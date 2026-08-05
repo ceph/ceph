@@ -206,7 +206,7 @@ monitor, two in a cluster that contains three monitors, three in a cluster that
 contains five monitors, four in a cluster that contains six monitors, and so
 on).
 
-See the `Monitor Config Reference`_ for more detail on configuring monitors.
+See the :ref:`monitor-config-reference` for more detail on configuring monitors.
 
 .. index:: architecture; high availability authentication
 
@@ -368,9 +368,9 @@ daemons. The authentication is not extended beyond the Ceph client. If a user
 accesses the Ceph client from a remote host, cephx authentication will not be
 applied to the connection between the user's host and the client host.
 
-See `Cephx Config Guide`_ for more on configuration details.
+See :ref:`rados-cephx-config-ref` for more on configuration details.
 
-See `User Management`_ for more on user management.
+See :ref:`user-management` for more on user management.
 
 See :ref:`A Detailed Description of the Cephx Authentication Protocol
 <cephx_2012_peter>` for more on the distinction between authorization and
@@ -433,8 +433,8 @@ the greater cluster provides several benefits:
    mismatches in object size and finds metadata mismatches, and is usually
    performed daily. Ceph OSD Daemons perform deeper scrubbing by comparing the
    data in objects, bit-for-bit, against their checksums. Deep scrubbing finds
-   bad sectors on drives that are not detectable with light scrubs. See `Data
-   Scrubbing`_ for details on configuring scrubbing.
+   bad sectors on drives that are not detectable with light scrubs. See :ref:`Data
+   Scrubbing <rados_config_scrubbing>` for details on configuring scrubbing.
 
 #. **Replication:** Data replication involves collaboration between Ceph
    Clients and Ceph OSD Daemons. Ceph OSD Daemons use the CRUSH algorithm to
@@ -525,7 +525,7 @@ Pools set at least the following parameters:
 - The Number of Placement Groups, and
 - The CRUSH Rule to Use.
 
-See `Set Pool Values`_ for details.
+See :ref:`setpoolvalues` for details.
 
 
 .. index: architecture; placement group mapping
@@ -626,7 +626,7 @@ which is the process of bringing all of the OSDs that store a Placement Group
 (PG) into agreement about the state of all of the RADOS objects (and their
 metadata) in that PG. Ceph OSD Daemons `Report Peering Failure`_ to the Ceph
 Monitors. Peering issues usually resolve themselves; however, if the problem
-persists, you may need to refer to the `Troubleshooting Peering Failure`_
+persists, you may need to refer to the :ref:`Troubleshooting Peering Failure <failures-osd-peering>`
 section.
 
 .. Note:: PGs that agree on the state of the cluster do not necessarily have
@@ -721,7 +721,7 @@ scrubbing by comparing data in objects bit-for-bit.  Deep scrubbing (by default
 performed weekly) finds bad blocks on a drive that weren't apparent in a light
 scrub.
 
-See `Data Scrubbing`_ for details on configuring scrubbing.
+See :ref:`Data Scrubbing <rados_config_scrubbing>` for details on configuring scrubbing.
 
 
 
@@ -1219,8 +1219,8 @@ appliances do not fully utilize the CPU and RAM of a typical commodity server,
 Ceph does. From heartbeats, to  peering, to rebalancing the cluster or
 recovering from faults,  Ceph offloads work from clients (and from a centralized
 gateway which doesn't exist in the Ceph architecture) and uses the computing
-power of the OSDs to perform the work. When referring to `Hardware
-Recommendations`_ and the `Network Config Reference`_,  be cognizant of the
+power of the OSDs to perform the work. When referring to :ref:`hardware-recommendations`
+and the `Network Config Reference`_,  be cognizant of the
 foregoing concepts to understand how Ceph utilizes computing resources.
 
 .. index:: Ceph Protocol, librados
@@ -1574,7 +1574,7 @@ another application.
    correspond in a 1:1 manner with an object stored in the storage cluster. It
    is possible for an S3 or Swift object to map to multiple Ceph objects.
 
-See `Ceph Object Storage`_ for details.
+See :ref:`object-gateway` for details.
 
 
 .. index:: Ceph Block Device; block device; RBD; Rados Block Device
@@ -1671,26 +1671,15 @@ instance for high availability.
 
 .. _RADOS - A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters: https://ceph.io/assets/pdfs/weil-rados-pdsw07.pdf
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
-.. _Monitor Config Reference: ../rados/configuration/mon-config-ref
-.. _Monitoring OSDs and PGs: ../rados/operations/monitoring-osd-pg
 .. _Heartbeats: ../rados/configuration/mon-osd-interaction
 .. _Monitoring OSDs: ../rados/operations/monitoring-osd-pg/#monitoring-osds
 .. _CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data: https://ceph.io/assets/pdfs/weil-crush-sc06.pdf
-.. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _Report Peering Failure: ../rados/configuration/mon-osd-interaction#osds-report-peering-failure
-.. _Troubleshooting Peering Failure: ../rados/troubleshooting/troubleshooting-pg#placement-group-down-peering-failure
-.. _Ceph Authentication and Authorization: ../rados/operations/auth-intro/
-.. _Hardware Recommendations: ../start/hardware-recommendations
 .. _Network Config Reference: ../rados/configuration/network-config-ref
-.. _Data Scrubbing: ../rados/configuration/osd-config-ref#scrubbing
 .. _striping: https://en.wikipedia.org/wiki/Data_striping
 .. _RAID: https://en.wikipedia.org/wiki/RAID
 .. _RAID 0: https://en.wikipedia.org/wiki/RAID_0#RAID_0
-.. _Ceph Object Storage: ../radosgw/
 .. _RESTful: https://en.wikipedia.org/wiki/RESTful
 .. _Erasure Code Notes: https://github.com/ceph/ceph/blob/40059e12af88267d0da67d8fd8d9cd81244d8f93/doc/dev/osd_internals/erasure_coding/developer_notes.rst
 .. _Cache Tiering: ../rados/operations/cache-tiering
-.. _Set Pool Values: ../rados/operations/pools#set-pool-values
 .. _Kerberos: https://en.wikipedia.org/wiki/Kerberos_(protocol)
-.. _Cephx Config Guide: ../rados/configuration/auth-config-ref
-.. _User Management: ../rados/operations/user-management
