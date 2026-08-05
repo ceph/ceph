@@ -60,13 +60,20 @@ describe('Mirroring page', () => {
           cy.get('#password').type('admin');
           cy.get('[type=submit]').click();
 
-          cy.get('input[name=name]').clear().type(name);
-          cy.get(`select[name=poolType]`).select('replicated');
-          cy.get(`select[name=poolType] option:checked`).contains('replicated');
-          cy.get('.float-start.me-2.select-menu-edit').click();
-          cy.get('.popover-body').should('be.visible');
-          // Choose rbd as the application label
-          cy.get('.select-menu-item-content').contains('rbd').click();
+          cy.get('[data-testid="pool-name"]').clear().type(name);
+
+          cy.get(
+            '[data-testid="pool-type-select"] cds-radio input[type="radio"][value="replicated"]'
+          ).check({ force: true });
+
+          cy.get('cds-combo-box[id="applications"] input.cds--text-input').click({ force: true });
+          cy.get('.cds--list-box__menu.cds--multi-select').should('be.visible');
+          cy.get('.cds--list-box__menu.cds--multi-select .cds--checkbox-label')
+            .contains('.cds--checkbox-label-text', 'rbd', { matchCase: false })
+            .parent()
+            .click({ force: true });
+          cy.get('body').type('{esc}');
+
           cy.get('cd-submit-button').click();
           cy.get('cd-pool-list').should('exist');
 

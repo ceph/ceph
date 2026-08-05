@@ -16,13 +16,14 @@ declare global {
 // is fixed.
 /* tslint:disable*/
 import { CdHelperClass } from '../../src/app/shared/classes/cd-helper.class';
+import { LocalStorage } from '../../src/app/shared/enum/local-storage-enum';
 import { Permissions } from '../../src/app/shared/models/permissions';
 import { table } from 'table';
 /* tslint:enable*/
 let auth: any;
 
 const fillAuth = () => {
-  window.localStorage.setItem('dashboard_username', auth.username);
+  window.localStorage.setItem(LocalStorage.DASHBOARD_USERNAME, auth.username);
   window.localStorage.setItem('dashboard_permissions', auth.permissions);
   window.localStorage.setItem('user_pwd_expiration_date', auth.pwdExpirationDate);
   window.localStorage.setItem('user_pwd_update_required', auth.pwdUpdateRequired);

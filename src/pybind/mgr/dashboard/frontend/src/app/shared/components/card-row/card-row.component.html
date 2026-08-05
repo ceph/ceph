@@ -2,7 +2,7 @@
 <li class="list-group-item">
   <div class="d-flex pl-1 pb-2 pt-2 position-relative">
     <div class="ms-4 me-auto">
-    @if (link && data !== null || total) {
+    @if (link && data != null || total) {
     <a [routerLink]="link"
        *ngIf="link && total > 0; else noLinkTitle"
        [ngPlural]="total"
@@ -51,7 +51,7 @@
 </div>
 
 <ng-template #defaultSummary>
-  @if (data === null) {
+  @if (data == null) {
   <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
     <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
@@ -111,7 +111,7 @@
 </ng-template>
 
 <ng-template #osdSummary>
-  @if (data === null) {
+  @if (data == null) {
   <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
   <span *ngIf="data.up === data.in">
@@ -163,7 +163,7 @@
 </ng-template>
 
 <ng-template #iscsiSummary>
-  @if (data === null || total === null) {
+  @if (data == null || total == null) {
   <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
   <span>
@@ -213,7 +213,7 @@
 </ng-template>
 
 <ng-template #noLinkTitle>
-@if (data !== null || total) {
+@if (data != null || total) {
 <span *ngIf="total || total === 0"
       [ngPlural]="total">
   {{ total }}

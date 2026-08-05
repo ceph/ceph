@@ -1,17 +1,17 @@
 /* tslint:disable*/
-import { CreateClusterWizardHelper } from '../../cluster/create-cluster.po';
+import { OnboardingHelper } from '../../cluster/create-cluster.po';
 import { OSDsPageHelper } from '../../cluster/osds.po';
 /* tslint:enable*/
 
 const osds = new OSDsPageHelper();
 
-describe('Create cluster create osds page', () => {
-  const createCluster = new CreateClusterWizardHelper();
+describe('Add storage - create osds page', () => {
+  const onboarding = new OnboardingHelper();
 
   beforeEach(() => {
     cy.login();
-    createCluster.navigateTo();
-    createCluster.createCluster();
+    onboarding.navigateTo();
+    onboarding.onboarding();
     cy.get('cd-wizard').within(() => {
       cy.get('button').contains('Create OSDs').click();
     });
@@ -34,9 +34,9 @@ describe('Create cluster create osds page', () => {
           cy.get('button').contains('Review').click();
         });
         cy.get('button[aria-label="Next"]').click();
-        cy.get('cd-dashboard').should('exist');
-        createCluster.navigateTo();
-        createCluster.createCluster();
+        cy.get('cd-overview').should('exist');
+        onboarding.navigateTo();
+        onboarding.onboarding();
         cy.get('cd-wizard').within(() => {
           cy.get('button').contains('Create OSDs').click();
         });

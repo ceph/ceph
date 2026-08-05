@@ -1,14 +1,14 @@
-import { DashboardPageHelper } from '../ui/dashboard.po';
+import { OverviewPagehelper } from '../ui/overview.po';
 
-describe('Dashboard Main Page', { retries: 0 }, () => {
-  const overview = new DashboardPageHelper();
+describe('Overview Page', { retries: 0 }, () => {
+  const overview = new OverviewPagehelper();
 
   beforeEach(() => {
     cy.login();
     overview.navigateTo();
   });
 
-  describe('Dashboard accessibility', () => {
+  describe('Overview accessibility', () => {
     it('should have no accessibility violations', () => {
       cy.injectAxe();
       cy.checkAccessibility(

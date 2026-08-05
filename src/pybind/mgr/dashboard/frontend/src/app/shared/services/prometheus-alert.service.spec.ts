@@ -38,7 +38,7 @@ describe('PrometheusAlertService', () => {
     const isDisabledByStatusCode = (statusCode: number, expectedStatus: boolean, done: any) => {
       service = TestBed.inject(PrometheusAlertService);
       prometheusService = TestBed.inject(PrometheusService);
-      spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(prometheusService, 'isAlertmanagerUsable').and.returnValue(of(true));
       spyOn(prometheusService, 'getGroupedAlerts').and.returnValue(
         new Observable((observer: any) => observer.error({ status: statusCode, error: {} }))
       );
@@ -115,7 +115,7 @@ describe('PrometheusAlertService', () => {
       spyOn(notificationService, 'show').and.stub();
 
       prometheusService = TestBed.inject(PrometheusService);
-      spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(prometheusService, 'isAlertmanagerUsable').and.returnValue(of(true));
       spyOn(prometheusService, 'getGroupedAlerts').and.callFake(() => of(alerts));
 
       alerts = [{ alerts: [prometheus.createAlert('alert0')] }];
@@ -202,7 +202,7 @@ describe('PrometheusAlertService', () => {
       service = TestBed.inject(PrometheusAlertService);
 
       prometheusService = TestBed.inject(PrometheusService);
-      spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
+      spyOn(prometheusService, 'isAlertmanagerUsable').and.returnValue(of(true));
       spyOn(prometheusService, 'getGroupedAlerts').and.callFake(() => of(alerts));
 
       alerts = [

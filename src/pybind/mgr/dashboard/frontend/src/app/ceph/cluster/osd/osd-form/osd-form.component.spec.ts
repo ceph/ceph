@@ -9,7 +9,6 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
 import { InventoryDevicesComponent } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-devices.component';
-import { DashboardModule } from '~/app/ceph/dashboard/dashboard.module';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -143,8 +142,7 @@ describe('OsdFormComponent', () => {
       SharedModule,
       RouterTestingModule,
       ReactiveFormsModule,
-      ToastrModule.forRoot(),
-      DashboardModule
+      ToastrModule.forRoot()
     ],
     declarations: [OsdFormComponent, OsdDevicesSelectionGroupsComponent, InventoryDevicesComponent]
   });
