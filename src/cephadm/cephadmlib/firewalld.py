@@ -33,18 +33,20 @@ class Firewalld(object):
     def check(self):
         # type: () -> bool
         self.cmd = find_executable('firewall-cmd')
+        logger.warning('FIREWALL DEBUG check(): firewall-cmd=%s', self.cmd)
         if not self.cmd:
-            logger.debug('firewalld does not appear to be present')
+            logger.warning('FIREWALL DEBUG check(): firewalld does not appear to be present')
             return False
         (enabled, state, _) = check_unit(self.ctx, 'firewalld.service')
+        logger.warning('FIREWALL DEBUG check(): enabled=%s state=%s', enabled, state)
         if not enabled:
-            logger.debug('firewalld.service is not enabled')
+            logger.warning('FIREWALL DEBUG check(): firewalld.service is not enabled')
             return False
         if state != 'running':
-            logger.debug('firewalld.service is not running')
+            logger.warning('FIREWALL DEBUG check(): firewalld.service is not running')
             return False
 
-        logger.info('firewalld ready')
+        logger.warning('FIREWALL DEBUG check(): firewalld ready, returning True')
         return True
 
     def enable_service_for(self, svc: str) -> None:
@@ -83,9 +85,10 @@ class Firewalld(object):
 
     def open_ports(self, fw_ports):
         # type: (List[int]) -> None
+        logger.warning('FIREWALL DEBUG open_ports(): available=%s ports=%s', self.available, fw_ports)
         if not self.available:
-            logger.debug(
-                'Not possible to open ports <%s>. firewalld.service is not available'
+            logger.warning(
+                'FIREWALL DEBUG open_ports(): NOT available, skipping ports <%s>'
                 % fw_ports
             )
             return
@@ -101,8 +104,9 @@ class Firewalld(object):
                 verbosity=CallVerbosity.DEBUG,
             )
             if ret:
-                logger.info(
-                    'Enabling firewalld port %s in current zone...' % tcp_port
+                logger.warning(
+                    'FIREWALL DEBUG open_ports(): running: %s --permanent --add-port %s',
+                    self.cmd, tcp_port,
                 )
                 out, err, ret = call(
                     self.ctx,
@@ -114,8 +118,8 @@ class Firewalld(object):
                         % (tcp_port, err)
                     )
             else:
-                logger.debug(
-                    'firewalld port %s is enabled in current zone' % tcp_port
+                logger.warning(
+                    'FIREWALL DEBUG open_ports(): port %s already open in current zone' % tcp_port
                 )
 
     def close_ports(self, fw_ports):
@@ -156,19 +160,29 @@ class Firewalld(object):
     def apply_rules(self):
         # type: () -> None
         if not self.available:
+            logger.warning('FIREWALL DEBUG apply_rules(): NOT available, skipping reload')
             return
 
         if not self.cmd:
             raise RuntimeError('command not defined')
 
+        logger.warning('FIREWALL DEBUG apply_rules(): reloading firewalld')
         call_throws(self.ctx, [self.cmd, '--reload'])
 
 
 def update_firewalld(ctx: CephadmContext, daemon: DaemonForm) -> None:
+    logger.warning(
+        'FIREWALL DEBUG update_firewalld(): daemon=%s firewalled=%s service=%s skip_firewalld=%s',
+        getattr(daemon, 'identity', None),
+        isinstance(daemon, FirewalledServiceDaemonForm),
+        getattr(daemon, 'firewall_service_name', lambda: None)() if isinstance(daemon, FirewalledServiceDaemonForm) else None,
+        getattr(ctx, 'skip_firewalld', 'NOT SET'),
+    )
     if not ('skip_firewalld' in ctx and ctx.skip_firewalld) and isinstance(
         daemon, FirewalledServiceDaemonForm
     ):
         svc = daemon.firewall_service_name()
+        logger.warning('FIREWALL DEBUG update_firewalld(): enabling service=%s', svc)
         if not svc:
             return
         firewall = Firewalld(ctx)

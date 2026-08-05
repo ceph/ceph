@@ -1221,7 +1221,15 @@ def deploy_daemon(
     with write_new(data_dir + '/unit.configured', owner=(uid, gid)) as f:
         f.write('mtime is time we were last configured\n')
 
+    logger.warning(
+        'FIREWALL DEBUG deploy_daemon(): daemon_type=%s endpoints=%s skip_firewalld=%s',
+        daemon_type,
+        [e.port for e in endpoints],
+        getattr(ctx, 'skip_firewalld', None),
+    )
+
     update_firewalld(ctx, daemon_form_create(ctx, ident))
+    logger.warning('FIREWALL DEBUG deploy_daemon(): update_firewalld() completed')
 
     # Open ports explicitly required for the daemon
     if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
