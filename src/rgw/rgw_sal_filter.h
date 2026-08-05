@@ -759,9 +759,14 @@ public:
   virtual bool empty() const override { return next->empty(); }
   virtual const std::string &get_name() const override { return next->get_name(); }
 
-  virtual int get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **state,
-			    optional_yield y, bool follow_olh = true) override;
-  virtual void set_obj_state(RGWObjState& _state) override { return next->set_obj_state(_state); }
+  /** If multipart, enumerate (a range [marker..marker+[min(max_parts, parts_count-1)] of) parts of the object */
+  virtual int list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			 int max_parts, int marker, int* next_marker,
+			 bool* truncated, list_parts_each_t each_func,
+			 optional_yield y) override;
+
+  virtual int load_obj_state(const DoutPrefixProvider *dpp, optional_yield y,
+                             bool follow_olh = true) override;
   virtual int set_obj_attrs(const DoutPrefixProvider* dpp, Attrs* setattrs,
 			    Attrs* delattrs, optional_yield y, uint32_t flags) override;
   virtual int get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp,
@@ -797,8 +802,16 @@ public:
   virtual const Attrs& get_attrs(void) const override { return next->get_attrs(); };
   virtual int set_attrs(Attrs a) override { return next->set_attrs(a); };
   virtual bool has_attrs(void) override { return next->has_attrs(); };
+  virtual bool get_attr(const std::string& name, bufferlist &dest) override { return next->get_attr(name, dest); }
   virtual ceph::real_time get_mtime(void) const override { return next->get_mtime(); };
+  virtual void set_mtime(ceph::real_time& mtime) override { return next->set_mtime(mtime); }
   virtual uint64_t get_obj_size(void) const override { return next->get_obj_size(); };
+  virtual uint64_t get_accounted_size(void) const override { return next->get_accounted_size(); };
+  virtual void set_accounted_size(uint64_t size) override { return next->set_accounted_size(size); }
+  virtual uint64_t get_epoch(void) const override { return next->get_epoch(); }
+  virtual void set_epoch(uint64_t epoch) override { return next->set_epoch(epoch); }
+  virtual uint32_t get_short_zone_id(void) const override { return next->get_short_zone_id(); }
+  virtual void set_short_zone_id(uint32_t id) override { return next->set_short_zone_id(id); }
   virtual Bucket* get_bucket(void) const override { return bucket; };
   virtual void set_bucket(Bucket* b) override;
   virtual std::string get_hash_source(void) override { return next->get_hash_source(); };
@@ -806,6 +819,7 @@ public:
   virtual std::string get_oid(void) const override { return next->get_oid(); };
   virtual bool get_delete_marker(void) override { return next->get_delete_marker(); };
   virtual bool get_in_extra_data(void) override { return next->get_in_extra_data(); };
+  virtual bool exists(void) override { return next->exists(); };
   virtual void set_in_extra_data(bool i) override { return next->set_in_extra_data(i); };
   int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end) {
     return next->range_to_ofs(obj_size, ofs, end);
@@ -873,6 +887,9 @@ public:
   virtual uint64_t get_size() override { return next->get_size(); }
   virtual const std::string& get_etag() override { return next->get_etag(); }
   virtual ceph::real_time& get_mtime() override { return next->get_mtime(); }
+  virtual const std::optional<rgw::cksum::Cksum>& get_cksum() {
+    return next->get_cksum();
+  }
 };
 
 class FilterMultipartUpload : public MultipartUpload {
@@ -1049,6 +1066,7 @@ public:
   virtual int complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,

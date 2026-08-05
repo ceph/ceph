@@ -488,7 +488,15 @@ namespace rgw::sal {
     return std::make_unique<DBLuaManager>(this);
   }
 
-  int DBObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **pstate, optional_yield y, bool follow_olh)
+  int DBObject::list_parts(const DoutPrefixProvider* dpp, CephContext* cct,
+			   int max_parts, int marker, int* next_marker,
+			   bool* truncated, list_parts_each_t each_func,
+			   optional_yield y)
+  {
+    return -EOPNOTSUPP;
+  }
+
+  int DBObject::load_obj_state(const DoutPrefixProvider* dpp, optional_yield y, bool follow_olh)
   {
     RGWObjState* astate;
     DB::Object op_target(store->getDB(), get_bucket()->get_info(), get_obj());
@@ -503,7 +511,6 @@ namespace rgw::sal {
     bool prefetch_data = state.prefetch_data;
 
     state = *astate;
-    *pstate = &state;
 
     state.obj = obj;
     state.is_atomic = is_atomic;
@@ -1219,9 +1226,11 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBMultipartWriter::complete(size_t accounted_size, const std::string& etag,
+  int DBMultipartWriter::complete(
+		       size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
                        std::map<std::string, bufferlist>& attrs,
+		       const std::optional<rgw::cksum::Cksum>& cksum,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
@@ -1243,6 +1252,7 @@ namespace rgw::sal {
     RGWUploadPartInfo info;
     info.num = part_num;
     info.etag = etag;
+    info.cksum = cksum;
     info.size = total_data_size;
     info.accounted_size = accounted_size;
     info.modified = real_clock::now();
@@ -1377,6 +1387,7 @@ namespace rgw::sal {
   int DBAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                          ceph::real_time *mtime, ceph::real_time set_mtime,
                          std::map<std::string, bufferlist>& attrs,
+			 const std::optional<rgw::cksum::Cksum>& cksum,
                          ceph::real_time delete_at,
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
