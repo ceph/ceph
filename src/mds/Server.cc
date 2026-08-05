@@ -196,8 +196,6 @@ void Server::create_logger()
                       PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_cap_revoke_eviction, "cap_revoke_eviction",
                       "Cap Revoke Client Eviction", "cre", PerfCountersBuilder::PRIO_INTERESTING);
-  plb.add_u64_counter(l_mdss_cache_trim_throttle, "cache_trim_throttle",
-                      "Cache trim throttle counter", "ctt", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_session_recall_throttle, "session_recall_throttle",
                       "Session recall throttle counter", "srt", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_u64_counter(l_mdss_session_recall_throttle2o, "session_recall_throttle2o",
