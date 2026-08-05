@@ -2024,6 +2024,214 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
             assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
 
 
+@attr('bucket_trim')
+def test_bucket_log_trim_enoent_race_after_reshard():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    all_clusters = set()
+    for zg in realm.current_period.zonegroups:
+        for zone in zg.zones:
+            all_clusters.add(zone.cluster)
+
+    def set_meta_sync_delay(delay_sec):
+        for cluster in all_clusters:
+            if delay_sec > 0:
+                cluster.ceph_admin(
+                    ['config', 'set', 'client', 'rgw_inject_delay_sec', str(delay_sec)])
+                cluster.ceph_admin(
+                    ['config', 'set', 'client', 'rgw_inject_delay_pattern', 'delay_meta_sync_bucket_instance_store'])
+            else:
+                cluster.ceph_admin(
+                    ['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+                cluster.ceph_admin(
+                    ['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+
+    def make_test_bucket():
+        name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', primary.zone.name, name)
+        bucket = primary.create_bucket(name)
+        for objname in ('a', 'b', 'c', 'd'):
+            primary.s3_client.put_object(Bucket=bucket.name, Key=objname, Body='foo')
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_bucket_checkpoint(zonegroup_conns, name)
+        return bucket
+
+    test_bucket = make_test_bucket()
+
+    # reshard on secondary to create a generation mismatch
+    secondary.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '13',
+        '--yes-i-really-mean-it'] + secondary.zone.zone_args())
+
+    for obj in ('a', 'b', 'c', 'd'):
+        cmd = ['object', 'rm'] + primary.zone.zone_args()
+        cmd += ['--bucket', test_bucket.name]
+        cmd += ['--object', obj]
+        primary.zone.cluster.admin(cmd + primary.zone.zone_args())
+
+    log.info('setting metadata sync delay to reproduce ENOENT trim race')
+    set_meta_sync_delay(30)
+    time.sleep(10)  # let the delay config reach the radosgws before deleting
+
+    try:
+        primary.s3_client.delete_bucket(Bucket=test_bucket.name)
+        zonegroup_data_checkpoint(zonegroup_conns)
+
+        # run autotrim on primary first — primary has the Deleted flag
+        # so it will fully clean up including removing its own
+        # bucket.instance metadata
+        bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+        time.sleep(config.checkpoint_delay)
+        bilog_autotrim(primary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+        time.sleep(config.checkpoint_delay)
+
+        # now autotrim on secondary — secondary queries primary, but
+        # primary's instance metadata is gone so primary responds -ENOENT.
+        # secondary doesn't have the Deleted flag yet (metadata sync is
+        # stalled). In #70858, this leaves StatusShards{gen=0, shards=[]}
+        # causing take_min_status() to fail with -EINVAL.
+        bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+        time.sleep(config.checkpoint_delay)
+        bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+    finally:
+        log.info('removing metadata sync delay')
+        set_meta_sync_delay(0)
+
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        zonegroup_meta_checkpoint(zonegroup)
+
+        for zone in zonegroup_conns.zones:
+            log.info('trimming on zone=%s', zone.name)
+            bilog_autotrim(zone.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+            time.sleep(config.checkpoint_delay)
+
+    bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'],)
+    time.sleep(config.checkpoint_delay)
+
+    for zonegroup in realm.current_period.zonegroups:
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        for zone in zonegroup_conns.zones:
+            assert check_bucket_instance_metadata(zone.zone, test_bucket.name)
+
+
+@attr('bucket_trim')
+def test_bucket_log_trim_live_empty_bucket_not_removed():
+    # A live bucket with no data written yet also returns -ENOENT for its bucket sync
+    # status on every peer as sync status is not initialized until data flows.
+    # autotrim must NOT mistake that for a deletion and remove the bucket
+    # instance metadata. This is a guard testcase for the -ENOENT disambiguation
+    # (tracker #70858): i.e., if the entrypoint still exists, so the bucket is live.
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+
+    # create a bucket but write no objects, so no bucket sync status is created
+    name = gen_bucket_name()
+    log.info('create empty bucket zone=%s name=%s', primary.zone.name, name)
+    bucket = primary.create_bucket(name)
+
+    # make sure the entrypoint and instance metadata reach every zone
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # run autotrim everywhere; peers return -ENOENT for sync status, but the
+    # bucket is live (entrypoint present) and must be left intact.
+    for zg in realm.current_period.zonegroups:
+        zg_conns = ZonegroupConns(zg)
+        for zone in zg_conns.zones:
+            log.info('trimming on zone=%s', zone.name)
+            bilog_autotrim(zone.zone, ['--rgw-sync-log-trim-max-buckets', '50'])
+            time.sleep(config.checkpoint_delay)
+
+    # the bucket instance metadata must still be present on every zone.
+    # check_bucket_instance_metadata() returns False when the instance is still
+    # present (i.e. it was NOT trimmed away).
+    for zg in realm.current_period.zonegroups:
+        zg_conns = ZonegroupConns(zg)
+        for zone in zg_conns.zones:
+            assert not check_bucket_instance_metadata(zone.zone, bucket.name), \
+                'live bucket %s instance wrongly removed on zone %s' % (bucket.name, zone.name)
+
+
+@attr('bucket_trim')
+def test_bucket_log_trim_new_bucket_entrypoint_not_synced():
+    # A bucket freshly created on the primary syncs its INSTANCE metadata to the
+    # secondary before its ENTRYPOINT (creation writes the instance first, see
+    # put_linked_bucket_info() in rgw_rados.cc). If autotrim runs on the secondary
+    # in that window, every peer returns -ENOENT (new, data-less bucket => sync
+    # status uninitialized). autotrim must confirm the deletion against the
+    # metadata master (which already has the entrypoint) rather than the secondary's
+    # not-yet-synced local copy, and so must leave the live bucket's instance intact.
+    #
+    # Force the window described above by delaying entrypoint ("bucket" section) metadata
+    # sync on the secondary while letting the instance ("bucket.instance") go through.
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    def set_entrypoint_sync_delay(delay_sec):
+        cluster = secondary.zone.cluster
+        if delay_sec > 0:
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_sec', str(delay_sec)])
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_pattern', 'delay_meta_sync_bucket_entrypoint_store'])
+        else:
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+
+    # metadata list is per-zone, so this reads the secondary's LOCAL entrypoints
+    def secondary_has_entrypoint(name):
+        cmd = ['metadata', 'list', 'bucket'] + secondary.zone.zone_args()
+        out, _ = secondary.zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+        try:
+            return name in json.loads(out)
+        except ValueError:
+            return False
+
+    with override_config(checkpoint_retries=30, checkpoint_delay=2):
+        set_entrypoint_sync_delay(config.checkpoint_retries * config.checkpoint_delay)
+        try:
+            time.sleep(10)  # let the delay config reach the radosgws before creating
+
+            name = gen_bucket_name()
+            log.info('create bucket zone=%s name=%s (no objects)', primary.zone.name, name)
+            primary.create_bucket(name)
+
+            # wait until the INSTANCE has synced to the secondary
+            # while its ENTRYPOINT is still delayed (absent)
+            window_hit = False
+            for _ in range(config.checkpoint_retries):
+                time.sleep(config.checkpoint_delay)
+                inst_present = not check_bucket_instance_metadata(secondary.zone, name)
+                ep_present = secondary_has_entrypoint(name)
+                log.info('secondary sync state: instance=%s entrypoint=%s', inst_present, ep_present)
+                if inst_present and not ep_present:
+                    window_hit = True
+                    break
+                if inst_present and ep_present:
+                    break  # entrypoint arrived too; window missed
+            assert window_hit, \
+                'could not reproduce instance-synced-but-entrypoint-not window on secondary'
+
+            # autotrim on the secondary while its local entrypoint is still absent
+            log.info('running autotrim on secondary while entrypoint is not yet synced')
+            bilog_autotrim(secondary.zone, ['--rgw-sync-log-trim-max-buckets', '50'])
+            time.sleep(config.checkpoint_delay)
+
+            # the instance metadata must NOT have been removed since the bucket is live
+            assert not check_bucket_instance_metadata(secondary.zone, name), \
+                'live (mid-sync) bucket %s instance wrongly removed on secondary zone' % name
+        finally:
+            set_entrypoint_sync_delay(0)
+            # let metadata sync catch up so the entrypoint lands and state is consistent
+            zonegroup_meta_checkpoint(zonegroup)
+
+
 @attr('bucket_reshard')
 def test_bucket_reshard_incremental():
     zonegroup = realm.master_zonegroup()
