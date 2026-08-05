@@ -810,6 +810,13 @@ hobject_t PGRecovery::get_temp_recovery_object(
     version);
 }
 
+void PGRecovery::on_pool_migration_source_starting()
+{
+  LOG_PREFIX(PGRecovery::on_pool_migration_source_starting);
+  DEBUGDPP("", *pg->get_dpp());
+  // TODO
+}
+
 void PGRecovery::on_pool_migration_source_suspended()
 {
   LOG_PREFIX(PGRecovery::on_pool_migration_source_suspended);

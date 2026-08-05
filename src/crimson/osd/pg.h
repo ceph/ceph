@@ -598,6 +598,9 @@ public:
     recovery_handler->backfill_suspended();
   }
 
+  void on_pool_migration_source_starting() final {
+    recovery_handler->on_pool_migration_source_starting();
+  }
   void on_pool_migration_source_reserved() final {
     recovery_handler->on_pool_migration_source_reserved();
   }
