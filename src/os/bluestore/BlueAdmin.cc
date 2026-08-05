@@ -29,7 +29,7 @@ static void take_cache_snapshot(BlueStore& store) {
   snap.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
   snap.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
   snap.buffer_hits = store.logger->get(l_bluestore_buffer_hits);
-  snap.buffer_miss_count = store.logger->get(l_bluestore_buffer_miss_lat + 1);
+  snap.buffer_misses = store.logger->get(l_bluestore_buffer_miss_lat + 1);
   snap.buffer_miss_latency_sum = store.logger->get(l_bluestore_buffer_miss_lat);
   
   store.cache_stats_snapshots.push_back(snap);
@@ -59,7 +59,7 @@ static bool get_snapshot_windows(BlueStore& store,
   current.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
   current.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
   current.buffer_hits = store.logger->get(l_bluestore_buffer_hits);
-  current.buffer_miss_count = store.logger->get(l_bluestore_buffer_miss_lat + 1);
+  current.buffer_misses = store.logger->get(l_bluestore_buffer_miss_lat + 1);
   current.buffer_miss_latency_sum = store.logger->get(l_bluestore_buffer_miss_lat);
   
   if(store.cache_stats_snapshots.size() >= 2) {
@@ -347,9 +347,18 @@ int BlueStore::SocketHook::call(
     f->open_object_section("onode_cache");
     
     uint64_t onode_hits = store.logger->get(l_bluestore_onode_hits);
+    uint64_t onode_misses = store.logger->get(l_bluestore_onode_misses);
     f->dump_unsigned("hits", onode_hits);
+    f->dump_unsigned("misses", onode_misses);
+    uint64_t total_accesses = onode_hits + onode_misses;
+    f->dump_unsigned("total", total_accesses);
+    if (total_accesses > 0) {
+      double hit_ratio = static_cast<double>(onode_hits) / static_cast<double>(total_accesses);
+      f->dump_float("hit_ratio", hit_ratio);
+    } else {
+      f->dump_float("hit_ratio", 0.0);
+    }
     
-   
     f->open_object_section("onode_cache_miss_latency");
     auto onode_miss_tavg = store.logger->get_tavg_ns(l_bluestore_onode_miss_lat);
     uint64_t onode_miss_sum_ns = onode_miss_tavg.first;
@@ -368,6 +377,20 @@ int BlueStore::SocketHook::call(
     }
     f->close_section();
     
+    f->close_section();
+    
+    f->open_object_section("onode_shard");
+    uint64_t shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
+    uint64_t shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
+    f->dump_unsigned("hits", shard_hits);
+    f->dump_unsigned("misses", shard_misses);
+    uint64_t shard_total = shard_hits + shard_misses;
+    f->dump_unsigned("total", shard_total);
+    if (shard_total > 0) {
+      f->dump_float("hit_ratio", (double)shard_hits / (double)shard_total);
+    } else {
+      f->dump_float("hit_ratio", 0.0);
+    }
     
     f->open_object_section("onode_shard_miss_latency");
     auto shard_miss_tavg = store.logger->get_tavg_ns(l_bluestore_onode_shard_miss_lat);
@@ -387,38 +410,6 @@ int BlueStore::SocketHook::call(
     }
     f->close_section();
     
-    uint64_t total_accesses = onode_hits + onode_miss_count;
-    f->dump_unsigned("total_accesses", total_accesses);
-    if (total_accesses > 0) {
-      double hit_ratio = static_cast<double>(onode_hits) / static_cast<double>(total_accesses);
-      f->dump_float("hit_ratio", hit_ratio);
-    } else {
-      f->dump_float("hit_ratio", 0.0);
-    }
-    
-    f->close_section();
-    
-    f->open_object_section("onode_shard");
-    uint64_t shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
-    uint64_t shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
-    f->dump_unsigned("hits", shard_hits);
-    f->dump_unsigned("misses", shard_misses);
-    uint64_t shard_total = shard_hits + shard_misses;
-    if (shard_total > 0) {
-      f->dump_float("hit_ratio", (double)shard_hits / (double)shard_total);
-    } else {
-      f->dump_float("hit_ratio", 0.0);
-    }
-    
-    auto shard_miss_lat_tavg = store.logger->get_tavg_ns(l_bluestore_onode_shard_miss_lat);
-    uint64_t shard_miss_lat_sum_ns = shard_miss_lat_tavg.first;
-    uint64_t shard_miss_lat_count = shard_miss_lat_tavg.second;
-    if (shard_miss_lat_count > 0) {
-      uint64_t avg_ns = shard_miss_lat_sum_ns / shard_miss_lat_count;
-      f->dump_format_unquoted("avg_miss_latency", "%" PRId64 ".%09" PRId64,
-                              avg_ns / 1000000000ull,
-                              avg_ns % 1000000000ull);
-    }
     f->close_section();
     
     f->open_object_section("object_data_cache");
@@ -426,13 +417,13 @@ int BlueStore::SocketHook::call(
     f->open_object_section("buffer_miss_latency");
     auto buffer_miss_tavg = store.logger->get_tavg_ns(l_bluestore_buffer_miss_lat);
     uint64_t buffer_miss_sum_ns = buffer_miss_tavg.first;
-    uint64_t buffer_miss_count = buffer_miss_tavg.second;
-    f->dump_unsigned("avgcount", buffer_miss_count);
+    uint64_t buffer_misses = buffer_miss_tavg.second;
+    f->dump_unsigned("avgcount", buffer_misses);
     f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
                             buffer_miss_sum_ns / 1000000000ull,
                             buffer_miss_sum_ns % 1000000000ull);
-    if (buffer_miss_count) {
-      uint64_t avg_ns = buffer_miss_sum_ns / buffer_miss_count;
+    if (buffer_misses) {
+      uint64_t avg_ns = buffer_miss_sum_ns / buffer_misses;
       f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
                               avg_ns / 1000000000ull,
                               avg_ns % 1000000000ull);
@@ -443,8 +434,8 @@ int BlueStore::SocketHook::call(
     
     uint64_t buffer_hits = store.logger->get(l_bluestore_buffer_hits);
     f->dump_unsigned("hits", buffer_hits);
-    f->dump_unsigned("misses", buffer_miss_count);
-    uint64_t buffer_total = buffer_hits + buffer_miss_count;
+    f->dump_unsigned("misses", buffer_misses);
+    uint64_t buffer_total = buffer_hits + buffer_misses;
     f->dump_unsigned("total_accesses", buffer_total);
     if (buffer_total > 0) {
       double buffer_hit_ratio = static_cast<double>(buffer_hits) / static_cast<double>(buffer_total);
@@ -464,7 +455,7 @@ int BlueStore::SocketHook::call(
       auto recent_duration = std::chrono::duration<double>(current.timestamp - most_recent.timestamp).count();
       if (recent_duration > 0) {
         f->open_object_section("since_most_recent_snapshot");
-        f->dump_float("window_seconds", recent_duration);
+        f->dump_float("seconds elapsed", recent_duration);
         
         f->open_object_section("onode_cache");
         uint64_t delta_onode_hits = current.onode_hits - most_recent.onode_hits;
@@ -502,12 +493,12 @@ int BlueStore::SocketHook::call(
         
         f->open_object_section("object_data_cache");
         uint64_t delta_buffer_hits = current.buffer_hits - most_recent.buffer_hits;
-        uint64_t delta_buffer_misses = current.buffer_miss_count - most_recent.buffer_miss_count;
+        uint64_t delta_buffer_misses = current.buffer_misses - most_recent.buffer_misses;
         uint64_t delta_buffer_lat = current.buffer_miss_latency_sum - most_recent.buffer_miss_latency_sum;
         uint64_t delta_buffer_total = delta_buffer_hits + delta_buffer_misses;
         f->dump_unsigned("hits", delta_buffer_hits);
         f->dump_unsigned("misses", delta_buffer_misses);
-        f->dump_unsigned("total_accesses", delta_buffer_total);
+        f->dump_unsigned("total", delta_buffer_total);
         if (delta_buffer_total > 0) {
           f->dump_float("hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_total);
         } else {
@@ -525,7 +516,7 @@ int BlueStore::SocketHook::call(
       
       if (oldest_duration > 0) {
         f->open_object_section("since_oldest_snapshot");
-        f->dump_float("window_seconds", oldest_duration);
+        f->dump_float("seconds elapsed", oldest_duration);
         
         f->open_object_section("onode_cache");
         uint64_t delta_onode_hits = current.onode_hits - oldest.onode_hits;
@@ -535,7 +526,7 @@ int BlueStore::SocketHook::call(
         
         f->dump_unsigned("hits", delta_onode_hits);
         f->dump_unsigned("misses", delta_onode_misses);
-        f->dump_unsigned("total_accesses", delta_onode_total);
+        f->dump_unsigned("total", delta_onode_total);
         if (delta_onode_total > 0) {
           f->dump_float("hit_ratio", (double)delta_onode_hits / (double)delta_onode_total);
           f->dump_float("accesses_per_second", (double)delta_onode_total / oldest_duration);
@@ -567,13 +558,13 @@ int BlueStore::SocketHook::call(
         
         f->open_object_section("object_data_cache");
         uint64_t delta_buffer_hits = current.buffer_hits - oldest.buffer_hits;
-        uint64_t delta_buffer_misses = current.buffer_miss_count - oldest.buffer_miss_count;
+        uint64_t delta_buffer_misses = current.buffer_misses - oldest.buffer_misses;
         uint64_t delta_buffer_lat = current.buffer_miss_latency_sum - oldest.buffer_miss_latency_sum;
         uint64_t delta_buffer_total = delta_buffer_hits + delta_buffer_misses;
         
         f->dump_unsigned("hits", delta_buffer_hits);
         f->dump_unsigned("misses", delta_buffer_misses);
-        f->dump_unsigned("total_accesses", delta_buffer_total);
+        f->dump_unsigned("total", delta_buffer_total);
         if (delta_buffer_total > 0) {
           f->dump_float("hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_total);
           f->dump_float("accesses_per_second", (double)delta_buffer_total / oldest_duration);

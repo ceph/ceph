@@ -4385,9 +4385,8 @@ void BlueStore::ExtentMap::maybe_load_shard(
       ceph_assert(p->dirty == false);
       ceph_assert(v.length() == p->shard_info->bytes);
 
-      auto shard_load_end = ceph::mono_clock::now();
-      onode->c->store->logger->tinc(l_bluestore_onode_shard_miss_lat, 
-                                     shard_load_end - shard_load_start);
+      onode->c->store->logger->tinc(l_bluestore_onode_shard_miss_lat,
+                                     ceph::mono_clock::now() - shard_load_start);
 
       onode->c->store->logger->inc(l_bluestore_onode_shard_misses);
     } else {
@@ -5403,7 +5402,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   if (o) {
     return o;
   }
-  auto start = mono_clock::now();//miss
+  auto start = mono_clock::now(); //miss 
   BLUE_SCOPE(get_onode);
   string key;
   get_object_key(store->cct, oid, &key);
@@ -6528,7 +6527,7 @@ void BlueStore::_init_logger()
 
   b.add_time_avg(l_bluestore_onode_miss_lat, "cacheonode_lat",
       "Average onode miss latency",
-      "ro_l", PerfCountersBuilder::PRIO_CRITICAL);
+      "ro_l");
 
   b.add_time_avg(l_bluestore_onode_shard_miss_lat,
                "onode_shard_miss_lat",
@@ -6604,7 +6603,7 @@ void BlueStore::_init_logger()
      unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_buffer_hits, "buffer_hits",
      "Count of buffer cache lookup hits",
-     "b_ht", PerfCountersBuilder::PRIO_CRITICAL);
+     "b_ht");
   //****************************************
 
   // internal stats
@@ -13222,8 +13221,7 @@ int BlueStore::_do_read(
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
     if (is_miss) {
-      auto miss_end_time = ceph::mono_clock::now();
-      logger->tinc(l_bluestore_buffer_miss_lat, miss_end_time - miss_start_time);
+      logger->tinc(l_bluestore_buffer_miss_lat, ceph::mono_clock::now() - miss_start_time);
     } else {
       logger->inc(l_bluestore_buffer_hits);
     }
@@ -13644,8 +13642,7 @@ int BlueStore::_do_readv(
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
 
-    auto miss_end_time = ceph::mono_clock::now();
-    logger->tinc(l_bluestore_buffer_miss_lat, miss_end_time - miss_start_time);
+    logger->tinc(l_bluestore_buffer_miss_lat, ceph::mono_clock::now() - miss_start_time);
     r = ioc.get_return_value();
     if (r < 0) {
       ceph_assert(r == -EIO); // no other errors allowed

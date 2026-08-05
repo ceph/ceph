@@ -2405,14 +2405,14 @@ public:
     uint64_t onode_shard_misses;
     uint64_t onode_shard_miss_latency_sum;
     uint64_t buffer_hits;
-    uint64_t buffer_miss_count;
+    uint64_t buffer_misses;
     uint64_t buffer_miss_latency_sum;
     
     CacheStatsSnapshot()
       : timestamp(ceph::mono_clock::zero()),
         onode_hits(0), onode_misses(0), onode_miss_latency_sum(0),
         onode_shard_hits(0), onode_shard_misses(0), onode_shard_miss_latency_sum(0),
-        buffer_hits(0), buffer_miss_count(0), buffer_miss_latency_sum(0) {}
+        buffer_hits(0), buffer_misses(0), buffer_miss_latency_sum(0) {}
   };
 
   ceph::mutex cache_stats_lock = ceph::make_mutex("BlueStore::cache_stats_lock");
