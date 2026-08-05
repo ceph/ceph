@@ -400,15 +400,8 @@ public:
    *
    * @return a global sequence ID that nobody else has seen.
    */
-  __u32 get_global_seq(__u32 old=0) {
-    std::lock_guard<ceph::spinlock> lg(global_seq_lock);
+  __u32 get_global_seq(__u32 old=0);
 
-    if (old > global_seq)
-      global_seq = old;
-    __u32 ret = ++global_seq;
-
-    return ret;
-  }
   /**
    * Get the protocol version we support for the given peer type: either
    * a peer protocol (if it matches our own), the protocol version for the
