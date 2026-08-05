@@ -28,6 +28,7 @@
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
+#include "common/Formatter.h"
 #include "common/Throttle.h"
 #include "include/Context.h"
 #include "include/types.h"
@@ -297,13 +298,13 @@ public:
    * Get the number of Messages which the Messenger has received
    * but not yet dispatched.
    */
-  virtual int get_dispatch_queue_len() = 0;
+  virtual int get_dispatch_queue_len() const = 0;
 
   /**
    * Get age of oldest undelivered message
    * (0 if the queue is empty)
    */
-  virtual double get_dispatch_queue_max_age(utime_t now) = 0;
+  virtual double get_dispatch_queue_max_age(utime_t now) const = 0;
 
   /**
    * @} // Accessors
@@ -520,6 +521,10 @@ public:
   /**
    * @} // Startup/Shutdown
    */
+
+  virtual void dump(
+      Formatter* f, std::function<bool(const std::string&)> filter =
+                        [](const std::string&) { return true; }) const = 0;
 
   /**
    * @defgroup Messaging
