@@ -12356,6 +12356,7 @@ void Server::_readdir_diff(
   size_t rollback_pos = 0;
   size_t rollback_num = 0;
 
+  bool waiting = false;
   bool end = build_snap_diff(
     mdr,
     dir,
@@ -12427,7 +12428,11 @@ void Server::_readdir_diff(
       mdcache->lru.lru_touch(dn);
       ++numfiles;
       return true;
-    });
+    },
+    &waiting);
+
+  if (waiting)
+    return;
 
   __u16 flags = 0;
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
@@ -12449,7 +12454,8 @@ bool Server::build_snap_diff(
   snapid_t snapid,
   unsigned diff_mask,
   const bufferlist& dnbl,
-  std::function<bool (CDentry*, CInode*, bool)> add_result_cb)
+  std::function<bool (CDentry*, CInode*, bool)> add_result_cb,
+  bool *waiting)
 {
   struct EntryInfo {
     CDentry* dn = nullptr;
@@ -12494,6 +12500,24 @@ bool Server::build_snap_diff(
       return res_mask != 0;
     }
   } before;
+
+
+  // rdlock filelock so pending snapflush completes before metadata is read.
+  auto rdlock_file_start = [&](CInode *in) -> bool {
+    if (!mds->locker->rdlock_start(&in->filelock, mdr)) {
+      dout(10) << __func__ << " waiting for snapflush, deferring readdir_snapdiff on "
+           << *in << " snap " << snapid_prev << " vs. " << snapid << dendl;
+      if (waiting)
+        *waiting = true;
+      return false;
+    }
+    return true;
+  };
+  auto rdlock_file_finish = [&](CInode *in) {
+    auto lit = mdr->locks.find(&in->filelock);
+    ceph_assert(lit != mdr->locks.end());
+    mds->locker->rdlock_finish(lit, mdr.get(), nullptr);
+  };
 
   auto insert_deleted = [&](EntryInfo& ei) {
     dout(20) << "build_snap_diff deleted file " << ei.dn->get_name() << " "
@@ -12628,11 +12652,27 @@ bool Server::build_snap_diff(
 		<< dendl;
 	      before.reset();
 	    } else {
-	      dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
-		<< dn->first << "/" << dn->last
-		<< dendl;
-	      before.reset();
-	      continue;
+	      /* If attrs match, rdlock the filelock which waits for pending snap
+	       * flush so that latest metadata is fetched under the lock.
+	       */
+	      if (!rdlock_file_start(in))
+		return false;
+	      bool differs = before.meta_differs(in, diff_mask, res_mask);
+	      rdlock_file_finish(in);
+	      if (differs) {
+		dout(0) << __func__ << " attrs changed " << dn->get_name() << " "
+		  << dn->first << "/" << dn->last
+		  << " result mask: 0x" << std::hex << res_mask << std::dec
+		  << " (after snapflush)"
+		  << dendl;
+		before.reset();
+	      } else {
+		dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
+		  << dn->first << "/" << dn->last
+		  << dendl;
+		before.reset();
+		continue;
+	      }
 	    }
 	  }
 	}
