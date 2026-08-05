@@ -91,7 +91,7 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
           redirectLink: [CEPHFS_MIRRORING_URL, '::prop', 'overview']
         }
       },
-      { name: $localize`Destination cluster`, prop: 'remote_cluster_name', flexGrow: 2 },
+      { name: $localize`Site name`, prop: 'remote_site_name', flexGrow: 2 },
       { name: $localize`Bytes replicated`, prop: 'bytes_replicated', flexGrow: 2 },
       { name: $localize`Last sync`, prop: 'last_sync', flexGrow: 2 },
       { name: $localize`Replicated paths`, prop: 'directory_count', flexGrow: 2 }
@@ -317,7 +317,7 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
     const recoveryCount = peer.stats?.recovery_count ?? 0;
 
     return {
-      remote_cluster_name: peer.remote?.cluster_name ?? '-',
+      remote_site_name: peer.remote?.cluster_name ?? '-',
       local_fs_name: fs.name,
       fs_name: peer.remote?.fs_name ?? '-',
       client_name: peer.remote?.client_name ?? '-',

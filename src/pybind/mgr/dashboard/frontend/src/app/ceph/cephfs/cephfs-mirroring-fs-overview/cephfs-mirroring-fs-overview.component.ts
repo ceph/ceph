@@ -79,7 +79,7 @@ export class CephfsMirroringFsOverviewComponent {
     const empty: DaemonOverviewInfo = {
       mirrorPaths: 0,
       failures: 0,
-      clusterName: '-',
+      siteName: '-',
       destinationFsName: '-',
       fsid: '-',
       monitorEndpoint: '-'
@@ -95,7 +95,7 @@ export class CephfsMirroringFsOverviewComponent {
       return {
         mirrorPaths: fs.directory_count ?? 0,
         failures: (fs.peers ?? []).reduce((sum, item) => sum + (item.stats?.failure_count ?? 0), 0),
-        clusterName: peer?.remote?.cluster_name ?? '-',
+        siteName: peer?.remote?.cluster_name ?? '-',
         destinationFsName: peer?.remote?.fs_name ?? '-',
         fsid: peer?.remote?.fsid ?? '-',
         monitorEndpoint: peer?.remote?.mon_host ?? '-',
@@ -124,8 +124,9 @@ export class CephfsMirroringFsOverviewComponent {
         syncingPaths: sync.syncingPaths
       },
       destination: {
-        clusterName: daemonInfo.clusterName,
-        siteName: daemonInfo.peerUuid ? (peers[daemonInfo.peerUuid]?.site_name ?? '-') : '-',
+        siteName: daemonInfo.peerUuid
+          ? peers[daemonInfo.peerUuid]?.site_name || daemonInfo.siteName
+          : daemonInfo.siteName,
         destinationFsName: daemonInfo.destinationFsName,
         fsid: daemonInfo.fsid,
         monitorEndpoint: daemonInfo.monitorEndpoint

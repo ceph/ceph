@@ -204,7 +204,7 @@ describe('CephfsMirroringListComponent', () => {
     expect(cephfsServiceMock.getMirrorStatus).toHaveBeenCalledWith('fs1', undefined, 'peer-uuid');
     expect(emitted[0]).toEqual(
       expect.objectContaining({
-        remote_cluster_name: 'clusterA',
+        remote_site_name: 'clusterA',
         local_fs_name: 'fs1',
         fs_name: 'fsA',
         client_name: 'clientA',
