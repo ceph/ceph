@@ -716,10 +716,7 @@ public:
 
   unsigned int get_num_zones() const {
     ceph_assert(pool);
-    int64_t num_zones = 1;  // default: single-zone pool, matches
-                            // pg_pool_t::get_num_zone()
-    pool->opts.get(pool_opts_t::NUM_ZONES, &num_zones);
-    return num_zones > 0 ? num_zones : 1;
+    return pool->get_num_zones();
   }
 
   const shard_id_t get_shard(const raw_shard_id_t raw_shard) const {

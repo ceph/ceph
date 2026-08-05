@@ -442,7 +442,7 @@ TEST(ECCommon, cache_ready_remaps_transaction_into_sub_write_for_remapped_shard)
 
   pg_pool_t pool;
   pool.size = 2 * (k + m); // 2 zones, k+m shards each
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   ECUtil::stripe_info_t sinfo(k, m, swidth, &pool);
 
   // Relative shard 0 of zone 1: absolute id k+m, which get_rel_shard() maps
@@ -1542,7 +1542,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_local_zone_available) {
 
   pg_pool_t pool;
   pool.size = 12; // 2 zones with k+m shards each
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1594,7 +1594,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_primary_in_zone1) {
 
   pg_pool_t pool;
   pool.size = 12; // 2 zones with k+m shards each
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1643,7 +1643,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_fallback_to_remote) {
 
   pg_pool_t pool;
   pool.size = 12; // 2 zones
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1704,7 +1704,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_missing_shard_local) {
 
   pg_pool_t pool;
   pool.size = 12;
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1752,7 +1752,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_error_shards) {
 
   pg_pool_t pool;
   pool.size = 12;
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1797,7 +1797,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_three_zones) {
 
   pg_pool_t pool;
   pool.size = 18; // 3 zones
-  pool.opts.set(pool_opts_t::NUM_ZONES, 3);
+  pool.num_zones = 3;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1839,7 +1839,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_insufficient_shards) {
 
   pg_pool_t pool;
   pool.size = 12;
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1875,7 +1875,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_redundant_reads) {
 
   pg_pool_t pool;
   pool.size = 12;
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1917,7 +1917,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_recovery_mode) {
 
   pg_pool_t pool;
   pool.size = 12;
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -1960,7 +1960,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_mixed_availability) {
 
   pg_pool_t pool;
   pool.size = 12;
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -2039,7 +2039,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_prefers_local_over_low_osd_rem
 
   pg_pool_t pool;
   pool.size = 12; // 2 zones with k+m shards each
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -2097,7 +2097,7 @@ TEST(ECCommon, get_readable_writable_shard_id_sets_returns_relative_shards) {
 
   pg_pool_t pool;
   pool.size = 6; // 2 zones * (k+m)
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
 
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
@@ -2151,7 +2151,7 @@ TEST(ECCommon, ensure_primary_shard_for_omap_zone1_primary_zone0_down) {
 
   pg_pool_t pool;
   pool.size = 12; // 2 zones of k+m=6 shards each
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   // Only relative shard 0 is primary-capable in each zone; relative
   // shards 1-5 cannot become primary.
   pool.nonprimary_shards.insert(shard_id_t(1));
@@ -2288,7 +2288,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_error_shards_force_remote) {
 
   pg_pool_t pool;
   pool.size = 2 * (k + m);
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ErasureCodeInterfaceRef ec_impl(new MockErasureCode());
 
@@ -2340,7 +2340,7 @@ TEST(ECCommon, get_all_avail_shards_zones_missing_loc_remote_candidate) {
 
   pg_pool_t pool;
   pool.size = 2 * (k + m);
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
   listenerStub.whoami = pg_shard_t(0, shard_id_t(0));
@@ -2396,7 +2396,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_local_copy_missing_object) {
 
   pg_pool_t pool;
   pool.size = 2 * (k + m);
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
   listenerStub.whoami = pg_shard_t(0, shard_id_t(0));
@@ -2447,7 +2447,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_three_zones_zone2_primary) {
 
   pg_pool_t pool;
   pool.size = 3 * (k + m);
-  pool.opts.set(pool_opts_t::NUM_ZONES, 3);
+  pool.num_zones = 3;
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
   listenerStub.whoami = pg_shard_t(12, shard_id_t(12));
@@ -2503,7 +2503,7 @@ TEST(ECCommon, cache_ready_writes_both_zone_copies_and_rolls_forward)
 
   pg_pool_t pool;
   pool.size = 2 * (k + m);
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   ECUtil::stripe_info_t sinfo(k, m, swidth, &pool);
 
   ECListenerStub listenerStub;
@@ -2575,7 +2575,7 @@ TEST(ECCommon, cache_ready_remote_zone_backfill_target_not_sent_op)
 
   pg_pool_t pool;
   pool.size = 2 * (k + m);
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   ECUtil::stripe_info_t sinfo(k, m, swidth, &pool);
 
   ECListenerStub listenerStub;
@@ -2638,7 +2638,7 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_local_backfill_not_displaced_b
 
   pg_pool_t pool;
   pool.size = 2 * (k + m);
-  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool.num_zones = 2;
   ECUtil::stripe_info_t s(k, m, swidth, &pool);
   ECListenerStub listenerStub;
   listenerStub.whoami = pg_shard_t(0, shard_id_t(0));

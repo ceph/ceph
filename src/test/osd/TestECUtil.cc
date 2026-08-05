@@ -1711,7 +1711,7 @@ TEST(ECUtil, rel_shard_and_zone_three_zones_match_pool)
   pg_pool_t pool;
   pool.type = pg_pool_t::TYPE_ERASURE;
   pool.size = 18;
-  pool.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(3));
+  pool.num_zones = 3;
   stripe_info_t sinfo(4, 2, 4096 * 4, &pool);
 
   ASSERT_EQ(3u, sinfo.get_num_zones());
@@ -1761,17 +1761,6 @@ TEST(ECUtil, zones_or)
             wide.zones_or(shard_id_set({shard_id_t(70)})));
   ASSERT_EQ(shard_id_set({shard_id_t(0), shard_id_t(23)}),
             wide.zones_or(shard_id_set({shard_id_t(23), shard_id_t(48)})));
-}
-
-// A non-positive NUM_ZONES is treated as a single zone.
-TEST(ECUtil, get_num_zones_nonpositive)
-{
-  for (int64_t zones : {int64_t(0), int64_t(-1)}) {
-    pg_pool_t pool;
-    pool.opts.set(pool_opts_t::NUM_ZONES, zones);
-    stripe_info_t sinfo(2, 1, 4096 * 2, &pool);
-    ASSERT_EQ(1u, sinfo.get_num_zones());
-  }
 }
 
 // Absolute zone-1 shard ids must not be used on per-zone shard maps.

@@ -346,7 +346,7 @@ TEST_F(TestLocalZoneForActingSet, ValidateFlagsAcceptsLocalizeReadsRegardlessOfE
   // passed to validate_flags().
   pg_pool_t pool;
   pool.type = pg_pool_t::TYPE_ERASURE;
-  pool.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+  pool.num_zones = 2;
 
   EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS, g_ceph_context));
 
@@ -360,7 +360,7 @@ TEST_F(TestLocalZoneForActingSet, FastECLocalizeBothFlagsAccepted)
   pool.type = pg_pool_t::TYPE_ERASURE;
   pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
   pool.set_flag(pg_pool_t::FLAG_CLIENT_SPLIT_READS);
-  pool.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+  pool.num_zones = 2;
   // Both BALANCE_READS and LOCALIZE_READS should pass flag validation.
   EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_BALANCE_READS, g_ceph_context));
   EXPECT_TRUE(SplitOp::validate_flags(&pool, CEPH_OSD_FLAG_LOCALIZE_READS, g_ceph_context));

@@ -75,7 +75,7 @@ function TEST_stretch_replicated() {
     ceph osd crush rule create-stretch-replicated || return 1
 
     ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].op' | grep "choose_firstn" || return 1
-    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].num' | grep "0" || return 1
+    ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].num' | grep "2" || return 1
     ceph osd crush rule dump stretch_replica_rule | jq '.steps[1].type' | grep "datacenter" || return 1
 
     ceph osd crush rule dump stretch_replica_rule | jq '.steps[2].op' | grep "chooseleaf_firstn" || return 1
@@ -148,7 +148,7 @@ function TEST_stretch_ec() {
     ceph osd crush rule create-erasure stretch_erasurecode_rule stretch_ec_profile --num-zones 2 || return 1
 
     ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].op' | grep "choose_firstn" || return 1
-    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].num' | grep "0" || return 1
+    ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].num' | grep "2" || return 1
     ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[3].type' | grep "datacenter" || return 1
 
     ceph osd crush rule dump stretch_erasurecode_rule | jq '.steps[4].op' | grep "chooseleaf_indep" || return 1
@@ -229,7 +229,7 @@ function TEST_pool_create_stretch_ec() {
     ceph osd pool create data0 erasure --num-zones 2 --k 2 --m 1 || return 1
 
     ceph osd crush rule dump data0 | jq '.steps[3].op' | grep "choose_firstn" || return 1
-    ceph osd crush rule dump data0 | jq '.steps[3].num' | grep "0" || return 1
+    ceph osd crush rule dump data0 | jq '.steps[3].num' | grep "2" || return 1
     ceph osd crush rule dump data0 | jq '.steps[3].type' | grep "datacenter" || return 1
 
     ceph osd crush rule dump data0 | jq '.steps[4].op' | grep "chooseleaf_indep" || return 1
@@ -296,7 +296,7 @@ function TEST_pool_create_stretch_replica() {
     test "$(ceph osd pool get data0 min_size -f json | jq .min_size)" = 2 || return 1
 
     ceph osd crush rule dump data0 | jq '.steps[1].op' | grep "choose_firstn" || return 1
-    ceph osd crush rule dump data0 | jq '.steps[1].num' | grep "0" || return 1
+    ceph osd crush rule dump data0 | jq '.steps[1].num' | grep "2" || return 1
     ceph osd crush rule dump data0 | jq '.steps[1].type' | grep "datacenter" || return 1
 
     ceph osd crush rule dump data0 | jq '.steps[2].op' | grep "chooseleaf_firstn" || return 1

@@ -969,7 +969,7 @@ class TestTScrubberBeECStretch : public TestTScrubberBeECCorruptShards {
   }
 
   void ec_set_stripe_info() override {
-    test_pg->m_pool->info.opts.set(pool_opts_t::NUM_ZONES, int64_t(num_zones));
+    test_pg->m_pool->info.num_zones = num_zones;
     TestTScrubberBeECCorruptShards::ec_set_stripe_info();
   }
 

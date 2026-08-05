@@ -582,7 +582,7 @@ TEST(ectransaction, partial_overwrite_plan_two_zones_matches_one_zone)
   pool1.size = 6;
   pg_pool_t pool2 = pool1;
   pool2.size = 12;
-  pool2.opts.set(pool_opts_t::NUM_ZONES, 2);
+  pool2.num_zones = 2;
   ECUtil::stripe_info_t sinfo1(4, 2, 16384, &pool1, std::vector<shard_id_t>(0));
   ECUtil::stripe_info_t sinfo2(4, 2, 16384, &pool2, std::vector<shard_id_t>(0));
   ASSERT_EQ(sinfo2.get_k_plus_m(), 6u);

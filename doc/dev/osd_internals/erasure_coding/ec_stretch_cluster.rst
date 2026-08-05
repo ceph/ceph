@@ -134,7 +134,7 @@ The full command syntax is listed here. Refer to the later sections for pool-typ
 
         # Replica-Specific Options
         [--size <size>]
-        [--num_replica_per_zone <num_replica_per_zone>]
+        [--replica <replica>]
 
         # Erasure-Specific Options
         [--k <num_data_shards>]
@@ -201,7 +201,8 @@ These are the primary parameters required for standard deployments.
   - *Pool Size*: For an EC pool, the resulting pool ``size`` is ``num_zones × (k + m)``. For a
     replicated pool created with ``num_zones`` greater than 1 and without ``--size``, it is
     ``num_zones × num_replica_per_zone`` (4 for 2 zones of 2 replicas). In global stretch mode
-    (``ceph mon enable_stretch_mode``) a replicated pool's size is ``mon_stretch_pool_size``.
+    (``ceph mon enable_stretch_mode``) a replicated pool's size is the number of zones ×
+    ``mon_global_stretch_pool_replica``, and ``--size`` is refused.
 
 
 2.1.4 Advanced Parameters
@@ -248,9 +249,8 @@ These parameters are intended for advanced users and offer finer control over th
   - *Note*: Mutually exclusive with ``--num_zones``: Cannot be used with multi-zone configurations. Also
     mutually exclusive with ``--k``/``--m``.
 
-**--num_replica_per_zone**
+**--replica**
   - *Definition*: For replicated pools, the number of replicas within each zone. (Replica only)
-  - *Default Value*: ``2``
 
 .. note::
 

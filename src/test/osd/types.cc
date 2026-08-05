@@ -1870,7 +1870,7 @@ TEST(pg_pool_t_test, get_ec_data_shard_count_multi_zone_fallback) {
   pg_pool_t p;
   p.type = pg_pool_t::TYPE_ERASURE;
   p.size = num_zones * (k + m);
-  p.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(num_zones));
+  p.num_zones = num_zones;
   for (int zone = 0; zone < num_zones; ++zone) {
     for (int i = 1; i < k; ++i) {
       p.nonprimary_shards.insert(shard_id_t(i + (k + m) * zone));

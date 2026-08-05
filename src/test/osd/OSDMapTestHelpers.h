@@ -191,7 +191,7 @@ public:
 
     // size = num_zones * (k + m)
     pool.size = num_zones * (k + m);
-    pool.opts.set(pool_opts_t::NUM_ZONES, num_zones);
+    pool.num_zones = num_zones;
     
     // num_zones > 1 pools get the monitor's value from make_stretch_pool().
     pool.min_size = num_zones * (k + m) - m;

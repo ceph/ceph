@@ -133,7 +133,7 @@ protected:
     pool_info.crush_rule = 0;
     pool_info.set_pg_num(8);
     pool_info.set_pgp_num(8);
-    pool_info.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+    pool_info.num_zones = 2;
 
     std::map<std::string, std::string> erasure_code_profile = {
       {"k", "2"}, {"m", "1"}, {"plugin", "jerasure"}, {"technique", "reed_sol_van"}
@@ -1283,7 +1283,7 @@ protected:
     pool_info.crush_rule    = 0;
     pool_info.set_pg_num(8);
     pool_info.set_pgp_num(8);
-    pool_info.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(3));
+    pool_info.num_zones = 3;
 
     std::map<std::string, std::string> ec_profile = {
       {"k", "2"}, {"m", "1"}, {"plugin", "jerasure"}, {"technique", "reed_sol_van"}
@@ -1464,7 +1464,7 @@ TEST_F(TestECActingStretch3Zone, CRUSH_rehash_ThreeZones) {
 TEST_F(TestECActingStretch3Zone, ZoneTransition_ThreeToTwo) {
   pg_pool_t two_zone = *osdmap->get_pg_pool(pool_id);
   two_zone.size = 6;
-  two_zone.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+  two_zone.num_zones = 2;
   two_zone.peering_crush_bucket_target = 2;
   two_zone.peering_crush_bucket_count = 2;
   const pg_pool_t* pool = &two_zone;
@@ -2083,7 +2083,7 @@ TEST_F(TestECActingStretch, NoZoneWithKShards_UpDoesNotCostRecoverability) {
 // datacenters (bucket_max 3) keeps every up OSD.
 TEST_F(TestECActingStretch, SingleZoneStretchPool_KeepsUpAcrossDatacenters) {
   pg_pool_t single_zone = *osdmap->get_pg_pool(pool_id);
-  single_zone.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(1));
+  single_zone.num_zones = 1;
   single_zone.peering_crush_bucket_count = 1;
   vector<int> up = {0, 1, 2, 3, 4, 5};
   map<pg_shard_t, pg_info_t> all_info;

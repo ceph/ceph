@@ -112,7 +112,7 @@ protected:
   void SetUp() override {
     ec_pool        = make_ec_pool(4, 2, 4096);
     ec_zones_pool  = make_ec_pool(4, 2, 4096);
-    ec_zones_pool.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+    ec_zones_pool.num_zones = 2;
     ec_crimson_pool = make_ec_pool(4, 2, 4096, pg_pool_t::FLAG_CRIMSON);
     rep_pool       = make_replicated_pool();
   }
@@ -703,14 +703,14 @@ protected:
 
     pg_pool_t ec = make_ec_pool(2, 1, 4096);
     ec.size = 6;
-    ec.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+    ec.num_zones = 2;
     ec.peering_crush_bucket_count = 2;
     ec.set_pg_num(1);
     ec.set_pgp_num(1);
     OSDMapTestHelpers::add_pool(map, ec_pool_id, ec);
 
     pg_pool_t rep = make_replicated_pool(4);
-    rep.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
+    rep.num_zones = 2;
     rep.peering_crush_bucket_count = 2;
     rep.set_pg_num(1);
     rep.set_pgp_num(1);

@@ -2186,7 +2186,7 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
     ceph_assert(existing != nullptr);
     pg_pool_t updated = *existing;
     updated.size = 2 * (k + m);
-    updated.opts.set(pool_opts_t::NUM_ZONES, 2);
+    updated.num_zones = 2;
     // min_size = num_zones * (k+m) - m
     updated.min_size = 2 * (k + m) - m;
     // Add nonprimary_shards for zone 1 (shards 1..k-1 in zone 1 are non-primary).
@@ -2346,7 +2346,7 @@ TEST_P(TestECFailoverWithPeering, AddNewZoneWhileSingleZone) {
     ceph_assert(existing != nullptr);
     pg_pool_t restored = *existing;
     restored.size = k + m;
-    restored.opts.set(pool_opts_t::NUM_ZONES, 1);
+    restored.num_zones = 1;
     restored.min_size = static_cast<unsigned>((k + m) - m);
     // Remove zone-1 nonprimary_shards entries.
     if (pool_flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) {

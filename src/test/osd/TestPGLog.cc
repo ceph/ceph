@@ -139,7 +139,7 @@ struct PGLogTestBase {
     pg_pool_t pool;
     pool.type = pg_pool_t::TYPE_ERASURE;
     pool.size = k_plus_m * num_zones;
-    pool.opts.set(pool_opts_t::NUM_ZONES, num_zones);
+    pool.num_zones = num_zones;
     pool.set_flag(pg_pool_t::FLAG_EC_OPTIMIZATIONS);
     return pool;
   }

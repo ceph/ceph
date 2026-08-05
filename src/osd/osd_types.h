@@ -1148,7 +1148,6 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
-    NUM_ZONES,  // number of zones for the pool
   };
 
   enum type_t {
@@ -1521,6 +1520,8 @@ struct pg_pool_t {
   uint64_t flags = 0;           ///< FLAG_*
   __u8 type = 0;                ///< TYPE_*
   __u8 size = 0, min_size = 0;  ///< number of osds in each pg
+  __u8 replica = 0;             ///< number of replicas per zone
+  __u8 num_zones = 1;           ///< number of zones
   __u8 crush_rule = 0;          ///< crush placement rule
   __u8 object_hash = 0;         ///< hash mapping object name to ps
   pg_autoscale_mode_t pg_autoscale_mode = pg_autoscale_mode_t::UNKNOWN;
@@ -1819,6 +1820,8 @@ public:
   unsigned get_type() const { return type; }
   unsigned get_size() const { return size; }
   unsigned get_min_size() const { return min_size; }
+  unsigned get_num_zones() const { return num_zones; }
+  unsigned get_replica() const { return replica; }
   int get_crush_rule() const { return crush_rule; }
   int get_object_hash() const { return object_hash; }
   const char *get_object_hash_name() const {
@@ -2022,15 +2025,14 @@ public:
     }
   }
 
+  /// Deprecated: use get_num_zones() instead
+  /// Kept for backward compatibility
   int get_num_zone() const {
-    int64_t num_zones = 1;  // default: single-zone pool
-    opts.get(pool_opts_t::NUM_ZONES, &num_zones);
-
-    return static_cast<int>(num_zones);
+    return get_num_zones();
   }
 
   int get_zone_size() const {
-    return size / get_num_zone();
+    return size / get_num_zones();
   }
 
   /// EC multi-zone: convert absolute shard ID to relative shard ID

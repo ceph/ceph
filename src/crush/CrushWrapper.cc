@@ -2528,7 +2528,7 @@ int CrushWrapper::add_simple_stretch_rule_at(
   crush_rule_set_step(
     rule, step++,
     CRUSH_RULE_CHOOSE_FIRSTN,
-    0,
+    num_failure_domains,
     zone_type);
   crush_rule_set_step(
       rule, step++,
