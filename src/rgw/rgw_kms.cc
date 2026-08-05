@@ -18,6 +18,7 @@
 #include <rapidjson/writer.h>
 #include "rapidjson/error/error.h"
 #include "rapidjson/error/en.h"
+#include <regex>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -117,6 +118,14 @@ static void concat_url(std::string &url, std::string path) {
     }
     url.append(path);
   }
+}
+
+static bool validate_barbican_key_id(std::string_view key_id) {
+  // Barbican expects UUID4 secret ids.
+  // See barbican: common/utils.py, api/controllers/secrets.py
+  static const std::regex uuid_4_re{
+      R"(^[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}$)"};
+  return std::regex_match(key_id.data(), uuid_4_re);
 }
 
 /**
@@ -919,6 +928,10 @@ static int request_key_from_barbican(const DoutPrefixProvider *dpp,
                                      const std::string& barbican_token,
                                      optional_yield y,
                                      std::string& actual_key) {
+  if (!validate_barbican_key_id(key_id)) {
+    return -EINVAL;
+  }
+
   int res;
 
   CephContext* cct = dpp->get_cct();
