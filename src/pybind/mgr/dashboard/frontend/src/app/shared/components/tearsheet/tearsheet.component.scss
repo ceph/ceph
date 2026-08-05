@@ -40,10 +40,35 @@
 
 // FULL TEARSHEET
 .tearsheet--full {
+  display: flex;
+  flex-direction: column;
   height: 100%;
   margin: 0;
+  min-height: 0;
   padding: 0;
-  width: 100%;
+
+  .tearsheet-cols--full {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+
+  .tearsheet-body {
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+
+  .tearsheet-main {
+    min-height: 0;
+  }
+
+  .tearsheet-content--full {
+    flex: 1 1 auto;
+    max-block-size: none;
+    min-block-size: 0;
+    min-height: 0;
+  }
 }
 
 .tearsheet-cols--full {

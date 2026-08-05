@@ -1,4 +1,12 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import {
+  Component,
+  Input,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  Output,
+  EventEmitter
+} from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
 import { Router } from '@angular/router';
 
@@ -31,7 +39,6 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalService } from '~/app/shared/services/modal.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { OsdFlagsIndivModalComponent } from '../osd-flags-indiv-modal/osd-flags-indiv-modal.component';
 import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
 import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
@@ -49,9 +56,13 @@ const BASE_URL = 'osd';
   selector: 'cd-osd-list',
   templateUrl: './osd-list.component.html',
   styleUrls: ['./osd-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  standalone: false
 })
 export class OsdListComponent extends ListWithDetails implements OnInit {
+  @Input() showTabs = true;
+  @Input() inlineCreate = false;
+  @Output() createAction = new EventEmitter<void>();
+
   @ViewChild('osdUsageTpl', { static: true })
   osdUsageTpl: TemplateRef<any>;
   @ViewChild('markOsdConfirmationTpl', { static: true })
@@ -109,7 +120,6 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private modalService: ModalService,
-    private urlBuilder: URLBuilderService,
     private router: Router,
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n,
@@ -124,7 +134,13 @@ export class OsdListComponent extends ListWithDetails implements OnInit {
         name: this.actionLabels.CREATE,
         permission: 'create',
         icon: Icons.add,
-        click: () => this.router.navigate([this.urlBuilder.getCreate()]),
+        click: () => {
+          if (this.inlineCreate) {
+            this.createAction.emit();
+          } else {
+            this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.CREATE] } }]);
+          }
+        },
         disable: (selection: CdTableSelection) => this.getDisable('create', selection),
         canBePrimary: (selection: CdTableSelection) => !selection.hasSelection
       },

@@ -23,7 +23,8 @@ import {
   FileUploaderModule,
   RadioModule,
   TilesModule,
-  LayerModule
+  LayerModule,
+  AccordionModule
 } from 'carbon-components-angular';
 
 import {
@@ -46,6 +47,10 @@ import { ConfigurationDetailsComponent } from './configuration/configuration-det
 import { ConfigurationFormComponent } from './configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { CreateClusterReviewComponent } from './create-cluster/create-cluster-review.component';
+import { CreateClusterStep1Component } from './create-cluster/create-cluster-step-1/create-cluster-step-1.component';
+import { CreateClusterStep2Component } from './create-cluster/create-cluster-step-2/create-cluster-step-2.component';
+import { CreateClusterStep3Component } from './create-cluster/create-cluster-step-3/create-cluster-step-3.component';
+import { CreateClusterStep4Component } from './create-cluster/create-cluster-step-4/create-cluster-step-4.component';
 import { CreateClusterComponent } from './create-cluster/create-cluster.component';
 import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
@@ -130,7 +135,8 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     FileUploaderModule,
     RadioModule,
     TilesModule,
-    LayerModule
+    LayerModule,
+    AccordionModule
   ],
   declarations: [
     MonitorComponent,
@@ -170,6 +176,10 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     PlacementPipe,
     CreateClusterComponent,
     CreateClusterReviewComponent,
+    CreateClusterStep1Component,
+    CreateClusterStep2Component,
+    CreateClusterStep3Component,
+    CreateClusterStep4Component,
     UpgradeComponent,
     UpgradeStartModalComponent,
     UpgradeProgressComponent,
