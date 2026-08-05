@@ -42,11 +42,6 @@ interface EndpointInfo {
   frontendConfig: string;
 }
 
-interface RealmTokenInfo {
-  realm: string;
-  token: string;
-}
-
 enum Protocol {
   HTTP = 'http',
   HTTPS = 'https'
@@ -60,7 +55,8 @@ enum ConfigType {
 @Component({
   selector: 'cd-rgw-multisite-wizard',
   templateUrl: './rgw-multisite-wizard.component.html',
-  styleUrls: ['./rgw-multisite-wizard.component.scss']
+  styleUrls: ['./rgw-multisite-wizard.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteWizardComponent implements OnInit {
   @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
@@ -76,7 +72,7 @@ export class RgwMultisiteWizardComponent implements OnInit {
   clusterDetailsArray: MultiCluster[] = [];
   isMultiClusterConfigured = false;
   exportTokenForm!: CdFormGroup;
-  realms: RealmTokenInfo[] = [];
+  realms: Array<{ realm: string; token: string }> = [];
   loading = false;
   zonegroupEndpointsOptions: ComboBoxItem[] = [];
   zoneEndpointsOptions: ComboBoxItem[] = [];
@@ -120,10 +116,9 @@ export class RgwMultisiteWizardComponent implements OnInit {
           .flat()
           .filter((cluster) => cluster['url'] !== currentUrl);
         this.isMultiClusterConfigured = this.clusterDetailsArray.length > 0;
-        this.stepTitles = (
-          this.isMultiClusterConfigured
-            ? STEP_TITLES_MULTI_CLUSTER_CONFIGURED
-            : STEP_TITLES_SINGLE_CLUSTER
+        this.stepTitles = (this.isMultiClusterConfigured
+          ? STEP_TITLES_MULTI_CLUSTER_CONFIGURED
+          : STEP_TITLES_SINGLE_CLUSTER
         ).map((label) => ({ label }));
         this.selectedCluster = this.isMultiClusterConfigured
           ? this.clusterDetailsArray[0]['name']
@@ -235,11 +230,11 @@ export class RgwMultisiteWizardComponent implements OnInit {
       zonegroupName: new UntypedFormControl('default_zonegroup', {
         validators: [Validators.required]
       }),
-      zonegroup_endpoints: new UntypedFormControl(null, [Validators.required]),
+      zonegroup_endpoints: new UntypedFormControl([], [Validators.required]),
       zoneName: new UntypedFormControl('default_zone', {
         validators: [Validators.required]
       }),
-      zone_endpoints: new UntypedFormControl(null, {
+      zone_endpoints: new UntypedFormControl([], {
         validators: [Validators.required]
       }),
       username: new UntypedFormControl('default_system_user', {
@@ -396,12 +391,13 @@ export class RgwMultisiteWizardComponent implements OnInit {
             zoneEndpoints,
             username
           )
-          .subscribe((data: unknown) => {
-            const realmTokenInfos = Array.isArray(data) ? (data as RealmTokenInfo[]) : [];
+          .subscribe((data: object) => {
             this.setupCompleted = true;
             this.rgwMultisiteService.setRestartGatewayMessage(false);
             this.loading = false;
-            this.realms = realmTokenInfos.filter((r: RealmTokenInfo) => r.realm === realmName);
+            this.realms = (Array.isArray(data) ? data : []).filter(
+              (r: object) => r['realm'] === realmName
+            );
             this.title = $localize`Multi-site replication created`;
             this.description = $localize`The replication configuration has been created successfully.`;
             this.showSuccessNotification();

@@ -185,7 +185,7 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
 
   getMergedPayload(): any {
     return this.stepContents.toArray().reduce((acc, wrapper) => {
-      const stepFormValue = wrapper.stepComponent.formGroup.value;
+      const stepFormValue = wrapper.stepComponent?.formGroup?.value;
       return { ...acc, ...stepFormValue };
     }, {});
   }
