@@ -6,18 +6,28 @@ The ``ceph-volume`` tool aims to be a single purpose command line tool to deploy
 logical volumes as OSDs, trying to maintain a similar API to ``ceph-disk`` when
 preparing, activating, and creating OSDs.
 
-It deviates from ``ceph-disk`` by not interacting or relying on the udev rules
-that come installed for Ceph. These rules allow automatic detection of
-previously set up devices that are in turn fed into ``ceph-disk`` to activate
-them.
+Unlike ``ceph-disk``, ``ceph-volume`` does not install or react to the
+Ceph specific udev rules that automatically triggered ``ceph-disk`` to activate
+OSDs at boot. That activation path relied on udev as an event bus, ``ceph-volume``
+uses systemd units instead.
+
+Separately, ``ceph-volume`` needs device metadata provider by udev to discover and
+classify block devices (for example in ``inventory`` or ``raw list``). It reads
+this metadata from ``/run/udev/data/``, a cache populated by ``systemd-udevd``,
+rather than spawning ``udevadm`` subprocesses for each device. This is an
+operational requirement distinct from the ceph-disk udev rules above:
+``systemd-udevd`` must be running on the host, block devices must have been
+processed by udev, and ``/run/udev`` must be visible wherever ``ceph-volume``
+runs.
 
 Cephadm shell
 -------------
 Do not run ``ceph-volume`` from a container session that was started with
 ``cephadm shell`` while relying on that shell's default bind mounts. By design,
 ``cephadm shell`` omits several host bind mounts that ``ceph-volume`` expects
-(for example /run/udev, /run/lvm, etc.). Invoking ``ceph-volume`` in that
-environment is likely to fail or behave incorrectly.
+(for example ``/run/udev``, ``/run/lvm``, etc.). Without ``/run/udev``, the
+udev metadata cache is unavailable and commands such as ``inventory`` or
+``raw list`` are likely to fail.
 
 Running ``ceph-volume`` yourself, outside of what ``ceph orch`` / cephadm
 drives, is not the normal operational path: it is mainly for debugging,
