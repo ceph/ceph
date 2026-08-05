@@ -2614,6 +2614,129 @@ def test_query_vectors_post_filter_topk():
     _ = _delete_vector_bucket(conn, bucket_name)
     set_rgw_config_option('rgw_s3vector_topk_post_filter_factor', 1)
 
+def _setup_vector_bucket_with_index(conn, bucket_name, index_name, dimension=4):
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    result = conn.create_index(
+        vectorBucketName=bucket_name,
+        indexName=index_name,
+        dataType='float32',
+        dimension=dimension,
+        distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension,0)},
+        {'key': 'v1', 'data': generate_data(dimension,1)}
+    ]
+    result = conn.put_vectors(
+        vectorBucketName=bucket_name,
+        indexName=index_name,
+        vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+@pytest.mark.vector_test
+def test_put_get_delete_vector_bucket_policy():
+    owner = connection()
+    bucket_name = gen_bucket_name()
+    index_name = "test-index"
+
+    _setup_vector_bucket_with_index(owner, bucket_name, index_name)
+
+    bucket_arn = 'arn:aws:s3vectors:::bucket/{}'.format(bucket_name)
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{"Effect": "Allow", "Principal": "*",
+                       "Action": "s3vectors:GetVectors",
+                       "Resource": bucket_arn}]
+    })
+
+    result = owner.put_vector_bucket_policy(
+        vectorBucketName=bucket_name, policy=policy)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    
+    #get
+    result = owner.get_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    #delete
+    result = owner.delete_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # post delete get must fail
+    with pytest.raises(owner.exceptions.ClientError) as err_info:
+        owner.get_vector_bucket_policy(vectorBucketName=bucket_name)
+    assert err_info.value.response['Error']['Code'] == 'NoSuchBucketPolicy'
+
+    #cleanup
+    owner.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+@pytest.mark.vector_test
+def test_vector_ops_allow_with_policy():
+    owner = connection()
+    other = another_user()
+    other_arn = "arn:aws:iam:::user/{other_uid}"
+    bucket_name = gen_bucket_name()
+    _setup_vector_bucket_with_index(owner, bucket_name, 'test-index')
+
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": other_arn},
+            "Action": "s3vectors:GetVectors",
+            "Resource": f"arn:aws:s3vectors:::bucket/{bucket_name}"
+        }]
+    })
+    owner.put_vector_bucket_policy(vectorBucketName=bucket_name, policy=policy)
+
+    result = other.get_vectors(vectorBucketName=bucket_name,
+                               indexName='test-index', keys=['v0'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    owner.delete_vector_bucket(vectorBucketName=bucket_name)
+
+@pytest.mark.vector_test
+def test_vector_ops_deny_without_policy():
+    """A second user is denied PutVectors when the policy only allows GetVectors."""
+    owner = connection()
+    other = another_user()
+    other_arn = f"arn:aws:iam:::user/{other}"
+    bucket_name = gen_bucket_name()
+    index_name = 'test-index'
+    dimension = 4
+
+    _setup_vector_bucket_with_index(owner, bucket_name, index_name, dimension=dimension)
+
+    # policy only allows GetVectors
+    policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [{
+            "Effect": "Allow",
+            "Principal": {"AWS": other_arn},
+            "Action": "s3vectors:GetVectors",
+            "Resource": f"arn:aws:s3vectors:::bucket/{bucket_name}"
+        }]
+    })
+    owner.put_vector_bucket_policy(vectorBucketName=bucket_name, policy=policy)
+
+    # other user can get vectors (allowed)
+    result = other.get_vectors(vectorBucketName=bucket_name,
+                               indexName=index_name, keys=['v0'])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # other user is denied put_vectors
+    with pytest.raises(other.exceptions.ClientError) as err_info:
+        other.put_vectors(
+            vectorBucketName=bucket_name,
+            indexName=index_name,
+            vectors=[{'key': 'vx', 'data': generate_data(dimension, 99)}])
+    assert err_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 403
+
+    # cleanup
+    owner.delete_vector_bucket(vectorBucketName=bucket_name)
 
 @pytest.mark.vector_test
 def test_sal_error_propagation():

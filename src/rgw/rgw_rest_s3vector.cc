@@ -954,6 +954,7 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
+    op_ret = rgw::s3vector::put_vector_bucket_policy(configuration, bucket.get(), this, y);
     // policy TODO: implement
   }
 };
