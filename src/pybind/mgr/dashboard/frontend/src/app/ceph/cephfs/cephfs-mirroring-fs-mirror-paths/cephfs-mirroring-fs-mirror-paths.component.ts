@@ -21,7 +21,12 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { FormatterService } from '~/app/shared/services/formatter.service';
-import { MirrorDirStatus, MirrorCheckpoint, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
+import {
+  MirrorDirStatus,
+  MirrorCheckpoint,
+  MirrorCheckpointStatus,
+  MirrorStatusResponse
+} from '~/app/shared/models/cephfs.model';
 import { MirrorPathSchedule } from '~/app/shared/models/snapshot-schedule';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -262,8 +267,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     this.subscriptions.add(
       this.cephfsService.list().subscribe({
         next: (filesystems: { id?: number; mdsmap?: { fs_name?: string } }[]) => {
-          const fsId =
-            filesystems.find((fs) => fs.mdsmap?.fs_name === this.fsName)?.id ?? 0;
+          const fsId = filesystems.find((fs) => fs.mdsmap?.fs_name === this.fsName)?.id ?? 0;
           const encodedFsName = encodeURIComponent(this.fsName);
           // Absolute URL avoids NG04006 when leaving /mirroring/:fsName for the list modal outlet
           this.router.navigateByUrl(
@@ -667,14 +671,64 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     snapshot: SnapshotEntry,
     checkpoint?: MirrorCheckpoint
   ): SnapshotPanelViewModel {
+    const display = checkpoint
+      ? this.checkpointStatusDisplay(checkpoint.status)
+      : {
+          icon: snapshot.icon,
+          iconClass: snapshot.iconClass,
+          statusLabel: snapshot.statusLabel,
+          replicationStatusLabel: this.replicationStatusLabel(snapshot.status)
+        };
+
     return {
       ...snapshot,
       expanded: this.expandedSnapshotNames.has(snapshot.name),
       hasCheckpoint: !!checkpoint,
       checkpoint,
       createdAt: checkpoint?.created_at ?? snapshot.createdAt,
-      replicationStatusLabel: this.replicationStatusLabel(snapshot.status)
+      icon: display.icon,
+      iconClass: display.iconClass,
+      statusLabel: display.statusLabel,
+      replicationStatusLabel: display.replicationStatusLabel
     };
+  }
+
+  private checkpointStatusDisplay(status: MirrorCheckpointStatus): {
+    icon: keyof typeof ICON_TYPE;
+    iconClass: string;
+    statusLabel: string;
+    replicationStatusLabel: string;
+  } {
+    switch (status) {
+      case 'created':
+        return {
+          icon: 'inProgress',
+          iconClass: 'info',
+          statusLabel: $localize`checkpoint created`,
+          replicationStatusLabel: $localize`Created`
+        };
+      case 'complete':
+        return {
+          icon: 'checkMarkOutline',
+          iconClass: 'success',
+          statusLabel: $localize`checkpoint complete`,
+          replicationStatusLabel: $localize`Complete`
+        };
+      case 'failed':
+        return {
+          icon: 'danger',
+          iconClass: 'danger',
+          statusLabel: $localize`checkpoint failed`,
+          replicationStatusLabel: $localize`Failed`
+        };
+      default:
+        return {
+          icon: 'warning',
+          iconClass: 'muted',
+          statusLabel: $localize`checkpoint unknown`,
+          replicationStatusLabel: $localize`Unknown`
+        };
+    }
   }
 
   toggleSnapshotExpanded(snapshotName: string): void {
@@ -707,15 +761,13 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
             path,
             snapName
           }),
-          call: this.cephfsService
-            .addMirrorCheckpoint(this.fsName, path, snapName)
-            .pipe(
-              tap(() => {
-                this.checkpointActionInProgress = '';
-                this.loadPathCheckpoints(path);
-                this.loadMirrorPaths();
-              })
-            )
+          call: this.cephfsService.addMirrorCheckpoint(this.fsName, path, snapName).pipe(
+            tap(() => {
+              this.checkpointActionInProgress = '';
+              this.loadPathCheckpoints(path);
+              this.loadMirrorPaths();
+            })
+          )
         })
         .subscribe({
           error: () => {
@@ -738,20 +790,19 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       itemNames: [snapName],
       actionDescription: 'remove',
       submitActionObservable: () =>
-        this.taskWrapper
-          .wrapTaskAroundCall({
-            task: new FinishedTask('cephfs/mirroring/checkpoint/remove', {
-              fsName: this.fsName,
-              path,
-              snapName
-            }),
-            call: this.cephfsService.removeMirrorCheckpoint(this.fsName, path, snapName).pipe(
-              tap(() => {
-                this.loadPathCheckpoints(path);
-                this.loadMirrorPaths();
-              })
-            )
-          })
+        this.taskWrapper.wrapTaskAroundCall({
+          task: new FinishedTask('cephfs/mirroring/checkpoint/remove', {
+            fsName: this.fsName,
+            path,
+            snapName
+          }),
+          call: this.cephfsService.removeMirrorCheckpoint(this.fsName, path, snapName).pipe(
+            tap(() => {
+              this.loadPathCheckpoints(path);
+              this.loadMirrorPaths();
+            })
+          )
+        })
     });
   }
 
