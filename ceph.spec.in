@@ -1993,6 +1993,9 @@ install -m 0644 -D udev/50-rbd.rules %{buildroot}%{_udevrulesdir}/50-rbd.rules
 install -m 0440 -D sudoers.d/ceph-smartctl %{buildroot}%{_sysconfdir}/sudoers.d/ceph-smartctl
 
 %if 0%{?rhel} >= 8 || 0%{?openEuler}
+# Undefine -P flag as it is only supported with python version >= 3.11
+%undefine _py3_shebang_P
+
 %{py3_shebang_fix} %{buildroot}%{_bindir}/* %{buildroot}%{_sbindir}/*
 %endif
 
