@@ -4,9 +4,12 @@ while MDS daemons may be killed and restarted by mds_thrash.
 
 This validates that quarantine state (persisted in inode optmetadata) survives
 MDS failovers and that cap revocation completes correctly after recovery.
+
+Modeled after quiescer.py — the quarantine equivalent of quiesce thrashing.
 """
 import contextlib
 import errno
+import json
 import logging
 import random
 import time
@@ -26,22 +29,27 @@ TEST_DATA = "Quarantine thrash test data."
 
 class QuarantineThrasher(ThrasherGreenlet):
     """
-    Periodically enables and disables quarantine on a subvolume.
+    Periodically enables and disables quarantine on a subvolume, verifying
+    that data access is blocked while quarantine is active and restored
+    after it is lifted.
 
     While MDS thrash is running in parallel, this exercises:
     - Quarantine enable during MDS failover (journal in flight)
     - Quarantine disable during MDS failover (cap revocation in flight)
     - Quarantine state recovery after MDS restart
     - Cap revocation completing on the new active MDS
+    - Data integrity after quarantine cycles
 
     Parameters:
-        initial_delay:  seconds before first quarantine cycle     (default: 10)
-        min_hold:       minimum seconds to hold quarantine        (default: 5)
-        max_hold:       maximum seconds to hold quarantine        (default: 30)
-        min_release:    minimum seconds between cycles            (default: 5)
-        max_release:    maximum seconds between cycles            (default: 20)
-        verify:         whether to verify access after each cycle (default: True)
-        seed:           random seed for reproducibility           (default: None)
+        initial_delay:    seconds before first cycle                (default: 10)
+        min_hold:         minimum seconds to hold quarantine        (default: 5)
+        max_hold:         maximum seconds to hold quarantine        (default: 30)
+        min_release:      minimum seconds between cycles            (default: 5)
+        max_release:      maximum seconds between cycles            (default: 20)
+        command_timeout:  timeout for individual ceph commands       (default: 120)
+        max_retries:      retries for enable/disable during failover (default: 15)
+        retry_delay:      seconds between retries                   (default: 3)
+        seed:             random seed for reproducibility           (default: None)
     """
 
     def __init__(self, ctx, fscid,
@@ -51,7 +59,9 @@ class QuarantineThrasher(ThrasherGreenlet):
                  max_hold=30,
                  min_release=5,
                  max_release=20,
-                 verify=True,
+                 command_timeout=120,
+                 max_retries=15,
+                 retry_delay=3,
                  seed=None,
                  **kwargs):
         super(QuarantineThrasher, self).__init__()
@@ -72,127 +82,175 @@ class QuarantineThrasher(ThrasherGreenlet):
         self.max_hold = max(1, max_hold)
         self.min_release = max(1, min_release)
         self.max_release = max(1, max_release)
-        self.verify = verify
+        self.command_timeout = command_timeout
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
         self.volname = self.fs.name
         self.subvol_created = False
         self.quarantine_enabled = False
+        self.subvol_path = None
 
-    def _run_ceph_cmd(self, *args, **kwargs):
+    def _run_ceph_cmd(self, *args):
         """Run a ceph CLI command, return (rc, stdout)."""
-        kwargs.setdefault('check_status', False)
-        kwargs.setdefault('stdout', StringIO())
-        kwargs.setdefault('timeoutcmd', 120)
-        result = self.fs.run_ceph_cmd(args=list(args), **kwargs)
+        result = self.fs.run_ceph_cmd(args=list(args), check_status=False,
+                                      stdout=StringIO(),
+                                      timeoutcmd=self.command_timeout)
         return result.exitstatus, result.stdout.getvalue()
 
     def _fs_cmd(self, *args):
-        """Run a 'ceph fs' subcommand."""
+        """Run a 'ceph fs' subcommand, raise on failure."""
         rc, out = self._run_ceph_cmd('fs', *args)
         if rc != 0:
             raise RuntimeError("ceph fs %s failed with rc=%d: %s"
                                % (' '.join(args), rc, out))
         return out
 
+    def _rcinfo(self, rc):
+        return "%d (%s)" % (rc, errno.errorcode.get(rc, 'Unknown'))
+
+    # -- Setup / cleanup ------------------------------------------------------
+
     def _setup_subvolume(self):
         """Create the test subvolume and write test data."""
         self.logger.info("Creating subvolume %s", SUBVOLUME_NAME)
-        try:
-            self._fs_cmd("subvolume", "create", self.volname,
-                         SUBVOLUME_NAME, "--mode=777")
-            self.subvol_created = True
-        except RuntimeError as e:
-            if 'already exists' not in str(e).lower():
-                raise
-            self.logger.info("Subvolume already exists, reusing")
-            self.subvol_created = True
+        self._fs_cmd("subvolume", "create", self.volname,
+                     SUBVOLUME_NAME, "--mode=777")
+        self.subvol_created = True
+
+        self.subvol_path = self._fs_cmd("subvolume", "getpath",
+                                        self.volname,
+                                        SUBVOLUME_NAME).strip()
+        self.logger.info("Subvolume path: %s", self.subvol_path)
 
     def _cleanup_subvolume(self):
-        """Remove the test subvolume."""
+        """Remove the test subvolume, disabling quarantine if needed."""
         if not self.subvol_created:
             return
-        try:
-            if self.quarantine_enabled:
-                self._quarantine_disable()
-        except Exception as e:
-            self.logger.warning("Error disabling quarantine during cleanup: %s", e)
+        if self.quarantine_enabled:
+            try:
+                self._quarantine_op("disable")
+            except Exception as e:
+                self.logger.warning("Cleanup: disable quarantine failed: %s", e)
         try:
             self._fs_cmd("subvolume", "rm", self.volname,
                          SUBVOLUME_NAME, "--force")
         except Exception as e:
-            self.logger.warning("Error removing subvolume during cleanup: %s", e)
+            self.logger.warning("Cleanup: rm subvolume failed: %s", e)
 
-    def _quarantine_enable(self):
-        """Enable quarantine, retrying on transient errors."""
-        max_retries = 10
-        for attempt in range(max_retries):
+    # -- Quarantine operations ------------------------------------------------
+
+    def _quarantine_op(self, op):
+        """Enable or disable quarantine, retrying on transient MDS errors."""
+        transient = {errno.EBUSY, errno.EAGAIN, errno.ENOENT,
+                     errno.EINTR, errno.EIO}
+
+        for attempt in range(1, self.max_retries + 1):
+            self.proceed_unless_stopped()
+
             rc, out = self._run_ceph_cmd(
-                'fs', 'subvolume', 'quarantine', 'enable',
+                'fs', 'subvolume', 'quarantine', op,
                 self.volname, SUBVOLUME_NAME)
-            if rc == 0:
-                self.quarantine_enabled = True
-                return
-            if rc == errno.EBUSY:
-                self.logger.info("Quarantine enable EBUSY (attempt %d/%d), retrying",
-                                 attempt + 1, max_retries)
-                self.sleep_unless_stopped(2)
-                continue
-            if rc == errno.EAGAIN or rc == errno.ENOENT:
-                self.logger.info("Quarantine enable got %d (MDS may be recovering), retrying",
-                                 rc)
-                self.sleep_unless_stopped(3)
-                continue
-            self.logger.warning("Quarantine enable failed rc=%d: %s", rc, out.strip())
-            self.sleep_unless_stopped(2)
-        raise RuntimeError("Failed to enable quarantine after %d attempts" % max_retries)
 
-    def _quarantine_disable(self):
-        """Disable quarantine, retrying on transient errors."""
-        max_retries = 10
-        for attempt in range(max_retries):
-            rc, out = self._run_ceph_cmd(
-                'fs', 'subvolume', 'quarantine', 'disable',
-                self.volname, SUBVOLUME_NAME)
             if rc == 0:
-                self.quarantine_enabled = False
+                self.quarantine_enabled = (op == "enable")
+                self.logger.info("quarantine %s succeeded (attempt %d)",
+                                 op, attempt)
                 return
-            if rc == errno.EBUSY:
-                self.logger.info("Quarantine disable EBUSY (attempt %d/%d), retrying",
-                                 attempt + 1, max_retries)
-                self.sleep_unless_stopped(2)
-                continue
-            if rc == errno.EAGAIN or rc == errno.ENOENT:
-                self.logger.info("Quarantine disable got %d (MDS may be recovering), retrying",
-                                 rc)
-                self.sleep_unless_stopped(3)
-                continue
-            self.logger.warning("Quarantine disable failed rc=%d: %s", rc, out.strip())
-            self.sleep_unless_stopped(2)
-        raise RuntimeError("Failed to disable quarantine after %d attempts" % max_retries)
 
-    def _verify_quarantine_active(self):
-        """Verify that the subvolume is quarantined (getpath should still work)."""
+            if rc in transient:
+                self.logger.info("quarantine %s got %s (attempt %d/%d), "
+                                 "MDS may be recovering",
+                                 op, self._rcinfo(rc), attempt,
+                                 self.max_retries)
+                self.sleep_unless_stopped(self.retry_delay)
+                continue
+
+            self.logger.warning("quarantine %s failed with %s: %s",
+                                op, self._rcinfo(rc), out.strip())
+            self.sleep_unless_stopped(self.retry_delay)
+
+        raise RuntimeError("quarantine %s failed after %d attempts"
+                           % (op, self.max_retries))
+
+    # -- Verification ---------------------------------------------------------
+
+    def _verify_quarantine_enforced(self):
+        """Verify quarantine is enforced: subvolume info should show enabled,
+        getpath should be blocked."""
         try:
-            out = self._fs_cmd("subvolume", "getpath", self.volname,
+            out = self._fs_cmd("subvolume", "info", self.volname,
                                SUBVOLUME_NAME)
-            path = out.strip()
-            if path:
-                self.logger.info("Quarantine active, subvolume path: %s", path)
+            info = json.loads(out)
+            if info.get("quarantine") == "enabled":
+                self.logger.info("Verified: quarantine enforced "
+                                 "(info shows quarantine=enabled)")
                 return True
-        except RuntimeError:
-            pass
+            self.logger.warning("Unexpected info during quarantine: %s", info)
+        except Exception as e:
+            self.logger.warning("Could not verify quarantine via info: %s", e)
+
+        # Fallback: check that getpath is blocked
+        rc, _ = self._run_ceph_cmd('fs', 'subvolume', 'getpath',
+                                   self.volname, SUBVOLUME_NAME)
+        if rc == errno.EACCES:
+            self.logger.info("Verified: quarantine enforced "
+                             "(getpath returned EACCES)")
+            return True
+
+        self.logger.warning("Quarantine verification inconclusive "
+                            "(getpath rc=%s)", self._rcinfo(rc))
         return False
 
     def _verify_quarantine_lifted(self):
-        """Verify that the subvolume is accessible (ls should work)."""
+        """Verify quarantine is lifted: subvolume info should show disabled,
+        getpath should succeed."""
         try:
-            out = self._fs_cmd("subvolume", "ls", self.volname)
-            if SUBVOLUME_NAME in out:
-                self.logger.info("Quarantine lifted, subvolume visible in ls")
+            out = self._fs_cmd("subvolume", "info", self.volname,
+                               SUBVOLUME_NAME)
+            info = json.loads(out)
+            if info.get("quarantine") == "disabled":
+                self.logger.info("Verified: quarantine lifted "
+                                 "(info shows quarantine=disabled)")
                 return True
-        except RuntimeError:
-            pass
+            self.logger.warning("Unexpected info after disable: %s", info)
+        except Exception as e:
+            self.logger.warning("Could not verify lift via info: %s", e)
+
+        # Fallback: check that getpath works
+        rc, out = self._run_ceph_cmd('fs', 'subvolume', 'getpath',
+                                     self.volname, SUBVOLUME_NAME)
+        if rc == 0 and out.strip():
+            self.logger.info("Verified: quarantine lifted "
+                             "(getpath returned %s)", out.strip())
+            return True
+
+        self.logger.warning("Quarantine lift verification inconclusive "
+                            "(getpath rc=%s)", self._rcinfo(rc))
         return False
+
+    # -- Main loop ------------------------------------------------------------
+
+    def do_quarantine_cycle(self, hold_time, cycle):
+        """Run one enable → hold → verify → disable → verify cycle."""
+
+        # Enable
+        self.logger.info("Cycle %d: enabling quarantine (will hold %.1fs)",
+                         cycle, hold_time)
+        self._quarantine_op("enable")
+
+        self.logger.info("Cycle %d: quarantine enabled, verifying", cycle)
+        self._verify_quarantine_enforced()
+
+        # Hold
+        self.sleep_unless_stopped(hold_time)
+
+        # Disable
+        self.logger.info("Cycle %d: disabling quarantine", cycle)
+        self._quarantine_op("disable")
+
+        self.logger.info("Cycle %d: quarantine disabled, verifying", cycle)
+        self._verify_quarantine_lifted()
 
     def _run(self):
         try:
@@ -206,44 +264,20 @@ class QuarantineThrasher(ThrasherGreenlet):
             cycle = 0
             while not self.is_stopped:
                 cycle += 1
-                hold_time = self.rnd.uniform(self.min_hold, self.max_hold)
-                release_time = self.rnd.uniform(self.min_release, self.max_release)
+                hold_time = round(
+                    self.rnd.uniform(self.min_hold, self.max_hold), 1)
+                release_time = round(
+                    self.rnd.uniform(self.min_release, self.max_release), 1)
 
-                # --- Enable quarantine ---
-                self.logger.info("Cycle %d: enabling quarantine (will hold %.1fs)",
-                                 cycle, hold_time)
                 try:
-                    self._quarantine_enable()
+                    self.do_quarantine_cycle(hold_time, cycle)
                 except RuntimeError as e:
-                    self.logger.warning("Cycle %d: enable failed: %s, will retry next cycle",
-                                        cycle, e)
-                    self.sleep_unless_stopped(release_time)
-                    continue
+                    self.logger.warning("Cycle %d failed: %s — "
+                                        "will retry after %.1fs",
+                                        cycle, e, release_time)
 
-                self.logger.info("Cycle %d: quarantine enabled, holding for %.1fs",
-                                 cycle, hold_time)
-
-                if self.verify:
-                    self._verify_quarantine_active()
-
-                self.sleep_unless_stopped(hold_time)
-
-                # --- Disable quarantine ---
-                self.logger.info("Cycle %d: disabling quarantine", cycle)
-                try:
-                    self._quarantine_disable()
-                except RuntimeError as e:
-                    self.logger.warning("Cycle %d: disable failed: %s, will retry next cycle",
-                                        cycle, e)
-                    self.sleep_unless_stopped(release_time)
-                    continue
-
-                self.logger.info("Cycle %d: quarantine disabled, releasing for %.1fs",
+                self.logger.info("Cycle %d: sleeping %.1fs before next cycle",
                                  cycle, release_time)
-
-                if self.verify:
-                    self._verify_quarantine_lifted()
-
                 self.sleep_unless_stopped(release_time)
 
         except Exception as e:
@@ -274,14 +308,23 @@ def task(ctx, config):
     Stress test quarantine by randomly enabling/disabling quarantine on a
     subvolume while MDS thrash is running.
 
+    Modeled after the quiescer task — exercises quarantine during MDS
+    failovers by cycling enable/disable while mds_thrash kills daemons.
+
+    Each cycle:
+      1. Enable quarantine on the test subvolume
+      2. Verify quarantine is enforced (info shows enabled, getpath blocked)
+      3. Hold for a random duration
+      4. Disable quarantine
+      5. Verify quarantine is lifted (info shows disabled, getpath works)
+      6. Sleep before next cycle
+
     Example config::
 
         - quarantine_thrasher:
             min_hold: 5
             max_hold: 20
             initial_delay: 10
-
-    Runs alongside mds_thrash to exercise quarantine during MDS failovers.
     """
 
     if config is None:
