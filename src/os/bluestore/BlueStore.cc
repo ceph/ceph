@@ -14827,7 +14827,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
    */
 
   OpSequencer *osr = txc->osr.get();
-  std::lock_guard l(osr->qlock);
+  std::unique_lock l(osr->qlock);
   txc->set_state(TransContext::STATE_IO_DONE);
   txc->ioc.release_running_aios();
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
@@ -14849,6 +14849,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
 	   p->get_state() == TransContext::STATE_IO_DONE);
 
   if (osr->kv_submitted_waiters) {
+    l.unlock(); // notify waiters outside the lock
     osr->qcond.notify_all();
   }
 }
@@ -14987,7 +14988,7 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
     ceph_assert(r == 0);
     txc->set_state(TransContext::STATE_KV_SUBMITTED);
     if (txc->osr->kv_submitted_waiters) {
-      std::lock_guard l(txc->osr->qlock);
+      // No need to take a lock.
       txc->osr->qcond.notify_all();
     }
 
