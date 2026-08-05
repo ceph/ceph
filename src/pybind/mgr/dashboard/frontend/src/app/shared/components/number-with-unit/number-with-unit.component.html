@@ -1,0 +1,30 @@
+<div
+  cdsRow
+  [formGroup]="formGroup"
+>
+  <div cdsCol>
+    <cds-number
+      [label]="label"
+      [helperText]="helperText"
+      cdValidate
+      #valueRef="cdValidate"
+      [formControlName]="valueControlName"
+      [min]="min"
+      [max]="max"
+      [invalid]="valueRef.isInvalid"
+      [invalidText]="invalidText"
+    >
+    </cds-number>
+  </div>
+  <div cdsCol>
+    <cds-select
+      [formControlName]="unitControlName"
+      [label]="unitLabel"
+      [id]="unitControlName"
+    >
+      @for (unit of units; track unit) {
+      <option [value]="unit">{{ unit }}</option>
+      }
+    </cds-select>
+  </div>
+</div>
