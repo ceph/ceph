@@ -852,6 +852,9 @@ class AgentMessageThread(threading.Thread):
                 self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
+                    self.mgr.log.info(
+                        f'HTTP config push to agent on {self.host} acknowledged; '
+                        f'agent config deps updated (deps={self.daemon_spec.deps})')
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
             except ConnectionError as e:
@@ -862,10 +865,16 @@ class AgentMessageThread(threading.Thread):
                 time.sleep(retry_wait)
             except Exception as e:
                 # if it's not a connection error, something has gone wrong. Give up.
-                self.mgr.log.error(f'Failed to contact agent on host {self.host}: {e}')
+                # Leave agent config deps unchanged so _check_agent can retry.
+                self.mgr.log.error(
+                    f'Failed to contact agent on host {self.host}: {e}. '
+                    f'Agent config deps left unchanged for retry')
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
                 return
-        self.mgr.log.error(f'Could not connect to agent on host {self.host}')
+        # Leave agent config deps unchanged so _check_agent can retry next cycle.
+        self.mgr.log.error(
+            f'Could not connect to agent on host {self.host}. '
+            f'Agent config deps left unchanged for retry')
         self.mgr.agent_cache.sending_agent_message[self.host] = False
         return
 
@@ -1011,9 +1020,14 @@ class CephadmAgentHelpers:
                 except Exception:
                     pass
                 daemon_spec = CephadmDaemonDeploySpec.from_daemon_description(agent)
+                has_agent_port = host in self.mgr.agent_cache.agent_ports
                 # we need to know the agent port to try to reconfig w/ http
                 # otherwise there is no choice but a full ssh reconfig
-                if host in self.mgr.agent_cache.agent_ports and root_cert_match and not down:
+                if has_agent_port and root_cert_match and not down:
+                    self.mgr.log.info(
+                        f'Agent config deps changed on {host} '
+                        f'(last_deps={last_deps} -> deps={deps}); '
+                        f'pushing updated config via HTTP')
                     daemon_spec = service_registry.get_service(daemon_type_to_service(
                         daemon_spec.daemon_type)).prepare_create(daemon_spec)
                     self.mgr.agent_helpers._request_agent_acks(
@@ -1022,10 +1036,24 @@ class CephadmAgentHelpers:
                         daemon_spec=daemon_spec,
                     )
                 else:
-                    self.mgr._daemon_action(daemon_spec, action='reconfig')
+                    self.mgr.log.info(
+                        f'Agent config deps changed on {host} '
+                        f'(last_deps={last_deps} -> deps={deps}); '
+                        f'reconfiguring via SSH '
+                        f'(agent_down={down}, has_agent_port={has_agent_port}, '
+                        f'root_cert_match={root_cert_match})')
+                    try:
+                        self.mgr._daemon_action(daemon_spec, action='reconfig')
+                    except Exception as e:
+                        # Deps are only stamped on successful deploy/reconfig.
+                        # Leaving them unchanged keeps last_deps != deps so we
+                        # retry on the next serve cycle.
+                        self.mgr.log.warning(
+                            f'SSH reconfig of agent on {host} failed: {e}. '
+                            f'Leaving agent config deps unchanged for retry')
                 return down
         except Exception as e:
-            self.mgr.log.debug(
+            self.mgr.log.warning(
                 f'Agent on host {host} not ready to have config and deps checked: {e}')
         action = self.mgr.cache.get_scheduled_daemon_action(agent.hostname, agent.name())
         if action:
