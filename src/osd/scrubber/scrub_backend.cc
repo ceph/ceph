@@ -90,6 +90,13 @@ ScrubBackend::ScrubBackend(ScrubBeListener& scrubber,
   m_mode_desc =
     (m_repair ? "repair"sv
               : (m_depth == scrub_level_t::deep ? "deep-scrub"sv : "scrub"sv));
+
+  // If the pool is a migration target then tolerate incomplete clones as
+  // scrubbing and migration can happen at the same time and scrubbing may
+  // detect clones that haven't been migrated yet
+  if (m_pool.info.is_migration_target()) {
+    m_incomplete_clones_allowed = true;
+  }
 }
 
 // for a Replica
