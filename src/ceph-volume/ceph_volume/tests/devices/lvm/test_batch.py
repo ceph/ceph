@@ -41,6 +41,16 @@ class TestBatch(object):
         assert b.args.dmcrypt_open_opts is None
         assert b.args.dmcrypt_format_opts is None
 
+    def test_batch_hw_opal_only_flag(self):
+        b = batch.Batch(['--hw-opal-only'])
+        assert b.args.hw_opal_only is True
+
+    @patch('ceph_volume.util.arg_validators.set_dmcrypt_no_workqueue')
+    def test_batch_hw_opal_mutually_exclusive_with_dmcrypt(self, _m_no_wq):
+        with pytest.raises(RuntimeError) as err:
+            batch.Batch(['--dmcrypt', '--hw-opal-only'])
+        assert 'mutually exclusive' in str(err.value)
+
     def test_disjoint_device_lists(self, mock_device_generator: Callable) -> None:
         device1 = mock_device_generator(used_by_ceph=False, available=True, abspath='/dev/sda')
         device2 = mock_device_generator(used_by_ceph=False, available=True, abspath='/dev/sdb')
@@ -464,6 +474,37 @@ class TestBatch(object):
         mock_lvs = [mock_lv_device_generator()]
         osds = batch.get_lvm_osds(mock_lvs, args)
         assert len(osds) == 1
+
+    def test_get_lvm_osds_rejects_hw_opal(self, factory,
+                                          mock_lv_device_generator,
+                                          conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        args = factory(osd_ids=[], dmcrypt=False, hw_opal_only=True)
+        with pytest.raises(RuntimeError) as err:
+            batch.get_lvm_osds([mock_lv_device_generator()], args)
+        assert 'existing LVs' in str(err.value)
+
+    def test_get_physical_osds_hw_opal_encryption(
+        self,
+        factory: Callable[..., Namespace],
+        mock_devices_available: List[device.Device],
+        conf_ceph_stub: Callable[[str], Conf],
+    ) -> None:
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        args = factory(
+            data_slots=1,
+            osds_per_device=1,
+            osd_ids=[],
+            dmcrypt=False,
+            hw_opal_only=True,
+            data_allocate_fraction=1.0,
+            block_db_size=None,
+            db_devices=[],
+            has_block_db_size_without_db_devices=None,
+        )
+        osds = batch.get_physical_osds(mock_devices_available, args)
+        assert osds
+        assert all(osd.encryption == 'hw-opal-only' for osd in osds)
 
     def test_multiple_osds_get_wal_devices(self, factory, conf_ceph_stub, mock_device_generator):
         """

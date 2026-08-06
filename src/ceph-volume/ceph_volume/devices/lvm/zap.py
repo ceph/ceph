@@ -222,7 +222,8 @@ class Zap:
         if system.path_is_mounted(lv_path):
             mlogger.info("Unmounting %s", lv_path)
             system.unmount(lv_path)
-        if dmcrypt and dmcrypt_uuid:
+        # hw-opal-only uses a disk-level mapper; close it when destroying the VG.
+        if dmcrypt and dmcrypt_uuid and lv.tags.get('ceph.hw_opal_only') != '1':
             self.dmcrypt_close(dmcrypt_uuid)
 
     def _write_replacement_header(self, device: str) -> None:
@@ -289,6 +290,13 @@ class Zap:
 
         if self.args.destroy:
             lvs = api.get_lvs(filters={'vg_name': device.vg_name})
+            hw_opal = lv.tags.get('ceph.hw_opal_only') == '1'
+            luks_device = lv.tags.get('ceph.luks_device') or lv.tags.get(
+                'ceph.%s_luks_device' % lv.tags.get('ceph.type', ''), ''
+            )
+            luks_uuid = lv.tags.get('ceph.luks_uuid') or lv.tags.get(
+                'ceph.%s_luks_uuid' % lv.tags.get('ceph.type', ''), ''
+            )
             if len(lvs) <= 1:
                 mlogger.info('Only 1 LV left in VG, will proceed to destroy '
                              'volume group %s', device.vg_name)
@@ -296,14 +304,43 @@ class Zap:
                 api.remove_vg(device.vg_name)
                 for pv in pvs:
                     api.remove_pv(pv.pv_name)
+                if hw_opal and luks_uuid:
+                    self.dmcrypt_close(luks_uuid)
+                if hw_opal and luks_device:
+                    admin_key = os.environ.get('CEPH_VOLUME_OPAL_ADMIN_KEY', '')
+                    if not admin_key:
+                        lockbox = lv.tags.get('ceph.cephx_lockbox_secret')
+                        osd_id = lv.tags.get('ceph.osd_id')
+                        osd_fsid = lv.tags.get('ceph.osd_fsid')
+                        if lockbox and osd_id and osd_fsid:
+                            try:
+                                encryption.write_lockbox_keyring(
+                                    osd_id, osd_fsid, lockbox
+                                )
+                                admin_key = encryption.get_dmcrypt_key(
+                                    osd_id, osd_fsid
+                                )
+                            except Exception as e:
+                                mlogger.warning(
+                                    'Unable to fetch LUKS key for OPAL erase: %s', e
+                                )
+                    if not admin_key:
+                        mlogger.warning(
+                            'Skipping OPAL erase for %s: set CEPH_VOLUME_OPAL_ADMIN_KEY '
+                            'or ensure the OSD lockbox key is available',
+                            luks_device,
+                        )
+                    else:
+                        encryption.luks_erase_hw_opal(luks_device, admin_key)
                 replacement_args: Dict[str, bool] = {
                     'block': self.args.replace_block,
                     'db': self.args.replace_db,
                     'wal': self.args.replace_wal
                 }
                 if replacement_args.get(lv.tags.get('ceph.type', ''), False):
-                    mlogger.info(f'Marking {self.parent_device} as being replaced')
-                    self._write_replacement_header(self.parent_device)
+                    mark_dev = luks_device if (hw_opal and luks_device) else self.parent_device
+                    mlogger.info(f'Marking {mark_dev} as being replaced')
+                    self._write_replacement_header(mark_dev)
             else:
                 mlogger.info('More than 1 LV left in VG, will proceed to '
                              'destroy LV only')

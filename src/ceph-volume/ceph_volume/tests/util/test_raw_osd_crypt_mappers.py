@@ -104,6 +104,48 @@ class TestApplies:
         assert not mappers.applies()
 
 
+class TestDeviceIsHwOpal:
+    def test_activate_path_prefix(self) -> None:
+        assert RawOsdCryptMappers.device_is_hw_opal(
+            '/dev/sda', '/dev/mapper/ceph-hw-opal-sda'
+        )
+
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.CephLuks2')
+    def test_json_area_hw_opal(self, m_luks_cls: MagicMock) -> None:
+        m_luks_cls.return_value.get_json_area.return_value = {
+            'segments': {'0': {'type': 'hw-opal'}},
+        }
+        assert RawOsdCryptMappers.device_is_hw_opal('/dev/sda')
+
+    @patch('ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.CephLuks2')
+    def test_not_opal(self, m_luks_cls: MagicMock) -> None:
+        m_luks_cls.return_value.get_json_area.return_value = {
+            'segments': {'0': {'type': 'crypt'}},
+        }
+        assert not RawOsdCryptMappers.device_is_hw_opal('/dev/sda')
+
+
+@patch(
+    'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.apply_cluster_context'
+)
+class TestHwOpalMapperName:
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.RawOsdCryptMappers.device_is_hw_opal',
+        return_value=True,
+    )
+    @patch(
+        'ceph_volume.util.raw_osd_crypt_mappers.encryption_utils.hw_opal_mapping_name',
+        return_value='ceph-hw-opal-sda',
+    )
+    def test_uses_hw_opal_mapping(
+        self, m_mapping: MagicMock, m_is_opal: MagicMock, m_cluster: MagicMock,
+    ) -> None:
+        mappers = RawOsdCryptMappers(
+            '0', 'fsid', '/dev/sda', cluster_name='ceph',
+        )
+        assert mappers._mapper_name_for_role('block') == 'ceph-hw-opal-sda'
+
+
 class TestRefresh:
     @patch(
         'ceph_volume.util.raw_osd_crypt_mappers.OsdLuksCredentials.apply_cluster_context'

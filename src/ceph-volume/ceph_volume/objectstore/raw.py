@@ -43,22 +43,31 @@ class Raw(BaseObjectStore):
 
             if device:
                 kname = disk.lsblk(device)['KNAME']
-                mapping = 'ceph-{}-{}-{}-dmcrypt'.format(self.osd_fsid,
-                                                         kname,
-                                                         device_type)
-                # format data device
-                encryption_utils.luks_format(
-                    self.dmcrypt_key,
-                    device
-                )
-                if self.with_tpm:
-                    self.enroll_tpm2(device)
-                encryption_utils.luks_open(
-                    self.dmcrypt_key,
-                    device,
-                    mapping,
-                    self.with_tpm
-                )
+                if self.hw_opal_only:
+                    mapping = encryption_utils.hw_opal_mapping_name(device)
+                    encryption_utils.prepare_hw_opal_device(
+                        self.dmcrypt_key,
+                        device,
+                        mapping,
+                        with_tpm=self.with_tpm,
+                        enroll_tpm2=self.enroll_tpm2 if self.with_tpm else None,
+                    )
+                else:
+                    mapping = 'ceph-{}-{}-{}-dmcrypt'.format(self.osd_fsid,
+                                                             kname,
+                                                             device_type)
+                    encryption_utils.luks_format(
+                        self.dmcrypt_key,
+                        device
+                    )
+                    if self.with_tpm:
+                        self.enroll_tpm2(device)
+                    encryption_utils.luks_open(
+                        self.dmcrypt_key,
+                        device,
+                        mapping,
+                        self.with_tpm
+                    )
                 self.__dict__[f'{device_type}_device_path'] = \
                     '/dev/mapper/{}'.format(mapping)  # TODO(guits): need to preserve path or find a way to get the parent device from the mapper ?
 
@@ -118,6 +127,9 @@ class Raw(BaseObjectStore):
         Returns True if the block device was formatted, False otherwise.
         """
         if not self.block_device_path:
+            return False
+        # nvme format can reset OPAL ownership/state; skip for hw-opal-only.
+        if self.hw_opal_only:
             return False
         return nvme_utils.preformat(self.block_device_path)
 

@@ -969,6 +969,11 @@ def get_ceph_volume_container(ctx: CephadmContext,
         envs.append('CEPH_VOLUME_SKIP_RESTORECON=yes')
     if 'CEPH_VOLUME_DEBUG=1' not in envs:
         envs.append('CEPH_VOLUME_DEBUG=1')
+    # Forward host OPAL admin PIN when set (optional override for --hw-opal-only).
+    opal_admin = os.environ.get('CEPH_VOLUME_OPAL_ADMIN_KEY')
+    if opal_admin and not any(
+            e.startswith('CEPH_VOLUME_OPAL_ADMIN_KEY=') for e in envs):
+        envs.append('CEPH_VOLUME_OPAL_ADMIN_KEY=%s' % opal_admin)
 
     return CephContainer(
         ctx,

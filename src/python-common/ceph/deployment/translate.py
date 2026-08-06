@@ -143,7 +143,9 @@ class to_ceph_volume(object):
                 if osd_type_str != 'classic':
                     cmds[i] += " --osd-type {}".format(osd_type_str)
 
-            if self.spec.encrypted:
+            if self.spec.hw_opal_only:
+                cmds[i] += " --hw-opal-only"
+            elif self.spec.encrypted:
                 cmds[i] += " --dmcrypt"
 
             if self.spec.tpm2:
