@@ -2196,17 +2196,12 @@ TEST_F(PeeringStateTest, Issue74218) {
 // Rebuild Stats Perf Counter Tests
 //
 // These tests exercise the latch logic in prepare_stats_for_publish() that
-// feeds rs_pg_rebuild_duration, rs_pg_rebuild_max_secs, and
-// rs_pg_rebuild_min_secs.
+// feeds rs_pg_rebuild_duration.
 // Design notes:
 //   - call_prepare_stats(osd) passes nullopt so the publish branch always
 //     runs, which is needed to drive the latch even when stats are unchanged.
 //   - A 10 ms sleep between the latch call and the clean call ensures
 //     rebuild_dur.to_msec() > 0 so the record is committed.
-//   - rebuild_secs = (uint64_t)rebuild_dur.sec(), so sub-second rebuilds
-//     leave pg_rebuild_max_secs and pg_rebuild_min_secs at 0.  Those gauges
-//     are verified only for their mutual ordering (min <= max); absolute
-//     values are verified via pg_rebuild_duration.sum which is in nanoseconds.
 // ============================================================================
 
 // One complete failure+recovery cycle does the following:
@@ -2220,7 +2215,7 @@ TEST_F(PeeringStateTest, Issue74218) {
 // The old_osd PeeringState is left in osd_peeringstate (may go stale).
 
 // ============================================================================
-// Test 1: Primary OSD records all four counters after a recovery event.
+// Test 1: Primary OSD records the rebuild duration after a recovery event.
 // ============================================================================
 TEST_F(PeeringStateTest, RebuildStatsLatchAndCount) {
   dout(0) << "== RebuildStatsLatchAndCount ==" << dendl;
@@ -2268,10 +2263,6 @@ TEST_F(PeeringStateTest, RebuildStatsLatchAndCount) {
   auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_GE(count, 1u);
   EXPECT_GT(sum_ns, 0u);
-
-  // max/min gauges track whole seconds; sub-second rebuilds leave both at 0.
-  // The key invariant is that min never exceeds max.
-  EXPECT_LE(perf->get(rs_pg_rebuild_min_secs), perf->get(rs_pg_rebuild_max_secs));
 }
 
 // ============================================================================
@@ -2311,9 +2302,7 @@ TEST_F(PeeringStateTest, RebuildStatsReplicaSkips) {
 
   call_prepare_stats(acting_primary);   // record fires on primary
 
-  // All rebuild counters on the replica must remain at their initial values.
-  EXPECT_EQ(replica_perf->get(rs_pg_rebuild_max_secs), 0u);
-  EXPECT_EQ(replica_perf->get(rs_pg_rebuild_min_secs), 0u);
+  // The rebuild counter on the replica must remain at its initial values.
   auto [sum_ns, count] =
     replica_perf->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_EQ(count, 0u);
@@ -2453,9 +2442,6 @@ TEST_F(PeeringStateTest, RebuildStatsCountAccumulates) {
   auto [sum_ns, count] = perf->get_tavg_ns(rs_pg_rebuild_duration);
   EXPECT_EQ(count, 2u);
   EXPECT_GT(sum_ns, 0u);
-
-  // min <= max invariant must hold across both events.
-  EXPECT_LE(perf->get(rs_pg_rebuild_min_secs), perf->get(rs_pg_rebuild_max_secs));
 }
 
 // ============================================================================
