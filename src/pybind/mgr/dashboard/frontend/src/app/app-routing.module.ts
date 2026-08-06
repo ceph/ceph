@@ -187,7 +187,7 @@ const routes: Routes = [
           {
             path: 'daemons',
             component: HostResourcePageComponent,
-            data: { breadcrumbs: 'Daemons', section: 'daemons' }
+            data: { breadcrumbs: 'Service instances', section: 'daemons' }
           },
           {
             path: 'performance',

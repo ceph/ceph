@@ -134,8 +134,9 @@
         >
           <span i18n>Unmanaged</span>
           <cd-help-text i18n
-            >If set to true, the orchestrator will not start nor stop any daemon associated with
-            this service. Placement and all other properties will be ignored.</cd-help-text
+            >If set to true, the orchestrator will not start nor stop any service instance
+            associated with this service. Placement and all other properties will be
+            ignored.</cd-help-text
           >
         </cds-checkbox>
       </div>
@@ -256,7 +257,7 @@
               [helperText]="countHelper"
             ></cds-number>
             <ng-template #countHelper>
-              <span i18n>Only that number of daemons will be created.</span>
+              <span i18n>Only that number of service instances will be created.</span>
             </ng-template>
             <ng-template #countError>
               <ng-container
