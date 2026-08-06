@@ -38,7 +38,7 @@
   }
 
   &-tab-content {
-    padding: var(--cds-spacing-04) 0;
+    padding: var(--cds-spacing-04) 0 0 0;
   }
 
   &-tab-content-item {
@@ -48,6 +48,11 @@
   &-tab-content-item-row {
     display: flex;
     justify-content: space-between;
+  }
+
+  &-resiliency-btn {
+    gap: var(--cds-spacing-05);
+    padding-inline: var(--cds-spacing-05);
   }
 
   &-resiliency-tab-content {
@@ -60,7 +65,7 @@
   }
 
   &-resiliency-chart-text {
-    width: 13rem;
+    width: 15rem;
     margin-left: var(--cds-spacing-04);
   }
 

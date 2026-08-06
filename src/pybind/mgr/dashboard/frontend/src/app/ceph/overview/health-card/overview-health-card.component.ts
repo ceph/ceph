@@ -26,7 +26,11 @@ import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { UpgradeInfoInterface } from '~/app/shared/models/upgrade.interface';
 import { UpgradeService } from '~/app/shared/api/upgrade.service';
 import { catchError, filter, map, shareReplay, startWith, switchMap } from 'rxjs/operators';
-import { HealthCardTabSection, HealthCardVM } from '~/app/shared/models/overview';
+import {
+  HealthCardTabSection,
+  HealthCardVM
+} from '~/app/shared/models/overview';
+import { AlertmanagerAlert, AlertState } from '~/app/shared/models/prometheus-alerts';
 import { HardwareService } from '~/app/shared/api/hardware.service';
 import { HealthService } from '~/app/shared/api/health.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
@@ -34,6 +38,9 @@ import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.s
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { HardwareNameMapping } from '~/app/shared/enum/hardware.enum';
 import { GaugeChartComponent } from '@carbon/charts-angular';
+import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
+
+const PG_ALERT_PREFIX = 'CephPG';
 
 type OverviewHealthData = {
   summary: Summary;
@@ -86,6 +93,7 @@ export class OverviewHealthCardComponent {
   private readonly mgrModuleService = inject(MgrModuleService);
   private readonly refreshIntervalService = inject(RefreshIntervalService);
   private readonly authStorageService = inject(AuthStorageService);
+  private readonly prometheusAlertService = inject(PrometheusAlertService);
 
   @Input({ required: true }) vm!: HealthCardVM;
   @Output() viewIncidents = new EventEmitter<void>();
@@ -159,6 +167,18 @@ export class OverviewHealthCardComponent {
       }));
     }),
     shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly pgAlertCount$ = this.prometheusAlertService.totalAlerts$.pipe(
+    map(
+      () =>
+        this.prometheusAlertService.alerts.filter(
+          (alert: AlertmanagerAlert) =>
+            alert.status.state === AlertState.ACTIVE &&
+            alert.labels.alertname?.startsWith(PG_ALERT_PREFIX)
+        ).length
+    ),
+    startWith(0)
   );
 
   readonly telemetryEnabled$: Observable<boolean> = this.healthService.getTelemetryStatus().pipe(
