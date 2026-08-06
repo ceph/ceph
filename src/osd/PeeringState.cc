@@ -4518,10 +4518,8 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
      *  - num_objects_degraded, num_objects_misplaced, num_objects_recovered
      *
      * The PG rebuild stats are aggregated into the following recoverystate
-     * perf counters:
+     * perf counter:
      *  - rs_pg_rebuild_duration: rebuild duration LONGRUNAVG time counter
-     *  - rs_pg_rebuild_max_secs: maximum rebuild duration (secs)
-     *  - rs_pg_rebuild_min_secs: minimum rebuild duration (secs)
      *
      * Workflow:
      *  1. Only the acting primary OSD of the PG executes the logic to
@@ -4593,17 +4591,7 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
 
         if (rebuild_dur.to_msec() > 0 &&
             (delta_recovered > 0 || rebuild_had_redundancy_loss)) {
-          PerfCounters &perf = pl->get_peering_perf();
-          perf.tinc(rs_pg_rebuild_duration, rebuild_dur);
-
-          const uint64_t rebuild_secs = (uint64_t)rebuild_dur.sec();
-          if (rebuild_secs > perf.get(rs_pg_rebuild_max_secs)) {
-            perf.set(rs_pg_rebuild_max_secs, rebuild_secs);
-          }
-          const uint64_t cur_min = perf.get(rs_pg_rebuild_min_secs);
-          if (cur_min == 0 || rebuild_secs < cur_min) {
-            perf.set(rs_pg_rebuild_min_secs, rebuild_secs);
-          }
+          pl->get_peering_perf().tinc(rs_pg_rebuild_duration, rebuild_dur);
           psdout(15) << "rebuild-stats: recorded rebuild for " << info.pgid
                      << " duration=" << rebuild_dur
                      << " delta_recovered=" << delta_recovered << dendl;
