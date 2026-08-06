@@ -18093,11 +18093,9 @@ int BlueStore::_do_write_v2(
     }
   } else {
     // normal uncompressed path
-    BlueStore::Writer wr(this, txc, &wctx, o);
     uint64_t start = p2align(offset, min_alloc_size);
     uint64_t end = p2roundup(offset + length, min_alloc_size);
-    wr.left_affected_range = start;
-    wr.right_affected_range = end;
+    BlueStore::Writer wr(this, txc, &wctx, o, start, end);
     std::tie(wr.left_shard_bound, wr.right_shard_bound) =
       o->extent_map.fault_range_ex(db, start, end - start);
     wr.do_write(offset, bl);
@@ -18158,9 +18156,7 @@ int BlueStore::_do_write_v2_compressed(
     uint32_t au_size = min_alloc_size;
     disk_for_compressed = estimator->split_and_compress(data_bl, bd);
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
-    BlueStore::Writer wr(this, txc, &wctx, o);
-    wr.left_affected_range = changes_start;
-    wr.right_affected_range = changes_end;
+    BlueStore::Writer wr(this, txc, &wctx, o, changes_start, changes_end);
     if (disk_for_compressed < disk_for_raw) {
       wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset + i.length, bd);
     } else {
