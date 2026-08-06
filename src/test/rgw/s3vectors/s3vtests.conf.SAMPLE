@@ -2,10 +2,25 @@
 port = 8000
 host = localhost
 zonegroup = default
+cluster = noname
 # s3vector_backend: Storage backend for s3vector data. Options: local, s3, or rgw (default)
 # When set to 's3' or 'rgw', tests will create a regular S3 bucket with the same name
 # as the vector bucket before vector operations.
 # s3vector_backend = s3
+#
+# backend options.
+# when not set, a value that fits the tested zone is used:
+# - s3vector_local_path: /tmp/rgw-s3vector-<cluster>-<port>
+# - s3vector_s3_endpoint: http://<host>:<port>, so that the RGW sends the S3 requests
+#   to itself. must be a URL, including the scheme
+# - s3vector_s3_region: the zonegroup
+# - s3vector_s3_allow_http: true
+# in s3vector_local_path, "<cluster>" and "<port>" are replaced with the values of
+# the tested zone, so that the RGWs of different zones do not share a directory
+# s3vector_local_path = /tmp/rgw-s3vector-<cluster>-<port>
+# s3vector_s3_endpoint = http://localhost:8000
+# s3vector_s3_region = default
+# s3vector_s3_allow_http = true
 
 [s3 main]
 access_key = 0555b35654ad1656d804

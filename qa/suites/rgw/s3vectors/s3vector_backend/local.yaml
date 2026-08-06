@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      client:
-        rgw_s3vector_backend: local

@@ -2,10 +2,15 @@
 port = 8101
 host = localhost
 zonegroup = zg1
+cluster = c1
+# the backend, and its options, are set on the RGWs of both zones at the
+# beginning of the run. see: s3vtests.conf.SAMPLE
+s3vector_backend = rgw
 
 [secondary]
 port = 8201
 host = localhost
+cluster = c2
 
 [s3 main]
 access_key = 0987654321

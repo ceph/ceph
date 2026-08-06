@@ -1,0 +1,56 @@
+roles:
+- [c1.mon.a, c1.mgr.x, c1.osd.0, c1.osd.1, c1.osd.2, c1.client.0]
+- [c2.mon.a, c2.mgr.x, c2.osd.0, c2.osd.1, c2.osd.2, c2.client.0]
+
+tasks:
+- install:
+- ceph: {cluster: c1}
+- ceph: {cluster: c2}
+- openssl_keys:
+- rgw:
+    c1.client.0:
+    c2.client.0:
+- rgw-multisite:
+- tox: [c1.client.0]
+- tox: [c2.client.0]
+- s3vectors-tests:
+    c1.client.0:
+      rgw_server: c1.client.0
+      secondary: c2.client.0
+      # the rest of the tests are covered by the single zone setup
+      extra_attr: [multisite_test]
+      # the tests are run once per backend. the backend is set on the RGWs by the
+      # tests, and does not require a restart
+      backends: [rgw, s3, local]
+    c2.client.0:
+      rgw_server: c2.client.0
+      # the vector bucket lifecycle is tested on the non-master zone as well,
+      # since vector buckets are created there and not on the master zone
+      extra_attr: [vector_bucket_test]
+      backends: [rgw, s3, local]
+
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
+  rgw-multisite:
+    realm:
+      name: test-realm
+      is_default: true
+    zonegroups:
+      - name: test-zonegroup
+        is_master: true
+        is_default: true
+        endpoints: [c1.client.0]
+        zones:
+          - name: test-zone1
+            is_master: true
+            is_default: true
+            endpoints: [c1.client.0]
+          - name: test-zone2
+            is_default: true
+            endpoints: [c2.client.0]

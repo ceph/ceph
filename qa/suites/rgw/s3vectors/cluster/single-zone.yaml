@@ -1,0 +1,24 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+
+tasks:
+- install:
+- ceph:
+- openssl_keys:
+- rgw: [client.0]
+- tox: [client.0]
+- s3vectors-tests:
+    client.0:
+      rgw_server: client.0
+      # the tests are run once per backend. the backend is set on the RGW by the
+      # tests, and does not require a restart
+      backends: [rgw, s3, local]
+
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
