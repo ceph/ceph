@@ -209,14 +209,14 @@ class Inventory:
 
     def __contains__(self, host: str) -> bool:
         host = normalize_hostname(host)
-        return host in self._inventory or host in itertools.chain.from_iterable(self._all_known_names.values())
+        return host in self._inventory or host in itertools.chain.from_iterable(list(self._all_known_names.values()))
 
     def _get_stored_name(self, host: str) -> str:
         host = normalize_hostname(host)
         self.assert_host(host)
         if host in self._inventory:
             return host
-        for stored_name, all_names in self._all_known_names.items():
+        for stored_name, all_names in list(self._all_known_names.items()):
             if host in all_names:
                 return stored_name
         return host
@@ -309,11 +309,11 @@ class Inventory:
         )
 
     def all_specs(self) -> List[HostSpec]:
-        return list(map(self.spec_from_dict, self._inventory.values()))
+        return [self.spec_from_dict(v) for v in list(self._inventory.values())]
 
     def get_host_with_state(self, state: str = "") -> List[str]:
         """return a list of host names in a specific state"""
-        return [h for h in self._inventory if self._inventory[h].get("status", "").lower() == state]
+        return [h for h in list(self._inventory) if self._inventory[h].get("status", "").lower() == state]
 
     def save(self) -> None:
         self.mgr.set_store('inventory', json.dumps(self._inventory))
@@ -1211,7 +1211,7 @@ class HostCache():
         if host in self.networks:
             j['networks_and_interfaces'] = self.networks[host]
         if host in self.daemon_config_deps:
-            for name, depi in self.daemon_config_deps[host].items():
+            for name, depi in list(self.daemon_config_deps[host].items()):
                 j['daemon_config_deps'][name] = {
                     'deps': depi.get('deps', []),
                     'last_config': datetime_to_str(depi['last_config']),
@@ -1219,16 +1219,16 @@ class HostCache():
         if host in self.osdspec_previews and self.osdspec_previews[host]:
             j['osdspec_previews'] = self.osdspec_previews[host]
         if host in self.osdspec_last_applied:
-            for name, ts in self.osdspec_last_applied[host].items():
+            for name, ts in list(self.osdspec_last_applied[host].items()):
                 j['osdspec_last_applied'][name] = datetime_to_str(ts)
 
         if host in self.last_host_check:
             j['last_host_check'] = datetime_to_str(self.last_host_check[host])
 
         if host in self.last_client_files:
-            j['last_client_files'] = self.last_client_files[host]
+            j['last_client_files'] = dict(self.last_client_files[host])
         if host in self.scheduled_daemon_actions:
-            j['scheduled_daemon_actions'] = self.scheduled_daemon_actions[host]
+            j['scheduled_daemon_actions'] = dict(self.scheduled_daemon_actions[host])
         if host in self.metadata_up_to_date:
             j['metadata_up_to_date'] = self.metadata_up_to_date[host]
         if host in self.devices:
