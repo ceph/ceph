@@ -22,7 +22,7 @@ its stored metadata, and cannot start again until it is repaired.
 
 Message: mds cluster is degraded
 Description: One or more MDS ranks are not currently up and running, clients
-may pause metadata IO until this situation is resolved.  This includes
+may pause metadata I/O until this situation is resolved.  This includes
 ranks being failed or damaged, and additionally includes ranks
 which are running on an MDS but have not yet made it to the *active*
 state (e.g. ranks currently in *replay* state).
@@ -143,7 +143,7 @@ other daemons, please see :ref:`health-checks`.
     Corrupt or missing metadata was encountered when reading
     from the metadata pool.  This message indicates that the damage was
     sufficiently isolated for the MDS to continue operating, although
-    client accesses to the damaged subtree will return IO errors.  Use
+    client accesses to the damaged subtree will return I/O errors.  Use
     the ``damage ls`` admin socket command to get more detail on the damage.
     This message appears as soon as any damage is encountered.
 

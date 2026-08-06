@@ -89,7 +89,7 @@ Install the iSCSI initiator and multipath tools:
 
       iscsiadm -m node -T iqn.2003-01.org.linux-iscsi.rheln1 -l
 
-**Multipath IO Setup:**
+**Multipath I/O Setup:**
 
 #. The multipath daemon (``multipathd``) uses the ``multipath.conf`` settings
    to set up devices automatically. Running the ``multipath`` command shows

@@ -40,7 +40,7 @@ Commands
 --------
 
 bench
-    Run IO benchmark
+    Run I/O benchmark
 
 Options
 =======
@@ -112,7 +112,7 @@ These options are used with the ``bench`` command.
 
 .. option:: --block-size <size>
 
-   IO block size (e.g. 1MB) (default: ``4MB``)
+   I/O block size (e.g. 1MB) (default: ``4MB``)
 
 .. option:: --fsync-every <size>
 

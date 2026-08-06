@@ -1,6 +1,6 @@
-=========================
- Ceph File System IO Path
-=========================
+===========================
+ Ceph File System I/O Path
+===========================
 
 All file data in CephFS is stored as RADOS objects. CephFS clients can directly
 access RADOS to operate on file data. MDS only handles metadata operations.
@@ -25,7 +25,7 @@ client cache.
             +---------------------+
               |
               V
-            +---------------------+  Data IOs  +--------------------+
+            +---------------------+ Data I/Os  +--------------------+
             |    CephFS Library   | ---------> |       LibRados     |
             +---------------------+            +--------------------+
               |                                  |
@@ -37,7 +37,7 @@ client cache.
 
 
             +----------------------+           +---------------------+
-            | CephFS kernel client | Data IOs  | Ceph kernel library |
+            | CephFS kernel client | Data I/Os | Ceph kernel library |
             |      (ceph.ko)       | --------> |     (libceph.ko)    |
             +----------------------+           +---------------------+
               |                                  |

@@ -134,7 +134,7 @@ Perform the following steps on the Ansible installer node.
 The ``ceph-iscsi`` package installs the configuration management
 logic and a Systemd service called ``rbd-target-api``. When the Systemd
 service is enabled, the ``rbd-target-api`` will start at boot time and
-will restore the Linux IO state. The Ansible playbook disables the
+will restore the Linux-IO (LIO) state. The Ansible playbook disables the
 target service during the deployment. Below are the outcomes of when
 interacting with the ``rbd-target-api`` Systemd service.
 

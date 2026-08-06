@@ -198,7 +198,7 @@ Hyper-V disk addressing
 There are a few possible ways of avoiding this Hyper-V limitation:
 
 * use an NTFS/ReFS partition to store VHDX image files instead of directly
-  attaching the RBD image. This may slightly impact the IO performance.
+  attaching the RBD image. This may slightly impact the I/O performance.
 * use the Hyper-V ``AutomaticStartAction`` setting to prevent the VMs from
   booting with the incorrect disks and have a script that updates VM disks
   attachments before powering them back on. The ``ElementName`` field of the

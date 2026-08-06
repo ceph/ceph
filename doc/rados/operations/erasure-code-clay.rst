@@ -8,7 +8,7 @@ The CLAY plugin is deprecated. Support for this plugin will be removed in
 the Vampire release.
 
 CLAY (short for coupled-layer) codes are erasure codes designed to bring about significant savings 
-in terms of network bandwidth and disk IO when a failed node/OSD/rack is being repaired. Let:
+in terms of network bandwidth and disk I/O when a failed node/OSD/rack is being repaired. Let:
 
 	d = number of OSDs contacted during repair
 
@@ -21,7 +21,7 @@ However, in the case of the *clay* plugin *d* is configurable within the limits:
 	k+1 <= d <= k+m-1 
 
 By default, the clay code plugin picks *d=k+m-1* as it provides the greatest savings in terms 
-of network bandwidth and disk IO. In the case of the *clay* plugin configured with 
+of network bandwidth and disk I/O. In the case of the *clay* plugin configured with
 *k=8*, *m=4* and *d=11* when a single OSD fails, d=11 OSDs are contacted and 
 250MiB is downloaded from each of them, resulting in a total download of 11 X 250MiB = 2.75GiB 
 amount of information. More general parameters are provided below. The benefits are substantial 
@@ -29,7 +29,7 @@ when the repair is carried out for a rack that stores information on the order o
 Terabytes.
 
 	+-------------+---------------------------------------------------------+
-	| plugin      | total amount of disk IO                                 |
+	| plugin      | total amount of disk I/O                                |
 	+=============+=========================================================+
 	|jerasure,isa | :math:`k S`                                             |
 	+-------------+---------------------------------------------------------+
@@ -179,8 +179,8 @@ Where:
 Notion of sub-chunks
 ====================
 
-The Clay code is able to save in terms of disk IO, network bandwidth as it
-is a vector code and it is able to view and manipulate data within a chunk 
+The Clay code is able to save in terms of disk I/O, network bandwidth as it
+is a vector code and it is able to view and manipulate data within a chunk
 at a finer granularity termed as a sub-chunk. The number of sub-chunks within 
 a chunk for a Clay code is given by:
 
@@ -209,7 +209,7 @@ How to choose a configuration given a workload
 ==============================================
 
 Only a few sub-chunks are read of all the sub-chunks within a chunk. These sub-chunks
-are not necessarily stored consecutively within a chunk. For best disk IO 
+are not necessarily stored consecutively within a chunk. For best disk I/O 
 performance, it is helpful to read contiguous data. For this reason, it is suggested that
 you choose stripe-size such that the sub-chunk size is sufficiently large.
 
@@ -221,25 +221,25 @@ For a given stripe-size (that's fixed based on a workload), choose ``k``, ``m``,
    For example consider a stripe-size of size 64MB, choosing *k=16*, *m=4* and *d=19* will
    result in a sub-chunk count of 1024 and a sub-chunk size of 4KB.
 #. For small size workloads, *k=4*, *m=2* is a good configuration that provides both network
-   and disk IO benefits.
+   and disk I/O benefits.
 
 Comparisons with LRC
 ====================
 
 Locally Recoverable Codes (LRC) are also designed in order to save in terms of network
-bandwidth, disk IO during single OSD recovery. However, the focus in LRCs is to keep the
+bandwidth, disk I/O during single OSD recovery. However, the focus in LRCs is to keep the
 number of OSDs contacted during repair (d) to be minimal, but this comes at the cost of storage overhead.
 The *clay* code has a storage overhead m/k. In the case of an *lrc*, it stores (k+m)/d parities in
 addition to the ``m`` parities resulting in a storage overhead (m+(k+m)/d)/k. Both *clay* and *lrc*
 can recover from the failure of any ``m`` OSDs.
 
-	+-----------------+----------------------------------+----------------------------------+
-	| Parameters      | disk IO, storage overhead (LRC)  | disk IO, storage overhead (CLAY) |
-	+=================+================+=================+==================================+
-	| (k=10, m=4)     | 7 * S, 0.6 (d=7)                 | 3.25 * S, 0.4 (d=13)             |
-	+-----------------+----------------------------------+----------------------------------+
-	| (k=16, m=4)     | 4 * S, 0.5625 (d=4)              | 4.75 * S, 0.25 (d=19)            |
-	+-----------------+----------------------------------+----------------------------------+
+	+-----------------+----------------------------------+-----------------------------------+
+	| Parameters      | disk I/O, storage overhead (LRC) | disk I/O, storage overhead (CLAY) |
+	+=================+================+=================+===================================+
+	| (k=10, m=4)     | 7 * S, 0.6 (d=7)                 | 3.25 * S, 0.4 (d=13)              |
+	+-----------------+----------------------------------+-----------------------------------+
+	| (k=16, m=4)     | 4 * S, 0.5625 (d=4)              | 4.75 * S, 0.25 (d=19)             |
+	+-----------------+----------------------------------+-----------------------------------+
 
 
 where ``S`` is the amount of data stored on a single OSD being recovered.

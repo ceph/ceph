@@ -27,7 +27,7 @@ Active Phase:
 
 - Scan for files located on the slow device.
 - Migrate those files back to the DB device.
-- While migration is in progress, the cleaner throttles itself according to :confval:`bluefs_spillover_cleaner_work_ratio` to reduce interference with foreground IO.
+- While migration is in progress, the cleaner throttles itself according to :confval:`bluefs_spillover_cleaner_work_ratio` to reduce interference with foreground I/O.
 
 Idle Phase:
 

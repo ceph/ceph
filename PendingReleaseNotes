@@ -971,9 +971,9 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   undergone significant usability and design improvements to address the slow
   backfill issue. Some important changes are:
   * The 'balanced' profile is set as the default mClock profile because it
-    represents a compromise between prioritizing client IO or recovery IO. Users
-    can then choose either the 'high_client_ops' profile to prioritize client IO
-    or the 'high_recovery_ops' profile to prioritize recovery IO.
+    represents a compromise between prioritizing client I/O or recovery I/O. Users
+    can then choose either the 'high_client_ops' profile to prioritize client I/O
+    or the 'high_recovery_ops' profile to prioritize recovery I/O.
   * QoS parameters like reservation and limit are now specified in terms of a
     fraction (range: 0.0 to 1.0) of the OSD's IOPS capacity.
   * The cost parameters (osd_mclock_cost_per_io_usec_* and
@@ -1069,7 +1069,7 @@ Relevant tracker: https://tracker.ceph.com/issues/61599
 * mon: add NVMe-oF gateway monitor and HA
   This PR adds high availability support for the nvmeof Ceph service. High availability
 means that even in the case that a certain GW is down, there will be another available
-path for the initiator to be able to continue the IO through another GW.
+path for the initiator to be able to continue the I/O through another GW.
 It is also adding 2 new mon commands, to notify monitor about the gateway creation/deletion:
   - nvme-gw create
   - nvme-gw delete
