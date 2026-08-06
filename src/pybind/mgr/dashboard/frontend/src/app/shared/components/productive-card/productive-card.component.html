@@ -12,9 +12,9 @@
   >
     <ng-content></ng-content>
   </section>
-  @if(!!footerTemplate) {
-  <footer class="productive-card-footer">
-    <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
-  </footer>
+  @if (!!footerTemplate) {
+    <footer class="productive-card-footer">
+      <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
+    </footer>
   }
 </cds-tile>

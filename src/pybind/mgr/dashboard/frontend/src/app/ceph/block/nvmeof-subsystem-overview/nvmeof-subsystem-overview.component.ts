@@ -14,7 +14,10 @@ export class NvmeofSubsystemOverviewComponent implements OnInit {
   groupName: string;
   subsystem: NvmeofSubsystem;
 
-  constructor(private route: ActivatedRoute, private nvmeofService: NvmeofService) {}
+  constructor(
+    private route: ActivatedRoute,
+    private nvmeofService: NvmeofService
+  ) {}
 
   ngOnInit() {
     this.route.parent?.params.subscribe((params) => {
