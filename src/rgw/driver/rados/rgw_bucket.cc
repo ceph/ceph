@@ -2896,6 +2896,10 @@ class RGWVectorBucketMetadataHandler : public RGWBucketMetadataHandler {
   using RGWBucketMetadataHandler::RGWBucketMetadataHandler;
 
   string get_type() override { return "vectorbucket"; }
+
+  // the vector data is not synced between the zones, and neither are the vector
+  // buckets holding it. each zone has its own vector buckets
+  bool is_synced() const override { return false; }
 };
 
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
@@ -3278,6 +3282,9 @@ protected:
      RGWBucketInstanceMetadataHandler(driver, svc_zone, svc_bucket, nullptr,  nullptr) {}
 
   string get_type() override { return "vectorbucket.instance"; }
+
+  // see RGWVectorBucketMetadataHandler::is_synced()
+  bool is_synced() const override { return false; }
 };
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
