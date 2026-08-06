@@ -165,7 +165,10 @@ const routes: Routes = [
       {
         path: 'hosts/:hostname',
         component: HostSidebarComponent,
-        data: { breadcrumbs: HostResourceBreadcrumbResolver },
+        data: {
+          breadcrumbs: HostResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         children: [
           { path: '', redirectTo: 'overview', pathMatch: 'full' },
           {
