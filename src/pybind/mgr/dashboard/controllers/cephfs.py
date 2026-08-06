@@ -52,7 +52,7 @@ DAEMON_STATUS_SCHEMA = [{
             'uuid': (str, 'Peer UUID'),
             'remote': ({
                 'client_name': (str, 'Ceph client name'),
-                'cluster_name': (str, 'Remote cluster name'),
+                'cluster_name': (str, 'Remote site name'),
                 'fs_name': (str, 'Remote filesystem name'),
             }, 'Remote peer information'),
             'stats': ({

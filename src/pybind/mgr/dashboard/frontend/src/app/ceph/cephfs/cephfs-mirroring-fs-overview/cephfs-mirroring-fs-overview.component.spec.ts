@@ -140,11 +140,10 @@ describe('CephfsMirroringFsOverviewComponent', () => {
     expect(cephfsServiceMock.getMirrorStatus).toHaveBeenCalledWith('myfs', undefined, 'peer-uuid');
     expect(fsData?.stats.mirrorPaths).toBe(5);
     expect(fsData?.stats.failures).toBe(2);
-    expect(fsData?.destination.clusterName).toBe('remote-cluster');
+    expect(fsData?.destination.siteName).toBe('remote-site');
     expect(fsData?.destination.destinationFsName).toBe('remote_fs');
     expect(fsData?.destination.fsid).toBe('abc-123');
     expect(fsData?.destination.monitorEndpoint).toBe('10.0.0.1:6789');
-    expect(fsData?.destination.siteName).toBe('remote-site');
     expect(fsData?.stats.syncingPaths).toBe(1);
     expect(fsData?.sync.bytesSynced).toBe('1.00 KiB');
     expect(fsData?.sync.path).toBe('/dir1');
@@ -227,7 +226,7 @@ describe('CephfsMirroringFsOverviewComponent helpers', () => {
     expect(info.mirrorPaths).toBe(3);
     expect(info.failures).toBe(1);
     expect(info.peerUuid).toBe('peer-1');
-    expect(info.clusterName).toBe('remote');
+    expect(info.siteName).toBe('remote');
   });
 
   it('buildMirroringFsOverviewData uses empty sync when status is null', () => {
@@ -237,7 +236,7 @@ describe('CephfsMirroringFsOverviewComponent helpers', () => {
       {
         mirrorPaths: 2,
         failures: 0,
-        clusterName: 'c',
+        siteName: 'c',
         destinationFsName: 'd',
         fsid: 'f',
         monitorEndpoint: 'm',
