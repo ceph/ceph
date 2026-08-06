@@ -767,6 +767,20 @@ void bluestore::Blob::decode(
   }
 }
 
+template void bluestore::Blob::decode<true>(
+  ceph::buffer::ptr::const_iterator&,
+  uint64_t,
+  uint64_t*,
+  bool,
+  BlueStore::Collection*);
+
+template void bluestore::Blob::decode<false>(
+  ceph::buffer::ptr::const_iterator&,
+  uint64_t,
+  uint64_t*,
+  bool,
+  BlueStore::Collection*);
+
 // Onode
 //
 // Mapping blobs over Onode's logical offsets.
