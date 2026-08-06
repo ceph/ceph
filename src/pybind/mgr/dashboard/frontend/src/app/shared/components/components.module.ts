@@ -190,7 +190,8 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     LinkModule,
     LayerModule,
     ThemeModule,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+    IconComponent
   ],
   declarations: [
     SparklineComponent,
@@ -232,7 +233,6 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     FormAdvancedFieldsetComponent,
     ProgressComponent,
     SidePanelComponent,
-    IconComponent,
     InlineMessageComponent,
     DetailsCardComponent,
     ToastComponent,

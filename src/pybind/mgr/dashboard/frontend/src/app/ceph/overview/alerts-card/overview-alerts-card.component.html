@@ -6,7 +6,15 @@
         class="cds--type-heading-compact-02"
         i18n
       >
-        System alerts
+        @if (filterType === 'block') {
+          Block alerts
+        } @else if (filterType === 'file') {
+          File alerts
+        } @else if (filterType === 'object') {
+          Object alerts
+        } @else {
+          System alerts
+        }
       </h2>
       <button
         cdsButton="ghost"

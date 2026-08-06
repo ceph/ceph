@@ -6,13 +6,16 @@ import {
   SimpleChanges,
   ViewEncapsulation
 } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { IconModule } from 'carbon-components-angular';
 import { ICON_TYPE, Icons, IconSize } from '../../enum/icons.enum';
 
 @Component({
   selector: 'cd-icon',
   templateUrl: './icon.component.html',
   styleUrl: './icon.component.scss',
-  standalone: false,
+  standalone: true,
+  imports: [CommonModule, IconModule],
   encapsulation: ViewEncapsulation.None
 })
 export class IconComponent implements OnInit, OnChanges {

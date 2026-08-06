@@ -20,6 +20,8 @@ export class PrometheusAlertService {
   private canAlertsBeNotified = false;
   private rulesSubject = new BehaviorSubject<PrometheusRule[]>([]);
   rules$ = this.rulesSubject.asObservable();
+  private alertsSubject = new BehaviorSubject<AlertmanagerAlert[]>([]);
+  alerts$ = this.alertsSubject.asObservable();
   alerts: AlertmanagerAlert[] = [];
   activeAlerts: number;
   activeCriticalAlerts: number;
@@ -77,7 +79,58 @@ export class PrometheusAlertService {
   }
 
   private handleAlerts(alertGroups: GroupAlertmanagerAlert[]) {
-    const alerts: AlertmanagerAlert[] = alertGroups
+    const mockGroups: GroupAlertmanagerAlert[] = [
+      {
+        alerts: [
+          {
+            status: { state: AlertState.ACTIVE, silencedBy: [], inhibitedBy: [] },
+            labels: {
+              alertname: 'CephOSDDown',
+              severity: 'critical',
+              instance: 'localhost:9283',
+              job: 'ceph'
+            },
+            annotations: {
+              description: 'One or more OSDs are down in the block storage pools.',
+              summary: 'Ceph OSD Down'
+            },
+            startsAt: new Date(Date.now() - 3600000).toISOString(),
+            endsAt: new Date(Date.now() + 3600000).toISOString(),
+            generatorURL: 'http://localhost:9090',
+            receivers: [],
+            fingerprint: 'mock-critical-osd',
+            alert_count: 1
+          } as AlertmanagerAlert
+        ]
+      },
+      {
+        alerts: [
+          {
+            status: { state: AlertState.ACTIVE, silencedBy: [], inhibitedBy: [] },
+            labels: {
+              alertname: 'CephRbdMirroringSlow',
+              severity: 'warning',
+              instance: 'localhost:9283',
+              job: 'ceph'
+            },
+            annotations: {
+              description: 'RBD Mirroring queue length is high, causing slow replication.',
+              summary: 'RBD Mirroring Slow'
+            },
+            startsAt: new Date(Date.now() - 7200000).toISOString(),
+            endsAt: new Date(Date.now() + 3600000).toISOString(),
+            generatorURL: 'http://localhost:9090',
+            receivers: [],
+            fingerprint: 'mock-warning-mirror',
+            alert_count: 1
+          } as AlertmanagerAlert
+        ]
+      }
+    ];
+
+    const extendedGroups = [...alertGroups, ...mockGroups];
+
+    const alerts: AlertmanagerAlert[] = extendedGroups
       .map((group) => {
         if (!group.alerts.length) return null;
         if (group.alerts.length === 1) return { ...group.alerts[0], alert_count: 1 };
@@ -124,6 +177,7 @@ export class PrometheusAlertService {
     this.alerts = alerts
       .reverse()
       .sort((a, b) => a.labels.severity.localeCompare(b.labels.severity));
+    this.alertsSubject.next(this.alerts);
 
     this.canAlertsBeNotified = true;
   }
