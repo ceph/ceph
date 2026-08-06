@@ -958,3 +958,190 @@ def test_nfs_choose_next_action_detects_explicit_value_change():
         last_deps=['tls_ktls: False'],
     )
     assert step.action is utils.Action.REDEPLOY
+
+
+# ---------------------------------------------------------------------------
+# Tests for configurable nfs_rados_command_timeout (IBMCEPH-14352)
+# ---------------------------------------------------------------------------
+
+class TestNFSRadosCommandTimeout:
+    """Verify that ganesha-rados-grace and rados subprocess calls use the
+    nfs_rados_command_timeout module option instead of a hardcoded value."""
+
+    def _make_nfs_service(self, module_options=None):
+        """Return an NFSService instance backed by a freshly constructed
+        CephadmOrchestrator module so that get_module_option() works."""
+        from cephadm.tests.fixtures import with_cephadm_module
+        from cephadm.services.service_registry import service_registry
+        # with_cephadm_module is a context manager; keep it alive via return
+        ctx = with_cephadm_module(module_options or {})
+        mgr = ctx.__enter__()
+        return ctx, service_registry.get_service('nfs')
+
+    # ------------------------------------------------------------------
+    # run_grace_tool: default timeout (30 s)
+    # ------------------------------------------------------------------
+    def test_run_grace_tool_uses_default_timeout(self):
+        import subprocess
+        from unittest.mock import patch, MagicMock
+        from cephadm.tests.fixtures import with_cephadm_module
+        from cephadm.services.service_registry import service_registry
+        from ceph.deployment.service_spec import NFSServiceSpec
+
+        with with_cephadm_module({}) as mgr:
+            assert mgr.nfs_rados_command_timeout == 30
+
+            nfs_svc = service_registry.get_service('nfs')
+            spec = NFSServiceSpec(service_id='mytest')
+
+            completed = MagicMock()
+            completed.returncode = 0
+            completed.stdout = b''
+
+            captured_timeout = []
+
+            def fake_run(cmd, stdout, stderr, timeout):
+                captured_timeout.append(timeout)
+                return completed
+
+            with patch.object(subprocess, 'run', side_effect=fake_run), \
+                 patch.object(nfs_svc, 'get_keyring_with_caps', return_value='[client.mgr.nfs.grace.nfs.mytest]\n\tkey = AQ==\n'), \
+                 patch.object(mgr, 'get_minimal_ceph_conf', return_value='[global]\n'), \
+                 patch.object(mgr, 'check_mon_command', return_value=None):
+                nfs_svc.run_grace_tool(spec, 'add', '0')
+
+            assert len(captured_timeout) == 1
+            assert captured_timeout[0] == 30
+
+    # ------------------------------------------------------------------
+    # run_grace_tool: custom configured timeout (60 s)
+    # ------------------------------------------------------------------
+    def test_run_grace_tool_uses_custom_timeout(self):
+        import subprocess
+        from unittest.mock import patch, MagicMock
+        from cephadm.tests.fixtures import with_cephadm_module
+        from cephadm.services.service_registry import service_registry
+        from ceph.deployment.service_spec import NFSServiceSpec
+
+        with with_cephadm_module({'nfs_rados_command_timeout': '60'}) as mgr:
+            assert mgr.nfs_rados_command_timeout == 60
+
+            nfs_svc = service_registry.get_service('nfs')
+            spec = NFSServiceSpec(service_id='mytest')
+
+            completed = MagicMock()
+            completed.returncode = 0
+            completed.stdout = b''
+
+            captured_timeout = []
+
+            def fake_run(cmd, stdout, stderr, timeout):
+                captured_timeout.append(timeout)
+                return completed
+
+            with patch.object(subprocess, 'run', side_effect=fake_run), \
+                 patch.object(nfs_svc, 'get_keyring_with_caps', return_value='[client.mgr.nfs.grace.nfs.mytest]\n\tkey = AQ==\n'), \
+                 patch.object(mgr, 'get_minimal_ceph_conf', return_value='[global]\n'), \
+                 patch.object(mgr, 'check_mon_command', return_value=None):
+                nfs_svc.run_grace_tool(spec, 'add', '0')
+
+            assert len(captured_timeout) == 1
+            assert captured_timeout[0] == 60
+
+    # ------------------------------------------------------------------
+    # create_rados_config_obj: both subprocess.run calls use the timeout
+    # ------------------------------------------------------------------
+    def test_create_rados_config_obj_uses_configurable_timeout(self):
+        import subprocess
+        from unittest.mock import patch, MagicMock
+        from cephadm.tests.fixtures import with_cephadm_module
+        from cephadm.services.service_registry import service_registry
+        from ceph.deployment.service_spec import NFSServiceSpec
+
+        with with_cephadm_module({'nfs_rados_command_timeout': '45'}) as mgr:
+            nfs_svc = service_registry.get_service('nfs')
+            spec = NFSServiceSpec(service_id='mytest')
+
+            captured_timeouts = []
+            call_count = [0]
+
+            def fake_run(cmd, stdout, stderr, timeout):
+                captured_timeouts.append(timeout)
+                r = MagicMock()
+                if call_count[0] == 0:
+                    # first call: "get" returns non-zero to trigger "put"
+                    r.returncode = 1
+                    r.stdout = b''
+                else:
+                    r.returncode = 0
+                    r.stdout = b''
+                call_count[0] += 1
+                return r
+
+            with patch.object(subprocess, 'run', side_effect=fake_run), \
+                 patch.object(mgr, 'get_ceph_option', return_value='/tmp/fake-keyring'), \
+                 patch.object(mgr, 'get_mgr_id', return_value='mgr.a'):
+                nfs_svc.create_rados_config_obj(spec)
+
+            # Both the "get" and the "put" calls must use the configured timeout
+            assert all(t == 45 for t in captured_timeouts), \
+                f"Expected all timeouts=45, got {captured_timeouts}"
+            assert len(captured_timeouts) == 2
+
+    # ------------------------------------------------------------------
+    # purge: rados rm uses the configurable timeout
+    # ------------------------------------------------------------------
+    def test_purge_uses_configurable_timeout(self):
+        import subprocess
+        from unittest.mock import patch, MagicMock
+        from cephadm.tests.fixtures import with_cephadm_module
+        from cephadm.services.service_registry import service_registry
+        from ceph.deployment.service_spec import NFSServiceSpec
+
+        with with_cephadm_module({'nfs_rados_command_timeout': '50'}) as mgr:
+            nfs_svc = service_registry.get_service('nfs')
+            spec = NFSServiceSpec(service_id='mytest')
+            mgr.spec_store._specs['nfs.mytest'] = MagicMock(spec=spec, spec_lock=MagicMock())
+            mgr.spec_store._specs['nfs.mytest'].spec = spec
+            mgr.spec_store.spec_created['nfs.mytest'] = datetime_now()
+
+            captured_timeouts = []
+
+            def fake_run(cmd, stdout, stderr, timeout):
+                captured_timeouts.append(timeout)
+                r = MagicMock()
+                r.returncode = 0
+                r.stderr = b''
+                return r
+
+            with patch.object(subprocess, 'run', side_effect=fake_run), \
+                 patch.object(mgr, 'get_ceph_option', return_value='/tmp/fake-keyring'), \
+                 patch.object(mgr, 'get_mgr_id', return_value='mgr.a'):
+                nfs_svc.purge('nfs.mytest')
+
+            assert len(captured_timeouts) == 1
+            assert captured_timeouts[0] == 50
+
+    # ------------------------------------------------------------------
+    # Option presence and defaults in MODULE_OPTIONS
+    # ------------------------------------------------------------------
+    def test_nfs_rados_command_timeout_option_registered(self):
+        from cephadm.module import CephadmOrchestrator
+        names = [o['name'] for o in CephadmOrchestrator.MODULE_OPTIONS]
+        assert 'nfs_rados_command_timeout' in names
+
+    def test_nfs_rados_command_timeout_default_is_30(self):
+        from cephadm.module import CephadmOrchestrator
+        opt = next(
+            o for o in CephadmOrchestrator.MODULE_OPTIONS
+            if o['name'] == 'nfs_rados_command_timeout'
+        )
+        assert opt['default'] == 30
+
+    def test_nfs_rados_command_timeout_type_is_secs(self):
+        from cephadm.module import CephadmOrchestrator
+        opt = next(
+            o for o in CephadmOrchestrator.MODULE_OPTIONS
+            if o['name'] == 'nfs_rados_command_timeout'
+        )
+        assert opt['type'] == 'secs'
