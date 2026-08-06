@@ -409,6 +409,69 @@ class TestFragmentation(CephFSTestCase):
         self.assertEqual(self.get_merges(), 0)
         self.assertEqual(len(self.get_dir_ino("/splitdir")["dirfrags"]), 2)
 
+    def test_finish_old_fragment_auth_pin_race(self):
+        """
+        Reproduce the race condition between directory fragmentation (split/merge)
+        and concurrent client metadata operations generating auth_pins.
+        """
+        log.info("Testing auth_pin race condition during fragment split/merge...")
+
+        # Configure the MDS balancer for ultra-aggressive fragmentation
+        self._configure(
+            mds_bal_split_size=20,
+            mds_bal_merge_size=5,
+            mds_bal_interval=1,
+            mds_bal_fragment_interval=1
+        )
+
+        time.sleep(5)
+
+        test_dir = "frag_race_dir"
+        self.mount_a.run_shell(['mkdir', '-p', test_dir])
+
+        # Define the background workloads for the client
+        spawner_script = f"""
+        while true; do
+            touch {test_dir}/file_{{1..50}} > /dev/null 2>&1 || true
+            sleep 0.2
+            rm -f {test_dir}/file_{{1..50}} > /dev/null 2>&1 || true
+            sleep 0.2
+        done
+        """
+
+        pinner_script = f"""
+        while true; do
+            stat {test_dir}/file_* > /dev/null 2>&1 || true
+            chmod 777 {test_dir}/file_* > /dev/null 2>&1 || true
+        done
+        """
+
+        # Write and execute the workloads
+        self.mount_a.client_remote.write_file('/tmp/spawner.sh', spawner_script.encode('utf-8'))
+        self.mount_a.client_remote.write_file('/tmp/pinner.sh', pinner_script.encode('utf-8'))
+        self.mount_a.client_remote.run(args=['chmod', '+x', '/tmp/spawner.sh', '/tmp/pinner.sh'])
+
+        spawner_proc = self.mount_a.run_shell(['bash', '/tmp/spawner.sh'], wait=False)
+        pinner_proc = self.mount_a.run_shell(['bash', '/tmp/pinner.sh'], wait=False)
+
+        run_time = 120
+        sleep_interval = 5
+        try:
+            for i in range(run_time // sleep_interval):
+                # Actively verify the MDS ranks are still active.
+                # wait_for_daemons() returns instantly if the MDS is healthy, but will
+                # block and fail if a daemon crashes. Looping it here acts as a fail-fast
+                # heartbeat, ensuring we catch any assertion failures from the race
+                # condition immediately during the 120s window rather than waiting blindly.
+                self.fs.wait_for_daemons()
+                time.sleep(sleep_interval)
+        finally:
+            # Use pkill to terminate the infinite loops.
+            self.mount_a.client_remote.run(args=['pkill', '-f', 'spawner.sh'], check_status=False)
+            self.mount_a.client_remote.run(args=['pkill', '-f', 'pinner.sh'], check_status=False)
+            self.mount_a.client_remote.run(args=['rm', '-f', '/tmp/spawner.sh', '/tmp/pinner.sh'])
+            self.mount_a.run_shell(['rm', '-rf', test_dir])
+
     def _run_dir_frag(self, killpoint):
         self._test_oversize(killpoint=killpoint)
 
