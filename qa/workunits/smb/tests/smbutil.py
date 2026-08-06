@@ -94,6 +94,10 @@ class SMBTestConf:
     def testdir(self):
         return self._data.get('testdir') or os.path.expanduser('~/cephtest')
 
+    @property
+    def params(self):
+        return self._data.get('params') or {}
+
 
 @contextlib.contextmanager
 def connection(conf, share):
