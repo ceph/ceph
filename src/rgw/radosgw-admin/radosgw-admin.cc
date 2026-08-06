@@ -420,6 +420,8 @@ void usage()
   cout << "                                       mdlog list\n";
   cout << "                                       data sync status\n";
   cout << "                                       sync error trim\n";
+  cout << "                                       gc list\n";
+  cout << "                                       gc process\n";
   cout << "                                     required for:\n";
   cout << "                                       mdlog trim\n";
   cout << "   --gen=<gen-id>                    optional for:\n";
@@ -9709,14 +9711,24 @@ next:
   }
 
   if (opt_cmd == OPT::GC_LIST) {
+    if (specified_shard_id) {
+      int max_gc_shards = min(static_cast<int>(g_ceph_context->_conf->rgw_gc_max_objs), rgw_shards_max());
+      if (shard_id < 0 || shard_id >= max_gc_shards) {
+        cerr << "ERROR: shard-id must be in the range [0, " << max_gc_shards - 1 << "]" << std::endl;
+        return EINVAL;
+      }
+    }
+
     int index = 0;
     bool truncated;
     bool processing_queue = false;
     formatter->open_array_section("entries");
 
+    std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
+
     do {
       list<cls_rgw_gc_obj_info> result;
-      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated, processing_queue);
+      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(index, marker, 1000, !include_all, result, truncated, processing_queue, gc_shard_id);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;
@@ -9743,6 +9755,14 @@ next:
   }
 
   if (opt_cmd == OPT::GC_PROCESS) {
+    if (specified_shard_id) {
+      int max_gc_shards = min(static_cast<int>(g_ceph_context->_conf->rgw_gc_max_objs), rgw_shards_max());
+      if (shard_id < 0 || shard_id >= max_gc_shards) {
+        cerr << "ERROR: shard-id must be in the range [0, " << max_gc_shards - 1 << "]" << std::endl;
+        return EINVAL;
+      }
+    }
+
     rgw::sal::RadosStore* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!rados_store) {
       cerr <<
@@ -9752,7 +9772,8 @@ next:
     }
     RGWRados* store = rados_store->getRados();
 
-    int ret = store->process_gc(!include_all, null_yield);
+    std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
+    int ret = store->process_gc(!include_all, null_yield, gc_shard_id);
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;

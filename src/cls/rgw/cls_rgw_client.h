@@ -253,7 +253,7 @@ void cls_rgw_gc_list(librados::ObjectReadOperation& op, const std::string& marke
                      uint32_t max, bool expired_only, bufferlist& bl);
 int cls_rgw_gc_list_decode(const bufferlist& bl,
                            std::list<cls_rgw_gc_obj_info>& entries,
-                           bool *truncated, std::string& next_marker);
+                           bool& truncated, std::string& next_marker);
 
 /* lifecycle */
 void cls_rgw_lc_get_head(librados::ObjectReadOperation& op, bufferlist& bl);

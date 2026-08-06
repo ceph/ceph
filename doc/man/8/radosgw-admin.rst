@@ -639,7 +639,7 @@ Options
 
 .. option:: --shard-id=<shard-id>
 
-   Optional for mdlog list, bi list, data sync status. Required for ``mdlog trim``.
+   Optional for mdlog list, bi list, data sync status, gc list, gc process. Required for ``mdlog trim``.
 
 .. option:: --max-entries=<entries>
 
