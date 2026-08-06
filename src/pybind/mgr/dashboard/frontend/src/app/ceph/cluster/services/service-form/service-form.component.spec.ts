@@ -1148,6 +1148,55 @@ x4Ea7kGVgx9kWh5XjWz9wjZvY49UKIT5ppIAWPMbLl3UpfckiuNhTA==
 
         expect(component.filteredZoneList.length).toBeGreaterThan(0);
       }));
+
+      it('should disable virtual_host_enabled control when no realms exist', () => {
+        const virtualHostControl = form.get('virtual_host_enabled');
+        expect(virtualHostControl.disabled).toBe(true);
+      });
+
+      it('should set virtual_host_enabled value to false when no realms exist', () => {
+        const virtualHostControl = form.get('virtual_host_enabled');
+        expect(virtualHostControl.value).toBe(false);
+      });
+
+      it('should enable virtual_host_enabled control when realms are populated and rgw module is enabled', fakeAsync(() => {
+        const virtualHostControl = form.get('virtual_host_enabled');
+        expect(virtualHostControl.disabled).toBe(true);
+
+        // Simulate realms being populated
+        (rgwRealmService.getAllRealmsInfo as jasmine.Spy).and.returnValue(
+          of({
+            realms: [
+              { id: 'r1', name: 'realm-a' },
+              { id: 'r2', name: 'realm-b' }
+            ],
+            default_realm: 'r1'
+          })
+        );
+        (rgwZonegroupService.getAllZonegroupsInfo as jasmine.Spy).and.returnValue(
+          of({
+            zonegroups: [
+              { id: 'zg1', name: 'zg-a1', realm_id: 'r1', zones: [{ name: 'zone-a1' }] },
+              { id: 'zg2', name: 'zg-a2', realm_id: 'r1', zones: [{ name: 'zone-a2' }] }
+            ],
+            default_zonegroup: 'zg1'
+          })
+        );
+
+        // Re-initialize with realms
+        component.setRgwFields();
+        tick();
+
+        expect(component.realmList.length).toBe(2);
+        expect(virtualHostControl.disabled).toBe(true); // Still disabled because rgw module is not enabled yet
+
+        // Simulate rgw module being enabled
+        (rgwMultisiteService.getRgwModuleStatus as jasmine.Spy).and.returnValue(of(true));
+        component['getRgwModuleStatus']();
+        tick();
+
+        expect(virtualHostControl.disabled).toBe(false);
+      }));
     });
   });
 });
