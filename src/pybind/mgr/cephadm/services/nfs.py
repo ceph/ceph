@@ -360,10 +360,16 @@ class NFSService(CephService):
             '-p', POOL_NAME,
             '--namespace', cast(str, spec.service_id),
         ]
+        rados_timeout = self.mgr.nfs_rados_command_timeout
+        if rados_timeout < 5:
+            self.mgr.log.info(
+                f'nfs_rados_command_timeout set to {rados_timeout}, using minimum of 5 seconds.'
+            )
+            rados_timeout = 5
         result = subprocess.run(
             cmd + ['get', objname, '-'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=10)
+            timeout=rados_timeout)
         if not result.returncode and not clobber:
             logger.info('Rados config object exists: %s' % objname)
             config_file_data = result.stdout
@@ -372,7 +378,7 @@ class NFSService(CephService):
             result = subprocess.run(
                 cmd + ['put', objname, '-'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                timeout=10)
+                timeout=rados_timeout)
             if result.returncode:
                 self.mgr.log.warning(
                     f'Unable to create rados config object {objname}: {result.stderr.decode("utf-8")}'
@@ -450,8 +456,14 @@ class NFSService(CephService):
                 action, nodeid,
             ]
             self.mgr.log.debug(cmd)
+            grace_timeout = self.mgr.nfs_rados_command_timeout
+            if grace_timeout < 5:
+                self.mgr.log.info(
+                    f'nfs_rados_command_timeout set to {grace_timeout}, using minimum of 5 seconds.'
+                )
+                grace_timeout = 5
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    timeout=10)
+                                    timeout=grace_timeout)
             if result.returncode:
                 stderr = result.stderr.decode("utf-8")
                 self.mgr.log.warning(
@@ -521,12 +533,18 @@ class NFSService(CephService):
             '--namespace', cast(str, spec.service_id),
             'rm', 'grace',
         ]
+        purge_timeout = self.mgr.nfs_rados_command_timeout
+        if purge_timeout < 5:
+            self.mgr.log.info(
+                f'nfs_rados_command_timeout set to {purge_timeout}, using minimum of 5 seconds.'
+            )
+            purge_timeout = 5
         try:
             result = subprocess.run(
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=10
+                timeout=purge_timeout
             )
         except Exception as e:
             err_msg = f'Got unexpected exception trying to remove ganesha grace file for nfs.{spec.service_id} service: {str(e)}'
