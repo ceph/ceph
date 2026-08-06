@@ -108,16 +108,23 @@ export class ApiInterceptorService implements HttpInterceptor {
               this.authStorageService.remove();
               this.router.navigate(['/login']);
               break;
-            case 403:
-              this.router.navigate(['error'], {
-                state: {
-                  message: $localize`Sorry, you don’t have permission to view this page or resource.`,
-                  header: $localize`Access Denied`,
-                  icon: 'locked',
-                  source: 'forbidden'
-                }
-              });
+            case 403: {
+              const UNSCOPED_UI_APIS = [
+                'ui-api/prometheus/prometheus-api-host',
+                'ui-api/prometheus/alertmanager-api-host'
+              ];
+              if (!UNSCOPED_UI_APIS.some((path) => request.url.startsWith(path))) {
+                this.router.navigate(['error'], {
+                  state: {
+                    message: $localize`Sorry, you don't have permission to view this page or resource.`,
+                    header: $localize`Access Denied`,
+                    icon: 'locked',
+                    source: 'forbidden'
+                  }
+                });
+              }
               break;
+            }
             default:
               timeoutId = this.prepareNotification(resp);
           }
@@ -151,12 +158,13 @@ export class ApiInterceptorService implements HttpInterceptor {
     return this.notificationService.show(() => {
       let message = '';
       if (_.isPlainObject(resp.error) && _.isString(resp.error.detail)) {
-        message = resp.error.detail; // Error was triggered by the backend.
+        message = resp.error.detail;
       } else if (_.isString(resp.error)) {
         message = resp.error;
       } else if (_.isString(resp.message)) {
         message = resp.message;
       }
+
       return new CdNotificationConfig(
         NotificationType.error,
         `${resp.status} - ${resp.statusText}`,

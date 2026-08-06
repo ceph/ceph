@@ -3960,7 +3960,13 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
 {
   switch (attrs_mod) {
   case RGWRados::ATTRSMOD_NONE:
-    attrs = src_attrs;
+    {
+      auto tags = attrs.extract(RGW_ATTR_TAGS);
+      attrs = src_attrs;
+      if (!tags.empty()) {
+        attrs[RGW_ATTR_TAGS] = std::move(tags.mapped());
+      }
+    }
     break;
   case RGWRados::ATTRSMOD_REPLACE:
     if (!attrs[RGW_ATTR_ETAG].length()) {
@@ -3970,6 +3976,13 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
       auto ttiter = src_attrs.find(RGW_ATTR_TAIL_TAG);
       if (ttiter != src_attrs.end()) {
         attrs[RGW_ATTR_TAIL_TAG] = src_attrs[RGW_ATTR_TAIL_TAG];
+      }
+    }
+    // the tag-set is copied from the source unless the request replaced it
+    if (attrs.find(RGW_ATTR_TAGS) == attrs.end()) {
+      auto titer = src_attrs.find(RGW_ATTR_TAGS);
+      if (titer != src_attrs.end()) {
+        attrs[RGW_ATTR_TAGS] = titer->second;
       }
     }
     break;

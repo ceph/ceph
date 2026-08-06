@@ -8638,6 +8638,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   bool do_shutdown = false;
   bool do_restart = false;
   bool network_error = false;
+  bool need_rebind = false;
   OSDMapRef osdmap = get_osdmap();
 
   // advance through the new maps
@@ -8810,22 +8811,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
 	start_waiting_for_healthy();
 
-	set<int> avoid_ports;
-#if defined(__FreeBSD__)
-        // prevent FreeBSD from grabbing the client_messenger port during
-        // rebinding. In which case a cluster_meesneger will connect also
-	// to the same port
-	client_messenger->get_myaddrs().get_ports(&avoid_ports);
-#endif
-	cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
-
-	int r = cluster_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-          derr << __func__ << " marked down:"
-	       << " rebind cluster_messenger failed" << dendl;
-        }
+	need_rebind = true;
 
 	hb_back_server_messenger->mark_down_all();
 	hb_front_server_messenger->mark_down_all();
@@ -8846,6 +8832,28 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 
   // yay!
   consume_map();
+
+  if (need_rebind) {
+    // Rebind cluster_messenger after consume_map() so that all shards
+    // have the updated OSDMap before peers can reconnect and retransmit
+    // messages. See https://tracker.ceph.com/issues/58417
+    set<int> avoid_ports;
+#if defined(__FreeBSD__)
+    // prevent FreeBSD from grabbing the client_messenger port during
+    // rebinding. In which case a cluster_messenger will connect also
+    // to the same port
+    client_messenger->get_myaddrs().get_ports(&avoid_ports);
+#endif
+    cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
+
+    int r = cluster_messenger->rebind(avoid_ports);
+    if (r != 0) {
+      do_shutdown = true;  // FIXME: do_restart?
+      network_error = true;
+      derr << __func__ << " marked down:"
+	   << " rebind cluster_messenger failed" << dendl;
+    }
+  }
 
   if (is_active() || is_waiting_for_healthy())
     maybe_update_heartbeat_peers();

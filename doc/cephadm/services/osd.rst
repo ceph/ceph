@@ -1138,6 +1138,73 @@ via the ``paths`` keyword with the following syntax:
         paths:
         - /dev/sde
 
+
+.. _cephadm-osd-collocated-db:
+
+DB on the Same Device (Collocated LV Split)
+-------------------------------------------
+
+.. versionadded:: Squid 19.2.1
+
+It is possible to deploy OSDs where the ``block.db`` LV is carved out of the
+**same physical device** as the data LV, without requiring a separate DB device.
+This provides the BlueStore non-collocated layout (data and metadata on separate
+LVs) using only a single device per OSD which helps to mitigate BlueStore fragmentation.
+
+This is achieved by specifying ``block_db_size`` **without** ``db_devices`` in
+the OSD spec. ``cephadm`` will instruct ``ceph-volume lvm batch`` to create two
+LVs per disk: one for data and one for ``block.db``.
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: osd_collocated_db
+    placement:
+      host_pattern: '*'
+    spec:
+      data_devices:
+        paths:
+          - /dev/sdb
+          - /dev/sdc
+      block_db_size: 4G           # Carve a 4 GB DB LV out of each data device
+
+The result is that each HDD will host two LVs:
+
+.. code-block:: none
+
+    data     /dev/sdb   196.00 GB   98.00%
+    block_db /dev/sdb     4.00 GB    2.00%
+
+This also works with explicit device paths and ``osds_per_device``:
+
+.. code-block:: yaml
+
+    service_type: osd
+    service_id: osd_collocated_db_paths
+    placement:
+      hosts:
+        - node01
+        - node02
+    spec:
+      data_devices:
+        paths:
+          - /dev/sdb
+          - /dev/sdc
+      block_db_size: 4G           # Carve a DB LV out of each data device
+      osds_per_device: 2          # Multiple OSDs per disk, each with its own DB LV
+
+.. note::
+
+    ``block_db_size`` is mandatory for this configuration. ``ceph-volume`` cannot
+    derive a sensible default DB size when both data and DB share the same device.
+    If the requested size cannot be satisfied, no OSDs will be deployed.
+
+.. note::
+
+    This feature was introduced in Squid 19.2.3. On older releases, you can achieve
+    the same result by manually creating the LVs in advance and passing them
+    explicitly to ``ceph-volume lvm prepare --bluestore --data <data-vg/lv> --block.db <db-vg/lv>``.
+
 .. _cephadm-osd-activate:
 
 Activate Existing OSDs

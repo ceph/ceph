@@ -6992,7 +6992,6 @@ options:
   enum_values:
   - aio
   - spdk
-  - pmem
 - name: bdev_stalled_read_warn_lifetime
   type: uint
   level: advanced

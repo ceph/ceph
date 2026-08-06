@@ -2,8 +2,6 @@
 Bucket Policies
 ===============
 
-.. versionadded:: Luminous
-
 The Ceph Object Gateway supports a subset of the Amazon S3 policy
 language applied to buckets.
 

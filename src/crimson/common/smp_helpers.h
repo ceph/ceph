@@ -66,7 +66,7 @@ auto proxy_method_on_core(
  */
 template <typename F>
 auto invoke_on_all_seq(F f) -> decltype(seastar::futurize_invoke(f)) {
-  for (auto core: seastar::smp::all_cpus()) {
+  for (auto core: seastar::this_smp_all_shards()) {
       co_await crimson::submit_to(core, [&f] { return seastar::futurize_invoke(f);});
   }
 }
@@ -96,8 +96,8 @@ public:
     : out_seqs(0) { }
 
   smp_crosscore_ordering_t() requires (!IS_ONE)
-    : out_seqs(seastar::smp::count, 0),
-      in_controls(seastar::smp::count) {}
+    : out_seqs(seastar::this_smp_shard_count(), 0),
+      in_controls(seastar::this_smp_shard_count()) {}
 
   ~smp_crosscore_ordering_t() = default;
 

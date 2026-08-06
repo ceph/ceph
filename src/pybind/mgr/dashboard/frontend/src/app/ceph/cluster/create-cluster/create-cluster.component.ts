@@ -97,10 +97,12 @@ export class CreateClusterComponent implements OnInit, OnDestroy {
       }
     });
 
-    this.osdService.getDeploymentOptions().subscribe((options) => {
-      this.deploymentOption = options;
-      this.selectedOption = { option: options.recommended_option, encrypted: false };
-    });
+    if (this.permissions.osd?.read) {
+      this.osdService.getDeploymentOptions().subscribe((options) => {
+        this.deploymentOption = options;
+        this.selectedOption = { option: options.recommended_option, encrypted: false };
+      });
+    }
 
     this.steps.forEach((step) => {
       this.stepsToSkip[step.label] = false;

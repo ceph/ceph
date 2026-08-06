@@ -224,9 +224,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       actionDescription: $localize`remove`,
       hideDefaultWarning: true,
       impact: DeletionImpact.high,
-      bodyContext: {
-        deletionMessage: $localize`Removing <strong>${hostname}</strong> will detach it from the gateway group and stop handling new I/O requests. Active connections may be disrupted.<br><br>You can re-add this node later if required.`
-      },
+      hasAssociatedResources: true,
       submitActionObservable: () => {
         const updatedSpec = this.buildRemoveGatewaySpecPayload(hostname);
         if (!updatedSpec) {
@@ -454,9 +452,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       },
       {
         label: $localize`Encryption`,
-        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
+        value: serviceSpec.spec?.encryption_key ? $localize`Enabled` : $localize`Disabled`,
         type: 'status',
-        statusIcon: serviceSpec.spec?.enable_auth ? 'success' : 'error'
+        statusIcon: serviceSpec.spec?.encryption_key ? 'success' : 'error'
       },
       {
         label: $localize`mTLS`,

@@ -38,12 +38,14 @@ constexpr uint64_t BUCKET_TAG_QUICK_TIMEOUT = 30;
 using namespace std;
 
 // these values are copied from cls/rgw/cls_rgw.cc
+#ifdef WITH_RADOSGW_RADOS
 static const string BI_OLH_ENTRY_NS_START = "\x80" "1001_";
 static const string BI_INSTANCE_ENTRY_NS_START = "\x80" "1000_";
 
 // number of characters that we should allow to be buffered by the formatter
 // before flushing (used by index check methods with dump_keys=true)
 static constexpr int FORMATTER_LEN_FLUSH_THRESHOLD = 4 * 1024 * 1024;
+#endif
 
 // default number of entries to list with each bucket listing call
 // (use marker to bridge between calls)
@@ -1826,19 +1828,9 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
 
   const std::string empty_end_marker;
   const size_t list_buckets_max = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  constexpr bool no_need_stats = false; // set need_stats to false
 
   uint32_t max_items = (uint32_t)list_buckets_max;
-
-  if (max_entries_specified) {
-    /* we never want to allow max_items higher than rgw_list_buckets_max_chunk */
-    if (max_entries > list_buckets_max) {
-      max_items = list_buckets_max;
-    } else {
-      max_items = max_entries;
-    }
-  }
-
-  constexpr bool no_need_stats = false; // set need_stats to false
 
   rgw::sal::BucketList listing;
   listing.next_marker = marker;
@@ -1908,11 +1900,14 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   const std::string& bucket_name = op_state.get_bucket_name();
   if (!bucket_name.empty()) {
     ret = bucket.init(driver, op_state, y, dpp);
-    if (-ENOENT == ret)
+    if (-ENOENT == ret) {
       return -ERR_NO_SUCH_BUCKET;
-    else if (ret < 0)
+    } else if (ret < 0) {
       return ret;
+    }
   }
+
+  const bool max_entries_specified = (op_state.max_entries > 0);
 
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
@@ -1963,24 +1958,39 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       return ret;
     }
   } else {
+    constexpr uint64_t max_keys = 1000;
     void *handle = nullptr;
     bool truncated = true;
+    uint64_t count = 0;
+    bool done = false;
 
     formatter->open_array_section("buckets");
     ret = driver->meta_list_keys_init(dpp, "bucket", string(), &handle);
-    while (ret == 0 && truncated) {
+
+    while (ret == 0 && !done && truncated) {
       std::list<std::string> buckets;
-      constexpr int max_keys = 1000;
+
+      // in experiments, meta_list_keys_next often doesn't return as
+      // many keys as requested; so asking for only the minimal amount
+      // needed to reach max_entries often requires extra calls, so
+      // we'll always ask for the maximum number of keys
       ret = driver->meta_list_keys_next(dpp, handle, max_keys, buckets,
-						   &truncated);
-      for (auto& bucket_name : buckets) {
+                                        &truncated);
+      for (const auto& bucket_name : buckets) {
         if (show_stats) {
-          bucket_stats(driver, site, user_id.tenant, bucket_name, op_state.restore_stats, formatter, dpp, y);
+          bucket_stats(driver, site, user_id.tenant, bucket_name,
+                       op_state.restore_stats, formatter, dpp, y);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}
-      }
-    }
+
+        ++count;
+        if (max_entries_specified && count >= op_state.max_entries) {
+          done = true;
+          break;
+        }
+      } // for bucket_name
+    } // while continuing to read
     driver->meta_list_keys_complete(handle);
     formatter->close_section();
   }

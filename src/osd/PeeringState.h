@@ -197,6 +197,14 @@ struct HeartbeatStamps : public RefCountedObject {
     peer_clock_delta_ub = delta_ub;
   }
 
+  void get_peer_clock_delta(
+      std::optional<ceph::signedspan> *out_lb,
+      std::optional<ceph::signedspan> *out_ub) const {
+    std::lock_guard l(lock);
+    *out_lb = peer_clock_delta_lb;
+    *out_ub = peer_clock_delta_ub;
+  }
+
 private:
   FRIEND_MAKE_REF(HeartbeatStamps);
   HeartbeatStamps(int o)

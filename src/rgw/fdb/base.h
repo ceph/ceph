@@ -45,6 +45,8 @@
 #include <filesystem>
 #include <type_traits>
 
+#include "common/container_concepts.h"
+
 #ifdef __cpp_lib_flat_map
  #include <flat_map>
  template <typename ...Args>
@@ -70,11 +72,55 @@ extern transaction_handle make_transaction(database_handle dbh);
 
 } // namespace ceph::libfdb
 
-// MOAR forward declarations-- "pay no attention to that man behind the curtain": 
-namespace ceph::libfdb::detail {
+namespace ceph::libfdb::concepts {
 
-template <typename T, typename ...Ts>
-concept is_any_of = (std::is_same_v<T, Ts> || ...);
+// Note that "stringlikes" are not all "stringview-likes", such as when they can be
+// written to:
+template <typename StringViewLikeT>
+concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
+
+template <typename IteratorT>
+concept key_value_iterator =
+ std::input_iterator<IteratorT> and
+ requires(const std::iter_value_t<IteratorT>& kv) {
+  kv.first;
+  kv.second;
+ };
+
+template <typename OutIterT>
+concept string_key_value_output_iterator =
+ std::output_iterator<OutIterT, std::pair<std::string, std::string>>;
+
+template <typename OutContainerT>
+concept string_key_value_output_container =
+ ceph::concepts::can_append<OutContainerT, std::pair<std::string, std::string>>;
+
+template <typename FnT>
+concept value_callback =
+ std::invocable<FnT&, std::span<const std::uint8_t>>;
+
+template <typename T>
+concept value_output =
+ !value_callback<std::remove_reference_t<T>> &&
+ std::is_lvalue_reference_v<T>;
+
+template <typename T>
+concept storable_invocation_result =
+ !std::is_void_v<T> && !std::is_reference_v<T>;
+
+template <typename T>
+concept supported_invocation_result =
+ std::is_void_v<T> || storable_invocation_result<T>;
+
+// There's a high likelihood that we're going to get more sophisticated selectors, 
+// so this is doing a more important job than it may appear to be:
+template <typename T>
+concept selector = ceph::concepts::same_as_any<T, ceph::libfdb::select>;
+
+} // namespace ceph::libfdb::concepts
+
+// MOAR forward declarations-- "pay no attention to that man behind the curtain":
+namespace ceph::libfdb::detail {
 
 struct future_value;
 
@@ -97,49 +143,10 @@ inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::lib
 
 // Stores a successively-generated of kv pair results to an iterator:
 template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
+requires ceph::libfdb::concepts::string_key_value_output_iterator<OutIterT>
 inline bool get_value_range_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& key_range, OutIterT out_iter);
 
 } // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb::concepts {
-
-// Note that "stringlikes" are not all "stringview-likes", such as when they can be
-// written to:
-template <typename StringViewLikeT>
-concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
-
-template <typename IteratorT>
-concept key_value_iterator =
- std::input_iterator<IteratorT> and
- requires(const std::iter_value_t<IteratorT>& kv) {
-  kv.first;
-  kv.second;
- };
-
-template <typename FnT>
-concept value_callback =
- std::invocable<FnT&, std::span<const std::uint8_t>>;
-
-template <typename T>
-concept value_output =
- !value_callback<std::remove_reference_t<T>> &&
- std::is_lvalue_reference_v<T>;
-
-template <typename T>
-concept storable_invocation_result =
- !std::is_void_v<T> && !std::is_reference_v<T>;
-
-template <typename T>
-concept supported_invocation_result =
- std::is_void_v<T> || storable_invocation_result<T>;
-
-// There's a high likelihood that we're going to get more sophisticated selectors, 
-// so this is doing a more important job than it may appear to be:
-template <typename T>
-concept selector = ceph::libfdb::detail::is_any_of<T, ceph::libfdb::select>;
-
-} // namespace ceph::libfdb::concepts
 
 // libfdb_exception: How to deal, when Bad Things(TM) happen:
 namespace ceph::libfdb {
@@ -576,7 +583,7 @@ class transaction final
  // JFW: it's not as easy to wedge an output_range into here as it appears, perhaps
  // needs to be revisited; I'm binding it to what's actually used in practice for now:
  template <typename OutIterT>
- requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
+ requires concepts::string_key_value_output_iterator<OutIterT>
  bool get(const ceph::libfdb::select& key_range, OutIterT out_iter) {
     return ceph::libfdb::detail::get_value_range_from_transaction(*this, key_range, out_iter);
  }
@@ -623,7 +630,10 @@ class transaction final
                         std::string_view,
                         OutputTargetOrFnT&&,
                         const commit_after_op);
- friend inline bool get(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, auto, const commit_after_op);
+ friend inline bool get(ceph::libfdb::transaction_handle,
+                        const ceph::libfdb::select&,
+                        concepts::string_key_value_output_iterator auto,
+                        const commit_after_op);
 
  friend inline void erase(ceph::libfdb::transaction_handle, std::string_view, const commit_after_op);
  friend inline void erase(ceph::libfdb::transaction_handle, const ceph::libfdb::select&, const commit_after_op);
@@ -868,9 +878,7 @@ inline auto decode_pairs(std::span<const FDBKeyValue> pairs)
 template <typename ValueT, typename AssocT>
 inline AssocT collect_pairs(std::span<const FDBKeyValue> pairs)
 {
- AssocT out;
- std::ranges::copy(decode_pairs<ValueT>(pairs), std::inserter(out, std::end(out)));
- return out;
+ return ceph::util::collect_as<AssocT>(decode_pairs<ValueT>(pairs));
 }
 
 template <typename AssocT>
@@ -892,7 +900,7 @@ inline query_window_result<AssocT> materialize_query_window(transaction& txn, se
 }
 
 template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
+requires concepts::string_key_value_output_iterator<OutIterT>
 inline bool get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT out_iter)
 {
  auto flattened = detail::generate_FDB_pairs(txn, key_range) | std::views::join;
@@ -930,23 +938,23 @@ inline std::vector<ceph::libfdb::select> as_select_seq(std::span<const FDBKey> x
  }
 
  // Gather the flattened list into *overlapping* libfdb::select pairs:
- return std::views::iota(std::size_t{0}, xs.size() - 1)
-           | std::views::transform([&parent, xs](const auto i) {
-              const auto& fst = xs[i];
-              const auto& snd = xs[i + 1];
-              const auto first_key = std::string_view((const char *)fst.key,
-                                                       static_cast<std::string::size_type>(fst.key_length));
-              const auto second_key = std::string_view((const char *)snd.key,
-                                                        static_cast<std::string::size_type>(snd.key_length));
+ return ceph::util::collect_as<std::vector<ceph::libfdb::select>>(
+          std::views::iota(std::size_t{0}, xs.size() - 1)
+        | std::views::transform([&parent, xs](const auto i) {
+           const auto& fst = xs[i];
+           const auto& snd = xs[i + 1];
+           const auto first_key = std::string_view((const char *)fst.key,
+                                                    static_cast<std::string::size_type>(fst.key_length));
+           const auto second_key = std::string_view((const char *)snd.key,
+                                                     static_cast<std::string::size_type>(snd.key_length));
 
-              ceph::libfdb::select split(first_key, second_key);
+           ceph::libfdb::select split(first_key, second_key);
 
-              split.options = parent.options;
-              split.begin_inclusive = (0 == i) ? parent.begin_inclusive : true;
-              split.end_inclusive = (i + 2 == xs.size()) ? parent.end_inclusive : false;
-              return split;
-             })
-           | std::ranges::to<std::vector<ceph::libfdb::select>>();
+           split.options = parent.options;
+           split.begin_inclusive = (0 == i) ? parent.begin_inclusive : true;
+           split.end_inclusive = (i + 2 == xs.size()) ? parent.end_inclusive : false;
+           return split;
+          }));
 }
 // Finding a clear example both in the samples and in the documentation is not very easy. The
 // statelessness of FDB requests bleeds into here with basically no hand-holding, but note for instance

@@ -902,7 +902,7 @@ sc::result ReplicaActive::react(const ReserverGranted& ev)
   // notify the primary
   auto grant_msg = make_message<MOSDScrubReserve>(
       spg_t(pg_id.pgid, m_pg->get_primary().shard), reservation.request_epoch,
-      MOSDScrubReserve::GRANT, m_pg->pg_whoami, pending_reservation_nonce);
+      MOSDScrubReserve::GRANT, m_pg->pg_whoami, reservation.nonce);
   m_pg->send_cluster_message(
       m_pg->get_primary().osd, grant_msg, reservation.request_epoch, false);
   return discard_event();

@@ -25,7 +25,10 @@ import { RgwConfigModalComponent } from './rgw-config-modal/rgw-config-modal.com
 import { RgwDaemonDetailsComponent } from './rgw-daemon-details/rgw-daemon-details.component';
 import { RgwDaemonListComponent } from './rgw-daemon-list/rgw-daemon-list.component';
 import { RgwUserCapabilityModalComponent } from './rgw-user-capability-modal/rgw-user-capability-modal.component';
-import { RgwUserDetailsComponent } from './rgw-user-details/rgw-user-details.component';
+import { RgwUserResourceSidebarComponent } from './rgw-user-resource-sidebar/rgw-user-resource-sidebar.component';
+import { RgwUserResourcePageComponent } from './rgw-user-resource-page/rgw-user-resource-page.component';
+import { RgwUserResourceBreadcrumbResolver } from './rgw-user-resource-page/rgw-user-resource-breadcrumb.resolver';
+import { RgwUserDetailsResolver } from './rgw-user-resource-page/rgw-user-details.resolver';
 import { RgwUserFormComponent } from './rgw-user-form/rgw-user-form.component';
 import { RgwUserListComponent } from './rgw-user-list/rgw-user-list.component';
 import { RgwUserS3KeyModalComponent } from './rgw-user-s3-key-modal/rgw-user-s3-key-modal.component';
@@ -70,6 +73,7 @@ import {
   LoadingModule,
   ModalModule,
   ProgressIndicatorModule,
+  ProgressBarModule,
   CodeSnippetModule,
   InputModule,
   CheckboxModule,
@@ -150,6 +154,7 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     ModalModule,
     GridModule,
     ProgressIndicatorModule,
+    ProgressBarModule,
     CodeSnippetModule,
     ButtonModule,
     LoadingModule,
@@ -180,7 +185,8 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
     RgwUserListComponent,
-    RgwUserDetailsComponent,
+    RgwUserResourceSidebarComponent,
+    RgwUserResourcePageComponent,
     RgwStorageClassListComponent
   ],
   declarations: [
@@ -191,7 +197,8 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
     RgwUserListComponent,
-    RgwUserDetailsComponent,
+    RgwUserResourceSidebarComponent,
+    RgwUserResourcePageComponent,
     RgwUserFormComponent,
     RgwUserSwiftKeyModalComponent,
     RgwUserS3KeyModalComponent,
@@ -286,6 +293,25 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:uid`,
         component: RgwUserFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: ':uid',
+        component: RgwUserResourceSidebarComponent,
+        data: {
+          breadcrumbs: RgwUserResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
+        resolve: {
+          user: RgwUserDetailsResolver
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RgwUserResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          }
+        ]
       }
     ]
   },
@@ -307,7 +333,10 @@ const routes: Routes = [
       {
         path: ':accountName',
         component: RgwUserAccountsResourceSidebarComponent,
-        data: { breadcrumbs: RgwAccountDetailsBreadcrumbResolver },
+        data: {
+          breadcrumbs: RgwAccountDetailsBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         resolve: {
           account: RgwAccountDetailsResolver
         },
@@ -458,7 +487,10 @@ const routes: Routes = [
       {
         path: ':name',
         component: RgwTopicResourceSidebarComponent,
-        data: { breadcrumbs: RgwTopicResourceBreadcrumbResolver },
+        data: {
+          breadcrumbs: RgwTopicResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         children: [
           { path: '', redirectTo: 'overview', pathMatch: 'full' },
           {

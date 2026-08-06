@@ -9,13 +9,37 @@ export class UsersPageHelper extends PageHelper {
   pages = pages;
 
   @PageHelper.restrictTo(pages.create.url)
-  create(tenant: string, user_id: string, fullname: string, email: string, maxbuckets: string) {
+  create(
+    tenant: string,
+    user_id: string,
+    fullname: string,
+    email: string,
+    maxbuckets: string,
+    account_id?: string,
+    selectPolicy: boolean = false
+  ) {
     // Enter in user_id
     cy.get('#user_id').type(user_id);
     // Show Tenant
     cy.get('#show_tenant_input').click({ force: true });
     // Enter in tenant
     cy.get('#tenant').type(tenant);
+
+    if (account_id) {
+      cy.get('select#link_account').select(account_id);
+      if (selectPolicy) {
+        // Wait for the policies combo box to appear (it only shows when account is linked and not root user)
+        cy.get('cds-combo-box#account_policies').scrollIntoView().should('be.visible');
+        cy.get('cds-combo-box#account_policies input[type="text"]').scrollIntoView().click();
+        cy.get('cds-combo-box#account_policies cds-dropdown-list ul[role="listbox"]')
+          .should('be.visible')
+          .find('li[role="option"]')
+          .first()
+          .find('input[type="checkbox"]')
+          .check({ force: true });
+      }
+    }
+
     // Enter in full name
     cy.get('#display_name').click().type(fullname);
 
@@ -48,12 +72,10 @@ export class UsersPageHelper extends PageHelper {
 
     cy.contains('button', 'Edit User').click();
 
-    // Click the user and check its details table for updated content
-    this.getExpandCollapseElement(name).click();
-    cy.get('[data-testid="datatable-row-detail"]')
-      .should('contain.text', new_fullname)
-      .and('contain.text', new_email)
-      .and('contain.text', new_maxbuckets);
+    // Check that the new values are reflected in the table
+    this.getTableCell(4, new_fullname, true).should('exist');
+    this.getTableCell(5, new_email, true).should('exist');
+    this.getTableCell(7, new_maxbuckets, true).should('exist');
   }
 
   invalidCreate() {
@@ -157,10 +179,10 @@ export class UsersPageHelper extends PageHelper {
   }
 
   checkUserKeys(user_name: string) {
-    this.getExpandCollapseElement(user_name).should('be.visible').click();
-    cy.get('cd-table').contains('td', user_name).click();
-    cy.get('cd-rgw-user-details cd-table [cdstablerow]').first().click();
-    cy.get("[aria-label='Show']").should('exist').click({ force: true });
+    this.searchTable(user_name);
+    this.getResourcePage(user_name).click();
+    cy.get('cd-table').contains('td', user_name).should('exist');
+    cy.contains('a', 'Show').should('exist').click({ force: true });
     cy.get('input#user').should('exist');
     cy.get('input#access_key').should('exist');
     cy.get('input#secret_key').should('exist');
@@ -181,48 +203,27 @@ export class UsersPageHelper extends PageHelper {
       'contain.text',
       `${account_name} - ${tenant}`
     );
+
+    cy.get('cds-combo-box#account_policies').scrollIntoView().should('be.visible');
+    cy.get('cds-combo-box#account_policies input[type="text"]').scrollIntoView().click();
+    cy.get('cds-combo-box#account_policies cds-dropdown-list ul[role="listbox"]')
+      .should('be.visible')
+      .find('li[role="option"]')
+      .first()
+      .find('input[type="checkbox"]')
+      .check({ force: true });
+
     cy.contains('button', 'Edit User').click();
 
     this.getTableRow(tenant + '$' + user_id).as('AccountUser');
-    cy.get('@AccountUser').find('td').eq(3).should('contain.text', `${account_name}`);
+    cy.get('@AccountUser').find('td').eq(2).should('contain.text', `${account_name}`);
 
-    // check table details if we have all the details there
-    this.getExpandCollapseElement(username).should('be.visible').click();
-    // check the Account Details section
-    cy.get('legend').should('contain.text', 'Account Details');
-    cy.get('table#accountsDetails').scrollIntoView();
-    cy.wait(500);
-    cy.get('table#accountsDetails').find('tbody tr').should('have.length', 4);
-    cy.get('table#accountsDetails').within(() => {
-      cy.get('tr')
-        .eq(0)
-        .within(() => {
-          cy.wait(500);
-          cy.get('td').eq(0).should('contain.text', 'Account ID');
-          cy.get('td').eq(1).should('contain.text', account_id);
-        });
-      cy.get('tr')
-        .eq(1)
-        .within(() => {
-          cy.wait(500);
-          cy.get('td').eq(0).should('contain.text', 'Name');
-          cy.get('td').eq(1).should('contain.text', account_name);
-        });
-      cy.get('tr')
-        .eq(2)
-        .within(() => {
-          cy.wait(500);
-          cy.get('td').eq(0).should('contain.text', 'Tenant');
-          cy.get('td').eq(1).should('contain.text', tenant);
-        });
-      cy.get('tr')
-        .eq(3)
-        .within(() => {
-          cy.wait(500);
-          cy.get('td').eq(0).should('contain.text', 'User type');
-          cy.get('td').eq(1).should('contain.text', 'rgw user');
-        });
-    });
+    // Check account details rendered in the resource overview card.
+    this.getResourcePage(username).should('be.visible').click();
+    this.assertOverviewFieldValue('Account ID', account_id);
+    this.assertOverviewFieldValue('Name', account_name);
+    this.assertOverviewFieldValue('Tenant', tenant);
+    this.assertOverviewFieldValue('User type', 'rgw user');
   }
 
   makeRootAccount(account_name: string, user_id: string, tenant: string) {
@@ -238,21 +239,16 @@ export class UsersPageHelper extends PageHelper {
 
     cy.contains('button', 'Edit User').click();
 
-    // check table details if we have all the details there
-    this.getExpandCollapseElement(username).should('be.visible').click();
-    // check the Account Details section
-    cy.get('legend').should('contain.text', 'Account Details');
-    cy.get('table#accountsDetails').scrollIntoView();
-    cy.wait(500);
-    cy.get('table#accountsDetails').find('tbody tr').should('have.length', 4);
-    cy.get('table#accountsDetails').within(() => {
-      cy.get('tr')
-        .eq(3)
-        .within(() => {
-          cy.wait(500);
-          cy.get('td').eq(0).should('contain.text', 'User type');
-          cy.get('td').eq(1).should('contain.text', 'Account root user');
-        });
-    });
+    // Check account details rendered in the resource overview card.
+    this.getResourcePage(username).should('be.visible').click();
+    this.assertOverviewFieldValue('User type', 'Account root user');
+  }
+
+  private assertOverviewFieldValue(label: string, value: string) {
+    cy.contains('cd-resource-overview-card h3', 'User details').should('be.visible');
+    cy.contains('cd-resource-overview-card .cd-overview-label', label)
+      .parent('.cd-overview-item')
+      .find('.cd-overview-value')
+      .should('contain.text', value);
   }
 }

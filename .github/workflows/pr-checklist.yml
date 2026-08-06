@@ -1,17 +1,22 @@
 ---
 name: "Pull Request Checklist"
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - main
     types:
       - edited
       - opened
       - reopened
+
+# https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax#defining-access-for-the-github_token-scopes
+permissions:
+  pull-requests: read
+
 jobs:
   pr_checklist:
     runs-on: ubuntu-latest
-    name: Verify
+    name: Verify Checklist
     steps:
       - name: Sleep for 30 seconds
         run: sleep 30s

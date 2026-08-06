@@ -46,7 +46,7 @@ ErasureCodePluginRegistry::~ErasureCodePluginRegistry()
     assert(plugin);
     void *library = plugin->library;
     delete plugin;
-    if (!disable_dlclose) {
+    if (library && !disable_dlclose) {
       dlclose(library);
     }
   }
@@ -60,7 +60,9 @@ int ErasureCodePluginRegistry::remove(const std::string &name)
   std::map<std::string,ErasureCodePlugin*>::iterator plugin = plugins.find(name);
   void *library = plugin->second->library;
   delete plugin->second;
-  dlclose(library);
+  if (library) {
+    dlclose(library);
+  }
   plugins.erase(plugin);
   return 0;
 }
@@ -82,6 +84,21 @@ ErasureCodePlugin *ErasureCodePluginRegistry::get(const std::string &name)
     return plugins[name];
   else
     return 0;
+}
+
+static std::map<std::string, std::function<ErasureCodePlugin*()>>&
+builtin_plugins()
+{
+  static std::map<std::string, std::function<ErasureCodePlugin*()>> reg;
+  return reg;
+}
+
+int ErasureCodePluginRegistry::register_builtin(
+  const std::string &name,
+  std::function<ErasureCodePlugin*()> create)
+{
+  builtin_plugins()[name] = std::move(create);
+  return 0;
 }
 
 int ErasureCodePluginRegistry::factory(const std::string &plugin_name,
@@ -124,6 +141,16 @@ int ErasureCodePluginRegistry::load(const std::string &plugin_name,
 				    ostream *ss)
 {
   ceph_assert(ceph_mutex_is_locked(lock));
+
+  if (auto it = builtin_plugins().find(plugin_name);
+      it != builtin_plugins().end()) {
+    int r = add(plugin_name, it->second());
+    if (r == 0) {
+      *plugin = get(plugin_name);
+    }
+    return r;
+  }
+
   std::string fname = directory + "/" PLUGIN_PREFIX
     + plugin_name + PLUGIN_SUFFIX;
   void *library = dlopen(fname.c_str(), RTLD_NOW);

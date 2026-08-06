@@ -269,6 +269,19 @@ TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]",
     CHECK(std::end(out_values) != std::ranges::find(out_values, string_pair { make_key(i), make_value(i) }));
   }
  }
+
+ SECTION("check multiple key selection into container", "[fdb]") {
+  TestType out_values;
+
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK(lfdb::get(txn,
+                  lfdb::select { make_key(0), make_key(100) },
+                  out_values,
+                  lfdb::commit_after_op::no_commit));
+
+  CHECK(100 == out_values.size());
+ }
 }
 
 TEST_CASE("check selectors", "[fdb][rgw]") {
@@ -338,6 +351,12 @@ TEST_CASE("check selectors", "[fdb][rgw]") {
   CHECK(std::ranges::is_sorted(out, std::ranges::greater {},
                                &std::pair<std::string, std::string>::first));
  }
+
+ std::map<std::string, std::string> out_map;
+
+ CHECK(lfdb::get(dbh, select_all, out_map));
+ CHECK(nentries == out_map.size());
+ CHECK(make_value(0) == out_map.at(make_key(0)));
 
  lfdb::set(dbh, test_key("keyx"), "outside");
  out.clear();
@@ -1104,12 +1123,11 @@ TEST_CASE("block_generator should correctly handle value types") {
 }
 
 
-// Adapted from Catch2 documentation:
-#include <catch2/catch_session.hpp>
+#include "test/catch2_compat.h"
 
 int main(int argc, char **argv) 
 {
-  int result = Catch::Session().run(argc, argv);
+  const auto result = ceph::test::run_catch2(argc, argv);
 
   // Make sure that FoundationDB is shut down once and only once:
   ceph::libfdb::shutdown_libfdb(); 

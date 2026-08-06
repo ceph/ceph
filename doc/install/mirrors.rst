@@ -1,3 +1,5 @@
+.. _install-mirrors:
+
 =============
  Ceph Mirrors
 =============

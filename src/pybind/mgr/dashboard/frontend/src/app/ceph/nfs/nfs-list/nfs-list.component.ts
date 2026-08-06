@@ -109,17 +109,23 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => [
-        `/${prefix}/nfs/edit/${getNfsUri()}`,
-        {
-          rgw_export_type:
-            this.fsal === SUPPORTED_FSAL.RGW &&
-            !_.isEmpty(this.selection?.first()?.path) &&
-            this.selection?.first()?.path !== RGW_USER_EXPORT_PATH
-              ? RgwExportType.BUCKET
-              : RgwExportType.USER
+      routerLink: () => {
+        const currentPrefix = getPathfromFsal(this.fsal);
+        const editUrl = `/${currentPrefix}/nfs/edit/${getNfsUri()}`;
+        if (this.fsal !== SUPPORTED_FSAL.RGW) {
+          return editUrl;
         }
-      ],
+        return [
+          editUrl,
+          {
+            rgw_export_type:
+              !_.isEmpty(this.selection?.first()?.path) &&
+              this.selection?.first()?.path !== RGW_USER_EXPORT_PATH
+                ? RgwExportType.BUCKET
+                : RgwExportType.USER
+          }
+        ];
+      },
       name: this.actionLabels.EDIT
     };
 

@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cstdarg>
+#include <cstdio>
+#include <ctime>
 #include <filesystem>
 #include <map>
 #include <memory>
@@ -11,6 +14,7 @@
 #include <unordered_map>
 #include <errno.h>
 #include <unistd.h>
+#include <sys/time.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -26,7 +30,6 @@
 #include "rocksdb/merge_operator.h"
 
 #include "common/version.h"
-#include "rocksdb/util/stderr_logger.h"
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/perf_counters.h"
@@ -70,6 +73,20 @@ using std::vector;
 using ceph::bufferlist;
 using ceph::bufferptr;
 using ceph::Formatter;
+
+#if ROCKSDB_MAJOR >= 8
+/*
+ * ConfigOptions defaults input_strings_escaped to true, where the pre-v8
+ * overloads taking the flag directly defaulted it to false, hence spelling
+ * it out.
+ */
+static rocksdb::ConfigOptions make_config_options()
+{
+  rocksdb::ConfigOptions config_options;
+  config_options.input_strings_escaped = false;
+  return config_options;
+}
+#endif
 
 static const char* sharding_def_dir = "sharding";
 static const char* sharding_def_file = "sharding/def";
@@ -943,7 +960,12 @@ int RocksDBStore::update_column_family_options(const std::string& base_name,
 	    << " options=" << more_options << dendl;
     return r;
   }
+#if ROCKSDB_MAJOR >= 8
+  status = rocksdb::GetColumnFamilyOptionsFromMap(
+    make_config_options(), *cf_opt, options_map, cf_opt);
+#else
   status = rocksdb::GetColumnFamilyOptionsFromMap(*cf_opt, options_map, cf_opt);
+#endif
   if (!status.ok()) {
     dout(5) << __func__ << " invalid column family optionsp; column family="
 	    << base_name << " options=" << more_options << dendl;
@@ -1008,7 +1030,12 @@ int RocksDBStore::apply_block_cache_options(const std::string& column_name,
   }
 
   rocksdb::BlockBasedTableOptions column_bbt_opts;
+#if ROCKSDB_MAJOR >= 8
+  status = GetBlockBasedTableOptionsFromMap(
+    make_config_options(), bbt_opts, cache_options_map, &column_bbt_opts);
+#else
   status = GetBlockBasedTableOptionsFromMap(bbt_opts, cache_options_map, &column_bbt_opts);
+#endif
   if (!status.ok()) {
     dout(5) << __func__ << " invalid block cache options; column=" << column_name
 	    << " options=" << block_cache_opt << dendl;
@@ -2097,12 +2124,51 @@ KeyValueDB::BackupStats RocksDBStore::backup(const std::string &path)
   return rv;
 }
 
+namespace {
+// stderr logger for the backup engine's info_log
+class StderrLogger : public rocksdb::Logger {
+public:
+  explicit StderrLogger(
+    rocksdb::InfoLogLevel log_level = rocksdb::InfoLogLevel::INFO_LEVEL)
+    : rocksdb::Logger(log_level) {}
+  // keep the Logv(InfoLogLevel, ...) overload visible
+  using rocksdb::Logger::Logv;
+  void Logv(const char* format, va_list ap) override {
+    // rocksdb::Logger requires that nothing propagate out of here, as RocksDB
+    // is not exception-safe, so format into a fixed buffer instead of
+    // allocating, at the price of truncating a very long message. Prefix each
+    // line with the time and thread id, and emit it with a single fprintf(),
+    // so that lines from different threads do not interleave.
+    timeval now;
+    gettimeofday(&now, nullptr);
+    struct tm t;
+    localtime_r(&now.tv_sec, &t);
+
+    char buf[1024];
+    int prefix_len = snprintf(
+      buf, sizeof(buf), "%04d/%02d/%02d-%02d:%02d:%02d.%06d %llx ",
+      t.tm_year + 1900, t.tm_mon + 1, t.tm_mday,
+      t.tm_hour, t.tm_min, t.tm_sec, static_cast<int>(now.tv_usec),
+      static_cast<unsigned long long>(
+        rocksdb::Env::Default()->GetThreadID()));
+    if (prefix_len < 0) {
+      prefix_len = 0;
+      buf[0] = '\0';
+    }
+    if (static_cast<size_t>(prefix_len) < sizeof(buf)) {
+      vsnprintf(buf + prefix_len, sizeof(buf) - prefix_len, format, ap);
+    }
+    fprintf(stderr, "%s\n", buf);
+  }
+};
+}
+
 bool RocksDBStore::restore_backup(CephContext *cct, const std::string &path,
                                   const std::string &backup_location,
                                   const std::optional<uint32_t> &version)
 {
   rocksdb::BackupEngineReadOnly* engine_ptr = nullptr;
-  rocksdb::StderrLogger logger = rocksdb::StderrLogger();
+  StderrLogger logger;
   rocksdb::BackupEngineOptions engine_options = rocksdb::BackupEngineOptions(backup_location);
   engine_options.info_log = &logger;
 

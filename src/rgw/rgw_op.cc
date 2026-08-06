@@ -59,9 +59,6 @@
 #include "rgw_process_env.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 #include "rgw_torrent.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
@@ -87,10 +84,6 @@
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight.h"
 #include "rgw_flight_frontend.h"
-#endif
-
-#ifdef WITH_RADOSGW_D4N
-#include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
 #ifdef WITH_LTTNG
@@ -2703,11 +2696,8 @@ void RGWGetObj::execute(optional_yield y)
   if (multipart_part_num) {
     read_op->params.part_num = &*multipart_part_num;
   }
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->object->set_cache_request();
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
@@ -3605,11 +3595,8 @@ void RGWListBucket::execute(optional_yield y)
   params.list_versions = list_versions;
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterBucket*>(s->bucket.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->bucket->set_cache_request();
 
   rgw::sal::Bucket::ListResults results;
 
@@ -4860,11 +4847,8 @@ void RGWPutObj::execute(optional_yield y)
 					 s->owner,
 					 pdest_placement, olh_epoch, s->req_id);
   }
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->object->set_cache_request();
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -6010,11 +5994,9 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.null_verid = null_verid;
       del_op->params.size_match = size_match;
       del_op->params.if_match = if_match;
-#ifdef WITH_RADOSGW_D4N
-      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-		dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
-      }
-#endif
+
+      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+        s->object->set_cache_request();
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -6342,8 +6324,49 @@ int RGWCopyObj::verify_permission(optional_yield y)
     rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
                                *md_directive);
 
+  /*
+   * The destination object is tagged whether the tag-set is replaced (from the
+   * request) or copied (from the source), so both paths must authorize object
+   * tagging and expose the tags to policy conditions. For a copied tag-set the
+   * source is read here to learn whether the destination will carry tags.
+   */
+  std::optional<RGWObjTags> dest_obj_tags = obj_tags;
+  if (!dest_obj_tags && copy_source_tags &&
+      s->local_source && source_zone.empty()) {
+    op_ret = s->src_object->get_obj_attrs(y, this);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+    const auto& src_attrs = s->src_object->get_attrs();
+    auto titer = src_attrs.find(RGW_ATTR_TAGS);
+    if (titer != src_attrs.end()) {
+      RGWObjTags tagset;
+      try {
+        auto bliter = titer->second.cbegin();
+        tagset.decode(bliter);
+      } catch (buffer::error& err) {
+        ldpp_dout(s, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+        return -EIO;
+      }
+      dest_obj_tags = std::move(tagset);
+    }
+  }
+
+  if (dest_obj_tags) {
+    for (const auto& kv : dest_obj_tags->get_tags()) {
+      rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/" + kv.first, kv.second);
+    }
+  }
+
   if (!verify_bucket_permission(this, s, ARN(s->object->get_obj()),
                                 rgw::IAM::s3PutObject)) {
+    return -EACCES;
+  }
+
+  // writing or clearing object tags requires the tagging permission too
+  if (dest_obj_tags &&
+      !verify_bucket_permission(this, s, ARN(s->object->get_obj()),
+                                rgw::IAM::s3PutObjectTagging)) {
     return -EACCES;
   }
 
@@ -6383,6 +6406,10 @@ int RGWCopyObj::init_common()
     return op_ret;
   }
   populate_with_generic_attrs(s, attrs);
+
+  if (obj_tags) {
+    obj_tags->encode(attrs[RGW_ATTR_TAGS]);
+  }
 
   return 0;
 }
@@ -6438,12 +6465,19 @@ void RGWCopyObj::execute(optional_yield y)
   if (init_common() < 0)
     return;
 
+  // expose replacement tags to the notification event payload
+  if (obj_tags) {
+    s->tagset = *obj_tags;
+  }
+
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
 				   = driver->get_notification(
 				     s->object.get(), s->src_object.get(),
 				     s, rgw::notify::ObjectCreatedCopy, y);
-  op_ret = res->publish_reserve(this);
+
+  // expose replacement tags to notification filtering
+  op_ret = res->publish_reserve(this, obj_tags ? &*obj_tags : nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -6529,6 +6563,13 @@ void RGWCopyObj::execute(optional_yield y)
   op_ret = rgw::bucketlogging::log_record(driver, rgw::bucketlogging::LoggingType::Journal, s->object.get(), s, canonical_name(), etag, obj_size, this, y, false, false);
   if (op_ret < 0) {
     return;
+  }
+
+  if (copy_source_tags && attrs_mod == rgw::sal::ATTRSMOD_REPLACE) {
+    bufferlist tags_bl;
+    if (s->src_object->get_attr(RGW_ATTR_TAGS, tags_bl)) {
+      attrs[RGW_ATTR_TAGS] = std::move(tags_bl);
+    }
   }
 
   /*
@@ -8121,6 +8162,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   } prefix{*this, o};
   const DoutPrefixProvider* dpp = &prefix;
 
+  using Clock = ceph::coarse_real_clock;
+  const auto started_at = Clock::now();
+
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
     send_partial_response(o, false, "", -EINVAL);
@@ -8217,6 +8261,11 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   }
   
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, r);
+
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_del_obj, 1);
+  rgw::op_counters::inc(counters, l_rgw_op_del_obj_b, obj_size);
+  rgw::op_counters::tinc(counters, l_rgw_op_del_obj_lat, Clock::now() - started_at);
 }
 
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
@@ -8300,7 +8349,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     bool has_versioned = false;
     for (auto object : multi_delete->objects) {
       const string& instance = object.get_version_id();
-      if (instance.empty()) {
+      if (!instance.empty()) {
         has_versioned = true;
         break;
       }
@@ -8902,7 +8951,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 
   auto status = rgw::tar::StatusIndicator::create();
   do {
-    op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
+    op_ret = stream->get_exactly(rgw::tar::TAR_BLOCK_SIZE, buffer);
     if (op_ret < 0) {
       ldpp_dout(this, 2) << "cannot read header" << dendl;
       return;
@@ -8930,7 +8979,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 	  else
 	    filename = file_prefix + std::string(header->get_filename());
 	  auto body = AlignedStreamGetter(0, header->get_filesize(),
-                                          rgw::tar::BLOCK_SIZE, *stream);
+                                          rgw::tar::TAR_BLOCK_SIZE, *stream);
           op_ret = handle_file(filename,
                                header->get_filesize(),
                                body, y);
@@ -9359,7 +9408,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
     if (s->public_access_block.BlockPublicPolicy &&
-        rgw::IAM::is_public(p)) {
+        rgw::IAM::is_public(this, p)) {
       op_ret = -EACCES;
       return;
     }
@@ -9906,7 +9955,8 @@ int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
 
 void RGWGetBucketPolicyStatus::execute(optional_yield y)
 {
-  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl.is_public(this);
+  isPublic = (s->iam_policy && rgw::IAM::is_public(this, *s->iam_policy)) ||
+             s->bucket_acl.is_public(this);
 }
 
 int RGWPutBucketPublicAccessBlock::verify_permission(optional_yield y)

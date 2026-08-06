@@ -273,12 +273,16 @@ export abstract class PageHelper {
   getResourcePage(content?: string) {
     this.waitDataTableToLoad();
     if (content) {
+      const escapedContent = content.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       return cy
         .contains('[cdstablerow] [cdstabledata]', content)
         .parent('[cdstablerow]')
-        .contains('[cdstabledata] a', new RegExp(`^${content}$`));
+        .contains(
+          '[cdstabledata] a, [cdstabledata] [cdslink]',
+          new RegExp(`^\\s*${escapedContent}\\s*$`)
+        );
     }
-    return cy.get('[cdstablerow] [cdstabledata] a').first();
+    return cy.get('[cdstablerow] [cdstabledata] a, [cdstablerow] [cdstabledata] [cdslink]').first();
   }
 
   /**

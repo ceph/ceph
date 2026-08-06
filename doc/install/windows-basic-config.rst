@@ -1,5 +1,7 @@
 :orphan:
 
+.. _install-windows-basic-config:
+
 ===========================
 Windows basic configuration
 ===========================

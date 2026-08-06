@@ -327,6 +327,12 @@ class SambaContainerCommon(ContainerCommon):
         # variable. This can be dropped once sambacc no longer needs it,
         # possibly after the next sambacc release.
         environ['SAMBACC_CTDB'] = 'ctdb-is-experimental'
+        environ[
+            'SAMBACC_PASSWD_LOCATION'
+        ] = '/etc/passwd:/var/lib/samba/passwd:/lib/passwd'
+        environ[
+            'SAMBACC_GROUP_LOCATION'
+        ] = '/etc/group:/var/lib/samba/group:/lib/group'
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
         if self.cfg.rank >= 0:
@@ -368,8 +374,11 @@ class SMBDContainer(SambaContainerCommon):
         args = super().args()
         args.append('run')
         if self.cfg.clustered:
-            auth_kind = 'nsswitch' if self.cfg.domain_member else 'users'
-            args.append(f'--setup={auth_kind}')
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+                args.append('--setup=users')
             args.append('--setup=smb_ctdb')
             args.append('--wait-for=ctdb')
         args.append('smbd')
@@ -445,11 +454,17 @@ class ConfigWatchContainer(SambaContainerCommon):
         return 'configwatch'
 
     def args(self) -> List[str]:
-        return super().args() + [
-            'update-config',
-            '--watch',
-            f'--signal-pids-dir={_WANT_SIGNAL_DIR}',
-        ]
+        args = super().args()
+        args.append('run')
+        if self.cfg.clustered:
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+            args.append('--wait-for=ctdb')
+        args.append(f'--config-watch-signal-pids-dir={_WANT_SIGNAL_DIR}')
+        args.append('configwatch')
+        return args
 
 
 class SMBMetricsContainer(ContainerCommon):

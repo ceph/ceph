@@ -1176,7 +1176,8 @@ The list of system roles are:
 - **cluster-manager**: allows full permissions for the *hosts*, *osd*,
   *monitor*, *manager*, and *config-opt* scopes.
 - **pool-manager**: allows full permissions for the *pool* scope.
-- **cephfs-manager**: allows full permissions for the *cephfs* scope.
+- **cephfs-manager**: allows full permissions for the *cephfs* scope, and
+  *read* permission for the *hosts* and *pool* scopes.
 
 The list of available roles can be retrieved with the following command:
 
