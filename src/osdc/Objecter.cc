@@ -234,6 +234,7 @@ std::vector<std::string> Objecter::get_tracked_keys() const noexcept
     "rados_mon_op_timeout"s,
     "rados_osd_op_timeout"s,
     "osd_min_split_replica_read_size"s,
+    "rados_replica_read_policy"s,
   };
 }
 
@@ -254,14 +255,15 @@ void Objecter::handle_conf_change(const ConfigProxy& conf,
     min_split_replica_read_size
       = conf.get_val<uint64_t>("osd_min_split_replica_read_size");
   }
-
-  auto read_policy = conf.get_val<std::string>("rados_replica_read_policy");
-  if (read_policy == "localize") {
-    extra_read_flags = CEPH_OSD_FLAG_LOCALIZE_READS;
-  } else if (read_policy == "balance") {
-    extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
-  } else {
-    extra_read_flags = 0;
+  if (changed.count("rados_replica_read_policy")) {
+    auto read_policy = conf.get_val<std::string>("rados_replica_read_policy");
+    if (read_policy == "localize") {
+      extra_read_flags = CEPH_OSD_FLAG_LOCALIZE_READS;
+    } else if (read_policy == "balance") {
+      extra_read_flags = CEPH_OSD_FLAG_BALANCE_READS;
+    } else {
+      extra_read_flags = 0;
+    }
   }
 }
 
