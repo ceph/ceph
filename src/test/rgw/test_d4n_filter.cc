@@ -64,7 +64,7 @@ class Environment : public ::testing::Environment {
 
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
 
-      redisHost = cct->_conf->rgw_d4n_address; 
+      redisHost = cct->_conf->rgw_d4n_l1_datacache_address; 
     }
 
     virtual void TearDown() {
@@ -333,13 +333,11 @@ TEST_F(D4NFilterFixture, PutObjectRead)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ((int)std::get<0>(resp).value(), 1);
     EXPECT_EQ((int)std::get<1>(resp).value(), 1);
-    EXPECT_EQ(std::get<2>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<3>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<2>(resp).value().size(), 25);
+    EXPECT_EQ(std::get<3>(resp).value().size(), 25);
 
     std::string version = std::get<4>(resp).value();
     std::error_code err;
-
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
@@ -347,7 +345,13 @@ TEST_F(D4NFilterFixture, PutObjectRead)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, GetObjectRead)
@@ -387,9 +391,9 @@ TEST_F(D4NFilterFixture, GetObjectRead)
     EXPECT_EQ((int)std::get<0>(resp).value(), 1);
     EXPECT_EQ((int)std::get<1>(resp).value(), 1);
     EXPECT_EQ((int)std::get<2>(resp).value(), 1);
-    EXPECT_EQ(std::get<3>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<4>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<5>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<3>(resp).value().size(), 25);
+    EXPECT_EQ(std::get<4>(resp).value().size(), 25);
+    EXPECT_EQ(std::get<5>(resp).value().size(), 16);
 
     std::string version = std::get<6>(resp).value();
     std::error_code err;
@@ -397,7 +401,6 @@ TEST_F(D4NFilterFixture, GetObjectRead)
     std::ifstream testFile; 
 
     // Check cache contents
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
     testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid);
@@ -470,7 +473,7 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
-       nullptr,
+		 nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -491,17 +494,15 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ((int)std::get<0>(resp).value(), 1);
     EXPECT_EQ((int)std::get<1>(resp).value(), 1);
-    EXPECT_EQ(std::get<2>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<3>(resp).value().size(), 14);
-
-    std::error_code err;
-    std::string version = "test_version"; // Expected version for copy object
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true);  
+    EXPECT_EQ(std::get<2>(resp).value().size(), 26);
+    EXPECT_EQ(std::get<3>(resp).value().size(), 26);
 
     /* TODO: DBStore has no copy_object implementation, so the below code will fail if uncommented. Once it is implemented, the following
        should be uncommented and added to the other copy_object unit tests for the read cache. */
     /*
     // Read copy object
+    std::error_code err;
+    std::string version = "test_version"; // Expected version for copy object
     Read_CB cb(&bl);
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(destObj->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), 0);
@@ -582,7 +583,7 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
-       nullptr,
+		 nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -603,12 +604,8 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ((int)std::get<0>(resp).value(), 1);
     EXPECT_EQ((int)std::get<1>(resp).value(), 1);
-    EXPECT_EQ(std::get<2>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<3>(resp).value().size(), 14);
-
-    std::error_code err;
-    std::string version = "dest_object_version"; // Expected version for copy object
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true);  
+    EXPECT_EQ(std::get<2>(resp).value().size(), 26);
+    EXPECT_EQ(std::get<3>(resp).value().size(), 26);
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
@@ -670,7 +667,7 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
 	     &tag,
 	     nullptr,
 	     nullptr,
-       nullptr,
+		 nullptr,
 	     env->dpp,
 	     optional_yield({yield}));
     EXPECT_EQ(ret, 0);
@@ -691,12 +688,8 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ((int)std::get<0>(resp).value(), 1);
     EXPECT_EQ((int)std::get<1>(resp).value(), 1);
-    EXPECT_EQ(std::get<2>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<3>(resp).value().size(), 14);
-
-    std::error_code err;
-    std::string version = "dest_object_version"; // Expected version for copy object
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true);  
+    EXPECT_EQ(std::get<2>(resp).value().size(), 26);
+    EXPECT_EQ(std::get<3>(resp).value().size(), 26);
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
@@ -741,7 +734,6 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
     }
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
 
@@ -764,9 +756,8 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
       EXPECT_EQ((int)std::get<2>(resp).value(), 0);
     }
 
-    /* TODO: Eviction cycle to delete cache blocks
+    /* TODO: Eviction cycle to delete cache block
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), false);  
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), false);     
     */
 
     conn->cancel();
@@ -806,8 +797,8 @@ TEST_F(D4NFilterFixture, PutVersionedObjectRead)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ((int)std::get<0>(resp).value(), 1);
     EXPECT_EQ((int)std::get<1>(resp).value(), 1);
-    EXPECT_EQ(std::get<2>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<3>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<2>(resp).value().size(), 26);
+    EXPECT_EQ(std::get<3>(resp).value().size(), 25);
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
@@ -861,14 +852,13 @@ TEST_F(D4NFilterFixture, GetVersionedObjectRead)
     EXPECT_EQ((int)std::get<0>(resp).value(), 1);
     EXPECT_EQ((int)std::get<1>(resp).value(), 1);
     EXPECT_EQ((int)std::get<2>(resp).value(), 1);
-    EXPECT_EQ(std::get<3>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<3>(resp).value().size(), 16);
 
     std::string version = std::get<4>(resp).value();
     std::error_code err;
     std::string testData; 
     std::ifstream testFile; 
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + instance, err), true);  
     std::string oid = instance + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
     testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid);
@@ -882,7 +872,6 @@ TEST_F(D4NFilterFixture, GetVersionedObjectRead)
 
     testFile.close();
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
     testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid);
@@ -959,7 +948,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
-         nullptr,
+		   nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -975,10 +964,9 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ((int)std::get<0>(resp).value(), 1);
-      EXPECT_EQ(std::get<1>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<1>(resp).value().size(), 27);
 
       std::error_code err;
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + instance, err), true);  
     }
 
     put_version_suspended_object(testName, yield);
@@ -1014,7 +1002,7 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
-         nullptr,
+		   nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1030,10 +1018,9 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ((int)std::get<0>(resp).value(), 1);
-      EXPECT_EQ(std::get<1>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<1>(resp).value().size(), 26);
 
       std::error_code err;
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/test_version", err), true);  
     }
 
     conn->cancel();
@@ -1100,7 +1087,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
-         nullptr,
+		   nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1116,10 +1103,9 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ((int)std::get<0>(resp).value(), 1);
-      EXPECT_EQ(std::get<1>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<1>(resp).value().size(), 27);
 
       std::error_code err;
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + instance, err), true);  
     }
 
     put_version_suspended_object(testName, yield);
@@ -1155,7 +1141,7 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
-         nullptr,
+		   nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1171,10 +1157,9 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ((int)std::get<0>(resp).value(), 1);
-      EXPECT_EQ(std::get<1>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<1>(resp).value().size(), 26);
 
       std::error_code err;
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/dest_object_version", err), true);  
     }
 
     conn->cancel();
@@ -1241,7 +1226,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
-         nullptr,
+		   nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1257,10 +1242,9 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ((int)std::get<0>(resp).value(), 1);
-      EXPECT_EQ(std::get<1>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<1>(resp).value().size(), 27);
 
       std::error_code err;
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + instance, err), true);  
     }
 
     put_version_suspended_object(testName, yield);
@@ -1296,7 +1280,7 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 	       &tag,
 	       nullptr,
 	       nullptr,
-         nullptr,
+		   nullptr,
 	       env->dpp,
 	       optional_yield({yield}));
       EXPECT_EQ(ret, 0);
@@ -1312,10 +1296,9 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ((int)std::get<0>(resp).value(), 1);
-      EXPECT_EQ(std::get<1>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<1>(resp).value().size(), 26);
 
       std::error_code err;
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/dest_object_version", err), true);  
     }
 
     conn->cancel();
@@ -1366,8 +1349,6 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
     }
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + instance, err), true);  
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
     oid = instance + "#0#" + std::to_string(ofs);
@@ -1402,9 +1383,7 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
     }
 
     /* TODO: Eviction cycle to delete cache blocks
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + instance, err), false);  
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), false);     
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), false);  
     oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), false);     
     */
@@ -1463,9 +1442,9 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 26);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 26);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
       EXPECT_EQ(std::get<8>(resp).value(), "1");
 
       version = std::get<9>(resp).value();
@@ -1475,7 +1454,6 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
     std::string testData; 
     std::ifstream testFile; 
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     std::string oid = version + "#0#" + std::to_string(ofs);
     std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid;
     EXPECT_EQ(fs::exists(location, err), true);     
@@ -1530,7 +1508,13 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, GetObjectWrite)
@@ -1576,16 +1560,15 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
     EXPECT_EQ((int)std::get<2>(resp).value(), 1);
     EXPECT_EQ((int)std::get<3>(resp).value(), 1);
     EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-    EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<5>(resp).value().size(), 26);
+    EXPECT_EQ(std::get<6>(resp).value().size(), 26);
+    EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
     std::string version = std::get<8>(resp).value();
     std::error_code err;
     std::string testData; 
     std::ifstream testFile; 
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
     testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid);
@@ -1603,7 +1586,13 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
@@ -1695,16 +1684,15 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     EXPECT_EQ((int)std::get<2>(resp).value(), 1);
     EXPECT_EQ((int)std::get<3>(resp).value(), 1);
     EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-    EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<5>(resp).value().size(), 29);
+    EXPECT_EQ(std::get<6>(resp).value().size(), 29);
+    EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
     std::string version = std::get<8>(resp).value();
     std::error_code err;
     std::string testData; 
     std::ifstream testFile; 
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true);
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + oid, err), true);     
     testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + oid);
@@ -1725,7 +1713,13 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
@@ -1817,16 +1811,15 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     EXPECT_EQ((int)std::get<2>(resp).value(), 1);
     EXPECT_EQ((int)std::get<3>(resp).value(), 1);
     EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-    EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<5>(resp).value().size(), 28);
+    EXPECT_EQ(std::get<6>(resp).value().size(), 28);
+    EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
     std::string version = std::get<8>(resp).value();
     std::error_code err;
     std::string testData; 
     std::ifstream testFile; 
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true);
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + oid, err), true);     
     testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + oid);
@@ -1847,7 +1840,13 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
@@ -1939,16 +1938,15 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     EXPECT_EQ((int)std::get<2>(resp).value(), 1);
     EXPECT_EQ((int)std::get<3>(resp).value(), 1);
     EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-    EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-    EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+    EXPECT_EQ(std::get<5>(resp).value().size(), 28);
+    EXPECT_EQ(std::get<6>(resp).value().size(), 28);
+    EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
     std::string version = std::get<8>(resp).value();
     std::error_code err;
     std::string testData; 
     std::ifstream testFile; 
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + version, err), true); 
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + oid, err), true);     
     testFile.open(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destName + "/" + oid);
@@ -1969,7 +1967,13 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, DeleteObjectWrite)
@@ -2006,7 +2010,6 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     }
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), true);     
 
@@ -2042,7 +2045,6 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     }
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), false);  
     std::string oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid, err), false);     
 
@@ -2052,14 +2054,20 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 // Write cache tests, versioned
 TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
   const std::string testName = "PutVersionedObjectWrite";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
   std::string version, instance;
@@ -2111,11 +2119,11 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
       EXPECT_EQ((int)std::get<5>(resp).value(), 1);
       EXPECT_EQ(std::get<6>(resp).value()[0], "null");
       EXPECT_EQ(std::get<6>(resp).value()[1], instance);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<8>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<9>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<10>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<11>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 27);
+      EXPECT_EQ(std::get<8>(resp).value().size(), 16);
+      EXPECT_EQ(std::get<9>(resp).value().size(), 27);
+      EXPECT_EQ(std::get<10>(resp).value().size(), 16);
+      EXPECT_EQ(std::get<11>(resp).value().size(), 27);
       EXPECT_EQ(std::get<12>(resp).value(), "1");
       EXPECT_EQ(std::get<13>(resp).value(), "1");
 
@@ -2127,7 +2135,6 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
     std::ifstream testFile; 
     std::string attr_val;
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instance, err), true);  
     std::string oid = instance + "#0#" + std::to_string(ofs);
     std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid;
     EXPECT_EQ(fs::exists(location, err), true);     
@@ -2141,7 +2148,6 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
     EXPECT_EQ(testData, "test data");
     testFile.close();
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     oid = version + "#0#" + std::to_string(ofs);
     location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid;
     EXPECT_EQ(fs::exists(location, err), true);     
@@ -2209,7 +2215,13 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
  
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
@@ -2255,15 +2267,14 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], instance);
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 27);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 27);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
       std::error_code err;
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + instance, err), true);  
       std::string oid = instance + "#0#" + std::to_string(ofs);
       std::string location = CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid;
       EXPECT_EQ(fs::exists(location, err), true);     
@@ -2326,9 +2337,9 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 27);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 16);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 27);
 
       std::string version = std::get<8>(resp).value();
 
@@ -2336,9 +2347,6 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + instance, err), true);  
-
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + version, err), true);  
       std::string oid = version + "#0#" + std::to_string(ofs);
       std::string location = CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + TEST_OBJ + testName + "/" + oid;
       EXPECT_EQ(fs::exists(location, err), true);     
@@ -2360,7 +2368,13 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
@@ -2454,15 +2468,14 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], instance);
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 30);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 30);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
      
       std::error_code err;
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + instance, err), true);  
       std::string oid = instance + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
@@ -2548,16 +2561,15 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 29);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 29);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
       std::string version = std::get<8>(resp).value();
       std::error_code err;
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + version, err), true);  
       std::string oid = version + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
@@ -2581,7 +2593,13 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
@@ -2675,15 +2693,14 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], instance);
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 29);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 29);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
      
       std::error_code err;
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + instance, err), true);  
       std::string oid = instance + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
@@ -2769,16 +2786,15 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 28);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 28);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
       std::string version = std::get<8>(resp).value();
       std::error_code err;
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + version, err), true);  
       std::string oid = version + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
@@ -2802,7 +2818,13 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
@@ -2896,15 +2918,14 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], instance);
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 29);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 29);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
      
       std::error_code err;
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + instance, err), true);  
       std::string oid = instance + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameEnabled + "/" + oid, err), true);  
 
@@ -2990,16 +3011,15 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
       EXPECT_EQ((int)std::get<2>(resp).value(), 1);
       EXPECT_EQ((int)std::get<3>(resp).value(), 1);
       EXPECT_EQ(std::get<4>(resp).value()[0], "null");
-      EXPECT_EQ(std::get<5>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<6>(resp).value().size(), 14);
-      EXPECT_EQ(std::get<7>(resp).value().size(), 14);
+      EXPECT_EQ(std::get<5>(resp).value().size(), 28);
+      EXPECT_EQ(std::get<6>(resp).value().size(), 28);
+      EXPECT_EQ(std::get<7>(resp).value().size(), 16);
 
       std::string version = std::get<8>(resp).value();
       std::error_code err;
       std::string testData; 
       std::ifstream testFile; 
 
-      EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + version, err), true);  
       std::string oid = version + "#0#" + std::to_string(ofs);
       EXPECT_EQ(fs::exists(CACHE_DIR + "/" + TEST_BUCKET + testName + "/" + destNameSuspended + "/" + oid, err), true);  
 
@@ -3023,7 +3043,13 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
@@ -3067,11 +3093,9 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
     version = std::get<6>(resp).value();
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instance, err), true);  
     std::string oid = instance + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), true);  
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version, err), true);  
     oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), true);  
 
@@ -3118,11 +3142,9 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
     EXPECT_EQ((int)std::get<5>(resp).value(), 0);
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instance, err), false);  
     std::string oid = instance + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), false);  
 
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version, err), false);  
     oid = version + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), false);  
 
@@ -3132,7 +3154,13 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 // Additional workflow tests
@@ -3182,34 +3210,26 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
     EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
     EXPECT_EQ(attr_val, "1");
 
-    /* TODO: The following code allows the DB::Object::Delete::delete_obj op to succeed in the cleaning method by removing the instance value.
-       However, this causes the wrong head_oid_in_cache key to be generated since it uses the empty version rather than the delete marker. As
-       a result, the head block for the delete marker does not get cleaned. If this code is not used, then the DBStore delete_obj method returns
-       -ENOENT, which also prevents the head block from being cleaned.
-    objEnabled->set_instance("");
-    std::string key = url_encode(bucketName, true) + "#" + deleteMarker + "#" + TEST_OBJ + testName;
-    std::string etag = "test_etag";
-    auto creationTime = ceph::real_clock::to_time_t(objEnabled->get_mtime());
-    d4nFilter->get_policy_driver()->get_cache_policy()->erase_dirty_object(env->dpp, key, optional_yield{yield}); 
-    d4nFilter->get_policy_driver()->get_cache_policy()->update_dirty_object(env->dpp, key, "", true, objEnabled->get_accounted_size(), creationTime, 
-                                                         std::get<rgw_user>(objEnabled->get_bucket()->get_owner()), etag, 
-                                                         objEnabled->get_bucket()->get_name(), objEnabled->get_bucket()->get_bucket_id(), 
-                                                         objEnabled->get_key(), rgw::d4n::REFCOUNT_NOOP, optional_yield{yield});*/
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DELETE_MARKER, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "1");
+
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
   }, rethrow);
 
   io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
 
-  net::spawn(io, [this] (net::yield_context yield) {
+  net::spawn(io, [this, &location] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
     std::unique_ptr<rgw::sal::Object::ReadOp> read_op(objEnabled->get_read_op());
     EXPECT_EQ(read_op->prepare(optional_yield{yield}, env->dpp), -2); // Simple read; should return -ENOENT
 
-    /* TODO: 
-    std::string attr_val;
+    /* TODO: In the cleaning method, if the entry being cleaned is not invalid and it is a delete marker, then the backend store delete op (DBObject::DBDeleteOP::delete_obj)
+ 	 * is called to delete the delete marker. However, the delete marker is not propagated to the backend during its creation and therefore, this results in the op returning 
+ 	 * -ENOENT. */
+    /*std::string attr_val;
     EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
-    EXPECT_EQ(attr_val, "0");*/ 
+    EXPECT_EQ(attr_val, "0");*/
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
@@ -3217,7 +3237,13 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
@@ -3255,7 +3281,6 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
     }
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instances[1], err), true);  
     std::string oid = instances[1] + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), true);  
 
@@ -3296,7 +3321,6 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
     std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instances[1], err), false);  
     std::string oid = instances[1] + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), false);  
 
@@ -3331,7 +3355,13 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
@@ -3384,7 +3414,13 @@ TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
@@ -3415,22 +3451,12 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
     std::error_code err;
-    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instances[1];
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instances[1] + "#0#" + std::to_string(ofs);
     EXPECT_EQ(fs::exists(location, err), true);  
-    std::string oid = "#0#" + std::to_string(ofs);
-    EXPECT_EQ(fs::exists(location + oid, err), true);  
 
-    {
-      std::string attr_val;
-      EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
-      EXPECT_EQ(attr_val, "0");
-    }
-
-    {
-      std::string attr_val;
-      EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location + oid, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
-      EXPECT_EQ(attr_val, "0");
-    }
+	std::string attr_val;
+	EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
+	EXPECT_EQ(attr_val, "0");
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op_enabled = objEnabled->get_delete_op();
     objEnabled->set_instance(instances[1]); // Latest version
@@ -3464,16 +3490,15 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
 
   io.run_for(std::chrono::seconds(2));
 
-  net::spawn(io, [this] (net::yield_context yield) {
+  net::spawn(io, [this, &testName, &bucketName, &instances] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
 
-    /* TODO: Cleaning method removes head object, so delete_obj calls after a cleaning cycle will not find the head object and will immediately call the backend's delete_obj,
-       resulting in the cache block not getting deleted properly
-    std::error_code err;
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instances[1], err), false);  
-    std::string oid = instances[1] + "#0#" + std::to_string(ofs);
-    EXPECT_EQ(fs::exists(CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + oid, err), false);  
-    */
+    /* Eviction will eventually lazily delete leftover cache blocks, so simply ensure
+     * they are no longer dirty */
+    std::string attr_val;
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instances[1] + "#0#" + std::to_string(ofs);  
+    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
+    EXPECT_EQ(attr_val, "0"); 
 
     conn->cancel();
     testBucket->remove(env->dpp, true, optional_yield{yield});
@@ -3481,7 +3506,13 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, ListObjectVersions)
@@ -3524,7 +3555,13 @@ TEST_F(D4NFilterFixture, ListObjectVersions)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
@@ -3534,9 +3571,9 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
   const std::string testName_1 = "PutObjectWrite_1";
   const std::string testName_2 = "PutObjectWrite_2";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
-  std::string instance;
+  std::string instance, version, version_1; 
  
-  net::spawn(io, [this, &testName, &testName_1, &testName_2, &bucketName, &instance] (net::yield_context yield) {
+  net::spawn(io, [this, &testName, &testName_1, &testName_2, &bucketName, &instance, &version, &version_1] (net::yield_context yield) {
     init_driver(yield);
     create_bucket(testName, yield);
     testBucket->get_info().bucket.bucket_id = bucketName;
@@ -3545,23 +3582,20 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
     put_version_suspended_object(testName_2, yield);
 
     EXPECT_EQ(testBucket->check_empty(env->dpp, yield), -ENOTEMPTY);
-    std::string version, version_1, version_2; 
 
     {
       boost::system::error_code ec;
       request req;
       req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "version");
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0", "version");
       req.push("HGET", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", "version");
 
-      response<std::string, std::string, std::string> resp;
+      response<std::string, std::string> resp;
 
       conn->async_exec(req, resp, yield[ec]);
 
       ASSERT_EQ((bool)ec, false);
       version = std::get<0>(resp).value();
       version_1 = std::get<1>(resp).value();
-      version_2 = std::get<2>(resp).value();
     }
     
     EXPECT_EQ(testBucket->remove(env->dpp, true, yield), 0);
@@ -3604,27 +3638,39 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
       EXPECT_EQ(std::get<12>(resp).value(), 0);
     }
 
-    std::string attr_val;
-    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version;  
-    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_INVALID, attr_val, optional_yield({yield})), 0);
-    EXPECT_EQ(attr_val, "1"); 
-
-    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_1 + "/" + version_1;
-    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_INVALID, attr_val, optional_yield({yield})), 0);
-    EXPECT_EQ(attr_val, "1"); 
-
-    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_2 + "/" + version_2;  
-    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_INVALID, attr_val, optional_yield({yield})), 0);
-    EXPECT_EQ(attr_val, "1"); 
-
     EXPECT_EQ(testBucket->check_empty(env->dpp, yield), 0);
+
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
+  }, rethrow);
+
+  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+
+  net::spawn(io, [this, &testName, &testName_1, &testName_2, &bucketName, &instance, &version, &version_1] (net::yield_context yield) {
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
+
+    std::error_code err;
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version;  
+    EXPECT_EQ(fs::exists(location, err), false);     
+
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instance;  
+    EXPECT_EQ(fs::exists(location, err), false);     
+
+
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version_1;  
+    EXPECT_EQ(fs::exists(location, err), false);     
 
     conn->cancel();
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
@@ -3663,7 +3709,6 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
       version_2 = std::get<2>(resp).value();
     }
     
-
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
   }, rethrow);
 
@@ -3713,18 +3758,16 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
       EXPECT_EQ(std::get<12>(resp).value(), 0);
     }
 
-    /* Eviction will eventually lazily delete leftover cache blocks, so simply ensure
-     * they are no longer dirty */
     std::string attr_val;
-    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version;  
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version + "#0#" + std::to_string(ofs);  
     EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
     EXPECT_EQ(attr_val, "0"); 
 
-    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_1 + "/" + version_1;
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_1 + "/" + version_1 + "#0#" + std::to_string(ofs);
     EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
     EXPECT_EQ(attr_val, "0"); 
 
-    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_2 + "/" + version_2;  
+    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName_2 + "/" + version_2 + "#0#" + std::to_string(ofs); 
     EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DIRTY, attr_val, optional_yield({yield})), 0);
     EXPECT_EQ(attr_val, "0"); 
 
@@ -3735,21 +3778,27 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
-TEST_F(D4NFilterFixture, BucketRemoveDeleteMarker)
+TEST_F(D4NFilterFixture, BucketRemoveWithDeleteMarker)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
   const std::string testName = "PutObjectWrite";
   const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
-  std::string instance_1, instance_2, instance_3;
+  std::string instance;
  
-  net::spawn(io, [this, &testName, &bucketName, &instance_1, &instance_2, &instance_3] (net::yield_context yield) {
+  net::spawn(io, [this, &testName, &bucketName, &instance] (net::yield_context yield) {
     init_driver(yield);
     create_bucket(testName, yield);
     testBucket->get_info().bucket.bucket_id = bucketName;
-    put_version_enabled_object(testName, instance_1, yield);
+    put_version_enabled_object(testName, instance, yield);
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = objEnabled->get_delete_op();
     objEnabled->set_instance(""); 
     EXPECT_EQ(del_op->delete_obj(env->dpp, optional_yield{yield}, rgw::sal::FLAG_LOG_OP), 0);
@@ -3797,22 +3846,38 @@ TEST_F(D4NFilterFixture, BucketRemoveDeleteMarker)
       EXPECT_EQ(std::get<5>(resp).value(), 0);
     }
 
-    std::string attr_val;
-    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + version;  
-    EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_INVALID, attr_val, optional_yield({yield})), 0);
-    EXPECT_EQ(attr_val, "1"); 
-
-    location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + delete_marker;  
+	// Delete markers are stored as head objects in the cache
+	std::string attr_val;
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + delete_marker;  
     EXPECT_EQ(d4nFilter->get_cache_driver()->get_attr(env->dpp, location, RGW_CACHE_ATTR_DELETE_MARKER, attr_val, optional_yield({yield})), 0);
     EXPECT_EQ(attr_val, "1"); 
 
     EXPECT_EQ(testBucket->check_empty(env->dpp, yield), 0);
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
+  }, rethrow);
+
+  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+
+  net::spawn(io, [this, &testName, &bucketName, &instance] (net::yield_context yield) {
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
+
+    // By contrast, head objects are not stored in the cache. Instead, the versioned object is a cache directory that is removed during cleaning (after being invalidated)
+    std::error_code err;
+    std::string location = CACHE_DIR + "/" + url_encode(bucketName, true) + "/" + TEST_OBJ + testName + "/" + instance;  
+    EXPECT_EQ(fs::exists(location, err), false);     
+
     conn->cancel();
     driver->shutdown();
     DriverDestructor driver_destructor(static_cast<rgw::sal::D4NFilterDriver*>(driver));
   }, rethrow);
 
-  io.run();
+  std::vector<std::thread> threads;
+  for (int i = 0; i < 2; ++i) {
+	threads.emplace_back([&] { io.run(); });
+  }
+  for (auto& thread : threads) {
+	thread.join();
+  }
 }
 
 int main(int argc, char *argv[]) {

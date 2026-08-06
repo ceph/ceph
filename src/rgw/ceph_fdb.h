@@ -33,7 +33,7 @@ between FDB's types! If you have a user type to add, this is the place!
 
 namespace ceph::libfdb::detail {
 
-auto as_fdb_span(ceph::buffer::list& bl)
+inline auto as_fdb_span(ceph::buffer::list& bl)
 {
  // c_str() makes the buffer::list contiguous. Use length(), not C-string
  // rules, because buffer::list may contain arbitrary bytes:
