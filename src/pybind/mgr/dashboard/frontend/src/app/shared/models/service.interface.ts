@@ -90,6 +90,17 @@ export interface QatSepcs {
   [key: string]: string;
 }
 
+export enum CertificateType {
+  internal = 'internal',
+  external = 'external'
+}
+
+export enum CertMode {
+  externalOnly = 'externalOnly',
+  both = 'both',
+  internalOnly = 'internalOnly'
+}
+
 export enum QatOptions {
   hw = 'hw',
   sw = 'sw',

@@ -133,36 +133,44 @@
     </div>
   }
 
-  <div class="form-item">
-    <label
-      class="cds--label cds--type-heading-compact-01"
-      for="certificateType"
-      i18n
-      >Choose Certificate Authority</label
-    >
-    <cds-radio-group
-      id="certificateType"
-      formControlName="certificateType"
-      orientation="horizontal"
-      helperText="Select how certificates will be signed for this service. Choose internal to use the cluster's CA, or external to upload certificates signed by your organization."
-      i18n-helperText
-    >
-      <cds-radio
-        [value]="CertificateType.internal"
-        (change)="onCertificateTypeChange(CertificateType.internal)"
+  <!--
+    Radio group: shown only when the caller allows more than one option.
+    - CertMode.both        → Internal + External radios
+    - CertMode.internalOnly → no radio needed (only path is internal)
+    - CertMode.externalOnly → no radio needed (only path is external)
+  -->
+  @if (certMode === CertMode.both) {
+    <div class="form-item">
+      <label
+        class="cds--label cds--type-heading-compact-01"
+        for="certificateType"
         i18n
+        >Choose Certificate Authority</label
       >
-        Internal
-      </cds-radio>
-      <cds-radio
-        [value]="CertificateType.external"
-        (change)="onCertificateTypeChange(CertificateType.external)"
-        i18n
+      <cds-radio-group
+        id="certificateType"
+        formControlName="certificateType"
+        orientation="horizontal"
+        helperText="Select how certificates will be signed for this service. Choose internal to use the cluster's CA, or external to upload certificates signed by your organization."
+        i18n-helperText
       >
-        External
-      </cds-radio>
-    </cds-radio-group>
-  </div>
+        <cds-radio
+          [value]="CertificateType.internal"
+          (change)="onCertificateTypeChange(CertificateType.internal)"
+          i18n
+        >
+          Internal
+        </cds-radio>
+        <cds-radio
+          [value]="CertificateType.external"
+          (change)="onCertificateTypeChange(CertificateType.external)"
+          i18n
+        >
+          External
+        </cds-radio>
+      </cds-radio-group>
+    </div>
+  }
 
   @if (showCertSourceChangeWarning) {
     <cd-alert-panel
@@ -175,7 +183,17 @@
     </cd-alert-panel>
   }
 
-  @if (formGroup.controls.certificateType.value === CertificateType.internal) {
+  <!--
+    Internal-cert panels:
+    - Shown when certMode is 'both' and the user selected Internal, OR
+    - Always shown when certMode is 'internalOnly'.
+    - Never shown when certMode is 'externalOnly'.
+  -->
+  @if (
+    certMode === CertMode.internalOnly ||
+    (certMode === CertMode.both &&
+      formGroup.controls.certificateType.value === CertificateType.internal)
+  ) {
     <cd-alert-panel
       type="info"
       spacingClass="mb-3"
