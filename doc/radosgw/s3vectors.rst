@@ -46,8 +46,9 @@ Three backends are supported:
   access to it with its credentials. Using this option may give better visibility
   to the data being stored, allow for quota management, rate-limiting etc.
 
-  .. tip:: using ``localhost:<port>`` (where ``<port>`` is the port configured
-  for the RGW's frontend) lets the RGW send the S3 requests to itself.
+  .. tip:: using ``http://localhost:<port>`` (where ``<port>`` is the port
+  configured for the RGW's frontend) lets the RGW send the S3 requests to itself.
+  make sure to set: ``rgw_s3vector_s3_allow_http = true`` in this case.
 
   .. tip:: setting the endpoint to be the RGW's load balancer (if one exists),
   may achieve better load distribution.
@@ -127,9 +128,17 @@ The following is recommended for any bucket that backs a vector bucket:
 Multisite
 ---------
 
-In a multisite configuration, only the *metadata* of the S3 Vectors entities is
-synced between the zones of a zonegroup. The vector data itself and the indexes
-built on top of it are **not** synced, so, each zone has its own view of the data.
+In a multisite configuration, S3 Vectors entities are not synced between the
+zones of a zonegroup. Neither the metadata of the vector buckets and their
+indexes, nor the vector data itself, is synced.
+
+Each zone has its own vector buckets, and a vector bucket has to be created in
+every zone in which it is needed. A vector bucket of the same name may exist in
+more than one zone, holding different indexes and vectors.
+
+The backing bucket of a vector bucket is a regular S3 bucket, and its own sync
+configuration applies to it. It should not be synced. See:
+`Recommended Bucket Configuration`_.
 
  .. note:: When an ``s3`` backend is used, all endnpoits must belong to the same zone/site.
 
@@ -553,12 +562,6 @@ deleted before the vector bucket itself can be deleted.
 
 .. note:: The backing S3 bucket itself is not deleted, and should be removed
    separately if it is no longer needed.
-
-.. note:: In a multisite configuration, the vector bucket is removed from all
-   zones, but indexes exist per zone: the emptiness check is done against the
-   indexes of the zone that served the request, and indexes created in other
-   zones are left behind. Note that manually deleting all objects from the
-   backing S3 bucket on the other zone will clean all indexes. See: `Multisite`_.
 
 Vector Bucket Policy
 ````````````````````

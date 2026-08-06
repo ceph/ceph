@@ -19,8 +19,16 @@ from . import(
     get_secret_key,
     get_config_host2,
     get_config_port2,
+    get_config_cluster,
+    get_config_cluster2,
+    get_config_rgw_client,
+    get_config_master_cluster,
     is_s3_backend,
-    get_s3vector_backend
+    get_s3vector_backend,
+    get_s3vector_local_path,
+    get_s3vector_s3_endpoint,
+    get_s3vector_s3_region,
+    get_s3vector_s3_allow_http
     )
 
 
@@ -32,30 +40,144 @@ run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
 
 test_path = os.path.normpath(os.path.dirname(os.path.realpath(__file__))) + '/../'
 
+# seconds to wait for the ceph cluster before giving up on a command
+cluster_connect_timeout = 10
+
 def bash(cmd, **kwargs):
     log.debug('running command: %s', ' '.join(cmd))
     kwargs['stdout'] = subprocess.PIPE
+    # errors are part of the output, so that they are reported when a command fails
+    kwargs.setdefault('stderr', subprocess.STDOUT)
     process = subprocess.Popen(cmd, **kwargs)
     s = process.communicate()[0].decode('utf-8')
     return (s, process.returncode)
 
 
-def admin(args, **kwargs):
+def installed_cluster_conf(cluster):
+    """ the configuration file of an installed cluster, if it exists.
+    "mrun" is always looking for a "ceph.conf", so it cannot be used when the
+    clusters are named (which is the case in a multisite teuthology run) """
+    conf = f'/etc/ceph/{cluster}.conf'
+    return conf if os.path.exists(conf) else None
+
+
+def admin(args, cluster=None, **kwargs):
     """ radosgw-admin command """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', 'noname'] + args
+    cluster = cluster or get_config_cluster()
+    if installed_cluster_conf(cluster):
+        cmd = ['radosgw-admin', '--cluster', cluster, '-n', get_config_rgw_client()] + args
+    else:
+        cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster] + args
     return bash(cmd, **kwargs)
 
 
-def ceph_admin(args, **kwargs):
-    """ ceph command """
-    cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', 'noname'] + args
+def ceph_admin(args, cluster=None, **kwargs):
+    """ ceph command.
+    the connect timeout prevents the command from blocking for the default 300
+    seconds of "client_mount_timeout" when the cluster cannot be reached """
+    cluster = cluster or get_config_cluster()
+    timeout = ['--connect-timeout', str(cluster_connect_timeout)]
+    if installed_cluster_conf(cluster):
+        cmd = ['ceph', '--cluster', cluster] + timeout + args
+    else:
+        cmd = [test_path + 'test-rgw-call.sh', 'call_ceph', cluster] + timeout + args
     return bash(cmd, **kwargs)
 
 
-def set_rgw_config_option(option, value):
-    """ change a config option """
-    client = f'client.rgw.{get_config_port()}'
-    return ceph_admin(['config', 'set', client, option, str(value)])
+def try_set_rgw_config_option(option, value, port=None, cluster=None):
+    """ change a config option of an RGW. returns the result of the command """
+    client = f'client.rgw.{port or get_config_port()}'
+    out, ret = ceph_admin(['config', 'set', client, option, str(value)], cluster=cluster)
+    if ret != 0:
+        log.warning("could not set '%s' on '%s': %s", option, client, out)
+    return out, ret
+
+
+def set_rgw_config_option(option, value, port=None, cluster=None):
+    """ change a config option of an RGW. skips the calling test if the cluster
+    cannot be reached, since the test would run with the wrong value """
+    out, ret = try_set_rgw_config_option(option, value, port, cluster)
+    if ret != 0:
+        pytest.skip(f"could not set '{option}': {out}")
+    return out, ret
+
+
+def _configure_backend(host, port, cluster):
+    """ set the s3vector backend options on an RGW, so that it does not have to
+    be started with them """
+    backend = get_s3vector_backend()
+    options = {'rgw_s3vector_backend': backend}
+    if backend == 'local':
+        # each RGW must have its own directory, otherwise they would share the data.
+        # "<cluster>" and "<port>" are replaced with the values of the tested zone
+        local_path = get_s3vector_local_path() or '/tmp/rgw-s3vector-<cluster>-<port>'
+        options['rgw_s3vector_local_path'] = local_path.replace(
+            '<cluster>', cluster).replace('<port>', str(port))
+    elif backend == 's3':
+        allow_http = get_s3vector_s3_allow_http()
+        # by default, the RGW is sending the S3 requests to itself
+        scheme = 'http' if allow_http in ('true', 'True', '1') else 'https'
+        options['rgw_s3vector_s3_endpoint'] = get_s3vector_s3_endpoint() or \
+            f'{scheme}://{host}:{port}'
+        options['rgw_s3vector_s3_region'] = get_s3vector_s3_region() or get_config_zonegroup()
+        options['rgw_s3vector_s3_allow_http'] = allow_http
+
+    for option, value in options.items():
+        _, ret = try_set_rgw_config_option(option, value, port=port, cluster=cluster)
+        if ret != 0:
+            log.warning("using the backend configuration of client.rgw.%s as it was started", port)
+            return
+    log.info("configured the '%s' backend on client.rgw.%s of cluster '%s'", backend, port, cluster)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def configure_backend(configfile):
+    """ configure the s3vector backend on the RGWs of all zones """
+    _configure_backend(get_config_host(), get_config_port(), get_config_cluster())
+    if get_config_host2():
+        _configure_backend(get_config_host2(), get_config_port2(), get_config_cluster2())
+
+
+# the group is created on the zonegroup, and applies to all of its buckets
+data_sync_group_id = 's3vector-tests-no-data-sync'
+
+
+@pytest.fixture(autouse=True, scope="module")
+def forbid_data_sync(configfile):
+    """ forbid data sync between the zones of the zonegroup.
+    the buckets backing the vector buckets hold LanceDB files, and each zone must
+    have its own copy of them. this is done at the zonegroup level, and not per
+    bucket, so that there is no window in which a bucket is created but its data
+    may still be synced. note that the metadata of the entities is still synced.
+    """
+    if not get_config_host2() or not is_s3_backend():
+        # not a multisite configuration, or a backend that does not store the
+        # vector data in S3 buckets, so there is nothing that may be synced
+        yield
+        return
+
+    # the sync policy may be changed only on the master zone, and a change of the
+    # zonegroup policy requires a period update
+    cluster = get_config_master_cluster()
+    out, ret = admin(['sync', 'group', 'create',
+                      '--group-id', data_sync_group_id,
+                      '--status', 'forbidden'], cluster=cluster)
+    if ret != 0:
+        log.warning("failed to forbid data sync: %s. the data of the zones may be synced", out)
+        yield
+        return
+    admin(['sync', 'group', 'pipe', 'create',
+           '--group-id', data_sync_group_id, '--pipe-id', 'all',
+           '--source-zones', '*', '--source-bucket', '*',
+           '--dest-zones', '*', '--dest-bucket', '*'], cluster=cluster)
+    admin(['period', 'update', '--commit'], cluster=cluster)
+    log.info("data sync is forbidden on the zonegroup")
+
+    yield
+
+    admin(['sync', 'group', 'remove', '--group-id', data_sync_group_id], cluster=cluster)
+    admin(['period', 'update', '--commit'], cluster=cluster)
+    log.info("data sync is allowed again on the zonegroup")
 
 
 def gen_bucket_name():
@@ -108,16 +230,35 @@ def connection2(service_name='s3vectors'):
     return client
 
 
+def _wait_for_user(uid, tenant=None, retries=12, delay=5):
+    """ wait for a user of the master zone to be synced to the tested zone """
+    if get_config_cluster() == (get_config_master_cluster() or get_config_cluster()):
+        # the user was created on the tested zone
+        return
+    args = ['user', 'info', '--uid', uid]
+    if tenant:
+        args += ['--tenant', tenant]
+    for _ in range(retries):
+        _, result = admin(args)
+        if result == 0:
+            return
+        time.sleep(delay)
+    log.warning("user '%s' was not synced to cluster '%s'", uid, get_config_cluster())
+
+
 def another_user(tenant=None):
     access_key = str(time.time())
     secret_key = str(time.time())
     uid = 'superman' + str(time.time())
+    args = ['user', 'create', '--uid', uid,
+            '--access-key', access_key, '--secret-key', secret_key,
+            '--display-name', '"Super Man"']
     if tenant:
-        _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])
-    else:
-        _, result = admin(['user', 'create', '--uid', uid, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])
-
+        args += ['--tenant', tenant]
+    # users may be created only on the master zone, and are synced from there
+    _, result = admin(args, cluster=get_config_master_cluster())
     assert result == 0
+    _wait_for_user(uid, tenant)
     hostname = get_config_host()
     port_no = get_config_port()
     if port_no == 443 or port_no == 8443:
@@ -139,15 +280,21 @@ def another_user(tenant=None):
 # s3vectors tests
 #################
 
-def _ensure_s3_bucket_for_vector_bucket(bucket_name):
+def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
     """
     When using S3/SAL backend, create a regular S3 bucket with the same name
     as the vector bucket. Required because these backends store LanceDB data
     directly in an S3 bucket with the vector bucket name.
+    In a multisite configuration, the connection of the second zone should be
+    used to create the bucket there as well, since a vector bucket cannot be
+    used in a zone before its backing bucket exists in it. Note that a creation
+    request in a zone that is not the master zone is forwarded to the master,
+    and the bucket is created locally afterwards.
     """
     if not is_s3_backend():
         return
-    s3conn = connection('s3')
+    if not s3conn:
+        s3conn = connection('s3')
     try:
         s3conn.head_bucket(Bucket=bucket_name)
         log.info("S3 bucket '%s' already exists", bucket_name)
@@ -200,15 +347,26 @@ def _delete_vector_bucket(conn, bucket_name):
     return conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
 
-def _delete_all_vector_buckets(conn):
-    result = conn.list_vector_buckets()
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    for bucket in result['vectorBuckets']:
-        bucket_name = bucket['vectorBucketName']
-        try:
-            _ = _delete_vector_bucket(conn, bucket_name)
-        except conn.exceptions.ClientError as err:
-            log.warning("Failed to delete vector bucket '%s': %s", bucket_name, str(err))
+def _delete_all_vector_buckets(conn, conn2=None):
+    """
+    Delete all vector buckets of a zone, and of the other zone when its
+    connection is given. A backing bucket is shared by the zones, so it is
+    deleted only after the vector buckets of both zones are gone.
+    """
+    bucket_names = []
+    for c in filter(None, (conn, conn2)):
+        result = c.list_vector_buckets()
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        for bucket in result['vectorBuckets']:
+            bucket_name = bucket['vectorBucketName']
+            if bucket_name not in bucket_names:
+                bucket_names.append(bucket_name)
+            try:
+                _ = _delete_vector_bucket(c, bucket_name)
+            except c.exceptions.ClientError as err:
+                log.warning("Failed to delete vector bucket '%s': %s", bucket_name, str(err))
+
+    for bucket_name in bucket_names:
         _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 
@@ -276,7 +434,8 @@ def test_delete_vector_bucket():
     pytest.raises(conn.exceptions.ClientError, conn.delete_vector_bucket, vectorBucketName=bucket_name)
     result = conn.list_vector_buckets()
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result['vectorBuckets']) == 0
+    # note that vector buckets of other tests, or of previous runs, may still exist
+    assert bucket_name not in [b['vectorBucketName'] for b in result['vectorBuckets']]
     # cleanup
     _delete_all_vector_buckets(conn)
 
@@ -332,66 +491,123 @@ def test_list_vector_buckets():
     _delete_all_vector_buckets(conn)
 
 
-@pytest.mark.vector_bucket_test
-def test_vector_buckets_sync():
+@pytest.mark.multisite_test
+def test_vector_buckets_not_synced():
+    """Test that vector buckets are not synced between the zones of a zonegroup."""
     conn = connection()
     conn2 = connection2()
     if not conn2:
-        log.info("Skipping test_vector_buckets_sync since second connection is not configured")
+        log.info("Skipping test_vector_buckets_not_synced since second connection is not configured")
         return
 
-    # create buckets from the first connection
+    # the backing buckets are regular S3 buckets, and must exist in the zone in
+    # which their vector bucket is used
     bucket_name1 = gen_bucket_name()
     bucket_name2 = gen_bucket_name()
+    s3conn2 = connection2('s3')
     _ensure_s3_bucket_for_vector_bucket(bucket_name1)
+    _ensure_s3_bucket_for_vector_bucket(bucket_name1, s3conn2)
+    _ensure_s3_bucket_for_vector_bucket(bucket_name2, s3conn2)
+
+    # create a vector bucket from each connection
     result = conn.create_vector_bucket(vectorBucketName=bucket_name1)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    _ensure_s3_bucket_for_vector_bucket(bucket_name2)
-    result = conn.create_vector_bucket(vectorBucketName=bucket_name2)
+    result = conn2.create_vector_bucket(vectorBucketName=bucket_name2)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    time.sleep(5)
+
+    # each zone sees only the vector buckets that were created in it
     result = conn.list_vector_buckets()
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     log.info("list_vector_buckets result: %s", result)
     bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
     assert bucket_name1 in bucket_names
-    assert bucket_name2 in bucket_names
-    time.sleep(5)
+    assert bucket_name2 not in bucket_names
 
-    # now check from the second connection
     result = conn2.list_vector_buckets()
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     log.info("list_vector_buckets from conn2 result: %s", result)
     bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
-    assert bucket_name1 in bucket_names
     assert bucket_name2 in bucket_names
+    assert bucket_name1 not in bucket_names
 
-    # create buckets from the 2nd connection
-    bucket_name3 = gen_bucket_name()
-    bucket_name4 = gen_bucket_name()
-    _ensure_s3_bucket_for_vector_bucket(bucket_name3)
-    result = conn2.create_vector_bucket(vectorBucketName=bucket_name3)
+    # a vector bucket of the other zone cannot be used
+    pytest.raises(conn.exceptions.ClientError, conn.get_vector_bucket, vectorBucketName=bucket_name2)
+    pytest.raises(conn2.exceptions.ClientError, conn2.get_vector_bucket, vectorBucketName=bucket_name1)
+
+    # the same name may be used for a different vector bucket in the other zone
+    result = conn2.create_vector_bucket(vectorBucketName=bucket_name1)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    _ensure_s3_bucket_for_vector_bucket(bucket_name4)
-    result = conn2.create_vector_bucket(vectorBucketName=bucket_name4)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    result = conn2.list_vector_buckets()
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    log.info("list_vector_buckets from conn2 result: %s", result)
-    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
-    assert bucket_name3 in bucket_names
-    assert bucket_name4 in bucket_names
     time.sleep(5)
 
-    # now check from the first connection
-    result = conn.list_vector_buckets()
+    # deleting it in one zone does not affect the other
+    result = conn2.delete_vector_bucket(vectorBucketName=bucket_name1)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    log.info("list_vector_buckets result: %s", result)
-    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
-    assert bucket_name3 in bucket_names
-    assert bucket_name4 in bucket_names
+    time.sleep(5)
+    result = conn.get_vector_bucket(vectorBucketName=bucket_name1)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     # cleanup
-    _delete_all_vector_buckets(conn)
+    _delete_all_vector_buckets(conn, conn2)
+
+
+@pytest.mark.multisite_test
+def test_vector_data_not_synced():
+    """Test that a vector bucket of the same name in another zone is a different
+    bucket, holding its own vectors."""
+    conn = connection()
+    conn2 = connection2()
+    if not conn2:
+        log.info("Skipping test_vector_data_not_synced since second connection is not configured")
+        return
+
+    dimension = 4
+    index_name = 'test-index'
+    bucket_name = gen_bucket_name()
+    # the backing bucket must exist in both zones. data sync is forbidden for the
+    # entire zonegroup during the run, so each zone holds its own objects
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    _ensure_s3_bucket_for_vector_bucket(bucket_name, connection2('s3'))
+
+    # the same vector bucket and index are created in both zones
+    for c in (conn, conn2):
+        result = c.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = c.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                dataType='float32', dimension=dimension,
+                                distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # vectors are written only in the first zone
+    num_vectors = 5
+    vectors = generate_vectors(num_vectors, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    time.sleep(5)
+
+    # the first zone has them
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == num_vectors
+
+    # and the second zone has none
+    result = conn2.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vectors from conn2 result: %s", result)
+    assert len(result['vectors']) == 0
+    result = conn2.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                               keys=[v['key'] for v in vectors])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0
+    result = conn2.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                 queryVector=generate_data(dimension, 0), topK=num_vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0
+
+    # cleanup
+    for c in (conn2, conn):
+        _ = _delete_vector_bucket(c, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 
 def _create_s3bucket(s3conn, bucket_name):
@@ -3063,8 +3279,11 @@ def test_versioned_s3_bucket():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     assert len(result['vectors']) == 0
 
-    # cleanup - delete vector bucket, then purge all versions and delete markers
-    _ = _delete_vector_bucket(conn, bucket_name)
+    # cleanup - delete the indexes, and then purge all versions and delete markers.
+    # the files that LanceDB removes are kept as noncurrent versions of the objects,
+    # so the vector bucket would still look like it holds indexes if the versions
+    # are not purged before it is deleted
+    _delete_all_indexes(conn, bucket_name)
     paginator = s3conn.get_paginator('list_object_versions')
     for page in paginator.paginate(Bucket=bucket_name):
         objects = []
@@ -3074,5 +3293,7 @@ def test_versioned_s3_bucket():
             objects.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
         if objects:
             s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+    result = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     s3conn.delete_bucket(Bucket=bucket_name)
 
