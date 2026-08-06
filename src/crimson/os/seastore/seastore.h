@@ -59,6 +59,25 @@ enum class txn_stage_t : uint8_t {
     BUILD_UPDATE_ONODE_SIZE, // onode.update_onode_size on extending writes
     BUILD_COPY_ON_WRITE,     // _maybe_copy_on_write
     BUILD_OBJ_WRITE,         // ObjectDataHandler::write
+    // Sub-phases of BUILD_OBJ_WRITE (ObjectDataHandler::write):
+    BUILD_ODH_RESERVE,       // prepare_data_reservation
+    BUILD_ODH_GET_PIN,       // get_containing_pin (steady-state path)
+    // Sub-phases of BUILD_ODH_GET_PIN:
+    BUILD_ODH_GET_PIN_CURSOR,  // lba_manager::get_cursor
+    BUILD_ODH_GET_PIN_RESOLVE, // resolve_cursor_to_mapping
+    BUILD_ODH_OVERWRITE,     // overwrite
+    // Sub-phases of BUILD_ODH_OVERWRITE:
+    BUILD_ODH_OVERWRITE_SINGLE, // handle_single_mapping_overwrite
+    BUILD_ODH_OVERWRITE_MULTI,  // handle_multi_mapping_overwrite
+    // Sub-phases of BUILD_ODH_OVERWRITE_SINGLE:
+    BUILD_ODH_SINGLE_PREP,     // edge read + punch_hole / delta / merge (before do_write)
+    // Sub-phases of BUILD_ODH_SINGLE_PREP (REMAP path):
+    BUILD_ODH_SINGLE_EDGE_READ, // read_unaligned_edge_data (0 if fully aligned)
+    BUILD_ODH_SINGLE_PUNCH,     // punch_hole_in_mapping (REMAP only)
+    BUILD_ODH_SINGLE_DO_WRITE, // do_write from single path only
+    // Sub-phases of BUILD_ODH_OVERWRITE_MULTI:
+    BUILD_ODH_MULTI_PUNCH,     // punch_multi_mapping_hole
+    BUILD_ODH_DO_WRITE,        // do_write (single + multi fill paths)
     SUBMIT_TOTAL,      // the whole submit_transaction (pipeline + journal write)
     // Sub-phases of submit_transaction:
     SUBMIT_RESERVE,        // enter(reserve_projected_usage) + epm reserve_projected_usage
@@ -283,6 +302,19 @@ public:
       seastar::lowres_clock::duration update_onode_size_time{0};
       seastar::lowres_clock::duration copy_on_write_time{0};
       seastar::lowres_clock::duration obj_write_time{0};
+      seastar::lowres_clock::duration odh_reserve_time{0};
+      seastar::lowres_clock::duration odh_get_pin_time{0};
+      seastar::lowres_clock::duration odh_get_pin_cursor_time{0};
+      seastar::lowres_clock::duration odh_get_pin_resolve_time{0};
+      seastar::lowres_clock::duration odh_overwrite_time{0};
+      seastar::lowres_clock::duration odh_overwrite_single_time{0};
+      seastar::lowres_clock::duration odh_overwrite_multi_time{0};
+      seastar::lowres_clock::duration odh_single_prep_time{0};
+      seastar::lowres_clock::duration odh_single_edge_read_time{0};
+      seastar::lowres_clock::duration odh_single_punch_time{0};
+      seastar::lowres_clock::duration odh_single_do_write_time{0};
+      seastar::lowres_clock::duration odh_multi_punch_time{0};
+      seastar::lowres_clock::duration odh_do_write_time{0};
       seastar::lowres_clock::duration submit_time{0};
 
       void reset_preserve_handle(TransactionManager &tm) {
