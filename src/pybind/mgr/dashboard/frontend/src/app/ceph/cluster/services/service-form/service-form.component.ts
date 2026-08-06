@@ -39,6 +39,7 @@ import {
   CephServiceCertificate,
   CephServiceSpec,
   CertificateType,
+  CertMode,
   QatOptions,
   QatSepcs
 } from '~/app/shared/models/service.interface';
@@ -56,6 +57,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   public sub = new Subscription();
 
   readonly CertificateType = CertificateType;
+  readonly CertMode = CertMode;
   readonly MDS_SVC_ID_PATTERN = /^[a-zA-Z_.-][a-zA-Z0-9_.-]*$/;
   readonly SNMP_DESTINATION_PATTERN = /^[^\:]+:[0-9]/;
   readonly SNMP_ENGINE_ID_PATTERN = /^[0-9A-Fa-f]{10,64}/g;
