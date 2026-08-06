@@ -991,6 +991,16 @@ void CDir::finish_old_fragment(MDSContext::vec& waiters, bool replay)
     }
   }
 
+  // If concurrent operations still hold auth_pins on this old fragment,
+  // defer final object cleanup until the final auth_unpin() executes.
+  if (auth_pins > 0) {
+    dout(10) << __func__ << " deferred fragment cleanup, auth_pins=" << auth_pins
+             << " on " << *this << dendl;
+    return;
+  }
+
+  state_clear(STATE_FRAGMENTING);
+
   ceph_assert(dir_auth_pins == 0);
   ceph_assert(auth_pins == 0);
 
@@ -1009,9 +1019,6 @@ void CDir::finish_old_fragment(MDSContext::vec& waiters, bool replay)
     put(PIN_EXPORTBOUND);
   if (is_subtree_root())
     put(PIN_SUBTREE);
-
-  if (auth_pins > 0)
-    put(PIN_AUTHPIN);
 
   ceph_assert(get_num_ref() == (state_test(STATE_STICKY) ? 1:0));
 }
@@ -3184,8 +3191,6 @@ void CDir::auth_unpin(void *by)
     auth_pin_set.erase(it);
   }
 #endif
-  if (auth_pins == 0)
-    put(PIN_AUTHPIN);
 
   dout(10) << "auth_unpin by " << by << " on " << *this << " count now " << auth_pins << dendl;
   ceph_assert(auth_pins >= 0);
@@ -3194,6 +3199,19 @@ void CDir::auth_unpin(void *by)
     freeze_tree_state->auth_pins -= 1;
 
   maybe_finish_freeze();  // pending freeze?
+
+  // Drop the auth pin and trigger deferred cleanup
+  if (auth_pins == 0) {
+    put(PIN_AUTHPIN);
+
+    if (state_test(STATE_FRAGMENTING)) {
+      dout(10) << __func__
+               << " auth_pins reached 0, completing deferred fragment cleanup on "
+               << *this << dendl;
+      MDSContext::vec dummy_waiters;
+      finish_old_fragment(dummy_waiters, true); // pass replay=true to bypass re-unfreezing/re-unpinning
+    }
+  }
 }
 
 void CDir::adjust_nested_auth_pins(int dirinc, void *by)
