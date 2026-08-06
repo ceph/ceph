@@ -10665,6 +10665,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   dout(20) << "finish_copyfrom on " << ctx->obs->oi.soid << dendl;
 
   ObjectState& obs = ctx->new_obs;
+  bool was_dirty = ctx->obc->obs.oi.is_dirty();
   if (obs.exists) {
     dout(20) << __func__ << ": exists, removing" << dendl;
     ctx->op_t->remove(obs.oi.soid);
@@ -10718,6 +10719,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ceph_assert(ctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
     ctx->new_snapset = SnapSet();
     ctx->new_snapset.from_snap_set(cb->results->snapset, false);
+    ctx->obc->ssc->snapset = ctx->new_snapset;
     if (cb->pool_migration) {
       // During pool migration there may be snaps that are pending
       // a trim in the source pool that will make it unnecessary
@@ -10775,6 +10777,16 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     dout(20) << __func__ << " setting whiteout flag on " << obs.oi.soid << dendl;
     obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
     ++ctx->delta_stats.num_whiteouts;
+  }
+
+  if (cb->pool_migration && obs.oi.soid.is_snap()) {
+    if (!was_dirty) {
+      dout(20) << __func__ << " pool migration clone: setting DIRTY flag on "
+               << obs.oi.soid << dendl;
+      obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+      ++ctx->delta_stats.num_objects_dirty;
+      osd->logger->inc(l_osd_tier_dirty);
+    }
   }
 
   interval_set<uint64_t> ch;
