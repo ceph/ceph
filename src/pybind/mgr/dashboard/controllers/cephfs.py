@@ -1435,7 +1435,7 @@ class CephFSMirror(RESTController):
                      'fs_name': (str, 'File system name'),
                  },
                  responses={200: {}})
-    @RESTController.Collection('POST', path='/disable')
+    @RESTController.Collection('POST', path='/disable', status=200)
     @DeletePermission
     def disable(self, fs_name: str):
         error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_disable', fs_name)
