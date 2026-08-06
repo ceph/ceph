@@ -39,6 +39,26 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+def _is_log_only_config(nfs_config: str) -> bool:
+    """Return True if nfs_config contains only LOG block(s).
+
+    NFS-Ganesha picks up LOG changes via RADOS watch/notify without
+    requiring a daemon restart.  If the config is empty, unparseable,
+    or contains any non-LOG top-level block, return False so the caller
+    falls back to the safe restart path.
+    """
+    try:
+        blocks = GaneshaConfParser(nfs_config).parse()
+    except Exception:
+        log.warning("Failed to parse user config, assuming restart is needed")
+        return False
+    if not blocks:
+        return False
+    block_names = [b.block_name for b in blocks]
+    log.debug("Parsed user config blocks: %s", block_names)
+    return all(name == 'LOG' for name in block_names)
+
+
 def resolve_ip(hostname: str) -> str:
     try:
         r = socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME,
@@ -532,7 +552,14 @@ class NFSCluster:
                 rados_obj.write_obj(nfs_config, user_conf_obj_name(cluster_id),
                                     conf_obj_name(cluster_id))
                 log.debug("Successfully saved %s's user config: \n %s", cluster_id, nfs_config)
-                restart_nfs_service(self.mgr, cluster_id)
+                if _is_log_only_config(nfs_config):
+                    log.debug("LOG-only config detected for %s, "
+                              "skipping restart (RADOS notify will reload)",
+                              cluster_id)
+                else:
+                    log.debug("Non-LOG config detected for %s, "
+                              "restarting NFS service", cluster_id)
+                    restart_nfs_service(self.mgr, cluster_id)
                 return
             raise ClusterNotFound()
         except NotImplementedError:
@@ -547,9 +574,17 @@ class NFSCluster:
                 rados_obj = self._rados(cluster_id)
                 if not rados_obj.check_config(USER_CONF_PREFIX):
                     raise NonFatalError("NFS-Ganesha User Config does not exist")
+                existing_conf = rados_obj.read_obj(user_conf_obj_name(cluster_id))
                 rados_obj.remove_obj(user_conf_obj_name(cluster_id),
                                      conf_obj_name(cluster_id))
-                restart_nfs_service(self.mgr, cluster_id)
+                if existing_conf and _is_log_only_config(existing_conf):
+                    log.debug("LOG-only config removed for %s, "
+                              "skipping restart (RADOS notify will reload)",
+                              cluster_id)
+                else:
+                    log.debug("Non-LOG config removed for %s, "
+                              "restarting NFS service", cluster_id)
+                    restart_nfs_service(self.mgr, cluster_id)
                 return
             raise ClusterNotFound()
         except NotImplementedError:
