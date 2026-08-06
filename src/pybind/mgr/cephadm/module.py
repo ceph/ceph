@@ -556,6 +556,15 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                  'When enabled, cephadm and bash commands are validated and executed via '
                  'the secure invoker wrapper.'
         ),
+        Option(
+            'nfs_rados_command_timeout',
+            type='secs',
+            default=30,
+            desc='Timeout (in seconds) for rados and ganesha-rados-grace commands '
+                 'issued by the NFS service (e.g. add/remove from the grace table, '
+                 'create/remove the rados config object). Increase this value if '
+                 'your cluster is under heavy load and these operations time out.',
+        ),
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -659,6 +668,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.inventory_list_all = False
             self.cgroups_split = True
             self.log_refresh_metadata = False
+            self.nfs_rados_command_timeout = 30
             self.default_cephadm_command_timeout = 0
             self.cephadm_log_destination = ''
             self.oob_default_addr = ''
