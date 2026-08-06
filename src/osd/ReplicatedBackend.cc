@@ -764,7 +764,10 @@ static uint32_t crc32_netstring(const uint32_t orig_crc, std::string_view data)
 {
   // XXX: This function MUST be compliant with the bufferlist marshalling format!
   // Otherwise scrubs-during-upgrade will explode.
-  __u32 len = data.length();
+  // len must use ceph_le32 to guarantee little-endian encoding on all platforms,
+  // matching Ceph's encode() wire format regardless of host byte order.
+  // See test: Crc32c.OmapDigestLengthFieldIsLittleEndian
+  ceph_le32 len{static_cast<uint32_t>(data.length())};
   auto crc = ceph_crc32c(orig_crc, (unsigned char*)&len, sizeof(len));
   crc = ceph_crc32c(crc, (unsigned char*)data.data(), data.length());
 
