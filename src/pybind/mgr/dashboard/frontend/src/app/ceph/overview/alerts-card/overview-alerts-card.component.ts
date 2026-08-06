@@ -6,9 +6,6 @@ import {
   ViewEncapsulation,
   inject
 } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { combineLatest } from 'rxjs';
-
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import {
   ButtonModule,
@@ -20,9 +17,10 @@ import {
 } from 'carbon-components-angular';
 import { RouterModule } from '@angular/router';
 import { ProductiveCardComponent } from '~/app/shared/components/productive-card/productive-card.component';
-import { ComponentsModule } from '~/app/shared/components/components.module';
+import { CommonModule } from '@angular/common';
 import { map, shareReplay, startWith } from 'rxjs/operators';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
+import { IconComponent } from '~/app/shared/components/icon/icon.component';
 
 const AlertIcon = {
   error: 'error',
@@ -37,7 +35,7 @@ const AlertIcon = {
     CommonModule,
     GridModule,
     TilesModule,
-    ComponentsModule,
+    IconComponent,
     RouterModule,
     ProductiveCardComponent,
     ButtonModule,
@@ -53,29 +51,58 @@ const AlertIcon = {
 })
 export class OverviewAlertsCardComponent implements OnInit {
   @Input() compact = true;
+  @Input() filterType: 'block' | 'file' | 'object' | 'all' = 'all';
   private readonly prometheusAlertService = inject(PrometheusAlertService);
 
   ngOnInit(): void {
     this.prometheusAlertService.getGroupedAlerts(true);
   }
 
-  readonly vm$ = combineLatest([
-    this.prometheusAlertService.criticalAlerts$.pipe(startWith(0)),
-    this.prometheusAlertService.warningAlerts$.pipe(startWith(0))
-  ]).pipe(
-    map(([critical, warning]) => {
-      const total = (critical ?? 0) + (warning ?? 0);
-      const hasAlerts = total > 0;
+  readonly vm$ = this.prometheusAlertService.alerts$.pipe(
+    startWith([]),
+    map((alerts) => {
+      const filtered = (alerts || []).filter((alert) => {
+        if (alert.status?.state !== 'active') return false;
+        if (this.filterType === 'all') return true;
+        const name = (alert.labels?.alertname || '').toLowerCase();
+        if (this.filterType === 'block') {
+          // Block storage includes RBD, NVMe-oF, iSCSI, TCMU, and OSD errors
+          return (
+            name.includes('rbd') ||
+            name.includes('nvme') ||
+            name.includes('iscsi') ||
+            name.includes('tcmu') ||
+            name.includes('osd')
+          );
+        }
+        if (this.filterType === 'file') {
+          // File storage includes CephFS and MDS (Metadata Servers)
+          return name.includes('cephfs') || name.includes('mds') || name.includes('filesystem');
+        }
+        if (this.filterType === 'object') {
+          // Object storage includes RGW (RADOS Gateway) and Multisite sync
+          return name.includes('rgw') || name.includes('multisite') || name.includes('bucket');
+        }
+        return true;
+      });
+
+      const critical = filtered.filter((alert) => alert.labels?.severity === 'critical').length;
+      const warning = filtered.filter((alert) => alert.labels?.severity === 'warning').length;
+      const total = critical + warning;
       const hasCritical = critical > 0;
       const hasWarning = warning > 0;
 
-      const icon = !hasAlerts
-        ? AlertIcon.success
-        : hasCritical
-          ? AlertIcon.error
-          : AlertIcon.warning;
+      const icon = hasCritical
+        ? AlertIcon.error
+        : hasWarning
+          ? AlertIcon.warning
+          : AlertIcon.success;
 
-      const statusText = hasAlerts ? $localize`Need attention` : $localize`No active alerts`;
+      const statusText = hasCritical
+        ? $localize`Need attention`
+        : hasWarning
+          ? $localize`Warning`
+          : $localize`No active alerts`;
 
       const badges = [
         hasCritical && { key: 'critical', icon: AlertIcon.error, count: critical },

@@ -8,20 +8,26 @@ import { provideRouter, RouterModule } from '@angular/router';
 import { take } from 'rxjs/operators';
 
 class MockPrometheusAlertService {
-  private totalSub = new BehaviorSubject<number>(0);
-  private criticalSub = new BehaviorSubject<number>(0);
-  private warningSub = new BehaviorSubject<number>(0);
-
-  totalAlerts$ = this.totalSub.asObservable();
-  criticalAlerts$ = this.criticalSub.asObservable();
-  warningAlerts$ = this.warningSub.asObservable();
+  private alertsSub = new BehaviorSubject<any[]>([]);
+  alerts$ = this.alertsSub.asObservable();
 
   getGroupedAlerts = jest.fn();
 
   emitCounts(total: number, critical: number, warning: number) {
-    this.totalSub.next(total);
-    this.criticalSub.next(critical);
-    this.warningSub.next(warning);
+    const alerts = [];
+    for (let i = 0; i < critical; i++) {
+      alerts.push({
+        status: { state: 'active' },
+        labels: { severity: 'critical', alertname: 'CephOSDDown' }
+      });
+    }
+    for (let i = 0; i < warning; i++) {
+      alerts.push({
+        status: { state: 'active' },
+        labels: { severity: 'warning', alertname: 'CephRbdMirroringSlow' }
+      });
+    }
+    this.alertsSub.next(alerts);
   }
 }
 
@@ -97,7 +103,7 @@ describe('OverviewAlertsCardComponent', () => {
 
     expect(vm.total).toBe(3);
     expect(vm.icon).toBe('warning');
-    expect(vm.statusText).toBe('Need attention');
+    expect(vm.statusText).toBe('Warning');
 
     expect(vm.badges).toEqual([{ key: 'warning', icon: 'warning', count: 3 }]);
   });
