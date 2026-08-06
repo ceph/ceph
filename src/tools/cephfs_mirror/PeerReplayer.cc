@@ -2045,7 +2045,10 @@ int PeerReplayer::should_sync_entry(const std::string &epath, const struct ceph_
     *need_data_sync = true;
     *need_attr_sync = true;
   } else {
-    *need_data_sync = (cstx.stx_size != pstx.stx_size) || (cstx.stx_mtime != pstx.stx_mtime);
+    // ctime covers same-size rewrites that restore mtime (size/mtime unchanged).
+    *need_data_sync = (cstx.stx_size != pstx.stx_size) ||
+                      (cstx.stx_mtime != pstx.stx_mtime) ||
+                      (cstx.stx_ctime != pstx.stx_ctime);
     *need_attr_sync = (cstx.stx_ctime != pstx.stx_ctime);
   }
 
@@ -2480,7 +2483,8 @@ int PeerReplayer::SnapDiffSync::init_sync() {
 
   ceph_snapdiff_info info;
   r = ceph_open_snapdiff(m_local, m_dir_root.c_str(), ".",
-                         stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), 0, &info);
+                         stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(),
+                         MIRROR_SNAPDIFF_DEFAULT_MASK, &info);
   if (r != 0) {
     derr << ": failed to open snapdiff for " << m_dir_root << ": r=" << r << dendl;
     return r;
@@ -2512,7 +2516,8 @@ int PeerReplayer::SnapDiffSync::init_directory(const std::string &epath,
 
     ceph_snapdiff_info info;
     r = ceph_open_snapdiff(m_local, m_dir_root.c_str(), epath.c_str(),
-                           stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), 0, &info);
+                           stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(),
+                           MIRROR_SNAPDIFF_DEFAULT_MASK, &info);
     if (r != 0) {
       derr << ": failed to open snapdiff for " << m_dir_root << ", r=" << r << dendl;
       return r;

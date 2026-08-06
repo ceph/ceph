@@ -21,6 +21,11 @@ namespace mirror {
 static const std::string CEPHFS_MIRROR_OBJECT("cephfs_mirror");
 static const std::string CEPHFS_MIRROR_SYNC_STAT_OMAP_PREFIX("sync_stat");
 
+// Attrs used for incremental snapdiff sync. mtime alone misses content
+// updates that restore mtime (e.g. via utimensat); include ctime/size too.
+constexpr unsigned MIRROR_SNAPDIFF_DEFAULT_MASK =
+  CEPH_SNAPDIFF_MTIME | CEPH_SNAPDIFF_CTIME | CEPH_SNAPDIFF_SIZE;
+
 typedef std::variant<bool, uint64_t, std::string> AttributeValue;
 typedef std::map<std::string, AttributeValue> Attributes;
 
