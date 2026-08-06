@@ -955,7 +955,7 @@ void Client::trim_dentry(Dentry *dn)
   // should still be attached to its dir. we touch dn->dir right below
   // (before unlink() get a chance to check it itself), so better we assert
   // it here too, otherwise we would just segfault on the dereference with
-  // no clue at all. See IBMCEPH-14337.
+  // no clue at all. See https://tracker.ceph.com/issues/77947.
   ceph_assert(dn->dir);
   ldout(cct, 15) << "trim_dentry unlinking dn " << dn->name 
 		 << " in dir "
@@ -3755,7 +3755,8 @@ void Client::close_dir(Dir *dir)
     // call, from _try_to_trim_inode() or from tick thread). we add log
     // here so if "num_pinned" go wrong in some future crash dump, we
     // have at least a clue what caused it.
-    // See: https://tracker.ceph.com/issues/74625, IBMCEPH-14337
+    // See: https://tracker.ceph.com/issues/74625,
+    // https://tracker.ceph.com/issues/77947
     ldout(cct, 15) << __func__ << " dropping dir pin on parent dn " << pdn->name
 		   << " (dn " << pdn << ") ref " << pdn->ref << " -> " << (pdn->ref - 1)
 		   << dendl;
@@ -3832,7 +3833,7 @@ void Client::unlink(Dentry *dn, bool keepdir, bool keepdentry)
   // that came up during review of the DentryRef fix - in theory somebody
   // could call us with a dn that close_dir()/detach() already unlinked.
   // better to assert here than dereference a null dn->dir few lines below.
-  // See IBMCEPH-14337.
+  // See https://tracker.ceph.com/issues/77947.
   ceph_assert(dn->dir);
 
   ldout(cct, 15) << "unlink dir " << dn->dir->parent_inode << " '" << dn->name << "' dn " << dn
