@@ -110,12 +110,15 @@ class CephNvmeof(ContainerDaemonForm):
             'client_cert',
             'client_key',
             'root_ca_cert',
-            'encryption_key',
         ]:
             if fn in files:
                 mounts[
                     os.path.join(data_dir, fn)
-                ] = f'/{fn.replace("_", ".")}'
+                ] = f'/certs/mtls/{fn.replace("_", ".")}'
+        if 'encryption_key' in files:
+            mounts[
+                os.path.join(data_dir, 'encryption_key')
+            ] = '/encryption.key'
         return mounts
 
     def customize_container_mounts(
