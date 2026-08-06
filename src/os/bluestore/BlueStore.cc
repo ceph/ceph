@@ -12453,10 +12453,6 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 
   if (bluefs) {
     buf->internally_reserved = 0;
-    // include dedicated db, too, if that isn't the shared device.
-    if (bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
-      buf->total += bluefs->get_block_device_size(BlueFS::BDEV_DB);
-    }
     // call any non-omap bluefs space "internal metadata"
     buf->internal_metadata =
       bluefs->get_used()

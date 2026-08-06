@@ -12587,6 +12587,10 @@ TEST_P(StoreTestSpecificAUSize, BluefsWriteInNoWalDiskEnvTest) {
 
   StartDeferred(0x1000);
 
+  store_statfs_t statfs;
+  ASSERT_EQ(0, store->statfs(&statfs));
+  ASSERT_EQ(g_conf()->bluestore_block_size, statfs.total);
+
   BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
   ceph_assert(bstore);
   bstore->inject_bluefs_file("db.slow", "store_test_injection_slow", 1 << 20ul);
