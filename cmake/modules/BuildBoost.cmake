@@ -163,7 +163,7 @@ function(do_build_boost root_dir version)
     #"--buildid=ceph" # changes lib names--can omit for static
     ${boost_features})
   set(install_command
-    ${b2} ${b2_install_targets})
+    ${b2} ${b2_install_targets} ${boost_features})
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
