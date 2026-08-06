@@ -137,3 +137,15 @@ export enum QatOptions {
   sw = 'sw',
   none = 'none'
 }
+
+export function decodeServiceNameFromRoute(serviceNameRoute: string): string {
+  if (!serviceNameRoute) {
+    return '';
+  }
+
+  try {
+    return decodeURIComponent(serviceNameRoute);
+  } catch {
+    return serviceNameRoute;
+  }
+}
