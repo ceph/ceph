@@ -66,7 +66,9 @@ export class RgwDaemonService {
         _.isEmpty(daemon)
           ? this.list().pipe(
               mergeMap((daemons) =>
-                _.isEmpty(daemons) ? throwError('No RGW daemons found!') : this.selectedDaemon$
+                _.isEmpty(daemons)
+                  ? throwError('No RGW service instances found!')
+                  : this.selectedDaemon$
               )
             )
           : of(daemon)

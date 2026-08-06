@@ -63,7 +63,8 @@
                   <ul>
                     <li i18n>Capacity of the cluster</li>
                     <li i18n>
-                      Number of monitors, managers, OSDs, MDSs, object gateways, or other daemons
+                      Number of monitors, managers, OSDs, MDSs, object gateways, or other service
+                      instances
                     </li>
                     <li i18n>Software version currently being used</li>
                     <li i18n>Number and types of RADOS pools and CephFS file systems</li>
@@ -98,10 +99,12 @@
               >
                 <ng-container i18n>Crash</ng-container>
                 <cd-helper>
-                  <ng-container i18n>Includes information about daemon crashes:</ng-container>
+                  <ng-container i18n
+                    >Includes information about service instance crashes:</ng-container
+                  >
                   <ul>
-                    <li i18n>Type of daemon</li>
-                    <li i18n>Version of the daemon</li>
+                    <li i18n>Type of service instance</li>
+                    <li i18n>Version of the service instance</li>
                     <li i18n>Operating system (OS distribution, kernel version)</li>
                     <li i18n>Stack trace identifying where in the Ceph code the crash occurred</li>
                   </ul>

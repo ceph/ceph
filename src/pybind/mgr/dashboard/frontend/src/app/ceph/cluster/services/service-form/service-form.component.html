@@ -355,7 +355,7 @@
             spacingClass="mb-3"
             i18n
           >
-            The RGW daemons for this service must be restarted to apply the updated realm,
+            The RGW service instances for this service must be restarted to apply the updated realm,
             zonegroup, or zone configuration.
           </cd-alert-panel>
         }
@@ -377,8 +377,9 @@
           >
             Enable
             <cd-help-text i18n>
-              If Unmanaged is selected, the orchestrator will not start or stop any daemons
-              associated with this service. Placement and all other properties will be ignored.
+              If Unmanaged is selected, the orchestrator will not start or stop any service
+              instances associated with this service. Placement and all other properties will be
+              ignored.
             </cd-help-text>
           </cds-checkbox>
         </fieldset>
@@ -473,7 +474,7 @@
             formControlName="count"
             id="count"
             min="1"
-            helperText="Number of deamons that will be deployed"
+            helperText="Number of service instances that will be deployed"
             i18n-helperText
           >
           </cds-number>
@@ -492,7 +493,7 @@
             id="rgw_frontend_port"
             min="1"
             max="65535"
-            helperText="Number of deamons that will be deployed"
+            helperText="Port on which the service listens for client requests."
             i18n-helperText
             [invalid]="
               serviceForm.controls.rgw_frontend_port.invalid &&

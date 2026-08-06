@@ -57,7 +57,7 @@ describe('RgwDaemonService', () => {
   });
 
   it('should call request and not select any daemon from empty daemon list', fakeAsync(() => {
-    expect(() => retrieveDaemonList([], null)).toThrowError('No RGW daemons found!');
+    expect(() => retrieveDaemonList([], null)).toThrowError('No RGW service instances found!');
     expect(selectDaemonSpy).toHaveBeenCalledTimes(0);
   }));
 

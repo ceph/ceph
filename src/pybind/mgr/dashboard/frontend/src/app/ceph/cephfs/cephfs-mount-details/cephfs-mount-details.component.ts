@@ -27,7 +27,7 @@ export class CephfsMountDetailsComponent extends BaseModal implements OnInit {
   ngOnInit(): void {
     this.mount = `sudo mount -t ceph <CLIENT_USER>@${this.mountData?.clusterFSID}.${this.mountData?.fsName}=${this.mountData?.path} ${this.MOUNT_DIRECTORY}`;
     this.fuse = `sudo ceph-fuse  ${this.MOUNT_DIRECTORY} -r ${this.mountData?.path} --client_mds_namespace=${this.mountData?.fsName}`;
-    this.nfs = `sudo mount -t nfs -o port=<PORT> <IP of active_nfs daemon>:<export_name> ${this.MOUNT_DIRECTORY}`;
+    this.nfs = `sudo mount -t nfs -o port=<PORT> <IP of active_nfs service instance>:<export_name> ${this.MOUNT_DIRECTORY}`;
   }
 
   cancel() {
