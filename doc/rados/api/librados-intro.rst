@@ -290,7 +290,7 @@ uses SSDs for frequently used objects or a "cold" pool that uses erasure coding.
 
 The main difference in the various ``librados`` bindings is between C and
 the object-oriented bindings for C++, Java and Python. The object-oriented
-bindings use objects to represent cluster handles, IO Contexts, iterators,
+bindings use objects to represent cluster handles, I/O Contexts, iterators,
 exceptions, etc.
 
 

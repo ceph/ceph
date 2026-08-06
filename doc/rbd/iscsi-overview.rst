@@ -10,7 +10,7 @@ clients (initiators) to send SCSI commands to storage devices (targets) over a
 TCP/IP network, enabling clients without native Ceph client support to access
 Ceph block storage.  
 
-Each iSCSI gateway exploits the Linux IO target kernel subsystem (LIO) to
+Each iSCSI gateway exploits the Linux-IO target kernel subsystem (LIO) to
 provide iSCSI protocol support. LIO utilizes userspace passthrough (TCMU) to
 interact with Ceph's librbd library and expose RBD images to iSCSI clients.
 With Ceph’s iSCSI gateway you can provision a fully integrated block-storage

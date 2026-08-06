@@ -8,7 +8,7 @@ may be necessary to forcibly terminate its access to the file system.  This
 process is called *eviction*.
 
 Evicting a CephFS client prevents it from communicating further with MDS
-daemons and OSD daemons.  If a client was doing buffered IO to the file system,
+daemons and OSD daemons.  If a client was doing buffered I/O to the file system,
 any un-flushed data will be lost.
 
 Clients may either be evicted automatically (if they fail to communicate
@@ -112,7 +112,7 @@ the blocklist:
 
 
 Doing this may put data integrity at risk if other clients have accessed
-files that the blocklisted client was doing buffered IO to.  It is also not
+files that the blocklisted client was doing buffered I/O to.  It is also not
 guaranteed to result in a fully functional client -- the best way to get
 a fully healthy client back after an eviction is to unmount the client
 and do a fresh mount.

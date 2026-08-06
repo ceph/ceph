@@ -1425,7 +1425,7 @@ file system flushes to synchronize checkpoints across its distributed components
 no guarantee that all acknowledged writes will be part of a given snapshot.
 
 The subvolume quiesce feature has been developed to provide enterprise-level consistency guarantees
-for multi-client applications that work with one or more subvolumes. The feature makes it possible to pause IO
+for multi-client applications that work with one or more subvolumes. The feature makes it possible to pause I/O
 to a set of subvolumes of a given volume (file system). Enforcing such a pause across all clients makes
 it possible to guarantee that any persistent checkpoints reached by the application before the pause
 will be recoverable from the snapshots made during the pause.
@@ -1436,7 +1436,7 @@ This pause is called a `quiesce`, which is also used as the command name:
 .. prompt:: bash $ auto
 
   $ ceph fs quiesce <vol_name> --set-id myset1 <[group_name/]sub_name...> --await
-  # perform actions while the IO pause is active, like taking snapshots
+  # perform actions while the I/O pause is active, like taking snapshots
   $ ceph fs quiesce <vol_name> --set-id myset1 --release --await
   # if successful, all members of the set were confirmed as still paused and released
 
@@ -1458,7 +1458,7 @@ A quiesce set can be manipulated in the following ways:
 * **cancel** the set, asynchronously aborting the pause on all its current members
 * **release** the set, requesting the end of the pause from all members and expecting an ack from all clients
 * **query** the current state of a set by id or all active sets or all known sets
-* **cancel all** active sets in case an immediate resume of IO is required.
+* **cancel all** active sets in case an immediate resume of I/O is required.
 
 The operations listed above are non-blocking: they attempt the intended modification
 and return with an up-to-date version of the target set, whether the operation was successful or not.
@@ -1723,7 +1723,7 @@ Quiesce-Await and Expiration
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Quiesce await has a side effect: it resets the internal expiration timer. This allows for a watchdog
-approach to a long running multistep process under the IO pause by repeatedly ``--await``\ ing an already
+approach to a long running multistep process under the I/O pause by repeatedly ``--await``\ ing an already
 `QUIESCED` set. Consider the following example script:
 
 .. prompt:: bash # auto
@@ -1744,14 +1744,14 @@ The goal of the script is to take consistent snapshots of 3 subvolumes.
 We begin by setting the bash ``-e`` option `(1)` to exit this script if any or the following commands
 returns with a non-zero status.
 
-We go on requesting an IO pause for the three subvolumes `(2)`. We set our timeouts allowing
+We go on requesting an I/O pause for the three subvolumes `(2)`. We set our timeouts allowing
 the system to spend up to 30 seconds reaching the quiesced state across all members
-and stay quiesced for up to 10 seconds before the quiesce expires and the IO
+and stay quiesced for up to 10 seconds before the quiesce expires and the I/O
 is resumed. We also specify ``--await`` to only proceed once the quiesce is reached.
 
 We then proceed with a set of command pairs that take the next snapshot and call ``--await`` on our set
 to extend the expiration timeout for 10 more seconds `(3,4)`. This approach gives us up to 10 seconds
-for every snapshot, but also allows taking as many snapshots as we need without losing the IO pause,
+for every snapshot, but also allows taking as many snapshots as we need without losing the I/O pause,
 and with it - consistency. If we wanted, we could update the `expiration` every time we called for await.
 
 If any of the snapshots gets stuck and takes longer than 10 seconds to complete, then the next call
@@ -1776,7 +1776,7 @@ a concurrent change of the set by another client. Consider this example:
   # ceph fs quiesce fs1 --set-id="snapshots" --release --await  # (5)
 
 The sequence looks good, and the release `(5)` completes successfully. However, it could be that
-before snap for sub3 `(4)` is taken, another session excludes sub3 from the set, resuming its IOs
+before snap for sub3 `(4)` is taken, another session excludes sub3 from the set, resuming its I/Os
 
 .. prompt:: bash # auto
 
