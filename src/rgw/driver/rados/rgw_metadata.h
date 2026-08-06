@@ -88,6 +88,9 @@ public:
     *shard_id = 0;
     return 0;
   }
+  // the section of this handler is not listed as one of the metadata
+  // sections that are synced between the zones of a zonegroup
+  virtual bool is_synced() const { return true; }
   virtual int attach(RGWMetadataManager *manager);
 };
 

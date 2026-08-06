@@ -4995,6 +4995,8 @@ options:
   - rgw
   min: 1
   max: 10
+  flags:
+  - runtime
   with_legacy: true
 - name: rgw_usage_log_key_transition
   type: bool
@@ -5062,6 +5064,8 @@ options:
   - rgw
   services:
   - rgw
+  flags:
+  - runtime
   with_legacy: true
 - name: rgw_s3vector_local_path
   type: str
@@ -5072,6 +5076,8 @@ options:
   default: /var/lib/ceph/radosgw/$cluster-$id/s3vector-lancedb
   services:
   - rgw
+  flags:
+  - runtime
   with_legacy: true
 - name: rgw_s3vector_s3_endpoint
   type: str
@@ -5081,6 +5087,8 @@ options:
     when rgw_s3vector_backend is set to "s3".
   services:
   - rgw
+  flags:
+  - runtime
   with_legacy: true
 - name: rgw_s3vector_s3_region
   type: str
@@ -5090,6 +5098,8 @@ options:
   default:
   services:
   - rgw
+  flags:
+  - runtime
   with_legacy: true
 - name: rgw_s3vector_s3_allow_http
   type: bool
@@ -5100,4 +5110,6 @@ options:
   default: false
   services:
   - rgw
+  flags:
+  - runtime
   with_legacy: true
