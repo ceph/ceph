@@ -18093,11 +18093,9 @@ int BlueStore::_do_write_v2(
     }
   } else {
     // normal uncompressed path
-    BlueStore::Writer wr(this, txc, &wctx, o);
     uint64_t start = p2align(offset, min_alloc_size);
     uint64_t end = p2roundup(offset + length, min_alloc_size);
-    wr.left_affected_range = start;
-    wr.right_affected_range = end;
+    BlueStore::Writer wr(this, txc, &wctx, o, start, end);
     std::tie(wr.left_shard_bound, wr.right_shard_bound) =
       o->extent_map.fault_range_ex(db, start, end - start);
     wr.do_write(offset, bl);
