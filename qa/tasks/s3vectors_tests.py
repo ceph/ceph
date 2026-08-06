@@ -80,9 +80,24 @@ def create_users(ctx, config):
     testdir = teuthology.get_testdir(ctx)
 
     users = {'s3 main': 'foo'}
-    for client in config['clients']:
+    # in a multisite configuration, users may be created only on the master zone,
+    # and are synced from there to the other zones. so, the user is created once,
+    # and its credentials are shared by the clients of all zones
+    master_client = config.get('master_client')
+    clients = list(config['clients'])
+    if master_client in clients:
+        clients.remove(master_client)
+        clients.insert(0, master_client)
+
+    for client in clients:
         s3vtests_conf = config['s3vtests_conf'][client]
         for section, user in users.items():
+            if master_client and client != master_client:
+                master_conf = config['s3vtests_conf'][master_client]
+                for key in ('user_id', 'email', 'display_name', 'access_key', 'secret_key'):
+                    s3vtests_conf[section][key] = master_conf[section][key]
+                log.debug('Using the user of {master} on {host}'.format(master=master_client, host=client))
+                continue
             _config_user(s3vtests_conf, section, '{user}.{client}'.format(user=user, client=client))
             log.debug('Creating user {user} on {host}'.format(user=s3vtests_conf[section]['user_id'], host=client))
             cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -107,6 +122,9 @@ def create_users(ctx, config):
         yield
     finally:
         for client in config['clients']:
+            if master_client and client != master_client:
+                # the user was created on the master zone, and is removed there
+                continue
             for user in users.values():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -126,6 +144,19 @@ def create_users(ctx, config):
                     )
 
 
+def get_backends(client_config):
+    """ the backends that the tests should be run against. the backend is set on
+    the RGWs by the tests themselves, so a single run may cover all of them """
+    return (client_config or {}).get('backends') or [None]
+
+
+def conf_file_name(testdir, client, backend):
+    name = 's3vectors-tests.{client}'.format(client=client)
+    if backend:
+        name += '.{backend}'.format(backend=backend)
+    return '{tdir}/ceph/src/test/rgw/s3vectors/{name}.conf'.format(tdir=testdir, name=name)
+
+
 @contextlib.contextmanager
 def configure(ctx, config):
     assert isinstance(config, dict)
@@ -135,12 +166,17 @@ def configure(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
         s3vtests_conf = config['s3vtests_conf'][client]
 
-        conf_fp = BytesIO()
-        s3vtests_conf.write(conf_fp)
-        remote.write_file(
-            path='{tdir}/ceph/src/test/rgw/s3vectors/s3vectors-tests.{client}.conf'.format(tdir=testdir, client=client),
-            data=conf_fp.getvalue(),
-            )
+        # a configuration file per backend, so that all of the tests are run
+        # once for every one of them
+        for backend in get_backends(properties):
+            if backend:
+                s3vtests_conf['DEFAULT']['s3vector_backend'] = backend
+            conf_fp = BytesIO()
+            s3vtests_conf.write(conf_fp)
+            remote.write_file(
+                path=conf_file_name(testdir, client, backend),
+                data=conf_fp.getvalue(),
+                )
 
     try:
         yield
@@ -149,11 +185,10 @@ def configure(ctx, config):
         testdir = teuthology.get_testdir(ctx)
         for client, properties in config['clients'].items():
             (remote,) = ctx.cluster.only(client).remotes.keys()
-            remote.run(
-                 args=['rm', '-f',
-                       '{tdir}/ceph/src/test/rgw/s3vectors/s3vectors-tests.{client}.conf'.format(tdir=testdir,client=client),
-                 ],
-                 )
+            for backend in get_backends(properties):
+                remote.run(
+                     args=['rm', '-f', conf_file_name(testdir, client, backend)],
+                     )
 
 
 def get_toxvenv_dir(ctx):
@@ -218,11 +253,16 @@ def run_tests(ctx, config):
         if 'extra_attr' in client_config:
             attr = client_config.get('extra_attr')
 
-        args = ['cd', '{tdir}/ceph/src/test/rgw/s3vectors/'.format(tdir=testdir), run.Raw('&&'),
-            'S3VTESTS_CONF=./s3vectors-tests.{client}.conf'.format(client=client),
-            'tox', '--', '-v', '-m', ' or '.join(attr)]
+        # the tests are run once per backend. changing the backend does not
+        # require a restart of the RGW, so a single setup covers all of them
+        for backend in get_backends(client_config):
+            args = ['cd', '{tdir}/ceph/src/test/rgw/s3vectors/'.format(tdir=testdir), run.Raw('&&'),
+                'S3VTESTS_CONF={conf}'.format(conf=conf_file_name(testdir, client, backend)),
+                'tox', '--', '-v', '-m', ' or '.join(attr)]
 
-        toxvenv_sh(ctx, remote, args, label="s3vectors tests against rgw")
+            toxvenv_sh(ctx, remote, args,
+                       label="s3vectors tests against rgw ({backend} backend)".format(
+                           backend=backend or 'default'))
 
     yield
 
@@ -255,22 +295,58 @@ def task(ctx,config):
 
     s3vector_backend = ctx.config.get('overrides', {}).get('ceph', {}).get('conf', {}).get('client', {}).get('rgw_s3vector_backend', 'rgw')
 
+    # some "radosgw-admin" commands are allowed only on the master zone. note that
+    # the client of its RGW is assumed to be the same as the one of the tested zone
+    master_cluster = None
+    master_client = None
+    if getattr(ctx, 'rgw_multisite', None):
+        master_cluster = ctx.rgw_multisite.realm.meta_master_zone().cluster.name
+        for client in clients:
+            if teuthology.split_role(client)[0] == master_cluster:
+                master_client = client
+                break
+        log.info('s3vectors: the master zone is in cluster %s (client %s)',
+                 master_cluster, master_client)
+
     for client in clients:
         endpoint = ctx.rgw.role_endpoints.get(client)
         assert endpoint, 's3vtests: no rgw endpoint for {}'.format(client)
 
+        # the cluster and the client are needed by the tests when they run
+        # "ceph" or "radosgw-admin" commands
+        cluster_name, daemon_type, client_id = teuthology.split_role(client)
+        infile = {
+            'DEFAULT':
+                {
+                'port':endpoint.port,
+                'host':endpoint.dns_name,
+                'zonegroup':ctx.rgw.zonegroup,
+                's3vector_backend':s3vector_backend,
+                'cluster':cluster_name,
+                'rgw_client':daemon_type + '.' + client_id,
+                },
+            's3 main':{}
+        }
+
+        if master_cluster:
+            infile['DEFAULT']['master_cluster'] = master_cluster
+
+        # in a multisite configuration, the RGW of the other zone is used by the
+        # tests that verify that nothing is synced between the zones
+        secondary = (config.get(client) or {}).get('secondary')
+        if secondary:
+            secondary_endpoint = ctx.rgw.role_endpoints.get(secondary)
+            assert secondary_endpoint, 's3vtests: no rgw endpoint for {}'.format(secondary)
+            secondary_cluster, _, _ = teuthology.split_role(secondary)
+            infile['secondary'] = {
+                'port':secondary_endpoint.port,
+                'host':secondary_endpoint.dns_name,
+                'cluster':secondary_cluster,
+            }
+
         s3vtests_conf[client] = ConfigObj(
             indent_type='',
-            infile={
-                'DEFAULT':
-                    {
-                    'port':endpoint.port,
-                    'host':endpoint.dns_name,
-                    'zonegroup':ctx.rgw.zonegroup,
-                    's3vector_backend':s3vector_backend,
-                    },
-                's3 main':{}
-            }
+            infile=infile
         )
 
     with contextutil.nested(
@@ -278,6 +354,7 @@ def task(ctx,config):
         lambda: create_users(ctx=ctx, config=dict(
                 clients=clients,
                 s3vtests_conf=s3vtests_conf,
+                master_client=master_client,
                 )),
         lambda: configure(ctx=ctx, config=dict(
                 clients=config,

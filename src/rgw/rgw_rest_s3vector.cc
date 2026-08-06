@@ -246,25 +246,6 @@ private:
     // vector buckets are indexless
     createparams.index_type = rgw::BucketIndexType::Indexless;
     createparams.placement_rule.storage_class = s->info.storage_class;
-    if (!driver->is_meta_master()) {
-      // apply bucket creation on the master zone first
-      JSONParser jp;
-      op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->owner.id,
-                                           &in_data, &jp, s->info, s->err, y);
-      if (op_ret < 0) {
-        return;
-      }
-
-      RGWBucketInfo master_info;
-      JSONDecoder::decode_json("bucket_info", master_info, &jp);
-
-      // update params with info from the master
-      createparams.marker = master_info.bucket.marker;
-      createparams.bucket_id = master_info.bucket.bucket_id;
-      createparams.zonegroup_id = master_info.zonegroup;
-      createparams.quota = master_info.quota;
-      createparams.creation_time = master_info.creation_time;
-    }
 
     op_ret = bucket->create(this, createparams, y);
     if (op_ret < 0) {
