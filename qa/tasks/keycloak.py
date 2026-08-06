@@ -209,7 +209,9 @@ def run_admin_cmds(ctx,config):
                 'create', 'realms',
                 '-s', realm,
                 '-s', 'enabled=true',
-                '-s', 'accessTokenLifespan=3600',
+                # we'd like tokens have enough time to live,
+                # 2 hours would be ok for any test run time
+                '-s', 'accessTokenLifespan=7200',
                 '-o',
             ],
         )
