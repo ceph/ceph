@@ -792,7 +792,7 @@ constexpr bool contains(const ExprT& expression, const ValueT& value)
    return;
   }
 
-  found = contains(x, value);
+  found = ::ceph::libfdb::interval::contains(x, value);
  });
 
  return found;
@@ -815,7 +815,7 @@ constexpr auto intersection(const LhsT& lhs, const RhsT& rhs)
   detail::max_bound(lhs_bounds.lower(), rhs_bounds.lower(), detail::inclusivity_merge::all),
   detail::min_bound(lhs_bounds.upper(), rhs_bounds.upper(), detail::inclusivity_merge::all));
 
- if (is_empty(out)) {
+ if (::ceph::libfdb::interval::is_empty(out)) {
   return query<domain_type>::empty();
  }
 
@@ -976,7 +976,7 @@ constexpr auto complement(ExprT&& expression)
 template <ordered_domain DomainT, typename SinkT>
 constexpr void for_each_interval(const query<DomainT>& x, SinkT&& sink)
 {
- if (is_empty(x)) {
+ if (::ceph::libfdb::interval::is_empty(x)) {
   return;
  }
 
@@ -1004,8 +1004,9 @@ constexpr void emit_intersection(const LhsT& lhs,
                                  const RhsT& rhs,
                                  SinkT&& sink)
 {
- ::ceph::libfdb::interval::for_each_interval(intersection(lhs, rhs),
-                                             std::forward<SinkT>(sink));
+ ::ceph::libfdb::interval::for_each_interval(
+  ::ceph::libfdb::interval::intersection(lhs, rhs),
+  std::forward<SinkT>(sink));
 }
 
 template <typename OutT, interval_view IntervalT>
@@ -1033,7 +1034,7 @@ constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expr
  }
 
  if constexpr (interval_view<RhsT>) {
-  if (is_empty(expression.rhs)) {
+  if (::ceph::libfdb::interval::is_empty(expression.rhs)) {
    ::ceph::libfdb::interval::for_each_interval(expression.lhs,
                                                std::forward<SinkT>(sink));
    return;
@@ -1051,7 +1052,7 @@ constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expr
 
    const auto remaining = query<domain_type>::between(cursor, lhs.upper());
 
-   if (is_empty(remaining)) {
+   if (::ceph::libfdb::interval::is_empty(remaining)) {
     emitted_tail = true;
     return;
    }
@@ -1066,9 +1067,9 @@ constexpr void for_each_interval(const detail::difference_expr<LhsT, RhsT>& expr
     return;
    }
 
-   const auto overlap = intersection(remaining, rhs);
+   const auto overlap = ::ceph::libfdb::interval::intersection(remaining, rhs);
 
-   if (is_empty(overlap)) {
+   if (::ceph::libfdb::interval::is_empty(overlap)) {
     return;
    }
 
@@ -1139,7 +1140,8 @@ constexpr void for_each_interval(const detail::intersection_expr<LhsT, RhsT>& ex
 
  ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&rhs_intervals, &overlaps](const auto& lhs) {
   for (const auto& rhs : rhs_intervals) {
-   if (auto overlap = intersection(lhs, rhs); !is_empty(overlap)) {
+   if (auto overlap = ::ceph::libfdb::interval::intersection(lhs, rhs);
+       !::ceph::libfdb::interval::is_empty(overlap)) {
     ceph::util::emplace_append(overlaps, std::move(overlap));
    }
   }
@@ -1203,12 +1205,12 @@ constexpr void emit_union(const LhsT& lhs,
                           const RhsT& rhs,
                           SinkT&& sink)
 {
- if (is_empty(lhs)) {
+ if (::ceph::libfdb::interval::is_empty(lhs)) {
   ::ceph::libfdb::interval::for_each_interval(rhs, std::forward<SinkT>(sink));
   return;
  }
 
- if (is_empty(rhs)) {
+ if (::ceph::libfdb::interval::is_empty(rhs)) {
   ::ceph::libfdb::interval::for_each_interval(lhs, std::forward<SinkT>(sink));
   return;
  }

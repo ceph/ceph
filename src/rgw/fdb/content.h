@@ -44,7 +44,7 @@ constexpr void append_string_segment(std::string& out, const std::string_view se
   out.push_back(c);
 
   if ('\0' == c) {
-   out.push_back(static_cast<char>(0xff));
+   out.push_back(static_cast<char>(0xFF));
   }
  }
 
@@ -57,8 +57,8 @@ constexpr void require_valid_keyspace(const std::string_view segment)
   throw ::ceph::libfdb::libfdb_exception("content key assembly requires a non-empty keyspace segment");
  }
 
- if (static_cast<char>(0xff) == segment.front()) {
-  throw ::ceph::libfdb::libfdb_exception("content keyspace segment must not start with 0xff");
+ if (static_cast<char>(0xFF) == segment.front()) {
+  throw ::ceph::libfdb::libfdb_exception("content keyspace segment must not start with 0xFF");
  }
 }
 

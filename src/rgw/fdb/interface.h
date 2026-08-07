@@ -131,8 +131,8 @@ inline void set(transaction_handle txn,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_fdb_span(k), &v](const transaction_handle& txn) {
-            return detail::transaction_set_kv_bytes(txn, key, ceph::libfdb::to::convert(v));
+          [key = detail::as_fdb_span(k), &v](const transaction_handle& active_txn) {
+            return detail::transaction_set_kv_bytes(active_txn, key, ceph::libfdb::to::convert(v));
           });
 }
 
@@ -161,12 +161,12 @@ inline void set(transaction_handle txn,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [&b, &e](const transaction_handle& txn) {
+          [&b, &e](const transaction_handle& active_txn) {
             std::vector<std::uint8_t> fixed_buffer;
 
             std::ranges::for_each(std::ranges::subrange(b, e),
-                      [&txn, &fixed_buffer](const auto& kv) {
-                        detail::transaction_set_kv_bytes(txn,
+                      [&active_txn, &fixed_buffer](const auto& kv) {
+                        detail::transaction_set_kv_bytes(active_txn,
                                   detail::as_fdb_span(kv.first),
                                   ceph::libfdb::to::convert(kv.second, fixed_buffer));
                       });
@@ -214,8 +214,8 @@ inline void set(transaction_handle txn,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_fdb_span(k), value = std::string_view(v)](const transaction_handle& txn) {
-            return detail::transaction_set_kv_bytes(txn, key, ceph::libfdb::to::convert(value));
+          [key = detail::as_fdb_span(k), value = std::string_view(v)](const transaction_handle& active_txn) {
+            return detail::transaction_set_kv_bytes(active_txn, key, ceph::libfdb::to::convert(value));
           });
 }
 
@@ -246,9 +246,9 @@ inline void erase(ceph::libfdb::transaction_handle txn,
                   const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [&selection](const transaction_handle& txn) {
-            query::for_each_interval(selection, [&txn](const ceph::libfdb::select& interval) {
-              detail::transaction_clear_range(txn, interval);
+          [&selection](const transaction_handle& active_txn) {
+            query::for_each_interval(selection, [&active_txn](const ceph::libfdb::select& interval) {
+              detail::transaction_clear_range(active_txn, interval);
             });
           });
 }
@@ -272,8 +272,8 @@ inline void erase(ceph::libfdb::transaction_handle txn,
                   const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_fdb_span(k)](const transaction_handle& txn) {
-            return detail::transaction_clear_key_bytes(txn, key);
+          [key = detail::as_fdb_span(k)](const transaction_handle& active_txn) {
+            return detail::transaction_clear_key_bytes(active_txn, key);
           });
 }
 
@@ -390,8 +390,8 @@ inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        const ceph::libfdb::commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [&selection, out_iter](const transaction_handle& txn) mutable {
-            return detail::get_value_selection_from_transaction(*txn, selection, out_iter);
+          [&selection, out_iter](const transaction_handle& active_txn) mutable {
+            return detail::get_value_selection_from_transaction(*active_txn, selection, out_iter);
           });
 }
 
@@ -422,8 +422,8 @@ inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        const ceph::libfdb::commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [&selection, &out](const transaction_handle& txn) {
-            return detail::get_value_selection_from_transaction(*txn, selection, out);
+          [&selection, &out](const transaction_handle& active_txn) {
+            return detail::get_value_selection_from_transaction(*active_txn, selection, out);
           });
 }
 
@@ -480,11 +480,11 @@ inline bool get(ceph::libfdb::transaction_handle txn,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_fdb_span(key), &output_target_or_fn](const transaction_handle& txn) {
+          [key = detail::as_fdb_span(key), &output_target_or_fn](const transaction_handle& active_txn) {
             if constexpr (concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>) {
-              return txn->get(key, output_target_or_fn);
+              return active_txn->get(key, output_target_or_fn);
             } else {
-              return txn->get(key,
+              return active_txn->get(key,
                               detail::value_collector(output_target_or_fn));
             }
           });
@@ -523,8 +523,8 @@ inline bool key_exists(transaction_handle txn,
                        const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_libfdb_key_view(k)](const transaction_handle& txn) {
-            return txn->key_exists(key);
+          [key = detail::as_libfdb_key_view(k)](const transaction_handle& active_txn) {
+            return active_txn->key_exists(key);
           });
 }
 
@@ -598,11 +598,12 @@ namespace ceph::libfdb {
 
 namespace detail {
 
-inline auto intervals(ceph::libfdb::select interval)
+inline auto intervals(ceph::libfdb::select selection)
 {
- return std::views::single(std::move(interval))
-      | std::views::filter([](const ceph::libfdb::select& interval) {
-         return not query::is_empty(interval);
+ // Raw selectors keep select compatibility but still execute in ordinary FDB keyspace:
+ return std::views::single(query::intersection(std::move(selection), query::universal()))
+      | std::views::filter([](const ceph::libfdb::select& range) {
+         return not query::is_empty(range);
         });
 }
 
@@ -709,7 +710,7 @@ auto blocks_selector(ceph::libfdb::database_handle dbh, ceph::libfdb::select sel
 
  auto split_ranges = detail::plan_split_ranges(dbh, selector, chunk_size);
 
- auto read_blocks = [txr = make_transactor(dbh)](this auto& read_blocks, ceph::libfdb::select range, const int iteration)
+ auto read_blocks = [txr = make_transactor(dbh)](this auto& self, ceph::libfdb::select range, const int iteration)
  -> std::generator<AssocT> {
   auto read_result = txr([range, iteration](auto& txn) {
    return detail::materialize_query_window<ValueT, AssocT>(*txn, range, iteration);
@@ -724,7 +725,7 @@ auto blocks_selector(ceph::libfdb::database_handle dbh, ceph::libfdb::select sel
   co_yield std::move(read_result.result_block);
 
   if (next_range) {
-   co_yield std::ranges::elements_of(read_blocks(std::move(*next_range), 2));
+   co_yield std::ranges::elements_of(self(std::move(*next_range), iteration + 1));
   }
  };
 
@@ -912,8 +913,8 @@ auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
 {
  return invoke_with_retry<invocation_failure_policy::retry>(
           txn, std::forward<FnT>(fn),
-          [](transaction_handle& txn) {
-            return ceph::libfdb::commit(txn);
+          [](transaction_handle& active_txn) {
+            return ceph::libfdb::commit(active_txn);
           });
 }
 

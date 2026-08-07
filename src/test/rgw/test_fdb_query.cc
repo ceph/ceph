@@ -88,8 +88,8 @@ struct described_int_interval final
 auto describe(const li::query<int_domain>& interval)
 {
  return described_int_interval {
-  .begin = interval.lower().key(),
-  .end = interval.upper().key(),
+  .begin = interval.lower().finite_key(),
+  .end = interval.upper().finite_key(),
   .begin_inclusive = interval.lower().inclusive(),
   .end_inclusive = interval.upper().inclusive()
  };
@@ -351,21 +351,21 @@ TEST_CASE("query primitives describe local intervals", "[fdb][query]")
 
  SECTION("prefix successor computes finite upper bounds")
  {
-  CHECK(lq::successor("") == std::string("\xff", 1));
+  CHECK(lq::successor("") == std::string("\xFF", 1));
   CHECK(lq::successor("abc") == "abd");
-  CHECK(lq::successor("abc\xff"sv) == "abd");
-  CHECK_THROWS_AS(lq::successor("\xff"sv), lfdb::libfdb_exception);
+  CHECK(lq::successor("abc\xFF"sv) == "abd");
+  CHECK_THROWS_AS(lq::successor("\xFF"sv), lfdb::libfdb_exception);
  }
 
  SECTION("prefix computes the finite successor bound")
  {
   CHECK(describe(lq::prefix("abc")) == described_interval { "abc", "abd", true, false });
-  CHECK(describe(lq::prefix("abc\xff"sv)) == described_interval { "abc\xff", "abd", true, false });
+  CHECK(describe(lq::prefix("abc\xFF"sv)) == described_interval { "abc\xFF", "abd", true, false });
  }
 
- SECTION("universal covers the ordinary exposed keyspace")
+ SECTION("universal covers the ordinary FDB keyspace")
  {
-  CHECK(describe(lq::universal()) == described_interval { "", "\xff", true, false });
+  CHECK(describe(lq::universal()) == described_interval { "", "\xFF", true, false });
  }
 
  SECTION("singleton is closed on both ends")
@@ -382,7 +382,38 @@ TEST_CASE("query primitives reject or normalize locally invalid intervals", "[fd
  CHECK(lq::is_empty(lq::interval(lq::open("a"), lq::closed("a"))));
  CHECK_FALSE(lq::is_empty(lq::singleton("a")));
 
- CHECK_THROWS_AS(lq::prefix("\xff"sv), lfdb::libfdb_exception);
+ const auto system_prefix = std::string("\xFF", 1) + "abc";
+
+ CHECK(lq::is_empty(lq::prefix("\xFF"sv)));
+ CHECK(lq::is_empty(lq::prefix(system_prefix)));
+}
+
+TEST_CASE("query helpers clamp algebraic infinity to ordinary FDB keyspace", "[fdb][query]")
+{
+ const auto keyspace_limit = std::string("\xFF", 1);
+
+ CHECK(lq::is_universal(lq::universal()));
+ CHECK(lq::contains(lq::universal(), "z"));
+ CHECK_FALSE(lq::contains(lq::universal(), keyspace_limit));
+
+ CHECK(lq::is_empty(lq::at(keyspace_limit)));
+ CHECK(lq::is_empty_expression(lq::from(lq::lower_at_or_after(keyspace_limit))));
+ CHECK(emitted_intervals(lq::until(lq::upper_at_or_before(keyspace_limit))) ==
+       std::vector { described_interval { "", "\xFF", true, false } });
+ CHECK(emitted_intervals(lq::closed_between("z", keyspace_limit)) ==
+       std::vector { described_interval { "z", "\xFF", true, false } });
+
+ const lfdb::select raw_closed_limit { lfdb::inclusive("z"),
+                                       lfdb::inclusive(keyspace_limit) };
+ CHECK(execution_intervals(raw_closed_limit) ==
+       std::vector { described_interval { "z", "\xFF", true, false } });
+
+ const auto composed_raw_limit = lq::set_union(lq::prefix("a"), raw_closed_limit);
+ CHECK(emitted_intervals(composed_raw_limit) ==
+       std::vector {
+        described_interval { "a", "b", true, false },
+        described_interval { "z", "\xFF", true, false }
+       });
 }
 
 TEST_CASE("query execution intervals suppress empty selections", "[fdb][query]")
@@ -473,7 +504,7 @@ TEST_CASE("query complement subtracts from universal", "[fdb][query]")
  CHECK(emitted_intervals(without_prefix) ==
        std::vector {
         described_interval { "", "m", true, false },
-        described_interval { "n", "\xff", true, false }
+        described_interval { "n", "\xFF", true, false }
        });
 }
 
@@ -503,7 +534,7 @@ TEST_CASE("query endpoint helpers compose range expressions", "[fdb][query]")
  SECTION("point-relative helpers describe half-bounded selections")
  {
   CHECK(emitted_intervals(lq::after("b")) ==
-        std::vector { described_interval { "b", "\xff", false, false } });
+        std::vector { described_interval { "b", "\xFF", false, false } });
   CHECK(emitted_intervals(lq::before("m")) ==
         std::vector { described_interval { "", "m", true, false } });
  }
@@ -816,7 +847,7 @@ TEST_CASE("query examples compose set operations", "[fdb][query][example]")
   CHECK(emitted_intervals(public_keys) ==
         std::vector {
          described_interval { "", "tenant/private/", true, false },
-         described_interval { "tenant/private0", "\xff", true, false }
+         described_interval { "tenant/private0", "\xFF", true, false }
         });
  }
 

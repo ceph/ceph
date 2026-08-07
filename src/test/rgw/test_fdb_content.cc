@@ -103,7 +103,7 @@ TEST_CASE("content key assembly rejects invalid inputs", "[fdb][content]")
  REQUIRE_THROWS_AS(content::keyspace(std::string_view()),
                    ceph::libfdb::libfdb_exception);
 
- REQUIRE_THROWS_AS(content::keyspace(std::string_view("\xff"sv)),
+ REQUIRE_THROWS_AS(content::keyspace(std::string_view("\xFF"sv)),
                    ceph::libfdb::libfdb_exception);
 }
 
@@ -111,7 +111,7 @@ TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
 {
  constexpr char segment_bytes[] = { 'a', '\0', 'b' };
  const auto key = content::keyspace(std::string_view(segment_bytes, sizeof(segment_bytes)));
- const auto expected = std::string("a\0\xff""b\0", 5);
+ const auto expected = std::string("a\0\xFF""b\0", 5);
 
  CHECK_THAT(materialized_key(key), Catch::Matchers::RangeEquals(expected));
 }
@@ -119,7 +119,7 @@ TEST_CASE("content key string segments escape embedded nulls", "[fdb][content]")
 TEST_CASE("content key string literals preserve embedded nulls", "[fdb][content]")
 {
  const auto key = content::keyspace("a\0b");
- const auto expected = std::string("a\0\xff""b\0", 5);
+ const auto expected = std::string("a\0\xFF""b\0", 5);
 
  CHECK_THAT(materialized_key(key), Catch::Matchers::RangeEquals(expected));
 }

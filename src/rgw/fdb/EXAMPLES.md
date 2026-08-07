@@ -215,8 +215,8 @@ under prefixes such as `person/`, `bucket/index/`, or `object/metadata/`.
 auto people = q::prefix("person/");
 ```
 
-Using a prefix beginning with 0xFF throws `lfdb::libfdb_exception`, because
-there is no finite successor prefix inside the ordinary exposed keyspace.
+A prefix at the 0xFF boundary normalizes to an empty selection in the ordinary
+FDB keyspace; `q::successor()` still throws when no finite successor exists.
 
 ### Selectively Selected Selectable Section
 
@@ -706,6 +706,16 @@ Use complement when the natural expression is "everything except this keyspace":
 
 ```cpp
 const auto public_keys = q::complement(q::prefix("tenant/private/"));
+```
+
+Unbounded helpers are still bounded by FoundationDB's ordinary byte keyspace:
+
+```cpp
+// Reads keys from "tenant/public/" through the end of ordinary FDB keys.
+auto public_tail = q::from(q::lower_at_or_after("tenant/public/"));
+
+// Complement is relative to that same public keyspace, not mathematical infinity.
+auto non_private = q::complement(q::prefix("tenant/private/"));
 ```
 
 Singleton queries are closed on both ends, so they remove one exact key cleanly:

@@ -233,9 +233,9 @@ struct libfdb_exception final : std::runtime_error
   : std::runtime_error(make_error_string(msg))
  {}
 
- explicit libfdb_exception(fdb_error_t fdb_error_value)
-  : std::runtime_error(make_fdb_error_string(fdb_error_value)),
-    fdb_error_value(fdb_error_value)
+ explicit libfdb_exception(fdb_error_t error)
+  : std::runtime_error(make_fdb_error_string(error)),
+    fdb_error_value(error)
  {}
 
  static std::string make_error_string(const std::string_view msg)
@@ -797,7 +797,7 @@ inline query_window extract_result_pairs(future_value result_owner)
  return query_window {
   .result_owner = std::move(result_owner),
   .result_pairs = std::span<const FDBKeyValue>(out_kvs, out_count),
-  .more_available = more_available
+  .more_available = 0 != more_available
  };
 }
 
