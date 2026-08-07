@@ -1241,7 +1241,7 @@ TEST_F(POSIXDriverTest, BucketCreate)
   EXPECT_EQ(bucket->get_name(), testname);
   EXPECT_EQ(bucket->get_key().name, testname);
   EXPECT_EQ(bucket->get_key().tenant, "");
-  EXPECT_EQ(bucket->get_key().bucket_id, "");
+  EXPECT_TRUE(bucket->get_key().bucket_id.starts_with(testname));
   EXPECT_FALSE(bucket_exists);
 
   sf::path tp{bp / "root" / testname};
@@ -1528,8 +1528,8 @@ TEST_F(POSIXObjectTest, ObjectCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -1561,10 +1561,9 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   bufferlist origbl;
   encode(ATTR1, origbl);
 
-  // POSIXDriver adds attributes ("POSIX-Owner", and "POSIX-Object-Type")
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  // POSIXDriver adds attributes ("POSIX-Object-Type")
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
   std::string addattr{"AddAttrO"};
@@ -1574,17 +1573,15 @@ TEST_F(POSIXObjectTest, ObjectAttrs)
   ret = object->modify_obj_attrs(addattr.c_str(), addbl, null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
 
-  EXPECT_EQ(object->get_attrs().size(), 4);
+  EXPECT_EQ(object->get_attrs().size(), 3);
   EXPECT_EQ(object->get_attrs()[ATTR1], origbl);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 
   ret = object->delete_obj_attrs(env->dpp, ATTR1.c_str(), null_yield);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(object->get_attrs().size(), 3);
+  EXPECT_EQ(object->get_attrs().size(), 2);
   EXPECT_EQ(object->get_attrs()[addattr], addbl);
-  EXPECT_TRUE(object->get_attrs().contains("POSIX-Owner"));
   EXPECT_TRUE(object->get_attrs().contains(ATTR_OBJECT_TYPE));
 }
 
@@ -1837,8 +1834,8 @@ TEST_F(POSIXMPObjectTest, MPUploadCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -2288,8 +2285,8 @@ TEST_F(POSIXVerObjectTest, ObjectCopy)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
@@ -2366,8 +2363,8 @@ TEST_F(POSIXVerObjectTest, CopyVersion)
 	   placement,
 	   &mtime,
 	   &mtime,
-	   &mtime,
-	   &mtime,
+	   nullptr,
+	   nullptr,
 	   false,
 	   nullptr,
 	   nullptr,
