@@ -225,6 +225,7 @@ CI:
 
 rbd:
   - doc/dev/rbd*
+  - doc/man/8/ceph-immutable-object-cache.rst
   - doc/man/8/ceph-rbdnamer.rst
   - doc/man/8/rbd*
   - doc/rbd/**
@@ -236,6 +237,7 @@ rbd:
   - qa/suites/krbd/**
   - qa/suites/rbd/**
   - qa/tasks/ceph_iscsi_client.py
+  - qa/tasks/immutable_object_cache*
   - qa/tasks/metadata.yaml
   - qa/tasks/qemu.py
   - qa/tasks/rbd*
@@ -249,6 +251,7 @@ rbd:
   - src/cls/journal/**
   - src/cls/lock/**
   - src/cls/rbd/**
+  - src/common/options/immutable-object-cache.yaml.in
   - src/common/options/rbd*
   - src/etc-rbdmap
   - src/include/krbd.h
@@ -267,6 +270,7 @@ rbd:
   - src/test/cls_journal/**
   - src/test/cls_lock/**
   - src/test/cls_rbd/**
+  - src/test/immutable_object_cache/**
   - src/test/journal/**
   - src/test/librbd/**
   - src/test/pybind/test_rbd.py
@@ -276,6 +280,7 @@ rbd:
   - src/test/test_rbd*
   - src/tools/immutable_object_cache/**
   - src/tools/rbd*/**
+  - systemd/ceph-immutable-object-cache*
   - systemd/ceph-rbd-mirror*
   - systemd/rbdmap.service.in
   - udev/50-rbd.rules
