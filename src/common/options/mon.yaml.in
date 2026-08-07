@@ -475,6 +475,19 @@ options:
   - mon_session_timeout
   min: 0
   with_legacy: true
+- name: mon_inject_dispatch_delay
+  type: float
+  level: dev
+  desc: Inject a delay after arming the monitor dispatch watchdog
+  long_desc: If positive, the monitor sleeps for this many seconds after arming
+    the dispatch watchdog and before acquiring Monitor::lock in ms_dispatch().
+    This is intended for testing that the dispatch watchdog can abort a monitor
+    whose dispatch thread stops making progress.
+  default: 0
+  services:
+  - mon
+  min: 0
+  with_legacy: true
 - name: mon_lease_renew_interval_factor
   type: float
   level: advanced

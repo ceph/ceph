@@ -4740,6 +4740,18 @@ void Monitor::dispatch_watchdog_shutdown()
   dispatch_heartbeat_depth = 0;
 }
 
+void Monitor::dispatch_watchdog_inject_delay()
+{
+  const auto delay = cct->_conf->mon_inject_dispatch_delay;
+  if (delay <= 0) {
+    return;
+  }
+
+  dout(1) << __func__ << " injecting monitor dispatch delay of "
+         << delay << " seconds" << dendl;
+  usleep((long long)(delay * 1000000.0));
+}
+
 void Monitor::_ms_dispatch(Message *m)
 {
   if (is_shutdown()) {

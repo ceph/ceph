@@ -955,6 +955,7 @@ public:
   void dispatch_watchdog_start();
   void dispatch_watchdog_finish();
   void dispatch_watchdog_shutdown();
+  void dispatch_watchdog_inject_delay();
 
   class DispatchWatchdogGuard {
     Monitor *mon;
@@ -972,6 +973,7 @@ public:
   void _ms_dispatch(Message *m);
   bool ms_dispatch(Message *m) override {
     DispatchWatchdogGuard dispatch_watchdog_guard(this);
+    dispatch_watchdog_inject_delay();
     std::lock_guard l{lock};
     _ms_dispatch(m);
     return true;
