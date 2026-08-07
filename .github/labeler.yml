@@ -74,6 +74,7 @@ common:
   - src/common/**
   - src/global/**
   - src/log/**
+  - src/python-common/**
 
 cephadm:
   - doc/cephadm/**
@@ -87,6 +88,7 @@ cephadm:
   - qa/workunits/cephadm/**
   - src/cephadm/**
   - src/pybind/mgr/cephadm/**
+  - src/pybind/mgr/smb/**
   - src/python-common/**
     
 orchestrator:
@@ -199,8 +201,10 @@ cephfs:
   - src/mon/FSCommands.*
   - src/pybind/cephfs/**
   - src/pybind/mgr/mds_autoscaler/**
+  - src/pybind/mgr/mirroring/**
   - src/pybind/mgr/status/**
   - src/pybind/mgr/volumes/**
+  - src/test/client/**
   - src/test/fs/**
   - src/test/libcephfs/**
   - src/tools/cephfs/**
@@ -260,6 +264,7 @@ rbd:
   - src/test/rbd*/**
   - src/test/run-rbd*
   - src/test/test_rbd*
+  - src/tools/immutable_object_cache/**
   - src/tools/rbd*/**
   - systemd/ceph-rbd-mirror*
   - systemd/rbdmap.service.in
@@ -276,12 +281,15 @@ nvmeof:
   - src/nvmeof/**
   - src/pybind/mgr/cephadm/services/nvmeof.py
   - src/pybind/mgr/cephadm/templates/services/nvmeof/**
+  - src/pybind/mgr/nvmeof/**
   - src/tools/ceph-dencoder/nvmeof*
 
 rgw:
   - qa/suites/rgw/**
+  - qa/tasks/kafka*
   - qa/tasks/rgw*
   - qa/tasks/s3*
+  - src/pybind/mgr/rgw/**
   - src/cls/cmpomap/**
   - src/cls/fifo/**
   - src/cls/otp/**
