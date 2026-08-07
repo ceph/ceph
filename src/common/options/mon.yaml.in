@@ -456,6 +456,25 @@ options:
   services:
   - mon
   with_legacy: true
+- name: mon_dispatch_watchdog_timeout
+  type: float
+  level: advanced
+  desc: Maximum time for monitor dispatch to make progress before aborting
+  long_desc: If positive, a monitor arms an internal heartbeat watchdog while
+    processing dispatch work. If the dispatch path stops making progress for
+    longer than this timeout, the monitor aborts through the existing heartbeat
+    suicide path so service management can restart it.
+  fmt_desc: The maximum time in seconds that a monitor dispatch operation may run
+    without making heartbeat progress before the monitor aborts. Set to ``0`` to
+    disable the dispatch watchdog.
+  default: 30
+  services:
+  - mon
+  see_also:
+  - mon_lease
+  - mon_session_timeout
+  min: 0
+  with_legacy: true
 - name: mon_lease_renew_interval_factor
   type: float
   level: advanced

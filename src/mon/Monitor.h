@@ -28,6 +28,7 @@
 #include <cmath>
 #include <string>
 #include <array>
+#include <pthread.h>
 
 #include "include/types.h"
 #include "include/health.h"
@@ -61,6 +62,10 @@
 struct health_check_map_t;
 class Messenger;
 class MonMap;
+
+namespace ceph {
+  struct heartbeat_handle_d;
+}
 
 using namespace TOPNSPC::common;
 
@@ -941,10 +946,32 @@ public:
     }
   };
 
+  ceph::mutex dispatch_watchdog_lock =
+    ceph::make_mutex("Monitor::dispatch_watchdog_lock");
+  ceph::heartbeat_handle_d *dispatch_heartbeat = nullptr;
+  pthread_t dispatch_heartbeat_thread = 0;
+  unsigned dispatch_heartbeat_depth = 0;
+
+  void dispatch_watchdog_start();
+  void dispatch_watchdog_finish();
+  void dispatch_watchdog_shutdown();
+
+  class DispatchWatchdogGuard {
+    Monitor *mon;
+  public:
+    explicit DispatchWatchdogGuard(Monitor *m) : mon(m) {
+      mon->dispatch_watchdog_start();
+    }
+    ~DispatchWatchdogGuard() {
+      mon->dispatch_watchdog_finish();
+    }
+  };
+
   //ms_dispatch handles a lot of logic and we want to reuse it
   //on forwarded messages, so we create a non-locking version for this class
   void _ms_dispatch(Message *m);
   bool ms_dispatch(Message *m) override {
+    DispatchWatchdogGuard dispatch_watchdog_guard(this);
     std::lock_guard l{lock};
     _ms_dispatch(m);
     return true;

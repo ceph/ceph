@@ -75,6 +75,7 @@
 #include "common/ceph_argparse.h"
 #include "common/Timer.h"
 #include "common/Clock.h"
+#include "common/HeartbeatMap.h"
 #include "common/errno.h"
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
@@ -335,6 +336,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
 Monitor::~Monitor()
 {
+  dispatch_watchdog_shutdown();
   op_tracker.on_shutdown();
   delete logger;
   ceph_assert(session_map.sessions.empty());
@@ -1203,6 +1205,7 @@ void Monitor::shutdown()
   }
 
   state = STATE_SHUTDOWN;
+  dispatch_watchdog_shutdown();
 
   lock.unlock();
   g_conf().remove_observer(this);
@@ -4657,6 +4660,84 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
     }
     op->mark_zap();
   }
+}
+
+void Monitor::dispatch_watchdog_start()
+{
+  std::lock_guard l(dispatch_watchdog_lock);
+
+  if (dispatch_heartbeat_depth > 0) {
+    ++dispatch_heartbeat_depth;
+    return;
+  }
+
+  const auto timeout = cct->_conf->mon_dispatch_watchdog_timeout;
+  if (timeout <= 0) {
+    if (dispatch_heartbeat) {
+      dout(10) << __func__ << " removing disabled dispatch watchdog" << dendl;
+      cct->get_heartbeat_map()->remove_worker(dispatch_heartbeat);
+      dispatch_heartbeat = nullptr;
+      dispatch_heartbeat_thread = 0;
+      dispatch_heartbeat_depth = 0;
+    }
+    return;
+  }
+
+  auto thread = pthread_self();
+  if (dispatch_heartbeat &&
+      !pthread_equal(dispatch_heartbeat_thread, thread)) {
+    dout(5) << __func__ << " rebinding dispatch watchdog from thread "
+           << dispatch_heartbeat_thread << " to " << thread
+           << dendl;
+    cct->get_heartbeat_map()->remove_worker(dispatch_heartbeat);
+    dispatch_heartbeat = nullptr;
+    dispatch_heartbeat_thread = 0;
+  }
+
+  if (!dispatch_heartbeat) {
+    std::stringstream ss;
+    ss << "mon." << name << " dispatch thread " << thread;
+    dispatch_heartbeat = cct->get_heartbeat_map()->add_worker(ss.str(), thread);
+    dispatch_heartbeat_thread = thread;
+    dout(5) << __func__ << " registered dispatch watchdog for thread "
+           << thread << dendl;
+  }
+
+  ++dispatch_heartbeat_depth;
+  if (dispatch_heartbeat_depth == 1) {
+    auto grace = ceph::make_timespan(timeout);
+    cct->get_heartbeat_map()->reset_timeout(dispatch_heartbeat, grace, grace);
+  }
+}
+
+void Monitor::dispatch_watchdog_finish()
+{
+  std::lock_guard l(dispatch_watchdog_lock);
+
+  if (!dispatch_heartbeat || dispatch_heartbeat_depth == 0) {
+    return;
+  }
+
+  --dispatch_heartbeat_depth;
+  if (dispatch_heartbeat_depth == 0) {
+    cct->get_heartbeat_map()->clear_timeout(dispatch_heartbeat);
+  }
+}
+
+void Monitor::dispatch_watchdog_shutdown()
+{
+  std::lock_guard l(dispatch_watchdog_lock);
+
+  if (!dispatch_heartbeat) {
+    return;
+  }
+
+  dout(10) << __func__ << " removing dispatch watchdog for thread "
+          << dispatch_heartbeat_thread << dendl;
+  cct->get_heartbeat_map()->remove_worker(dispatch_heartbeat);
+  dispatch_heartbeat = nullptr;
+  dispatch_heartbeat_thread = 0;
+  dispatch_heartbeat_depth = 0;
 }
 
 void Monitor::_ms_dispatch(Message *m)
