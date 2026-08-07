@@ -129,6 +129,15 @@ core:
   - qa/workunits/objectstore/**
   - qa/workunits/rados/**
   - src/ceph.in
+  - src/pybind/mgr/balancer/**
+  - src/pybind/mgr/crash/**
+  - src/pybind/mgr/devicehealth/**
+  - src/pybind/mgr/insights/**
+  - src/pybind/mgr/localpool/**
+  - src/pybind/mgr/osd_perf_query/**
+  - src/pybind/mgr/osd_support/**
+  - src/pybind/mgr/pg_autoscaler/**
+  - src/pybind/mgr/progress/**
   - src/ceph_osd.cc
   - src/ceph_mon.cc
   - src/blk/**
@@ -202,6 +211,7 @@ cephfs:
   - src/pybind/cephfs/**
   - src/pybind/mgr/mds_autoscaler/**
   - src/pybind/mgr/mirroring/**
+  - src/pybind/mgr/snap_schedule/**
   - src/pybind/mgr/status/**
   - src/pybind/mgr/volumes/**
   - src/test/client/**
