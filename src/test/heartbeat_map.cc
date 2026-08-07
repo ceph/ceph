@@ -43,3 +43,15 @@ TEST(HeartbeatMap, Unhealth) {
 
   hm.remove_worker(h);
 }
+
+TEST(HeartbeatMap, CheckTouchFileChecksHealth) {
+  HeartbeatMap hm(g_ceph_context);
+  heartbeat_handle_d *h = hm.add_worker("one", pthread_self());
+
+  hm.reset_timeout(h, ceph::make_timespan(1), ceph::make_timespan(0));
+  sleep(2);
+  hm.check_touch_file();
+  ASSERT_EQ(1, hm.get_unhealthy_workers());
+
+  hm.remove_worker(h);
+}
