@@ -439,6 +439,18 @@ provides reasonable default settings for Monitor/OSD interaction; however,  you
 may modify them as needed. See `Monitor/OSD Interaction`_ for details.
 
 
+Monitor dispatch watchdog
+-------------------------
+
+Ceph Monitors can use an internal heartbeat watchdog to detect when the
+messenger dispatch path stops making progress. If the dispatch path remains
+stalled for longer than the configured timeout, the Monitor aborts through the
+existing heartbeat suicide path so that service management can restart it.
+
+.. confval:: mon_dispatch_watchdog_timeout
+.. confval:: mon_inject_dispatch_delay
+
+
 .. index:: Ceph Monitor; leader, Ceph Monitor; provider, Ceph Monitor; requester, Ceph Monitor; synchronization
 
 Monitor Store Synchronization

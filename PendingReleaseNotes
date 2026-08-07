@@ -1,3 +1,10 @@
+* RADOS: Monitors now arm a dispatch-thread watchdog while processing
+  messenger dispatch work. If the dispatch path stops making progress for
+  longer than ``mon_dispatch_watchdog_timeout``, the monitor aborts through
+  the existing heartbeat suicide path so service management can restart it.
+  The ``mon_inject_dispatch_delay`` developer option is available for
+  fault-injection testing of this watchdog.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
