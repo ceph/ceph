@@ -1535,6 +1535,11 @@ class NFSServiceSpec(ServiceSpec):
     def validate(self) -> None:
         super(NFSServiceSpec, self).validate()
 
+        if self.placement is not None and self.placement.count_per_host is not None:
+            raise SpecValidationError(
+                "Placement 'count_per_host' is not supported for nfs service."
+            )
+
         if self.virtual_ip and (self.ip_addrs or self.networks):
             raise SpecValidationError("Invalid NFS spec: Cannot set virtual_ip and "
                                       f"{'ip_addrs' if self.ip_addrs else 'networks'} fields")
