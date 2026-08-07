@@ -2671,6 +2671,26 @@ mirror_group_resync()
     run_cmd "rbd --cluster=${cluster} mirror group resync ${group_spec}"
 }
 
+group_resync_marker_exists()
+{
+    local cluster=$1
+    local group_spec=$2
+
+    local group_id
+    get_id_from_group_info "${cluster}" "${group_spec}" group_id "run_admin_cmd" || { fail; return 1; }
+
+    local group_header_oid="rbd_group_header.${group_id}"
+    local pool="${group_spec%%/*}"
+    local remainder="${group_spec#*/}"
+    local namespace_args=""
+
+    if [[ "${remainder}" == */* ]]; then
+        namespace_args="--namespace ${remainder%/*}"
+    fi
+
+    try_admin_cmd "rados --cluster ${cluster} --pool ${pool} ${namespace_args} getomapval ${group_header_oid} metadata_rbd_group_resync >/dev/null"
+}
+
 test_group_present()
 {
     local cluster=$1
