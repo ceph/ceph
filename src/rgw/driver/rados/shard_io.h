@@ -198,10 +198,16 @@ struct WaitCancellation {
           sending = std::move(*completed);
         }
       }
+
       auto i = outstanding.begin();
-      while (i != outstanding.end()) {
+      // the final completion may wake the calling coroutine and cause it
+      // to return, so we can't safely access 'outstanding' from its stack
+      // afterwards. use a local variable 'done' for the loop condition
+      bool done = (i == outstanding.end());
+      while (!done) {
         // emit() may dispatch the completion that removes i from outstanding
         auto& shard = *i++;
+        done = (i == outstanding.end());
         shard.signal.emit(type);
       }
     }
@@ -530,45 +536,46 @@ struct ReadHandler {
   }
 
   void operator()(error_code ec, version_t = {}, bufferlist = {}) {
-    outstanding.erase(outstanding.iterator_to(shard));
-
-    bool need_cancel = false;
+    auto self = outstanding.iterator_to(shard);
 
     const auto result = reader.on_complete(shard.id(), ec);
     switch (result) {
       case Result::Retry:
         // reschedule the shard for sending
+        outstanding.erase(self);
         sending.push_back(shard);
         ldpp_dout(&reader, 20) << "read on '" << shard.object()
             << "' needs retry: " << ec.message() << dendl;
         break;
       case Result::Success:
+        outstanding.erase(self);
         break;
       case Result::Error:
         ldpp_dout(&reader, 4) << "read on '" << shard.object()
             << "' failed: " << ec.message() << dendl;
         if (!failure) {
           failure = ec;
-          // trigger cancellations after our call to maybe_complete(). one of
-          // the cancellations may trigger completion and cause async_reads()
-          // to co_return. our call to maybe_complete() would then access
-          // variables that were destroyed with async_reads()'s stack
-          need_cancel = !outstanding.empty();
+
+          // cancel other outstanding requests
+          auto i = outstanding.begin();
+          while (i != outstanding.end()) {
+            if (i == self) {
+              ++i;
+              continue;
+            }
+            // emit() may recurse and remove i
+            auto& s = *i++;
+            s.signal.emit(boost::asio::cancellation_type::terminal);
+          }
         }
+
+        // remove this shard after any cancellations, which could otherwise
+        // cause async_reads() to return while we're still accessing its memory
+        outstanding.erase(self);
         break;
     }
 
     maybe_complete(waiter, sending, outstanding, terminal);
-
-    if (need_cancel) {
-      // cancel outstanding requests
-      auto i = outstanding.begin();
-      while (i != outstanding.end()) {
-        // emit() may recurse and remove i
-        auto& s = *i++;
-        s.signal.emit(boost::asio::cancellation_type::terminal);
-      }
-    }
   }
 }; // struct ReadHandler
 
