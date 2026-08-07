@@ -69,6 +69,9 @@ cdef nogil:
     cdef struct ceph_snapdiff_info:
         int dummy
 
+    cdef struct ceph_snapdiff_info2:
+        int dummy
+
     cdef struct ceph_snapdiff_entry_t:
         dirent dir_entry
         uint64_t snapid
@@ -239,11 +242,17 @@ cdef nogil:
         pass
     dirent * ceph_readdir(ceph_mount_info *cmount, ceph_dir_result *dirp):
         pass
-    int ceph_open_snapdiff(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, unsigned mask, ceph_snapdiff_info *out):
+    int ceph_open_snapdiff(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, ceph_snapdiff_info *out):
+        pass
+    int ceph_open_snapdiff2(ceph_mount_info *cmount, const char *root_path, const char *rel_path, const char *snap1path, const char *snap2root, unsigned mask, ceph_snapdiff_info2 **out):
         pass
     int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out):
         pass
+    int ceph_readdir_snapdiff2(ceph_snapdiff_info2 *snapdiff, ceph_snapdiff_entry_t *out):
+        pass
     int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff):
+        pass
+    int ceph_close_snapdiff2(ceph_snapdiff_info2 *snapdiff):
         pass
     int ceph_rmdir(ceph_mount_info *cmount, const char *path):
         pass
