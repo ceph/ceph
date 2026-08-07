@@ -2,6 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 
 import { ToastrModule } from 'ngx-toastr';
 
@@ -12,7 +13,7 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { NvmeofSubsystemsStepOneComponent } from './nvmeof-subsystem-step-1.component';
 import { FormHelper } from '~/testing/unit-test-helper';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { ComboBoxModule, GridModule, InputModule } from 'carbon-components-angular';
+import { ComboBoxModule, GridModule, InputModule, RadioModule } from 'carbon-components-angular';
 
 import { of } from 'rxjs';
 
@@ -38,9 +39,11 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
         InputModule,
         GridModule,
         ComboBoxModule,
+        RadioModule,
         ToastrModule.forRoot()
       ],
-      providers: [NgbActiveModal]
+      providers: [NgbActiveModal],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
   });
 
@@ -70,6 +73,38 @@ describe('NvmeofSubsystemsStepOneComponent', () => {
     it('should give error on invalid nqn', () => {
       formHelper.setValue('nqn', 'nqn:2001-07.com.ceph:');
       formHelper.expectError('nqn', 'nqnPattern');
+    });
+
+    it('should require subnet mask when auto-fetch is selected and validated', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.AUTO_FETCH);
+      formHelper.setValue('subnetMask', '');
+      form.get('subnetMask')?.updateValueAndValidity();
+
+      expect(form.get('subnetMask')?.hasError('required')).toBeTruthy();
+    });
+
+    it('should not require subnet mask when add manually is selected', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.MANUAL);
+      formHelper.setValue('subnetMask', '');
+      form.get('subnetMask')?.updateValueAndValidity();
+
+      expect(form.get('subnetMask')?.hasError('required')).toBeFalsy();
+    });
+
+    it('should require listeners when add manually is selected and none are chosen', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.MANUAL);
+      formHelper.setValue('listeners', []);
+      form.get('listeners')?.updateValueAndValidity();
+
+      expect(form.get('listeners')?.hasError('required')).toBeTruthy();
+    });
+
+    it('should not require listeners when auto-fetch is selected', () => {
+      formHelper.setValue('listenerMode', component.LISTENER_MODE.AUTO_FETCH);
+      formHelper.setValue('listeners', []);
+      form.get('listeners')?.updateValueAndValidity();
+
+      expect(form.get('listeners')?.hasError('required')).toBeFalsy();
     });
   });
 });

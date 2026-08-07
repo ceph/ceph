@@ -10,7 +10,7 @@
   </section>
   @if(!!footerTemplate) {
   <footer class="productive-card-footer">
-    <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
+    <ng-container *ngTemplateOutlet="footerTemplate || null"></ng-container>
   </footer>
   }
 </cds-tile>

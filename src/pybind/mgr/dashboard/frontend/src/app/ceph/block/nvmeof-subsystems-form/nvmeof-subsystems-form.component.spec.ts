@@ -94,6 +94,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
       nvmeofService = TestBed.inject(NvmeofService);
       spyOn(nvmeofService, 'createSubsystem').and.returnValue(of({}));
       spyOn(nvmeofService, 'addSubsystemInitiators').and.returnValue(of({}));
+      spyOn(nvmeofService, 'createListeners').and.returnValue(of({}));
     });
 
     it('should be creating request correctly', () => {
@@ -105,6 +106,99 @@ describe('NvmeofSubsystemsFormComponent', () => {
         gw_group: mockGroupName,
         dhchap_key: 'Q2VwaE52bWVvRkNoYXBTeW50aGV0aWNLZXkxMjM0NTY='
       });
+    });
+
+    it('should include network_mask in createSubsystem request when listenerMode is auto-fetch and subnetMask is set', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'auto-fetch',
+        subnetMask: '192.168.1.0/24'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        dhchap_key: '',
+        network_mask: ['192.168.1.0/24']
+      });
+    });
+
+    it('should not include network_mask in createSubsystem request when listenerMode is manual', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'manual',
+        subnetMask: '192.168.1.0/24'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createSubsystem).toHaveBeenCalledWith({
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        dhchap_key: ''
+      });
+    });
+
+    it('should call createListeners when listenerMode is manual and listeners are provided', () => {
+      const listeners = [{ content: 'host1', addr: '10.0.0.1' }];
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners,
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'manual'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createListeners).toHaveBeenCalledWith(
+        'test-nqn.default',
+        mockGroupName,
+        listeners
+      );
+    });
+
+    it('should not call createListeners when listenerMode is auto-fetch', () => {
+      const payload: SubsystemPayload = {
+        nqn: 'test-nqn',
+        gw_group: mockGroupName,
+        addedHosts: [],
+        hostType: HOST_TYPE.ALL,
+        subsystemDchapKey: '',
+        listeners: [{ content: 'host1', addr: '10.0.0.1' }],
+        authType: AUTHENTICATION.Unidirectional,
+        hostDchapKeyList: [],
+        listenerMode: 'auto-fetch',
+        subnetMask: '10.0.0.0/24'
+      };
+
+      component.group = mockGroupName;
+      component.onSubmit(payload);
+
+      expect(nvmeofService.createListeners).not.toHaveBeenCalled();
     });
 
     it('should add initiators with wildcard when hostType is ALL', () => {
@@ -127,6 +221,21 @@ describe('NvmeofSubsystemsFormComponent', () => {
         hosts: [],
         gw_group: mockGroupName
       });
+    });
+
+    it('should hide authentication step when host type is ALL', () => {
+      component.onHostTypeChanged(HOST_TYPE.ALL);
+
+      expect(component.showAuthStep).toBeFalsy();
+      expect(component.steps.some((step) => step.label === 'Authentication')).toBeFalsy();
+    });
+
+    it('should show authentication step when host type is SPECIFIC', () => {
+      component.onHostTypeChanged(HOST_TYPE.ALL);
+      component.onHostTypeChanged(HOST_TYPE.SPECIFIC);
+
+      expect(component.showAuthStep).toBeTruthy();
+      expect(component.steps.some((step) => step.label === 'Authentication')).toBeTruthy();
     });
   });
 });

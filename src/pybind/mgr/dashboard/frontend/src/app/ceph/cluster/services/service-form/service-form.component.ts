@@ -70,6 +70,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   serviceForm: CdFormGroup;
   action: string;
   resource: string;
+  submitAction: string;
   serviceTypes: string[] = [];
   serviceIds: string[] = [];
   selectedHosts: string[] = [];
@@ -205,9 +206,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         [
           CdValidators.requiredIf({
             service_type: 'iscsi'
-          }),
-          CdValidators.requiredIf({
-            service_type: 'nvmeof'
           })
         ]
       ],
@@ -628,6 +626,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ngOnInit(): void {
     this.open = true;
     this.action = this.actionLabels.CREATE;
+    this.submitAction = `${this.action} ${this.resource}`;
     this.resolveRoute();
 
     this.cephServiceService
@@ -666,6 +665,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
 
     if (this.editing) {
       this.action = this.actionLabels.EDIT;
+      this.submitAction = this.actionLabels.SAVE_CHANGES;
       this.disableForEditing(this.serviceType);
       this.cephServiceService
         .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), this.serviceName)
@@ -708,7 +708,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
               }
               break;
             case 'nvmeof':
-              this.serviceForm.get('pool').setValue(response[0].spec.pool);
               this.serviceForm.get('group').setValue(response[0].spec.group);
               this.serviceForm.get('enable_mtls').setValue(response[0].spec?.enable_auth);
               this.serviceForm.get('root_ca_cert').setValue(response[0].spec?.root_ca_cert);
@@ -1036,6 +1035,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         } else {
           this.showRealmCreationForm = false;
         }
+        this.updateRgwControlStates();
       },
       (_error) => {
         const defaultZone = new RgwZone();
@@ -1044,29 +1044,18 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         defaultZonegroup.name = 'default';
         this.zoneList.push(defaultZone);
         this.zonegroupList.push(defaultZonegroup);
+        this.updateRgwControlStates();
       }
     );
   }
 
   setNvmeServiceId() {
-    const pool = this.serviceForm.get('pool').value;
     const group = this.serviceForm.get('group').value;
-    if (pool && group) {
-      this.serviceForm.get('service_id').setValue(`${pool}.${group}`);
-    } else if (pool) {
-      this.serviceForm.get('service_id').setValue(pool);
-    } else if (group) {
+    if (group) {
       this.serviceForm.get('service_id').setValue(group);
     } else {
       this.serviceForm.get('service_id').setValue(null);
     }
-  }
-
-  setNvmeDefaultPool() {
-    const defaultPool =
-      this.rbdPools?.find((p: Pool) => p.pool_name === 'rbd')?.pool_name ||
-      this.rbdPools?.[0].pool_name;
-    this.serviceForm.get('pool').setValue(defaultPool);
   }
 
   requiresServiceId(serviceType: string) {
@@ -1076,7 +1065,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   setServiceId(serviceId: string): void {
     const requiresServiceId: boolean = this.requiresServiceId(serviceId);
     if (requiresServiceId && serviceId === 'nvmeof') {
-      this.setNvmeDefaultPool();
       this.setNvmeServiceId();
     } else if (requiresServiceId) {
       this.serviceForm.get('service_id').setValue(null);
@@ -1093,6 +1081,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
       .map((service) => service['service_id']);
 
     this.getDefaultPlacementCount(selectedServiceType);
+
+    if (selectedServiceType === 'nvmeof' && this.rbdPools?.length > 0) {
+      this.serviceForm.get('pool').setValue(this.rbdPools[0].pool_name);
+    }
 
     if (selectedServiceType === 'rgw') {
       this.setRgwFields();
@@ -1123,9 +1115,35 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         this.serviceForm.get('backend_service').disable();
         break;
       case 'nvmeof':
-        this.serviceForm.get('pool').disable();
         this.serviceForm.get('group').disable();
         break;
+      case 'grafana':
+        this.serviceForm.get('grafana_admin_password').disable();
+        break;
+    }
+  }
+
+  private updateRgwControlStates(): void {
+    const realmControl = this.serviceForm.get('realm_name');
+    const zonegroupControl = this.serviceForm.get('zonegroup_name');
+    const zoneControl = this.serviceForm.get('zone_name');
+
+    if (this.editing || this.realmList.length === 0) {
+      realmControl.disable({ emitEvent: false });
+    } else {
+      realmControl.enable({ emitEvent: false });
+    }
+
+    if (this.editing || this.zonegroupList.length === 0) {
+      zonegroupControl.disable({ emitEvent: false });
+    } else {
+      zonegroupControl.enable({ emitEvent: false });
+    }
+
+    if (this.editing || this.zoneList.length === 0) {
+      zoneControl.disable({ emitEvent: false });
+    } else {
+      zoneControl.enable({ emitEvent: false });
     }
   }
 
@@ -1205,7 +1223,6 @@ export class ServiceFormComponent extends CdForm implements OnInit {
         break;
 
       case 'nvmeof':
-        serviceSpec['pool'] = values['pool'];
         serviceSpec['group'] = values['group'];
         serviceSpec['enable_auth'] = values['enable_mtls'];
         if (values['enable_mtls']) {

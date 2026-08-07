@@ -13,9 +13,11 @@
   <cd-tearsheet-step>
     <cd-nvmeof-subsystem-step-two
       #tearsheetStep
-      [group]="group"></cd-nvmeof-subsystem-step-two>
+      [group]="group"
+      (hostTypeChanged)="onHostTypeChanged($event)"
+    ></cd-nvmeof-subsystem-step-two>
   </cd-tearsheet-step>
-  @if(showAuthStep) {
+  @if (showAuthStep) {
   <cd-tearsheet-step>
     <cd-nvmeof-subsystem-step-three
      #tearsheetStep
@@ -36,4 +38,3 @@
      [hostDchapKeyCount]="reviewHostDchapKeyCount"></cd-nvmeof-subsystem-step-four>
   </cd-tearsheet-step>
 </cd-tearsheet>
-
