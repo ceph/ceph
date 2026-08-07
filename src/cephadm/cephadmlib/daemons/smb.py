@@ -987,6 +987,7 @@ class SMB(ContainerDaemonForm):
     def customize_container_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
         args.extend(self._layout().primary.container_args())
 
     def customize_container_mounts(
