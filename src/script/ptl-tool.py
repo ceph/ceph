@@ -126,6 +126,18 @@ except FileNotFoundError:
     pass
 REDMINE_API_KEY = os.getenv("PTL_TOOL_REDMINE_API_KEY", REDMINE_API_KEY)
 SPECIAL_BRANCHES = ('main', 'luminous', 'jewel', 'HEAD')
+# 'nvme', 'orch', and 'upgrades' never match a real GitHub label on ceph/ceph
+# (verified via `gh api repos/ceph/ceph/labels/<name>`, 404 on all three) --
+# 'nvmeof', 'orchestrator', and 'needs-upgrade-testing' are the labels that
+# actually exist and are added alongside, kept rather than replaced in case
+# a future label reintroduces the shorter/older name.
+# Cross-checked against .github/labeler.yml (commit a391fef144a7): this whitelist
+# covers 14 of labeler.yml's 27 categories -- 13 more (mon, mgr, pybind, rook,
+# bluestore, nfs, monitoring, telemetry, documentation, api-change, CI, script,
+# config-change) exist in the auto-labeler but have no SUPPORTED_QA_TAGS entry.
+# Left out of this change deliberately -- several of those (documentation, CI,
+# script, config-change) aren't QA-testing-relevant categories, and expanding
+# the whole list needs its own discussion.
 SUPPORTED_QA_TAGS = {
     'build/ops',
     'ceph-volume',
@@ -136,8 +148,11 @@ SUPPORTED_QA_TAGS = {
     'crimson',
     'dashboard',
     'libcephsqlite',
+    'needs-upgrade-testing',
     'nvme',
+    'nvmeof',
     'orch',
+    'orchestrator',
     'rbd',
     'rgw',
     'tests',
