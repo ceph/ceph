@@ -32,6 +32,290 @@ By default, cephadm will deploy 5 daemons on arbitrary hosts. See
 :ref:`orchestrator-cli-placement-spec` for details of specifying
 the placement of daemons.
 
+
+.. _mon-service-spec:
+
+Service Specification
+=====================
+
+A MON service can be deployed or updated using a YAML service specification
+file with ``ceph orch apply -i``. The following is a complete example
+showing all available parameters:
+
+.. code-block:: yaml
+
+    service_type: mon
+    placement:
+      hosts:
+        - host1
+        - host2
+        - host3
+      count: 5
+      label: mon
+      host_pattern: "mon*"
+      count_per_host: 1
+    config:
+      mon_warn_on_pool_no_redundancy: "false"
+    unmanaged: false
+    preview_only: false
+    networks:
+    - 10.1.2.0/24
+    extra_container_args:
+      - "--cpus=2"
+    extra_entrypoint_args:
+      - "--mon-data=/var/lib/ceph/mon"
+    custom_configs:
+      - mount_path: /etc/custom/mon.conf
+        content: |
+          [custom]
+          setting = value
+    spec:
+      crush_locations:
+        host1:
+          - datacenter=a
+        host2:
+          - datacenter=b
+          - rack=2
+        host3:
+          - datacenter=a
+
+.. note::
+
+   The ``placement`` fields (``hosts``, ``label``, ``host_pattern``,
+   ``count``, ``count_per_host``) are mutually exclusive in certain
+   combinations. See :ref:`orchestrator-cli-placement-spec` for details.
+
+.. note::
+
+   The ``mon`` service type does **not** use a ``service_id``.
+
+Top-level Parameters
+--------------------
+
+The following parameters are available at the top level of the MON service
+specification:
+
+``service_type``
+    **Required.** Must be ``mon``.
+
+``placement``
+    Specifies where and how many monitor daemons to deploy. See
+    `Placement Parameters`_ below for available sub-fields. If omitted,
+    cephadm uses its default placement strategy (up to 5 monitors).
+
+``config``
+    A mapping of Ceph configuration option names to values. These are
+    applied via ``ceph config set mon <key> <value>`` when the spec is
+    applied. Example:
+
+    .. code-block:: yaml
+
+        config:
+          mon_warn_on_pool_no_redundancy: "false"
+          mon_osd_full_ratio: "0.95"
+
+``unmanaged``
+    Boolean (default: ``false``). When ``true``, cephadm will not
+    automatically deploy, remove, or reconfig monitor daemons. Daemons
+    must be manually added with ``ceph orch daemon add mon``.
+
+``preview_only``
+    Boolean (default: ``false``). When ``true``, changes are previewed
+    but not applied.
+
+``networks``
+    A list of IP networks in CIDR notation (e.g., ``10.1.2.0/24``) to
+    which monitor daemons should bind. If specified, monitors will only
+    be deployed on hosts with IP addresses matching one of the listed
+    networks.
+
+    .. code-block:: yaml
+
+        networks:
+        - 10.1.2.0/24
+        - 192.168.1.0/24
+
+``extra_container_args``
+    A list of additional arguments passed to the container runtime
+    (podman/docker) when starting the monitor container. Each entry can
+    be a plain string or an object with ``argument`` and ``split`` fields.
+
+    .. code-block:: yaml
+
+        extra_container_args:
+          - "--cpus=2"
+          - argument: "--memory=4g"
+            split: false
+
+``extra_entrypoint_args``
+    A list of additional arguments appended to the monitor daemon's
+    entrypoint command. Each entry can be a plain string or an object with
+    ``argument`` and ``split`` fields.
+
+    .. code-block:: yaml
+
+        extra_entrypoint_args:
+          - "--mon-data=/var/lib/ceph/mon"
+
+``custom_configs``
+    A list of custom configuration files to mount inside the monitor
+    container. Each entry has ``mount_path`` (the path inside the
+    container) and ``content`` (the file contents).
+
+    .. code-block:: yaml
+
+        custom_configs:
+          - mount_path: /etc/custom/mon.conf
+            content: |
+              [custom]
+              setting = value
+
+Placement Parameters
+--------------------
+
+The ``placement`` section controls which hosts monitors are deployed on and
+how many. The following sub-fields are available:
+
+``hosts``
+    A list of hostnames where monitors should be deployed. Each entry can
+    be a simple hostname or an extended format with network and name:
+
+    - ``hostname`` — deploy on this host
+    - ``hostname:network`` — deploy on this host, binding to the specified
+      IP or network
+    - ``hostname=name`` — deploy with a custom daemon name suffix
+
+    .. code-block:: yaml
+
+        placement:
+          hosts:
+            - host1
+            - host2:10.1.2.0/24
+            - host3=custom-name
+
+``count``
+    Integer (>= 1). The total number of monitor daemons to deploy.
+    Cephadm will choose hosts automatically if ``hosts`` is not specified.
+    Mutually exclusive with ``count_per_host``.
+
+``count_per_host``
+    Integer (>= 1). Number of daemons to deploy per matching host.
+    Requires ``label``, ``hosts``, or ``host_pattern`` to be set.
+    Mutually exclusive with ``count``.
+
+``label``
+    A host label string. Monitors will be deployed on all hosts that
+    have this label assigned. Mutually exclusive with ``hosts``.
+
+    .. code-block:: yaml
+
+        placement:
+          label: mon
+
+``host_pattern``
+    An fnmatch-style pattern or regex to select hosts by name.
+    Mutually exclusive with ``hosts``. Can be a string (fnmatch) or
+    an object with ``pattern`` and ``pattern_type`` fields:
+
+    .. code-block:: yaml
+
+        # fnmatch pattern (default)
+        placement:
+          host_pattern: "mon*"
+
+        # regex pattern
+        placement:
+          host_pattern:
+            pattern: "mon[0-9]+"
+            pattern_type: regex
+
+MON-Specific Parameters (``spec`` section)
+------------------------------------------
+
+The following parameters are specific to the MON service and are placed
+under the ``spec:`` section:
+
+``crush_locations``
+    A mapping of hostnames to lists of CRUSH location strings. Each
+    CRUSH location must be in the format ``<bucket_type>=<location>``
+    (e.g., ``datacenter=dc1``, ``rack=rack2``).
+
+    When cephadm deploys a monitor on a host listed here, it sets the
+    CRUSH location via ``--set-crush-location``. If multiple CRUSH
+    locations are specified for a host, the first is used at deploy time
+    and additional locations are applied via ``ceph mon set_location``.
+
+    .. code-block:: yaml
+
+        spec:
+          crush_locations:
+            host1:
+              - datacenter=a
+            host2:
+              - datacenter=b
+              - rack=2
+            host3:
+              - datacenter=a
+
+    .. note::
+
+       Setting the CRUSH location in the spec is the recommended way of
+       replacing tiebreaker mon daemons, as they require having a location
+       set when they are added.
+
+    .. note::
+
+       Mon daemons will only get the ``--set-crush-location`` flag set
+       when cephadm actually deploys them. If a spec is applied that
+       includes a CRUSH location for a mon that is already deployed, the
+       flag may not be set until a redeploy command is issued.
+
+Complete Minimal Examples
+-------------------------
+
+Deploy 5 monitors on labeled hosts:
+
+.. code-block:: yaml
+
+    service_type: mon
+    placement:
+      count: 5
+      label: mon
+
+Deploy monitors on specific hosts with network binding:
+
+.. code-block:: yaml
+
+    service_type: mon
+    placement:
+      hosts:
+        - host1:10.1.2.0/24
+        - host2:10.1.2.0/24
+        - host3:10.1.2.0/24
+    networks:
+    - 10.1.2.0/24
+
+Deploy monitors with CRUSH locations for stretch mode:
+
+.. code-block:: yaml
+
+    service_type: mon
+    placement:
+      count: 5
+    spec:
+      crush_locations:
+        host1:
+          - datacenter=a
+        host2:
+          - datacenter=a
+        host3:
+          - datacenter=b
+        host4:
+          - datacenter=b
+        host5:
+          - datacenter=c
+
+
 Designating a Particular Subnet for Monitors
 --------------------------------------------
 
@@ -184,13 +468,16 @@ host. If multiple CRUSH locations are set for one host, cephadm
 will attempt to set the additional locations using the
 "ceph mon set_location" command.
 
+See the ``crush_locations`` parameter in :ref:`mon-service-spec` for the
+full specification reference.
+
 .. note::
 
    Setting the CRUSH location in the spec is the recommended way of
    replacing tiebreaker mon daemons, as they require having a location
    set when they are added.
 
- .. note::
+.. note::
 
    Tiebreaker mon daemons are a part of stretch mode clusters. For more
    info on stretch mode clusters see :ref:`stretch_mode`
