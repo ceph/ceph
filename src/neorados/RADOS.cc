@@ -877,6 +877,7 @@ void RADOS::Builder::build_(asio::io_context& ioctx,
   }
 
   cct->_conf.parse_env(cct->get_module_type());
+  cct->_conf.apply_changes(nullptr);
 
   for (const auto& [n, v] : configs) {
     std::stringstream ss;
