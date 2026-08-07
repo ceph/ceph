@@ -594,3 +594,78 @@ recovered), run the following command:
 
 This command can be used to to remove the ``HEALTH_WARN`` state, which recovery
 mode raises. It fails if the cluster is not in recovery mode.
+
+.. _stretch_mode_perf_counters:
+
+Cross-Zone Performance Counters
+================================
+
+Stretch clusters have OSD performance counters and per pool 
+performance counters that measure inter-zone utilization. 
+
+Write fan-out
+-------------
+
+These counters track shard data sent to replica OSDs
+that reside in remote zones.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Counter
+     - Description
+   * - ``l_osd_stretch_cross_zone_write_ops``
+     - Number of cross-zone sub-write operations issued.
+   * - ``l_osd_stretch_cross_zone_write_bytes``
+     - Total bytes of shard data sent to OSDs in the remote zone during
+       write fan-out.
+   * - ``l_osd_stretch_cross_zone_write_lat``
+     - Average round-trip latency (ns) for cross-zone sub-write operations.
+   * - ``l_osd_stretch_cross_zone_write_lat_hist``
+     - Latency histogram for cross-zone sub-write operations (p50 / p95 / p99).
+
+Recovery push
+-------------
+
+These counters track shard data sent to remote-zone OSDs during PG recovery.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Counter
+     - Description
+   * - ``l_osd_stretch_cross_zone_recovery_push_ops``
+     - Number of cross-zone recovery push operations issued.
+   * - ``l_osd_stretch_cross_zone_recovery_push_bytes``
+     - Total bytes pushed to remote-zone OSDs during recovery.
+   * - ``l_osd_stretch_cross_zone_recovery_push_lat``
+     - Average round-trip latency (ns) for cross-zone recovery push
+       operations.
+   * - ``l_osd_stretch_cross_zone_recovery_push_lat_hist``
+     - Latency histogram for cross-zone recovery push operations (p50 / p95 / p99).
+
+Remote-zone reads
+-----------------
+
+These counters track shard data fetched from remote-zone OSDs, which occurs
+during EC reconstruction reads
+
+.. list-table::
+   :header-rows: 1
+   :widths: 45 55
+
+   * - Counter
+     - Description
+   * - ``l_osd_stretch_cross_zone_read_ops``
+     - Number of cross-zone sub-read operations issued.
+   * - ``l_osd_stretch_cross_zone_read_sent_bytes``
+     - Total bytes of read requests sent to remote-zone OSDs
+   * - ``l_osd_stretch_cross_zone_read_recv_bytes``
+     - Total bytes of shard data received from remote-zone OSDs in response
+       to cross-zone read requests.
+   * - ``l_osd_stretch_cross_zone_read_lat``
+     - Average round-trip latency (ns) for cross-zone sub-read operations.
+   * - ``l_osd_stretch_cross_zone_read_lat_hist``
+     - Latency histogram for cross-zone sub-read operations (p50 / p95 / p99).
