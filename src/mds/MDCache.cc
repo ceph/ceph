@@ -12749,6 +12749,10 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& 
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
+      // wake anyone waiting on this fragment (e.g. a log segment expiry
+      // gather), same as finish_uncommitted_fragment() does - dropping
+      // the waiters would wedge the expiry of uf.ls forever
+      mds->queue_waiters(uf.waiters);
       uncommitted_fragments.erase(it);
     }
   }
