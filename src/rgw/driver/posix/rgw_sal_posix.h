@@ -155,6 +155,7 @@ public:
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
   virtual std::string get_cur_version() { return ""; };
+  virtual std::string get_instance() { return ""; };
 };
 
 class File : public FSEnt {
@@ -305,6 +306,7 @@ class VersionedDirectory : public Directory {
 protected:
   std::string instance_id;
   std::unique_ptr<FSEnt> cur_version;
+  bool curr_is_dm{false};
 
 public:
   VersionedDirectory(std::string _name, Directory* _parent, CephContext* _ctx) : Directory(_name, _parent, _ctx)
@@ -344,12 +346,15 @@ public:
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual std::string get_cur_version() override;
+  virtual std::string get_instance() override { return instance_id; };
   std::string get_new_instance();
   int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
   int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
   int add_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, std::unique_ptr<File>& marker, const std::string &name);
+  virtual bool curr_is_delete_marker() { return curr_is_dm; };
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
   int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
+  int get_latest_version_ent(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt> &f);
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<VersionedDirectory>(*this);
   }
