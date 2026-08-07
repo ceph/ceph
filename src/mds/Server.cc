@@ -12622,13 +12622,13 @@ bool Server::build_snap_diff(
 	  } else {
 	    unsigned res_mask = 0;
 	    if (before.meta_differs(in, diff_mask, res_mask) ) {
-	      dout(0) << __func__ << " attrs changed " << dn->get_name() << " "
+	      dout(30) << __func__ << " attrs changed " << dn->get_name() << " "
 		<< dn->first << "/" << dn->last
 		<< " result mask: 0x" << std::hex << res_mask << std::dec
 		<< dendl;
 	      before.reset();
 	    } else {
-	      dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
+	      dout(30) << __func__ << " attrs not changed " << dn->get_name() << " "
 		<< dn->first << "/" << dn->last
 		<< dendl;
 	      before.reset();
