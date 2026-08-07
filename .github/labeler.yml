@@ -88,7 +88,6 @@ cephadm:
   - qa/workunits/cephadm/**
   - src/cephadm/**
   - src/pybind/mgr/cephadm/**
-  - src/pybind/mgr/smb/**
   - src/python-common/**
     
 orchestrator:
@@ -345,6 +344,18 @@ nfs:
   - doc/cephadm/nfs.rst
   - doc/radosgw/nfs.rst
   - doc/dev/vstart-ganesha.rst
+
+smb:
+  - src/pybind/mgr/smb/**
+  - src/pybind/mgr/cephadm/services/smb.py
+  - src/pybind/mgr/cephadm/tests/services/test_smb.py
+  - src/pybind/mgr/dashboard/controllers/smb.py
+  - src/pybind/mgr/dashboard/tests/test_smb.py
+  - qa/tasks/smb.py
+  - qa/workunits/smb/**
+  - qa/suites/orch/cephadm/smb/**
+  - doc/mgr/smb.rst
+  - doc/cephadm/services/smb.rst
 
 monitoring:
   - doc/cephadm/monitoring.rst
