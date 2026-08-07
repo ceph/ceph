@@ -209,7 +209,11 @@ class Raw(BaseObjectStore):
         activated_any: bool = False
         lvm_prepare_lv_paths = lvm_api.ceph_volume_lvm_prepare_lv_paths()
 
-        for d in disk.lsblk_all(abspath=True):
+        # Skip device classes whose backing storage may be unavailable
+        # (rbd mapped to a peer cluster, nbd/drbd/zram without a daemon).
+        # Opening such devices for LUKS2 inspection can wedge in D-state.
+        EXCLUDED_NAMES = ['rbd', 'nbd', 'drbd', 'zram']
+        for d in disk.lsblk_all(abspath=True, exclude_names=EXCLUDED_NAMES):
             device: str = d.get('NAME', '')
             if lvm_api.is_ceph_volume_lvm_prepared(device, lvm_prepare_lv_paths):
                 continue
