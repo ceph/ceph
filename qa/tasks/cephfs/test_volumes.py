@@ -8323,7 +8323,7 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
 
         # do some IO
-        self._do_subvolume_io(subvolume, number_of_files=200)
+        self._do_subvolume_io(subvolume, number_of_files=1000)
 
         # snapshot subvolume
         self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
@@ -8335,7 +8335,9 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone1)
 
         # wait for clone1 to be in-progress
-        self._wait_for_clone_to_be_in_progress(clone1)
+        # Poll faster so a short in-progress window is not missed; keep ~120s
+        # wall-clock timeout (timo is try count, not seconds).
+        self._wait_for_clone_to_be_in_progress(clone1, timo=600, sleep=0.2)
 
         # cancel in-progess clone1
         self._fs_cmd("clone", "cancel", self.volname, clone1)
