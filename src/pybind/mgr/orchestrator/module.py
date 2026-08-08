@@ -2228,8 +2228,23 @@ Usage:
             nvmeof_pool_helper = NvmeofMetadataPoolHelper(self)
             nvmeof_pool_helper.create_pool_if_needed()
 
+        # If a service already exists for this (pool, group) pair — potentially stored
+        # with the old lstrip('.') service_id form (bug: '.nvmeof' was trimmed to 'nvmeof')
+        # — reuse its service_id so we update the existing service rather than creating a
+        # duplicate.  The equivalence check is intentionally limited to the '.nvmeof'/'nvmeof'
+        # pair: that is the only pool whose name has a leading dot in standard NVMeoF usage.
+        service_id = f'{pool}.{group}' if group else pool
+        existing = raise_if_exception(self.describe_service(service_type='nvmeof'))
+        for svc in existing:
+            esvc = cast(NvmeofServiceSpec, svc.spec)
+            pools_are_equivalent = (esvc.pool == pool
+                                    or {esvc.pool, pool} == {'.nvmeof', 'nvmeof'})
+            if esvc.group == group and pools_are_equivalent:
+                service_id = esvc.service_id
+                break
+
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}' if group else pool,
+            service_id=service_id,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),

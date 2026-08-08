@@ -7,7 +7,7 @@ import yaml
 
 from ceph.deployment.hostspec import HostSpec
 from ceph.deployment.inventory import Devices, Device
-from ceph.deployment.service_spec import ServiceSpec
+from ceph.deployment.service_spec import NvmeofServiceSpec, ServiceSpec
 from ceph.deployment import inventory
 from ceph.utils import datetime_now
 from mgr_module import HandleCommandResult
@@ -300,26 +300,28 @@ def test_preview_table_osd_smoke():
 @mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
 @mock.patch("orchestrator.module.OrchestratorCli.remote")
 @mock.patch("orchestrator.module.OrchestratorCli.get")
+@mock.patch("orchestrator.module.OrchestratorCli.describe_service")
 class TestApplyNvmeof:
 
     def setup_method(self):
         self.m = OrchestratorCli('orchestrator', 0, 0)
 
-    def test_missing_group_raises_validation_error(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_missing_group_raises_validation_error(self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
         res = self.m._apply_nvmeof(pool="mypool", group="")
 
         assert res.retval != 0
         assert "The --group argument is required" in res.stderr
         mock_apply_misc.assert_not_called()
 
-    def test_inbuf_raises_validation_error(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_inbuf_raises_validation_error(self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
         res = self.m._apply_nvmeof(pool="mypool", group="mygroup", inbuf="some_yaml_content")
 
         assert res.retval != 0
         assert "unrecognized command -i; -h or --help for usage" in res.stderr
         mock_apply_misc.assert_not_called()
 
-    def test_custom_pool_skips_metadata_pool_creation(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_custom_pool_skips_metadata_pool_creation(self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+        mock_describe.return_value = OrchResult([])
         mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
 
         res = self.m._apply_nvmeof(pool="custompool", group="mygroup")
@@ -328,7 +330,7 @@ class TestApplyNvmeof:
         mock_apply_misc.assert_called_once()
         assert res.retval == 0
 
-    def test_default_pool_fails_if_module_disabled(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_default_pool_fails_if_module_disabled(self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
         mock_release_name.return_value = "squid"
         mock_get.return_value = {'modules': [], 'always_on_modules': {}}
 
@@ -342,7 +344,8 @@ class TestApplyNvmeof:
         mock_remote.assert_not_called()
         mock_apply_misc.assert_not_called()
 
-    def test_default_pool_creates_metadata_pool_if_module_enabled(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_default_pool_creates_metadata_pool_if_module_enabled(self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+        mock_describe.return_value = OrchResult([])
         mock_release_name.return_value = "squid"
         mock_get.return_value = {'modules': ['nvmeof'], 'always_on_modules': {}}
         mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
@@ -352,6 +355,103 @@ class TestApplyNvmeof:
         mock_remote.assert_called_once_with('nvmeof', 'create_pool_if_not_exists')
         mock_apply_misc.assert_called_once()
         assert res.retval == 0
+
+    def test_yaml_and_cli_produce_same_service_name_for_default_pool(
+            self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+        """Regression: 'ceph orch apply -i spec.yaml' and 'ceph orch apply nvmeof --group ...'
+        must produce the same service_name so they address the same stored service.
+
+        Before the fix, the CLI stripped the leading dot from '.nvmeof' via lstrip('.'),
+        generating service_id='nvmeof.gw_group1' while the YAML path kept the dot,
+        generating service_id='.nvmeof.gw_group1'.  The resulting service_names differed:
+          YAML: nvmeof..nvmeof.gw_group1
+          CLI:  nvmeof.nvmeof.gw_group1
+        """
+        mock_describe.return_value = OrchResult([])
+        mock_release_name.return_value = "squid"
+        mock_get.return_value = {'modules': ['nvmeof'], 'always_on_modules': {}}
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        # Simulate 'ceph orch apply -i spec.yaml' — service_id taken verbatim from YAML
+        yaml_spec_str = textwrap.dedent("""
+            service_type: nvmeof
+            service_id: .nvmeof.gw_group1
+            spec:
+              pool: .nvmeof
+              group: gw_group1
+        """).strip()
+        yaml_spec = ServiceSpec.from_json(yaml.safe_load(yaml_spec_str))
+
+        # Simulate 'ceph orch apply nvmeof --group gw_group1'
+        self.m._apply_nvmeof(pool=".nvmeof", group="gw_group1")
+        cli_spec = mock_apply_misc.call_args[0][0][0]
+
+        assert yaml_spec.service_name() == cli_spec.service_name()
+
+    def test_cli_reuses_existing_service_id_from_old_trimmed_form(
+            self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+        """Backward-compat: if a service already exists with the old trimmed service_id
+        ('nvmeof.mygroup1', produced by the lstrip('.') bug), a subsequent CLI apply must
+        reuse that service_id rather than generating a new '.nvmeof.mygroup1', which would
+        create a second duplicate service alongside the existing one."""
+        existing_spec = NvmeofServiceSpec(
+            service_id='nvmeof.mygroup1',   # old trimmed form stored on disk
+            group='mygroup1',
+            pool='.nvmeof'
+        )
+        mock_describe.return_value = OrchResult(
+            [ServiceDescription(spec=existing_spec)]
+        )
+        mock_release_name.return_value = "squid"
+        mock_get.return_value = {'modules': ['nvmeof'], 'always_on_modules': {}}
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        self.m._apply_nvmeof(pool=".nvmeof", group="mygroup1")
+
+        submitted_spec = mock_apply_misc.call_args[0][0][0]
+        assert submitted_spec.service_id == 'nvmeof.mygroup1'
+        assert submitted_spec.service_name() == 'nvmeof.nvmeof.mygroup1'
+
+    def test_cli_reuses_existing_service_id_when_both_pools_identical_dotted(
+            self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+        """Applying against an existing service whose pool is already '.nvmeof' (correct form)
+        must also reuse the stored service_id — not just the old trimmed form."""
+        existing_spec = NvmeofServiceSpec(
+            service_id='.nvmeof.mygroup1',
+            group='mygroup1',
+            pool='.nvmeof'
+        )
+        mock_describe.return_value = OrchResult(
+            [ServiceDescription(spec=existing_spec)]
+        )
+        mock_release_name.return_value = "squid"
+        mock_get.return_value = {'modules': ['nvmeof'], 'always_on_modules': {}}
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        self.m._apply_nvmeof(pool=".nvmeof", group="mygroup1")
+
+        submitted_spec = mock_apply_misc.call_args[0][0][0]
+        assert submitted_spec.service_id == '.nvmeof.mygroup1'
+
+    def test_cli_does_not_conflate_dotted_custom_pool_with_undotted(
+            self, mock_describe, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+        """'.mypool' and 'mypool' are distinct pools — the equivalence shortcut must only
+        apply to the '.nvmeof'/'nvmeof' pair, not to arbitrary dot-prefixed pool names."""
+        existing_spec = NvmeofServiceSpec(
+            service_id='mypool.mygroup1',
+            group='mygroup1',
+            pool='mypool'
+        )
+        mock_describe.return_value = OrchResult(
+            [ServiceDescription(spec=existing_spec)]
+        )
+        mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
+
+        # Applying with '.mypool' must NOT reuse the 'mypool' service — different pools
+        self.m._apply_nvmeof(pool=".mypool", group="mygroup1")
+
+        submitted_spec = mock_apply_misc.call_args[0][0][0]
+        assert submitted_spec.service_id == '.mypool.mygroup1'  # new service_id, not reused
 
 
 @mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
