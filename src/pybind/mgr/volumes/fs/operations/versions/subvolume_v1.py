@@ -801,10 +801,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
         return pending_clones_info
 
-    def remove_snapshot(self, snapname, force=False):
+    def remove_snapshot(self, snapname, force=False, snap_path=None):
         if self.has_pending_clones(snapname):
             raise VolumeException(-errno.EAGAIN, "snapshot '{0}' has pending clones".format(snapname))
-        snappath = self.snapshot_path(snapname)
+
         try:
             self.metadata_mgr.remove_section(self.get_snap_section_name(snapname))
             self.metadata_mgr.flush()
@@ -819,7 +819,10 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                           f"group={self.group_name} reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
                 raise VolumeException(-errno.EAGAIN,
                                       f"failed to remove snapshot metadata on snap={snapname} reason={me.args[0]} {me.args[1]}")
-        rmsnap(self.fs, snappath)
+
+        if not snap_path:
+            snap_path = self.snapshot_path(snapname)
+        rmsnap(self.fs, snap_path)
 
     def snapshot_info(self, snapname):
         if is_inherited_snap(snapname):
