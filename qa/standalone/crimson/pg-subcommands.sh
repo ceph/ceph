@@ -205,5 +205,5 @@ function TEST_b_crimson_save_and_compare() {
     delete_pool $poolname
 }
 
-# Run cd build && ../qa/run-standalone.sh osd/pg-subcommands.sh
+# Run cd build && ../qa/run-standalone.sh crimson/pg-subcommands.sh
 main pg-subcommands "$@"
