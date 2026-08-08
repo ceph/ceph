@@ -1,21 +1,25 @@
 @if (service) {
-  <cds-tabs [cacheActive]="false">
-    <cds-tab
-      heading="Daemons"
-      i18n-heading
-    >
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Service details"
+        [columns]="3"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+    }
+
+    @case ('daemons') {
       <cd-service-daemon-list
         [serviceName]="service?.service_name"
         mode="daemons"
       >
       </cd-service-daemon-list>
-    </cds-tab>
+    }
 
-    @if (hasCertificate) {
-      <cds-tab
-        heading="Certificate"
-        i18n-heading
-      >
+    @case ('certificate') {
+      @if (hasCertificate) {
         <cd-service-certificate-details
           [certificate]="certificate"
           [serviceName]="service?.service_name"
@@ -23,18 +27,21 @@
           (editService)="onEditService($event)"
         >
         </cd-service-certificate-details>
-      </cds-tab>
+      }
     }
 
-    <cds-tab
-      heading="Service Events"
-      i18n-heading
-    >
+    @case ('events') {
       <cd-service-daemon-list
         [serviceName]="service?.service_name"
         mode="events"
       >
       </cd-service-daemon-list>
-    </cds-tab>
-  </cds-tabs>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No service found.</cd-alert-panel
+  >
 }

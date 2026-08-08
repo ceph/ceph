@@ -10,11 +10,10 @@
     [autoReload]="5000"
     [autoSave]="false"
     (fetchData)="getServices($event)"
-    [hasDetails]="hasDetails"
+    [hasDetails]="false"
     [serverSide]="true"
     [count]="count"
     updateExpandedOnRefresh="always"
-    (setExpandedRow)="setExpandedRow($event)"
     (updateSelection)="updateSelection($event)"
   >
     <cd-table-actions
@@ -24,13 +23,6 @@
       [tableActions]="tableActions"
     >
     </cd-table-actions>
-    <cd-service-details
-      *cdTableDetail
-      [permissions]="permissions"
-      [selection]="expandedRow"
-      (editService)="openModal(true, $event)"
-    >
-    </cd-service-details>
   </cd-table>
 </ng-container>
 <router-outlet name="modal"></router-outlet>
@@ -54,36 +46,89 @@
   #urlTpl
   let-row="data.row"
 >
-  <ng-container *ngIf="serviceUrls[row.service_type]; else noUrl">
+  <div class="d-flex align-items-center gap-1">
     <a
-      *ngIf="!isMgmtGateway; else mgmtGateway"
-      target="_blank"
-      [href]="serviceUrls[row.service_type]"
+      cdsLink
+      [routerLink]="[viewUrl, row.service_name | encodeUri, 'overview']"
+      (click)="onServiceLinkClick($event)"
     >
       {{ row.service_name }}
-      <svg
-        [cdsIcon]="icons.launch"
-        [size]="icons.size16"
-        class="cds-info-color"
-      ></svg>
     </a>
 
-    <ng-template #mgmtGateway>
+    <ng-container *ngIf="serviceUrls[row.service_type]">
       <a
+        *ngIf="!isMgmtGateway; else mgmtGateway"
         target="_blank"
-        [href]="row.service_type"
+        [href]="serviceUrls[row.service_type]"
+        (click)="$event.stopPropagation()"
       >
-        {{ row.service_name }}
         <svg
           [cdsIcon]="icons.launch"
           [size]="icons.size16"
           class="cds-info-color"
         ></svg>
       </a>
-    </ng-template>
-  </ng-container>
-  <ng-template #noUrl>{{ row.service_name }}</ng-template>
+
+      <ng-template #mgmtGateway>
+        <a
+          target="_blank"
+          [href]="row.service_type"
+          (click)="$event.stopPropagation()"
+        >
+          <svg
+            [cdsIcon]="icons.launch"
+            [size]="icons.size16"
+            class="cds-info-color"
+          ></svg>
+        </a>
+      </ng-template>
+    </ng-container>
+  </div>
 </ng-template>
+
+<!-- <ng-template
+  #urlTpl
+  let-row="data.row"
+>
+  <div class="d-flex align-items-center gap-1">
+    <a
+      cdsLink
+      href="javascript:void(0);"
+      (click)="onServiceLinkClick(row, $event)"
+    >
+      {{ row.service_name }}
+    </a>
+
+    <ng-container *ngIf="serviceUrls[row.service_type]">
+      <a
+        *ngIf="!isMgmtGateway; else mgmtGateway"
+        target="_blank"
+        [href]="serviceUrls[row.service_type]"
+        (click)="$event.stopPropagation()"
+      >
+        <svg
+          [cdsIcon]="icons.launch"
+          [size]="icons.size16"
+          class="cds-info-color"
+        ></svg>
+      </a>
+
+      <ng-template #mgmtGateway>
+        <a
+          target="_blank"
+          [href]="row.service_type"
+          (click)="$event.stopPropagation()"
+        >
+          <svg
+            [cdsIcon]="icons.launch"
+            [size]="icons.size16"
+            class="cds-info-color"
+          ></svg>
+        </a>
+      </ng-template>
+    </ng-container>
+  </div>
+</ng-template> -->
 
 <ng-template
   #certificateStatusTpl
@@ -96,7 +141,7 @@
   ) {
     <span class="d-flex align-items-center gap-1">
       <cd-icon [type]="statusIconMap[row.certificate.status] || statusIconMap['default']"></cd-icon>
-      {{ formatCertificateStatus(row.certificate) }}
+      {{ row.certificate | serviceCertificateStatus }}
     </span>
   } @else {
     -
