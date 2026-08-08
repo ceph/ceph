@@ -4171,6 +4171,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_inject_migrator_session_race",
     "mds_inject_rename_corrupt_dentry_first",
     "mds_kill_dirfrag_at",
+    "mds_kill_ino_prealloc_at",
     "mds_kill_shutdown_at",
     "mds_log_event_large_threshold",
     "mds_log_events_per_segment",
