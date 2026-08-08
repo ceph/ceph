@@ -18,7 +18,7 @@
 #include "MgrSession.h"
 
 #include "include/stringify.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "auth/RotatingKeyRing.h"
 #include "json_spirit/json_spirit_writer.h"
 
@@ -1800,7 +1800,7 @@ bool DaemonServer::_handle_command(
     string whostr;
     cmd_getval(cmdctx->cmdmap, "who", whostr);
     std::vector<string> pvec;
-    get_str_vec(prefix, pvec);
+    ceph::split_str(prefix, pvec);
 
     std::set<int> osds;
     if (whostr == "*" || whostr == "all" || whostr == "any") {
@@ -2415,7 +2415,7 @@ bool DaemonServer::_handle_command(
              prefix == "osd pool cancel-force-recovery" ||
              prefix == "osd pool cancel-force-backfill") {
     std::vector<string> vs;
-    get_str_vec(prefix, vs);
+    ceph::split_str(prefix, vs);
     auto& granularity = vs.front();
     auto& forceop = vs.back();
     std::vector<pg_t> pgs;

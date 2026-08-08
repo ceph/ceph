@@ -305,7 +305,7 @@ int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
 			  const DoutPrefixProvider* dpp, optional_yield y)
 {
   vector<string> params;
-  get_str_vec(mfa_str, " ", params);
+  ceph::split_str(mfa_str, " ", params);
 
   if (params.size() != 2) {
     ldpp_dout(dpp, 5) << "NOTICE: invalid mfa string provided: " << mfa_str << dendl;

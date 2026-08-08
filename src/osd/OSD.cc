@@ -143,7 +143,7 @@
 #include "objclass/objclass.h"
 
 #include "common/cmdparse.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/util.h"
 
 #include "include/ceph_assert.h"
@@ -3213,7 +3213,7 @@ will start to track new ops received afterwards.";
     string arg;
     cmd_getval(cmdmap, "arg", arg);
     vector<string> argvec;
-    get_str_vec(arg, argvec);
+    ceph::split_str(arg, argvec);
     cpu_profiler_handle_command(argvec, ds);
     outbl.append(ds.str());
   }
@@ -11882,7 +11882,7 @@ int heap(CephContext& cct,
   }
 
   std::vector<std::string> cmd_vec;
-  get_str_vec(cmd, cmd_vec);
+  ceph::split_str(cmd, cmd_vec);
 
   string val;
   if (cmd_getval(cmdmap, "value", val)) {

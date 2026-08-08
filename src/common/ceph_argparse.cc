@@ -20,7 +20,7 @@
 #include "common/config.h"
 #include "common/strtol.h" // for strict_strtof()
 #include "common/version.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include <sstream>
 
@@ -109,7 +109,7 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
       g_str_vec_lock.unlock();
       return;
     }
-    get_str_vec(p, " ", g_str_vec);
+    ceph::split_str(p, " ", g_str_vec);
   }
 
   std::vector<const char*> env;
@@ -199,7 +199,7 @@ bool parse_ip_port_vec(const char *s, std::vector<entity_addrvec_t>& vec, int ty
 {
   // first split by [ ;], which are not valid for an addrvec
   std::list<std::string> items;
-  get_str_list(s, " ;", items);
+  ceph::split_str(s, " ;", items);
 
   for (auto& i : items) {
     const char *s = i.c_str();

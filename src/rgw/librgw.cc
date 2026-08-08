@@ -19,7 +19,7 @@
 
 #include "include/rados/librgw.h"
 
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "common/ceph_argparse.h"
 #include "common/ceph_context.h"
 #include "common/dout.h"
@@ -58,7 +58,7 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
       // last non-0 argument will be split and consumed
       if (argc > 1) {
 	const std::string spl_arg{argv[(--argc)]};
-	get_str_vec(spl_arg, " \t", spl_args);
+	ceph::split_str(spl_arg, " \t", spl_args);
       }
       auto args = argv_to_vec(argc, argv);
       // append split args, if any

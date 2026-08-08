@@ -23,7 +23,7 @@
 #include "include/stringify.h"
 #include "common/BackTrace.h"
 #include "common/JSONFormatter.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "global/signal_handler.h"
 
 #include "common/debug.h"
@@ -367,7 +367,7 @@ int PyModule::load(PyThreadState *pMainThreadState)
   const auto subinterpreter_modules_opt = g_conf().get_val<std::string>(
     "mgr_subinterpreter_modules"
   );
-  auto subinterpreter_modules = ceph::split(subinterpreter_modules_opt);
+  auto subinterpreter_modules = ceph::split_view(subinterpreter_modules_opt);
   use_main_interpreter = std::count(
     subinterpreter_modules.begin(), subinterpreter_modules.end(), "*"
   ) == 0 && std::count(

@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
 #include <experimental/iterator>
+#include <list>
 #include <locale>
 #include <sstream>
 
@@ -87,7 +88,7 @@
 #include "include/stringify.h"
 #include "include/util.h"
 #include "common/cmdparse.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/str_map.h"
 #include "include/scope_guard.h"
 #include "perfglue/heap_profiler.h"
@@ -6003,7 +6004,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  for (auto n : { "network_numa_nodes", "objectstore_numa_nodes" }) {
 	    p = m.find(n);
 	    if (p != m.end()) {
-	      list<string> ls = get_str_list(p->second, ",");
+	      list<string> ls = ceph::split_str<std::list>(p->second, ",");
 	      f->open_array_section(n);
 	      for (auto node : ls) {
 		f->dump_int("node", atoi(node.c_str()));

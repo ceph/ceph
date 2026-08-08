@@ -10,7 +10,7 @@
 #include "common/io_exerciser/IoOp.h"
 #include "common/io_exerciser/IoSequence.h"
 #include "common/io_exerciser/Model.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
@@ -550,7 +550,7 @@ class TestRunner {
   GenerationType data_generation_type;
 
   std::string line;
-  ceph::split split = ceph::split("");
+  ceph::split_view split = ceph::split_view("");
   ceph::spliterator tokens;
 
   int balanced_read_percentage;

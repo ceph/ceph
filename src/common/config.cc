@@ -18,7 +18,7 @@
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/config_obs.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
@@ -103,7 +103,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result)
 {
   list<string> ls;
-  get_str_list(filename_list, ";,", ls);
+  ceph::split_str(filename_list, ";,", ls);
 
   int ret = -ENOENT;
   list<string>::iterator iter;
@@ -438,7 +438,7 @@ md_config_t::get_conffile_paths(const ConfigValues& values,
   }
 
   std::list<std::string> paths;
-  get_str_list(conf_files_str, ";,", paths);
+  ceph::split_str(conf_files_str, ";,", paths);
   for (auto i = paths.begin(); i != paths.end(); ) {
     string& path = *i;
     if (path.find("$data_dir") != path.npos &&

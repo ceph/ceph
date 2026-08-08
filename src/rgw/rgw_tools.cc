@@ -6,7 +6,7 @@
 
 #include "common/errno.h"
 #include "common/safe_io.h" // for safe_read()
-#include "common/split.h"
+#include "include/str_lib.h"
 
 #include "driver/rados/rgw_tools.h"
 
@@ -30,7 +30,7 @@ void parse_mime_map_line(std::string_view line)
   }
   line.remove_prefix(spaces);
 
-  auto splitline = ceph::split(line, delims);
+  auto splitline = ceph::split_view(line, delims);
   auto iter = splitline.begin();
   if (iter == splitline.end()) {
     return;

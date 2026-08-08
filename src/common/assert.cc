@@ -15,10 +15,11 @@
 
 #include "include/ceph_assert.h"
 
+#include <list>
 #include <sstream>
 
 #include "include/compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/types.h" // for operator<<(std::list)
 #include "common/BackTrace.h"
 #include "common/Clock.h" // for ceph_clock_now()
@@ -45,7 +46,7 @@ namespace ceph {
   {
     ceph_assert(!g_assert_context);
     g_assert_context = cct;
-    const auto supressions = get_str_list(
+    const auto supressions = ceph::split_str<std::list>(
       g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
     if (!supressions.empty()) {
       lderr(g_assert_context) << "WARNING: supressions for ceph_assert present: "
@@ -90,7 +91,7 @@ namespace ceph {
       }
 
       // bypass the abort?
-      const auto supressions = get_str_list(
+      const auto supressions = ceph::split_str<std::list>(
 	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
       should_abort = std::none_of(
 	std::begin(supressions), std::end(supressions),
@@ -185,7 +186,7 @@ namespace ceph {
       }
 
       // bypass the abort?
-      const auto supressions = get_str_list(
+      const auto supressions = ceph::split_str<std::list>(
 	g_assert_context->_conf.get_val<std::string>("ceph_assert_supresssions"));
       should_abort = std::none_of(
 	std::begin(supressions), std::end(supressions),

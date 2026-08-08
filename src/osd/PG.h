@@ -35,7 +35,7 @@
 
 #include "PGLog.h"
 #include "OSDMap.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "PGBackend.h"
 #include "PGPeeringEvent.h"
 #include "PeeringState.h"
@@ -132,7 +132,7 @@ class PGRecoveryStats {
       f->dump_stream("min_time") << i.min_time;
       f->dump_stream("max_time") << i.max_time;
       std::vector<std::string> states;
-      get_str_vec(p->first, "/", states);
+      ceph::split_str(p->first, "/", states);
       f->open_array_section("nested_states");
       for (std::vector<std::string>::iterator st = states.begin();
 	   st != states.end(); ++st) {

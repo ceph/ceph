@@ -640,7 +640,7 @@ static int update_mgrmap(MonitorDBStore& st)
     // mgr expects epoch > 1
     map.epoch++;
     auto initial_modules =
-      get_str_vec(g_ceph_context->_conf.get_val<string>("mgr_initial_modules"));
+      ceph::split_str(g_ceph_context->_conf.get_val<string>("mgr_initial_modules"));
     copy(begin(initial_modules),
 	 end(initial_modules),
 	 inserter(map.modules, end(map.modules)));

@@ -23,7 +23,7 @@
 #include "ErasureCodePlugin.h"
 #include "common/errno.h"
 #include "include/dlfcn_compat.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/ceph_assert.h"
 
 using namespace std;
@@ -211,7 +211,7 @@ int ErasureCodePluginRegistry::preload(const std::string &plugins,
 {
   std::lock_guard l{lock};
   list<string> plugins_list;
-  get_str_list(plugins, plugins_list);
+  ceph::split_str(plugins, plugins_list);
   for (list<string>::iterator i = plugins_list.begin();
        i != plugins_list.end();
        ++i) {

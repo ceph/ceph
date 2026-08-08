@@ -4,7 +4,7 @@
 #include <signal.h>
 
 #include "rgw_frontend.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include "include/ceph_assert.h"
 
@@ -17,7 +17,7 @@ using namespace std;
 int RGWFrontendConfig::parse_config(const string& config,
 				    std::multimap<string, string>& config_map)
 {
-  for (auto& entry : get_str_vec(config, " ")) {
+  for (auto& entry : ceph::split_str(config, " ")) {
     string key;
     string val;
 

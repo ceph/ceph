@@ -7,7 +7,7 @@
 #include <map>
 
 #include "include/types.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 
 #include "rgw_acl_s3.h"
 #include "driver/rados/rgw_user.h"
@@ -392,7 +392,7 @@ static int parse_acl_header(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  for (std::string_view grantee : ceph::split(hacl, ",")) {
+  for (std::string_view grantee : ceph::split_view(hacl, ",")) {
     ACLGrant grant;
     int ret = parse_grantee_str(dpp, y, driver, std::string{grantee}, perm, grant);
     if (ret < 0)

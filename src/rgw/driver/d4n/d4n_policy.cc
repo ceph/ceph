@@ -2,7 +2,7 @@
 
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_perf_counters.h"
 
 namespace rgw { namespace d4n {
@@ -289,7 +289,7 @@ CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optiona
   std::string key = entry->key;
   CacheBlock* victim = new CacheBlock();
 
-  auto parts = split(key, "#");
+  auto parts = ceph::split_view(key, "#");
   std::vector<std::string> block_info;
   block_info.assign(parts.begin(), parts.end());
   

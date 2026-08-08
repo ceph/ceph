@@ -94,7 +94,7 @@ using namespace std::literals::string_view_literals;
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
 #include "common/errno.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #define dout_subsys ceph_subsys_client
 
@@ -2581,7 +2581,7 @@ void Client::populate_metadata(const std::string &mount_root)
 
   // Apply any metadata from the user's configured overrides
   std::vector<std::string> tokens;
-  get_str_vec(cct->_conf->client_metadata, ",", tokens);
+  ceph::split_str(cct->_conf->client_metadata, ",", tokens);
   for (const auto &i : tokens) {
     auto eqpos = i.find("=");
     // Throw out anything that isn't of the form "<str>=<str>"
