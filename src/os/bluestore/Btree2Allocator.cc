@@ -137,6 +137,77 @@ void Btree2Allocator::release(const release_set_t& release_set)
   }
 }
 
+uint64_t Btree2Allocator::get_free_extents(
+  uint64_t range_begin,
+  uint64_t range_end,
+  size_t max_count,
+  free_extent_vector_t* out)
+{
+  ceph_assert(range_begin <= range_end);
+  if (range_begin == range_end) {
+    return range_end;
+  }
+  std::lock_guard l(lock);
+
+  // Extents released via the fast path (see release()) sit in 'cache'
+  // rather than range_tree until they're reused or evicted. They must be
+  // folded in here too, same as _foreach() already does via cache->foreach,
+  // otherwise a foreach_interruptible() walk driven by get_free_extents()
+  // would silently skip whatever free space currently lives in the cache.
+  // The cache is small and bounded (<= 256 entries), so collecting it
+  // wholesale on every call is cheap; entries are non-overlapping, so a
+  // simple offset-sorted merge with the range_tree scan below is safe.
+  std::vector<std::pair<uint64_t, uint64_t>> cached;
+  if (cache) {
+    cache->foreach([&](uint64_t offset, uint64_t length) {
+      if (offset < range_end && offset + length > range_begin) {
+        cached.emplace_back(offset, length);
+      }
+    });
+    std::sort(cached.begin(), cached.end());
+  }
+
+  auto it = range_tree.lower_bound(range_begin);
+  // An extent whose start < range_begin may still span into the window.
+  if (it != range_tree.begin()) {
+    auto prev = std::prev(it);
+    if (prev->second > range_begin) {
+      it = prev;
+    }
+  }
+  size_t n = 0;
+  size_t ci = 0;
+  const bool unbounded = (max_count == 0);
+  while (((it != range_tree.end() && it->first < range_end) || ci < cached.size()) &&
+         (unbounded || n < max_count)) {
+    bool take_tree = (it != range_tree.end() && it->first < range_end) &&
+      (ci >= cached.size() || it->first <= cached[ci].first);
+    uint64_t start, end;
+    if (take_tree) {
+      start = it->first;
+      end = it->second;
+      ++it;
+    } else {
+      start = cached[ci].first;
+      end = cached[ci].first + cached[ci].second;
+      ++ci;
+    }
+    uint64_t lo = std::max(start, range_begin);
+    uint64_t hi = std::min(end, range_end);
+    out->emplace_back(lo, hi - lo);
+    ++n;
+  }
+
+  uint64_t cursor = range_end;
+  if (it != range_tree.end() && it->first < range_end) {
+    cursor = std::min(cursor, it->first);
+  }
+  if (ci < cached.size()) {
+    cursor = std::min(cursor, cached[ci].first);
+  }
+  return cursor;
+}
+
 void Btree2Allocator::_shutdown()
 {
   if (cache) {

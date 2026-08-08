@@ -153,6 +153,61 @@ uint64_t HybridAllocatorBase<T>::_spillover_allocate(uint64_t want,
     extents);
 }
 
+template <typename T>
+uint64_t HybridAllocatorBase<T>::get_free_extents(
+  uint64_t range_begin,
+  uint64_t range_end,
+  size_t max_count,
+  free_extent_vector_t* out)
+{
+  if (!bmap_alloc) {
+    return T::get_free_extents(range_begin, range_end, max_count, out);
+  }
+
+  // Fetch up to max_count from each sub-allocator independently.
+  // Both return extents sorted by offset; we merge them in O(n+m).
+  free_extent_vector_t primary_out, bmap_out;
+  uint64_t primary_cursor = T::get_free_extents(
+    range_begin, range_end, max_count, &primary_out);
+  uint64_t bmap_cursor = bmap_alloc->get_free_extents(
+    range_begin, range_end, max_count, &bmap_out);
+
+  auto pi = primary_out.begin();
+  auto bi = bmap_out.begin();
+  const bool unbounded = (max_count == 0);
+  size_t n = 0;
+
+  while ((pi != primary_out.end() || bi != bmap_out.end()) &&
+         (unbounded || n < max_count)) {
+    bool take_primary;
+    if (pi == primary_out.end()) {
+      take_primary = false;
+    } else if (bi == bmap_out.end()) {
+      take_primary = true;
+    } else {
+      take_primary = (pi->offset <= bi->offset);
+    }
+    out->push_back(take_primary ? *pi++ : *bi++);
+    ++n;
+  }
+
+  // Resume cursor: the minimum next-unprocessed offset from either stream.
+  // Prefer batch leftovers (exact extent offsets) over sub-cursors (used only
+  // when a batch was exhausted but the sub-allocator signalled more remains).
+  uint64_t cursor = range_end;
+  if (pi != primary_out.end()) {
+    cursor = std::min(cursor, pi->offset);
+  } else if (primary_cursor < range_end) {
+    cursor = std::min(cursor, primary_cursor);
+  }
+  if (bi != bmap_out.end()) {
+    cursor = std::min(cursor, bi->offset);
+  } else if (bmap_cursor < range_end) {
+    cursor = std::min(cursor, bmap_cursor);
+  }
+  return cursor;
+}
+
 template <typename PrimaryAllocator>
 uint64_t HybridAllocatorBase<PrimaryAllocator>::_allocate_or_rollback(
   bool primary,
