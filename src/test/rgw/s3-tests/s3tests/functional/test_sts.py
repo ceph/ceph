@@ -28,6 +28,8 @@ from collections import namedtuple
 
 from email.header import decode_header
 
+from .utils import assert_raises, _get_status_and_error_code
+
 from . import(
     configfile,
     setup_teardown,
@@ -392,6 +394,60 @@ def test_assume_role_allow_head_nonexistent():
         status = e.response['ResponseMetadata']['HTTPStatusCode']
     assert status == 404
 
+@pytest.mark.test_of_sts
+@pytest.mark.fails_on_dbstore
+def test_assume_role_chaining_disallowed():
+    """Verify that role chaining is disallowed (tracker #78697)."""
+    assume_role_error = None
+    iam_client = get_iam_client()
+    sts_client = get_sts_client()
+    sts_user_id = get_alt_user_id()
+    default_endpoint = get_config_endpoint()
+    role_session_name = get_parameter_name()
+
+    # Trust policy: allow the IAM alt-user to call sts:AssumeRole
+    policy_document = (
+        '{"Version":"2012-10-17","Statement":[{"Effect":"Allow",'
+        '"Principal":{"AWS":["arn:aws:iam:::user/' + sts_user_id + '"]},'
+        '"Action":["sts:AssumeRole"]}]}'
+    )
+    (role_error, role_response, general_role_name) = create_role(
+        iam_client, '/', None, policy_document, None, None, None
+    )
+    if role_response:
+        assert role_response['Role']['Arn'] == 'arn:aws:iam:::role/' + general_role_name
+    else:
+        assert False, role_error
+
+    # Permission policy:
+    role_policy = (
+        '{"Version":"2012-10-17","Statement":{"Effect":"Allow",'
+        '"Action":"s3:*","Resource":"arn:aws:s3:::*"}}'
+    )
+    (role_err, response) = put_role_policy(iam_client, general_role_name, None, role_policy)
+    if response:
+        assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+    else:
+        assert False, role_err
+
+    # First assume-role: IAM user → temporary credentials (must succeed)
+    resp = sts_client.assume_role(
+        RoleArn=role_response['Role']['Arn'],
+        RoleSessionName=role_session_name,
+    )
+    assert resp['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # Second assume-role (role chaining): temporary credentials → same role
+    # Must be denied because role chaining is not supported
+    chained_sts_client = get_sts_client(
+        aws_access_key_id=resp['Credentials']['AccessKeyId'],
+        aws_secret_access_key=resp['Credentials']['SecretAccessKey'],
+        aws_session_token=resp['Credentials']['SessionToken'],
+    )
+    e = assert_raises(ClientError, chained_sts_client.assume_role,
+            RoleArn=role_response['Role']['Arn'],
+            RoleSessionName=get_parameter_name())
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
 
 @pytest.mark.webidentity_test
 @pytest.mark.token_claims_trust_policy_test

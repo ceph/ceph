@@ -838,6 +838,15 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
 
 int RGWREST_STS::verify_permission(optional_yield y)
 {
+  //blocking role chaining as it is not officially supported in RGW
+  //this logic applies only to AssumeRole* calls.
+  //this needs to be revisited in case any other STS op uses this method
+  //to verify its permission.
+  //disallow temporary credentials from invoking assumerole* calls
+  if (s->auth.identity && s->auth.identity->get_identity_type() == TYPE_ROLE) {
+    s->err.message = "Role chaining is not supported";
+    return -EPERM;
+  }
   STS::STSService _sts(s->cct, driver, s->user->get_id(), s->auth.identity.get());
   sts = std::move(_sts);
 
