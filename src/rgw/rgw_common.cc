@@ -1101,8 +1101,19 @@ bool rgw_transport_is_secure(CephContext *cct, const RGWEnv& env)
   }
   // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
   i = m.find("HTTP_X_FORWARDED_PROTO");
-  if (i != m.end() && i->second == "https") {
-    return true;
+  if (i != m.end()) {
+    // A proxy chain may append multiple protocols as a comma-separated list
+    // (repeated header field-lines are combined this way). The right-most
+    // value is the one asserted by the proxy closest to us, which is the hop
+    // that rgw_trust_forwarded_https opts into trusting.
+    std::string_view proto{i->second};
+    const auto comma = proto.rfind(',');
+    if (comma != std::string_view::npos) {
+      proto = proto.substr(comma + 1);
+    }
+    if (rgw_trim_whitespace(proto) == "https") {
+      return true;
+    }
   }
   return false;
 }

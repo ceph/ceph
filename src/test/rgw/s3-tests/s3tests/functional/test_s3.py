@@ -4,6 +4,10 @@ import botocore.config
 from botocore.exceptions import ClientError
 from botocore.exceptions import ParamValidationError
 from botocore.handlers import validate_bucket_name
+from botocore.auth import S3SigV4Auth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
+import http.client
 import isodate
 import email.utils
 import datetime
@@ -41,6 +45,7 @@ from .policy import Policy, Statement, make_json_policy
 from .iam import iam_root, nuke_role
 
 from . import (
+    config,
     configfile,
     setup_teardown,
     get_client,
@@ -3606,6 +3611,70 @@ def test_object_content_encoding_aws_chunked():
     client.put_object(Bucket=bucket, Key=key, ContentEncoding='aws-chunked, aws-chunked')
     response = client.head_object(Bucket=bucket, Key=key)
     assert 'ContentEncoding' not in response
+
+def test_object_content_encoding_duplicate_header_signature():
+    """tracker #75304: a client that sends the same header name on two
+    field-lines signs the comma-joined canonical value ('gzip,aws-chunked'),
+    as the AWS Go SDK v2 transfer manager does. RGW must recombine the
+    duplicate wire headers before verifying the signature; otherwise only the
+    last value survives, the reconstructed canonical header differs, and the
+    request is rejected with 403 SignatureDoesNotMatch."""
+    bucket = get_new_bucket()
+    key = 'dup-content-encoding'
+    body = b'hello duplicate headers'
+
+    host = config.default_host
+    port = config.default_port
+    region = config.main_api_name or 'us-east-1'
+    creds = Credentials(config.main_access_key, config.main_secret_key)
+
+    # Sign over the SigV4 canonical (comma-joined) form. botocore signs the
+    # Host header from the URL but does not add it to req.headers, so set it
+    # explicitly; it must be both signed and put on the wire. S3SigV4Auth (not
+    # plain SigV4Auth) also adds the required x-amz-content-sha256 header.
+    url = '%s/%s/%s' % (config.default_endpoint, bucket, key)
+    headers = {'Host': '%s:%d' % (host, port),
+               'Content-Encoding': 'gzip,aws-chunked'}
+    req = AWSRequest(method='PUT', url=url, data=body, headers=headers)
+    S3SigV4Auth(creds, 's3', region).add_auth(req)
+    signed = dict(req.headers)
+
+    # Transmit two separate Content-Encoding field-lines on the wire.
+    # http.client.putheader emits one line per call and does not collapse
+    # duplicate names the way a dict (or boto3's before-call hook) would.
+    if config.default_is_secure:
+        ctx = ssl.create_default_context()
+        if not config.default_ssl_verify:
+            ctx.check_hostname = False
+            ctx.verify_mode = ssl.CERT_NONE
+        conn = http.client.HTTPSConnection(host, port, timeout=30, context=ctx)
+    else:
+        conn = http.client.HTTPConnection(host, port, timeout=30)
+    try:
+        conn.putrequest('PUT', '/%s/%s' % (bucket, key),
+                        skip_host=True, skip_accept_encoding=True)
+        for name, value in signed.items():
+            if name.lower() in ('content-encoding', 'content-length'):
+                continue
+            conn.putheader(name, value)
+        conn.putheader('Content-Encoding', 'gzip')
+        conn.putheader('Content-Encoding', 'aws-chunked')
+        conn.putheader('Content-Length', str(len(body)))
+        conn.endheaders()
+        conn.send(body)
+        resp = conn.getresponse()
+        status = resp.status
+        resp.read()
+    finally:
+        conn.close()
+
+    assert status == 200
+
+    # aws-chunked is stripped from the content-encoding returned on read, so a
+    # HEAD reports just 'gzip' - confirming both values reached the server.
+    client = get_client()
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert response['ContentEncoding'] == 'gzip'
 
 def test_object_anon_put():
     bucket_name = get_new_bucket()
