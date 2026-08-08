@@ -1,7 +1,40 @@
 from mgr_util import create_self_signed_cert, verify_tls, ServerConfigException, get_cert_issuer_info, certificate_days_to_expire
 from OpenSSL import crypto, SSL
 
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec
+from cryptography.x509.oid import NameOID
+
+import datetime
 import unittest
+
+
+def generate_ec_cert_and_key():
+    """Return a matching cert/key PEM pair using an EC key.
+
+    create_self_signed_cert() only ever produces RSA keys.
+    """
+    key = ec.generate_private_key(ec.SECP256R1())
+    name = x509.Name([
+        x509.NameAttribute(NameOID.ORGANIZATION_NAME, 'Ceph'),
+        x509.NameAttribute(NameOID.COMMON_NAME, 'cephadm'),
+    ])
+    now = datetime.datetime.now()
+    crt = (x509.CertificateBuilder()
+           .subject_name(name)
+           .issuer_name(name)
+           .public_key(key.public_key())
+           .serial_number(x509.random_serial_number())
+           .not_valid_before(now - datetime.timedelta(days=1))
+           .not_valid_after(now + datetime.timedelta(days=365))
+           .sign(key, hashes.SHA256()))
+    crt_pem = crt.public_bytes(serialization.Encoding.PEM).decode('utf-8')
+    key_pem = key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.TraditionalOpenSSL,
+        encryption_algorithm=serialization.NoEncryption()).decode('utf-8')
+    return crt_pem, key_pem
 
 
 valid_ceph_cert = """-----BEGIN CERTIFICATE-----\nMIICxjCCAa4CEQCpHIQuSYhCII1J0SVGYnT1MA0GCSqGSIb3DQEBDQUAMCExDTAL\nBgNVBAoMBENlcGgxEDAOBgNVBAMMB2NlcGhhZG0wHhcNMjIwNzA2MTE1MjUyWhcN\nMzIwNzAzMTE1MjUyWjAhMQ0wCwYDVQQKDARDZXBoMRAwDgYDVQQDDAdjZXBoYWRt\nMIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAn2ApFna2CVYE7RDtjJVk\ncJTcJQrjzDOlCoZtxb1QMCQZMXjx/7d6bseQP+dkkeA0hZxnjJZWeu6c/YnQ1JiT\n2aDuDpWoJAaiinHRJyZuY5tqG+ggn95RdToZVbeC+0uALzYi4UFacC3sfpkyIKBR\nic43+2fQNz0PZ+8INSTtm75Y53gbWuGF7Dv95200AmAN2/u8LKWZIvdhbRborxOF\nlK2T40qbj9eH3ewIN/6Eibxrvg4va3pIoOaq0XdJHAL/MjDGJAtahPIenwcjuega\n4PSlB0h3qiyFXz7BG8P0QsPP6slyD58ZJtCGtJiWPOhlq47DlnWlJzRGDEFLLryf\n8wIDAQABMA0GCSqGSIb3DQEBDQUAA4IBAQBixd7RZawlYiTZaCmv3Vy7X/hhabac\nE/YiuFt1YMe0C9+D8IcCQN/IRww/Bi7Af6tm+ncHT9GsOGWX6hahXDKTw3b9nSDi\nETvjkUTYOayZGfhYpRA6m6e/2ypcUYsiXRDY9zneDKCdPREIA1D6L2fROHetFX9r\nX9rSry01xrYwNlYA1e6GLMXm2NaGsLT3JJlRBtT3P7f1jtRGXcwkc7ns0AtW0uNj\nGqRLHfJazdgWJFsj8vBdMs7Ci0C/b5/f7J/DLpPCvUA3Fqwn9MzHl01UwlDsKy1a\nROi4cfQNOLbWX8g3PfIlqtdGYNA77UPxvy1SUimmtdopZaEVWKkqeWYK\n-----END CERTIFICATE-----\n
@@ -42,6 +75,15 @@ class TLSchecks(unittest.TestCase):
         new_key.generate_key(crypto.TYPE_RSA, 2048)
         new_key = crypto.dump_privatekey(crypto.FILETYPE_PEM, new_key).decode('utf-8')
         self.assertRaises(ServerConfigException, verify_tls, crt, new_key)
+
+    def test_ec_tls(self):
+        crt, key = generate_ec_cert_and_key()
+        verify_tls(crt, key)
+
+    def test_mismatched_ec_tls(self):
+        crt, _ = generate_ec_cert_and_key()
+        _, other_key = generate_ec_cert_and_key()
+        self.assertRaises(ServerConfigException, verify_tls, crt, other_key)
 
     def test_get_cert_issuer_info(self):
 
