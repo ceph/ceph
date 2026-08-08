@@ -731,8 +731,10 @@ seastar::future<> OSD::_add_device_class()
   }
 
   INFO("device_class is {} ", device_class);
+  std::string lowered = device_class;
+  std::transform(lowered.begin(), lowered.end(), lowered.begin(), ::tolower);
+  is_rotational = !(lowered == "ssd" || lowered == "random_block_ssd");
 
-  is_rotational = (device_class != "ssd");
   std::string cmd = fmt::format(
     R"({{"prefix": "osd crush set-device-class", "class": "{}", "ids": ["{}"]}})",
     device_class, stringify(whoami)
