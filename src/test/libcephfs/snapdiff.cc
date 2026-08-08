@@ -351,21 +351,21 @@ public:
   {
     auto s1 = make_snap_name(snap1);
     auto s2 = make_snap_name(snap2);
-    ceph_snapdiff_info info;
+    ceph_snapdiff_info2 *info;
     ceph_snapdiff_entry_t res_entry;
-    int r = ceph_open_snapdiff(cmount,
-                               dir_path,
-                               relpath,
-                               s1.c_str(),
-                               s2.c_str(),
-                               diff_mask,
-                               &info);
+    int r = ceph_open_snapdiff2(cmount,
+                                dir_path,
+                                relpath,
+                                s1.c_str(),
+                                s2.c_str(),
+                                diff_mask,
+                                &info);
     if (r != 0) {
       std::cerr << " Failed to open snapdiff, ret:" << r << std::endl;
       return r;
     }
-    while (0 < (r = ceph_readdir_snapdiff(&info,
-                                          &res_entry))) {
+    while (0 < (r = ceph_readdir_snapdiff2(info,
+                                           &res_entry))) {
       if (strcmp(res_entry.dir_entry.d_name, ".") == 0 ||
         strcmp(res_entry.dir_entry.d_name, "..") == 0) {
         continue;
@@ -375,7 +375,7 @@ public:
         break;
       }
     }
-    ceph_assert(0 == ceph_close_snapdiff(&info));
+    ceph_assert(0 == ceph_close_snapdiff2(info));
     if (r != 0) {
       std::cerr << " Failed to readdir snapdiff, ret:" << r
                 << " " << relpath << ", " << snap1 << " vs. " << snap2
