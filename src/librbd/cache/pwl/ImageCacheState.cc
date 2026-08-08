@@ -129,7 +129,7 @@ ImageCacheState<I>* ImageCacheState<I>::create_image_cache_state(
   if (!dirty_cache && !cache_desired) {
     ldout(image_ctx->cct, 20) << "Do not desire to use image cache." << dendl;
   } else if (dirty_cache && !cache_desired) {
-    lderr(image_ctx->cct) << "There's a dirty cache, but RWL cache is disabled."
+    lderr(image_ctx->cct) << "There's a dirty cache, but PWL cache is disabled."
                           << dendl;
     r = -EINVAL;
   }else if ((!dirty_cache || cache_state_str.empty()) && cache_desired) {
@@ -184,7 +184,7 @@ bool ImageCacheState<I>::is_valid() {
     if (this->clean) {
       cleanstring = "clean";
     }
-    lderr(m_image_ctx->cct) << "An image cache (RWL) remains on another host "
+    lderr(m_image_ctx->cct) << "An image cache (PWL) remains on another host "
                             << host << " which is " << cleanstring
                             << ". Flush/close the image there to remove the "
                             << "image cache" << dendl;
