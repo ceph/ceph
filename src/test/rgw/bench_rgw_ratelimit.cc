@@ -37,12 +37,13 @@ struct parameters {
 std::shared_ptr<std::vector<client_info>> ds = std::make_shared<std::vector<client_info>>(std::vector<client_info>());
 
 std::string method[2] = {"PUT", "GET"};
+RGWRateLimitOp limit[2] = {RGWRateLimitOp::Write, RGWRateLimitOp::Read};
 void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::shared_ptr<RateLimiter> ratelimit, const parameters& params, boost::asio::yield_context& yield, boost::asio::io_context& ioctx)
 {
     auto dout = DoutPrefix(g_ceph_context, ceph_subsys_rgw, "rate limiter: ");
     boost::asio::steady_timer timer(ioctx);
-    int rw = 0; // will always use PUT method as there is no difference
-    std::string methodop(method[rw]);
+    int rw = 0; // will always use RGWRateLimitOp::Write as there is no difference
+    RGWRateLimitOp limitop = limit[rw];
     auto req_size = params.req_size;
     auto backend_bandwidth = params.backend_bandwidth;
 // the 4 * 1024 * 1024 is the RGW default we are sending in a typical environment
@@ -50,12 +51,12 @@ void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::share
         if (req_size <= backend_bandwidth) {
             while (req_size > 0) {
                 if(req_size > 4*1024*1024) {
-                    ratelimit->decrease_bytes(methodop.c_str(),it.tenant, 4*1024*1024, info);
+                    ratelimit->decrease_bytes(limitop, it.tenant, 4*1024*1024, info);
                     it.bytes += 4*1024*1024;
                     req_size = req_size - 4*1024*1024;
                 }
                 else {
-                    ratelimit->decrease_bytes(methodop.c_str(),it.tenant, req_size, info);
+                    ratelimit->decrease_bytes(limitop, it.tenant, req_size, info);
                     req_size = 0;
                 }
             }
@@ -69,13 +70,13 @@ void simulate_transfer(client_info& it, const RGWRateLimitInfo* info, std::share
                         timer.async_wait(yield);
                         total_bytes = 0;
                     }
-                    ratelimit->decrease_bytes(methodop.c_str(),it.tenant, 4*1024*1024, info);
+                    ratelimit->decrease_bytes(limitop, it.tenant, 4*1024*1024, info);
                     it.bytes += 4*1024*1024;
                     req_size = req_size - 4*1024*1024;
                     total_bytes += 4*1024*1024;
                 }
                 else {
-                    ratelimit->decrease_bytes(methodop.c_str(),it.tenant, req_size, info);
+                    ratelimit->decrease_bytes(limitop, it.tenant, req_size, info);
                     it.bytes += req_size;
                     total_bytes += req_size;
                     req_size = 0;
@@ -91,7 +92,8 @@ bool simulate_request(client_info& it, const RGWRateLimitInfo& info, std::shared
     int rw = 0; // will always use PUT method as there is no different
     std::string methodop = method[rw];
     auto dout = DoutPrefix(g_ceph_context, ceph_subsys_rgw, "rate limiter: ");
-    bool to_fail = ratelimit->should_rate_limit(methodop.c_str(), it.tenant, time, &info, "");
+    RGWRateLimitOp op;
+    bool to_fail = ratelimit->should_rate_limit(methodop.c_str(), it.tenant, time, &info, "", op);
     if(to_fail)
     {
         it.rejected++;
