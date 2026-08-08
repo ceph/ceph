@@ -14,6 +14,7 @@
  */
 
 #include "rgw_sal_filter.h"
+#include "common/async/lock_client.h"
 
 namespace rgw { namespace sal {
 
@@ -1463,18 +1464,13 @@ std::unique_ptr<LCSerializer> FilterLifecycle::get_serializer(
   return std::make_unique<FilterLCSerializer>(std::move(ns));
 }
 
-int FilterRestoreSerializer::try_lock(const DoutPrefixProvider *dpp, ceph::timespan dur,
-				 optional_yield y)
+std::unique_ptr<ceph::async::LockClient> FilterRestore::get_lock_client(
+    boost::asio::any_io_executor ex,
+    const std::string& lock_name,
+    const std::string& oid,
+    const std::string& cookie)
 {
-  return next->try_lock(dpp, dur, y);
-}
-
-std::unique_ptr<RestoreSerializer> FilterRestore::get_serializer(const std::string& lock_name,
-						       const std::string& oid,
-						       const std::string& cookie) {
-  std::unique_ptr<RestoreSerializer> ns;
-  ns = next->get_serializer(lock_name, oid, cookie);
-  return std::make_unique<FilterRestoreSerializer>(std::move(ns));
+  return next->get_lock_client(std::move(ex), lock_name, oid, cookie);
 }
 
 int FilterRestore::initialize(const DoutPrefixProvider* dpp, optional_yield y,
