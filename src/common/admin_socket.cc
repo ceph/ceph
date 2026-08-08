@@ -25,6 +25,7 @@
 typedef void* timer_t;
 #endif
 
+#include <filesystem>
 #include <iomanip>
 #include <optional>
 
@@ -1070,6 +1071,85 @@ public:
   }
 };
 
+/*
+ * Unprivileged daemons (radosgw, rbd-mirror, ...) default their admin socket
+ * path to a per-process name embedding $pid (and $cctid) so that several
+ * instances of the same daemon can coexist. The socket file is only unlinked
+ * on a graceful exit (see add_cleanup_file()/atexit()); a process killed with
+ * SIGKILL -- which is what `ceph orch daemon restart --force` and container or
+ * pod restarts do -- leaves its socket behind. Because the next instance picks
+ * a new $pid/$cctid, bind_and_listen()'s same-path stale-socket unlink never
+ * revisits the old one, so dead sockets accumulate one per forced restart.
+ *
+ * Before binding, sweep the run directory for sibling sockets belonging to
+ * this same daemon and unlink the ones that no longer answer a ping. A live
+ * concurrent instance answers the ping and is left untouched. Our identity is
+ * taken from "$cluster-$name." (the stable prefix of the default per-process
+ * name) so sockets belonging to other daemons are never considered.
+ */
+static void unlink_stale_sibling_sockets(CephContext *cct,
+					 const std::string& path)
+{
+  namespace fs = std::filesystem;
+  const fs::path sockpath(path);
+  fs::path dir = sockpath.parent_path();
+  if (dir.empty()) {
+    dir = ".";
+  }
+  const std::string base = sockpath.filename().string();
+
+  // Recover the stable, entity-specific prefix straight from our identity
+  // rather than parsing digits out of the file name: $pid can be a small value
+  // in a container (e.g. 2) that also appears elsewhere in $name. The default
+  // per-process templates start with either "$cluster-$name." (daemons, e.g.
+  // radosgw) or "$name." (e.g. rbd-mirror); pick whichever our own name uses.
+  // Anchoring on the full $name keeps other daemons' sockets out of scope. If
+  // neither layout matches (a fixed admin_socket, or some other template)
+  // there is nothing here to sweep.
+  const std::string name = cct->_conf->name.to_str();
+  const std::string cluster_prefix = cct->_conf->cluster + "-" + name + ".";
+  const std::string name_prefix = name + ".";
+  static constexpr std::string_view suffix = ".asok";
+  std::string prefix;
+  if (base.starts_with(cluster_prefix)) {
+    prefix = cluster_prefix;
+  } else if (base.starts_with(name_prefix)) {
+    prefix = name_prefix;
+  } else {
+    return;
+  }
+  if (!base.ends_with(suffix)) {
+    return;
+  }
+
+  std::error_code ec;
+  for (const auto& de : fs::directory_iterator(dir, ec)) {
+    if (ec) {
+      break;
+    }
+    std::error_code type_ec;
+    if (!de.is_socket(type_ec)) {              // only unlink actual sockets
+      continue;
+    }
+    const std::string fn = de.path().filename().string();
+    if (fn == base ||                          // our own (not yet bound) socket
+	!fn.starts_with(prefix) ||             // different daemon
+	!fn.ends_with(suffix)) {
+      continue;
+    }
+    const std::string full = de.path().string();
+    AdminSocketClient client(full);
+    bool ok = false;
+    client.ping(&ok);
+    if (ok) {                                  // a live instance owns it
+      continue;
+    }
+    lgeneric_subdout(cct, asok, 5) << "unlinking stale admin socket "
+				   << full << dendl;
+    retry_sys_call(::unlink, full.c_str());
+  }
+}
+
 bool AdminSocket::init(const std::string& path)
 {
   ldout(m_cct, 5) << "init " << path << dendl;
@@ -1095,6 +1175,9 @@ bool AdminSocket::init(const std::string& path)
     lderr(m_cct) << "AdminSocketConfigObs::init: error: " << err << dendl;
     return false;
   }
+#ifndef _WIN32
+  unlink_stale_sibling_sockets(m_cct, path);
+#endif
   int sock_fd;
   err = bind_and_listen(path, &sock_fd);
   if (!err.empty()) {
