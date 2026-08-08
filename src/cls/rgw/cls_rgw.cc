@@ -367,6 +367,23 @@ static std::string cls_rgw_after_versions(const std::string& key)
   return key + '\1'; // suffix "\1" sorts after suffixes like "\0v123\0iabc"
 }
 
+static void encode_obj_index_plain_key(const cls_rgw_obj_key& key, uint64_t ver_epoch, string *index_key)
+{
+  *index_key = key.name;
+  if (key.instance.empty()) {
+    return;
+  }
+
+  string ver_delim("\0v", 2);
+  string inst_delim("\0i", 2);
+  index_key->append(ver_delim);
+  string str_epoch;
+  decreasing_str(ver_epoch, &str_epoch);
+  index_key->append(str_epoch);
+  index_key->append(inst_delim);
+  index_key->append(key.instance);
+}
+
 static void encode_obj_versioned_data_key(const cls_rgw_obj_key& key,
 					  std::string* index_key,
 					  bool append_delete_marker_suffix = false)
@@ -1660,7 +1677,7 @@ public:
     return true;
   }
 
-  uint64_t get_epoch() {
+  uint64_t get_epoch() const {
     return olh_data_entry.epoch;
   }
 
@@ -1672,7 +1689,7 @@ public:
     return olh_data_entry;
   }
 
-  void update(cls_rgw_obj_key& key, bool delete_marker) {
+  void update(const cls_rgw_obj_key& key, bool delete_marker) {
     olh_data_entry.delete_marker = delete_marker;
     olh_data_entry.key = key;
   }
@@ -1695,19 +1712,19 @@ public:
     update_olh_log(olh_data_entry, op, op_tag, key, delete_marker, epoch);
   }
 
-  bool exists() { return olh_data_entry.exists; }
+  bool exists() const { return olh_data_entry.exists; }
 
   void set_exists(bool exists) {
     olh_data_entry.exists = exists;
   }
 
-  bool pending_removal() { return olh_data_entry.pending_removal; }
+  bool pending_removal() const { return olh_data_entry.pending_removal; }
 
   void set_pending_removal(bool pending_removal) {
     olh_data_entry.pending_removal = pending_removal;
   }
 
-  const string& get_tag() { return olh_data_entry.tag; }
+  const string& get_tag() const { return olh_data_entry.tag; }
   void set_tag(const string& tag) {
     olh_data_entry.tag = tag;
   }
@@ -2890,7 +2907,23 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 
   switch (op.type) {
     case BIIndexType::Plain:
-      idx = op.key.name;
+      if (!op.key.instance.empty()) {
+        // we need to obtain the instance BI entry for the key first - so we can
+        // get a hold of the versioned_epoch which is necessary to build the idx
+        // string for the plain entry with non-empty instance string;
+        string obj_index_key;
+        encode_obj_versioned_data_key(op.key, &obj_index_key);
+        rgw_bucket_dir_entry entry;
+        int ret = read_index_entry(hctx, obj_index_key, &entry);
+        if (ret < 0) {
+          CLS_LOG(1, "ERROR: read_index_entry(): cls_cxx_map_get_val returned %d", ret);
+          return ret;
+        }
+        encode_obj_index_plain_key(op.key, entry.versioned_epoch, &idx);
+      }
+      else {
+        idx = op.key.name;
+      }
       break;
     case BIIndexType::Instance:
       encode_obj_index_key(op.key, &idx);
