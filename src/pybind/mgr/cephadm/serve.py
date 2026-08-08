@@ -506,7 +506,7 @@ class CephadmServe:
             self.mgr.remove_health_warning(k)
         # clear recently altered daemons that were created/removed more than 60 seconds ago
         self.mgr.recently_altered_daemons = {
-            d: t for (d, t) in self.mgr.recently_altered_daemons.items()
+            d: t for (d, t) in list(self.mgr.recently_altered_daemons.items())
             if ((datetime_now() - t).total_seconds() < 60)
         }
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
@@ -1422,7 +1422,7 @@ class CephadmServe:
                     f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
 
         # client keyrings
-        for ks in self.mgr.keys.keys.values():
+        for ks in list(self.mgr.keys.keys.values()):
             try:
                 ret, keyring, err = self.mgr.mon_command({
                     'prefix': 'auth get',
