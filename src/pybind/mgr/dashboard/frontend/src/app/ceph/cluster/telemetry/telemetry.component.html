@@ -34,17 +34,23 @@
               understanding of the way Ceph is used. The data is sent secured to {{ sendToUrl }} and
               {{ sendToDeviceUrl }} (device report).
             </p>
-            <div *ngIf="moduleEnabled">
-              The plugin is already <b>enabled</b>. Click <b>Deactivate</b> to disable it.&nbsp;
-              <button
-                type="button"
-                class="btn btn-light"
-                (click)="disableModule('The Telemetry module has been disabled successfully.')"
-                i18n
-              >
-                Deactivate
-              </button>
-            </div>
+            @if (moduleEnabled) {
+              <div class="module-enabled-info">
+                <p i18n>
+                  The plugin is already <b>enabled</b>. Deactivate it to disable telemetry data
+                  submission.
+                </p>
+                <button
+                  type="button"
+                  cdsButton="secondary"
+                  size="sm"
+                  (click)="disableModule('The Telemetry module has been disabled successfully.')"
+                  i18n
+                >
+                  Deactivate
+                </button>
+              </div>
+            }
             <legend i18n>Channels</legend>
             <p i18n>
               The telemetry report is broken down into several "channels", each with a different
@@ -215,7 +221,7 @@
               </div>
             </div>
 
-            <ng-container *ngIf="showContactInfo">
+            @if (showContactInfo) {
               <legend>
                 <ng-container i18n>Contact Information</ng-container>
                 <cd-helper i18n
@@ -239,44 +245,44 @@
                     placeholder="Example User <user@example.com>"
                   />
                 </div>
-              </div>
-              <div class="form-group row">
-                <label
-                  class="cd-col-form-label"
-                  for="description"
-                  i18n
-                  >Description</label
-                >
-                <div class="cd-col-form-input">
-                  <input
-                    id="description"
-                    class="form-control"
-                    type="text"
-                    formControlName="description"
-                    placeholder="My first Ceph cluster"
-                    i18n-placeholder
-                  />
+                <div class="form-group row">
+                  <label
+                    class="cd-col-form-label"
+                    for="description"
+                    i18n
+                    >Description</label
+                  >
+                  <div class="cd-col-form-input">
+                    <input
+                      id="description"
+                      class="form-control"
+                      type="text"
+                      formControlName="description"
+                      placeholder="My first Ceph cluster"
+                      i18n-placeholder
+                    />
+                  </div>
+                </div>
+                <div class="form-group row">
+                  <label
+                    class="cd-col-form-label"
+                    for="organization"
+                    i18n
+                    >Organization</label
+                  >
+                  <div class="cd-col-form-input">
+                    <input
+                      id="organization"
+                      class="form-control"
+                      type="text"
+                      formControlName="organization"
+                      placeholder="Organization name"
+                      i18n-placeholder
+                    />
+                  </div>
                 </div>
               </div>
-              <div class="form-group row">
-                <label
-                  class="cd-col-form-label"
-                  for="organization"
-                  i18n
-                  >Organization</label
-                >
-                <div class="cd-col-form-input">
-                  <input
-                    id="organization"
-                    class="form-control"
-                    type="text"
-                    formControlName="organization"
-                    placeholder="Organization name"
-                    i18n-placeholder
-                  />
-                </div>
-              </div>
-            </ng-container>
+            }
             <legend i18n>Advanced Settings</legend>
             <div class="form-group row">
               <label
@@ -292,17 +298,13 @@
               <div class="cd-col-form-input">
                 <input
                   id="interval"
-                  class="form-control"
                   type="number"
                   formControlName="interval"
                   min="8"
                 />
-                <span
-                  class="invalid-feedback"
-                  *ngIf="configForm.showError('interval', formDir, 'min')"
-                  i18n
-                  >The entered value is too low! It must be greater or equal to 8.</span
-                >
+                @if (configForm.showError('interval', formDir, 'min')) {
+                  <span i18n>The entered value is too low! It must be greater or equal to 8.</span>
+                }
               </div>
             </div>
             <div class="form-group row">
@@ -340,15 +342,15 @@
             </p>
           </div>
           <div class="card-footer">
-            <div class="button-group text-right">
+            <cds-button-set>
               <button
                 type="button"
-                class="btn btn-light"
+                cdsButton="primary"
                 (click)="next()"
               >
                 <ng-container>{{ actionLabels.NEXT }}</ng-container>
               </button>
-            </div>
+            </cds-button-set>
           </div>
         </div>
       </form>
