@@ -2295,6 +2295,68 @@ class TestMirroring(CephFSTestCase):
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_incremental_sync_preserved_mtime(self):
+        """Incremental sync when content changes but mtime is restored.
+
+        snapdiff defaults to mtime-only; mirror uses mtime|ctime|size so a
+        write that restores mtime is still detected (via size and/or ctime).
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.mount_a.run_shell(["mkdir", "d0"])
+        self.mount_a.write_file("d0/file1", data="some text\n")
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap0"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap0', 1)
+        self.verify_snapshot('d0', 'snap0')
+
+        def file_mtime(path):
+            return self.mount_a.run_shell(
+                ["stat", "-c", "%y", path]).stdout.getvalue().strip()
+
+        def file_size(path):
+            return int(self.mount_a.run_shell(
+                ["stat", "-c", "%s", path]).stdout.getvalue().strip())
+
+        # size changes, mtime restored — caught via size (and ctime)
+        self.mount_a.run_shell(["cp", "-a", "d0/file1", "d0/file1.ref"])
+        mtime_before = file_mtime("d0/file1")
+        size_before = file_size("d0/file1")
+        self.mount_a.run_shell_payload(
+            'printf "your data\\n" >> d0/file1 && sync')
+        self.mount_a.run_shell(["touch", "-r", "d0/file1.ref", "d0/file1"])
+        self.mount_a.run_shell(["rm", "-f", "d0/file1.ref"])
+        self.assertEqual(mtime_before, file_mtime("d0/file1"))
+        self.assertGreater(file_size("d0/file1"), size_before)
+
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap1"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap1', 2)
+        self.verify_snapshot('d0', 'snap1')
+
+        # same size rewrite, mtime restored — caught via ctime
+        self.mount_a.run_shell(["cp", "-a", "d0/file1", "d0/file1.ref"])
+        mtime_before = file_mtime("d0/file1")
+        size_before = file_size("d0/file1")
+        self.mount_a.write_file("d0/file1", data="X" * size_before)
+        self.mount_a.run_shell(["sync"])
+        self.mount_a.run_shell(["touch", "-r", "d0/file1.ref", "d0/file1"])
+        self.mount_a.run_shell(["rm", "-f", "d0/file1.ref"])
+        self.assertEqual(mtime_before, file_mtime("d0/file1"))
+        self.assertEqual(size_before, file_size("d0/file1"))
+
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap2"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap2', 3)
+        self.verify_snapshot('d0', 'snap2')
+
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_cephfs_mirror_sync_with_purged_snapshot(self):
         """Test snapshot synchronization in midst of snapshot deletes.
 
