@@ -1252,12 +1252,20 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     @profile_method()
     def get_osd_blocklisted_entries(self) -> None:
-        r = self.mon_command({
+        ret, out, err = self.mon_command({
             'prefix': 'osd blocklist ls',
             'format': 'json'
         })
-        blocklist_entries = r[2].split(' ')
-        blocklist_count = blocklist_entries[1]
+
+        try:
+            parsed_data = json.loads(out)
+            blocklist_count = len(parsed_data.get('blocklist', [])) + \
+                len(parsed_data.get('range_blocklist', []))
+        except json.JSONDecodeError:
+            # Fallback for older Ceph monitor versions
+            blocklist_entries = err.split(' ')
+            blocklist_count = int(blocklist_entries[1])
+
         for stat in OSD_BLOCKLIST:
             self.metrics['cluster_{}'.format(stat)].set(int(blocklist_count))
 
