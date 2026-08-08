@@ -29,7 +29,7 @@ iSCSI Initiator for Microsoft Windows
 #. Repeat steps 5 and 6 for each target portal defined when setting up
    the iSCSI gateway.
 
-**Multipath IO Setup:**
+**Multipath I/O Setup:**
 
 Configuring the MPIO load balancing policy, setting the timeout and
 retry options are using PowerShell with the ``mpclaim`` command. The
@@ -39,7 +39,7 @@ rest is done in the iSCSI Initiator tool.
   It is recommended to increase the ``PDORemovePeriod`` option to 120
   seconds from PowerShell. This value might need to be adjusted based
   on the application. When all paths are down, and 120 seconds
-  expires, the operating system will start failing IO requests.
+  expires, the operating system will start failing I/O requests.
 
 ::
 

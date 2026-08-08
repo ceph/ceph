@@ -153,7 +153,7 @@ Parameters
    * object-map: object map support (requires exclusive-lock)
    * fast-diff: fast diff calculations (requires object-map)
    * deep-flatten: snapshot flatten support
-   * journaling: journaled IO support (requires exclusive-lock)
+   * journaling: journaled I/O support (requires exclusive-lock)
    * data-pool: erasure coded pool support
 
 .. option:: --image-shared
@@ -181,7 +181,7 @@ Commands
 .. TODO rst "option" directive seems to require --foo style options, parsing breaks on subcommands.. the args show up as bold too
 
 :command:`bench` --io-type <read | write | readwrite | rw> [--io-size *size-in-B/K/M/G/T*] [--io-threads *num-ios-in-flight*] [--io-total *size-in-B/K/M/G/T*] [--io-pattern seq | rand] [--rw-mix-read *read proportion in readwrite*] *image-spec*
-  Generate a series of IOs to the image and measure the IO throughput and
+  Generate a series of I/Os to the image and measure the I/O throughput and
   latency.  If no suffix is given, unit B is assumed for both --io-size and
   --io-total.  Defaults are: --io-size 4096, --io-threads 16, --io-total 1G,
   --io-pattern seq, --rw-mix-read 50.

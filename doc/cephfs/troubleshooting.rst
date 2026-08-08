@@ -369,7 +369,7 @@ requests are the ``mdsc`` (current requests to the MDS) and the ``osdc``
 * ``mds_sessions``: Dumps the current sessions to MDSes
 * ``monc``: Dumps the current maps from the Monitor, and any "subscriptions" held
 * ``monmap``: Dumps the current monitor map epoch and Monitors
-* ``osdc``: Dumps the current ops in-flight to OSDs (ie, file data IO)
+* ``osdc``: Dumps the current ops in-flight to OSDs (ie, file data I/O)
 * ``osdmap``: Dumps the current OSDMap epoch, pools, and OSDs
 
 If the data pool is in a ``NEARFULL`` condition, then the kernel CephFS client

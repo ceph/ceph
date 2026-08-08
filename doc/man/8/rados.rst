@@ -150,11 +150,11 @@ Load gen options
 
 .. option:: --min-op-len
 
-   Min io size of operations.
+   Min I/O size of operations.
 
 .. option:: --max-op-len
 
-   Max io size of operations.
+   Max I/O size of operations.
 
 .. option:: --max-ops
 

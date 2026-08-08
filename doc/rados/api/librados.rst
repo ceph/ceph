@@ -43,7 +43,7 @@ Once the cluster handle is configured, you can connect to the cluster with :c:fu
 		exit(1);
 	}
 
-Then you open an "IO context", a :c:type:`rados_ioctx_t`, with :c:func:`rados_ioctx_create()`::
+Then you open an "I/O context", a :c:type:`rados_ioctx_t`, with :c:func:`rados_ioctx_create()`::
 
 	rados_ioctx_t io;
 	char *poolname = "mypool";
@@ -69,16 +69,16 @@ write into an object called ``greeting`` with
 		exit(1);
 	}
 
-In the end, you will want to close your IO context and connection to RADOS with :c:func:`rados_ioctx_destroy()` and :c:func:`rados_shutdown()`::
+In the end, you will want to close your I/O context and connection to RADOS with :c:func:`rados_ioctx_destroy()` and :c:func:`rados_shutdown()`::
 
 	rados_ioctx_destroy(io);
 	rados_shutdown(cluster);
 
 
-Asynchronous IO
-===============
+Asynchronous I/O
+================
 
-When doing lots of IO, you often don't need to wait for one operation
+When doing lots of I/O, you often don't need to wait for one operation
 to complete before starting the next one. `Librados` provides
 asynchronous versions of several operations:
 
