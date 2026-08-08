@@ -103,8 +103,49 @@ MDS
 A metadata server (MDS) is necessary for the proper functioning of CephFS.
 See :ref:`orchestrator-cli-cephfs` and :ref:`arch-cephfs`.
 
-Vstart Cluster Installation and Configuration Procedure
-=======================================================
+Deploying Your First Ceph Cluster
+=================================
+
+The recommended way to deploy a Ceph cluster is with ``cephadm``, which
+bootstraps a cluster on a single host from a container image and then
+expands it to additional hosts. A minimal deployment looks like this:
+
+#. Install the ``cephadm`` package on the first host. It is available in
+   the repositories of most major Linux distributions, for example:
+
+   .. prompt:: bash #
+
+      dnf install cephadm
+
+   or:
+
+   .. prompt:: bash #
+
+      apt install cephadm
+
+#. Bootstrap the cluster, supplying the IP address of the first host:
+
+   .. prompt:: bash #
+
+      cephadm bootstrap --mon-ip <ip-of-this-host>
+
+This creates a working single-host cluster, complete with a web-based
+dashboard, that can then be expanded with additional hosts and storage
+devices. See :ref:`cephadm_deploying_new_cluster` for the complete
+procedure, including requirements, adding hosts, and deploying OSDs.
+
+If you are running Ceph inside Kubernetes, use `Rook
+<https://rook.io>`_ instead. An overview of all installation methods is
+in :ref:`install-overview`.
+
+Building a Development Cluster from Source (vstart)
+===================================================
+
+.. note:: This procedure is intended for developers who want to modify
+   or contribute to Ceph. It compiles Ceph from source, which can take
+   several hours, and produces a throwaway development cluster. If you
+   want to deploy Ceph to store data, use ``cephadm`` as described
+   above instead.
 
 #. Clone the ``ceph/ceph`` repository:
 
