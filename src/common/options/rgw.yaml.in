@@ -101,6 +101,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_dedup_skip_compressed
+  type: bool
+  level: advanced
+  desc: Skip server-side compressed objects during dedup.
+  long_desc: When true, compressed objects are skipped during the dedup process.
+    When false (default), compressed objects participate in dedup and their
+    uncompressed data is hashed on-the-fly for matching.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_max_chunk_size
   type: size
   level: advanced
