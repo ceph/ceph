@@ -447,14 +447,23 @@ class TestCephAdm(object):
         ctx.initial_dashboard_password = 'password'
         ctx.initial_dashboard_user = 'User'
         with pytest.raises(Exception):
-            _cephadm.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
+            _cephadm.prepare_dashboard(
+                ctx, 0, 0,
+                lambda _, extra_mounts=None, ___=None: '5',
+                lambda module_names=None: None)
 
         ctx.skip_firewalld = True
-        _cephadm.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
+        _cephadm.prepare_dashboard(
+            ctx, 0, 0,
+            lambda _, extra_mounts=None, ___=None: '5',
+            lambda module_names=None: None)
 
         ctx.skip_firewalld = False
         with pytest.raises(Exception):
-            _cephadm.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
+            _cephadm.prepare_dashboard(
+                ctx, 0, 0,
+                lambda _, extra_mounts=None, ___=None: '5',
+                lambda module_names=None: None)
 
     def test_to_deployment_container(self, funkypatch):
         """
