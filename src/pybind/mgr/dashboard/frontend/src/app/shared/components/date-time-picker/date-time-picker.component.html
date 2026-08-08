@@ -1,8 +1,5 @@
-<div cdsCol>
-  <div
-    cdsRow
-    class="form-item-append"
-  >
+<div class="cds-mt-5 date-time-row">
+  <div class="date-time-col">
     <cds-text-label
       >{{ name }}
       <cds-date-picker
@@ -17,14 +14,18 @@
         cdsTheme="theme"
       ></cds-date-picker>
     </cds-text-label>
-    <cds-text-label *ngIf="hasTime"
+  </div>
+  <div
+    class="date-time-col"
+    *ngIf="hasTime"
+  >
+    <cds-text-label
       >Select a time
       <cds-timepicker
         (valueChange)="onModelChange($event)"
         [(ngModel)]="time"
         [disabled]="disabled"
         pattern="(1[012]|[0-9]):[0-5][0-9]"
-        *ngIf="hasTime"
       >
         <cds-timepicker-select
           [(ngModel)]="ampm"
