@@ -2124,8 +2124,9 @@ int Client::verify_reply_trace(int r, MetaSession *session,
   std::unordered_map<vinodeno_t, Inode*>::iterator p;
 
   extra_bl = reply->get_extra_bl();
-  if (extra_bl.length() >= 8) {
-    if (session->mds_features.test(CEPHFS_FEATURE_DELEG_INO)) {
+  if (extra_bl.length()) {
+    // Check size to determine how to decode payload from mds
+    if (extra_bl.length() > 8 && session->mds_features.test(CEPHFS_FEATURE_DELEG_INO)) {
      struct openc_response_t	ocres;
 
      decode(ocres, extra_bl);
