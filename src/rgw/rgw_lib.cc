@@ -472,13 +472,13 @@ namespace rgw {
     this->fe = fe;
   }
 
-  int RGWLib::init()
+  int RGWLib::init(rgw::FrontendType frontend_type)
   {
     vector<const char*> args;
-    return init(args);
+    return init(args, frontend_type);
   }
 
-  int RGWLib::init(vector<const char*>& args)
+  int RGWLib::init(vector<const char*>& args, rgw::FrontendType frontend_type)
   {
     int r{0};
     /* alternative default for module */
@@ -505,7 +505,7 @@ namespace rgw {
     mutex.unlock();
 
     /* stage all front-ends (before common-init-finish) */
-    main.init_frontends1(true /* nfs */);
+    main.init_frontends1(frontend_type);
 
     common_init_finish(g_ceph_context);
 
