@@ -662,8 +662,6 @@ public:
   static const size_t AES_256_KEYSIZE = 256 / 8;        // 32 bytes
   static const size_t AES_256_IVSIZE = 96 / 8;          // 12 bytes (GCM standard)
   static const size_t GCM_TAG_SIZE = 128 / 8;           // 16 bytes
-  static const size_t CHUNK_SIZE = 4096;
-  static const size_t ENCRYPTED_CHUNK_SIZE = CHUNK_SIZE + GCM_TAG_SIZE; // 4112
 
   const DoutPrefixProvider* dpp;
 private:
@@ -675,12 +673,16 @@ private:
   bool salt_initialized = false;
   uint32_t part_number_ = 0;  // For multipart: ensures unique IVs across parts
   bool part_salt_applied_ = false;
+  size_t chunk_size;
+  size_t encrypted_chunk_size;
   std::once_flag gcm_accel_init_once;
   CryptoAccelRef gcm_accel;
 
 public:
   explicit AES_256_GCM(const DoutPrefixProvider* dpp, CephContext* cct)
-    : dpp(dpp), cct(cct) {
+    : dpp(dpp), cct(cct),
+      chunk_size(cct->_conf->rgw_crypt_aead_chunk_size),
+      encrypted_chunk_size(chunk_size + GCM_TAG_SIZE) {
     memset(salt, 0, AES_256_GCM_SALT_SIZE);
   }
 
@@ -878,11 +880,16 @@ public:
   }
 
   size_t get_block_size() override {
-    return CHUNK_SIZE;
+    return chunk_size;
   }
 
   size_t get_encrypted_block_size() override {
-    return ENCRYPTED_CHUNK_SIZE;
+    return encrypted_chunk_size;
+  }
+
+  void set_chunk_size(size_t bs) override {
+    chunk_size = bs;
+    encrypted_chunk_size = bs + GCM_TAG_SIZE;
   }
 
   // Encode chunk index as 8-byte big-endian AAD for chunk reordering protection.
@@ -900,7 +907,7 @@ public:
 
     std::call_once(gcm_accel_init_once, [this]() {
       static const size_t max_requests = g_ceph_context->_conf->rgw_thread_pool_size;
-      gcm_accel = get_crypto_accel(dpp, cct, CHUNK_SIZE, max_requests);
+      gcm_accel = get_crypto_accel(dpp, cct, chunk_size, max_requests);
       if (!gcm_accel) {
         failed_to_get_crypto_gcm.store(true, std::memory_order_release);
       }
@@ -962,7 +969,7 @@ public:
       }
 
       int written = 0;
-      ceph_assert(size <= CHUNK_SIZE);
+      ceph_assert(size <= chunk_size);
       if (1 != EVP_EncryptUpdate(ctx, out, &written, in, size)) {
         ldpp_dout(dpp, 5) << "EVP: EncryptUpdate failed" << dendl;
         return false;
@@ -994,7 +1001,7 @@ public:
       }
 
       int written = 0;
-      ceph_assert(size <= CHUNK_SIZE);
+      ceph_assert(size <= chunk_size);
       if (1 != EVP_DecryptUpdate(ctx, out, &written, in, size)) {
         ldpp_dout(dpp, 5) << "EVP: DecryptUpdate failed" << dendl;
         return false;
@@ -1068,16 +1075,16 @@ public:
                         << " missing per-part salt; refusing to encrypt" << dendl;
       return false;
     }
-    if (stream_offset % static_cast<off_t>(CHUNK_SIZE) != 0) {
+    if (stream_offset % static_cast<off_t>(chunk_size) != 0) {
       ldpp_dout(dpp, 0) << "GCM: stream_offset " << stream_offset
-                        << " not chunk-aligned (" << CHUNK_SIZE << ")" << dendl;
+                        << " not chunk-aligned (" << chunk_size << ")" << dendl;
       return false;
     }
 
-    // Calculate output size: each CHUNK_SIZE plaintext becomes CHUNK_SIZE + GCM_TAG_SIZE
-    size_t num_full_chunks = size / CHUNK_SIZE;
-    size_t remainder = size % CHUNK_SIZE;
-    size_t output_size = num_full_chunks * ENCRYPTED_CHUNK_SIZE;
+    // Calculate output size: each chunk_size plaintext becomes chunk_size + GCM_TAG_SIZE
+    size_t num_full_chunks = size / chunk_size;
+    size_t remainder = size % chunk_size;
+    size_t output_size = num_full_chunks * encrypted_chunk_size;
     if (remainder > 0) {
       output_size += remainder + GCM_TAG_SIZE;
     }
@@ -1122,29 +1129,29 @@ public:
     }
 
     // Process full chunks
-    for (size_t offset = 0; offset < num_full_chunks * CHUNK_SIZE; offset += CHUNK_SIZE) {
+    for (size_t offset = 0; offset < num_full_chunks * chunk_size; offset += chunk_size) {
       unsigned char iv[AES_256_IVSIZE];
       cursor.emit(iv);
       const unsigned char* input_ptr = input_raw + offset;
 
       unsigned char* ciphertext = buf_raw + out_pos;
-      unsigned char* tag = buf_raw + out_pos + CHUNK_SIZE;
+      unsigned char* tag = buf_raw + out_pos + chunk_size;
 
-      if (!gcm_transform(ciphertext, input_ptr, CHUNK_SIZE,
+      if (!gcm_transform(ciphertext, input_ptr, chunk_size,
                          iv, key, tag, cursor.chunk_index, true, y, accel, evp_ctx.get())) {
         ldpp_dout(dpp, 5) << "Failed to encrypt chunk at offset " << offset << dendl;
         return false;
       }
 
       cursor.advance();
-      out_pos += ENCRYPTED_CHUNK_SIZE;
+      out_pos += encrypted_chunk_size;
     }
 
     // Process remainder (if any)
     if (remainder > 0) {
       unsigned char iv[AES_256_IVSIZE];
       cursor.emit(iv);
-      const unsigned char* input_ptr = input_raw + num_full_chunks * CHUNK_SIZE;
+      const unsigned char* input_ptr = input_raw + num_full_chunks * chunk_size;
 
       unsigned char* ciphertext = buf_raw + out_pos;
       unsigned char* tag = buf_raw + out_pos + remainder;
@@ -1173,9 +1180,9 @@ public:
     output.clear();
 
     // Input is organized as encrypted chunks (ciphertext + tag)
-    size_t num_full_chunks = size / ENCRYPTED_CHUNK_SIZE;
-    size_t remainder = size % ENCRYPTED_CHUNK_SIZE;
-    size_t output_size = num_full_chunks * CHUNK_SIZE;
+    size_t num_full_chunks = size / encrypted_chunk_size;
+    size_t remainder = size % encrypted_chunk_size;
+    size_t output_size = num_full_chunks * chunk_size;
 
     if (remainder > 0) {
       if (remainder <= GCM_TAG_SIZE) {
@@ -1228,10 +1235,10 @@ public:
     for (size_t i = 0; i < num_full_chunks; i++) {
       unsigned char iv[AES_256_IVSIZE];
       cursor.emit(iv);
-      const unsigned char* chunk_ptr = input_raw + i * ENCRYPTED_CHUNK_SIZE;
+      const unsigned char* chunk_ptr = input_raw + i * encrypted_chunk_size;
 
-      if (!gcm_transform(buf_raw + out_pos, chunk_ptr, CHUNK_SIZE,
-                         iv, key, const_cast<unsigned char*>(chunk_ptr + CHUNK_SIZE),
+      if (!gcm_transform(buf_raw + out_pos, chunk_ptr, chunk_size,
+                         iv, key, const_cast<unsigned char*>(chunk_ptr + chunk_size),
                          cursor.chunk_index, false, y, accel, evp_ctx.get())) {
         ldpp_dout(dpp, 5) << "GCM: Failed to decrypt chunk " << i
                           << " - authentication failed" << dendl;
@@ -1239,7 +1246,7 @@ public:
       }
 
       cursor.advance();
-      out_pos += CHUNK_SIZE;
+      out_pos += chunk_size;
     }
 
     // Process remainder (if any)
@@ -1247,7 +1254,7 @@ public:
       size_t plaintext_size = remainder - GCM_TAG_SIZE;
       unsigned char iv[AES_256_IVSIZE];
       cursor.emit(iv);
-      const unsigned char* chunk_ptr = input_raw + num_full_chunks * ENCRYPTED_CHUNK_SIZE;
+      const unsigned char* chunk_ptr = input_raw + num_full_chunks * encrypted_chunk_size;
 
       if (!gcm_transform(buf_raw + out_pos, chunk_ptr, plaintext_size,
                          iv, key, const_cast<unsigned char*>(chunk_ptr + plaintext_size),
@@ -1293,7 +1300,7 @@ public:
   bool init_iv_cursor(iv_cursor& cursor, off_t stream_offset) {
     ceph_assert(salt_initialized);
     cursor.hi = part_number_;
-    cursor.lo = stream_offset / CHUNK_SIZE;
+    cursor.lo = stream_offset / chunk_size;
     cursor.chunk_index = cursor.lo;
     return true;
   }
@@ -1961,6 +1968,17 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
     return false;
   }
 
+  size_t chunk_size;
+  if (aead_chunk_size_from_attrs(attrs, &chunk_size) != 0) {
+    if (dpp) {
+      ldpp_dout(dpp, 1) << "rgw_get_aead_decrypted_size: invalid or "
+                          "missing PREFETCH_ALIGN xattr - size derivation "
+                          "skipped (subsequent GET will fail at decrypt)"
+                        << dendl;
+    }
+    return false;
+  }
+
   /* Try CRYPT_PARTS first (more accurate for multipart) */
   if (auto i = attrs.find(RGW_ATTR_CRYPT_PARTS); i != attrs.end()) {
     std::vector<size_t> parts_len;
@@ -1977,7 +1995,7 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
     if (!parts_len.empty()) {
       uint64_t total = 0;
       for (size_t enc_part : parts_len) {
-        total += aead_encrypted_to_plaintext_size(enc_part, dpp);
+        total += aead_encrypted_to_plaintext_size(enc_part, chunk_size, dpp);
       }
       *decrypted_size = total;
       return true;
@@ -1985,7 +2003,7 @@ bool rgw_get_aead_decrypted_size(const DoutPrefixProvider* dpp,
   }
 
   /* Fallback: calculate from total encrypted size */
-  *decrypted_size = aead_encrypted_to_plaintext_size(encrypted_size, dpp);
+  *decrypted_size = aead_encrypted_to_plaintext_size(encrypted_size, chunk_size, dpp);
   if (dpp) {
     ldpp_dout(dpp, 20) << "AEAD: calculated decrypted size " << *decrypted_size
                        << " from encrypted " << encrypted_size << dendl;
@@ -2104,10 +2122,11 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-C-AES256-GCM");
         if (!block_crypt) {
-          // multipart-init: write prefetch align from AEAD constants
+          // multipart-init: write prefetch align from configured chunk size
+          const size_t bs = s->cct->_conf->rgw_crypt_aead_chunk_size;
           bufferlist align_bl;
-          encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
-          encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+          encode(static_cast<uint32_t>(bs), align_bl);
+          encode(static_cast<uint32_t>(bs + AEAD_TAG_SIZE), align_bl);
           attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
         }
         std::string salt = generate_gcm_salt(s, attrs);
@@ -2225,9 +2244,10 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         if (use_gcm) {
           set_attr(attrs, RGW_ATTR_CRYPT_MODE, "SSE-KMS-GCM");
           if (!block_crypt) {
+            const size_t bs = s->cct->_conf->rgw_crypt_aead_chunk_size;
             bufferlist align_bl;
-            encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
-            encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+            encode(static_cast<uint32_t>(bs), align_bl);
+            encode(static_cast<uint32_t>(bs + AEAD_TAG_SIZE), align_bl);
             attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
           }
           std::string salt = generate_gcm_salt(s, attrs);
@@ -2323,9 +2343,10 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256-GCM");
         if (!block_crypt) {
+          const size_t bs = s->cct->_conf->rgw_crypt_aead_chunk_size;
           bufferlist align_bl;
-          encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
-          encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+          encode(static_cast<uint32_t>(bs), align_bl);
+          encode(static_cast<uint32_t>(bs + AEAD_TAG_SIZE), align_bl);
           attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
         }
         std::string salt = generate_gcm_salt(s, attrs);
@@ -2396,9 +2417,10 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
       if (use_gcm) {
         set_attr(attrs, RGW_ATTR_CRYPT_MODE, "RGW-AUTO-GCM");
         if (!block_crypt) {
+          const size_t bs = s->cct->_conf->rgw_crypt_aead_chunk_size;
           bufferlist align_bl;
-          encode(static_cast<uint32_t>(AEAD_CHUNK_SIZE), align_bl);
-          encode(static_cast<uint32_t>(AEAD_ENCRYPTED_CHUNK_SIZE), align_bl);
+          encode(static_cast<uint32_t>(bs), align_bl);
+          encode(static_cast<uint32_t>(bs + AEAD_TAG_SIZE), align_bl);
           attrs[RGW_ATTR_CRYPT_PREFETCH_ALIGN] = std::move(align_bl);
         }
         std::string salt = generate_gcm_salt(s, attrs);
@@ -2669,6 +2691,13 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     if (stored_salt.empty()) return -EIO;
 
     auto gcm = std::make_unique<AES_256_GCM>(s, s->cct);
+    size_t chunk_size;
+    if (aead_chunk_size_from_attrs(attrs, &chunk_size) != 0) {
+      ldpp_dout(s, 5) << "ERROR: SSE-C-AES256-GCM: invalid or missing "
+                        "PREFETCH_ALIGN xattr" << dendl;
+      return -EIO;
+    }
+    gcm->set_chunk_size(chunk_size);
     gcm->set_salt(reinterpret_cast<const uint8_t*>(stored_salt.c_str()),
                    stored_salt.size());
     // Re-derive encryption key from user key + object identity
@@ -2772,6 +2801,14 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
       return -EIO;
     }
+    size_t chunk_size;
+    if (aead_chunk_size_from_attrs(attrs, &chunk_size) != 0) {
+      ldpp_dout(s, 5) << "ERROR: SSE-KMS-GCM: invalid or missing "
+                        "PREFETCH_ALIGN xattr" << dendl;
+      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+      return -EIO;
+    }
+    aes->set_chunk_size(chunk_size);
     std::string bucket_id, object_name;
     pick_gcm_identity(s, copy_source, src_identity, bucket_id, object_name);
     auto* gcm = dynamic_cast<AES_256_GCM*>(aes.get());
@@ -2855,6 +2892,13 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
     if (stored_salt.empty()) return -EIO;
 
     auto gcm = std::make_unique<AES_256_GCM>(s, s->cct);
+    size_t chunk_size;
+    if (aead_chunk_size_from_attrs(attrs, &chunk_size) != 0) {
+      ldpp_dout(s, 5) << "ERROR: RGW-AUTO-GCM: invalid or missing "
+                        "PREFETCH_ALIGN xattr" << dendl;
+      return -EIO;
+    }
+    gcm->set_chunk_size(chunk_size);
     gcm->set_salt(reinterpret_cast<const uint8_t*>(stored_salt.c_str()),
                    stored_salt.size());
 
@@ -2946,6 +2990,14 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
       ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
       return -EIO;
     }
+    size_t chunk_size;
+    if (aead_chunk_size_from_attrs(attrs, &chunk_size) != 0) {
+      ldpp_dout(s, 5) << "ERROR: AES256-GCM: invalid or missing "
+                        "PREFETCH_ALIGN xattr" << dendl;
+      ::ceph::crypto::zeroize_for_security(actual_key.data(), actual_key.length());
+      return -EIO;
+    }
+    aes->set_chunk_size(chunk_size);
     std::string bucket_id, object_name;
     pick_gcm_identity(s, copy_source, src_identity, bucket_id, object_name);
     auto* gcm = dynamic_cast<AES_256_GCM*>(aes.get());

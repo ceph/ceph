@@ -4285,10 +4285,18 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // Check if this is AEAD encryption to track plaintext size
   bool is_aead = false;
   uint64_t plaintext_ofs = 0;
+  size_t aead_chunk_size = 0;
   auto mode_iter = attrs.find(RGW_ATTR_CRYPT_MODE);
   if (mode_iter != attrs.end()) {
     std::string crypt_mode = mode_iter->second.to_str();
     is_aead = is_aead_mode(crypt_mode);
+  }
+  if (is_aead) {
+    if (aead_chunk_size_from_attrs(attrs, &aead_chunk_size) != 0) {
+      ldpp_dout(dpp, 5) << "ERROR: complete_multipart: invalid or missing "
+                          "PREFETCH_ALIGN xattr" << dendl;
+      return -EIO;
+    }
   }
   // AEAD: (S3 part number, GCM salt) per selected part, in manifest-segment order.
   std::vector<std::pair<uint32_t, std::string>> part_keys;
@@ -4416,7 +4424,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
           // For compressed parts, use the uncompressed size directly
           plaintext_ofs += obj_part.accounted_size;
         } else {
-          plaintext_ofs += aead_encrypted_to_plaintext_size(obj_part.size);
+          plaintext_ofs += aead_encrypted_to_plaintext_size(
+              obj_part.size, aead_chunk_size);
         }
       }
     }
