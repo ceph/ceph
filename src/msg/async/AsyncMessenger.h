@@ -38,6 +38,8 @@
 #include "include/ceph_assert.h"
 #include "common/admin_socket.h"
 
+#include "smc/smc_socket_checker.h"
+
 class AsyncMessenger;
 
 /**
