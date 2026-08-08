@@ -30,6 +30,7 @@ overrides:
       - pool full
       - pool\(s\) full
       - telemetry module includes new collections
+      - but it is still running
 tasks:
 - install:
     branch: tentacle
