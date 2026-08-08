@@ -12401,6 +12401,66 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedPartialTest) {
     << std::endl;
 }
 
+TEST_P(StoreTestSpecificAUSize, BluestoreLegacyMinAllocSizeAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // 64 KiB was the default allocation unit for HDD-backed OSDs deployed
+  // prior to Pacific; the alert only applies to rotational media
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hybrid");
+  g_conf().apply_changes(nullptr);
+  StartDeferred(65536);
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 1);
+  std::cout << "legacy_min_alloc_size_alert:"
+	    << alerts.find("BLUESTORE_LEGACY_MIN_ALLOC_SIZE")->second
+	    << std::endl;
+
+  // the alert can be disabled at runtime
+  SetVal(g_conf(), "bluestore_warn_on_legacy_min_alloc_size", "false");
+  g_conf().apply_changes(nullptr);
+
+  alerts.clear();
+  r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreFlashMinAllocSizeNoAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // a large allocation unit on flash is considered deliberate (e.g.
+  // aligned with the indirection unit of coarse-IU QLC devices) and
+  // must not raise the alert
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  g_conf().apply_changes(nullptr);
+  StartDeferred(65536);
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+}
+
+TEST_P(StoreTestSpecificAUSize, BluestoreDefaultMinAllocSizeNoAlertTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  StartDeferred(4096);
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUESTORE_LEGACY_MIN_ALLOC_SIZE"), 0);
+}
+
 TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
   if (string(GetParam()) != "bluestore")
     return;
