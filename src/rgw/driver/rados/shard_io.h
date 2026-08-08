@@ -226,14 +226,15 @@ auto async_wait(WaitHandler& wakeup, ShardList& sending, ShardList& outstanding,
 }
 
 inline void maybe_complete(WaitHandler& wakeup, ShardList& sending,
-                           ShardList& outstanding, bool terminal)
+                           ShardList& outstanding, bool terminal,
+                           boost::asio::any_io_executor ex)
 {
   const bool ready_to_send = !sending.empty() && !terminal;
   const bool done_waiting = outstanding.empty();
   if (wakeup && (ready_to_send || done_waiting)) {
     auto slot = boost::asio::get_associated_cancellation_slot(wakeup);
     slot.clear(); // remove async_wait()'s cancellation handler
-    boost::asio::dispatch(std::move(wakeup));
+    boost::asio::post(ex, std::move(wakeup));
   }
 }
 
@@ -288,7 +289,7 @@ struct RevertibleWriteHandler {
         break;
     }
 
-    maybe_complete(waiter, sending, outstanding, terminal);
+    maybe_complete(waiter, sending, outstanding, terminal, get_executor());
   }
 }; // struct RevertibleWriteHandler
 
@@ -316,7 +317,7 @@ struct RevertHandler {
           << "' failed: " << ec.message() << dendl;
     }
 
-    maybe_complete(waiter, sending, outstanding, terminal);
+    maybe_complete(waiter, sending, outstanding, terminal, get_executor());
   }
 }; // struct RevertHandler
 
@@ -444,7 +445,7 @@ struct WriteHandler {
         break;
     }
 
-    maybe_complete(waiter, sending, outstanding, terminal);
+    maybe_complete(waiter, sending, outstanding, terminal, get_executor());
   }
 }; // struct WriteHandler
 
@@ -558,7 +559,7 @@ struct ReadHandler {
         break;
     }
 
-    maybe_complete(waiter, sending, outstanding, terminal);
+    maybe_complete(waiter, sending, outstanding, terminal, get_executor());
 
     if (need_cancel) {
       // cancel outstanding requests
