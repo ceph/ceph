@@ -47,7 +47,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             xprtsec: Optional[str] = None,
             cmount_path: Optional[str] = "/",
             transports: Optional[List[str]] = None,
-            skip_notify_nfs_server: bool = False
+            skip_notify_nfs_server: bool = False,
+            kmip_key_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """Create a CephFS export"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
@@ -66,7 +67,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             xprtsec=xprtsec,
             cmount_path=cmount_path,
             transports=transports,
-            earmark_resolver=earmark_resolver
+            earmark_resolver=earmark_resolver,
+            kmip_key_id=kmip_key_id
         )
 
     @NFSCLICommand('nfs export create rgw', perm='rw')
@@ -83,7 +85,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             sectype: Optional[List[str]] = None,
             xprtsec: Optional[str] = None,
             transports: Optional[List[str]] = None,
-            skip_notify_nfs_server: bool = False
+            skip_notify_nfs_server: bool = False,
+            kmip_key_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Create an RGW export"""
         self.export_mgr.skip_notify_nfs_server = skip_notify_nfs_server
@@ -99,6 +102,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             sectype=sectype,
             xprtsec=xprtsec,
             transports=transports,
+            kmip_key_id=kmip_key_id
         )
 
     @NFSCLICommand('nfs export rm', perm='rw')
@@ -171,14 +175,20 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 rdma_port: Optional[int] = None,
                                 enable_nfsv3: bool = False,
                                 ingress_placement: Optional[str] = None,
-                                inbuf: Optional[str] = None) -> None:
+                                inbuf: Optional[str] = None,
+                                ) -> None:
         """Create an NFS Cluster"""
         cluster_qos_config = None
+        kmip_cert = kmip_key = kmip_ca_cert = kmip_host_list = None
         ssl_cert = ssl_key = ssl_ca_cert = tls_min_version = tls_ciphers = None
         ssl = tls_ktls = tls_debug = False
         if inbuf:
             config = yaml.safe_load(inbuf)
             cluster_qos_config = config.get('cluster_qos_config')
+            kmip_cert = config.get('kmip_cert')
+            kmip_key = config.get('kmip_key')
+            kmip_ca_cert = config.get('kmip_ca_cert')
+            kmip_host_list = config.get('kmip_host_list')
             ssl = config.get('ssl')
             ssl_cert = config.get('ssl_cert')
             ssl_key = config.get('ssl_key')
@@ -213,6 +223,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            ip_addrs=ip_addrs,
                                            monitoring_ip_addrs=monitoring_ip_addrs,
                                            monitoring_port=monitoring_port,
+                                           kmip_cert=kmip_cert,
+                                           kmip_key=kmip_key,
+                                           kmip_ca_cert=kmip_ca_cert,
+                                           kmip_host_list=kmip_host_list,
                                            ssl=ssl,
                                            ssl_cert=ssl_cert,
                                            ssl_key=ssl_key,
