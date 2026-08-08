@@ -12284,6 +12284,31 @@ void BlueStore::inject_bluefs_file(std::string_view dir, std::string_view name, 
   bluefs->close_writer(p_handle);
 }
 
+// Applies selected reshard scheme.
+// The function modifies onode and writes it directly to db
+// without sequencer; requires prior operations to onodes be
+// fully committed to db.
+void BlueStore::debug_force_reshard(
+  coll_t cid, ghobject_t oid,
+  BlueStore::ExtentMap::ReshardPlan& rp)
+{
+  OnodeRef o;
+  CollectionRef c = _get_collection(cid);
+  ceph_assert(c);
+  {
+    std::unique_lock l{ c->lock }; // just to avoid internal asserts
+    o = c->get_onode(oid, false);
+    ceph_assert(o);
+    o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  }
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+  o->extent_map.request_reshard(0, OBJECT_MAX_SIZE);
+  o->extent_map.reshard_action(rp, db, txn);
+  _record_onode(o, txn);
+  db->submit_transaction_sync(txn);
+}
+
 int BlueStore::compact()
 {
   int r = 0;
@@ -18068,11 +18093,9 @@ int BlueStore::_do_write_v2(
     }
   } else {
     // normal uncompressed path
-    BlueStore::Writer wr(this, txc, &wctx, o);
     uint64_t start = p2align(offset, min_alloc_size);
     uint64_t end = p2roundup(offset + length, min_alloc_size);
-    wr.left_affected_range = start;
-    wr.right_affected_range = end;
+    BlueStore::Writer wr(this, txc, &wctx, o, start, end);
     std::tie(wr.left_shard_bound, wr.right_shard_bound) =
       o->extent_map.fault_range_ex(db, start, end - start);
     wr.do_write(offset, bl);
@@ -18104,6 +18127,8 @@ int BlueStore::_do_write_v2_compressed(
     *_dout << i.offset << "~" << i.length << " ";
   }
   *_dout << std::dec << dendl;
+  uint32_t changes_start = regions.front().offset;
+  uint32_t changes_end = regions.back().offset + regions.back().length;
   for (const auto& i : regions) {
     ceph::buffer::list data_bl;
     if (i.offset <= offset && offset < i.offset + i.length) {
@@ -18131,16 +18156,16 @@ int BlueStore::_do_write_v2_compressed(
     uint32_t au_size = min_alloc_size;
     disk_for_compressed = estimator->split_and_compress(data_bl, bd);
     disk_for_raw = p2roundup(i.offset + i.length, au_size) - p2align(i.offset, au_size);
-    BlueStore::Writer wr(this, txc, &wctx, o);
+    BlueStore::Writer wr(this, txc, &wctx, o, changes_start, changes_end);
     if (disk_for_compressed < disk_for_raw) {
       wr.do_write_with_blobs(i.offset, i.offset + i.length, i.offset + i.length, bd);
     } else {
       wr.do_write(i.offset, data_bl);
     }
+    changes_start = wr.left_affected_range;
+    changes_end = wr.right_affected_range;
   }
   estimator->finish();
-  uint32_t changes_start = regions.front().offset;
-  uint32_t changes_end = regions.back().offset + regions.back().length;
   o->extent_map.compress_extent_map(changes_start, changes_end - changes_start);
   o->extent_map.dirty_range(changes_start, changes_end - changes_start);
   o->extent_map.maybe_reshard(changes_start, changes_end);

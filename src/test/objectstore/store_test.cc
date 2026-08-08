@@ -25,6 +25,7 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
 #include <boost/random/binomial_distribution.hpp>
+#include <random>
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
@@ -12794,6 +12795,155 @@ TEST_P(StoreTest, BlueFS_truncate_remove_race) {
   fs.unittest_inject_delay = nullptr;
   EXPECT_EQ(store->umount(), 0);
   EXPECT_EQ(store->mount(), 0);
+}
+
+typedef std::mt19937 gen_type_2;
+gen_type_2 rng = gen_type_2(0);
+uniform_int_distribution<> random_byte =
+    uniform_int_distribution<>(0, 200); //'!', '~');
+
+std::string random_string(uint32_t msg_size)
+{
+  std::string result;
+  uint32_t s = 0;
+  result.reserve(msg_size);
+  while (s < msg_size) {
+    result.push_back(random_byte(rng));
+    s++;
+  }
+  return result;
+}
+
+TEST_P(StoreTestSpecificAUSize, WriteV2CompressReject64K) {
+
+  if(string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_write_v2", "true");
+  SetVal(g_conf(), "bluestore_compression_algorithm", "snappy");
+  SetVal(g_conf(), "bluestore_compression_mode", "force");
+  SetVal(g_conf(), "bluestore_default_buffered_write", "false");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(ch, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(ch, hoid);
+    ASSERT_EQ(true, exists);
+  }
+
+  uint32_t blob_size = 128 * 1024;
+  uint32_t object_size = blob_size * 8;
+  string object_content = random_string(object_size);
+  bufferlist object_content_bl;
+  object_content_bl.append(object_content);
+
+  //1. fill with random data
+  for (uint32_t offs = 0; offs < object_size; offs += blob_size) {
+    bufferlist bl;
+    string msg = object_content.substr(offs, blob_size);
+    bl.append(msg);
+    ObjectStore::Transaction t;
+    C_SaferCond c;
+    t.register_on_commit(&c);
+    t.write(cid, hoid, offs, bl.length(), bl);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+  }
+  //00000~20000 blob A
+  //20000~20000 blob B
+  //40000~20000 blob C
+  //60000~20000 blob D
+  //80000~20000 blob E
+  //a0000~20000 blob F
+  //c0000~20000 blob G
+  //e0000~20000 blob H
+  //2. force known sharding
+  BlueStore* bstore = dynamic_cast<BlueStore*>(store.get());
+  BlueStore::ExtentMap::ReshardPlan rp;
+  rp.new_shard_info.emplace_back(0, 0);
+  rp.new_shard_info.emplace_back(0x30000, 0);
+  rp.new_shard_info.emplace_back(0x90000, 0);
+  rp.shard_index_begin = 0;
+  rp.shard_index_end = 0;
+  rp.spanning_scan_begin = 0; // doesn't matter
+  rp.spanning_scan_end = 0; // doesn't matter
+  bstore->debug_force_reshard(cid, hoid, rp);
+  //00000~20000 blob A  shard a
+  //20000~10000 blob B1 shard a
+  //30000~10000 blob B2 shard b
+  //40000~20000 blob C  shard b
+  //60000~20000 blob D  shard b
+  //80000~10000 blob E1 shard b
+  //90000~10000 blob E2 shard c
+  //a0000~20000 blob F  shard c
+  //c0000~20000 blob G  shard c
+  //e0000~20000 blob H  shard c
+  //3. overwrite
+  bufferlist bl;
+  string msg = object_content.substr(0x50000, 128 * 1024);
+  bl.append(msg);
+  ObjectStore::Transaction t;
+  C_SaferCond c;
+  t.register_on_commit(&c);
+  t.write(cid, hoid, 0x50000, bl.length(), bl);
+  // the default 0x20000 scan around during recompression makes
+  // the affected range 0x50000~0x20000 -> 0x30000~0x60000
+  r = queue_transaction(store, ch, std::move(t));
+  ASSERT_EQ(r, 0);
+  c.wait();
+  //00000~20000 blob A  shard a
+  //20000~20000 blob B  shard a <- modified not written
+  //range 30000~10000           <- not in shard marked to write
+  //40000~20000 blob C  shard b
+  //60000~20000 blob D  shard b
+  //80000~10000 blob E1 shard b
+  //90000~10000 blob E2 shard c
+  //a0000~20000 blob F  shard c
+  //c0000~20000 blob G  shard c
+  //e0000~20000 blob H  shard c
+  // unload hoid's ExtentMap
+  ch.reset();
+  EXPECT_EQ(store->umount(), 0);
+  EXPECT_EQ(store->mount(), 0);
+  ch = store->open_collection(cid);
+  //00000~20000 blob A  shard a
+  //20000~10000 blob B1 shard a
+  //30000~10000                 <- missing!
+  //40000~20000 blob C  shard b
+  //60000~20000 blob D  shard b
+  //80000~10000 blob E1 shard b
+  //90000~10000 blob E2 shard c
+  //a0000~20000 blob F  shard c
+  //c0000~20000 blob G  shard c
+  //e0000~20000 blob H  shard c
+  bufferlist object_content_read;
+  r = store->read(ch, hoid, 0, object_size, object_content_read);
+  EXPECT_EQ(r, (int)object_size);
+  EXPECT_TRUE(bl_eq(object_content_read, object_content_bl));
 }
 
 #endif  // WITH_BLUESTORE
