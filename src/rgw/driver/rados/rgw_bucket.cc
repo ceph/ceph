@@ -1511,6 +1511,24 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
   return ret;
 }
 
+int RGWBucketAdminOp::remove_all_objects(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
+				   optional_yield y, const DoutPrefixProvider *dpp,
+				   bool bypass_gc, bool keep_index_consistent)
+{
+  std::unique_ptr<rgw::sal::Bucket> bucket;
+
+  int ret = driver->load_bucket(dpp, rgw_bucket(op_state.get_tenant(),
+                                                op_state.get_bucket_name()),
+                                &bucket, y);
+  if (ret < 0)
+    return ret;
+
+  if (bypass_gc)
+    return bucket->remove_all_objects_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
+
+  return bucket->remove_all_objects(dpp, op_state.will_delete_children(), y);
+}
+
 int RGWBucketAdminOp::remove_object(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y)
 {
   RGWBucket bucket;
