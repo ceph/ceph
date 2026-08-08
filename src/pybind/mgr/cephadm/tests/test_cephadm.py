@@ -1768,7 +1768,7 @@ class TestCephadm(object):
                 placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1),
                 unmanaged=True)
             ),  # noqa: E124
-            ('client.nfs.x', True, ServiceSpec(
+            ('client.nfs.id', True, ServiceSpec(
                 service_type='nfs',
                 service_id='id',
                 placement=PlacementSpec(hosts=[HostPlacementSpec('test', '', 'x')], count=1),
