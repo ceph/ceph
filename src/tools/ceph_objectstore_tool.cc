@@ -3395,7 +3395,17 @@ int dup(string srcpath, ObjectStore *src, string dstpath, ObjectStore *dst)
 
 	bufferlist header;
 	map<string,bufferlist> omap;
-	src->omap_get(ch, oid, &header, &omap);
+
+	src->omap_get_header(ch, oid, &header);
+	src->omap_iterate(
+	  ch, oid,
+	  ObjectStore::omap_iter_seek_t::min_lower_bound(),
+	  [&omap](std::string_view key, std::string_view value) mutable {
+	    bufferlist bl;
+	    bl.append(value);
+	    omap.emplace(key, bl);
+	    return ObjectStore::omap_iter_ret_t::NEXT;
+	  });
 	if (header.length()) {
 	  t.omap_setheader(cid, oid, header);
 	  ++keys;
