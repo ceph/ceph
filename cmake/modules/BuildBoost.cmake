@@ -162,8 +162,13 @@ function(do_build_boost root_dir version)
     ${b2} ${b2_targets}
     #"--buildid=ceph" # changes lib names--can omit for static
     ${boost_features})
+  # Pass the same features to `install` as to the `stage` build above.
+  # Without them b2 falls back to its default (link=shared) and rebuilds the
+  # whole set as shared libraries on top of the static staged build - roughly
+  # doubling the Boost build - even though bundled Boost is always static
+  # (Boost_USE_STATIC_LIBS is forced ON) and nothing links the shared libs.
   set(install_command
-    ${b2} ${b2_install_targets})
+    ${b2} ${b2_install_targets} ${boost_features})
   if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
     check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
     set(source_dir
