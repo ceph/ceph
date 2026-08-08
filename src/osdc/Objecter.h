@@ -16,6 +16,7 @@
 #ifndef CEPH_OBJECTER_H
 #define CEPH_OBJECTER_H
 
+#include <deque>
 #include <list>
 #include <map>
 #include <mutex>
@@ -1840,8 +1841,13 @@ private:
   void update_crush_location();
 
   class RequestStateHook;
+  class SessionStrandHook;
 
   RequestStateHook *m_request_state_hook = nullptr;
+  SessionStrandHook *m_session_strand_hook = nullptr;
+
+public:
+  void dump_session_strands(ceph::Formatter *f);
 
 public:
   /*** track pending operations ***/
@@ -2369,7 +2375,7 @@ public:
 			boost::system::error_code ec);
   void _finish_command(CommandOp *c, boost::system::error_code ec,
 		       std::string&& rs, ceph::buffer::list&& bl);
-  void handle_command_reply(MCommandReply *m);
+  void handle_command_reply(cref_t<MCommandReply> m);
 
   // -- lingering ops --
 
@@ -2507,14 +2513,33 @@ public:
     // lockdep (using std::sharedMutex) because lockdep doesn't know
     // that.
     std::shared_mutex lock;
+    boost::asio::strand<boost::asio::io_context::executor_type> strand;
+
+    std::mutex strand_track_lock;
+    std::deque<MessageRef> queued_messages;
+
+    template <typename Callable>
+    void track_enqueue(const MessageRef& m, Callable&& f) {
+      std::lock_guard l(strand_track_lock);
+      queued_messages.push_back(m);
+      boost::asio::post(strand, std::forward<Callable>(f));
+    }
+
+    void track_dequeue(const MessageRef& m) {
+      std::lock_guard l(strand_track_lock);
+      ceph_assert(!queued_messages.empty());
+      auto const& _m = queued_messages.front();
+      ceph_assert(_m == m);
+      queued_messages.pop_front();
+    }
 
     int incarnation;
     ConnectionRef con;
     int num_locks;
     std::unique_ptr<std::mutex[]> completion_locks;
 
-    OSDSession(CephContext *cct, int o) :
-      osd(o), incarnation(0), con(NULL),
+    OSDSession(CephContext *cct, int o, boost::asio::io_context::executor_type ex) :
+      osd(o), strand(ex), incarnation(0), con(NULL),
       num_locks(cct->_conf->objecter_completion_locks_per_session),
       completion_locks(new std::mutex[num_locks]) {}
 
@@ -2553,9 +2578,8 @@ public:
   std::map<ceph_tid_t,PoolOp*> pool_ops;
   std::atomic<unsigned> num_homeless_ops{0};
 
-  OSDSession* homeless_session = new OSDSession(cct, -1);
-  OSDSession* splitop_session = new OSDSession(cct, -2); // -2 to differentiate from homeless
-
+  OSDSession* homeless_session;
+  OSDSession* splitop_session;
 
   // ops waiting for an osdmap with a new pool or confirmation that
   // the pool does not exist (may be expanded to other uses later)
@@ -2580,7 +2604,7 @@ public:
   void _send_op_account(Op *op);
   void _cancel_linger_op(Op *op);
   void _finish_op(Op *op, int r);
-  boost::system::error_code process_op_reply_handlers(Op *op, std::vector<OSDOp> &out_ops);
+  boost::system::error_code process_op_reply_handlers(Op *op, const std::vector<OSDOp>& out_ops);
   void complete_op_reply(Op *op, boost::system::error_code handler_error, OSDSession *s, std::unique_lock<std::shared_mutex> &sl, int rc);
   static bool is_pg_changed(
     int oldprimary,
@@ -2782,13 +2806,11 @@ private:
       return false;
     }
   }
-  void ms_fast_dispatch2(const MessageRef& m) override {
-    [[maybe_unused]] auto s = ms_dispatch2(m);
-  }
+  void ms_fast_dispatch2(const MessageRef& m) override;
 
-  void handle_osd_op_reply(class MOSDOpReply *m);
-  void handle_osd_backoff(class MOSDBackoff *m);
-  void handle_watch_notify(class MWatchNotify *m);
+  void handle_osd_op_reply(cref_t<MOSDOpReply> m);
+  void handle_osd_backoff(cref_t<MOSDBackoff> m);
+  void handle_watch_notify(cref_t<MWatchNotify> m);
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map(epoch_t e=0);
 
@@ -3309,7 +3331,7 @@ public:
  public:
 
   void _do_watch_notify(boost::intrusive_ptr<LingerOp> info,
-                        boost::intrusive_ptr<MWatchNotify> m);
+                        cref_t<MWatchNotify> m);
 
   /**
    * set up initial ops in the op std::vector, and allocate a final op slot.
