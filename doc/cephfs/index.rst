@@ -172,6 +172,7 @@ Troubleshooting and Disaster Recovery
 
     Client eviction <eviction>
     Scrubbing the File System <scrub>
+    Damaged ranks <damaged-rank>
     Handling full file systems <full>
     Metadata repair <disaster-recovery-experts>
     Troubleshooting <troubleshooting>

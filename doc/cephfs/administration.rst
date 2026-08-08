@@ -285,7 +285,8 @@ Get metadata about the given MDS known to the Monitors.
 
 Mark the file system rank as repaired. Unlike the name suggests, this command
 does not change a MDS; it manipulates the file system rank which has been
-marked damaged.
+marked damaged. See :ref:`cephfs-damaged-rank` for what a damaged rank
+means and for the repair workflow.
 
 ::
 
