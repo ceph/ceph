@@ -1733,7 +1733,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
     if (ret < 0) {
       ldpp_dout(dpp, 10) << "cannot list all reshards in logshard oid=" <<
 	logshard_oid << dendl;
-      continue;
+      break;
     }
 
     for(const auto& entry : entries) { // logshard entries
@@ -1743,6 +1743,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
       if (logshard_lock.should_renew(now)) {
         ret = logshard_lock.renew(now);
         if (ret < 0) {
+          logshard_lock.unlock();
           return ret;
         }
       }
@@ -1752,7 +1753,7 @@ int RGWReshard::process_single_logshard(int logshard_num, const DoutPrefixProvid
   } while (is_truncated);
 
   logshard_lock.unlock();
-  return 0;
+  return ret;
 }
 
 
