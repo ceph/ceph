@@ -539,8 +539,10 @@ def _check_share_resource(
             ):
                 raise ErrorResult(
                     share,
-                    msg="earmark has already been set by smb cluster "
-                    f"{parsed_earmark['cluster_id']}",
+                    msg=(f"Earmark has already been set by SMB cluster "
+                        f"'{parsed_earmark['cluster_id']}'."
+                        "Remove or update the existing earmark before reusing it with a different cluster. Ensure any existing SMB data, permissions, and ACLs are reviewed before reuse."
+                        ),
                 )
 
     name_used_by = _share_name_in_use(staging, share)
