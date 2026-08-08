@@ -1,3 +1,10 @@
+* RGW: Added support for Keystone application credential access rules for
+  Swift, letting RGW enforce the method/path restrictions defined on
+  restricted OpenStack application credential tokens. New config options
+  ``rgw_keystone_verify_access_rules`` (default: true) and
+  ``rgw_keystone_accepted_service_types`` (default: object-store, swift)
+  control enforcement behavior.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
