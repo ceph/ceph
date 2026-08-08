@@ -6312,6 +6312,10 @@ int OSDMap::pack_upmap_results(
     ceph_assert(tmp_osd_map.pg_upmap_items.count(i));
     tmp_osd_map.pg_upmap_items.erase(i);
     pending_inc->old_pg_upmap_items.insert(i);
+    // Drop any pending new_pg_upmap_items entry left from an earlier
+    // iteration of calc_pg_upmaps, otherwise the incremental ends up with
+    // both an old and a new entry for the same pg.
+    pending_inc->new_pg_upmap_items.erase(i);
     ++num_changed;
   }
   for (auto& [pg, um_items] : to_upmap) {
@@ -6320,10 +6324,13 @@ int OSDMap::pack_upmap_results(
                    << dendl;
     tmp_osd_map.pg_upmap_items[pg] = um_items;
     pending_inc->new_pg_upmap_items[pg] = um_items;
+    // Symmetric to the to_unmap loop: drop a stale old_pg_upmap_items
+    // entry so this iteration's add isn't undone on apply.
+    pending_inc->old_pg_upmap_items.erase(pg);
     ++num_changed;
   }
 
-  return num_changed; 
+  return num_changed;
 }
 
 std::default_random_engine OSDMap::get_random_engine(
