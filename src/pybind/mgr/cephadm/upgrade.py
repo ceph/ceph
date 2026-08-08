@@ -1692,6 +1692,46 @@ class CephadmUpgrade:
             self.upgrade_state.fs_original_allow_standby_replay = {}
             self._save_upgrade_state()
 
+    def _filtered_scope_up_to_date(
+        self,
+        target_digests: Optional[List[str]],
+        target_name: str,
+    ) -> bool:
+        assert self.upgrade_state is not None
+        if target_digests is None:
+            target_digests = []
+
+        if self.mgr.use_agent:
+            hosts: Set[str] = set()
+            if self.upgrade_state.hosts is not None:
+                hosts.update(self.upgrade_state.hosts)
+            for d in self._get_filtered_daemons():
+                if d.hostname is not None:
+                    hosts.add(d.hostname)
+            for hostname in hosts:
+                if not self.mgr.cache.host_metadata_up_to_date(hostname):
+                    logger.info(
+                        'Upgrade: Waiting for host %s metadata before completing',
+                        hostname,
+                    )
+                    self.mgr.agent_helpers._request_ack_all_not_up_to_date()
+                    return False
+
+        for d in self._get_filtered_daemons():
+            if d.daemon_type not in CEPH_IMAGE_TYPES:
+                continue
+            if (
+                (self.mgr.use_repo_digest and d.matches_digests(target_digests))
+                or (not self.mgr.use_repo_digest and d.matches_image_name(target_name))
+            ):
+                continue
+            logger.info(
+                'Upgrade: Waiting for %s to match target image before completing',
+                d.name(),
+            )
+            return False
+        return True
+
     def _mark_upgrade_complete(self) -> None:
         if not self.upgrade_state:
             logger.debug('_mark_upgrade_complete upgrade already marked complete, exiting')
@@ -1948,5 +1988,17 @@ class CephadmUpgrade:
                 'who': name_to_config_section(daemon_type),
             })
 
+        # Limited (--limit) upgrades end when the batch quota is exhausted,
+        # even if other daemons in the filter still need the target image.
+        if (
+            self.upgrade_state.remaining_count is not None
+            and self.upgrade_state.remaining_count <= 0
+        ):
+            self._mark_upgrade_complete()
+            return
+        if not self._filtered_scope_up_to_date(
+            target_digests, self.upgrade_state._target_name,
+        ):
+            return
         self._mark_upgrade_complete()
         return
