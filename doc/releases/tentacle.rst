@@ -867,7 +867,8 @@ MGR
 RADOS
 
 * FastEC: Long-anticipated performance and space amplification
-  optimizations are added for erasure-coded pools.
+  optimizations are added for erasure-coded pools. See
+  :ref:`rados_ops_erasure_coding_optimizations`.
 * BlueStore: Improved compression and a new, faster WAL (write-ahead-log).
 * Data Availability Score: Users can now track a data availability score
   for each pool in their cluster.
@@ -1046,7 +1047,9 @@ RADOS
   (RGW), in particular when using smaller sized objects. A new flag
   ``allow_ec_optimizations`` must be set on each pool to switch to using the
   new code. Existing pools can be upgraded once the OSD and Monitor daemons
-  have been updated. There is no need to update the clients.
+  have been updated. There is no need to update the clients. See
+  :ref:`rados_ops_erasure_coding_optimizations` for how to enable the
+  optimizations and for tuning guidance.
 
 * The default plugin for erasure coded pools has been changed from Jerasure to
   ISA-L. Clusters created on Tentacle or later releases will use ISA-L as the
