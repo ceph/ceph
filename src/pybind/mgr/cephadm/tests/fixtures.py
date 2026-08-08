@@ -3,6 +3,7 @@ import asyncio
 import sys
 from tempfile import NamedTemporaryFile
 from contextlib import contextmanager
+import json
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from ceph.utils import datetime_to_str, datetime_now
@@ -49,6 +50,130 @@ def match_glob(val, pat):
         assert pat in val
 
 
+class FakeCephSecretsClient:
+    """In-memory fake for CephSecretsClient.
+
+    Mirrors the real client API so that cephadm unit tests exercise the same
+    code paths as production.  The store is a plain dict keyed by
+    (namespace, scope_value, target, name).
+    """
+
+    SECRET_PREFIX = 'secret:/'
+
+    def __init__(self, mgr):
+        self.mgr = mgr
+        # (namespace, scope_value, target, name) -> {"data": str, "version": int}
+        self._db = {}
+        # namespace -> epoch counter
+        self._epochs = {}
+
+    def _key(self, namespace, scope, target, name):
+        return (namespace, str(getattr(scope, 'value', scope)), target or '', name)
+
+    def _bump_epoch(self, namespace):
+        self._epochs[namespace] = self._epochs.get(namespace, 0) + 1
+
+    # ---- epoch ----
+
+    def secret_get_epoch(self, namespace):
+        return self._epochs.get(namespace, 0)
+
+    # ---- CRUD ----
+
+    def secret_set(self, namespace, scope, target, name, data,
+                   user_made=True, editable=True):
+        key = self._key(namespace, scope, target, name)
+        version = self._db.get(key, {}).get('version', 0) + 1
+        self._db[key] = {'data': data, 'version': version}
+        self._bump_epoch(namespace)
+        return {'version': version}
+
+    def secret_get_value(self, namespace, scope, target, name):
+        key = self._key(namespace, scope, target, name)
+        rec = self._db.get(key)
+        return rec['data'] if rec is not None else None
+
+    def secret_get_version(self, namespace, scope, target, name):
+        key = self._key(namespace, scope, target, name)
+        rec = self._db.get(key)
+        return rec['version'] if rec is not None else None
+
+    def secret_get_versions(self, uris):
+        from ceph_secrets_types import parse_secret_uri, CephSecretException
+        out = {}
+        for uri in uris or []:
+            try:
+                ref = parse_secret_uri(uri)
+                out[uri] = self.secret_get_version(
+                    ref.namespace, ref.scope, ref.target, ref.name)
+            except CephSecretException:
+                pass
+        return out
+
+    def secret_rm(self, namespace, scope, target, name):
+        key = self._key(namespace, scope, target, name)
+        if key in self._db:
+            del self._db[key]
+            self._bump_epoch(namespace)
+            return True
+        return False
+
+    # ---- scan / resolve ----
+
+    def _collect_secret_uris(self, obj):
+        """Recursively collect whole-value secret:/ URI strings from obj."""
+        uris = []
+        if isinstance(obj, str):
+            stripped = obj.strip()
+            if stripped.startswith(self.SECRET_PREFIX):
+                uris.append(stripped)
+        elif isinstance(obj, dict):
+            for v in obj.values():
+                uris.extend(self._collect_secret_uris(v))
+        elif isinstance(obj, (list, tuple)):
+            for item in obj:
+                uris.extend(self._collect_secret_uris(item))
+        return uris
+
+    def scan_refs(self, obj=None, namespace=None):
+        return sorted(set(self._collect_secret_uris(obj or {})))
+
+    def scan_unresolved_refs(self, obj=None, namespace=None):
+        from ceph_secrets_types import parse_secret_uri, CephSecretException
+        unresolved = []
+        for uri in self.scan_refs(obj, namespace):
+            try:
+                ref = parse_secret_uri(uri)
+                if self.secret_get_version(
+                        ref.namespace, ref.scope, ref.target, ref.name) is None:
+                    unresolved.append(uri)
+            except CephSecretException:
+                unresolved.append(uri)
+        return unresolved
+
+    def resolve_object(self, obj=None):
+        from ceph_secrets_types import parse_secret_uri, CephSecretException
+        if isinstance(obj, str):
+            stripped = obj.strip()
+            if stripped.startswith(self.SECRET_PREFIX):
+                try:
+                    ref = parse_secret_uri(stripped)
+                    value = self.secret_get_value(
+                        ref.namespace, ref.scope, ref.target, ref.name)
+                    if value is None:
+                        raise RuntimeError(
+                            f'Secret not found during resolve: {stripped!r}')
+                    return value
+                except CephSecretException as e:
+                    raise RuntimeError(
+                        f'Invalid secret URI during resolve: {stripped!r}: {e}') from e
+            return obj
+        if isinstance(obj, dict):
+            return {k: self.resolve_object(v) for k, v in obj.items()}
+        if isinstance(obj, list):
+            return [self.resolve_object(item) for item in obj]
+        return obj
+
 class MockEventLoopThread:
     def get_result(self, coro, timeout):
         if sys.version_info >= (3, 7):
@@ -91,6 +216,7 @@ def with_cephadm_module(module_options=None, store=None):
     :param store: Set the store before module.__init__ is called
     """
     with mock.patch("cephadm.module.CephadmOrchestrator.get_ceph_option", get_ceph_option), \
+            mock.patch("cephadm.cephadm_secrets.CephSecretsClient", FakeCephSecretsClient), \
             mock.patch("cephadm.services.osd.RemoveUtil._run_mon_cmd"), \
             mock.patch('cephadm.module.CephadmOrchestrator.get_module_option_ex', get_module_option_ex), \
             mock.patch("cephadm.module.CephadmOrchestrator.get_osdmap"), \
