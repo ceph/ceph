@@ -953,10 +953,12 @@ int main(int argc, char **argv) {
         }
         if (common_options.dump_metrics) {
           f.open_array_section("metrics_values");
-          crimson::metrics::dump_metric_value_map(
-            seastar::scollectd::get_value_map(),
-            &f,
-            [](const auto &) { return true; });
+          co_await crimson::invoke_on_all_seq([&f] {
+            crimson::metrics::dump_metric_value_map(
+             seastar::scollectd::get_value_map(),
+             &f,
+             [](const auto &) { return true; });
+          });
           f.close_section();
         }
         f.close_section();
