@@ -1741,7 +1741,8 @@ private:
   bool keep_balanced_budget = false;
   bool honor_pool_full = true;
 
-  std::atomic<int> extra_read_flags{0};
+  std::atomic<int> extra_read_flags{0}; 
+  int blocked_read_flags = 0;
 
   // If this is true, accumulate a set of blocklisted entities
   // to be drained by consume_blocklist_events.
@@ -2996,6 +2997,8 @@ private:
     int ret = flags | global_op_flags |
               extra_read_flags.load(std::memory_order_relaxed) |
               CEPH_OSD_FLAG_READ;
+    
+    ret &= ~blocked_read_flags;
 
     // If the op is rwordered, strip out the balanced and localized flags.
     if (flags & CEPH_OSD_FLAG_RWORDERED) {
