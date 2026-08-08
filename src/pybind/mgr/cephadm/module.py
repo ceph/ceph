@@ -3602,6 +3602,16 @@ Then run the following:
         assert data_devices is not None
         device_list = [d.path for d in drive_group.data_devices.paths] if drive_group.data_devices else []
 
+        # DriveGroupSpec stores osd_type as str and validate() compares to 'classic'/'crimson';
+        # pass a string, not an OSDType enum member.
+        ot = drive_group.osd_type
+        if isinstance(ot, OSDType):
+            osd_type_str: str = ot.value
+        elif isinstance(ot, str):
+            osd_type_str = ot
+        else:
+            osd_type_str = 'classic'
+
         osd_default_spec = DriveGroupSpec(
             service_id="default",
             placement=PlacementSpec(host_pattern=host),
@@ -3612,7 +3622,7 @@ Then run the following:
             unmanaged=False,
             method=drive_group.method,
             objectstore=drive_group.objectstore,
-            osd_type=OSDType(drive_group.osd_type)
+            osd_type=osd_type_str
         )
 
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")

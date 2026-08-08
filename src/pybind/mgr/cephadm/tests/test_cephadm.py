@@ -1399,13 +1399,19 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_osds(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
-            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
-                                data_devices=DeviceSelection(paths=['']))
+            # Non-empty paths (empty string is rejected by validate_no_empty_device_paths).
+            # db_devices with a filter but no paths makes is_path_lists_only False so an empty
+            # device cache yields "No devices found".
+            dg = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='test'),
+                data_devices=DeviceSelection(paths=['/dev/unused']),
+                db_devices=DeviceSelection(rotational=True),
+            )
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
-            assert "Error: Device path is empty." in out
+            assert "Error: No devices found for host test." in out
             bad_dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='invalid_host'),
-                                    data_devices=DeviceSelection(paths=['']))
+                                    data_devices=DeviceSelection(paths=['/dev/unused']))
             c = cephadm_module.create_osds(bad_dg)
             out = wait(cephadm_module, c)
             assert "Invalid 'host:device' spec: host not found in cluster" in out
@@ -1413,8 +1419,11 @@ class TestCephadm(object):
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_create_noncollocated_osd(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
-            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
-                                data_devices=DeviceSelection(paths=['']))
+            dg = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='test'),
+                data_devices=DeviceSelection(paths=['/dev/unused']),
+                db_devices=DeviceSelection(rotational=True),
+            )
             c = cephadm_module.create_osds(dg)
             out = wait(cephadm_module, c)
             assert "Error: Device path is empty." in out
@@ -1448,7 +1457,7 @@ class TestCephadm(object):
     def test_prepare_drivegroup(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
-                                data_devices=DeviceSelection(paths=['']))
+                                data_devices=DeviceSelection(paths=['/dev/unused']))
             out = cephadm_module.osd_service.prepare_drivegroup(dg)
             assert len(out) == 1
             f1 = out[0]
@@ -1548,6 +1557,24 @@ class TestCephadm(object):
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
             assert all(any(cmd in exp_cmd for exp_cmd in exp_commands)
                        for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_raw_seastore_driveselection_to_ceph_volume(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(
+                service_id='test.spec',
+                method='raw',
+                placement=PlacementSpec(host_pattern='test'),
+                data_devices=DeviceSelection(paths=['/dev/sda']),
+                objectstore='seastore',
+                osd_type='crimson',
+            )
+            dg.validate()
+            ds = DriveSelection(dg, Devices([Device(path='/dev/sda')]))
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], False)
+            assert out == [
+                'raw prepare --objectstore seastore --data /dev/sda --osd-type crimson',
+            ]
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([
