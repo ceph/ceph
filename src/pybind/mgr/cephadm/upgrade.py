@@ -1481,12 +1481,11 @@ class CephadmUpgrade:
                     return False, to_upgrade
 
             if d.daemon_type == 'mds' and self._enough_mds_for_ok_to_stop(d):
-                # when fail_fs is set to true, all MDS daemons will be moved to
-                # up:standby state, so Cephadm won't be able to upgrade due to
-                # this check and and will warn with "It is NOT safe to stop
-                # mds.<daemon_name> at this time: one or more filesystems is
-                # currently degraded", therefore we bypass this check for that
-                # case.
+                # When fail_fs is set to true, all MDS daemons will be moved to
+                # up:standby state. ok-to-stop would then warn with "It is NOT
+                # safe to stop mds.<daemon_name> at this time: one or more
+                # filesystems is currently degraded", so we bypass this check
+                # when fail_fs is set (via `not self.upgrade_state.fail_fs`).
                 assert self.upgrade_state is not None
                 if not self.upgrade_state.fail_fs \
                         and not self._wait_for_ok_to_stop(d, known_ok_to_stop):
@@ -1511,6 +1510,12 @@ class CephadmUpgrade:
                 # osd ok-to-upgrade batch is not empty, so keep looping to
                 # add more OSDs to the batch
                 if d.daemon_type == 'osd' and self._upgrade_uses_ok_to_upgrade_for_osds() and (len(known_ok_to_upgrade) > 0):
+                    continue  # do not break
+                # fail_fs already took the filesystem down; upgrade all MDS
+                # in one pass rather than one daemon per upgrade cycle.
+                if (d.daemon_type == 'mds'
+                        and self.upgrade_state is not None
+                        and self.upgrade_state.fail_fs):
                     continue  # do not break
                 break
 
