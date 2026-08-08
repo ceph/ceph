@@ -1,4 +1,5 @@
 import ipaddress
+import json
 import logging
 import re
 import socket
@@ -11,16 +12,19 @@ from object_format import ErrorResponse
 import orchestrator
 from orchestrator.module import IngressType
 
-from .exception import NFSInvalidOperation, ClusterNotFound
+from .exception import NFSInvalidOperation, ClusterNotFound, NFSObjectNotFound
 from .utils import (
     ManualRestartRequired,
     NonFatalError,
     available_clusters,
     conf_obj_name,
     restart_nfs_service,
+    redeploy_nfs_service,
     user_conf_obj_name,
     USER_CONF_PREFIX,
-    qos_conf_obj_name)
+    qos_conf_obj_name,
+    normalize_auth_entity,
+    entity_belongs_to_nfs_cluster)
 from .rados_utils import NFSRados
 from .ganesha_conf import format_block, GaneshaConfParser
 from .qos_conf import (
@@ -366,6 +370,122 @@ class NFSCluster:
             raise NonFatalError("Cluster does not exist")
         except Exception as e:
             log.exception(f"Failed to delete NFS Cluster {cluster_id}")
+            raise ErrorResponse.wrap(e)
+
+    def _resolve_entities(
+            self,
+            cluster_id: str,
+            entity: Optional[List[str]]
+    ) -> List[str]:
+        if not entity:
+            return self._list_cluster_auth_entities(cluster_id)
+        entities: List[str] = []
+        for raw in entity:
+            normalized = normalize_auth_entity(raw)
+            if not entity_belongs_to_nfs_cluster(normalized, cluster_id):
+                raise NFSInvalidOperation(
+                    f"{normalized} does not belong to NFS cluster {cluster_id}"
+                )
+            entities.append(normalized)
+        # remove duplicates if any
+        return list(dict.fromkeys(entities))
+
+    def _list_cluster_auth_entities(self, cluster_id: str) -> List[str]:
+        """Return all auth entities belonging to this NFS cluster."""
+        result = self.mgr.check_mon_command({
+            'prefix': 'auth ls',
+            'format': 'json',
+        })
+        try:
+            auth_data = json.loads(result.stdout)
+        except ValueError as e:
+            raise NFSInvalidOperation(f"Failed to parse auth ls output: {e}")
+
+        auth_dump = auth_data.get('auth_dump', []) if isinstance(auth_data, dict) else auth_data
+        return [
+            entry['entity']
+            for entry in auth_dump
+            if isinstance(entry, dict)
+            and entry.get('entity')
+            and entity_belongs_to_nfs_cluster(entry['entity'], cluster_id)
+        ]
+
+    def _auth_rotate(self, entity: str, cluster_id: str, key_type: Optional[str]) -> None:
+        log.info(
+            "Rotating NFS key %s for cluster %s%s",
+            entity, cluster_id,
+            f" with key_type {key_type}" if key_type else ""
+        )
+        rotate_cmd: Dict[str, str] = {
+            'prefix': 'auth rotate',
+            'entity': entity,
+        }
+        if key_type:
+            rotate_cmd['key_type'] = key_type
+        self.mgr.check_mon_command(rotate_cmd)
+
+    def rotate_keys(
+            self,
+            cluster_id: str,
+            entity: Optional[List[str]] = None,
+            key_type: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """
+        Rotate NFS auth keys for a cluster.
+
+        If entities are omitted, rotate all cluster keys (daemon/recovery and
+        CephFS export keys). Export configs are refreshed after export-key
+        rotation. The NFS service is redeployed when any daemon key is rotated.
+        """
+        try:
+            if cluster_id not in available_clusters(self.mgr):
+                raise ClusterNotFound()
+
+            entities = self._resolve_entities(cluster_id, entity)
+            if not entities:
+                raise NFSObjectNotFound(
+                    f"No auth entities found for NFS cluster {cluster_id}"
+                )
+
+            export_user_ids = self.mgr.export_mgr.get_cephfs_export_user_ids(cluster_id)
+            export_entities = [
+                ent for ent in entities if ent[len('client.'):] in export_user_ids
+            ]
+            daemon_entities = [
+                ent for ent in entities if ent[len('client.'):] not in export_user_ids
+            ]
+
+            for ent in entities:
+                self._auth_rotate(ent, cluster_id, key_type)
+
+            updated_exports: List[str] = []
+            if export_entities:
+                updated_exports = self.mgr.export_mgr.refresh_export_keys(
+                    cluster_id, export_entities
+                )
+
+            service_redeployed = False
+            if daemon_entities:
+                log.info(
+                    "Redeploying NFS service nfs.%s after rotating daemon keys: %s",
+                    cluster_id, daemon_entities
+                )
+                redeploy_nfs_service(self.mgr, cluster_id)
+                service_redeployed = True
+
+            result: Dict[str, Any] = {
+                "cluster_id": cluster_id,
+                "rotated": entities,
+                "export_keys": export_entities,
+                "daemon_keys": daemon_entities,
+                "updated_exports": updated_exports,
+                "service_redeployed": service_redeployed,
+            }
+            if key_type:
+                result["key_type"] = key_type
+            return result
+        except Exception as e:
+            log.exception("Failed to rotate NFS keys for cluster %s", cluster_id)
             raise ErrorResponse.wrap(e)
 
     def list_nfs_cluster(self) -> List[str]:

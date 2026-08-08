@@ -190,6 +190,36 @@ orchestration, these commands check service status:
    ceph orch ls --service_name=ingress.nfs.<cluster_id>
 
 
+Rotate NFS Cluster Keys
+-----------------------
+
+.. prompt:: bash #
+
+   ceph nfs cluster rotate-key <cluster_id> [<entity>...] [--key-type <type>]
+
+Rotate auth keys belonging to an NFS cluster. ``<cluster_id>`` is required.
+
+If no ``<entity>`` values are given, all auth entities for the cluster are
+rotated, including daemon/recovery keyrings (for example
+``client.nfs.<cluster_id>`` and ``client.nfs.<daemon_id>-rgw``) and CephFS
+export keyrings (``client.nfs.<cluster_id>.<fs_name>.<hash>``).
+
+If one or more ``<entity>`` values are given, only those entities are rotated.
+Each entity must belong to the cluster (the ``client.`` prefix is optional).
+
+``--key-type <type>`` is optional and is passed through to ``ceph auth rotate``
+(for example ``aes256k``).
+
+After export keys are rotated, matching CephFS exports are updated with the new
+keyrings. After any daemon keys are rotated, the NFS service is redeployed
+(``ceph orch redeploy nfs.<cluster_id>``).
+
+For example::
+
+   ceph nfs cluster rotate-key cephfs-nfs1 --key-type aes256k
+   ceph nfs cluster rotate-key cephfs-nfs1 client.nfs.cephfs-nfs1.cephfs.c44692f7 --key-type aes256k
+
+
 Updating an NFS Cluster
 -----------------------
 
