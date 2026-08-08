@@ -4,6 +4,7 @@ import pytest
 from .api import admin
 
 def setup():
+    global cfg
     cfg = configparser.RawConfigParser()
     try:
         path = os.environ['BNTESTS_CONF']
@@ -18,9 +19,6 @@ def setup():
         raise RuntimeError('Your config file is missing the DEFAULT section!')
     if not cfg.has_section("s3 main"):
         raise RuntimeError('Your config file is missing the "s3 main" section!')
-    if not cfg.has_section("kerberos"):
-        raise RuntimeError('Your config file is missing the "kerberos" section!')
-
     defaults = cfg.defaults()
 
     global default_host
@@ -53,13 +51,28 @@ def setup():
     main_secret_key = cfg.get('s3 main',"secret_key")
 
     global kerberos_service_name
-    kerberos_service_name = cfg.get('kerberos', 'service_name')
+    kerberos_service_name = cfg.get('kerberos', 'service_name', fallback=None)
 
     global kerberos_principal
-    kerberos_principal = cfg.get('kerberos', 'principal')
+    kerberos_principal = cfg.get('kerberos', 'principal', fallback=None)
 
     global kerberos_keytab
-    kerberos_keytab = cfg.get('kerberos', 'keytab')
+    kerberos_keytab = cfg.get('kerberos', 'keytab', fallback=None)
+
+    global oauthbearer_token_endpoint_url
+    oauthbearer_token_endpoint_url = cfg.get('oauthbearer', 'token_endpoint_url', fallback=None)
+
+    global oauthbearer_client_id
+    oauthbearer_client_id = cfg.get('oauthbearer', 'client_id', fallback=None)
+
+    global oauthbearer_client_secret
+    oauthbearer_client_secret = cfg.get('oauthbearer', 'client_secret', fallback=None)
+
+    global oauthbearer_access_token
+    oauthbearer_access_token = cfg.get('oauthbearer', 'access_token', fallback=None)
+
+    global oauthbearer_scope
+    oauthbearer_scope = cfg.get('oauthbearer', 'scope', fallback=None)
 
 def get_config_host():
     global default_host
@@ -90,6 +103,16 @@ def get_kerberos_config():
     global kerberos_principal
     global kerberos_keytab
     return kerberos_service_name, kerberos_principal, kerberos_keytab
+
+def get_oauthbearer_config():
+    global oauthbearer_token_endpoint_url
+    global oauthbearer_client_id
+    global oauthbearer_client_secret
+    global oauthbearer_access_token
+    global oauthbearer_scope
+    return (oauthbearer_token_endpoint_url, oauthbearer_client_id,
+            oauthbearer_client_secret, oauthbearer_access_token,
+            oauthbearer_scope)
 
 @pytest.fixture(autouse=True, scope="package")
 def configfile():
