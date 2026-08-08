@@ -2633,8 +2633,21 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             return self._rados
 
         ctx_capsule = self.get_context()
-        self._rados = rados.Rados(context=ctx_capsule)
-        self._rados.connect()
+        rados_inst = rados.Rados(context=ctx_capsule)
+
+        # The monitors may be briefly unreachable when a module first opens
+        # its librados handle, e.g. right after a mgr failover while the mons
+        # are still (re)forming quorum. connect() retries such a failure on
+        # its own because ceph-mgr defaults rados_connect_retries above 0; an
+        # error surfacing here is one that outlived those retries.
+        rados_inst.connect()
+
+        # Only cache the handle once it is actually connected, so a failed
+        # connect does not leave a poisoned, unconnected instance behind. The
+        # mgr does not retry a module that throws in __init__, but a module
+        # that catches the error and asks for the handle again gets a fresh
+        # connect attempt rather than a dead instance.
+        self._rados = rados_inst
         self._ceph_register_client(None, self._rados.get_addrs(), False)
         return self._rados
 

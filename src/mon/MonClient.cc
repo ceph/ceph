@@ -588,7 +588,14 @@ int MonClient::authenticate(double timeout)
   }
   sub.want("monmap", monmap.get_epoch() ? monmap.get_epoch() + 1 : 0, 0);
   sub.want("config", 0, 0);
-  if (!_opened())
+  // A previous attempt may have left a failure behind: either it gave up on
+  // the last pending connection (nothing is open, the usual case) or it timed
+  // out while the connections were still hunting, in which case they are still
+  // around along with the error they recorded. Start a fresh hunt in both
+  // cases, otherwise a caller retrying authenticate() is handed the stale
+  // authenticate_err straight back without the monitors ever being contacted
+  // again.
+  if (!_opened() || authenticate_err < 0)
     _reopen_session();
 
   auto until = ceph::mono_clock::now();
