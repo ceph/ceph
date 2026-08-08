@@ -34,7 +34,7 @@ from .cephadmservice import (
     CephadmDaemonDeploySpec,
     simplified_keyring,
 )
-from ..tlsobject_types import TLSCredentials, EMPTY_TLS_CREDENTIALS
+from ..tlsobject_types import TLSCredentials, EMPTY_TLS_CREDENTIALS, TLSObjectManager
 from ..schedule import DaemonPlacement
 from cephadm import utils
 from dataclasses import replace
@@ -290,11 +290,29 @@ class SMBService(CephService):
                         'smb', cert_name, key_name, self.SCOPE, ca_cert_name
                     )
                     if cert_pem:
-                        self.mgr.cert_mgr.save_cert(cert_name, cert_pem, svc_name, host, user_made=True)
+                        self.mgr.cert_mgr.save_cert(
+                            cert_name,
+                            cert_pem,
+                            svc_name,
+                            host,
+                            managed_by=TLSObjectManager.USER,
+                        )
                     if key_pem:
-                        self.mgr.cert_mgr.save_key(key_name, key_pem, svc_name, host, user_made=True)
+                        self.mgr.cert_mgr.save_key(
+                            key_name,
+                            key_pem,
+                            svc_name,
+                            host,
+                            managed_by=TLSObjectManager.USER,
+                        )
                     if ca_pem:
-                        self.mgr.cert_mgr.save_cert(ca_cert_name, ca_pem, svc_name, host, user_made=True)
+                        self.mgr.cert_mgr.save_cert(
+                            ca_cert_name,
+                            ca_pem,
+                            svc_name,
+                            host,
+                            managed_by=TLSObjectManager.USER,
+                        )
         for ext_cluster in smb_spec.ceph_cluster_configs or []:
             files = config_blobs.setdefault('files', {})
             c_name = f'{ext_cluster.alias}.ceph.conf'
