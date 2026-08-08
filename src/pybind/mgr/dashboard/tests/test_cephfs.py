@@ -44,6 +44,28 @@ class CephFsTest(ControllerTestCase):
         self.assertEqual(mds_versions['bar'], ['foo'])
 
 
+class CephFSCreateTest(ControllerTestCase):
+    cephFs = CephFS()
+
+    def _placement(self, placement):
+        mgr.remote = Mock(return_value=(0, '', ''))
+        self.cephFs.create('test_fs', {'placement': placement})
+        return mgr.remote.call_args[0][3]['placement']
+
+    def test_empty_placement_inherits_orchestrator_default(self):
+        # No count/labels/hosts must produce an empty placement so the
+        # orchestrator applies its default (active + standby), matching the CLI.
+        self.assertEqual(self._placement({}), '')
+
+    def test_count_is_honored(self):
+        self.assertEqual(self._placement({'count': 2}), '2')
+
+    def test_labels_and_hosts(self):
+        self.assertEqual(self._placement({'labels': ['mds']}), 'label:mds')
+        self.assertEqual(self._placement({'count': 2, 'hosts': ['host-a', 'host-b']}),
+                         '2 host-a host-b')
+
+
 class CephFSMirrorTest(ControllerTestCase):
 
     @classmethod
