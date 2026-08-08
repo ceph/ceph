@@ -1588,6 +1588,12 @@ COMMAND("nvme-gw listeners"
 	" show all nvmeof gateways listeners within (pool, group)",
 	"mon", "r")
 
+COMMAND("nvme-gw ok-to-stop"
+	" name=pool,type=CephString"
+	" name=group,type=CephString",
+	" returns true if is it possible to stop one of gateways within (pool, group)",
+	"mon", "r")
+
 COMMAND("nvme-gw enable"
    " name=id,type=CephString"
    " name=pool,type=CephString"
