@@ -112,10 +112,20 @@ function(do_build_boost root_dir version)
   set(user_config ${CMAKE_BINARY_DIR}/user-config.jam)
   # edit the user-config.jam so b2 will be able to use the specified
   # toolset and python
+  # b2 invokes the compiler directly, so the launcher (ccache/sccache) cmake
+  # uses for the rest of the build has to be spliced into the toolset command
+  set(boost_cxx_command "${CMAKE_CXX_COMPILER}")
+  if(CMAKE_CXX_COMPILER_LAUNCHER)
+    list(JOIN CMAKE_CXX_COMPILER_LAUNCHER " " boost_cxx_launcher)
+    set(boost_cxx_command "${boost_cxx_launcher} ${CMAKE_CXX_COMPILER}")
+  endif()
+  # the command must stay unquoted: b2 then treats it as a list of tokens
+  # (launcher + compiler) and its existence check passes on the compiler,
+  # whereas a quoted "launcher compiler" string is stat()ed as one path
   file(WRITE ${user_config}
     "using ${toolset}"
     " : "
-    " : ${CMAKE_CXX_COMPILER}"
+    " : ${boost_cxx_command}"
     " : <compileflags>-fPIC <compileflags>-w <compileflags>-Wno-everything"
     " ;\n")
   if(with_python_version)
