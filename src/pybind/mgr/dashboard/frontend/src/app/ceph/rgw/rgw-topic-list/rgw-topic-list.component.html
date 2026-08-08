@@ -1,28 +1,35 @@
-  <ng-container>
+<ng-container>
   <legend>
-  <cd-help-text i18n>
-   A topic specifies where and how event notifications from a bucket are delivered, including the target system (e.g., Kafka or HTTP) and its configuration.
-  </cd-help-text>
+    <cd-help-text i18n>
+      A topic specifies where and how event notifications from a bucket are delivered, including the
+      target system (e.g., Kafka or HTTP) and its configuration.
+    </cd-help-text>
   </legend>
-  <cd-table #table
-            headerTitle="Notification destination"
-            headerDescription="Delivers bucket and object change notifications to external services like Kafka or AMQP."
-            [autoReload]="true"
-            [data]="topics$ | async"
-            [columns]="columns"
-            columnMode="flex"
-            selectionType="single"
-            [hasDetails]="true"
-            id="key"
-            (setExpandedRow)="setExpandedRow($event)"
-            (updateSelection)="updateSelection($event)"
-            (fetchData)="fetchData()">
-  <cd-table-actions class="table-actions"
-                    [permission]="permission"
-                    [selection]="selection"
-                    [tableActions]="tableActions">
-  </cd-table-actions>
-  <cd-rgw-topic-details *cdTableDetail
-                        [selection]="expandedRow"></cd-rgw-topic-details>
+  <cd-table
+    #table
+    headerTitle="Notification destination"
+    headerDescription="Delivers bucket and object change notifications to external services like Kafka or AMQP."
+    [autoReload]="true"
+    [data]="topics$ | async"
+    [columns]="columns"
+    columnMode="flex"
+    selectionType="single"
+    [hasDetails]="true"
+    id="key"
+    (setExpandedRow)="setExpandedRow($event)"
+    (updateSelection)="updateSelection($event)"
+    (fetchData)="fetchData()"
+  >
+    <cd-table-actions
+      class="table-actions"
+      [permission]="permission"
+      [selection]="selection"
+      [tableActions]="tableActions"
+    >
+    </cd-table-actions>
+    <cd-rgw-topic-details
+      *cdTableDetail
+      [selection]="expandedRow"
+    ></cd-rgw-topic-details>
   </cd-table>
-  </ng-container>
+</ng-container>

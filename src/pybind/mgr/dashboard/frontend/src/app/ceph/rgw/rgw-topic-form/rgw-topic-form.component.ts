@@ -309,7 +309,7 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
 
     const defaults: typeof this.topicForm.value = _.clone(this.topicForm.value);
     const keys = Object.keys(this.topicForm.value) as (keyof typeof topic)[];
-    let value: Pick<typeof topic, typeof keys[number]> = _.pick(topic, keys);
+    let value: Pick<typeof topic, (typeof keys)[number]> = _.pick(topic, keys);
 
     value = _.merge(defaults, value);
     if (!this.owners.includes(value['owner'])) {
@@ -371,8 +371,8 @@ export class RgwTopicFormComponent extends CdForm implements OnInit, AfterViewCh
         urlObj.protocol === UrlProtocol.HTTPS
           ? URLPort.HTTPS
           : urlObj.protocol === UrlProtocol.HTTP
-          ? URLPort.HTTP
-          : '';
+            ? URLPort.HTTP
+            : '';
     }
     return port;
   }

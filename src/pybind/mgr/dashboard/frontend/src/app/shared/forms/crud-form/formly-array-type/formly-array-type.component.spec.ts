@@ -8,7 +8,12 @@ import { configureTestBed } from '~/testing/unit-test-helper';
 
 @Component({
   template: ` <form [formGroup]="form">
-    <formly-form [model]="{}" [fields]="fields" [options]="{}" [form]="form"></formly-form>
+    <formly-form
+      [model]="{}"
+      [fields]="fields"
+      [options]="{}"
+      [form]="form"
+    ></formly-form>
   </form>`
 })
 class MockFormComponent {

@@ -1,18 +1,26 @@
-<div cdsCol
-     [columnNumbers]="{ md: 4 }">
+<div
+  cdsCol
+  [columnNumbers]="{ md: 4 }"
+>
   <ng-container *cdFormLoading="loading">
-    <form name="smbShareForm"
-          #formDir="ngForm"
-          [formGroup]="smbShareForm"
-          novalidate>
-      <div i18n="form title"
-           class="form-header">
+    <form
+      name="smbShareForm"
+      #formDir="ngForm"
+      [formGroup]="smbShareForm"
+      novalidate
+    >
+      <div
+        i18n="form title"
+        class="form-header"
+      >
         {{ action | titlecase }} {{ resource | upperFirst }}
       </div>
 
       <!-- Share Id -->
-      <div class="form-item form-item-append"
-           cdsRow>
+      <div
+        class="form-item form-item-append"
+        cdsRow
+      >
         <div cdsCol>
           <cds-text-label
             labelInputID="share_id"
@@ -48,14 +56,18 @@
 
         <!-- Share Name -->
         <div cdsCol>
-          <cds-text-label labelInputID="name"
-                          i18n
-                          helperText="Name of the Share"
-                          i18n-helperText>Share Name
-            <input cdsText
-                   type="text"
-                   id="name"
-                   formControlName="name" />
+          <cds-text-label
+            labelInputID="name"
+            i18n
+            helperText="Name of the Share"
+            i18n-helperText
+            >Share Name
+            <input
+              cdsText
+              type="text"
+              id="name"
+              formControlName="name"
+            />
           </cds-text-label>
         </div>
       </div>
@@ -72,19 +84,25 @@
           [invalidText]="volumeError"
           i18n-label
         >
-          <option *ngIf="allFsNames?.length === 0"
-                  value=""
-                  i18n>
+          <option
+            *ngIf="allFsNames?.length === 0"
+            value=""
+            i18n
+          >
             -- No filesystem available --
           </option>
-          <option *ngIf="allFsNames !== null && allFsNames?.length > 0"
-                  value=""
-                  i18n>
+          <option
+            *ngIf="allFsNames !== null && allFsNames?.length > 0"
+            value=""
+            i18n
+          >
             -- Select the filesystem --
           </option>
-          <option *ngFor="let filesystem of allFsNames"
-                  [value]="filesystem.name"
-                  i18n>
+          <option
+            *ngFor="let filesystem of allFsNames"
+            [value]="filesystem.name"
+            i18n
+          >
             {{ filesystem.name }}
           </option>
         </cds-select>
@@ -98,8 +116,10 @@
         </ng-template>
       </div>
 
-      <div class="form-item"
-           *ngIf="smbShareForm.getValue('volume')">
+      <div
+        class="form-item"
+        *ngIf="smbShareForm.getValue('volume')"
+      >
         <cds-select
           formControlName="subvolume_group"
           label="Subvolume Group"
@@ -108,12 +128,18 @@
           [skeleton]="allsubvolgrps === null"
           i18n-label
         >
-          <option *ngIf="allsubvolgrps === null"
-                  value=""
-                  i18n>Loading...</option>
-          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length >= 0"
-                  value=""
-                  i18n>
+          <option
+            *ngIf="allsubvolgrps === null"
+            value=""
+            i18n
+          >
+            Loading...
+          </option>
+          <option
+            *ngIf="allsubvolgrps !== null && allsubvolgrps.length >= 0"
+            value=""
+            i18n
+          >
             -- Select the CephFS subvolume group --
           </option>
           <option
@@ -127,8 +153,10 @@
         </cds-select>
       </div>
 
-      <div class="form-group row"
-           *ngIf="smbShareForm.getValue('volume')">
+      <div
+        class="form-group row"
+        *ngIf="smbShareForm.getValue('volume')"
+      >
         <cds-select
           formControlName="subvolume"
           label="Subvolume"
@@ -136,17 +164,25 @@
           (change)="setSubVolPath()"
           [skeleton]="allsubvols === null"
         >
-          <option *ngIf="allsubvols === null"
-                  value=""
-                  i18n>Loading...</option>
-          <option *ngIf="allsubvols !== null && allsubvols.length === 0"
-                  value=""
-                  i18n>
+          <option
+            *ngIf="allsubvols === null"
+            value=""
+            i18n
+          >
+            Loading...
+          </option>
+          <option
+            *ngIf="allsubvols !== null && allsubvols.length === 0"
+            value=""
+            i18n
+          >
             -- No SMB subvolume available --
           </option>
-          <option *ngIf="allsubvols !== null && allsubvols.length > 0"
-                  value=""
-                  i18n>
+          <option
+            *ngIf="allsubvols !== null && allsubvols.length > 0"
+            value=""
+            i18n
+          >
             -- Select the SMB subvolume --
           </option>
           <option
@@ -161,16 +197,22 @@
       </div>
 
       <!-- Path -->
-      <div class="form-item form-item-append"
-           cdsRow>
+      <div
+        class="form-item form-item-append"
+        cdsRow
+      >
         <div cdsCol>
-          <cds-text-label labelInputID="prefixedPath"
-                          i18n
-                          helperText="A path is a relative path.">Prefixed Path
-            <input cdsText
-                   type="text"
-                   id="prefixedPath"
-                   formControlName="prefixedPath" />
+          <cds-text-label
+            labelInputID="prefixedPath"
+            i18n
+            helperText="A path is a relative path."
+            >Prefixed Path
+            <input
+              cdsText
+              type="text"
+              id="prefixedPath"
+              formControlName="prefixedPath"
+            />
           </cds-text-label>
         </div>
         <div cdsCol>
@@ -207,9 +249,11 @@
 
       <!-- Browseable -->
       <div class="form-item">
-        <cds-checkbox id="browseable"
-                      formControlName="browseable"
-                      i18n>Browseable
+        <cds-checkbox
+          id="browseable"
+          formControlName="browseable"
+          i18n
+          >Browseable
           <cd-help-text
             >If selected the share will be included in share listings visible to
             clients.</cd-help-text
@@ -219,51 +263,65 @@
 
       <!-- Readonly -->
       <div class="form-item">
-        <cds-checkbox id="readonly"
-                      formControlName="readonly"
-                      i18n>Readonly
+        <cds-checkbox
+          id="readonly"
+          formControlName="readonly"
+          i18n
+          >Readonly
           <cd-help-text>If selected no clients are permitted to write to the share.</cd-help-text>
         </cds-checkbox>
       </div>
 
       <!-- QoS rate limiting -->
-      <div class="form-header"
-           i18n>Rate limiting</div>
-      <div class="form-item form-item-append"
-           cdsRow>
+      <div
+        class="form-header"
+        i18n
+      >
+        Rate limiting
+      </div>
+      <div
+        class="form-item form-item-append"
+        cdsRow
+      >
         <div cdsCol>
-          <cds-number formControlName="read_iops_limit"
-                      cdValidate
-                      #readIopsRef="cdValidate"
-                      label="Read IOPS limit"
-                      i18n-label
-                      [min]="0"
-                      [max]="1000000"
-                      helperText="Max read operations per second (0 = disabled)"
-                      i18n-helperText
-                      [invalid]="readIopsRef.isInvalid"
-                      invalidText="Value must be between 0 and 1,000,000"
-                      i18n-invalidText>
+          <cds-number
+            formControlName="read_iops_limit"
+            cdValidate
+            #readIopsRef="cdValidate"
+            label="Read IOPS limit"
+            i18n-label
+            [min]="0"
+            [max]="1000000"
+            helperText="Max read operations per second (0 = disabled)"
+            i18n-helperText
+            [invalid]="readIopsRef.isInvalid"
+            invalidText="Value must be between 0 and 1,000,000"
+            i18n-invalidText
+          >
           </cds-number>
         </div>
         <div cdsCol>
-          <cds-number formControlName="write_iops_limit"
-                      cdValidate
-                      #writeIopsRef="cdValidate"
-                      label="Write IOPS limit"
-                      i18n-label
-                      [min]="0"
-                      [max]="1000000"
-                      helperText="Max write operations per second (0 = disabled)"
-                      i18n-helperText
-                      [invalid]="writeIopsRef.isInvalid"
-                      invalidText="Value must be between 0 and 1,000,000"
-                      i18n-invalidText>
+          <cds-number
+            formControlName="write_iops_limit"
+            cdValidate
+            #writeIopsRef="cdValidate"
+            label="Write IOPS limit"
+            i18n-label
+            [min]="0"
+            [max]="1000000"
+            helperText="Max write operations per second (0 = disabled)"
+            i18n-helperText
+            [invalid]="writeIopsRef.isInvalid"
+            invalidText="Value must be between 0 and 1,000,000"
+            i18n-invalidText
+          >
           </cds-number>
         </div>
       </div>
-      <div class="form-item form-item-append"
-           cdsRow>
+      <div
+        class="form-item form-item-append"
+        cdsRow
+      >
         <div cdsCol>
           <cd-number-with-unit
             [form]="smbShareForm"
@@ -297,36 +355,42 @@
           ></cd-number-with-unit>
         </div>
       </div>
-      <div class="form-item form-item-append"
-           cdsRow>
+      <div
+        class="form-item form-item-append"
+        cdsRow
+      >
         <div cdsCol>
-          <cds-number formControlName="read_delay_max"
-                      cdValidate
-                      #readDelayRef="cdValidate"
-                      label="Read delay max (s)"
-                      i18n-label
-                      [min]="0"
-                      [max]="300"
-                      helperText="Max allowed delay for read operations in seconds"
-                      i18n-helperText
-                      [invalid]="readDelayRef.isInvalid"
-                      invalidText="Value must be between 0 and 300"
-                      i18n-invalidText>
+          <cds-number
+            formControlName="read_delay_max"
+            cdValidate
+            #readDelayRef="cdValidate"
+            label="Read delay max (s)"
+            i18n-label
+            [min]="0"
+            [max]="300"
+            helperText="Max allowed delay for read operations in seconds"
+            i18n-helperText
+            [invalid]="readDelayRef.isInvalid"
+            invalidText="Value must be between 0 and 300"
+            i18n-invalidText
+          >
           </cds-number>
         </div>
         <div cdsCol>
-          <cds-number formControlName="write_delay_max"
-                      cdValidate
-                      #writeDelayRef="cdValidate"
-                      label="Write delay max (s)"
-                      i18n-label
-                      [min]="0"
-                      [max]="300"
-                      helperText="Max allowed delay for write operations in seconds"
-                      i18n-helperText
-                      [invalid]="writeDelayRef.isInvalid"
-                      invalidText="Value must be between 0 and 300"
-                      i18n-invalidText>
+          <cds-number
+            formControlName="write_delay_max"
+            cdValidate
+            #writeDelayRef="cdValidate"
+            label="Write delay max (s)"
+            i18n-label
+            [min]="0"
+            [max]="300"
+            helperText="Max allowed delay for write operations in seconds"
+            i18n-helperText
+            [invalid]="writeDelayRef.isInvalid"
+            invalidText="Value must be between 0 and 300"
+            i18n-invalidText
+          >
           </cds-number>
         </div>
       </div>

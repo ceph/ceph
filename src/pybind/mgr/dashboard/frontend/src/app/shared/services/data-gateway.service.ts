@@ -13,7 +13,10 @@ export class DataGatewayService {
   cache: { [keys: string]: Observable<any> } = {};
   selected: any;
 
-  constructor(private http: HttpClient, private crudFormAdapater: CrudFormAdapterService) {}
+  constructor(
+    private http: HttpClient,
+    private crudFormAdapater: CrudFormAdapterService
+  ) {}
 
   list(dataPath: string): Observable<any> {
     const cacheable = this.getCacheable(dataPath, 'get');
