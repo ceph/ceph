@@ -1590,7 +1590,8 @@ class Module(MgrModule, OrchestratorClientMixin):
             daemons = raise_if_exception(self.list_daemons(daemon_type='rgw'))
             for daemon in daemons:
                 if daemon.daemon_id and '.' in daemon.daemon_id:
-                    instance_id = daemon.daemon_id.split(".")[2]
+                    parts = daemon.daemon_id.split(".")
+                    instance_id = parts[2] if len(parts) > 2 else parts[-1]
                 else:
                     instance_id = daemon.daemon_id if daemon.daemon_id else ""
                 self.metrics['rgw_metadata'].set(1,
