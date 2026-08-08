@@ -919,6 +919,18 @@ option(WITH_SYSTEMD "build with systemd support" ON)
 
 add_subdirectory(src)
 
+# Manifest of Catch2-based unit test binaries (see add_catch2_test in
+# cmake/modules/AddCephTest.cmake), one name per line, written next to the
+# built binaries. Consumers - e.g. the Windows test runner in
+# ceph-win32-tests - can read this to classify test binaries without a
+# hand-maintained, easily-stale list.
+get_property(ceph_catch2_test_binaries GLOBAL PROPERTY CEPH_CATCH2_TEST_BINARIES)
+if(ceph_catch2_test_binaries)
+  list(JOIN ceph_catch2_test_binaries "\n" ceph_catch2_test_binaries_joined)
+  file(WRITE "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/catch2_tests.list"
+    "${ceph_catch2_test_binaries_joined}\n")
+endif()
+
 add_subdirectory(qa)
 add_subdirectory(doc)
 if(WITH_MANPAGE)
