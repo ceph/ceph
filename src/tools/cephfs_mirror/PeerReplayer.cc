@@ -2640,6 +2640,7 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
 
         struct ceph_statx estx;
         r = ceph_statxat(m_local, m_fh->c_fd, _epath.c_str(), &estx,
+                         CEPH_STATX_INO |
                          CEPH_STATX_MODE | CEPH_STATX_UID | CEPH_STATX_GID |
                          CEPH_STATX_SIZE | CEPH_STATX_ATIME | CEPH_STATX_MTIME,
                          AT_SYMLINK_NOFOLLOW);
@@ -2650,6 +2651,60 @@ int PeerReplayer::SnapDiffSync::get_entry(std::string *epath, struct ceph_statx 
 
         bool pic = entry.is_purged_or_itype_changed() || m_deleted[entry.epath].contains(e_name);
         if (S_ISDIR(estx.stx_mode)) {
+          bool purge_remote = false;
+          if (!pic) {
+            struct ceph_statx prev_stx;
+            r = ceph_statxat(m_fh->p_mnt, m_fh->p_fd, _epath.c_str(), &prev_stx,
+                             CEPH_STATX_INO | CEPH_STATX_MODE,
+                             AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+            if (r == -ENOENT) {
+              dout(10) << ": directory=" << _epath
+                       << " is absent from the previous snapshot; using full traversal"
+                       << dendl;
+              pic = true;
+            } else if (r < 0) {
+              derr << ": failed to stat previous directory=" << _epath
+                   << ", r=" << r << dendl;
+              return r;
+            } else if (!S_ISDIR(prev_stx.stx_mode)) {
+              // Same-name type changes should normally have been recorded in
+              // m_deleted. Keep this defensive check before trusting snapdiff.
+              pic = true;
+              purge_remote = true;
+            } else if (prev_stx.stx_ino != estx.stx_ino) {
+              dout(10) << ": directory=" << _epath
+                       << " changed inode between snapshots ("
+                       << prev_stx.stx_ino << " -> " << estx.stx_ino
+                       << "); purging remote and using full traversal" << dendl;
+              pic = true;
+              purge_remote = true;
+            }
+          }
+
+          if (purge_remote) {
+            struct ceph_statx remote_stx;
+            r = ceph_statxat(m_remote, m_fh->r_fd_dir_root, _epath.c_str(),
+                             &remote_stx, CEPH_STATX_MODE,
+                             AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
+            if (r == 0) {
+              if (S_ISDIR(remote_stx.stx_mode)) {
+                r = purge_func(_epath);
+              } else {
+                r = ceph_unlinkat(m_remote, m_fh->r_fd_dir_root,
+                                  _epath.c_str(), 0);
+              }
+              if (r < 0) {
+                derr << ": failed to purge replaced remote entry=" << _epath
+                     << ", r=" << r << dendl;
+                return r;
+              }
+            } else if (r != -ENOENT) {
+              derr << ": failed to stat replaced remote entry=" << _epath
+                   << ", r=" << r << dendl;
+              return r;
+            }
+          }
+
           SyncEntry se;
           r = init_directory(_epath, estx, pic, &se);
           if (r < 0) {
