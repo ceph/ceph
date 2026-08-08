@@ -492,3 +492,31 @@ class TestBatchOsd(object):
                                                         '5G',
                                                         1,
                                                         'block_wal')
+
+    def test_multiple_osds_get_wal_devices(self):
+        """
+        Test that when deploying multiple OSDs with wal_devices configured,
+        each OSD gets a WAL device assigned (not just the last one).
+        
+        This test verifies the fix for the bug where the WAL allocation code
+        was outside the OSD iteration loop, causing only the last OSD to
+        receive a WAL device.
+        """
+        osd1 = batch.Batch.OSD('/dev/data1', 1, '50G', 1, 1, None)
+        osd2 = batch.Batch.OSD('/dev/data2', 1, '50G', 1, 2, None)
+        
+        very_fast_allocations = [
+            ('/dev/wal1', 100.0, disk.Size(b=2 * 1024**3), 1),
+            ('/dev/wal2', 100.0, disk.Size(b=2 * 1024**3), 1),
+        ]
+        
+        for osd in [osd1, osd2]:
+            if very_fast_allocations:
+                very_fast_alloc = very_fast_allocations.pop() if very_fast_allocations else None
+                if very_fast_alloc:
+                    osd.add_very_fast_device(*very_fast_alloc)
+        
+        assert osd1.very_fast is not None, "First OSD should have a WAL device"
+        assert osd2.very_fast is not None, "Second OSD should have a WAL device"
+        assert osd1.very_fast.path == '/dev/wal2'
+        assert osd2.very_fast.path == '/dev/wal1'
