@@ -1,3 +1,13 @@
+* CephFS: The ``fs subvolumegroup create`` command now supports the
+  ``--namespace-isolated`` option. When a subvolume group is created with this flag,
+  the group directory is placed in a separate RADOS namespace, and all subvolumes
+  subsequently created within that group automatically inherit RADOS namespace
+  isolation without needing the ``--namespace-isolated`` flag on each
+  ``fs subvolume create`` invocation. An optional ``--pool-namespace`` flag allows
+  specifying an explicit RADOS namespace to override the auto-generated name.
+  This provides per-tenant RADOS-level security isolation at the subvolume group
+  granularity.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
