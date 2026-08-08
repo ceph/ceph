@@ -111,24 +111,26 @@ export class RgwMultisiteSyncPipeModalComponent extends BaseModal implements OnI
             zones.push(new SelectOption(false, zone.name, ''));
           });
           this.sourceZones = JSON.parse(JSON.stringify(zones)).map((zone: { name: string }) => {
-            return { name: zone.name, content: zone.name };
+            return { name: zone.name, content: zone.name, selected: false };
           });
           this.destZones = JSON.parse(JSON.stringify(zones)).map((zone: { name: string }) => {
-            return { name: zone.name, content: zone.name };
+            return { name: zone.name, content: zone.name, selected: false };
           });
           if (this.editing) {
             this.pipeForm.get('pipe_id').disable();
             this.sourceZones = [...this.sourceZones].map((zone: { name: string }) => {
-              if (this.pipeSelectedRow.source.zones.includes(zone.name)) {
-                return { name: zone.name, content: zone.name, selected: true };
-              }
-              return { name: zone.name, content: zone.name };
+              return {
+                name: zone.name,
+                content: zone.name,
+                selected: this.pipeSelectedRow.source.zones.includes(zone.name)
+              };
             });
             this.destZones = [...this.destZones].map((zone: { name: string }) => {
-              if (this.pipeSelectedRow.dest.zones.includes(zone.name)) {
-                return { name: zone.name, content: zone.name, selected: true };
-              }
-              return { name: zone.name, content: zone.name };
+              return {
+                name: zone.name,
+                content: zone.name,
+                selected: this.pipeSelectedRow.dest.zones.includes(zone.name)
+              };
             });
             const availableDestZone: SelectOption[] = [];
             this.pipeSelectedRow.dest.zones.forEach((zone: string) => {
