@@ -140,6 +140,8 @@ struct OSDCapMatch {
     : pool_tag(app, key, val) {}
   OSDCapMatch(const std::string& ns, const OSDCapPoolTag& pt)
     : pool_namespace("", ns), pool_tag(pt) {}
+  OSDCapMatch(const OSDCapPoolNamespace& pns, const OSDCapPoolTag& pt)
+    : pool_namespace(pns), pool_tag(pt) {}
 
   /**
    * check if given request parameters match our constraints

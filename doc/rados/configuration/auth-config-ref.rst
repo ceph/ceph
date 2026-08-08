@@ -275,7 +275,7 @@ daemon to function are shown below.
 ``radosgw``
 
 :Location: ``$rgw_data/keyring``
-:Capabilities: ``mon 'allow rwx' osd 'allow rwx'``
+:Capabilities: ``mon 'profile rgw' osd 'profile rgw'``
 
 
 .. note:: The monitor keyring (that is, ``mon.``) contains a key but no
