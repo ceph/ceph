@@ -154,7 +154,8 @@ set(librgw_common_srcs
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
   rgw_bucket_sync.cc
-  rgw_rest_restore.cc)
+  rgw_rest_restore.cc
+  rgw_sc_quota_checker.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
