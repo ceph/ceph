@@ -59,7 +59,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
 
     this.columns = [
       {
-        name: $localize`Daemon name`,
+        name: $localize`Service instance name`,
         prop: 'daemon_name',
         flexGrow: 1,
         filterable: true
