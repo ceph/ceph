@@ -227,6 +227,19 @@ enum {
   l_bluestore_clist_lat,
   l_bluestore_remove_lat,
   l_bluestore_truncate_lat,
+  l_bluestore_exists_lat,
+  l_bluestore_stat_lat,
+  l_bluestore_getattr_lat,      // shared: getattr/getattrs
+  l_bluestore_fiemap_lat,
+  l_bluestore_omap_get_lat,
+  l_bluestore_clone_lat,
+  l_bluestore_change_attr_lat,      // shared: setattr/setattrs/rmattr/rmattrs
+  l_bluestore_touch_lat,
+  l_bluestore_zero_lat,
+  l_bluestore_omap_set_lat,   // shared: omap setkeys/setheader/rmkeys/rmkey_range
+  l_bluestore_rename_lat,
+  l_bluestore_collection_lat,   // shared read: list/exists/bits
+  l_bluestore_other_write_lat,        // shared write: set_alloc_hint, set_collection_opts, collection create/remove/split/merge
   //****************************************
 
   // allocation stats

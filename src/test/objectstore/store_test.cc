@@ -1885,6 +1885,121 @@ TEST_P(StoreTestSpecificAUSize, ReproBug41901Test) {
   }
 }
 
+TEST_P(StoreTest, InterfacePerfCounters) {
+  if (string(GetParam()) != "bluestore")
+    GTEST_SKIP() << "bluestore-only perf counters";
+
+  const PerfCounters* logger = store->get_perf_counters();
+  auto cnt    = [logger](int idx){ return logger->get_tavg_ns(idx).second; };  // # calls
+  auto sum_ns = [logger](int idx){ return logger->get_tavg_ns(idx).first;  };  // total ns
+
+  coll_t cid;
+  // clone src/dst must share the same explicit hobject hash (123) or _clone -EINVALs.
+  ghobject_t oid (hobject_t(sobject_t("obj",  CEPH_NOSNAP), "key", 123, -1, ""));
+  ghobject_t coid(hobject_t(sobject_t("obj2", CEPH_NOSNAP), "key", 123, -1, ""));
+  ghobject_t roid(hobject_t(sobject_t("obj3", CEPH_NOSNAP), "key", 123, -1, ""));
+  ghobject_t miss(hobject_t(sobject_t("missing", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+
+  // build+run a transaction
+  auto submit = [&](auto&& fn) {
+    ObjectStore::Transaction t; fn(t);
+    ASSERT_EQ(0, queue_transaction(store, ch, std::move(t)));
+  };
+  // baseline -> run fn -> assert counter advanced by `want` (prints avg latency for demo)
+  auto check = [&](const char* name, int idx, uint64_t want, auto&& fn) {
+    uint64_t before = cnt(idx);
+    fn();
+    uint64_t after = cnt(idx);
+    double avg_us = after ? (double)sum_ns(idx) / after / 1000.0 : 0.0;
+    std::cout << "  " << name << ": +" << (after - before)
+              << " (expected +" << want << "), avg " << avg_us << " us\n";
+    EXPECT_EQ(before + want, after) << name;
+  };
+
+  // setup: a populated object (data + attr + omap)
+  submit([&](auto& t){
+    t.create_collection(cid, 0);
+    t.touch(cid, oid);
+    bufferlist bl; bl.append(string(4096, 'a'));
+    t.write(cid, oid, 0, bl.length(), bl);
+    bufferlist av; av.append("v");
+    t.setattr(cid, oid, "a", av);
+    map<string,bufferlist> om{{"k", av}};
+    t.omap_setkeys(cid, oid, om);
+  });
+
+  // ---- read side ----
+  check("exists_lat", l_bluestore_exists_lat, 2, [&]{
+    store->exists(ch, miss); store->exists(ch, oid); });
+
+  check("stat_lat", l_bluestore_stat_lat, 2, [&]{
+    struct stat st;
+    store->stat(ch, miss, &st);            // -ENOENT still counts
+    store->stat(ch, oid, &st); });
+
+  check("getattr_lat (getattr+getattrs)", l_bluestore_getattr_lat, 2, [&]{
+    bufferptr bp; store->getattr(ch, oid, "a", bp);
+    std::map<std::string, bufferptr, std::less<>> aset;
+    store->getattrs(ch, oid, aset); });
+
+  check("fiemap_lat", l_bluestore_fiemap_lat, 1, [&]{
+    bufferlist bl; store->fiemap(ch, oid, 0, 4096, bl); });
+
+  check("omap_get_lat (get+header+check_keys)", l_bluestore_omap_get_lat, 3, [&]{
+    bufferlist header; map<string,bufferlist> out;
+    store->omap_get(ch, oid, &header, &out);
+    store->omap_get_header(ch, oid, &header);
+    set<string> keys{"k"}, got;
+    store->omap_check_keys(ch, oid, keys, &got); });
+
+  check("collection_lat (list+exists+bits)", l_bluestore_collection_lat, 3, [&]{
+    vector<coll_t> ls; store->list_collections(ls);
+    store->collection_exists(cid);
+    store->collection_bits(ch); });
+
+  // regression guard: collection_empty delegates to collection_list (already measured
+  // as clist_lat), so it must NOT bump collection_lat.
+  check("collection_empty stays uncounted", l_bluestore_collection_lat, 0, [&]{
+    bool empty; store->collection_empty(ch, &empty); });
+
+  // ---- write side ----
+  check("touch_lat", l_bluestore_touch_lat, 1, [&]{
+    submit([&](auto& t){ t.touch(cid, oid); }); });
+
+  check("zero_lat", l_bluestore_zero_lat, 1, [&]{
+    submit([&](auto& t){ t.zero(cid, oid, 0, 4096); }); });
+
+  check("clone_lat (clone+clone_range)", l_bluestore_clone_lat, 2, [&]{
+    submit([&](auto& t){
+      t.clone(cid, oid, coid);
+      t.clone_range(cid, oid, coid, 0, 4096, 0); }); });
+
+  check("chgattr_lat (setattr+setattrs+rmattr+rmattrs)", l_bluestore_change_attr_lat, 4, [&]{
+    bufferlist v; v.append("x");
+    std::map<std::string, bufferptr, std::less<>> aset{{"b", bufferptr("y", 1)}};
+    submit([&](auto& t){
+      t.setattr(cid, oid, "a", v);
+      t.setattrs(cid, oid, aset);
+      t.rmattr(cid, oid, "a");
+      t.rmattrs(cid, oid); }); });
+
+  check("omap_set_lat (setkeys+setheader+rmkeys+rmkeyrange)", l_bluestore_omap_set_lat, 4, [&]{
+    bufferlist v; v.append("x");
+    map<string,bufferlist> om{{"k1", v}, {"k2", v}};
+    set<string> rm{"k1"};
+    submit([&](auto& t){
+      t.omap_setkeys(cid, oid, om);
+      t.omap_setheader(cid, oid, v);
+      t.omap_rmkeys(cid, oid, rm);
+      t.omap_rmkeyrange(cid, oid, "k2", "k9"); }); });
+
+  check("rename_lat", l_bluestore_rename_lat, 1, [&]{
+    submit([&](auto& t){ t.collection_move_rename(cid, coid, cid, roid); }); });
+
+  check("other_write_lat (set_alloc_hint)", l_bluestore_other_write_lat, 1, [&]{
+    submit([&](auto& t){ t.set_alloc_hint(cid, oid, 4096, 4096, 0); }); });
+}
 
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
   if(string(GetParam()) != "bluestore")
