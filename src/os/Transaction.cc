@@ -87,7 +87,6 @@ void Transaction::dump(ceph::Formatter *f)
       }
       break;
 
-#ifdef WITH_CRIMSON
     case Transaction::OP_TOUCH_TEMP:
       {
         coll_t cid = i.get_cid(op->cid);
@@ -99,7 +98,6 @@ void Transaction::dump(ceph::Formatter *f)
         f->dump_stream("oid") << dest_oid;
       }
       break;
-#endif
 
     case Transaction::OP_WRITE:
       {
