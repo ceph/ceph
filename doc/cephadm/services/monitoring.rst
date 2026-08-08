@@ -657,7 +657,7 @@ webhook URLs like so:
         - "https://foo"
         - "https://bar"
 
-Where ``default_webhook_urls`` is a list of additional URLs that are
+Where ``webhook_urls`` is a list of additional URLs that are
 added to the default receivers' ``<webhook_configs>`` configuration.
 
 Run ``reconfig`` on the service to update its configuration:
