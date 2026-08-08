@@ -290,6 +290,16 @@ class DataProcessorFactory {
   virtual RGWGetObj_Filter* get_filter() = 0;
   virtual bool need_copy_data() = 0;
   virtual void finalize_attrs(Attrs& attrs) { /* default implementation does nothing */ }
+
+  /*
+   * Override the accounted size for the bucket index.  Called after
+   * finalize_attrs().  Returns the logical object size when the
+   * factory knows better than the default heuristic, e.g. after
+   * decompressing data whose recompression was a no-op.
+   */
+  virtual uint64_t get_accounted_size(uint64_t default_size) {
+    return default_size;
+  }
 };
 
 /**
