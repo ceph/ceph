@@ -1,6 +1,8 @@
 # -*- mode: YAML -*-
 ---
-
+headers: |
+  #include "common/strtol.h"
+  #include "osdc/SplitOp.h"
 options:
 - name: host
   type: str
@@ -2957,6 +2959,18 @@ options:
   fmt_desc: The minimum size (in bytes) of a read to a single replica. For split
     reads, all reads will be at least this size before a client will split it
     across multiple replicas. Set to 0 to disable read splitting for replica pools.
+  validator: |
+    [](std::string *value, std::string *error_message) {
+      uint64_t f = strict_si_cast<uint64_t>(*value, error_message);
+      if (!error_message->empty()) {
+        return -EINVAL;
+      } else if (f < SplitOp::REPLICA_MIN_SPLIT_SIZE && f != 0) {
+        *error_message = "value must be 4096 or greater"
+                         " or set to zero to disable splitting";
+        return -EINVAL;
+      }
+      return 0;
+    }
 # max number of parallel snap trims/pg
 - name: osd_pg_max_concurrent_snap_trims
   type: uint
