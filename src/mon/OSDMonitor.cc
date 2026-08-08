@@ -7628,12 +7628,14 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   stringstream ss;
   string rule_name;
   bool bulk = false;
+  bool force_create = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
 			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
+       force_create,
 			 &ss);
 
   if (ret < 0) {
@@ -8233,7 +8235,16 @@ int OSDMonitor::check_pg_num(int64_t pool,
   // assume min cluster size 3
   osd_num_by_crush = std::max(osd_num_by_crush, 3u);
   auto projected_pgs_per_osd = projected / osd_num_by_crush;
-
+  uint64_t pg_limit = max_pgs_per_osd * osd_num_by_crush;
+  if (projected > pg_limit) {
+      *ss << " pg_num " << pg_num
+      << " size " << size
+      << " for this pool would result in "
+      << projected
+      << " cumulative PGs which exceeds the limit of "
+      << "value of " << max_pgs_per_osd;
+    return -ERANGE;
+  }
   if (projected_pgs_per_osd > max_pgs_per_osd) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
@@ -8288,6 +8299,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
+         bool force_create,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8301,15 +8313,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     return -EINVAL;
 
   if (pg_num == 0) {
-    auto pg_num_from_mode =
-      [pg_num=g_conf().get_val<uint64_t>("osd_pool_default_pg_num")]
-      (const string& mode) {
-      return mode == "on" ? 1 : pg_num;
-    };
-    pg_num = pg_num_from_mode(
-      pg_autoscale_mode.empty() ?
-      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode") :
-      pg_autoscale_mode);
+    pg_num = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
   }
   if (pgp_num == 0)
     pgp_num = g_conf().get_val<uint64_t>("osd_pool_default_pgp_num");
@@ -8382,7 +8386,7 @@ int OSDMonitor::prepare_new_pool(string& name,
              << duration << dendl;
   }
   r = check_pg_num(-1, pg_num, size, crush_rule, ss);
-  if (r) {
+  if (r && !force_create) {
     dout(10) << "check_pg_num returns " << r << dendl;
     return r;
   }
@@ -8398,7 +8402,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
     return r;
   }
-  
   bool fread = false;
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
     switch (fast_read) {
@@ -14128,7 +14131,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
-
+    bool force_create = false;
+    cmd_getval(cmdmap, "force_pg_limit", force_create);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
@@ -14140,6 +14144,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   pg_autoscale_mode,
 			   bulk,
 			   crimson,
+         force_create,
 			   &ss);
     if (err < 0) {
       switch(err) {
