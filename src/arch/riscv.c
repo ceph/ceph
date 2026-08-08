@@ -36,7 +36,9 @@ void ceph_arch_riscv_probe(void)
     if (do_hwprobe(pairs, 1) == 0) {
         unsigned long long ext = pairs[0].value;
         ceph_arch_riscv_rvv  = (ext & RISCV_HWPROBE_IMA_V);
-        ceph_arch_riscv_zbc  = (ext & RISCV_HWPROBE_EXT_ZBC);
-        ceph_arch_riscv_zvbc = (ext & RISCV_HWPROBE_EXT_ZVBC);
+        ceph_arch_riscv_zbc =
+            (ext & RISCV_HWPROBE_EXT_ZBC) == RISCV_HWPROBE_EXT_ZBC;
+        ceph_arch_riscv_zvbc =
+            (ext & RISCV_HWPROBE_EXT_ZVBC) == RISCV_HWPROBE_EXT_ZVBC;
     }
 }
