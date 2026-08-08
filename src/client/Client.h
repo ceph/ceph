@@ -101,6 +101,89 @@ enum {
   l_c_wr_avg,
   l_c_wr_sqsum,
   l_c_wr_ops,
+  l_c_rd_sz_avg,
+  l_c_rd_sz_sqsum,
+  l_c_wr_sz_avg,
+  l_c_wr_sz_sqsum,
+  l_c_aio_ops,
+  l_c_aio_completions,
+  l_c_aio_in_flight,
+  l_c_osdc_hit,
+  l_c_osdc_miss,
+  l_c_osdc_dirty,
+  l_c_mds_req,
+  l_c_mds_req_lookup,
+  l_c_mds_req_getattr,
+  l_c_mds_req_lookuphash,
+  l_c_mds_req_lookupparent,
+  l_c_mds_req_lookupino,
+  l_c_mds_req_lookupname,
+  l_c_mds_req_getvxattr,
+  l_c_mds_req_dummy,
+  l_c_mds_req_setxattr,
+  l_c_mds_req_rmxattr,
+  l_c_mds_req_setlayout,
+  l_c_mds_req_setattr,
+  l_c_mds_req_setfilelock,
+  l_c_mds_req_getfilelock,
+  l_c_mds_req_setdirlayout,
+  l_c_mds_req_mknod,
+  l_c_mds_req_link,
+  l_c_mds_req_unlink,
+  l_c_mds_req_rename,
+  l_c_mds_req_mkdir,
+  l_c_mds_req_rmdir,
+  l_c_mds_req_symlink,
+  l_c_mds_req_create,
+  l_c_mds_req_open,
+  l_c_mds_req_readdir,
+  l_c_mds_req_lookupsnap,
+  l_c_mds_req_mksnap,
+  l_c_mds_req_rmsnap,
+  l_c_mds_req_lssnap,
+  l_c_mds_req_renamesnap,
+  l_c_mds_req_readdir_snapdiff,
+  l_c_mds_req_file_blockdiff,
+  l_c_mds_req_fragmentdir,
+  l_c_mds_req_exportdir,
+  l_c_mds_req_flush,
+  l_c_mds_req_enqueue_scrub,
+  l_c_mds_req_repair_fragstats,
+  l_c_mds_req_repair_inodestats,
+  l_c_mds_req_rdlock_fragsstats,
+  l_c_mds_req_quiesce_path,
+  l_c_mds_req_quiesce_inode,
+  l_c_mds_req_lock_path,
+  l_c_mds_req_uninline_data,
+  l_c_caps,
+  l_c_caps_dirty,
+  l_c_caps_grant,
+  l_c_caps_revoke,
+  l_c_caps_release,
+  l_c_fscrypt_wr_amp,
+  l_c_fscrypt_rd_amp,
+  l_c_fscrypt_enc_lat,
+  l_c_fscrypt_dec_lat,
+  l_c_fscrypt_rd_lat,
+  l_c_fscrypt_wr_lat,
+  l_c_lat_getattr,
+  l_c_lat_lookup,
+  l_c_lat_readdir,
+  l_c_lat_open,
+  l_c_lat_create,
+  l_c_lat_mkdir,
+  l_c_lat_unlink,
+  l_c_lat_rmdir,
+  l_c_lat_rename,
+  l_c_lat_setattr,
+  l_c_dentry_count,
+  l_c_caps_flushing,
+  l_c_cap_wait_lat,
+  l_c_unsafe_reqs,
+  l_c_lock_ops,
+  l_c_lock_lat,
+  l_c_mds_rtt,
+  l_c_catchall_lat,
   l_c_last,
 };
 
@@ -437,6 +520,24 @@ public:
   int file_blockdiff_finish(struct scan_state_t *state);
 
   int get_perf_counters(bufferlist *outbl);
+
+  
+  /** Return the internal PerfCounters logger (nullptr if not yet initialised). */
+  PerfCounters *get_logger() const { return logger.get(); }
+
+  /**
+   * Read a single perf counter value directly from the internal PerfCounters
+   * object.  @p idx must be in [l_c_first, l_c_last).
+   *
+   * For U64 counters returns the raw count cast to int64_t.
+   * For TIME counters returns nanoseconds as a large int (tget().to_nsec()).
+   * Returns -ENOTCONN if the client is not initialised.
+   * Returns -ERANGE  if idx is out of bounds.
+   *
+   * @p is_time is set to true when @p idx refers to a time counter.
+   */
+  int64_t get_perf_counter_value(int idx, bool *is_time);
+
 
   /*
    * Get the next snapshot delta entry.
@@ -954,15 +1055,8 @@ public:
   void tick();
   void start_tick_thread();
 
-  void update_read_io_size(size_t size) {
-    total_read_ops++;
-    total_read_size += size;
-  }
-
-  void update_write_io_size(size_t size) {
-    total_write_ops++;
-    total_write_size += size;
-  }
+  void update_read_io_size(size_t size);
+  void update_write_io_size(size_t size);
 
   void inc_dentry_nr() {
     ++dentry_nr;
@@ -988,6 +1082,27 @@ public:
   }
   std::pair<uint64_t, uint64_t> get_cap_hit_rates() {
     return std::make_pair(cap_hits, cap_misses);
+  }
+
+  void inc_caps() {
+    if (logger)
+      logger->inc(l_c_caps);
+  }
+  void dec_caps() {
+    if (logger)
+      logger->dec(l_c_caps);
+  }
+  void inc_caps_grant() {
+    if (logger)
+      logger->inc(l_c_caps_grant);
+  }
+  void inc_caps_revoke() {
+    if (logger)
+      logger->inc(l_c_caps_revoke);
+  }
+  void inc_caps_release() {
+    if (logger)
+      logger->inc(l_c_caps_release);
   }
 
   void inc_opened_files() {
@@ -1825,6 +1940,7 @@ private:
 
     int64_t get_ofs() { return offset; }
     uint64_t get_size() { return size; }
+    utime_t start;
   };
 
   class WriteEncMgr_Buffered : public WriteEncMgr {

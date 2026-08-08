@@ -286,6 +286,18 @@ public:
   }
   std::pair<uint64_t, uint64_t> get_tavg_ns(int idx) const;
 
+  
+  /** Return the type flags (PERFCOUNTER_TIME, PERFCOUNTER_U64, …) for @p idx. */
+  perfcounter_type_d get_type(int idx) const;
+
+  /** Return the counter name string for @p idx (pointer into static storage). */
+  const char *get_name_for_idx(int idx) const;
+
+  /** Return the lower bound (exclusive) passed to PerfCountersBuilder. */
+  int get_lower_bound() const { return m_lower_bound; }
+  /** Return the upper bound (exclusive) passed to PerfCountersBuilder. */
+  int get_upper_bound() const { return m_upper_bound; }
+
   const std::string& get_name() const;
   void set_name(std::string s) {
     m_name = s;

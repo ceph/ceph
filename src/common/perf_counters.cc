@@ -450,6 +450,21 @@ pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const
   return data.read_avg();
 }
 
+
+perfcounter_type_d PerfCounters::get_type(int idx) const
+{
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
+  return m_data[idx - m_lower_bound - 1].type;
+}
+
+const char *PerfCounters::get_name_for_idx(int idx) const
+{
+  ceph_assert(idx > m_lower_bound);
+  ceph_assert(idx < m_upper_bound);
+  return m_data[idx - m_lower_bound - 1].name;
+}
+
 void PerfCounters::reset()
 {
   perf_counter_data_vec_t::iterator d = m_data.begin();
