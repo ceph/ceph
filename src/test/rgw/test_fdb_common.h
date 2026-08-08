@@ -19,7 +19,7 @@
 
 namespace lfdb = ceph::libfdb;
 
-constexpr const char* const msg = "Hello, World!";
+constexpr char msg[] = "Hello, World!";
 
 constexpr const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
 

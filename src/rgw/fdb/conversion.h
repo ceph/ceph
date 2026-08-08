@@ -72,6 +72,11 @@ non-FDB input sources here (or any non-matching user output sources). Do NOT add
 non-owning targets, lest Antevorda be angered!: */
 namespace ceph::libfdb::from {
 
+inline void convert(const std::span<const std::uint8_t>& from, versionstamp& to)
+{
+ to.store_result(from);
+}
+
 inline void convert(const std::span<const std::uint8_t>& from, auto& to)
 {
  zpp::bits::in zpp_in(from);
