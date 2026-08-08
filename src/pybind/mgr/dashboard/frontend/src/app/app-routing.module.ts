@@ -71,6 +71,7 @@ import { NotificationsPageComponent } from './core/navigation/notification-panel
 import { CephfsMirroringWizardComponent } from './ceph/cephfs/cephfs-mirroring-wizard/cephfs-mirroring-wizard.component';
 import { CephfsMirroringErrorComponent } from './ceph/cephfs/cephfs-mirroring-error/cephfs-mirroring-error.component';
 import { OverviewComponent } from './ceph/overview/overview.component';
+import { NfsClusterFormComponent } from './ceph/nfs/nfs-cluster-form/nfs-cluster-form.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -514,12 +515,17 @@ const routes: Routes = [
             children: [
               { path: '', component: NfsClusterComponent },
               {
+                path: `${URLVerbs.EDIT}/:cluster_id`,
+                component: NfsClusterFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              },
+              {
                 path: `${URLVerbs.CREATE}/:fs_name/:subvolume_group`,
                 component: NfsFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
               {
-                path: `${URLVerbs.CREATE}`,
+                path: `${URLVerbs.CREATE}/:cluster_id`,
                 component: NfsFormComponent,
                 data: { breadcrumbs: ActionLabels.CREATE }
               },
