@@ -664,11 +664,6 @@ int FSCryptDenc::decrypt(const char *in_data, int in_len,
     return -EINVAL;
   }
 
-  if ((uint64_t)out_len < (fscrypt_align_ofs(in_len))) {
-    ldout(cct, 0) << __FILE__ << ":" << __LINE__ << dendl;
-    return -ERANGE;
-  }
-
   if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key.data(), iv.raw,
                           0, cipher_params.data())) {
     ldout(cct, 0) << __FILE__ << ":" << __LINE__ << dendl;
@@ -702,10 +697,6 @@ int FSCryptDenc::encrypt(const char *in_data, int in_len,
     if ((int)key.size() != key_size) {
       ldout(cct, 0) << "ERROR: unexpected encryption key size: " << key.size() << " (expected: " << key_size << ")" << dendl;
       return -EINVAL;
-    }
-
-    if ((uint64_t)out_len < (fscrypt_align_ofs(in_len))) {
-      return -ERANGE;
     }
 
     if (!EVP_CipherInit_ex2(cipher_ctx, cipher, (const uint8_t *)key.data(), iv.raw,
@@ -749,8 +740,11 @@ int FSCryptFNameDenc::get_encrypted_symlink_length(const int& plain_size) const
 {
    int padding_size = ctx->get_filename_padding_bytes();
    int padded_size = (plain_size + padding_size - 1) & ~ (padding_size - 1);
-   if (padded_size > PATH_MAX) {
-    padded_size = PATH_MAX;
+   // The usable symlink target length is maxed at PATH_MAX - 3. This is due
+   // to two bytes being used for defining length and then one byte used for
+   // nul character.
+   if (padded_size > PATH_MAX - 2) {
+    padded_size = PATH_MAX - 2;
   }
   return padded_size;
 }
@@ -768,7 +762,7 @@ int FSCryptFNameDenc::get_encrypted_fname(const std::string& plain, std::string 
   memcpy(orig, plain.c_str(), plain_size);
   memset(orig + plain_size, 0, filename_padded_size - plain_size);
 
-  char enc_name[NAME_MAX + 64]; /* some extra just in case */
+  char enc_name[NAME_MAX];
   int r = encrypt(orig, filename_padded_size,
                   enc_name, sizeof(enc_name));
 
@@ -818,7 +812,7 @@ int FSCryptFNameDenc::get_decrypted_fname(const std::string& b64enc, const std::
                                 enc, sizeof(enc));
   }
 
-  char dec_fname[NAME_MAX + 64]; /* some extra just in case */
+  char dec_fname[NAME_MAX];
   int r = decrypt(penc, len, dec_fname, sizeof(dec_fname));
 
   if (r >= 0) {
@@ -839,13 +833,19 @@ struct fscrypt_slink_data {
 int FSCryptFNameDenc::get_encrypted_symlink(const std::string& plain, std::string *encrypted)
 {
   auto plain_size = plain.size();
+
+  fscrypt_slink_data slink_data;
+
+  if (plain_size > sizeof(slink_data.enc)) {
+    return -ENAMETOOLONG;
+  }
+
   auto symlink_padded_size = get_encrypted_symlink_length(plain_size);
 
   char orig[symlink_padded_size];
   memcpy(orig, plain.c_str(), plain_size);
   memset(orig + plain_size, 0, symlink_padded_size - plain_size);
 
-  fscrypt_slink_data slink_data;
   int r = encrypt(orig, symlink_padded_size,
                   slink_data.enc, sizeof(slink_data.enc));
 
@@ -872,7 +872,7 @@ int FSCryptFNameDenc::get_decrypted_symlink(const std::string& b64enc, std::stri
   int len = fscrypt_fname_unarmor(b64enc.c_str(), b64enc.size(),
                                   (char *)&slink_data, sizeof(slink_data));
 
-  char dec_fname[PATH_MAX + 64]; /* some extra just in case */
+  char dec_fname[sizeof(slink_data.enc)];
 
   if (slink_data.len > len) { /* should never happen */
     ldout(cct, 0) << __FILE__ << ":" << __LINE__ << ":" << __func__ << "(): ERROR: slink_data.len greater than decrypted buffer (slink_data.len=" << slink_data.len << ", len=" << len << ")" << dendl;
@@ -967,6 +967,11 @@ int FSCryptFDataDenc::decrypt_bl(uint64_t off, uint64_t len, uint64_t pos, const
 
       chunk.append_hole(chunk_len);
 
+      if ((uint64_t)chunk_len < (fscrypt_align_ofs(chunk_len))) {
+        ldout(cct, 0) << __FILE__ << ":" << __LINE__ << dendl;
+        return -ERANGE;
+      }
+
       uint64_t bl_off = pos - start_block_off;
       r = decrypt(bl->c_str() + bl_off, chunk_len,
                   chunk.c_str(), chunk_len);
@@ -1028,6 +1033,10 @@ int FSCryptFDataDenc::encrypt_bl(uint64_t off, uint64_t len, bufferlist& bl, buf
 
     bufferlist chunk;
     chunk.append_hole(chunk_len);
+
+    if ((uint64_t)chunk_len < (fscrypt_align_ofs(chunk_len))) {
+      return -ERANGE;
+    }
 
     r = encrypt(bl.c_str() + pos - off, chunk_len,
                 chunk.c_str(), chunk_len);
