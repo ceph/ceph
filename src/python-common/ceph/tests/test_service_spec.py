@@ -579,6 +579,10 @@ def test_yaml(y):
         if key in obj_dict.get('spec', {}):
             obj_dict['spec'][key] = data['spec'][key]
 
+    """RGW spec may not have 'rgw_frontend_port' if it is not set, so we pop it from the dict before comparison if it's missing in the input data."""
+    if data.get('service_type') == 'rgw' and 'rgw_frontend_port' not in data.get('spec', {}):
+            obj_dict['spec'].pop('rgw_frontend_port', None)
+
     assert obj_dict == data
 
 def test_alertmanager_spec_1():
@@ -1476,9 +1480,9 @@ def test_extra_args_handling(y, ec_args, ee_args, ec_final_args, ee_final_args):
         for args in spec_obj.extra_entrypoint_args:
             ee_res.extend(args.to_args())
         assert ee_res == ee_final_args
-  
+
 def test_osd_has_default_termination_grace_when_missing():
-    
+
     spec_data = """
 service_type: osd
 service_id: osd_spec_default
