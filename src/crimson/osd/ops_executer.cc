@@ -79,8 +79,25 @@ OpsExecuter::call_ierrorator::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 
   const auto flags = method->get_flags();
 
-  if (flags & CLS_METHOD_WR) {
-    check_init_op_params(modified_by::user);
+  bool call_may_write = (flags & CLS_METHOD_WR) != 0;
+
+  if (!op_info.may_write() && call_may_write) {
+    std::string str = fmt::format("Method {}.{} contains a {} operation "
+                                  "but is not marked {}. ",
+                                  cname, mname,
+                                  call_may_write ? "write" : "read",
+                                  op_info.may_write() ? "WR" : "RD");
+
+    // Currently there is no pg level cluster logging in Crimson.
+    // So instead this is just logged to the log for the Crimson process.
+    if (conn->has_feature(CEPH_FEATURE_SERVER_UMBRELLA)) {
+      logger().error("{}",str);
+      return crimson::ct_error::invarg::make();
+    } else {
+      logger().warn("{} It is advisable to update your "
+                    "client to umbrella or newer.",
+                    str);
+    }
   }
 
   logger().debug("calling method {}.{}, num_read={}, num_write={}",
