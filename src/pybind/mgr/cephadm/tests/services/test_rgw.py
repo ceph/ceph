@@ -104,6 +104,22 @@ class TestRGWService:
         return cm, svc_name, spec, daemon, mock_spec_store
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_port_reuse(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(
+                service_id="foo",
+                rgw_frontend_port=80,
+                allow_port_reuse=True,
+            )
+            with with_service(cephadm_module, s) as dds:
+                _, f, _ = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': f'client.{dds[0]}',
+                    'key': 'rgw_frontends',
+                })
+                assert f == 'beast port=80 so_reuseport=1'
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_post_remove_no_op_when_requires_certificates_is_false(
             self, cephadm_module: CephadmOrchestrator):
         """

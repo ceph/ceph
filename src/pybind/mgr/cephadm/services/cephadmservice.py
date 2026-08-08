@@ -1641,6 +1641,9 @@ class RgwService(CephService):
         else:
             raise OrchestratorError(f'Invalid rgw_frontend_type parameter: {ftype}. Valid values are: beast, civetweb.')
 
+        if spec.allow_port_reuse:
+            args.append('so_reuseport=1')
+
         if spec.rgw_frontend_extra_args is not None:
             args.extend(spec.rgw_frontend_extra_args)
 
