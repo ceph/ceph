@@ -36,9 +36,14 @@ class TableTool : public MDSUtility
 
     int apply_role_fn(std::function<int(mds_role_t, Formatter *)> fptr, Formatter *f);
 
+    bool rados_connected{false};
+
   public:
     static void usage();
     int main(std::vector<const char*> &argv);
+
+    int connect_rados();
+    librados::Rados& get_rados_handle();
 
     TableTool()
     {

@@ -80,6 +80,7 @@
 #include "common/admin_socket.h"
 #include "global/signal_handler.h"
 #include "common/Formatter.h"
+#include "common/LogEntry.h"
 #include "include/stringify.h"
 #include "include/color.h"
 #include "include/ceph_fs.h"
@@ -154,7 +155,11 @@ static ostream& _prefix(std::ostream *_dout, const Monitor *mon) {
 }
 
 void Monitor::C_Command::_finish(int r) {
+  LogMsg msg;
+  bool send_logmsg = false;
   auto m = op->get_req<MMonCommand>();
+  std::ostringstream oss;
+  oss << m->cmd;
   if (r >= 0) {
     std::ostringstream ss;
     if (!op->get_req()->get_connection()) {
@@ -164,10 +169,17 @@ void Monitor::C_Command::_finish(int r) {
 
       // if client drops we may not have a session to draw information from.
       if (s) {
-	ss << "from='" << s->name << " " << s->addrs << "' "
-	   << "entity='" << s->entity_name << "' ";
+        // TODO: reuse from handle_command?
+        send_logmsg = true;
+        msg.name = s->name;
+        msg.addrs = s->addrs;
+        msg.entity_name = s->entity_name;
+        msg.cmd = oss.str();
+        msg.cmd_args = "";
+        msg.cmd_state = "finished";
+        msg.cmd_retval = r;
       } else {
-	ss << "session dropped for command ";
+        ss << "session dropped for command";
       }
     }
     cmdmap_t cmdmap;
@@ -175,10 +187,15 @@ void Monitor::C_Command::_finish(int r) {
     std::string prefix;
     cmdmap_from_json(m->cmd, &cmdmap, ds);
     cmd_getval(cmdmap, "prefix", prefix);
-    if (prefix != "config set" && prefix != "config-key set")
-      ss << "cmd='" << m->cmd << "': finished";
+    if (prefix != "config set" && prefix != "config-key set") {
+      if (send_logmsg) {
+        mon.audit_clog->info(std::move(msg));
+      } else {
+        ss << "cmd='" << oss.str() << "' r=" << r << ": finished";
+        mon.audit_clog->info() << ss.str();
+      }
+    }
 
-    mon.audit_clog->info() << ss.str();
     mon.reply_command(op, rc, rs, rdata, version);
   }
   else if (r == -ECANCELED)
@@ -561,7 +578,7 @@ will start to track new ops received afterwards.";
     << "from='admin socket' "
     << "entity='admin socket' "
     << "cmd=" << command << " "
-    << "args=" << args << ": finished";
+    << "args=" << args << " r=" << r << ": finished";
   return r;
 
 abort:
@@ -569,7 +586,7 @@ abort:
     << "from='admin socket' "
     << "entity='admin socket' "
     << "cmd=" << command << " "
-    << "args=" << args << ": aborted";
+    << "args=" << args << " r=" << r << ": aborted";
   return r;
 }
 
@@ -3713,23 +3730,41 @@ void Monitor::handle_command(MonOpRequestRef op)
     return;
   }
 
+  LogMsg msg;
+  msg.name = session->name;
+  msg.addrs = session->addrs;
+  msg.entity_name = session->entity_name;
+  std::ostringstream oss;
+  oss << m->cmd;
+  msg.cmd = oss.str();
+  msg.cmd_args = "";
+  msg.cmd_retval = 0;
+
   if (!_allowed_command(session, service, prefix, cmdmap,
                         param_str_map, mon_cmd)) {
     dout(1) << __func__ << " access denied" << dendl;
-    if (prefix != "config set" && prefix != "config-key set")
-      (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-        << "from='" << session->name << " " << session->addrs << "' "
-        << "entity='" << session->entity_name << "' "
-        << "cmd=" << m->cmd << ":  access denied";
+    msg.cmd_state = "access denied";
+    msg.cmd_retval = -EPERM;
+    if (prefix != "config set" && prefix != "config-key set") {
+      if (cmd_is_rw) {
+        audit_clog->info(std::move(msg));
+      } else {
+        audit_clog->debug(std::move(msg));
+      }
+    }
+
     reply_command(op, -EACCES, "access denied", 0);
     return;
   }
 
-  if (prefix != "config set" && prefix != "config-key set")
-    (cmd_is_rw ? audit_clog->info() : audit_clog->debug())
-        << "from='" << session->name << " " << session->addrs << "' "
-        << "entity='" << session->entity_name << "' "
-        << "cmd=" << m->cmd << ": dispatch";
+  msg.cmd_state = "dispatch";
+  if (prefix != "config set" && prefix != "config-key set") {
+    if (cmd_is_rw) {
+      audit_clog->info(std::move(msg));
+    } else {
+      audit_clog->debug(std::move(msg));
+    }
+  }
 
   // compat kludge for legacy clients trying to tell commands that are
   // new.  see bottom of MonCommands.h.  we need to handle both (1)

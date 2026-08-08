@@ -134,6 +134,7 @@ class NotifyType(str, Enum):
     osd_map = 'osd_map'
     fs_map = 'fs_map'
     command = 'command'
+    audit = 'audit'
 
     # these are disabled because there are no users.
     #  see Mgr.cc:
@@ -1091,6 +1092,9 @@ class API:
 
 class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
     MGR_POOL_NAME = ".mgr"
+    # if this is changed, ensure the cephfs recovery tools
+    # also know about it.
+    AUDIT_POOL_NAME = ".audit"
 
     # Priority definitions for perf counters
     PRIO_CRITICAL = 10
@@ -1289,6 +1293,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.log.debug("creating new mgr pool")
             self.create_pool(self.MGR_POOL_NAME)
             self.appify_pool(self.MGR_POOL_NAME, 'mgr')
+
+    @API.perm('w')
+    @API.expose
+    def create_audit_pool(self) -> None:
+        if not self.pool_exists(self.AUDIT_POOL_NAME):
+            self.log.debug("creating audit pool")
+            self.create_pool(self.AUDIT_POOL_NAME)
+            self.appify_pool(self.AUDIT_POOL_NAME, 'auditman')
 
     def create_skeleton_schema(self, db: sqlite3.Connection) -> None:
         SQL = [
@@ -2794,6 +2806,13 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         :param int query_id: query ID
         """
         return self._ceph_get_mds_perf_counters(query_id)
+
+    def audit_log_subscribe(self, sequence: int) -> None:
+        """
+        Subscribe to cluster audit logs starting from a chosen sequence
+        number.
+        """
+        return self._audit_log_subscribe(sequence)
 
     def get_daemon_health_metrics(self) -> Dict[str, List[Dict[str, Any]]]:
         """

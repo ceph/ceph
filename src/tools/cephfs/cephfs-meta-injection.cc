@@ -13,6 +13,8 @@
 #include <vector>
 
 #include <boost/program_options.hpp>
+
+#include "ToolsAuditLogger.h"
 namespace po = boost::program_options;
 using std::string;
 using namespace std;
@@ -88,7 +90,26 @@ int main(int argc, const char **argv)
     std::cerr << "error in initialization: " << cpp_strerror(rc) << std::endl;
     return rc;
   }
+
+  rc = mt.connect_rados();
+  if (rc != 0) {
+    return rc;
+  }
+
+  std::unique_ptr<ToolsAuditLogger> logger = nullptr;
+  if (auto logger_r = ToolsAuditLogger::create_for_tool(cct.get(), mt.get_rados_handle(), "cephfs_meta_injection"); logger_r.has_value()) {
+    logger = std::move(logger_r.value());
+    logger->log_begin(argv[0], ToolsAuditLogger::get_audit_cmd_args(args), ceph_clock_now().sec());
+  } else {
+    std::cerr << "could not create audit db for cephfs-data-scan, moving on..." << std::endl;
+  }
+
   rc = mt.main(mode, rank_str, minfo, ino, out, in, vm.count("yes-i-really-really-mean-it"));
+
+  if (logger) {
+    logger->log_end(ceph_clock_now().sec(), rc < 0 ? mt.get_audit_status().empty() ? "unknown_error" : mt.get_audit_status() : "completed", rc);
+  }
+
   if (rc != 0) {
     std::cerr << "error (" << cpp_strerror(rc) << ")" << std::endl;
     return -1;

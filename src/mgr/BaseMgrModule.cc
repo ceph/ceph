@@ -1485,6 +1485,19 @@ ceph_get_mds_perf_counters(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
+ceph_audit_log_subscribe(BaseMgrModule *self, PyObject *args)
+{
+  unsigned int seq;
+  if (!PyArg_ParseTuple(args, "i:ceph_audit_log_subscribe", &seq)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  self->py_modules->audit_log_subscribe(seq);
+  Py_RETURN_NONE;
+}
+
+static PyObject*
 ceph_is_authorized(BaseMgrModule *self, PyObject *args)
 {
   PyObject *args_dict = NULL;
@@ -1735,6 +1748,9 @@ PyMethodDef BaseMgrModule_methods[] = {
 
   {"_ceph_get_daemon_health_metrics", (PyCFunction)ceph_get_daemon_health_metrics,
     METH_VARARGS, "Get health metrics for all daemons"},
+
+  {"_audit_log_subscribe", (PyCFunction)ceph_audit_log_subscribe,
+    METH_VARARGS, "Subscribe to monitor audit log channel"},
 
   {NULL, NULL, 0, NULL}
 };

@@ -325,21 +325,6 @@ int TableTool::main(std::vector<const char*> &argv)
 
   dout(10) << __func__ << dendl;
 
-  // RADOS init
-  // ==========
-  r = rados.init_with_context(g_ceph_context);
-  if (r < 0) {
-    derr << "RADOS unavailable, cannot scan filesystem journal" << dendl;
-    return r;
-  }
-
-  dout(4) << "connecting to RADOS..." << dendl;
-  r = rados.connect();
-  if (r < 0) {
-    derr << "couldn't connect to cluster: " << cpp_strerror(r) << dendl;
-    return r;
-  }
-
   // Require at least 3 args <rank> <mode> <arg> [args...]
   if (argv.size() < 3) {
     cerr << "missing required 3 arguments" << std::endl;
@@ -435,5 +420,29 @@ int TableTool::main(std::vector<const char*> &argv)
   jf.flush(std::cout);
   std::cout << std::endl;
   return r;
+}
+
+int TableTool::connect_rados()
+{
+  int r = rados.init_with_context(g_ceph_context);
+  if (r < 0) {
+    derr << "RADOS unavailable, cannot scan filesystem journal" << dendl;
+    return r;
+  }
+
+  dout(4) << "connecting to RADOS..." << dendl;
+  r = rados.connect();
+  if (r < 0) {
+    derr << "couldn't connect to cluster: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  rados_connected = true;
+  return 0;
+}
+
+librados::Rados& TableTool::get_rados_handle()
+{
+  ceph_assert(rados_connected);
+  return rados;
 }
 

@@ -83,22 +83,22 @@ bool DataScan::parse_kwarg(
       return false;
     }
     dout(4) << "Using local file output to '" << val << "'" << dendl;
-    driver = new LocalFileDriver(val, data_io);
+    driver = new LocalFileDriver(val, data_io, err);
     return true;
   } else if (arg == std::string("--worker_n")) {
-    std::string err;
-    worker_n = strict_strtoll(val.c_str(), 10, &err);
-    if (!err.empty()) {
-      std::cerr << "Invalid worker number '" << val << "'" << std::endl;
+    std::string err_msg;
+    worker_n = strict_strtoll(val.c_str(), 10, &err_msg);
+    if (!err_msg.empty()) {
+      err << "Invalid worker number '" << val << "'" << std::endl;
       *r = -EINVAL;
       return false;
     }
     return true;
   } else if (arg == std::string("--worker_m")) {
-    std::string err;
-    worker_m = strict_strtoll(val.c_str(), 10, &err);
-    if (!err.empty()) {
-      std::cerr << "Invalid worker count '" << val << "'" << std::endl;
+    std::string err_msg;
+    worker_m = strict_strtoll(val.c_str(), 10, &err_msg);
+    if (!err_msg.empty()) {
+      err << "Invalid worker count '" << val << "'" << std::endl;
       *r = -EINVAL;
       return false;
     }
@@ -111,7 +111,7 @@ bool DataScan::parse_kwarg(
     Filesystem const* fs;
     *r = fsmap->parse_filesystem(val, &fs);
     if (*r != 0) {
-      std::cerr << "Invalid filesystem '" << val << "'" << std::endl;
+      err << "Invalid filesystem '" << val << "'" << std::endl;
       return false;
     }
     fscid = fs->get_fscid();
@@ -120,10 +120,10 @@ bool DataScan::parse_kwarg(
     metadata_pool_name = val;
     return true;
   } else if (arg == std::string("--progress_update_interval")) {
-    std::string err;
-    progress_update_interval = std::chrono::seconds(strict_strtoll(val.c_str(), 10, &err));
-    if (!err.empty()) {
-      std::cerr << "Invalid progress update interval '" << val << "'" << std::endl;
+    std::string err_msg;
+    progress_update_interval = std::chrono::seconds(strict_strtoll(val.c_str(), 10, &err_msg));
+    if (!err_msg.empty()) {
+      err << "Invalid progress update interval '" << val << "'" << std::endl;
       *r = -EINVAL;
       return false;
     }
@@ -157,18 +157,11 @@ int DataScan::main(const std::vector<const char*> &args)
   // Parse args
   // ==========
   if (args.size() < 1) {
-    cerr << "missing position argument" << std::endl;
+    err << "missing position argument" << std::endl;
     return -EINVAL;
   }
 
-  // Common RADOS init: open metadata pool
-  // =====================================
-  int r = rados.init_with_context(g_ceph_context);
-  if (r < 0) {
-    derr << "RADOS unavailable" << dendl;
-    return r;
-  }
-
+  int r = 0;
 
   std::string const &command = args[0];
   std::string data_pool_name;
@@ -218,7 +211,7 @@ int DataScan::main(const std::vector<const char*> &args)
         pg_t pg;
         bool parsed = pg.parse(*i);
         if (!parsed) {
-          std::cerr << "Invalid PG '" << *i << "'" << std::endl;
+          err << "Invalid PG '" << *i << "'" << std::endl;
           return -EINVAL;
         } else {
           pg_files_pgs.insert(pg);
@@ -229,7 +222,7 @@ int DataScan::main(const std::vector<const char*> &args)
     }
 
     // Fall through: unhandled
-    std::cerr << "Unknown argument '" << *i << "'" << std::endl;
+    err << "Unknown argument '" << *i << "'" << std::endl;
     return -EINVAL;
   }
 
@@ -239,7 +232,7 @@ int DataScan::main(const std::vector<const char*> &args)
     if (fsmap->filesystem_count() == 1) {
       fscid = fsmap->get_filesystem().get_fscid();
     } else {
-      std::cerr << "Specify a filesystem with --filesystem" << std::endl;
+      err << "Specify a filesystem with --filesystem" << std::endl;
       return -EINVAL;
     }
   }
@@ -247,18 +240,10 @@ int DataScan::main(const std::vector<const char*> &args)
 
   // Default to output to metadata pool
   if (driver == NULL) {
-    driver = new MetadataDriver();
+    driver = new MetadataDriver(err);
     driver->set_force_corrupt(force_corrupt);
     driver->set_force_init(force_init);
     dout(4) << "Using metadata pool output" << dendl;
-  }
-
-  dout(4) << "connecting to RADOS..." << dendl;
-  r = rados.connect();
-  if (r < 0) {
-    std::cerr << "couldn't connect to cluster: " << cpp_strerror(r)
-              << std::endl;
-    return r;
   }
 
   r = driver->init(rados, metadata_pool_name, fsmap, fscid);
@@ -283,7 +268,7 @@ int DataScan::main(const std::vector<const char*> &args)
     std::string pool_name;
     r = rados.pool_reverse_lookup(data_pool_id, &pool_name);
     if (r < 0) {
-      std::cerr << "Failed to resolve data pool: " << cpp_strerror(r)
+      err << "Failed to resolve data pool: " << cpp_strerror(r)
 		<< std::endl;
       return r;
     }
@@ -292,16 +277,16 @@ int DataScan::main(const std::vector<const char*> &args)
       autodetect_data_pools = true;
       data_pool_name = pool_name;
     } else if (data_pool_name != pool_name) {
-      std::cerr << "Warning: pool '" << data_pool_name << "' is not the "
+      err << "Warning: pool '" << data_pool_name << "' is not the "
         "main CephFS data pool!" << std::endl;
       if (!force_pool) {
-        std::cerr << "Use --force-pool to continue" << std::endl;
+        err << "Use --force-pool to continue" << std::endl;
         return -EINVAL;
       }
 
       data_pool_id = rados.pool_lookup(data_pool_name.c_str());
       if (data_pool_id < 0) {
-	std::cerr << "Data pool '" << data_pool_name << "' not found!"
+	err << "Data pool '" << data_pool_name << "' not found!"
 		  << std::endl;
 	return -ENOENT;
       }
@@ -330,7 +315,7 @@ int DataScan::main(const std::vector<const char*> &args)
 	std::string pool_name;
 	r = rados.pool_reverse_lookup(pool_id, &pool_name);
 	if (r < 0) {
-	  std::cerr << "Failed to resolve data pool: " << cpp_strerror(r)
+	  err << "Failed to resolve data pool: " << cpp_strerror(r)
 		    << std::endl;
 	  return r;
 	}
@@ -341,7 +326,7 @@ int DataScan::main(const std::vector<const char*> &args)
     for (auto &data_pool_name: extra_data_pool_names) {
       int64_t pool_id = rados.pool_lookup(data_pool_name.c_str());
       if (data_pool_id < 0) {
-	std::cerr << "Data pool '" << data_pool_name << "' not found!" << std::endl;
+	err << "Data pool '" << data_pool_name << "' not found!" << std::endl;
 	return -ENOENT;
       } else {
 	dout(4) << "data pool '" << data_pool_name << "' has ID " << pool_id
@@ -349,10 +334,10 @@ int DataScan::main(const std::vector<const char*> &args)
       }
 
       if (!fs.get_mds_map().is_data_pool(pool_id)) {
-	std::cerr << "Warning: pool '" << data_pool_name << "' is not a "
+	err << "Warning: pool '" << data_pool_name << "' is not a "
 	  "CephFS data pool!" << std::endl;
 	if (!force_pool) {
-	  std::cerr << "Use --force-pool to continue" << std::endl;
+	  err << "Use --force-pool to continue" << std::endl;
 	  return -EINVAL;
 	}
       }
@@ -374,7 +359,7 @@ int DataScan::main(const std::vector<const char*> &args)
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
     if (r < 0) {
-      std::cerr << "Pool " << metadata_pool_id
+      err << "Pool " << metadata_pool_id
         << " identified in MDS map not found in RADOS!" << std::endl;
       return r;
     }
@@ -401,9 +386,34 @@ int DataScan::main(const std::vector<const char*> &args)
   } else if (command == "init") {
     return driver->init_roots(fs.get_mds_map().get_first_data_pool());
   } else {
-    std::cerr << "Unknown command '" << command << "'" << std::endl;
+    err << "Unknown command '" << command << "'" << std::endl;
     return -EINVAL;
   }
+}
+
+int DataScan::connect_rados()
+{
+  int r = rados.init_with_context(g_ceph_context);
+  if (r < 0) {
+    derr << "RADOS unavailable" << dendl;
+    return r;
+  }
+
+  dout(4) << "connecting to RADOS..." << dendl;
+  r = rados.connect();
+  if (r < 0) {
+    err << "couldn't connect to cluster: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+  rados_connected = true;
+  return 0;
+}
+
+librados::Rados& DataScan::get_rados_handle()
+{
+  ceph_assert(rados_connected);
+  return rados;
 }
 
 int MetadataDriver::inject_unlinked_inode(
@@ -418,7 +428,7 @@ int MetadataDriver::inject_unlinked_inode(
     return r;
   }
   if (already_exists && !force_init) {
-    std::cerr << "Inode 0x" << std::hex << inono << std::dec << " already"
+    err << "Inode 0x" << std::hex << inono << std::dec << " already"
                " exists, skipping create.  Use --force-init to overwrite"
                " the existing object." << std::endl;
     return 0;
@@ -561,16 +571,16 @@ int parse_oid(const std::string &oid, uint64_t *inode_no, uint64_t *obj_id)
     return -EINVAL;
   }
 
-  std::string err;
+  std::string err_msg;
   std::string inode_str = oid.substr(0, oid.find("."));
-  *inode_no = strict_strtoll(inode_str.c_str(), 16, &err);
-  if (!err.empty()) {
+  *inode_no = strict_strtoll(inode_str.c_str(), 16, &err_msg);
+  if (!err_msg.empty()) {
     return -EINVAL;
   }
 
   std::string pos_string = oid.substr(oid.find(".") + 1);
-  *obj_id = strict_strtoll(pos_string.c_str(), 16, &err);
-  if (!err.empty()) {
+  *obj_id = strict_strtoll(pos_string.c_str(), 16, &err_msg);
+  if (!err_msg.empty()) {
     return -EINVAL;
   }
 
@@ -743,7 +753,7 @@ int DataScan::forall_objects(
                        << dendl;
               continue;
             }
-          } catch (const buffer::error &err) {
+          } catch (const buffer::error&) {
           }
           dout(20) << "read non-matching tag '" << read_tag << "'" << dendl;
         } else {
@@ -854,7 +864,7 @@ int DataScan::scan_inodes()
   }
 
   if (!roots_present) {
-    std::cerr << "Some or all system inodes are absent.  Run 'init' from "
+    err << "Some or all system inodes are absent.  Run 'init' from "
       "one node before running 'scan_inodes'" << std::endl;
     return -EIO;
   }
@@ -1481,7 +1491,7 @@ int DataScan::scan_links()
                  << dir_ino << std::dec << "/" << dname << dendl;
             return -EINVAL;
           }
-        } catch (const buffer::error& err) {
+        } catch (const buffer::error&) {
           derr << "Error decoding dentry 0x" << std::hex << dir_ino << std::dec
                << "/" << dname << dendl;
           return -EINVAL;
@@ -1731,7 +1741,7 @@ int DataScan::scan_frags()
   }
 
   if (!roots_present) {
-    std::cerr << "Some or all system inodes are absent.  Run 'init' from "
+    err << "Some or all system inodes are absent.  Run 'init' from "
       "one node before running 'scan_inodes'" << std::endl;
     return -EIO;
   }
@@ -1904,7 +1914,7 @@ int MetadataTool::read_fnode(
   auto old_fnode_iter = fnode_bl.cbegin();
   try {
     (*fnode).decode(old_fnode_iter);
-  } catch (const buffer::error &err) {
+  } catch (const buffer::error&) {
     return -EINVAL;
   }
 
@@ -1963,7 +1973,7 @@ int MetadataTool::read_dentry(inodeno_t parent_ino, frag_t frag,
     }
     if (dnfirst)
       *dnfirst = first;
-  } catch (const buffer::error &err) {
+  } catch (const buffer::error&) {
     dout(20) << "encoding error in dentry 0x" << std::hex << parent_ino
              << std::dec << "/" << dname << dendl;
     return -EINVAL;
@@ -1990,9 +2000,9 @@ int MetadataDriver::load_table(MDSTable *table)
     decode(table_ver, p);
     table->decode_state(p);
     table->force_replay_version(table_ver);
-  } catch (const buffer::error &err) {
+  } catch (const buffer::error& e) {
     derr << "unable to decode mds table '" << table_oid.name << "': "
-      << err.what() << dendl;
+      << e.what() << dendl;
     return -EIO;
   }
   return 0;
