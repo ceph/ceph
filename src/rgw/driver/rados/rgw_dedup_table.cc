@@ -134,12 +134,11 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   int dedup_table_t::add_entry(key_t *p_key,
-                               disk_block_id_t block_id,
-                               record_id_t rec_id,
+                               disk_rec_id_t rec_addr,
                                bool shared_manifest,
                                dedup_stats_t *p_dedup_stats)
   {
-    value_t new_val(block_id, rec_id, shared_manifest);
+    value_t new_val(rec_addr, shared_manifest);
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (!val.is_occupied()) {
@@ -160,27 +159,26 @@ namespace rgw::dedup {
       if (val.count <= MAX_COPIES_PER_OBJ) {
         inc_counters(p_key, p_dedup_stats);
       }
-      if (val.count < std::numeric_limits<std::uint16_t>::max()) {
+      if (val.count < std::numeric_limits<std::uint8_t>::max()) {
         val.count ++;
       }
       if (!val.has_shared_manifest() && shared_manifest) {
         // replace value!
         ldpp_dout(dpp, 20) << __func__ << "::Replace with shared_manifest::["
-                           << val.block_idx << "/" << (int)val.rec_id << "] -> ["
-                           << block_id << "/" << (int)rec_id << "]" << dendl;
+                           << val.rec_addr << "] -> ["
+                           << rec_addr << "]" << dendl;
         new_val.count = val.count;
         hash_tab[idx].val = new_val;
       }
       ceph_assert(val.count > 1);
     }
-    ldpp_dout(dpp, 20) << __func__ << "::COUNT="<< val.count << dendl;
+    ldpp_dout(dpp, 20) << __func__ << "::COUNT="<< (int)val.count << dendl;
     return 0;
   }
 
   //---------------------------------------------------------------------------
   void dedup_table_t::update_entry(key_t *p_key,
-                                   disk_block_id_t block_id,
-                                   record_id_t rec_id,
+                                   disk_rec_id_t rec_addr,
                                    bool shared_manifest)
   {
     uint32_t idx = find_entry(p_key);
@@ -188,17 +186,17 @@ namespace rgw::dedup {
     value_t &val = hash_tab[idx].val;
     ceph_assert(val.is_occupied());
 
-    // need to overwrite the block_idx/rec_id from the first pass
-    // unless already set with shared_manifest with the correct block-id/rec-id
+    // need to overwrite the rec_addr from the first pass
+    // unless already set with shared_manifest with the correct rec_addr
     // We only set the shared_manifest flag on the second pass where we
-    // got valid block-id/rec-id
+    // got valid rec_addr
     if (!val.has_shared_manifest()) {
       // replace value!
-      value_t new_val(block_id, rec_id, shared_manifest);
+      value_t new_val(rec_addr, shared_manifest);
       new_val.count = val.count;
       ldpp_dout(dpp, 20) << __func__ << "::Replaced table entry::["
-                         << val.block_idx << "/" << (int)val.rec_id << "] -> ["
-                         << block_id << "/" << (int)rec_id << "]" << dendl;
+                         << val.rec_addr << "] -> ["
+                         << rec_addr << "]" << dendl;
 
       val = new_val;
     }
@@ -206,15 +204,14 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   int dedup_table_t::set_src_mode(const key_t *p_key,
-                                  disk_block_id_t block_id,
-                                  record_id_t rec_id,
+                                  disk_rec_id_t rec_addr,
                                   bool set_shared_manifest_src,
                                   bool set_has_valid_hash_src)
   {
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (val.is_occupied()) {
-      if (val.block_idx == block_id && val.rec_id == rec_id) {
+      if (val.rec_addr == rec_addr) {
         if (set_shared_manifest_src) {
           val.set_shared_manifest_src();
         }
@@ -230,18 +227,17 @@ namespace rgw::dedup {
 
   //---------------------------------------------------------------------------
   int dedup_table_t::inc_count(const key_t *p_key,
-                               disk_block_id_t block_id,
-                               record_id_t rec_id)
+                               disk_rec_id_t rec_addr)
   {
     uint32_t idx = find_entry(p_key);
     value_t &val = hash_tab[idx].val;
     if (val.is_occupied()) {
-      if (val.block_idx == block_id && val.rec_id == rec_id) {
+      if (val.rec_addr == rec_addr) {
         val.inc_count();
         return 0;
       }
       else {
-        ldpp_dout(dpp, 5) << __func__ << "::ERR Failed Ncopies bloc/rec" << dendl;
+        ldpp_dout(dpp, 5) << __func__ << "::ERR Failed Ncopies rec_addr" << dendl;
       }
     }
     else {
@@ -325,8 +321,8 @@ int main()
   }
   work_shard_t work_shard = 3;
   for (unsigned i = 0; i < MAX_ENTRIES; i++) {
-    disk_block_id_t block_id(worker_id, std::rand());
-    tab.add_entry(key_tab+i, block_id, 0, false, false);
+    disk_rec_id_t rec_addr(worker_id, std::rand() & 0x00FFFFFF);
+    tab.add_entry(key_tab+i, rec_addr, false, false);
   }
   double avg = (double)total / MAX_ENTRIES;
   std::cout << "Insert::num entries=" << MAX_ENTRIES << ", total=" << total

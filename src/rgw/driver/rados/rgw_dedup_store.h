@@ -18,6 +18,7 @@
 #include "rgw_realm_reloader.h"
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include <variant>
 #include <iostream>
 #include <ostream>
@@ -47,91 +48,57 @@ namespace rgw::dedup {
   static constexpr unsigned MAX_REC_IN_BLOCK = 32;
   // we use 8bit record indices
   static_assert(MAX_REC_IN_BLOCK < 0xFF);
-  using slab_id_t      = uint16_t;
-  using block_offset_t = uint8_t;
+  using slab_id_t      = uint32_t;
+  using block_offset_t = uint16_t;
   using record_id_t    = uint8_t;
 
-  // disk_block_id_t is a 32 bits concataion of shard_id, slab_id and block_off
-  // ---8---- | -------16------- | ---8----
-  // shard_id |      slab_id     | block_off
-  struct __attribute__ ((packed)) disk_block_id_t
+  // disk_rec_id_t is a 48-bit in-memory address pointing directly to a record.
+  // Replaces the old 32-bit disk_block_id_t. The rec_id field (previously stored
+  // separately in value_t) is now absorbed into the address.
+  // This type is never serialized to disk/network; uses packed bit-fields.
+  //
+  // Layout (LSB to MSB on little-endian):
+  // | work_shard | slab_id  | block_id | rec_id | rsv |
+  // | 8 bits     | 24 bits  | 9 bits   | 6 bits | 1   |
+  //
+  // sizeof(disk_rec_id_t) == 6 bytes via __attribute__((packed)).
+  struct __attribute__ ((packed)) disk_rec_id_t
   {
-  public:
-    disk_block_id_t() {
-      block_id = 0;
+    work_shard_t  work_shard : 8;
+    uint32_t      slab_id    : 24;
+    uint16_t      block_id   : 9;
+    uint8_t       rec_id     : 6;
+    uint8_t       rsv        : 1;
+
+    disk_rec_id_t()
+      : work_shard(0), slab_id(0), block_id(0), rec_id(0), rsv(0) {}
+
+    disk_rec_id_t(work_shard_t ws, uint32_t sid, uint16_t bid)
+      : work_shard(ws), slab_id(sid), block_id(bid), rec_id(0), rsv(0) {
+      ceph_assert(ws <= MAX_WORK_SHARD);
     }
 
-    disk_block_id_t(work_shard_t shard_id, uint32_t seq_number) {
-      ceph_assert((seq_number & SEQ_NUMBER_MASK) == seq_number);
-      ceph_assert(shard_id <= MAX_WORK_SHARD);
-      block_id = (uint32_t)shard_id << OBJ_SHARD_SHIFT | seq_number;
+    disk_rec_id_t(work_shard_t ws, uint32_t sid, uint16_t bid, record_id_t rid)
+      : work_shard(ws), slab_id(sid), block_id(bid), rec_id(rid), rsv(0) {
+      ceph_assert(ws <= MAX_WORK_SHARD);
+      ceph_assert(rid < MAX_REC_IN_BLOCK);
     }
 
-    disk_block_id_t& operator =(const disk_block_id_t &other) {
-      this->block_id = other.block_id;
-      return *this;
+    inline bool operator ==(const disk_rec_id_t &other) const {
+      return memcmp(this, &other, sizeof(*this)) == 0;
     }
 
-    inline disk_block_id_t& operator =(uint32_t val) {
-      this->block_id = val;
-      return *this;
-    }
-
-    inline bool operator ==(const disk_block_id_t &other) const {
-      return (this->block_id == other.block_id);
-    }
-
-    inline explicit operator uint32_t() const {
-      return this->block_id;
-    }
-
-    friend std::ostream& operator<<(std::ostream& os, const disk_block_id_t& block_id);
+    friend std::ostream& operator<<(std::ostream& os, const disk_rec_id_t& rec_id);
 
     std::string get_slab_name(md5_shard_t md5_shard) const;
+    std::string get_coarse_slab_name(uint16_t group_id) const;
 
-    static inline slab_id_t seq_num_to_slab_id(uint32_t seq_number) {
-      return (seq_number & SLAB_ID_MASK) >> SLAB_ID_SHIFT;
+    inline void set_rec_id(record_id_t rid) {
+      ceph_assert(rid < MAX_REC_IN_BLOCK);
+      this->rec_id = rid;
     }
-
-    static inline uint32_t slab_id_to_seq_num(uint32_t slab_id) {
-      return (slab_id << SLAB_ID_SHIFT);
-    }
-
-    inline block_offset_t get_block_offset() const {
-      return get_block_offset(get_seq_num());
-    }
-
-    inline work_shard_t get_work_shard_id() const {
-      return (block_id & OBJ_SHARD_MASK) >> OBJ_SHARD_SHIFT;
-    }
-
-  private:
-    inline uint32_t get_seq_num() const {
-      return (block_id & SEQ_NUMBER_MASK);
-    }
-
-    inline slab_id_t get_slab_id() const {
-      return seq_num_to_slab_id(get_seq_num());
-    }
-
-    inline block_offset_t get_block_offset(uint32_t seq_number) const {
-      return (seq_number & BLOCK_OFF_MASK);
-    }
-
-    static constexpr uint32_t OBJ_SHARD_SHIFT  = 24;
-    static constexpr uint32_t OBJ_SHARD_MASK   = 0xFF000000;
-
-    static constexpr uint32_t SEQ_NUMBER_SHIFT = 0;
-    static constexpr uint32_t SEQ_NUMBER_MASK  = 0x00FFFFFF;
-
-    static constexpr uint32_t SLAB_ID_SHIFT    = 8;
-    static constexpr uint32_t SLAB_ID_MASK     = 0x00FFFF00;
-
-    static constexpr uint32_t BLOCK_OFF_SHIFT  = 0;
-    static constexpr uint32_t BLOCK_OFF_MASK   = 0x000000FF;
-
-    uint32_t block_id;
   };
+  static_assert(sizeof(disk_rec_id_t) == 6);
 
   struct __attribute__ ((packed)) record_flags_t {
   private:
@@ -176,7 +143,7 @@ namespace rgw::dedup {
     size_t length() const;
     int validate(const char *caller,
                  const DoutPrefixProvider* dpp,
-                 disk_block_id_t block_id,
+                 disk_rec_id_t rec_addr,
                  record_id_t rec_id) const;
     inline bool multipart_object() { return (this->s.num_parts > 0); }
     struct packed_rec_t
@@ -220,10 +187,10 @@ namespace rgw::dedup {
   static constexpr unsigned LAST_BLOCK_MAGIC = 0xCAD7;
   struct  __attribute__ ((packed)) disk_block_header_t {
     void deserialize();
-    int verify(disk_block_id_t block_id, const DoutPrefixProvider* dpp);
+    int verify(uint16_t expected_block_idx, const DoutPrefixProvider* dpp);
     uint16_t        offset;
     uint16_t        rec_count;
-    disk_block_id_t block_id;
+    uint16_t        block_idx;
     uint16_t        rec_offsets[MAX_REC_IN_BLOCK];
   };
   static constexpr unsigned MAX_REC_SIZE = (DISK_BLOCK_SIZE - sizeof(disk_block_header_t));
@@ -234,48 +201,117 @@ namespace rgw::dedup {
     disk_block_header_t* get_header() { return (disk_block_header_t*)data; }
     bool is_empty() const { return (get_header()->rec_count == 0); }
 
-    void init(work_shard_t worker_id, uint32_t seq_number);
+    void init(uint16_t block_idx);
     record_id_t add_record(const disk_record_t *p_rec, const DoutPrefixProvider *dpp);
     void close_block(const DoutPrefixProvider* dpp, bool has_more);
-    disk_block_id_t get_block_id() {
-      disk_block_header_t *p_header = get_header();
-      return p_header->block_id;
-    }
     char data[DISK_BLOCK_SIZE];
   };
 
   int load_record(librados::IoCtx          &ioctx,
                   const disk_record_t      *p_tgt_rec,
                   disk_record_t            *p_src_rec, /* OUT */
-                  disk_block_id_t           block_id,
-                  record_id_t               rec_id,
+                  disk_rec_id_t             rec_addr,
                   md5_shard_t               md5_shard,
                   const DoutPrefixProvider *dpp);
 
   int load_slab(librados::IoCtx &ioctx,
                 bufferlist &bl,
-                md5_shard_t md5_shard,
+                shard_t shard,
                 work_shard_t worker_id,
-                uint32_t seq_number,
-                const DoutPrefixProvider* dpp);
+                uint32_t slab_id,
+                const DoutPrefixProvider* dpp,
+                bool is_coarse);
 
   int store_slab(librados::IoCtx &ioctx,
                  bufferlist &bl,
-                 md5_shard_t md5_shard,
+                 shard_t shard,
                  work_shard_t worker_id,
-                 uint32_t seq_number,
-                 const DoutPrefixProvider* dpp);
+                 uint32_t slab_id,
+                 const DoutPrefixProvider* dpp,
+                 bool is_coarse);
+
+  //---------------------------------------------------------------------------
+  // Forward-only iterator over all records in a slab sequence.
+  // Encapsulates the slab→block→record traversal with robust error handling
+  // (retry on slab load failure, skip bad blocks) and detailed logging.
+  // Does NOT validate records or handle heartbeat/pause/stop — caller's responsibility.
+  class slab_record_iterator_t
+  {
+  public:
+    struct record_ref_t {
+      disk_record_t  rec;        // deserialized record in host format
+      disk_rec_id_t  rec_addr;   // full address: (worker_id, slab_id, block_id, rec_id)
+    };
+
+    slab_record_iterator_t(const DoutPrefixProvider *dpp,
+                           librados::IoCtx &ioctx,
+                           uint32_t shard_or_group,
+                           work_shard_t worker_id,
+                           bool is_coarse);
+
+    // Advances to the next record.
+    // Returns true if a record is available (access via operator*).
+    // Returns false on EOF or error (distinguish via error()).
+    bool next();
+
+    // Current record — valid only after next() returns true
+    record_ref_t& operator*() { return d_ref; }
+    record_ref_t* operator->() { return &d_ref; }
+
+    // 0 if iteration ended normally (EOF), negative on fatal error
+    int error() const { return d_error; }
+
+    uint32_t slab_count() const { return d_slab_count; }
+    uint32_t failed_block_count() const { return d_failed_block_count; }
+    uint32_t missing_last_block_marker_count() const { return d_missing_last_block_marker; }
+
+  private:
+    bool assign_next_record();
+    bool check_for_more_blocks();
+    bool open_next_block();
+    bool load_next_slab();
+
+    record_ref_t               d_ref;
+    int                        d_error               = 0;
+
+    const DoutPrefixProvider  *dpp;
+    librados::IoCtx           &d_ioctx;
+    uint32_t                   d_shard_or_group;
+    work_shard_t               d_worker_id;
+    bool                       d_is_coarse;
+
+    // slab-level state
+    bufferlist                 d_bl;
+    uint32_t                   d_slab_id             = 0;
+    uint32_t                   d_slab_count          = 0;
+    int                        d_slab_failure_count  = 0;
+    bool                       d_has_more_slabs      = true;
+
+    // block-level state
+    char                       d_block_buff[sizeof(disk_block_t)];
+    bufferlist::const_iterator d_bl_itr;
+    disk_block_header_t       *d_p_header            = nullptr;
+    const char                *d_p_block             = nullptr;
+    uint16_t                   d_block_num           = 0;
+    int                        d_block_failure_count = 0;
+    bool                       d_has_more_blocks     = false;
+
+    // record-level state within current block
+    unsigned                   d_rec_idx             = 0;
+
+    // stats
+    uint32_t                   d_failed_block_count  = 0;
+    uint32_t                   d_missing_last_block_marker = 0;
+
+    static constexpr int MAX_OBJ_LOAD_FAILURE = 3;
+    static constexpr int MAX_BAD_BLOCKS = 2;
+  };
 
   class disk_block_array_t;
   class disk_block_seq_t
   {
     friend class disk_block_array_t;
   public:
-    struct record_info_t {
-      disk_block_id_t block_id;
-      record_id_t     rec_id;
-    };
-
     disk_block_seq_t(const DoutPrefixProvider* dpp_in,
                      disk_block_t *p_arr_in,
                      work_shard_t worker_id,
@@ -284,51 +320,84 @@ namespace rgw::dedup {
     int flush_disk_records(librados::IoCtx &ioctx);
     md5_shard_t get_md5_shard() { return d_md5_shard; }
     int add_record(librados::IoCtx     &ioctx,
-                   const disk_record_t *p_rec, // IN-OUT
-                   record_info_t       *p_rec_info); // OUT-PARAM
+                   const disk_record_t *p_rec,
+                   disk_rec_id_t       *p_rec_addr); // OUT
+    disk_block_seq_t() {;}
 
   private:
-    disk_block_seq_t() {;}
     void activate(const DoutPrefixProvider* _dpp,
                   disk_block_t *_p_arr,
                   work_shard_t worker_id,
                   md5_shard_t md5_shard,
-                  worker_stats_t *p_stats);
+                  worker_stats_t *p_stats,
+                  bool coarse);
     inline const disk_block_t* last_block() { return &p_arr[DISK_BLOCK_COUNT-1]; }
     int flush(librados::IoCtx &ioctx);
     void slab_reset() {
+      d_block_id = 0;
       p_curr_block = p_arr;
-      p_curr_block->init(d_worker_id, d_seq_number);
+      p_curr_block->init(d_block_id);
     }
 
     disk_block_t   *p_arr         = nullptr;
     disk_block_t   *p_curr_block  = nullptr;
     worker_stats_t *p_stats       = nullptr;
     const DoutPrefixProvider *dpp = nullptr;
-    uint32_t        d_seq_number  = 0;
+    uint32_t        d_slab_id     = 0;
+    uint16_t        d_block_id    = 0;
     work_shard_t    d_worker_id   = NULL_WORK_SHARD;
     md5_shard_t     d_md5_shard   = NULL_MD5_SHARD;
+    bool            d_coarse      = false;
   };
 
   class disk_block_array_t
   {
   public:
+
+    // Single-pass: num_buffers = num_md5_shards, route by md5_low % N
+
+    // Phase 1 (coarse): num_buffers = G = ceil(sqrt(N)),
+    //                   route by md5_shard / shards_per_group → group_id
+    // Phase 2 (fine):   num_buffers = shards_per_group = ceil(N/G),
+    //                   route by md5_shard - group_id * shards_per_group → buffer_idx
+    enum class mode_t { SINGLE_PASS, PHASE1_COARSE, PHASE2_FINE };
     disk_block_array_t(const DoutPrefixProvider* _dpp,
                        uint8_t *raw_mem,
                        uint64_t raw_mem_size,
                        work_shard_t worker_id,
                        worker_stats_t *p_worker_stats,
-                       md5_shard_t num_md5_shards);
+                       md5_shard_t num_md5_shards,
+                       uint32_t num_groups = 0,
+                       uint32_t shards_per_group = 0,
+                       uint32_t group_id = 0,
+                       mode_t mode = mode_t::SINGLE_PASS);
+
     void flush_output_buffers(const DoutPrefixProvider* dpp,
                               librados::IoCtx &ioctx);
     disk_block_seq_t* get_shard_block_seq(uint64_t md5_low) {
       md5_shard_t md5_shard = md5_low % d_num_md5_shards;
-      return d_disk_arr + md5_shard;
+      uint32_t idx;
+      switch (d_mode) {
+      case mode_t::PHASE1_COARSE:
+        idx = md5_shard / d_shards_per_group;
+        break;
+      case mode_t::PHASE2_FINE:
+        idx = md5_shard - d_group_id * d_shards_per_group;
+        break;
+      default: // SINGLE_PASS
+        idx = md5_shard;
+        break;
+      }
+      ceph_assert(idx < d_disk_arr.size());
+      return &d_disk_arr[idx];
     }
 
     //private:
-    disk_block_seq_t  d_disk_arr[MAX_MD5_SHARD];
+    std::vector<disk_block_seq_t> d_disk_arr;
     work_shard_t      d_worker_id;
     md5_shard_t       d_num_md5_shards;
+    uint32_t          d_shards_per_group = 0;
+    uint32_t          d_group_id         = 0;
+    mode_t            d_mode             = mode_t::SINGLE_PASS;
   };
 } //namespace rgw::dedup
