@@ -187,9 +187,14 @@ struct ghobj_cmp_t {
 ghobj_cmp_t compare_ghobj(ghobject_t &identity, const ghobject_t &base) {
   auto snap_bak = identity.hobj.snap;
   identity.hobj.snap = base.hobj.snap;
+  auto gen_bak = identity.generation;
+  identity.generation = base.generation;
   bool same_object = (identity == base);
-  bool equal = same_object && (snap_bak == base.hobj.snap);
+  bool equal = same_object &&
+               (snap_bak == base.hobj.snap) &&
+               (gen_bak == base.generation);
   identity.hobj.snap = snap_bak;
+  identity.generation = gen_bak;
   return {same_object, equal};
 }
 }
@@ -217,7 +222,7 @@ FLTreeOnodeManager::get_or_create_onode(
 
   // handle object id from sibling
   auto onode = OnodeRef(flonode);
-  if (!hoid.hobj.is_head()) {
+  if (!hoid.hobj.is_head() || !hoid.is_no_gen()) {
     // cur onode is not head, move to next onode to check if it's
     // the clone sibling under the same object.
     auto next_cursor = co_await tree.get_next(trans, cursor);

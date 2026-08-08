@@ -207,7 +207,7 @@ public:
     return true;
   }
   void set_sibling_object_id(local_object_id_t id) {
-    assert(!sibling_object_id);
+    assert(!sibling_object_id || *sibling_object_id == id);
     sibling_object_id = id;
   }
   // should only be used for unittest
