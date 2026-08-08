@@ -471,3 +471,26 @@ class HardwareMetricsTest(TestCase):
         self.module._process_processors(self.status, self.hostname)
         for labels in self.module.metrics['hardware_cpu_cores'].value:
             self.assertEqual(len(labels), 5)
+
+    # --- get_hardware_metrics orchestration ---
+
+    def test_skips_when_orch_unavailable(self):
+        from prometheus.module import Module
+        self.module.orch_is_available.return_value = False
+        Module.get_hardware_metrics(self.module)
+        self.module.node_proxy_fullreport.assert_not_called()
+
+    def test_skips_when_hw_monitoring_disabled(self):
+        from prometheus.module import Module
+        self.module.orch_is_available.return_value = True
+        self.module.get_module_option_ex.return_value = False
+        Module.get_hardware_metrics(self.module)
+        self.module.node_proxy_fullreport.assert_not_called()
+
+    def test_fetches_when_hw_monitoring_enabled(self):
+        from prometheus.module import Module
+        self.module.orch_is_available.return_value = True
+        self.module.get_module_option_ex.return_value = True
+        self.module.node_proxy_fullreport.return_value = {}
+        Module.get_hardware_metrics(self.module)
+        self.module.node_proxy_fullreport.assert_called_once()
