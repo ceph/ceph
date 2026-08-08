@@ -23,7 +23,9 @@ The most important methods to override are:
   take action when new cluster data is available.
 * a ``handle_command`` member function if your module
   exposes CLI commands. But this approach for exposing commands
-  is deprecated. For more details, see :ref:`mgr-module-exposing-commands`.
+  is deprecated: new modules should register commands with the
+  ``CLICommand`` decorator instead. For details on both approaches,
+  see :ref:`mgr-module-exposing-commands`.
 
 Some modules interface with external orchestrators to deploy
 Ceph services.  These also inherit from ``Orchestrator``, which adds
