@@ -302,6 +302,150 @@ end
         result = admin(['script', 'rm', '--context', context])
         assert result[1] == 0
 
+@pytest.mark.request_test
+def test_delete_obj():
+    bucket_name = gen_bucket_name()
+    socket_path = '/tmp/'+bucket_name
+
+    script = '''
+if Request.RGWOp == "delete_obj" then
+    local json = require("cjson")
+    local socket = require("socket")
+    local unix = require("socket.unix")
+    local s = unix()
+    E = {{}}
+    msg = {{bucket = (Request.Bucket or (Request.CopyFrom or E).Bucket).Name,
+        object = Request.Object.Name,
+        time = Request.Time,
+        operation = Request.RGWOp,
+        http_status = Request.Response.HTTPStatusCode,
+        error_code = Request.Response.HTTPStatus,
+        object_size = Request.Object.Size,
+        trans_id = Request.TransactionId}}
+    assert(s:connect("{}"))
+    s:send(json.encode(msg).."\\n")
+    s:close()
+end
+'''.format(socket_path)
+
+    result = admin(['script-package', 'add', '--package=lua-cjson', '--allow-compilation'])
+    assert result[1] ==  0
+    result = admin(['script-package', 'add', '--package=luasocket', '--allow-compilation'])
+    assert result[1] == 0 
+    result = admin(['script-package', 'reload'])
+    assert result[1] == 0 
+    result = put_script(script, "postrequest")
+    assert result[1] == 0 
+
+    socket_server = UnixSocket(socket_path)
+    try:
+        conn = connection()
+        # create bucket
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        # create objects in the bucket (async)
+        number_of_objects = 5
+        keys = []
+        for i in range(number_of_objects):
+            content = str(os.urandom(1024*1024)).encode("ascii")
+            key = str(i)
+            conn.put_object(Body=content, Bucket=bucket_name, Key=key)
+            keys.append(key)
+
+        for i in range(number_of_objects):
+            conn.delete_object(Bucket=bucket_name, Key=keys[i])
+
+        time.sleep(5)
+        event_keys = []
+        for event in socket_server.get_and_reset_events():
+            assert event['bucket'] == bucket_name
+            event_keys.append(event['object'])
+
+        assert keys == event_keys
+
+    finally:
+        socket_server.shutdown()
+        conn.delete_bucket(Bucket=bucket_name)
+        contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+        for context in contexts:
+            result = admin(['script', 'rm', '--context', context])
+            assert result[1] == 0
+
+@pytest.mark.request_test
+def test_multi_delete_obj():
+    bucket_name = gen_bucket_name()
+    socket_path = '/tmp/'+bucket_name
+
+    script = '''
+if Request.RGWOp == "multi_object_delete" then
+    local json = require("cjson")
+    local socket = require("socket")
+    local unix = require("socket.unix")
+    local s = unix()
+    E = {{}}
+
+    local names = ""
+    local n = #Request.Objects
+    for i = 0, n-1 do
+        names = names .. Request.Objects[i].Name
+        if i ~= n-1 then
+            names = names .. ","
+        end
+    end
+
+    msg = {{bucket = (Request.Bucket or (Request.CopyFrom or E).Bucket).Name,
+        object = names,
+        time = Request.Time,
+        operation = Request.RGWOp,
+        http_status = Request.Response.HTTPStatusCode,
+        error_code = Request.Response.HTTPStatus,
+        trans_id = Request.TransactionId}}
+    assert(s:connect("{}"))
+    s:send(json.encode(msg).."\\n")
+    s:close()
+end
+'''.format(socket_path)
+
+    result = admin(['script-package', 'add', '--package=lua-cjson', '--allow-compilation'])
+    assert result[1] ==  0
+    result = admin(['script-package', 'add', '--package=luasocket', '--allow-compilation'])
+    assert result[1] == 0 
+    result = admin(['script-package', 'reload'])
+    assert result[1] == 0 
+    result = put_script(script, "postrequest")
+    assert result[1] == 0 
+
+    socket_server = UnixSocket(socket_path)
+    try:
+        conn = connection()
+        # create bucket
+        bucket = conn.create_bucket(Bucket=bucket_name)
+        # create objects in the bucket (async)
+        number_of_objects = 5
+        keys = []
+        for i in range(number_of_objects):
+            content = str(os.urandom(1024*1024)).encode("ascii")
+            key = str(i)
+            conn.put_object(Body=content, Bucket=bucket_name, Key=key)
+            keys.append(key)
+
+        objs_dict = {'Objects': [{"Key": key["Key"]} for key in conn.list_objects(Bucket=bucket_name)['Contents']]}
+        conn.delete_objects(Bucket=bucket_name, Delete=objs_dict)
+
+        time.sleep(5)
+        event_keys = []
+        for event in socket_server.get_and_reset_events():
+            assert event['bucket'] == bucket_name
+            event_keys += event['object'].split(",")
+
+        assert keys == event_keys
+
+    finally:
+        socket_server.shutdown()
+        conn.delete_bucket(Bucket=bucket_name)
+        contexts = ['prerequest', 'postrequest', 'background', 'getdata', 'putdata']
+        for context in contexts:
+            result = admin(['script', 'rm', '--context', context])
+            assert result[1] == 0
 
 @pytest.mark.example_test
 def test_copyfrom():

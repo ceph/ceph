@@ -2275,6 +2275,7 @@ class RGWDeleteMultiObj : public RGWOp {
    */
   void handle_individual_object(const RGWMultiDelObject& object,
                                 optional_yield y,
+                                size_t index = 0,
                                 const bool skip_olh_obj_update = false);
 
   void handle_objects(const std::vector<RGWMultiDelObject>& objects,

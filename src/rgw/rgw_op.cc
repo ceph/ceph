@@ -8146,6 +8146,7 @@ void RGWDeleteMultiObj::write_ops_log_entry(rgw_log_entry& entry) const {
 
 void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object,
                                                  optional_yield y,
+                                                 size_t index,
                                                  const bool skip_olh_obj_update)
 {
   const string& key = object.get_key();
@@ -8266,6 +8267,8 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   rgw::op_counters::inc(counters, l_rgw_op_del_obj, 1);
   rgw::op_counters::inc(counters, l_rgw_op_del_obj_b, obj_size);
   rgw::op_counters::tinc(counters, l_rgw_op_del_obj_lat, Clock::now() - started_at);
+
+  s->objects[index] = std::move(obj);
 }
 
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
@@ -8290,7 +8293,7 @@ void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& obj
       [this, &objects] (const rgw::multi_delete::Item& item,
                         bool skip_update_olh,
                         boost::asio::yield_context y) {
-        handle_individual_object(objects[item.index], y, skip_update_olh);
+        handle_individual_object(objects[item.index], y, item.index, skip_update_olh);
       },
       [this] {
         rgw_flush_formatter(s, s->formatter);
@@ -8360,6 +8363,9 @@ void RGWDeleteMultiObj::execute(optional_yield y)
       return;
     }
   }
+
+  // pre-initialize s->objects so each pointer can be moved into this vector after its corresponding object is deleted
+  s->objects = std::vector<std::unique_ptr<rgw::sal::Object>>(multi_delete_object_num);
 
   begin_response();
 
