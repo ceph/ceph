@@ -3439,8 +3439,14 @@ void BlueFS::_compact_log_async_LD_LNF_D() //also locks FW for new_writer
   // lock log's run-time structures for a while
   log.lock.lock();
 
-  // Extend log in case of having a big transaction waiting before starting compaction.
-  _maybe_extend_log();
+  // Extension only happens on the flush path; if the runway is short for
+  // the pending transaction, flush it - that extends the log as a side
+  // effect (see _flush_and_sync_log_LD).
+  if (uint64_t extend_amount = _need_extend_log(); extend_amount > 0) {
+    log.lock.unlock();
+    _flush_and_sync_log_LD();
+    log.lock.lock();
+  }
 
   // only one compaction allowed at one time
   bool old_is_comp = std::atomic_exchange(&log_is_compacting, true);
@@ -3756,21 +3762,23 @@ void BlueFS::_consume_dirty(uint64_t seq)
   }
 }
 
-int64_t BlueFS::_maybe_extend_log() {
+// Returns the amount to extend the log by, or 0 if the runway suffices.
+// Requires log.lock; call after log.t is fully composed for an exact estimate.
+uint64_t BlueFS::_need_extend_log() {
   uint64_t runway = log.writer->file->fnode.get_allocated() - log.writer->get_effective_write_pos();
-  // increasing the size of the log involves adding a OP_FILE_UPDATE_INC which its size will 
-  // increase with respect the number of extents. bluefs_min_log_runway should cover the max size 
+  // increasing the size of the log involves adding a OP_FILE_UPDATE_INC which its size will
+  // increase with respect the number of extents. bluefs_min_log_runway should cover the max size
   // a log can get.
   // inject new allocation in case log is too big
   size_t expected_log_size = 0;
   log.t.bound_encode(expected_log_size);
   if (expected_log_size + cct->_conf->bluefs_min_log_runway > runway) {
-    _extend_log(expected_log_size + cct->_conf->bluefs_max_log_runway);
-  } else if (runway < cct->_conf->bluefs_min_log_runway) {
-    _extend_log(cct->_conf->bluefs_max_log_runway);
+    return expected_log_size + cct->_conf->bluefs_max_log_runway;
   }
-  runway = log.writer->file->fnode.get_allocated() - log.writer->get_effective_write_pos();
-  return runway;
+  if (runway < cct->_conf->bluefs_min_log_runway) {
+    return cct->_conf->bluefs_max_log_runway;
+  }
+  return 0;
 }
 
 void BlueFS::_extend_log(uint64_t amount) {
@@ -3805,13 +3813,11 @@ void BlueFS::_extend_log(uint64_t amount) {
   log.writer->append(bl);
   ceph_assert(allocated_before_extension >= log.writer->get_effective_write_pos());
 
-  // before sync_core we advance the seq
-  {
-    std::unique_lock<ceph::mutex> l(dirty.lock);
-    dirty.seq_live++;
-    log.seq_live++;
-    log.t.seq++;
-  }
+  // The extension transaction consumed seq log.t.seq (reserved by the
+  // caller under dirty.lock); step log.t.seq so the upcoming main
+  // transaction takes the next slot. seq_live is deliberately not
+  // touched here.
+  log.t.seq++;
 }
 
 void BlueFS::_flush_and_sync_log_core()
@@ -3832,8 +3838,8 @@ void BlueFS::_flush_and_sync_log_core()
   logger->inc(l_bluefs_logged_bytes, bl.length());
 
   uint64_t runway = log.writer->file->fnode.get_allocated() - log.writer->get_effective_write_pos();
-  // ensure runway is big enough, this should be taken care of by _maybe_extend_log,
-  // but let's keep this here just in case.
+  // ensure runway is big enough, this should be taken care of by the
+  // _need_extend_log()/_extend_log() pair, but let's keep this here just in case.
   ceph_assert(bl.length() <= runway); 
 
 
@@ -3917,11 +3923,22 @@ int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
   ceph_assert(want_seq == 0 || want_seq <= dirty.seq_live); // illegal to request seq that was not created yet
   uint64_t seq =_log_advance_seq();
   _consume_dirty(seq);
+  // Reserve a dedicated seq for the log-extension transaction (if one is
+  // needed) while dirty.lock is still held; otherwise a concurrent
+  // _signal_dirty_to_log_D() could register a file under a seq that no
+  // _consume_dirty() will ever visit (https://tracker.ceph.com/issues/79068).
+  uint64_t extend_amount = _need_extend_log();
+  if (extend_amount) {
+    ++dirty.seq_live;
+    ++log.seq_live;
+  }
   vector<interval_set<uint64_t>> to_release(dirty.pending_release.size());
   to_release.swap(dirty.pending_release);
   dirty.lock.unlock();
 
-  _maybe_extend_log();
+  if (extend_amount) {
+    _extend_log(extend_amount);
+  }
   _flush_and_sync_log_core();
   _flush_bdev(log.writer);
   logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
