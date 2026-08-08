@@ -26,7 +26,6 @@ from mgr_util import (
     is_valid_container_image_ref,
     to_pretty_timedelta,
     format_bytes,
-    parse_combined_pem_file,
     NvmeofMetadataPoolHelper,
 )
 from mgr_module import MgrModule, HandleCommandResult, Option
@@ -1285,13 +1284,17 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         Sets the cert-key pair from -i <pem-file>, which must be a valid PEM file containing both the certificate and the private key.
         """
         if inbuf:
-            cert_content, key_content = parse_combined_pem_file(inbuf)
-            if not cert_content or not key_content:
-                raise OrchestratorError('Expected a combined PEM file with certificate and key pairs')
+            # inbuf may be a combined cert+key blob, a fullchain PEM (key +
+            # leaf + intermediates), or just a cert chain. Parsing/validating
+            # the PEM content is left entirely to cert_store_set_pair, which
+            # is implemented per-backend (e.g. cephadm) and already knows how
+            # to split and validate TLS PEM bundles — this avoids needing any
+            # PEM-parsing import here.
+            cert_content, key_content = inbuf, ''
         else:
-            cert_content, key_content = cert, key
-            if not cert_content or not key_content:
+            if not cert or not key:
                 raise OrchestratorError('This command requires passing cert/key pair by either using --cert/--key parameters or a combined PEM file using "-i" option.')
+            cert_content, key_content = cert, key
 
         completion = self.cert_store_set_pair(
             cert_content,
