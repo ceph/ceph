@@ -214,6 +214,12 @@ describe('UserFormComponent', () => {
 
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
+      spyOn(userService, 'list').and.callFake(() =>
+        of([
+          { username: user.username, roles: user.roles, enabled: true },
+          { username: 'admin2', roles: ['administrator'], enabled: true }
+        ])
+      );
       spyOn(TestBed.inject(RoleService), 'list').and.callFake(() => of(roles));
       spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.returnValue(user.username);
       setUrl('/user-management/users/edit/user1');
@@ -311,6 +317,126 @@ describe('UserFormComponent', () => {
       });
       userReq.flush({});
       expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);
+    });
+  });
+
+  describe('last admin protection in edit mode', () => {
+    const adminUser: UserFormModel = {
+      username: 'otheradmin',
+      password: undefined,
+      name: 'Other Admin',
+      email: 'other@admin.com',
+      roles: ['administrator'],
+      enabled: true,
+      pwdExpirationDate: undefined,
+      pwdUpdateRequired: false
+    };
+    const allUsers = [
+      { username: 'otheradmin', roles: ['administrator'], enabled: true }
+    ];
+    const roles = [
+      {
+        name: 'administrator',
+        description: 'Administrator',
+        scopes_permissions: { user: ['create', 'delete', 'read', 'update'] }
+      },
+      {
+        name: 'read-only',
+        description: 'Read-Only',
+        scopes_permissions: { user: ['read'] }
+      }
+    ];
+
+    beforeEach(() => {
+      spyOn(userService, 'get').and.callFake(() => of(adminUser));
+      spyOn(userService, 'list').and.callFake(() => of(allUsers));
+      spyOn(TestBed.inject(RoleService), 'list').and.callFake(() => of(roles));
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.returnValue('currentuser');
+      setUrl('/user-management/users/edit/otheradmin');
+      spyOn(TestBed.inject(SettingsService), 'getStandardSettings').and.callFake(() =>
+        of({
+          user_pwd_expiration_warning_1: 10,
+          user_pwd_expiration_warning_2: 5,
+          user_pwd_expiration_span: 90
+        })
+      );
+      component.ngOnInit();
+      const req = httpTesting.expectOne('api/role');
+      req.flush(roles);
+      httpTesting.expectOne('ui-api/standard_settings');
+    });
+
+    afterEach(() => {
+      httpTesting.verify();
+    });
+
+    it('should mark user as last admin', () => {
+      expect(component.isLastAdminUser).toBe(true);
+    });
+
+    it('should disable administrator role for last admin user', () => {
+      const administratorRole = component.allRoles.find((role) => role.name === 'administrator');
+      expect(administratorRole.disabled).toBeTruthy();
+    });
+
+    it('should protect roles clear button for last admin', () => {
+      expect(component.disableRolesClearButton()).toBeTruthy();
+    });
+  });
+
+  describe('non-last admin in edit mode', () => {
+    const adminUser: UserFormModel = {
+      username: 'admin1',
+      password: undefined,
+      name: 'Admin 1',
+      email: 'admin1@admin.com',
+      roles: ['administrator'],
+      enabled: true,
+      pwdExpirationDate: undefined,
+      pwdUpdateRequired: false
+    };
+    const allUsers = [
+      { username: 'admin1', roles: ['administrator'], enabled: true },
+      { username: 'admin2', roles: ['administrator'], enabled: true }
+    ];
+    const roles = [
+      {
+        name: 'administrator',
+        description: 'Administrator',
+        scopes_permissions: { user: ['create', 'delete', 'read', 'update'] }
+      }
+    ];
+
+    beforeEach(() => {
+      spyOn(userService, 'get').and.callFake(() => of(adminUser));
+      spyOn(userService, 'list').and.callFake(() => of(allUsers));
+      spyOn(TestBed.inject(RoleService), 'list').and.callFake(() => of(roles));
+      spyOn(TestBed.inject(AuthStorageService), 'getUsername').and.returnValue('currentuser');
+      setUrl('/user-management/users/edit/admin1');
+      spyOn(TestBed.inject(SettingsService), 'getStandardSettings').and.callFake(() =>
+        of({
+          user_pwd_expiration_warning_1: 10,
+          user_pwd_expiration_warning_2: 5,
+          user_pwd_expiration_span: 90
+        })
+      );
+      component.ngOnInit();
+      const req = httpTesting.expectOne('api/role');
+      req.flush(roles);
+      httpTesting.expectOne('ui-api/standard_settings');
+    });
+
+    afterEach(() => {
+      httpTesting.verify();
+    });
+
+    it('should not mark user as last admin when multiple admins exist', () => {
+      expect(component.isLastAdminUser).toBe(false);
+    });
+
+    it('should not disable administrator role for non-last admin', () => {
+      const administratorRole = component.allRoles.find((role) => role.name === 'administrator');
+      expect(administratorRole.disabled).toBeFalsy();
     });
   });
 });

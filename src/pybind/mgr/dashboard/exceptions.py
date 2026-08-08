@@ -115,6 +115,12 @@ class PwdExpirationDateNotValid(Exception):
             "The password expiration date must not be in the past")
 
 
+class LastAdminError(Exception):
+    def __init__(self, action: str, username: str):
+        super().__init__(
+            f"Cannot {action} user '{username}': last user with administrator role")
+
+
 class GrafanaError(Exception):
     pass
 
