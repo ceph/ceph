@@ -252,6 +252,12 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_inc_map_received, "inc_map_received",
     "number of incremental OSD map received via MOSDMap");
+  osd_plb.add_u64_counter(
+    l_osd_full_map_stored, "full_map_stored",
+    "number of full OSD maps written to the store");
+  osd_plb.add_u64_counter(
+    l_osd_map_rebuilt, "map_rebuilt",
+    "number of OSD maps rebuilt from incremental maps");
   osd_plb.add_u64_counter(l_osd_mape, "map_message_epochs", "OSD map epochs");
   osd_plb.add_u64_counter(
     l_osd_mape_dup, "map_message_epoch_dups", "OSD map duplicates");

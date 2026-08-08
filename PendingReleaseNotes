@@ -1,3 +1,17 @@
+* RADOS: New ``osd_map_full_checkpoint_interval`` option. When set to a
+  non-zero value N, OSDs persist a full OSDMap only every Nth epoch and keep
+  only the incremental map for intermediate epochs, rebuilding them on demand
+  from the nearest older full map. This substantially reduces per-epoch
+  metadata writes on large clusters with big OSDMaps during periods of fast
+  epoch churn. Full maps received from the monitor are always persisted, and
+  the per-epoch canonical re-encode and CRC verification are unchanged.
+  Enabling the option adds an incompat feature to the OSD superblock; OSD
+  versions without support for it will refuse to start on such a store.
+  Setting the option back to 0 and restarting the OSD backfills the missing
+  full maps and clears the superblock feature, after which downgrading is
+  possible again. The default (0) preserves the previous behavior of storing
+  a full map every epoch.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
