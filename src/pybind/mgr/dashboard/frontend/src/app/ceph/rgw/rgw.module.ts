@@ -22,7 +22,10 @@ import { RgwBucketDetailsComponent } from './rgw-bucket-details/rgw-bucket-detai
 import { RgwBucketFormComponent } from './rgw-bucket-form/rgw-bucket-form.component';
 import { RgwBucketListComponent } from './rgw-bucket-list/rgw-bucket-list.component';
 import { RgwConfigModalComponent } from './rgw-config-modal/rgw-config-modal.component';
-import { RgwDaemonDetailsComponent } from './rgw-daemon-details/rgw-daemon-details.component';
+import { RgwDaemonResourcePageComponent } from './rgw-daemon-resource-page/rgw-daemon-resource-page.component';
+import { RgwDaemonResourceSidebarComponent } from './rgw-daemon-resource-sidebar/rgw-daemon-resource-sidebar.component';
+import { RgwDaemonResourceBreadcrumbResolver } from './rgw-daemon-resource-page/rgw-daemon-resource-breadcrumb.resolver';
+import { RgwDaemonResourceResolver } from './rgw-daemon-resource-page/rgw-daemon-resource.resolver';
 import { RgwDaemonListComponent } from './rgw-daemon-list/rgw-daemon-list.component';
 import { RgwUserCapabilityModalComponent } from './rgw-user-capability-modal/rgw-user-capability-modal.component';
 import { RgwUserResourceSidebarComponent } from './rgw-user-resource-sidebar/rgw-user-resource-sidebar.component';
@@ -180,7 +183,7 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
     ComponentsModule
   ],
   exports: [
-    RgwDaemonDetailsComponent,
+    RgwDaemonResourcePageComponent,
     RgwBucketFormComponent,
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
@@ -192,7 +195,8 @@ import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account
   declarations: [
     RgwRateLimitComponent,
     RgwDaemonListComponent,
-    RgwDaemonDetailsComponent,
+    RgwDaemonResourcePageComponent,
+    RgwDaemonResourceSidebarComponent,
     RgwBucketFormComponent,
     RgwBucketListComponent,
     RgwBucketDetailsComponent,
@@ -279,6 +283,27 @@ const routes: Routes = [
     pathMatch: 'full' // Required for a clean reload on daemon selection.
   },
   { path: 'daemon', component: RgwDaemonListComponent, data: { breadcrumbs: 'Gateways' } },
+  {
+    path: 'daemon/:daemonId',
+    component: RgwDaemonResourceSidebarComponent,
+    data: { breadcrumbs: RgwDaemonResourceBreadcrumbResolver },
+    resolve: {
+      daemon: RgwDaemonResourceResolver
+    },
+    children: [
+      { path: '', redirectTo: 'overview', pathMatch: 'full' },
+      {
+        path: 'overview',
+        component: RgwDaemonResourcePageComponent,
+        data: { breadcrumbs: 'Overview', section: 'overview' }
+      },
+      {
+        path: 'performance',
+        component: RgwDaemonResourcePageComponent,
+        data: { breadcrumbs: 'Performance', section: 'performance' }
+      }
+    ]
+  },
   {
     path: 'user',
     data: { breadcrumbs: 'Users' },

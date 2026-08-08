@@ -1,0 +1,65 @@
+@if (selection) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Details"
+        [fields]="daemonDetailsFields"
+      >
+      </cd-resource-overview-card>
+
+      <section class="cds-mt-5">
+        <cd-resource-overview-card
+          i18n-title
+          title="Frontend Configuration"
+          [fields]="frontendConfigurationFields"
+        >
+        </cd-resource-overview-card>
+      </section>
+
+      <section class="cds-mt-5">
+        <cd-resource-overview-card
+          i18n-title
+          title="Software &amp; Version"
+          [fields]="softwareVersionFields"
+        >
+        </cd-resource-overview-card>
+      </section>
+
+      <section class="cds-mt-5">
+        <cd-resource-overview-card
+          i18n-title
+          title="Distribution"
+          [fields]="distributionFields"
+        >
+        </cd-resource-overview-card>
+      </section>
+
+      <section class="cds-mt-5">
+        <cd-resource-overview-card
+          i18n-title
+          title="Kernel &amp; Operating System"
+          [fields]="kernelOperatingSystemFields"
+        >
+        </cd-resource-overview-card>
+      </section>
+    }
+    @case ('performance') {
+      <cd-grafana
+        i18n-title
+        title="RGW instance details"
+        [grafanaPath]="'ceph-object-instance-details?var-rgw_servers=rgw.' + selection.id"
+        [type]="'metrics'"
+        uid="x5ARzZtmk"
+        grafanaStyle="one"
+      >
+      </cd-grafana>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No RGW daemon found.</cd-alert-panel
+  >
+}
