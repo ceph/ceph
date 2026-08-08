@@ -1,0 +1,19 @@
+:host ::ng-deep cd-resource-overview-card {
+  .cd-overview-password {
+    .cds--label {
+      display: none !important;
+    }
+    // Remove default margins and adjust height to match standard text
+    .cds--password-input-wrapper,
+    .cds--text-input-wrapper {
+      margin: 0 !important;
+    }
+
+    .cds--text-input {
+      min-height: auto;
+      height: auto;
+      padding-top: 0;
+      padding-bottom: 0;
+    }
+  }
+}
