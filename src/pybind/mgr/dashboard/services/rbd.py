@@ -343,7 +343,8 @@ class RbdService(object):
 
                     if pool_interval:
                         stat['schedule_info'] = {
-                            'name': pool_schedule_spec,
+                            'name': image_schedule_spec,
+                            'schedule_source': pool_schedule_spec,
                             'schedule_interval': pool_interval,
                             'schedule_time': image_schedule_time,
                             'inherited': 'pool'
@@ -352,7 +353,8 @@ class RbdService(object):
                         cluster_interval = RbdMirroringService.get_schedule_interval('')
                         if cluster_interval:
                             stat['schedule_info'] = {
-                                'name': '',
+                                'name': image_schedule_spec,
+                                'schedule_source': '',
                                 'schedule_interval': cluster_interval,
                                 'schedule_time': image_schedule_time,
                                 'inherited': 'cluster'
