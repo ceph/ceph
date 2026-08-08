@@ -95,6 +95,7 @@ set(librgw_common_srcs
   rgw_public_access.cc
   rgw_putobj.cc
   rgw_quota.cc
+  rgw_sc_quota_checker.cc
   rgw_resolve.cc
   rgw_rest.cc
   rgw_rest_account.cc
