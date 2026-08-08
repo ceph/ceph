@@ -11,7 +11,7 @@ namespace image_replayer {
 struct ReplayerListener {
   virtual ~ReplayerListener() {}
 
-  virtual void handle_notification() = 0;
+  virtual void handle_notification(bool force=false) = 0;
 };
 
 } // namespace image_replayer
