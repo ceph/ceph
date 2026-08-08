@@ -193,7 +193,7 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
      * client about a name conflict.
      */
     if (info.owner != params.owner) {
-      return -ERR_BUCKET_EXISTS;
+      return -EEXIST;
     }
     // prevent re-creation with different index type or shard count
     if ((params.index_type && *params.index_type !=

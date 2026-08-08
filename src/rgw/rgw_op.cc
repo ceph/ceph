@@ -4126,12 +4126,28 @@ void RGWCreateBucket::execute(optional_yield y)
   s->bucket_exists = (op_ret != -ENOENT);
   ceph_assert(s->bucket); // creates handle even on ENOENT
 
+  // need_metadata_upload() is always false for S3, so use the check to decide
+  // if it's a s3 request and not a swift request.
+  bool is_s3 = !need_metadata_upload();
+  const auto eexist_override = s->cct->_conf.get_val<bool>("rgw_bucket_eexist_override");
+
   if (s->bucket_exists) {
     const RGWBucketInfo& info = s->bucket->get_info();
 
-    if (!s->system_request && createparams.zonegroup_id != info.zonegroup) {
-      s->err.message = "Cannot modify existing bucket's zonegroup";
+    // check bucket ownership first: if the requester doesn't own the
+    // bucket, return BucketAlreadyExists immediately without leaking
+    // details about the existing bucket's configuration
+    if (info.owner != s->owner.id) {
       op_ret = -EEXIST;
+      return;
+    }
+
+    // for s3 request, if rgw_bucket_eexist_override is true, just return back if bucekt
+    // exists, as we do not allow any changes in bucket's configuration;
+    // if rgw_bucket_eexist_override is false, allow checking bucket's configuration
+    // before returning 200.
+    if (is_s3 && eexist_override) {
+      op_ret = -ERR_BUCKET_EXISTS;
       return;
     }
 
@@ -4142,44 +4158,48 @@ void RGWCreateBucket::execute(optional_yield y)
     // don't allow changes to placement
     if (createparams.placement_rule != info.placement_rule) {
       s->err.message = "Cannot modify existing bucket's placement rule";
-      op_ret = -EEXIST;
+      // for swift, -ERR_BUCKET_EXISTS is translated as STATUS_ACCEPTED which doesn't indicate an error.
+      // however swift does need an error here since X-Storage-Policy can not be changed
+      op_ret = (is_s3 ? -ERR_BUCKET_EXISTS : -EEXIST);
       return;
     }
 
-    // prevent re-creation with different index type or shard count
-    if ((createparams.index_type && *createparams.index_type !=
-         info.layout.current_index.layout.type) ||
-        (createparams.index_shards && *createparams.index_shards !=
-         info.layout.current_index.layout.normal.num_shards)) {
-      s->err.message =
-          "Cannot modify existing bucket's index type or shard count";
-      op_ret = -EEXIST;
-      return;
-    }
-
-    // don't allow changes to object lock
-    if (createparams.obj_lock_enabled != info.obj_lock_enabled()) {
-      s->err.message = "Cannot modify existing bucket's object lock";
-      op_ret = -EEXIST;
-      return;
-    }
-
-    // don't allow changes to the acl policy
-    RGWAccessControlPolicy old_policy;
-    int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
-                                               s->bucket->get_attrs(),
-                                               old_policy, y);
-    if (r >= 0 && old_policy != policy) {
-      s->err.message = "Cannot modify existing access control policy";
-      op_ret = -EEXIST;
-      return;
-    }
-
-    // For s3::CreateBucket just return back if bucket exists, as we do not allow
-    // any changes in bucket config param. need_metadata_upload() is always false
-    // for S3, so use the check to decide if its s3 request and not swift request.
-    if (!need_metadata_upload()) {
+    if (is_s3) {
       op_ret = -ERR_BUCKET_EXISTS;
+
+      if (!s->system_request && createparams.zonegroup_id != info.zonegroup) {
+        s->err.message = "Cannot modify existing bucket's zonegroup";
+        return;
+      }
+
+      // prevent re-creation with different index type or shard count
+      if ((createparams.index_type && *createparams.index_type !=
+           info.layout.current_index.layout.type) ||
+          (createparams.index_shards && *createparams.index_shards !=
+           info.layout.current_index.layout.normal.num_shards)) {
+        s->err.message =
+            "Cannot modify existing bucket's index type or shard count";
+        return;
+      }
+
+      // don't allow changes to object lock
+      if (createparams.obj_lock_enabled != info.obj_lock_enabled()) {
+        s->err.message = "Cannot modify existing bucket's object lock";
+        return;
+      }
+
+      // don't allow changes to the acl policy for s3
+      // swift acl updates will be handled in put_swift_bucket_metadata
+      RGWAccessControlPolicy old_policy;
+      int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
+                                                 s->bucket->get_attrs(),
+                                                 old_policy, y);
+      if (r >= 0 && old_policy != policy) {
+        s->err.message = "Cannot modify existing access control policy";
+        return;
+      }
+
+      op_ret = 0;
       return;
     } else {
       // For swift, update the bucket metadata and do not call createbucket.
@@ -4256,6 +4276,11 @@ void RGWCreateBucket::execute(optional_yield y)
 
   ldpp_dout(this, 10) << "user=" << s->user << " bucket=" << s->bucket << dendl;
   op_ret = s->bucket->create(this, createparams, y);
+  // swift: keep ERR_BUCKET_EXISTS to be transalted as STATUS_ACCEPTED
+  // s3 with rgw_bucket_eexist_override as true: keep ERR_BUCKET_EXISTS to return BucketAlreadyOwnedByYou
+  if (op_ret == -ERR_BUCKET_EXISTS && is_s3 && !eexist_override) {
+    op_ret = 0;
+  }
 
   /* continue if EEXIST and create_bucket will fail below.  this way we can
    * recover from a partial create by retrying it. */
