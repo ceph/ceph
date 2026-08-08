@@ -1,0 +1,39 @@
+---
+- hosts: mon0
+  become: true
+  tasks:
+    - name: Stop OSDs
+      command: "cephadm shell -- ceph orch daemon stop osd.{{ item }}"
+      loop: "{{ osd_ids }}"
+
+    - name: Mark OSDs down
+      shell: "until test $(cephadm shell -- ceph osd tree --format json | jq '.nodes[] | select(.id == {{ item }} and .type == \"osd\") | .status') == \\\"down\\\"; do sleep 1; cephadm shell -- ceph osd down {{ item }}; done"
+      loop: "{{ osd_ids }}"
+      register: result
+      until: result is succeeded
+      async: 300
+      poll: 10
+
+    - name: Remove OSDs
+      command: "cephadm shell -- ceph orch daemon rm osd.{{ item }} --force"
+      loop: "{{ osd_ids }}"
+      register: result
+      until: result is succeeded
+      retries: 60
+      delay: 1
+
+    - name: Make sure OSDs are removed from crush map
+      command: "cephadm shell -- ceph osd crush rm {{ item }}"
+      loop: "{{ osd_ids }}"
+      register: result
+      until: result is succeeded
+      retries: 60
+      delay: 1
+
+    - name: Purge OSDs
+      command: "cephadm shell -- ceph osd purge {{ item }} --force"
+      loop: "{{ osd_ids }}"
+      register: result
+      until: result is succeeded
+      delay: 60
+      retries: 1
