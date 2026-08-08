@@ -16,6 +16,7 @@
 #include "osdc/Journaler.h"
 #include "osdc/Objecter.h"
 #include "common/perf_counters.h"
+#include "common/Cond.h" // for C_SaferCond
 #include "common/dout.h"
 #include "include/Context.h"
 #include "msg/Messenger.h"
