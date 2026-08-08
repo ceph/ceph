@@ -17,6 +17,7 @@
 #include "common/RefCountedObj.h"
 
 #include "rgw_coroutine.h"
+#include "perfglue/heap_profiler.h"
 
 #include <atomic>
 #include <string_view>
@@ -228,6 +229,7 @@ void* RGWCurlHandles::entry()
       if (saved_curl.empty())
         break;
     } else {
+      ceph_heap_mark_thread_temporarily_idle();
       cleaner_cond.wait_for(lock, std::chrono::seconds(MAXIDLE));
     }
     mono_time now = mono_clock::now();

@@ -22,6 +22,8 @@ void ceph_heap_profiler_stats(char *buf, int length) { return; }
 
 void ceph_heap_release_free_memory() { return; }
 
+void ceph_heap_mark_thread_temporarily_idle() { return; }
+
 double ceph_heap_get_release_rate() { return 0; }
 
 void ceph_heap_set_release_rate(double value) { return; }
