@@ -33,12 +33,18 @@
 
 #include <map>
 #include <list>
-#include <chrono>
 #include <vector>
+#include <unordered_map>
+
+#include <atomic>
+#include <chrono>
+#include <thread>
+#include <concepts>
+#include <exception>
+
 #include <ranges>
 #include <iterator>
 #include <algorithm>
-#include <unordered_map>
 
 using Catch::Matchers::AllMatch;
 
@@ -189,6 +195,223 @@ TEST_CASE("fdb simple", "[rgw][fdb]") {
     // ...and now it should be gone again:
     lfdb::erase(lfdb::make_transaction(j), k, lfdb::commit_after_op::commit);
     CHECK_FALSE(lfdb::key_exists(lfdb::make_transaction(j), k, lfdb::commit_after_op::no_commit));
+ }
+}
+
+static_assert(not std::default_initializable<lfdb::watch_handle>);
+static_assert(not std::copy_constructible<lfdb::watch_handle>);
+static_assert(std::move_constructible<lfdb::watch_handle>);
+
+static constexpr std::string_view watch_key = "watch/key";
+
+bool wait_until(std::predicate auto&& predicate,
+                const std::chrono::milliseconds timeout = 5s)
+{
+ const auto expiration_time = std::chrono::steady_clock::now() + timeout;
+ while (!std::invoke(predicate) &&
+        std::chrono::steady_clock::now() < expiration_time) {
+  std::this_thread::sleep_for(10ms);
+ }
+
+ return std::invoke(predicate);
+}
+
+lfdb::watch_event wait_for_watch_event(lfdb::watch_handle& watch,
+                                       const std::chrono::milliseconds timeout = 5s)
+{
+ std::atomic_bool done = false;
+ std::exception_ptr thrown;
+ lfdb::watch_event result = lfdb::watch_event::cancelled;
+
+ std::jthread wait_thread {
+  [&done, &result, &thrown, &watch](std::stop_token stop_token) {
+   try
+   {
+    result = watch.wait_for_event(stop_token);
+   }
+   catch (...)
+   {
+    thrown = std::current_exception();
+   }
+
+   done.store(true, std::memory_order_release);
+  }
+ };
+
+ const auto completed = wait_until([&done] {
+  return done.load(std::memory_order_acquire);
+ }, timeout);
+
+ if (not completed) {
+  wait_thread.request_stop();
+ }
+
+ wait_thread.join();
+
+ if (not completed) {
+  FAIL("watch did not report an event before timeout; check local FoundationDB watch support");
+ }
+
+ if (thrown) {
+  std::rethrow_exception(thrown);
+ }
+
+ return result;
+}
+
+bool trigger_watch_until(lfdb::database_handle dbh,
+                         std::string_view key,
+                         std::atomic_int& callbacks,
+                         const int target,
+                         const std::chrono::milliseconds timeout = 5s)
+{
+ const auto expiration_time = std::chrono::steady_clock::now() + timeout;
+ auto enough_callbacks = [&] {
+  return target <= callbacks.load(std::memory_order_acquire);
+ };
+
+ for (const auto n : std::views::iota(0) |
+                     std::views::take_while([&](auto) {
+                      return not enough_callbacks() &&
+                             std::chrono::steady_clock::now() < expiration_time;
+                     })) {
+  lfdb::set(dbh, key, fmt::format("value-{}", n));
+  wait_until(enough_callbacks, 50ms);
+ }
+
+ return enough_callbacks();
+}
+
+TEST_CASE("transaction watches", "[rgw][fdb]") {
+ janitor dbh;
+
+ SECTION("watch fires after committed key change") {
+  auto txn = lfdb::make_transaction(dbh);
+  auto watch = lfdb::make_watch(txn, watch_key);
+
+  REQUIRE(lfdb::commit(txn));
+  REQUIRE_FALSE(watch.ready());
+
+  lfdb::set(dbh, watch_key, "value");
+
+  CHECK(lfdb::watch_event::changed == wait_for_watch_event(watch));
+  CHECK(watch.ready());
+ }
+
+ SECTION("watch fires after committed key erase") {
+  lfdb::set(dbh, watch_key, "value");
+
+  auto txn = lfdb::make_transaction(dbh);
+  auto watch = lfdb::make_watch(txn, watch_key);
+
+  REQUIRE(lfdb::commit(txn));
+  REQUIRE_FALSE(watch.ready());
+
+  lfdb::erase(dbh, watch_key);
+
+  CHECK(lfdb::watch_event::changed == wait_for_watch_event(watch));
+  CHECK(watch.ready());
+ }
+
+ SECTION("database watch commits its watch transaction") {
+  auto watch = lfdb::make_watch(dbh, watch_key);
+
+  REQUIRE_FALSE(watch.ready());
+
+  lfdb::set(dbh, watch_key, "value");
+
+  CHECK(lfdb::watch_event::changed == wait_for_watch_event(watch));
+  CHECK(watch.ready());
+ }
+
+ SECTION("watch cancellation returns a wait result") {
+  auto watch = lfdb::make_watch(dbh, watch_key);
+
+  REQUIRE_FALSE(watch.ready());
+
+  watch.cancel();
+
+  CHECK(lfdb::watch_event::cancelled == watch.wait_for_event());
+  CHECK(watch.ready());
+ }
+
+ SECTION("throwing wait preserves cancellation as an exception") {
+  auto watch = lfdb::make_watch(dbh, watch_key);
+
+  REQUIRE_FALSE(watch.ready());
+
+  watch.cancel();
+
+  CHECK_THROWS_AS(watch.wait(), lfdb::libfdb_exception);
+  CHECK(watch.ready());
+ }
+
+ SECTION("watch can be rearmed after each key change") {
+  auto watch = lfdb::make_watch(dbh, watch_key);
+
+  lfdb::set(dbh, watch_key, "first-value");
+
+  REQUIRE(lfdb::watch_event::changed == wait_for_watch_event(watch));
+
+  watch = lfdb::make_watch(dbh, watch_key);
+
+  lfdb::set(dbh, watch_key, "second-value");
+
+  CHECK(lfdb::watch_event::changed == wait_for_watch_event(watch));
+  CHECK(watch.ready());
+ }
+
+ SECTION("read-your-writes disabled transactions reject watches") {
+  lfdb::transaction_options opts{
+   { FDB_TR_OPTION_READ_YOUR_WRITES_DISABLE, lfdb::option_flag },
+  };
+
+  auto txn = lfdb::make_transaction(dbh, opts);
+  auto watch = lfdb::make_watch(txn, watch_key);
+
+  CHECK_THROWS_AS(watch.wait_for_event(), lfdb::libfdb_exception);
+  CHECK(watch.ready());
+ }
+
+ SECTION("watch wait can be cancelled by stop token") {
+  lfdb::watch_event result = lfdb::watch_event::changed;
+  std::jthread wait_thread {
+   [&dbh, &result](std::stop_token stop_token) {
+    auto watch = lfdb::make_watch(dbh, watch_key);
+    result = watch.wait_for_event(stop_token);
+   }
+  };
+
+  wait_thread.request_stop();
+  wait_thread.join();
+
+  CHECK(lfdb::watch_event::cancelled == result);
+ }
+
+ SECTION("watch loop re-arms until stopped") {
+  std::atomic_int callbacks = 0;
+  std::atomic_bool wrong_key = false;
+
+  std::jthread watch_thread {
+   [&dbh, &callbacks, &wrong_key](std::stop_token stop_token) {
+    lfdb::watched_loop(dbh, watch_key, stop_token,
+     [&callbacks, &wrong_key](std::string_view key) {
+      if (watch_key != key) {
+       wrong_key.store(true, std::memory_order_release);
+      }
+
+      callbacks.fetch_add(1, std::memory_order_release);
+     });
+   }
+  };
+
+  REQUIRE(trigger_watch_until(dbh, watch_key, callbacks, 1));
+  REQUIRE(trigger_watch_until(dbh, watch_key, callbacks, 2));
+
+  watch_thread.request_stop();
+  watch_thread.join();
+
+  CHECK_FALSE(wrong_key.load(std::memory_order_acquire));
  }
 }
 
