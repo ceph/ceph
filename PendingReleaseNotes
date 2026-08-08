@@ -1,3 +1,12 @@
+* RADOS: Changing a pool's CRUSH rule can now optionally preserve data
+  placement: with ``mon_crush_rule_change_preserve_acting`` enabled, the
+  monitor stages ``pg-upmap-items`` entries in the same map epoch as the rule
+  change, keeping each shard on an OSD of its acting set whenever the new
+  failure domain allows it and relocating only the violating shards (either
+  load-aware, the default, or by deterministic hashing; see
+  ``mon_crush_rule_change_preserve_acting_fill_strategy``). This avoids
+  relocating the bulk of a pool when only its failure domain changes.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
