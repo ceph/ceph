@@ -34,7 +34,8 @@ struct Snapshot {
 
   static int get_name(ImageCtxT *ictx, uint64_t snap_id, std::string *snap_name);
 
-  static int get_id(ImageCtxT *ictx, const std::string& snap_name, uint64_t *snap_id);
+  static int get_id(ImageCtxT *ictx, const std::string& snap_name,
+                    uint64_t *snap_id, bool all_snaps = false);
 
   static int list(ImageCtxT *ictx, std::vector<snap_info_t>& snaps);
 
