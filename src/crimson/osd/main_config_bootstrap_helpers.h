@@ -92,6 +92,12 @@ public:
 tl::expected<early_config_t, int>
 get_early_config(int argc, const char *argv[]);
 
+/// Like get_early_config but for CEPH_ENTITY_TYPE_CLIENT (e.g. client.admin).
+/// On failure, \p error() is 0 for --help/--version, 1 for usage errors, or
+/// a negative errno-style code.
+tl::expected<early_config_t, int>
+get_early_config_client(int argc, const char *argv[]);
+
 }
 
 WRITE_CLASS_ENCODER(crimson::osd::early_config_t)
