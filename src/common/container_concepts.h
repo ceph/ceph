@@ -171,6 +171,17 @@ concept has_insert_append = requires(ContainerT& c, T&& v) {
   c.insert(std::end(c), std::forward<T>(v));
 };
 
+template <typename ContainerT>
+concept has_subscript_operator = requires(ContainerT& c, typename ContainerT::key_type& key) {
+  { c[std::move(key)] } -> std::same_as<typename ContainerT::mapped_type&>;
+};
+
+template <typename ContainerT>
+concept has_try_emplace_key = requires(ContainerT& c, typename ContainerT::key_type& key) {
+  { c.try_emplace(std::move(key)) } ->
+    std::same_as<std::pair<typename ContainerT::iterator, bool>>;
+};
+
 template <typename ContainerT, typename IteratorT, typename... ArgsT>
 concept has_emplace_after = requires(ContainerT& c, IteratorT pos, ArgsT&&... args) {
   c.emplace_after(pos, std::forward<ArgsT>(args)...);
