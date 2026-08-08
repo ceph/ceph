@@ -16,6 +16,8 @@ bool get_features(uint64_t *features);
 bool is_feature_enabled(uint64_t feature);
 int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
                     const std::string &name, uint64_t size);
+int create_image_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
+                    const std::string &name, uint64_t size, int order);
 int create_image_full_pp(librbd::RBD &rbd, librados::IoCtx &ioctx,
                          const std::string &name, uint64_t size,
                          uint64_t features, bool old_format, int *order);

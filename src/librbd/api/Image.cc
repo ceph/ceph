@@ -971,7 +971,7 @@ int Image<I>::flatten_children(I *ictx, const char* snap_name,
 template <typename I>
 int Image<I>::encryption_format(I* ictx, encryption_format_t format,
                                 encryption_options_t opts, size_t opts_size,
-                                bool c_api) {
+                                bool insecure_fast_mode, bool c_api) {
   crypto::EncryptionFormat<I>* result_format;
   auto r = util::create_encryption_format(
           ictx->cct, format, opts, opts_size, c_api, &result_format);
@@ -982,7 +982,7 @@ int Image<I>::encryption_format(I* ictx, encryption_format_t format,
   C_SaferCond cond;
   auto req = librbd::crypto::FormatRequest<I>::create(
           ictx, std::unique_ptr<crypto::EncryptionFormat<I>>(result_format),
-          &cond);
+          insecure_fast_mode, &cond);
   req->send();
   return cond.wait();
 }

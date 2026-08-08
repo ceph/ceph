@@ -99,7 +99,7 @@ struct TestMockCryptoFormatRequest : public TestMockFixture {
     mock_image_ctx->encryption_format.reset(old_encryption_format);
     mock_format_request = MockFormatRequest::create(
           mock_image_ctx,
-          std::unique_ptr<MockEncryptionFormat>(new_encryption_format),
+          std::unique_ptr<MockEncryptionFormat>(new_encryption_format), false,
           on_finish);
   }
 
@@ -124,10 +124,10 @@ struct TestMockCryptoFormatRequest : public TestMockFixture {
     }));
   }
 
-  void expect_encryption_format() {
+  void expect_encryption_format(bool insecure_fast_mode) {
     EXPECT_CALL(*new_encryption_format, format(
-            mock_image_ctx, _)).WillOnce(
-                    WithArg<1>(Invoke([this](Context* ctx) {
+            mock_image_ctx, insecure_fast_mode, _)).WillOnce(
+                    WithArg<2>(Invoke([this](Context* ctx) {
                       format_context = ctx;
     })));
   }
@@ -163,7 +163,7 @@ TEST_F(TestMockCryptoFormatRequest, FailShutDownCrypto) {
 TEST_F(TestMockCryptoFormatRequest, FormatFail) {
   mock_image_ctx->encryption_format = nullptr;
   expect_test_journal_feature(false);
-  expect_encryption_format();
+  expect_encryption_format(false);
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   format_context->complete(-EIO);
@@ -174,7 +174,26 @@ TEST_F(TestMockCryptoFormatRequest, FormatFail) {
 TEST_F(TestMockCryptoFormatRequest, Success) {
   mock_image_ctx->encryption_format = nullptr;
   expect_test_journal_feature(false);
-  expect_encryption_format();
+  expect_encryption_format(false);
+  mock_format_request->send();
+  ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
+  expect_image_flush(0);
+  format_context->complete(0);
+  ASSERT_EQ(0, finished_cond.wait());
+  ASSERT_EQ(new_encryption_format, mock_image_ctx->encryption_format.get());
+}
+
+TEST_F(TestMockCryptoFormatRequest, SuccessInsecureFast) {
+  delete mock_format_request;
+  new_encryption_format = new MockEncryptionFormat();
+  mock_format_request = MockFormatRequest::create(
+        mock_image_ctx,
+        std::unique_ptr<MockEncryptionFormat>(new_encryption_format), true,
+        on_finish);
+
+  mock_image_ctx->encryption_format = nullptr;
+  expect_test_journal_feature(false);
+  expect_encryption_format(true);
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_image_flush(0);
@@ -186,7 +205,7 @@ TEST_F(TestMockCryptoFormatRequest, Success) {
 TEST_F(TestMockCryptoFormatRequest, FailFlush) {
   expect_test_journal_feature(false);
   expect_shutdown_crypto();
-  expect_encryption_format();
+  expect_encryption_format(false);
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_image_flush(-EIO);
@@ -198,7 +217,7 @@ TEST_F(TestMockCryptoFormatRequest, FailFlush) {
 TEST_F(TestMockCryptoFormatRequest, CryptoAlreadyLoaded) {
   expect_test_journal_feature(false);
   expect_shutdown_crypto();
-  expect_encryption_format();
+  expect_encryption_format(false);
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_image_flush(0);
@@ -211,7 +230,7 @@ TEST_F(TestMockCryptoFormatRequest, ThinFormat) {
   mock_image_ctx->encryption_format = nullptr;
   mock_image_ctx->parent = mock_parent_image_ctx;
   expect_test_journal_feature(false);
-  expect_encryption_format();
+  expect_encryption_format(false);
   mock_format_request->send();
   ASSERT_EQ(ETIMEDOUT, finished_cond.wait_for(0));
   expect_image_flush(0);
