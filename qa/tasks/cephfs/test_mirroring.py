@@ -2222,6 +2222,83 @@ class TestMirroring(CephFSTestCase):
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_blockdiff_pure_truncate(self):
+        """Verify incremental sync when only the file size changes."""
+
+        self.setup_mount_b(mds_perm='rw')
+        self.config_set(
+            'client.mirror',
+            'cephfs_mirror_blockdiff_min_file_size', 16777216)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+        cases = [
+            ('object_boundary_shrink', 64, 32),
+            ('partial_object_shrink', 64, 33),
+            ('same_object_shrink', 19, 18),
+            ('sparse_grow', 20, 40),
+        ]
+
+        def snapshot_file_state(mount, snap_name, file_name):
+            path = f'{dir_name}/.snap/{snap_name}/{file_name}'
+            stat = mount.run_shell(
+                ['stat', '-c', '%F:%s', path]
+            ).stdout.getvalue().strip()
+            file_type, size = stat.rsplit(':', 1)
+            digest = mount.run_shell(
+                ['sha256sum', path]
+            ).stdout.getvalue().split()[0]
+            return file_type, int(size), digest
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      peer_spec, self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+
+        for file_name, initial_size_mb, _ in cases:
+            self.mount_a.run_shell([
+                'dd', 'if=/dev/zero', f'of={dir_name}/{file_name}',
+                'bs=1M', f'count={initial_size_mb}', 'conv=fsync'
+            ])
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_a'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_a', 1)
+        self.verify_snapshot(dir_name, 'snap_a')
+
+        for file_name, initial_size_mb, final_size_mb in cases:
+            self.mount_a.run_shell([
+                'truncate', '-s', f'{final_size_mb}M',
+                f'{dir_name}/{file_name}'
+            ])
+            if final_size_mb > initial_size_mb:
+                # Ensure snapdiff reports sparse growth without writing data.
+                self.mount_a.run_shell([
+                    'touch', '-m', f'{dir_name}/{file_name}'
+                ])
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_b'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_b', 2)
+        self.assertIn('snap_b', self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        mismatches = []
+        for file_name, _, _ in cases:
+            source_state = snapshot_file_state(
+                self.mount_a, 'snap_b', file_name)
+            destination_state = snapshot_file_state(
+                self.mount_b, 'snap_b', file_name)
+            log.info('pure truncate case %s: source=%s destination=%s',
+                     file_name, source_state, destination_state)
+            if source_state != destination_state:
+                mismatches.append((file_name, source_state, destination_state))
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.assertEqual([], mismatches)
+
     def test_cephfs_mirror_incremental_sync_with_type_mixup(self):
         """ Test incremental snapshot synchronization with file type changes.
 
