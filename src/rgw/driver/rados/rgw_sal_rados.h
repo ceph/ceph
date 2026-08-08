@@ -25,6 +25,7 @@
 #include "rgw_role.h"
 #include "rgw_multi.h"
 #include "rgw_putobj_processor.h"
+#include "rgw_lua.h"
 #include "services/svc_tier_rados.h"
 #include "cls/lock/cls_lock_client.h"
 
@@ -1282,7 +1283,8 @@ public:
   ~RadosLuaManager() override = default;
 
   // To be used by the radosgw-admin process
-  int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  int get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script) override;
+  int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_meta_key, const std::string& unnamed_script_key, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) override;
   // To be used by the radosgw process
   std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;

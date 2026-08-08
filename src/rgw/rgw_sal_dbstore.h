@@ -329,7 +329,10 @@ protected:
     virtual ~DBLuaManager() = default;
 
     /** Get a script named with the given key from the backing store */
-    virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+    virtual int get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script) override;
+    /** List all scripts named with the given key from the backing store */
+    virtual int list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_meta_key, const std::string& unnamed_script_key,
+                             RGWObjVersionTracker* objv, std::vector<std::string>& scripts) override;
     /** Get a ref to the Lua bytecode if it exists, else the script named with the given key from the backing store */
     virtual std::tuple<rgw::lua::LuaCodeType, int> get_script_or_bytecode(const DoutPrefixProvider* dpp, optional_yield y,
                                                                           const std::string& key) override;

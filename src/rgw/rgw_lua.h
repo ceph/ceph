@@ -34,19 +34,29 @@ enum class context {
 // return "none" if not matched
 context to_context(const std::string& s);
 
+std::string to_string(context ctx);
+
 // verify a lua script
 bool verify(const std::string& script, std::string& err_msg);
 
+// lua script oid key helpers
+void parse_script_oid(const std::string& key, context& ctx, std::string& tenant, std::string& name);
+std::string script_list_metadata_oid(context ctx, const std::string& tenant);
+std::string script_oid(context ctx, const std::string& tenant, const std::string& name);
+
 // driver a lua script in a context
-int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script);
+int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, optional_yield y, const std::string& tenant, context ctx, const std::string& script, const std::string& name);
 
 // read the stored lua script from a context
-int read_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script);
+int read_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, optional_yield y, const std::string& tenant, context ctx, std::string& script, const std::string& name);
 
-std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx);
+// list the stored lua scripts from a context
+int list_scripts(const DoutPrefixProvider *dpp, sal::LuaManager* manager, optional_yield y, const std::string&tenant, context ctx, std::vector<std::string>& scripts);
+
+std::tuple<LuaCodeType, int> read_script_or_bytecode(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, optional_yield y, const std::string& tenant, context ctx, const std::string& name);
 
 // delete the stored lua script from a context
-int delete_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx);
+int delete_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, optional_yield y, const std::string& tenant, context ctx, const std::string& name);
 
 using packages_t = std::set<std::string>;
 

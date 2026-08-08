@@ -5524,15 +5524,14 @@ int RadosLuaManager::unwatch_script(const DoutPrefixProvider* dpp, const std::st
   return 0;
 }
 
-int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
-{
+int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, RGWObjVersionTracker* objv, const std::string& key, std::string& script) {
   if (pool.empty()) {
     ldpp_dout(dpp, 10) << "WARNING: missing pool when reading Lua script " << dendl;
     return 0;
   }
-  bufferlist bl;
 
-  int r = rgw_get_system_obj(store->svc()->sysobj, pool, key, bl, nullptr, nullptr, y, dpp);
+  bufferlist bl;
+  int r = rgw_get_system_obj(store->svc()->sysobj, pool, key, bl, objv, nullptr, y, dpp);
   if (r < 0) {
     return r;
   }
@@ -5541,9 +5540,53 @@ int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
   try {
     ceph::decode(script, iter);
   } catch (buffer::error& err) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to decode Lua script for "
+                        << key << ", error: " << err.what() << dendl;
     return -EIO;
   }
 
+  return 0;
+}
+
+int RadosLuaManager::list_scripts(const DoutPrefixProvider* dpp, optional_yield y, const std::string& list_meta_key, const std::string& unnamed_script_key, RGWObjVersionTracker* objv, std::vector<std::string>& scripts) {
+  if (pool.empty()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when reading Lua script " << dendl;
+    return 0;
+  }
+
+  // get the script list metadata as a bufferlist
+  bufferlist bl;
+  int r = rgw_get_system_obj(store->svc()->sysobj, pool, list_meta_key, bl, objv, nullptr, y, dpp);
+  if (r < 0 && r != -ENOENT) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to read Lua script metadata for " << list_meta_key << ", err:" << r << dendl;
+    return r;
+  }
+
+  // decode the bufferlist
+  if (r != -ENOENT) {
+    auto iter = bl.cbegin();
+    try {
+      ceph::decode(scripts, iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to decode Lua script metadata for "
+                          << list_meta_key << ", error: " << err.what() << dendl;
+      return -EIO;
+    }
+  }
+
+  // for backward compatibility with RGW versions that never had list_scripts support,
+  // double-check if the unnamed script exists and if so, include it in the list scripts output
+  if (std::find(scripts.begin(), scripts.end(), "") == scripts.end()) {
+    int ret = rgw_get_system_obj(store->svc()->sysobj, pool, unnamed_script_key, bl, nullptr, nullptr, y, dpp);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 10) << "WARNING: failed to read the unnamed Lua script for " << unnamed_script_key << ", err:" << ret << dendl;
+      return ret;
+    }
+    if (ret == 0) {
+      auto i = std::lower_bound(scripts.begin(), scripts.end(), "");
+      scripts.insert(i, "");
+    }
+  }
   return 0;
 }
 
@@ -5601,17 +5644,53 @@ int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
     ldpp_dout(dpp, 10) << "WARNING: missing pool when writing Lua script " << dendl;
     return 0;
   }
+
+  // create the script
   bufferlist bl;
   ceph::encode(script, bl);
-
   int r = rgw_put_system_obj(dpp, store->svc()->sysobj, pool, key, bl, false, nullptr, real_time(), y);
   if (r < 0) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to write Lua script " << key << ", err:" << r << dendl;
     return r;
   }
 
   r = notify_script_update(dpp, key, y);
   if (r < 0) {
     ldpp_dout(dpp, 10) << "WARNING: failed to send Lua script update notification :" << key << ", err:" << r << dendl;
+  }
+
+  // read the script list
+  std::string script_tenant, script_name;
+  rgw::lua::context script_context;
+  rgw::lua::parse_script_oid(key, script_context, script_tenant, script_name);
+  std::string list_meta_key = rgw::lua::script_list_metadata_oid(script_context, script_tenant);
+  std::string unnamed_script_key = rgw::lua::script_oid(script_context, script_tenant, "");
+
+  int retries = 10;
+  do {
+    std::vector<std::string> scripts;
+    RGWObjVersionTracker objv;
+    r = list_scripts(dpp, y, list_meta_key, unnamed_script_key, &objv, scripts);
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(dpp, 10) << "WARNING: failed to list Lua scripts for " << list_meta_key << ", err:" << r << dendl;
+      return r;
+    }
+
+    // write the new script list
+    if (std::find(scripts.begin(), scripts.end(), script_name) == scripts.end()) {
+      // insert script in lexicographical order
+      auto i = std::lower_bound(scripts.begin(), scripts.end(), script_name);
+      scripts.insert(i, script_name);
+
+      bufferlist bl;
+      ceph::encode(scripts, bl);
+      r = rgw_put_system_obj(dpp, store->svc()->sysobj, pool, list_meta_key, bl, false, &objv, real_time(), y);
+    }
+    retries--;
+  } while(r == -ECANCELED && retries > 0);
+
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to update Lua script list: " << list_meta_key << ", err:" << r << dendl;
     return r;
   }
   return 0;
@@ -5623,11 +5702,47 @@ int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y,
     ldpp_dout(dpp, 10) << "WARNING: missing pool when deleting Lua script " << dendl;
     return 0;
   }
+
+  // delete the script
   int r = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, key, nullptr, y);
   if (r < 0 && r != -ENOENT) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to delete Lua script " << key << ", err:" << r << dendl;
     return r;
   }
 
+  // read the script list
+  std::string script_tenant, script_name;
+  rgw::lua::context script_context;
+  rgw::lua::parse_script_oid(key, script_context, script_tenant, script_name);
+  std::string list_meta_key = rgw::lua::script_list_metadata_oid(script_context, script_tenant);
+  std::string unnamed_script_key = rgw::lua::script_oid(script_context, script_tenant, "");
+
+  int retries = 10;
+  do {
+    RGWObjVersionTracker objv;
+    std::vector<std::string> scripts;
+    r = list_scripts(dpp, y, list_meta_key, unnamed_script_key, &objv, scripts);
+    if (r < 0 && r != -ENOENT) {
+      ldpp_dout(dpp, 10) << "WARNING: failed to list Lua scripts for " << list_meta_key << ", err:" << r << dendl;
+      return r;
+    }
+
+    // write the new script list
+    auto it = std::find(scripts.begin(), scripts.end(), script_name);
+    if (it != scripts.end()) {
+      scripts.erase(it);
+
+      bufferlist bl;
+      ceph::encode(scripts, bl);
+      r = rgw_put_system_obj(dpp, store->svc()->sysobj, pool, list_meta_key, bl, false, &objv, real_time(), y);
+    }
+    retries--;
+  } while(r == -ECANCELED && retries > 0);
+
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "WARNING: failed to update Lua script list: " << list_meta_key << ", err:" << r << dendl;
+    return r;
+  }
   return 0;
 }
 
