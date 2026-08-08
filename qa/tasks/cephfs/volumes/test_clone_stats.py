@@ -7,7 +7,7 @@ from io import StringIO
 from tasks.cephfs.test_volumes import TestVolumesHelper
 
 from teuthology.contextutil import safe_while
-from teuthology.exceptions import CommandFailedError
+from teuthology.exceptions import CommandFailedError, MaxWhileTries
 
 log = getLogger(__name__)
 
@@ -283,16 +283,104 @@ class CloneProgressReporterHelper(TestVolumesHelper):
             except AssertionError:
                 self.assertIn('complete', o)
 
-    def _wait_for_clone_progress_bars_to_be_removed(self):
-        with safe_while(tries=10, sleep=0.5) as proceed:
+    def _wait_for_clone_progress_bars_to_be_removed(self, clones):
+        with safe_while(tries=8, sleep=10) as proceed:
             while proceed():
-                o = self.get_ceph_cmd_stdout('status --format json-pretty')
-                o = json.loads(o)
+                pevs = self.get_pevs_from_ceph_status(clones)
+                if len(pevs) == 0:
+                    return
 
-                pevs = o['progress_events'] # pevs = progress events
-                pevs = self.filter_in_only_clone_pevs(pevs)
-                if not pevs:
-                    break
+    def wait_until_bar_msg(self, clones, BAR_MSGS):
+        '''
+        wait until "finished" message is printed for clone progress bars
+        '''
+        clones = (clones, ) if isinstance(clones, str) else clones
+        NUM_OF_BARS = 1 if len(clones) <= 4 else 2
+
+        with safe_while(tries=5, sleep=2) as proceed:
+            while proceed():
+                pev = self.get_pevs_from_ceph_status(clones)
+                if len(pev) < NUM_OF_BARS:
+                    continue
+                elif len(pev) > NUM_OF_BARS:
+                    raise RuntimeError('1 progress event was expected, instead '
+                                       f'received {len(pev)} progress bars')
+
+                if NUM_OF_BARS == 1:
+                    if isinstance(BAR_MSGS, (list, tuple)):
+                        self.assertEqual(len(BAR_MSGS), NUM_OF_BARS)
+                        bar_msg = BAR_MSGS[0]
+                    else:
+                        bar_msg = BAR_MSGS
+
+                    pev_msg = tuple(pev.values())[0]['message'].lower()
+                    if bar_msg in pev_msg:
+                        break
+                elif NUM_OF_BARS == 2:
+                    self.assertEqual(len(BAR_MSGS), NUM_OF_BARS)
+
+                    bar_msg1, bar_msg2 = BAR_MSGS
+                    pev_msg1 = tuple(pev.values())[0]['message'].lower()
+                    pev_msg2 = tuple(pev.values())[1]['message'].lower()
+
+                    if bar_msg1 in pev_msg1 and bar_msg2 in pev_msg2:
+                        break
+                    elif bar_msg2 in pev_msg1 and bar_msg1 in pev_msg2:
+                        break
+                else:
+                    raise RuntimeError(f'NUM_OF_BARS is {NUM_OF_BARS}, but it '
+                                        'shouldn\'t be more than 2')
+
+    def ensure_finished_bar_msg_lasted(self, clones):
+        '''
+        ensure that the clone progress bar was printed for roughly a minute
+        after cloning has finished.
+        '''
+        BAR_MSG1 = 'no ongoing clones left'
+        BAR_MSG2 = 'no ongoing or pending clones left'
+
+        clones = (clones, ) if isinstance(clones, str) else clones
+        NUM_OF_BARS = 1 if len(clones) <= 4 else 2
+
+        if NUM_OF_BARS == 1:
+            self.wait_until_bar_msg(clones, BAR_MSG1)
+        elif NUM_OF_BARS == 2:
+            self.wait_until_bar_msg(clones, (BAR_MSG1, BAR_MSG2))
+        else:
+            raise RuntimeError(f'NUM_OF_BARS is {NUM_OF_BARS}, but it '
+                                'shouldn\'t be more than 2')
+
+        try:
+            with safe_while(tries=5, sleep=10) as proceed:
+                while proceed():
+                    pevs = self.get_pevs_from_ceph_status(clones)
+                    self.assertEqual(len(pevs), NUM_OF_BARS)
+
+                    if NUM_OF_BARS == 1:
+                        pev_msg = tuple(pevs.values())[0]['message'].lower()
+                        self.assertIn(BAR_MSG1, pev_msg)
+                    elif NUM_OF_BARS == 2:
+                        pev_msg1 = tuple(pevs.values())[0]['message'].lower()
+                        pev_msg2 = tuple(pevs.values())[1]['message'].lower()
+
+                        if BAR_MSG1 in pev_msg1 and BAR_MSG2 in pev_msg2:
+                            continue
+                        elif BAR_MSG2 in pev_msg1 and BAR_MSG1 in pev_msg2:
+                            continue
+                        else:
+                            raise RuntimeError('"finished" progresss bar '
+                                               'messages were not printed as '
+                                               'expceted')
+                    elif NUM_OF_BARS > 2:
+                        raise RuntimeError(f'NUM_OF_BARS is {NUM_OF_BARS}, but it '
+                                            'shouldn\'t be more than 2')
+        except MaxWhileTries:
+            # not raising the exception, the loop's purpose was to run until
+            # all "tries" finish
+            pass
+        else:
+            raise RuntimeError('exception MaxWhileTries was expected to be '
+                               'raised but wasn\'t raised.')
 
 
 # NOTE: these tests consumes considerable amount of CPU and RAM due generation
@@ -681,7 +769,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         time.sleep(1)
         self.cancel_clones_and_ignore_if_finished(c)
         self._wait_for_clone_to_be_canceled(c)
-        self._wait_for_clone_progress_bars_to_be_removed()
+        self._wait_for_clone_progress_bars_to_be_removed(c)
 
         # test that cloning had begun but didn't finish.
         try:
@@ -726,7 +814,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         self.cancel_clones_and_ignore_if_finished(c)
         for i in c:
             self._wait_for_clone_to_be_canceled(i)
-        self._wait_for_clone_progress_bars_to_be_removed()
+        self._wait_for_clone_progress_bars_to_be_removed(c)
 
         try:
             sv_path = sv_path.replace(sv, c[0])
@@ -773,7 +861,7 @@ class TestCloneProgressReporter(CloneProgressReporterHelper):
         self.cancel_clones_and_ignore_if_finished(c)
         for i in c:
             self._wait_for_clone_to_be_canceled(i)
-        self._wait_for_clone_progress_bars_to_be_removed()
+        self._wait_for_clone_progress_bars_to_be_removed(c)
 
         try:
             sv_path = sv_path.replace(sv, c[0])
@@ -852,7 +940,7 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
         self.cancel_clones_and_ignore_if_finished(c)
         for i in c:
             self._wait_for_clone_to_be_canceled(i)
-        self._wait_for_clone_progress_bars_to_be_removed()
+        self._wait_for_clone_progress_bars_to_be_removed(c)
 
     def test_for_2_ongoing_clones(self):
         self._run_test(MAX_THREADS=2, NUM_OF_CLONES=5)
@@ -867,3 +955,239 @@ class TestOngoingClonesCounter(CloneProgressReporterHelper):
     # since other tests in this class also test this feature.
     def test_for_6_ongoing_clones(self):
         self._run_test(MAX_THREADS=6, NUM_OF_CLONES=24)
+
+
+class TestCloneProgressReporterFinish(CloneProgressReporterHelper):
+    '''
+    Tests for that CloneProgressReporter.finish()
+    '''
+
+    def test_wait_when_clones_less_than_cloner_threads(self):
+        '''
+        Test that 1 clone progress bars are printed for a minute after cloning
+        operation has finished with a message that indicates that there are
+        no more clone jobs left.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(1)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self.wait_until_bar_msg(c, 'ongoing clones - average progress')
+
+        self.cancel_clones_and_ignore_if_finished(c)
+        self.ensure_finished_bar_msg_lasted(c)
+
+    def test_wait_when_clones_equal_to_cloner_threads(self):
+        '''
+        Test that 1 clone progress bar are printed for a minute after cloning
+        operation has finished/cancelled with a message that indicates that
+        there are no more clone jobs left.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(4)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        self.wait_until_bar_msg(c, 'ongoing clones - average progress')
+
+        self.cancel_clones_and_ignore_if_finished(c)
+        self.ensure_finished_bar_msg_lasted(c)
+
+    def test_wait_when_clones_more_than_cloner_threads(self):
+        '''
+        Test that 2 clone progress bars are printed for a minute after cloning
+        operation has finished/cancelled with a message that indicates that
+        there are no more clone jobs left.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        self.wait_until_bar_msg(c, ('ongoing clones - average progress',
+                                    'total '))
+
+        self.cancel_clones_and_ignore_if_finished(c)
+        self.ensure_finished_bar_msg_lasted(c)
+
+    def test_when_wait_is_aborted_by_clones_less_than_cloner_threads(self):
+        '''
+        Test that when wait is aborted due to a new clone job, progress bar
+        message for ongoing clone is printed as expected.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c1, c2 = self._gen_subvol_clone_name(2)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c1}')
+        self.wait_until_bar_msg(c1, 'ongoing clones - average progress')
+
+        self.run_ceph_cmd(f'fs clone cancel {v} {c1}')
+        self.wait_until_bar_msg(c1, 'no ongoing clones left')
+
+        # actual testing begins now...
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c2}')
+        self.wait_until_bar_msg(c2, 'ongoing clones - average progress')
+
+        # allowing clone jobs to finish will consume too much time and space
+        # and not cancelling these clone doesnt affect this test case.
+        self.cancel_clones_and_ignore_if_finished(c2)
+        # this call is just to wait for the "finished" progress bar message to
+        # vanish
+        self.ensure_finished_bar_msg_lasted(c2)
+
+    def test_when_wait_is_aborted_by_clones_equal_to_cloner_threads(self):
+        '''
+        Test that when wait is aborted due to 4 clone jobs (where clone threads
+        are also 4), progress bar message for ongoing clone is printed as
+        expected.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c1 = self._gen_subvol_clone_name(1)
+        c2 = self._gen_subvol_clone_name(4)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c1}')
+        self.wait_until_bar_msg(c1, 'ongoing clones - average progress')
+
+        self.run_ceph_cmd(f'fs clone cancel {v} {c1}')
+        self.wait_until_bar_msg(c1, 'no ongoing clones left')
+
+        # actual testing begins now...
+        for c in c2:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self.wait_until_bar_msg(c2, 'ongoing clones')
+
+        # allowing clone jobs to finish will consume too much time and space
+        # and not cancelling these clone doesnt affect this test case.
+        self.cancel_clones_and_ignore_if_finished(c2)
+        # this call is just to wait for the "finished" progress bar message to
+        # vanish
+        self.ensure_finished_bar_msg_lasted(c2)
+
+    def test_when_wait_is_aborted_by_clones_more_than_cloner_threads(self):
+        '''
+        Test that when wait is aborted due to 7 new clone jobs (where clone
+        threads are only 4), progress bar message for ongoing clones and
+        pending clones is printed as expected.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c1 = self._gen_subvol_clone_name(1)
+        c2 = self._gen_subvol_clone_name(7)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c1}')
+        self.wait_until_bar_msg(c1, 'ongoing clones - average progress')
+
+        self.run_ceph_cmd(f'fs clone cancel {v} {c1}')
+        self.wait_until_bar_msg(c1, 'no ongoing clones left')
+
+        for c in c2:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self.wait_until_bar_msg(c2, ('ongoing clones', 'total '))
+
+        # allowing clone jobs to finish will consume too much time, space and
+        # CPU and not cancelling these clone doesnt affect this test case.
+        self.cancel_clones_and_ignore_if_finished(c2)
+        # this call is just to wait for the "finished" progress bar message to
+        # vanish
+        self.ensure_finished_bar_msg_lasted(c2)
+
+    def test_finish(self):
+        '''
+        Test that progress bar and their messages are removed from "ceph status"
+        output after waiting period for CloneProgressReporter thread is finished
+        without encountering any new clones.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(1)
+
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_no_wait', 'false')
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        size = self._do_subvolume_io(sv, None, None, 3, 1024)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self.wait_till_rbytes_is_right(v, sv, size)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        # ensure that the clone progress bar has been removed from "ceph status"
+        # output after waiting period is complete.
+        self._wait_for_clone_to_complete(c)
+
+        # thread will wait for 60 sec for new clones before terminating itself.
+        log.info('sleeping for 60 sec to wait for the RTimer thread to finish')
+        time.sleep(60)
+        # give bit more time for progress bars to be removed after cloning has
+        # been finished.
+        with safe_while(tries=3, sleep=2) as proceed:
+            while proceed():
+                pevs = self.get_pevs_from_ceph_status(c)
+                if len(pevs) == 0:
+                    break
