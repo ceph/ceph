@@ -16,6 +16,7 @@
 #include "common/safe_io.h"
 
 #include "os/bluestore/BlueStore.h"
+#include "os/bluestore/BlueStore_objects.h"
 
 using namespace std;
 

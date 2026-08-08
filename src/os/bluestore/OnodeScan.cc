@@ -11,13 +11,11 @@
  * Foundation.  See file COPYING.
  */
 #include "BlueStore.h"
+#include "BlueStore_objects.h"
 #include "common/pretty_binary.h"
 #include "simple_bitmap.h"
 #include "common/debug.h"
 using namespace std;
-
-// kv store prefixes, copied from BlueStore.cc
-const string PREFIX_OBJ = "O";         // object name -> onode_t
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bs.onode_scan "
