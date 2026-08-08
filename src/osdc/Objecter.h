@@ -617,9 +617,34 @@ struct ObjectOperation {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_DELETE, 0, 0, bl);
   }
-  void mapext(uint64_t off, uint64_t len) {
+  struct CB_ObjectOperation_mapext {
+    std::map<uint64_t, uint64_t>* extents;
+    boost::system::error_code* pec;
+
+    void operator()(boost::system::error_code, int r,
+		    const ceph::buffer::list& bl) {
+      if (r < 0) {
+        return;
+      }
+
+      try {
+        auto iter = bl.cbegin();
+        decode(*extents, iter);
+      } catch (const ceph::buffer::error& e) {
+        if (pec != nullptr) {
+          *pec = e.code();
+        }
+      }
+    }
+  };
+
+  void mapext(uint64_t off, uint64_t len,
+	      boost::system::error_code* ec,
+	      std::map<uint64_t, uint64_t>* extents) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+    set_handler(CB_ObjectOperation_mapext{extents, ec});
+    out_ec.back() = ec;
   }
   void sparse_read(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
