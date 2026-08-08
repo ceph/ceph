@@ -25,7 +25,7 @@ inline void shutdown_libfdb()
  ceph::libfdb::detail::database_system::shutdown_fdb();
 }
 
-// By default, libfdb will in turn use FDB's own defaults (see FDB docs):
+// By default, libfdb applies its internal database defaults:
 inline database_handle create_database()
 {
  return std::make_shared<database>();
@@ -131,7 +131,7 @@ auto commit_in_new_transaction(database_handle dbh, FnT&& fn)
 namespace ceph::libfdb {
 
 inline void set(transaction_handle txn,
-                std::string_view k, const auto& v,
+                const concepts::libfdb_key auto& k, const auto& v,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
@@ -142,18 +142,20 @@ inline void set(transaction_handle txn,
 
 // If someone gives us an explicit transaction handle, they almost certainly don't want to commit 
 // it (though they can always specify otherwise):
-inline void set(transaction_handle txn, std::string_view k, const auto& v)
+inline void set(transaction_handle txn,
+                const concepts::libfdb_key auto& k,
+                const auto& v)
 {
  return set(txn, k, v, commit_after_op::no_commit);
 }
 
 // ...conversely, with a database handle given, we can assume they DO want to auto-commit:
 inline void set(database_handle dbh,
-                std::string_view k, const auto& v)
+                const concepts::libfdb_key auto& k, const auto& v)
 {
  return detail::commit_in_new_transaction(dbh,
-          [key = detail::as_fdb_span(k), &v](const transaction_handle& txn) {
-            return txn->set(key, ceph::libfdb::to::convert(v));
+          [&k, &v](const transaction_handle& txn) {
+            return set(txn, k, v, commit_after_op::no_commit);
           });
 }
 
@@ -188,7 +190,8 @@ inline void set(database_handle dbh, IteratorT b, IteratorT e)
 
 // Note that we force things into a span so that byte streams get the proper encoding expected by zpp_bits:
 inline void set(transaction_handle txn,
-                std::string_view k, const ceph::libfdb::concepts::stringview_convertible auto& v,
+                const concepts::libfdb_key auto& k,
+                const ceph::libfdb::concepts::stringview_convertible auto& v,
                 const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
@@ -198,17 +201,19 @@ inline void set(transaction_handle txn,
 }
 
 inline void set(transaction_handle txn,
-                std::string_view k, const ceph::libfdb::concepts::stringview_convertible auto& v)
+                const concepts::libfdb_key auto& k,
+                const ceph::libfdb::concepts::stringview_convertible auto& v)
 {
  return set(txn, k, v, commit_after_op::no_commit);
 }
 
 inline void set(database_handle dbh,
-                std::string_view k, const ceph::libfdb::concepts::stringview_convertible auto& v)
+                const concepts::libfdb_key auto& k,
+                const ceph::libfdb::concepts::stringview_convertible auto& v)
 {
  return detail::commit_in_new_transaction(dbh,
-          [key = detail::as_fdb_span(k), value = std::string_view(v)](const transaction_handle& txn) {
-            return txn->set(key, ceph::libfdb::to::convert(value));
+          [&k, &v](const transaction_handle& txn) {
+            return set(txn, k, v, commit_after_op::no_commit);
           });
 }
 
@@ -242,7 +247,7 @@ inline void erase(ceph::libfdb::database_handle dbh,
 }
 
 inline void erase(ceph::libfdb::transaction_handle txn,
-                  std::string_view k,
+                  const concepts::libfdb_key auto& k,
                   const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
@@ -251,16 +256,16 @@ inline void erase(ceph::libfdb::transaction_handle txn,
           });
 }
 
-inline void erase(ceph::libfdb::transaction_handle txn, std::string_view k)
+inline void erase(ceph::libfdb::transaction_handle txn, const concepts::libfdb_key auto& k)
 {
  return erase(txn, k, commit_after_op::no_commit);
 }
 
-inline void erase(ceph::libfdb::database_handle dbh, std::string_view k)
+inline void erase(ceph::libfdb::database_handle dbh, const concepts::libfdb_key auto& k)
 {
  return detail::commit_in_new_transaction(dbh,
-          [key = detail::as_fdb_span(k)](const transaction_handle& txn) {
-            return txn->erase(key);
+          [&k](const transaction_handle& txn) {
+            return erase(txn, k, commit_after_op::no_commit);
           });
 }
 
@@ -303,7 +308,7 @@ template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> ||
          concepts::value_output<OutputTargetOrFnT&&>
 inline bool get(ceph::libfdb::transaction_handle txn,
-                std::string_view key,
+                const concepts::libfdb_key auto& key,
                 OutputTargetOrFnT&& output_target_or_fn,
                 const commit_after_op commit_after)
 {
@@ -324,7 +329,8 @@ template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> ||
          concepts::value_output<OutputTargetOrFnT&&>
 inline bool get(ceph::libfdb::transaction_handle txn,
-                std::string_view key, OutputTargetOrFnT&& output_target_or_fn)
+                const concepts::libfdb_key auto& key,
+                OutputTargetOrFnT&& output_target_or_fn)
 {
  return get(txn, key, std::forward<OutputTargetOrFnT>(output_target_or_fn), commit_after_op::no_commit);
 }
@@ -333,7 +339,8 @@ template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> ||
          concepts::value_output<OutputTargetOrFnT&&>
 inline bool get(ceph::libfdb::database_handle dbh,
-                std::string_view key, OutputTargetOrFnT&& output_target_or_fn)
+                const concepts::libfdb_key auto& key,
+                OutputTargetOrFnT&& output_target_or_fn)
 {
  return detail::maybe_retry(ceph::libfdb::make_transaction(dbh),
           [key, &output_target_or_fn](transaction_handle& txn) {
@@ -347,21 +354,21 @@ namespace ceph::libfdb {
 
 // Does a key exist?
 inline bool key_exists(transaction_handle txn,
-                       std::string_view k,
+                       const concepts::libfdb_key auto& k,
                        const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [k](const transaction_handle& txn) {
-            return txn->key_exists(k);
+          [key = detail::as_libfdb_key_view(k)](const transaction_handle& txn) {
+            return txn->key_exists(key);
           });
 }
 
-inline bool key_exists(transaction_handle txn, std::string_view k)
+inline bool key_exists(transaction_handle txn, const concepts::libfdb_key auto& k)
 {
  return key_exists(txn, k, commit_after_op::no_commit);
 }
 
-inline bool key_exists(database_handle dbh, std::string_view k)
+inline bool key_exists(database_handle dbh, const concepts::libfdb_key auto& k)
 {
  return detail::maybe_retry(ceph::libfdb::make_transaction(dbh),
           [k](transaction_handle& txn) {

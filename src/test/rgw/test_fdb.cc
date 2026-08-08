@@ -57,6 +57,8 @@ using std::vector;
 
 using namespace std::literals;
 
+namespace content = ceph::libfdb::layer::content;
+
 // Be nice to Catch2's template-test macros:
 using string_pair = std::pair<std::string, std::string>;
 
@@ -230,6 +232,46 @@ TEST_CASE("delete keys in range", "[rgw][fdb]") {
  CHECK_FALSE(lfdb::key_exists(dbh, make_key(6, "bounded")));
  CHECK_FALSE(lfdb::key_exists(dbh, make_key(7, "bounded")));
  CHECK(lfdb::key_exists(dbh, make_key(8, "bounded")));
+}
+
+TEST_CASE("content keys work with libfdb operations", "[rgw][fdb][content]")
+{
+ janitor dbh;
+
+ const auto object =
+  content::keyspace(test_namespace_prefix())
+  / "content"
+  / "object";
+ const auto blocks = object / "blocks";
+ const auto block_range = content::prefix(blocks);
+
+ lfdb::set(dbh, object, "metadata");
+ lfdb::set(dbh, blocks / "0000000000", "block-0");
+ lfdb::set(dbh, blocks / "0000000001", "block-1");
+
+ std::string metadata;
+ CHECK(lfdb::get(dbh, object, metadata));
+ CHECK("metadata" == metadata);
+ CHECK(lfdb::key_exists(dbh, object));
+
+ std::vector<std::pair<std::string, std::string>> block_entries;
+ lfdb::get(dbh, block_range, std::back_inserter(block_entries));
+
+ REQUIRE(2 == block_entries.size());
+ CHECK("block-0" == block_entries[0].second);
+ CHECK("block-1" == block_entries[1].second);
+
+ lfdb::erase(dbh, object);
+
+ metadata.clear();
+ CHECK_FALSE(lfdb::get(dbh, object, metadata));
+ CHECK_FALSE(lfdb::key_exists(dbh, object));
+
+ lfdb::erase(dbh, block_range);
+
+ block_entries.clear();
+ lfdb::get(dbh, block_range, std::back_inserter(block_entries));
+ CHECK(block_entries.empty());
 }
 
 TEMPLATE_PRODUCT_TEST_CASE("multi-key ops", "[rgw][fdb]", 
@@ -445,7 +487,7 @@ TEST_CASE("fdb conversions (functions)", "[fdb][rgw]")
 
   auto fn = [&o](const char *data, std::size_t sz) -> void { 
     // Because we did /conversion/ on the inbound data, we're still obliged to
-    // reverse this (or else we'll see whatever artefacts the conversion produced)-- 
+    // reverse this (otherwise we'll see whatever artefacts the conversion produced)--
     // the complication is a consequence of dealing with the underlying buffer directly:
     std::span<const std::uint8_t> in_span((const std::uint8_t *)data, sz);
  
@@ -589,12 +631,10 @@ TEST_CASE("basic generators", "[fdb]") {
  REQUIRE(nkeys == kvs_in.size());
 
  SECTION("pair_generator forward") {
-    std::vector<std::pair<std::string, std::string>> out;
     auto txn = lfdb::make_transaction(j);
 
-    // pair_generator returns key-value pairs:
-    for (auto&& kvp : lfdb::pair_generator(txn, lfdb::select { make_key(0), make_key(nkeys) }))
-     out.emplace_back(std::move(kvp));
+    const auto out = lfdb::pair_generator(txn, lfdb::select { make_key(0), make_key(nkeys) })
+                   | std::ranges::to<std::vector<string_pair>>();
 
     CAPTURE(nkeys);
     CAPTURE(out.size());
@@ -615,9 +655,9 @@ TEST_CASE("basic generators", "[fdb]") {
     auto selector = lfdb::select { make_key(0), make_key(nkeys) };
     selector.options.reverse_order = true;
 
-    std::vector<std::pair<std::string, std::string>> out;
     auto txn = lfdb::make_transaction(j);
-    std::ranges::copy(lfdb::pair_generator(txn, selector), std::back_inserter(out));
+    const auto out = lfdb::pair_generator(txn, selector)
+                   | std::ranges::to<std::vector<string_pair>>();
 
     CAPTURE(nkeys);
     CAPTURE(out.size());
@@ -637,9 +677,9 @@ TEST_CASE("basic generators", "[fdb]") {
     auto selector = lfdb::select { make_key(0), make_key(nkeys) };
     selector.options.stride = 5; // one of the most prime of prime numbers
 
-    std::vector<std::pair<std::string, std::string>> out;
     auto txn = lfdb::make_transaction(j);
-    std::ranges::copy(lfdb::pair_generator(txn, selector), std::back_inserter(out));
+    const auto out = lfdb::pair_generator(txn, selector)
+                   | std::ranges::to<std::vector<string_pair>>();
 
     CAPTURE(nkeys);
     CAPTURE(out.size());
@@ -660,9 +700,9 @@ TEST_CASE("basic generators", "[fdb]") {
     selector.options.reverse_order = true;
     selector.options.stride = 5; // one of the most prime of prime numbers
 
-    std::vector<std::pair<std::string, std::string>> out;
     auto txn = lfdb::make_transaction(j);
-    std::ranges::copy(lfdb::pair_generator(txn, selector), std::back_inserter(out));
+    const auto out = lfdb::pair_generator(txn, selector)
+                   | std::ranges::to<std::vector<string_pair>>();
 
     CAPTURE(nkeys);
     CAPTURE(out.size());
@@ -709,21 +749,17 @@ TEST_CASE("generators honor selector endpoints", "[fdb]") {
  write_monotonic_kvs(j, 10, prefix);
 
  auto collect_pair_keys = [&j](lfdb::select selector) {
-  std::vector<std::string> out;
   auto txn = lfdb::make_transaction(j);
-  std::ranges::copy(lfdb::pair_generator(txn, selector)
-                  | std::views::transform([](const auto& kv) { return kv.first; }),
-                    std::back_inserter(out));
-  return out;
+  return lfdb::pair_generator(txn, selector)
+       | std::views::transform([](const auto& kv) { return kv.first; })
+       | std::ranges::to<std::vector<std::string>>();
  };
 
  auto collect_block_keys = [&j](lfdb::select selector) {
-  std::vector<std::string> out;
-  std::ranges::for_each(lfdb::block_generator(j, selector), [&out](const auto& block) {
-   std::ranges::copy(block | std::views::transform([](const auto& kv) { return kv.first; }),
-                     std::back_inserter(out));
-  });
-  return out;
+  return lfdb::block_generator(j, selector)
+       | std::views::join
+       | std::views::transform([](const auto& kv) { return kv.first; })
+       | std::ranges::to<std::vector<std::string>>();
  };
 
  auto selector = lfdb::select { lfdb::exclusive(make_key(3, prefix)), lfdb::inclusive(make_key(6, prefix)) };
