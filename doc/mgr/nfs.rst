@@ -268,7 +268,7 @@ Example use cases include:
 
    .. prompt:: bash #
 
-      ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=.nfs namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow rw path=<export_path>'
+      ceph auth get-or-create client.<user_id> mon 'allow r' osd 'allow rw pool=.nfs namespace=<nfs_cluster_name>, allow rw tag cephfs data=<fs_name>' mds 'allow all path=<export_path>'
 
 View Customized NFS Ganesha Configuration
 -----------------------------------------
