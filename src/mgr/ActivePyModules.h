@@ -17,6 +17,7 @@
 #include "ActivePyModule.h"
 
 #include "common/Finisher.h"
+#include "common/Timer.h"
 #include "common/ceph_mutex.h"
 
 #include "PyFormatter.h"
@@ -57,6 +58,12 @@ class ActivePyModules
   Context *recheck_modules_start = nullptr;
   // module class instances already created
   std::map<std::string, std::shared_ptr<ActivePyModule>> modules;
+  
+  struct FailedModuleInfo {
+    PyModuleRef py_module;
+    std::shared_ptr<ActivePyModule> active_module;
+    std::chrono::steady_clock::time_point next_retry_time;
+  };
   PyModuleConfig &module_config;
   bool have_local_config_map = false;
   std::map<std::string, std::string> store_cache;
@@ -78,6 +85,10 @@ private:
   std::map<std::string,ProgressEvent> progress_events;
 
   mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
+
+  std::map<std::string, FailedModuleInfo> failed_always_on_modules;
+  SafeTimer retry_timer;
+  Context *retry_event = nullptr;
 
 public:
   ActivePyModules(
@@ -241,6 +252,20 @@ public:
     return modules.count(name) > 0;
   }
 
+  std::string get_module_load_error(const std::string &name) const
+  {
+    std::lock_guard l(lock);
+    auto it = failed_always_on_modules.find(name);
+    if (it != failed_always_on_modules.end() && it->second.active_module) {
+      std::string error = it->second.active_module->get_load_error_string();
+      int retry_count = it->second.active_module->get_load_retry_count();
+      if (!error.empty()) {
+        return error + " (retry " + std::to_string(retry_count) + ")";
+      }
+    }
+    return "";
+  }
+
   bool method_exists(
       const std::string &module_name,
       const std::string &method_name) const
@@ -257,7 +282,9 @@ public:
 
   int init();
 
-  void start_one(PyModuleRef py_module);
+  void start_one(PyModuleRef py_module,
+                 std::shared_ptr<ActivePyModule> active_module = nullptr);
+
 
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,
@@ -275,5 +302,11 @@ public:
   // only after all modules are ready.
   // See "PyModuleRegistry::check_all_modules_started()".
   void check_all_modules_started(Context *modules_start_complete);
+
+private:
+  void schedule_retry_failed_module(const std::string& module_name,
+                                     PyModuleRef py_module,
+                                     std::shared_ptr<ActivePyModule> active_module);
+  void retry_failed_modules();
 };
 
