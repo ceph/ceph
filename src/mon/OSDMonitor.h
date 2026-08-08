@@ -887,6 +887,17 @@ public:
 				  std::set<int> *really_down_buckets,
 				  std::set<std::string> *really_down_mons);
   /**
+   * Refuse a rule stretch mode cannot resolve a surviving bucket from.
+   *
+   * @param overridable whether the command offers --yes-i-really-mean-it, in
+   *                    which case the caller may proceed once the operator says
+   *                    so and the message says as much
+   * @returns 0 if the rule is usable, else the error to reply with
+   */
+  int check_stretch_device_class(const CrushWrapper& crush, int rule,
+				 const std::string& rule_name, int barrier,
+				 bool overridable, std::ostream& ss) const;
+  /**
    * Set degraded mode in the OSDMap, adding the given dead buckets to the dead set
    * and using the live_zones (should presently be size 1)
    */
