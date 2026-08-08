@@ -42,6 +42,7 @@ struct RGWLCCloudTierCtx {
   bool is_multipart_upload{false};
   bool target_bucket_created{true};
   bool target_by_bucket{false};
+  bool retain_current_version{false};
 
   optional_yield y;
 

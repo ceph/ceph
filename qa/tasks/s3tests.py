@@ -390,6 +390,9 @@ def configure(ctx, config):
                 s3tests_conf['s3 cloud']['cloud_storage_class'] = client_rgw_config.get('cloud_storage_class')
                 s3tests_conf['s3 cloud']['storage_class'] = client_rgw_config.get('cloud_regular_storage_class')
                 s3tests_conf['s3 cloud']['retain_head_object'] = client_rgw_config.get('cloud_retain_head_object')
+                cloud_retain_current_version = client_rgw_config.get('cloud_retain_current_version')
+                if (cloud_retain_current_version != None):
+                    s3tests_conf['s3 cloud']['retain_current_version'] = cloud_retain_current_version
                 cloud_target_path = client_rgw_config.get('cloud_target_path')
                 cloud_target_storage_class = client_rgw_config.get('cloud_target_storage_class')
                 if (cloud_target_path != None):

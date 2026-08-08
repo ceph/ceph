@@ -229,6 +229,28 @@ struct rgw_cls_link_olh_op {
 };
 WRITE_CLASS_ENCODER(rgw_cls_link_olh_op)
 
+struct rgw_cls_refresh_instance_op {
+  cls_rgw_obj_key key;
+
+  rgw_cls_refresh_instance_op() {}
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(key, bl);
+    DECODE_FINISH(bl);
+  }
+
+  static std::list<rgw_cls_refresh_instance_op> generate_test_instances();
+  void dump(ceph::Formatter *f) const;
+};
+WRITE_CLASS_ENCODER(rgw_cls_refresh_instance_op)
+
 struct rgw_cls_unlink_instance_op {
   cls_rgw_obj_key key;
   std::string op_tag;
@@ -1815,6 +1837,7 @@ constexpr auto bucket_unlink_instance = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_U
 constexpr auto bucket_read_olh_log = ClsMethod<RdTag, ClassId>(RGW_BUCKET_READ_OLH_LOG);
 constexpr auto bucket_trim_olh_log = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_TRIM_OLH_LOG);
 constexpr auto bucket_clear_olh = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_CLEAR_OLH);
+constexpr auto bucket_refresh_instance = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_REFRESH_INSTANCE);
 
 // Object
 constexpr auto obj_remove = ClsMethod<RdWrTag, ClassId>(RGW_OBJ_REMOVE);
