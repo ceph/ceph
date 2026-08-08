@@ -2253,6 +2253,24 @@ class TestSubvolumeGroups(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolumegroup_pin_for_default_group(self):
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        self.config_set('mds', 'mds_export_ephemeral_distributed', True)
+
+        self._fs_cmd("subvolumegroup", "pin", self.volname, "_nogroup", "distributed", "True")
+        subvolumes = self._gen_subvol_name(50)
+        for subvolume in subvolumes:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        self._wait_distributed_subtrees(2 * 2, status=status, rank="all")
+
+        # remove subvolumes
+        for subvolume in subvolumes:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+    
     def test_subvolumegroup_charmap(self):
         attrs = {
           "normalization": "nfc",
