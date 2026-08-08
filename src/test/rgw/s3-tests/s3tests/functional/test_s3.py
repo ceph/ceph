@@ -18402,6 +18402,18 @@ def _verify_flushed_on_put(result):
         return result['FlushedLoggingObject']
 
 
+def _time_bucket_logging_phase(metrics, name, fn):
+    start = time.perf_counter()
+    result = fn()
+    metrics[name] = time.perf_counter() - start
+    return result
+
+
+def _format_bucket_logging_metrics(metrics):
+    return ', '.join('{}={:.3f}s'.format(name, elapsed)
+                    for name, elapsed in metrics.items())
+
+
 def _bucket_logging_cleanup(cleanup_type, logging_type, single_prefix, concurrency):
     if not _has_bucket_logging_extension():
         pytest.skip('ceph extension to bucket logging not supported at client')
@@ -19142,6 +19154,130 @@ def _bucket_logging_conf_update(logging_type, update_value, concurrency):
         body += _get_body(response)
 
     assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', src_names, logging_type, num_keys, exact_match)
+
+
+def _bucket_logging_target_change_flushes_old_target(old_key_count, new_key_count,
+                                                     record_metrics=False):
+    if not _has_bucket_logging_extension():
+        pytest.skip('ceph extension to bucket logging not supported at client')
+
+    metrics = OrderedDict()
+    client = get_client()
+    src_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=src_bucket_name)
+    old_log_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=old_log_bucket_name)
+    new_log_bucket_name = get_new_bucket_name()
+    get_new_bucket_resource(name=new_log_bucket_name)
+
+    old_prefix = 'old-log/'
+    new_prefix = 'new-log/'
+
+    def set_old_policy():
+        _set_log_bucket_policy(client, old_log_bucket_name,
+                               [src_bucket_name], [old_prefix])
+
+    def set_new_policy():
+        _set_log_bucket_policy(client, new_log_bucket_name,
+                               [src_bucket_name], [new_prefix])
+
+    _time_bucket_logging_phase(metrics, 'set_old_policy', set_old_policy)
+    _time_bucket_logging_phase(metrics, 'set_new_policy', set_new_policy)
+
+    logging_enabled = {'TargetBucket': old_log_bucket_name,
+                       'ObjectRollTime': expected_object_roll_time*10,
+                       'LoggingType': 'Journal',
+                       'TargetPrefix': old_prefix}
+
+    def enable_old_target():
+        return client.put_bucket_logging(Bucket=src_bucket_name,
+                                         BucketLoggingStatus={
+                                             'LoggingEnabled': logging_enabled,
+                                         })
+
+    response = _time_bucket_logging_phase(
+        metrics, 'enable_old_target', enable_old_target)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    old_src_names = ['old-target-object' + str(j) for j in range(old_key_count)]
+
+    def put_old_target_objects():
+        for name in old_src_names:
+            client.put_object(Bucket=src_bucket_name, Key=name, Body=randcontent())
+
+    _time_bucket_logging_phase(metrics, 'write_old_target_records', put_old_target_objects)
+
+    response = client.list_objects_v2(Bucket=old_log_bucket_name)
+    assert _get_keys(response) == []
+
+    logging_enabled['TargetBucket'] = new_log_bucket_name
+    logging_enabled['TargetPrefix'] = new_prefix
+
+    def change_target():
+        return client.put_bucket_logging(Bucket=src_bucket_name,
+                                         BucketLoggingStatus={
+                                             'LoggingEnabled': logging_enabled,
+                                         })
+
+    result = _time_bucket_logging_phase(
+        metrics, 'change_target_and_flush', change_target)
+    flushed_obj = _verify_flushed_on_put(result)
+    assert flushed_obj.startswith(old_prefix)
+
+    response = client.list_objects_v2(Bucket=old_log_bucket_name)
+    keys = _get_keys(response)
+    assert keys == [flushed_obj]
+
+    response = client.get_object(Bucket=old_log_bucket_name, Key=flushed_obj)
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', old_src_names,
+                           'Journal', len(old_src_names), exact_match=True)
+
+    response = client.list_objects_v2(Bucket=new_log_bucket_name)
+    assert _get_keys(response) == []
+
+    new_src_names = ['new-target-object' + str(j) for j in range(new_key_count)]
+
+    def put_new_target_objects():
+        for name in new_src_names:
+            client.put_object(Bucket=src_bucket_name, Key=name, Body=randcontent())
+
+    _time_bucket_logging_phase(metrics, 'write_new_target_records', put_new_target_objects)
+    flushed_obj = _time_bucket_logging_phase(
+        metrics, 'flush_new_target',
+        lambda: _flush_logs(client, src_bucket_name))
+    response = client.list_objects_v2(Bucket=new_log_bucket_name)
+    keys = _get_keys(response)
+    assert keys == [flushed_obj]
+    assert flushed_obj.startswith(new_prefix)
+
+    response = client.get_object(Bucket=new_log_bucket_name, Key=flushed_obj)
+    body = _get_body(response)
+    assert _verify_records(body, src_bucket_name, 'REST.PUT.OBJECT', new_src_names,
+                           'Journal', len(new_src_names), exact_match=True)
+
+    if record_metrics:
+        logger.info('bucket logging target-change baseline: old_keys=%d new_keys=%d %s',
+                    old_key_count, new_key_count, _format_bucket_logging_metrics(metrics))
+
+    return metrics
+
+
+@pytest.mark.bucket_logging
+@pytest.mark.bucket_logging_cleanup
+@pytest.mark.fails_on_aws
+def test_bucket_logging_target_change_flushes_old_target():
+    _bucket_logging_target_change_flushes_old_target(old_key_count=3, new_key_count=1)
+
+
+@pytest.mark.bucket_logging
+@pytest.mark.bucket_logging_benchmark
+@pytest.mark.bucket_logging_cleanup
+@pytest.mark.fails_on_aws
+def test_bucket_logging_target_change_baseline_benchmark():
+    _bucket_logging_target_change_flushes_old_target(old_key_count=100,
+                                                     new_key_count=10,
+                                                     record_metrics=True)
 
 
 @pytest.mark.bucket_logging
