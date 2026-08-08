@@ -4606,6 +4606,9 @@ void Monitor::remove_session(MonSession *s)
 
 void Monitor::remove_all_sessions()
 {
+  std::unique_lock<std::mutex> lk(shutdown_mutex);
+  shutdown_cv.wait(lk, [&]{ return fast_auth_in_progress.load() == 0; });
+
   std::lock_guard l(session_map_lock);
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
@@ -6831,6 +6834,12 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
     return true;
   }
 
+  if(state == STATE_SHUTDOWN) {
+    con->mark_down();
+    return false;
+  }
+  fast_auth_in_progress.fetch_add(1, std::memory_order_acquire);
+
   auto priv = con->get_priv();
   MonSession *s = static_cast<MonSession*>(priv.get());
   if (!s) {
@@ -6838,6 +6847,7 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
     if (state == STATE_SHUTDOWN) {
       dout(10) << __func__ << " ignoring new con " << con << " (shutdown)" << dendl;
       con->mark_down();
+      fast_auth_in_progress.fetch_sub(1, std::memory_order_release);
       return false;
     }
     s = session_map.new_session(
@@ -6851,6 +6861,9 @@ bool Monitor::ms_handle_fast_authentication(Connection *con)
     logger->set(l_mon_num_sessions, session_map.get_size());
     logger->inc(l_mon_session_add);
   }
+  fast_auth_in_progress.fetch_sub(1, std::memory_order_release);
+  shutdown_cv.notify_all();
+
   dout(10) << __func__ << " session " << s << " con " << con
 	   << " addr " << s->con->get_peer_addr()
 	   << " " << *s << dendl;
