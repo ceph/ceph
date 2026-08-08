@@ -174,6 +174,10 @@ void Log::reopen_log_file()
   }
   if (m_log_file.length()) {
     m_fd = ::open(m_log_file.c_str(), O_CREAT|O_WRONLY|O_APPEND|O_CLOEXEC, 0644);
+    if (m_fd < 0) {
+      int e = errno;
+      std::cerr << "failed to open log file " << m_log_file << ": " << cpp_strerror(e) << std::endl;
+    }
     if (m_fd >= 0 && (m_uid || m_gid)) {
       if (::fchown(m_fd, m_uid, m_gid) < 0) {
 	int e = errno;
