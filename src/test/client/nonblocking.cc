@@ -1201,12 +1201,12 @@ TEST_F(TestClient, LlreadvLlwritevQuotaFull) {
   // set quota.max_bytes
   char xattrk[128];
   sprintf(xattrk, "ceph.quota.max_bytes");
-  char setxattrv[128], getxattrv[128];
+  char setxattrv[128], getxattrv[128]{};
   int32_t len = sprintf(setxattrv, "8388608"); // 8MiB
   int64_t rc = client->ll_setxattr(diri, xattrk, setxattrv, len,
                                    CEPH_XATTR_CREATE, myperm);
   ASSERT_EQ(rc, 0);
-  rc = client->ll_getxattr(diri, xattrk, (void *)getxattrv, len, myperm);
+  rc = client->ll_getxattr(diri, xattrk, getxattrv, len, myperm);
   ASSERT_EQ(rc, 7);
   ASSERT_STREQ(setxattrv, getxattrv);
 
