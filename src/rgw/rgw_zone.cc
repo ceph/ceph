@@ -789,6 +789,23 @@ void RGWZoneGroupPlacementTierS3::dump(Formatter *f) const
   encode_json("multipart_min_part_size", multipart_min_part_size, f);
 }
 
+void RGWZoneGroupPlacementTierS3::dump_mask_keys(Formatter *f) const
+{
+  encode_json("endpoint", endpoint, f);
+  encode_json("access_key", key.id, f);
+  string secret = (key.key.empty() ? "" : "******");
+  encode_json("secret", secret, f);
+  encode_json("region", region, f);
+  string s = (host_style == PathStyle ? "path" : "virtual");
+  encode_json("host_style", s, f);
+  encode_json("location_constraint", location_constraint, f);
+  encode_json("target_storage_class", target_storage_class, f);
+  encode_json("target_path", target_path, f);
+  encode_json("acl_mappings", acl_mappings, f);
+  encode_json("multipart_sync_threshold", multipart_sync_threshold, f);
+  encode_json("multipart_min_part_size", multipart_min_part_size, f);
+}
+
 void RGWTierACLMapping::dump(Formatter *f) const
 {
   string s;
