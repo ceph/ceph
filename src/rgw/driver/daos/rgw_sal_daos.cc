@@ -1696,9 +1696,7 @@ int DaosMultipartUpload::complete(
     prefix_map_t& processed_prefixes) {
   ldpp_dout(dpp, 20) << "DEBUG: complete" << dendl;
   char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  MD5NonCrypto hash;
   bool truncated;
   int ret;
 
