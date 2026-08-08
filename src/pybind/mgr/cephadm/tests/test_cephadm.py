@@ -1455,6 +1455,117 @@ class TestCephadm(object):
             assert f1[0] == 'test'
             assert isinstance(f1[1], DriveSelection)
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
+    @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')
+    @mock.patch('cephadm.services.osd.OSDService.prepare_drivegroup')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    def test_preview_crush_device_class_rotational_and_override(
+            self, _prepare_dg, d_to_cv, _run_cv_cmd, cephadm_module):
+        # No spec-level class: per-device override beats the rotational
+        # fallback ('hdd' for rotational=1, 'ssd' otherwise).
+        with with_host(cephadm_module, 'test'):
+            # filter-based selection (all=True) returns the Devices passed to
+            # DriveSelection, with their sys_api intact.
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(all=True),
+                                service_id='mixed')
+            disks = [
+                Device('/dev/sdb', sys_api={'rotational': '1'}, available=True),
+                Device('/dev/sdc', sys_api={'rotational': '0'},
+                       crush_device_class='nvme', available=True),
+                Device('/dev/sdd', sys_api={'rotational': '0'}, available=True),
+            ]
+            ds = DriveSelection(dg, disks)
+            _prepare_dg.return_value = [('test', ds)]
+            d_to_cv.return_value = ['some-cv-cmd']
+            cv_json = (
+                '[{"data": "/dev/sdb", "data_size": "300 GB"},'
+                ' {"data": "/dev/sdc", "data_size": "300 GB"},'
+                ' {"data": "/dev/sdd", "data_size": "300 GB"}]'
+            )
+            _run_cv_cmd.side_effect = async_side_effect(([cv_json], '', 0))
+
+            preview = cephadm_module.osd_service.generate_previews([dg], 'test')
+            assert len(preview) == 1
+            by_path = {o['data']: o.get('crush_device_class')
+                       for o in preview[0]['data']}
+            assert by_path == {'/dev/sdb': 'hdd',
+                               '/dev/sdc': 'nvme',
+                               '/dev/sdd': 'ssd'}
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
+    @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')
+    @mock.patch('cephadm.services.osd.OSDService.prepare_drivegroup')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    def test_preview_crush_device_class_paths_spec_uses_inventory(
+            self, _prepare_dg, d_to_cv, _run_cv_cmd, cephadm_module):
+        # When the spec selects devices by path, the Device objects in
+        # ds.data_devices() carry no sys_api; the rotational fallback must
+        # come from the cached host inventory.
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(paths=[
+                                    '/dev/sdb', '/dev/sdc']),
+                                service_id='by_paths')
+            ds = DriveSelection(dg, Devices([
+                Device('/dev/sdb'), Device('/dev/sdc')]))
+            cephadm_module.cache.devices['test'] = [
+                Device('/dev/sdb', sys_api={'rotational': '1'}),
+                Device('/dev/sdc', sys_api={'rotational': '0'}),
+            ]
+            _prepare_dg.return_value = [('test', ds)]
+            d_to_cv.return_value = ['some-cv-cmd']
+            cv_json = (
+                '[{"data": "/dev/sdb", "data_size": "300 GB"},'
+                ' {"data": "/dev/sdc", "data_size": "300 GB"}]'
+            )
+            _run_cv_cmd.side_effect = async_side_effect(([cv_json], '', 0))
+
+            preview = cephadm_module.osd_service.generate_previews([dg], 'test')
+            by_path = {o['data']: o.get('crush_device_class')
+                       for o in preview[0]['data']}
+            assert by_path == {'/dev/sdb': 'hdd', '/dev/sdc': 'ssd'}
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    @mock.patch('cephadm.services.osd.OSDService._run_ceph_volume_command')
+    @mock.patch('cephadm.services.osd.OSDService.driveselection_to_ceph_volume')
+    @mock.patch('cephadm.services.osd.OSDService.prepare_drivegroup')
+    @mock.patch('cephadm.services.osd.OsdIdClaims.refresh', lambda _: None)
+    @mock.patch('cephadm.services.osd.OsdIdClaims.get', lambda _: {})
+    def test_preview_crush_device_class_spec_override(
+            self, _prepare_dg, d_to_cv, _run_cv_cmd, cephadm_module):
+        # Spec-level crush_device_class applies to devices without their own
+        # override, regardless of rotational.
+        with with_host(cephadm_module, 'test'):
+            dg = DriveGroupSpec(placement=PlacementSpec(host_pattern='test'),
+                                data_devices=DeviceSelection(all=True),
+                                service_id='spec_class',
+                                crush_device_class='hdd')
+            disks = [
+                Device('/dev/sdb', sys_api={'rotational': '0'}, available=True),
+                Device('/dev/sdc', sys_api={'rotational': '0'},
+                       crush_device_class='nvme', available=True),
+            ]
+            ds = DriveSelection(dg, disks)
+            _prepare_dg.return_value = [('test', ds)]
+            d_to_cv.return_value = ['some-cv-cmd']
+            cv_json = (
+                '[{"data": "/dev/sdb", "data_size": "300 GB"},'
+                ' {"data": "/dev/sdc", "data_size": "300 GB"}]'
+            )
+            _run_cv_cmd.side_effect = async_side_effect(([cv_json], '', 0))
+
+            preview = cephadm_module.osd_service.generate_previews([dg], 'test')
+            assert len(preview) == 1
+            by_path = {o['data']: o.get('crush_device_class')
+                       for o in preview[0]['data']}
+            assert by_path == {'/dev/sdb': 'hdd',
+                               '/dev/sdc': 'nvme'}
+
     @pytest.mark.parametrize(
         "devices, preview, exp_commands",
         [

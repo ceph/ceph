@@ -271,19 +271,54 @@ def test_preview_table_osd_smoke():
                                 "block_db_size": "66.67 GB",
                                 "data": "/dev/sdb",
                                 "data_size": "300.00 GB",
-                                "encryption": "None"
+                                "encryption": "None",
+                                "crush_device_class": "hdd",
                             },
                             {
                                 "block_db": "/dev/nvme0n1",
                                 "block_db_size": "66.67 GB",
                                 "data": "/dev/sdc",
                                 "data_size": "300.00 GB",
-                                "encryption": "None"
+                                "encryption": "None",
+                                "crush_device_class": "hdd",
                             },
                             {
                                 "block_db": "/dev/nvme0n1",
                                 "block_db_size": "66.67 GB",
                                 "data": "/dev/sdd",
+                                "data_size": "300.00 GB",
+                                "encryption": "None",
+                                "crush_device_class": "nvme",
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+    ]
+    out = preview_table_osd(data)
+    assert 'CRUSH_DEVICE_CLASS' in out
+    assert 'hdd' in out
+    assert 'nvme' in out
+
+
+def test_preview_table_osd_missing_crush_class():
+    # Backward compat: older preview payloads with no crush_device_class
+    # render '-' rather than crashing.
+    data = [
+        {
+            'service_type': 'osd',
+            'data':
+            {
+                'foo host':
+                [
+                    {
+                        'osdspec': 'foo',
+                        'error': '',
+                        'data':
+                        [
+                            {
+                                "data": "/dev/sdb",
                                 "data_size": "300.00 GB",
                                 "encryption": "None"
                             }
@@ -293,7 +328,8 @@ def test_preview_table_osd_smoke():
             }
         }
     ]
-    preview_table_osd(data)
+    out = preview_table_osd(data)
+    assert 'CRUSH_DEVICE_CLASS' in out
 
 
 @mock.patch("orchestrator.module.OrchestratorCli.release_name", new_callable=mock.PropertyMock)
