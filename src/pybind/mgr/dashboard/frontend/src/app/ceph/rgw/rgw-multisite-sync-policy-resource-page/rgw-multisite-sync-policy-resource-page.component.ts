@@ -1,22 +1,40 @@
-import { Component, Input, OnChanges, SimpleChanges, TemplateRef, ViewChild } from '@angular/core';
+import { TitleCasePipe } from '@angular/common';
+import {
+  Component,
+  OnDestroy,
+  OnInit,
+  TemplateRef,
+  ViewChild,
+  ViewEncapsulation
+} from '@angular/core';
+import { ActivatedRoute, ParamMap } from '@angular/router';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import {
+  Observable,
+  Subscriber,
+  Subscription,
+  combineLatest,
+  forkJoin as observableForkJoin
+} from 'rxjs';
+import { FlowType } from '~/app/ceph/rgw/models/rgw-multisite';
+import { RgwMultisiteSyncFlowModalComponent } from '~/app/ceph/rgw/rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
+import { RgwMultisiteSyncPipeModalComponent } from '~/app/ceph/rgw/rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { Permission } from '~/app/shared/models/permissions';
-import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
-import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { Observable, Subscriber, forkJoin as observableForkJoin } from 'rxjs';
-import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { RgwMultisiteSyncFlowModalComponent } from '../rgw-multisite-sync-flow-modal/rgw-multisite-sync-flow-modal.component';
-import { FlowType } from '../models/rgw-multisite';
-import { RgwMultisiteSyncPipeModalComponent } from '../rgw-multisite-sync-pipe-modal/rgw-multisite-sync-pipe-modal.component';
+import { Permission } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
-import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 enum MultisiteResourceType {
   flow = 'flow',
@@ -24,96 +42,112 @@ enum MultisiteResourceType {
 }
 
 @Component({
-  selector: 'cd-rgw-multisite-sync-policy-details',
-  templateUrl: './rgw-multisite-sync-policy-details.component.html',
-  styleUrls: ['./rgw-multisite-sync-policy-details.component.scss'],
+  selector: 'cd-rgw-multisite-sync-policy-resource-page',
+  templateUrl: './rgw-multisite-sync-policy-resource-page.component.html',
+  styleUrls: ['./rgw-multisite-sync-policy-resource-page.component.scss'],
+  encapsulation: ViewEncapsulation.None,
   standalone: false
 })
-export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
-  @Input()
-  expandedRow: any;
-  @Input()
-  permission: Permission;
+export class RgwMultisiteSyncPolicyResourcePageComponent implements OnInit, OnDestroy {
+  private sub = new Subscription();
 
   @ViewChild(TableComponent)
   table: TableComponent;
   @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
-  resourceType: MultisiteResourceType = MultisiteResourceType.flow;
+  section = 'overview';
   flowType = FlowType;
+  permission: Permission;
+  resourceType: MultisiteResourceType = MultisiteResourceType.flow;
   modalRef: NgbModalRef;
-  symmetricalFlowData: any = [];
-  directionalFlowData: any = [];
-  pipeData: any = [];
+
+  groupName = '';
+  bucketName = '';
+  notFound = false;
+  hasPolicyGroup = false;
+  overviewFields: OverviewField[] = [];
+
+  symmetricalFlowData: any[] = [];
+  directionalFlowData: any[] = [];
+  pipeData: any[] = [];
+
   symmetricalFlowCols: CdTableColumn[];
   directionalFlowCols: CdTableColumn[];
   pipeCols: CdTableColumn[];
+
   symFlowTableActions: CdTableAction[];
   dirFlowTableActions: CdTableAction[];
   pipeTableActions: CdTableAction[];
+
   symFlowSelection = new CdTableSelection();
   dirFlowSelection = new CdTableSelection();
   pipeSelection = new CdTableSelection();
 
   constructor(
+    private route: ActivatedRoute,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalCdsService,
     private rgwMultisiteService: RgwMultisiteService,
     private taskWrapper: TaskWrapperService,
-    private cdsModalService: ModalCdsService
+    private cdsModalService: ModalCdsService,
+    private authStorageService: AuthStorageService,
+    private titleCasePipe: TitleCasePipe
   ) {
+    this.permission = this.authStorageService.getPermissions().rgw;
+
     this.symmetricalFlowCols = [
       {
-        name: 'Name',
+        name: $localize`Name`,
         prop: 'id',
         flexGrow: 1
       },
       {
-        name: 'Zones',
+        name: $localize`Zones`,
         prop: 'zones',
         flexGrow: 1
       }
     ];
     this.directionalFlowCols = [
       {
-        name: 'Source Zone',
+        name: $localize`Source Zone`,
         prop: 'source_zone',
         flexGrow: 1
       },
       {
-        name: 'Destination Zone',
+        name: $localize`Destination Zone`,
         prop: 'dest_zone',
         flexGrow: 1
       }
     ];
     this.pipeCols = [
       {
-        name: 'Name',
+        name: $localize`Name`,
         prop: 'id',
         flexGrow: 1
       },
       {
-        name: 'Source Zone',
+        name: $localize`Source Zone`,
         prop: 'source.zones',
         flexGrow: 1
       },
       {
-        name: 'Destination Zone',
+        name: $localize`Destination Zone`,
         prop: 'dest.zones',
         flexGrow: 1
       },
       {
-        name: 'Source Bucket',
+        name: $localize`Source Bucket`,
         prop: 'source.bucket',
         flexGrow: 1
       },
       {
-        name: 'Destination Bucket',
+        name: $localize`Destination Bucket`,
         prop: 'dest.bucket',
         flexGrow: 1
       }
     ];
+
     const symAddAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -136,6 +170,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       canBePrimary: (selection: CdTableSelection) => selection.hasMultiSelection
     };
     this.symFlowTableActions = [symAddAction, symEditAction, symDeleteAction];
+
     const dirAddAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -154,6 +189,7 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       canBePrimary: (selection: CdTableSelection) => selection.hasSelection
     };
     this.dirFlowTableActions = [dirAddAction, dirDeleteAction];
+
     const pipeAddAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
@@ -178,46 +214,120 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
     this.pipeTableActions = [pipeAddAction, pipeEditAction, pipeDeleteAction];
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
-    if (changes.expandedRow.currentValue && changes.expandedRow.currentValue.groupName) {
+  ngOnInit(): void {
+    this.sub.add(
+      this.route.data.subscribe((data) => {
+        this.section = data['section'] ?? 'overview';
+      })
+    );
+
+    this.sub.add(
+      combineLatest([
+        this.route.parent?.paramMap ?? this.route.paramMap,
+        this.route.parent?.queryParamMap ?? this.route.queryParamMap
+      ]).subscribe(([pm, queryPm]: [ParamMap, ParamMap]) => {
+        this.groupName = pm.get('groupName') || '';
+        this.bucketName = queryPm.get('bucketName') || '';
+        this.loadData();
+      })
+    );
+  }
+
+  ngOnDestroy(): void {
+    this.sub.unsubscribe();
+  }
+
+  private getCurrentGroupContext() {
+    return {
+      groupName: this.groupName,
+      bucket: this.bucketName || undefined
+    };
+  }
+
+  private buildOverviewFields(policy: any): OverviewField[] {
+    const symmetricalCount = this.symmetricalFlowData.length;
+    const directionalCount = this.directionalFlowData.length;
+    const pipesCount = this.pipeData.length;
+
+    const status = policy?.status;
+    const zonegroup = policy?.zonegroup;
+
+    return [
+      {
+        label: $localize`Group Name`,
+        value: this.groupName
+      },
+      {
+        label: $localize`Status`,
+        value: status ? this.titleCasePipe.transform(status) : '-'
+      },
+      {
+        label: $localize`Scope`,
+        value: this.bucketName ? $localize`Bucket-level` : $localize`Zonegroup-level`
+      },
+      {
+        label: $localize`Associated Zonegroup`,
+        value: zonegroup || '-'
+      },
+      {
+        label: $localize`Associated Bucket`,
+        value: this.bucketName || '-'
+      },
+      {
+        label: $localize`Total Flows`,
+        value: `${symmetricalCount} ${$localize`Symmetrical`}, ${directionalCount} ${$localize`Directional`}`
+      },
+      {
+        label: $localize`Total Pipes`,
+        value: pipesCount
+      }
+    ];
+  }
+
+  loadData(context?: CdTableFetchDataContext): void {
+    if (!this.groupName) {
+      this.hasPolicyGroup = false;
+      this.notFound = true;
+      this.overviewFields = [];
       this.symmetricalFlowData = [];
       this.directionalFlowData = [];
-      this.loadData();
+      this.pipeData = [];
+      return;
     }
+
+    this.rgwMultisiteService.getSyncPolicyGroup(this.groupName, this.bucketName).subscribe({
+      next: (policy: any) => {
+        this.notFound = false;
+        this.hasPolicyGroup = true;
+        this.symmetricalFlowData = policy?.data_flow?.[FlowType.symmetrical] || [];
+        this.directionalFlowData = policy?.data_flow?.[FlowType.directional] || [];
+        this.pipeData = policy?.pipes || [];
+        this.overviewFields = this.buildOverviewFields(policy || {});
+      },
+      error: () => {
+        this.hasPolicyGroup = false;
+        this.notFound = true;
+        this.overviewFields = [];
+        if (context) {
+          context.error();
+        }
+      }
+    });
   }
 
-  loadData(context?: any) {
-    if (this.expandedRow) {
-      this.rgwMultisiteService
-        .getSyncPolicyGroup(this.expandedRow.groupName, this.expandedRow.bucket)
-        .subscribe(
-          (policy: any) => {
-            this.symmetricalFlowData = policy.data_flow[FlowType.symmetrical] || [];
-            this.directionalFlowData = policy.data_flow[FlowType.directional] || [];
-            this.pipeData = policy.pipes || [];
-          },
-          () => {
-            if (context) {
-              context.error();
-            }
-          }
-        );
-    }
-  }
-
-  updateSelection(selection: any, type: FlowType) {
+  updateSelection(selection: CdTableSelection, type: FlowType): void {
     if (type === FlowType.directional) {
       this.dirFlowSelection = selection;
-    } else {
-      this.symFlowSelection = selection;
+      return;
     }
+    this.symFlowSelection = selection;
   }
 
-  async openModal(flowType: FlowType, edit = false) {
+  async openModal(flowType: FlowType, edit = false): Promise<void> {
     const action = edit ? 'edit' : 'create';
     const initialState = {
       groupType: flowType,
-      groupExpandedRow: this.expandedRow,
+      groupExpandedRow: this.getCurrentGroupContext(),
       flowSelectedRow:
         flowType === FlowType.symmetrical
           ? this.symFlowSelection.first()
@@ -232,16 +342,21 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       if (res === NotificationType.success) {
         this.loadData();
       }
-    } catch (err) {}
+    } catch {
+      // Modal dismissed.
+    }
   }
 
-  deleteFlow(flowType: FlowType) {
+  deleteFlow(flowType: FlowType): void {
     this.resourceType = MultisiteResourceType.flow;
     let selection = this.symFlowSelection;
     if (flowType === FlowType.directional) {
       selection = this.dirFlowSelection;
     }
+
     const flowIds = selection.selected.map((flow: any) => flow.id);
+    const groupContext = this.getCurrentGroupContext();
+
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: selection.hasSingleSelection ? $localize`Flow` : $localize`Flows`,
       itemNames: flowIds,
@@ -258,25 +373,20 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
                   return this.rgwMultisiteService.removeSyncFlow(
                     flow.id,
                     flowType,
-                    this.expandedRow.groupName,
-                    this.expandedRow.bucket
+                    groupContext.groupName,
+                    groupContext.bucket
                   );
                 })
               )
             })
             .subscribe({
               error: (error: any) => {
-                // Forward the error to the observer.
                 observer.error(error);
-                // Reload the data table content because some deletions might
-                // have been executed successfully in the meanwhile.
-                this.table.refreshBtn();
+                this.table?.refreshBtn();
               },
               complete: () => {
-                // Notify the observer that we are done.
                 observer.complete();
-                // Reload the data table content.
-                this.table.refreshBtn();
+                this.table?.refreshBtn();
               }
             });
         });
@@ -284,10 +394,10 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
     });
   }
 
-  async openPipeModal(edit = false) {
+  async openPipeModal(edit = false): Promise<void> {
     const action = edit ? 'edit' : 'create';
     const initialState = {
-      groupExpandedRow: this.expandedRow,
+      groupExpandedRow: this.getCurrentGroupContext(),
       pipeSelectedRow: this.pipeSelection.first(),
       action: action
     };
@@ -299,12 +409,16 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
       if (res === NotificationType.success) {
         this.loadData();
       }
-    } catch (err) {}
+    } catch {
+      // Modal dismissed.
+    }
   }
 
-  deletePipe() {
+  deletePipe(): void {
     this.resourceType = MultisiteResourceType.pipe;
     const pipeIds = this.pipeSelection.selected.map((pipe: any) => pipe.id);
+    const groupContext = this.getCurrentGroupContext();
+
     this.cdsModalService.show(DeleteConfirmationModalComponent, {
       itemDescription: this.pipeSelection.hasSingleSelection ? $localize`Pipe` : $localize`Pipes`,
       itemNames: pipeIds,
@@ -320,25 +434,20 @@ export class RgwMultisiteSyncPolicyDetailsComponent implements OnChanges {
                 this.pipeSelection.selected.map((pipe: any) => {
                   return this.rgwMultisiteService.removeSyncPipe(
                     pipe.id,
-                    this.expandedRow.groupName,
-                    this.expandedRow.bucket
+                    groupContext.groupName,
+                    groupContext.bucket
                   );
                 })
               )
             })
             .subscribe({
               error: (error: any) => {
-                // Forward the error to the observer.
                 observer.error(error);
-                // Reload the data table content because some deletions might
-                // have been executed successfully in the meanwhile.
-                this.table.refreshBtn();
+                this.table?.refreshBtn();
               },
               complete: () => {
-                // Notify the observer that we are done.
                 observer.complete();
-                // Reload the data table content.
-                this.table.refreshBtn();
+                this.table?.refreshBtn();
               }
             });
         });
