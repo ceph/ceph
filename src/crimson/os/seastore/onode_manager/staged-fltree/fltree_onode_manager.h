@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <array>
+#include <map>
+#include <optional>
+#include <utility>
+
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
@@ -396,42 +401,77 @@ using OnodeTree = Btree<FLTreeOnode>;
 using crimson::common::get_conf;
 
 class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
-  OnodeTree tree;
+  // POC: one onode tree per collection, all on the one shared LBA. optional
+  // because Btree is neither movable nor default-constructible.
+  std::array<std::optional<OnodeTree>, MAX_ONODE_TREES> tree_pool;
 
   uint32_t default_data_reservation = 0;
+
+  // Slot 0 is the meta collection's, so it keeps the same tree across the OSD's
+  // mkfs-then-start remount.
+  static constexpr std::size_t META_SLOT = 0;
+
+  std::map<coll_t, OnodeTree*> trees;
+  std::size_t next_free_slot = META_SLOT + 1;
+
+  // Claims a tree on first touch. Synchronous, so `trees` is safe under the
+  // shard's cross-collection concurrency.
+  OnodeTree &tree_for(const coll_t &cid) {
+    auto [it, is_new] = trees.try_emplace(cid, nullptr);
+    if (is_new) {
+      ceph_assert(next_free_slot < MAX_ONODE_TREES);
+      it->second = &*tree_pool[next_free_slot++];
+    }
+    return *it->second;
+  }
+
 public:
   FLTreeOnodeManager(TransactionManager &tm) :
-    tree(NodeExtentManager::create_seastore(tm)),
     default_data_reservation(
       get_conf<uint64_t>("seastore_default_max_object_size"))
-  {}
+  {
+    for (std::size_t i = 0; i < MAX_ONODE_TREES; ++i) {
+      tree_pool[i].emplace(
+        NodeExtentManager::create_seastore(tm, L_ADDR_MIN, 0.0, i));
+    }
+    trees.emplace(coll_t::meta(), &*tree_pool[META_SLOT]);
+  }
 
   mkfs_ret mkfs(Transaction &t) {
-    return tree.mkfs(t);
+    // every slot gets an empty tree: load_root() requires a non-null root laddr
+    for (auto &tree : tree_pool) {
+      co_await tree->mkfs(t);
+    }
   }
 
   contains_onode_ret contains_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) final;
 
   get_onode_ret get_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) final;
 
   get_or_create_onode_ret get_or_create_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) final;
 
   get_or_create_onodes_ret get_or_create_onodes(
     Transaction &trans,
+    const coll_t &cid,
     const std::vector<ghobject_t> &hoids) final;
 
   erase_onode_ret erase_onode(
     Transaction &trans,
+    const coll_t &cid,
     OnodeRef &onode) final;
 
   list_onodes_ret list_onodes(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) final;
