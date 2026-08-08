@@ -606,6 +606,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'r'
         },
         {
+            'cmd': 'fs clone bulk cancel '
+                   'name=vol_name,type=CephString ',
+            'desc': "Cancel all pending clones in one shot.",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs bulk canceled clones rm '
+                   'name=vol_name,type=CephString ',
+            'desc': "Deletes all cancelled clones in one shot.",
+            'perm': 'rw'
+        },
+        {
             'cmd': 'fs subvolume snapshot_visibility set'
                    ' name=vol_name,type=CephString'
                    ' name=sub_name,type=CephString'
@@ -1147,6 +1159,14 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     def _cmd_fs_clone_cancel(self, inbuf, cmd):
         return self.vc.clone_cancel(
             vol_name=cmd['vol_name'], clone_name=cmd['clone_name'], group_name=cmd.get('group_name', None))
+
+    @mgr_cmd_wrap
+    def _cmd_fs_clone_bulk_cancel(self, inbuf, cmd):
+        return self.vc.clone_bulk_cancel(vol_name=cmd['vol_name'])
+
+    @mgr_cmd_wrap
+    def _cmd_fs_bulk_canceled_clones_rm(self, inbuf, cmd):
+        return self.vc.bulk_canceled_clones_rm(vol_name=cmd['vol_name'])
 
     # remote method
     def subvolume_getpath(self, vol_name, subvol, group_name):
