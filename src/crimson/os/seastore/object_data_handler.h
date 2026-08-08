@@ -6,6 +6,8 @@
 #include <iostream>
 #include <limits>
 
+#include <seastar/core/lowres_clock.hh>
+
 #include "include/buffer.h"
 
 #include "test/crimson/seastore/test_block.h" // TODO
@@ -344,6 +346,21 @@ public:
     Transaction &t;
     Onode &onode;
     Onode *d_onode = nullptr; // The desination node in case of clone
+    // Optional sinks for ObjectDataHandler::write stage timing
+    // (set from SeaStore::_write). Null => do not record.
+    seastar::lowres_clock::duration *odh_reserve_time = nullptr;
+    seastar::lowres_clock::duration *odh_get_pin_time = nullptr;
+    seastar::lowres_clock::duration *odh_get_pin_cursor_time = nullptr;
+    seastar::lowres_clock::duration *odh_get_pin_resolve_time = nullptr;
+    seastar::lowres_clock::duration *odh_overwrite_time = nullptr;
+    seastar::lowres_clock::duration *odh_overwrite_single_time = nullptr;
+    seastar::lowres_clock::duration *odh_overwrite_multi_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_prep_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_edge_read_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_punch_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_do_write_time = nullptr;
+    seastar::lowres_clock::duration *odh_multi_punch_time = nullptr;
+    seastar::lowres_clock::duration *odh_do_write_time = nullptr;
   };
 
   using touch_iertr = base_iertr;

@@ -451,6 +451,7 @@ ObjectDataHandler::write_ret do_write(
   data_t &data)
 {
   assert(data.bl);
+  auto t0 = seastar::lowres_clock::now();
   return ctx.tm.alloc_data_extents<ObjectDataBlock>(
     ctx.t,
     laddr_hint_t::create_as_fixed(overwrite_range.aligned_begin),
@@ -483,6 +484,11 @@ ObjectDataHandler::write_ret do_write(
       iter.copy(extent->get_length(), extent->get_bptr().c_str());
       off = (off + extent->get_length()).checked_to_laddr();
       left -= extent->get_length();
+    }
+    return ObjectDataHandler::write_iertr::now();
+  }).si_then([ctx, t0] {
+    if (ctx.odh_do_write_time) {
+      *ctx.odh_do_write_time += seastar::lowres_clock::now() - t0;
     }
     return ObjectDataHandler::write_iertr::now();
   }).handle_error_interruptible(
@@ -1033,7 +1039,11 @@ ObjectDataHandler::handle_single_mapping_overwrite(
     overwrite_range.aligned_begin,
     overwrite_range.aligned_len,
     op_type);
-  auto do_overwrite = [ctx, &overwrite_range, &data, op_type](auto pos) {
+  auto prep_start = seastar::lowres_clock::now();
+  auto do_overwrite = [ctx, prep_start, &overwrite_range, &data, op_type](auto pos) {
+    if (ctx.odh_single_prep_time) {
+      *ctx.odh_single_prep_time += seastar::lowres_clock::now() - prep_start;
+    }
     if (overwrite_range.is_empty()) {
       // the overwrite is completed in the previous steps,
       // this can happen if delta based overwrites are involved.
@@ -1060,7 +1070,15 @@ ObjectDataHandler::handle_single_mapping_overwrite(
       data.bl = std::move(bl);
     }
     if (data.bl) {
-      return do_write(ctx, std::move(pos), overwrite_range, data);
+      auto dw_start = seastar::lowres_clock::now();
+      return do_write(ctx, std::move(pos), overwrite_range, data
+      ).si_then([ctx, dw_start] {
+	if (ctx.odh_single_do_write_time) {
+	  *ctx.odh_single_do_write_time +=
+	    seastar::lowres_clock::now() - dw_start;
+	}
+	return write_iertr::now();
+      });
     } else {
       if (op_type == op_type_t::OP_CLONERANGE) {
 	return do_clonerange(ctx, std::move(pos), overwrite_range, data);
@@ -1077,12 +1095,24 @@ ObjectDataHandler::handle_single_mapping_overwrite(
 	extent_len_t>(overwrite_range.unaligned_begin);
       auto unaligned_len = overwrite_range.unaligned_len;
       return delta_based_overwrite(
-	ctx, unaligned_offset, unaligned_len, std::move(mapping), data.bl);
+	ctx, unaligned_offset, unaligned_len, std::move(mapping), data.bl
+      ).si_then([ctx, prep_start] {
+	if (ctx.odh_single_prep_time) {
+	  *ctx.odh_single_prep_time += seastar::lowres_clock::now() - prep_start;
+	}
+	return write_iertr::now();
+      });
     }
   case edge_handle_policy_t::MERGE_INPLACE:
     {
       return merge_into_mapping(
-	ctx, overwrite_range, data, std::move(mapping));
+	ctx, overwrite_range, data, std::move(mapping)
+      ).si_then([ctx, prep_start] {
+	if (ctx.odh_single_prep_time) {
+	  *ctx.odh_single_prep_time += seastar::lowres_clock::now() - prep_start;
+	}
+	return write_iertr::now();
+      });
     }
   case edge_handle_policy_t::REMAP:
     {
@@ -1095,13 +1125,29 @@ ObjectDataHandler::handle_single_mapping_overwrite(
 	edge = static_cast<edge_t>(edge | edge_t::RIGHT);
       }
       if (edge != edge_t::NONE) {
+	auto edge_start = seastar::lowres_clock::now();
 	fut = read_unaligned_edge_data(
-	  ctx, overwrite_range, data, mapping, edge);
+	  ctx, overwrite_range, data, mapping, edge
+	).si_then([ctx, edge_start] {
+	  if (ctx.odh_single_edge_read_time) {
+	    *ctx.odh_single_edge_read_time +=
+	      seastar::lowres_clock::now() - edge_start;
+	  }
+	  return base_iertr::now();
+	});
       }
       return fut.si_then([ctx, &overwrite_range, mapping] {
+	auto punch_start = seastar::lowres_clock::now();
 	return ctx.tm.punch_hole_in_mapping<ObjectDataBlock>(
 	  ctx.t, overwrite_range.aligned_begin,
-	  overwrite_range.aligned_len, std::move(mapping));
+	  overwrite_range.aligned_len, std::move(mapping)
+	).si_then([ctx, punch_start](auto pos) {
+	  if (ctx.odh_single_punch_time) {
+	    *ctx.odh_single_punch_time +=
+	      seastar::lowres_clock::now() - punch_start;
+	  }
+	  return base_iertr::make_ready_future<LBAMapping>(std::move(pos));
+	});
       }).si_then([do_overwrite=std::move(do_overwrite)](auto pos) {
 	return do_overwrite(std::move(pos));
       });
@@ -1119,9 +1165,14 @@ ObjectDataHandler::handle_multi_mapping_overwrite(
   LBAMapping first_mapping,
   op_type_t op_type)
 {
+  auto punch_start = seastar::lowres_clock::now();
   return punch_multi_mapping_hole(
     ctx, overwrite_range, data, std::move(first_mapping), op_type
-  ).si_then([ctx, &overwrite_range, &data, op_type](auto pos) {
+  ).si_then([ctx, &overwrite_range, &data, op_type, punch_start](auto pos) {
+    if (ctx.odh_multi_punch_time) {
+      *ctx.odh_multi_punch_time +=
+	seastar::lowres_clock::now() - punch_start;
+    }
     if (overwrite_range.is_empty()) {
       // the overwrite is completed in the previous steps,
       // this can happen if delta based overwrites are involved.
@@ -1188,14 +1239,29 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
       ctx.tm.get_block_size()},
     [first_mapping=std::move(first_mapping),
     this, ctx](auto &data, auto &overwrite_range) {
+    auto op = data.bl.has_value() ? op_type_t::OVERWRITE : op_type_t::ZERO;
     if (overwrite_range.is_range_in_mapping(first_mapping)) {
+      auto t0 = seastar::lowres_clock::now();
       return handle_single_mapping_overwrite(
-	ctx, overwrite_range, data, std::move(first_mapping),
-	data.bl.has_value() ? op_type_t::OVERWRITE : op_type_t::ZERO);
+	ctx, overwrite_range, data, std::move(first_mapping), op
+      ).si_then([ctx, t0] {
+	if (ctx.odh_overwrite_single_time) {
+	  *ctx.odh_overwrite_single_time +=
+	    seastar::lowres_clock::now() - t0;
+	}
+	return write_iertr::now();
+      });
     } else {
+      auto t0 = seastar::lowres_clock::now();
       return handle_multi_mapping_overwrite(
-	ctx, overwrite_range, data, std::move(first_mapping),
-	data.bl.has_value() ? op_type_t::OVERWRITE : op_type_t::ZERO);
+	ctx, overwrite_range, data, std::move(first_mapping), op
+      ).si_then([ctx, t0] {
+	if (ctx.odh_overwrite_multi_time) {
+	  *ctx.odh_overwrite_multi_time +=
+	    seastar::lowres_clock::now() - t0;
+	}
+	return write_iertr::now();
+      });
     }
   });
 }
@@ -1423,26 +1489,52 @@ ObjectDataHandler::write_ret ObjectDataHandler::write(
 	     object_data.get_reserved_data_base(),
 	     object_data.get_reserved_data_len(),
              object_data.is_null());
+      auto reserve_start = seastar::lowres_clock::now();
       return prepare_data_reservation(
 	ctx,
 	ctx.onode,
 	object_data,
 	p2roundup(offset + bl.length(), ctx.tm.get_block_size())
-      ).si_then([this, ctx, offset, &object_data, &bl]
+      ).si_then([this, ctx, offset, &object_data, &bl, reserve_start]
 		(auto mapping) -> write_ret {
+	if (ctx.odh_reserve_time) {
+	  *ctx.odh_reserve_time += seastar::lowres_clock::now() - reserve_start;
+	}
 	auto data_base = object_data.get_reserved_data_base();
+	auto time_overwrite = [ctx](auto fut, auto ow_start) {
+	  return std::move(fut).si_then([ctx, ow_start] {
+	    if (ctx.odh_overwrite_time) {
+	      *ctx.odh_overwrite_time +=
+		seastar::lowres_clock::now() - ow_start;
+	    }
+	    return write_iertr::now();
+	  });
+	};
 	if (mapping) {
-	  return overwrite(
-	    ctx, data_base, offset, bl.length(),
-	    bufferlist(bl), std::move(*mapping));
+	  auto ow_start = seastar::lowres_clock::now();
+	  return time_overwrite(
+	    overwrite(
+	      ctx, data_base, offset, bl.length(),
+	      bufferlist(bl), std::move(*mapping)),
+	    ow_start);
 	}
 	laddr_offset_t l_start = data_base + offset;
+	auto pin_start = seastar::lowres_clock::now();
 	return ctx.tm.get_containing_pin(
-	  ctx.t, l_start.get_aligned_laddr(ctx.tm.get_block_size())
-	).si_then([this, ctx, offset, data_base, &bl](auto pin) {
-	  return overwrite(
-	    ctx, data_base, offset, bl.length(),
-	    bufferlist(bl), std::move(pin));
+	  ctx.t, l_start.get_aligned_laddr(ctx.tm.get_block_size()),
+	  ctx.odh_get_pin_cursor_time,
+	  ctx.odh_get_pin_resolve_time
+	).si_then([this, ctx, offset, data_base, &bl, pin_start,
+		   time_overwrite=std::move(time_overwrite)](auto pin) {
+	  if (ctx.odh_get_pin_time) {
+	    *ctx.odh_get_pin_time += seastar::lowres_clock::now() - pin_start;
+	  }
+	  auto ow_start = seastar::lowres_clock::now();
+	  return time_overwrite(
+	    overwrite(
+	      ctx, data_base, offset, bl.length(),
+	      bufferlist(bl), std::move(pin)),
+	    ow_start);
 	}).handle_error_interruptible(
 	  write_iertr::pass_further{},
 	  crimson::ct_error::assert_all("unexpected enoent")
