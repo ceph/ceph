@@ -4404,6 +4404,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",pglog_hardlimit";
   if (f & CEPH_OSDMAP_NOAUTOSCALE)
     s += ",noautoscale";
+  if (f & CEPH_OSDMAP_SIMPLEAUTOSCALE)
+    s += ",simpleautoscale";
   if (s.length())
     s.erase(0, 1);
   return s;

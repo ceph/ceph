@@ -1145,6 +1145,33 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    /**
+     * EFFECTIVE_RATIO
+     *
+     * The pool's share (0.0, 1.0] of its budget domain's PG budget
+     * (OSD count x mon_target_pg_per_osd, in PG replicas). May be set
+     * (pre-staged) at any time but is inert unless the osdmap's
+     * SIMPLEAUTOSCALE flag is set; while it is, the pg_autoscaler plans
+     * pg_num = ratio x budget / pool size and stamps divergences as
+     * PLANNED_PG_NUM. Unlike TARGET_SIZE_RATIO it is absolute: never
+     * normalized against other pools and never overridden by actual
+     * usage.
+     */
+    EFFECTIVE_RATIO,
+    /**
+     * PLANNED_PG_NUM
+     *
+     * The pg_num the autoscaler's current plan calls for, stamped by the
+     * pg_autoscaler whenever a pool's plan diverges from its pg_num.
+     * 'osd pool autoscale-accept' applies exactly this stamped value and
+     * clears it in one osdmap transaction, so what the operator saw in
+     * autoscale-status is what they get; on mode 'on' pools the mgr
+     * invokes the same acceptance automatically unless the plan is a
+     * large merge (see mon_osd_pool_pg_merge_confirm_bytes). The derived
+     * plan state (learn/pending/current) is reported by 'osd pool get
+     * pg_autoscale_plan'.
+     */
+    PLANNED_PG_NUM,
   };
 
   enum type_t {

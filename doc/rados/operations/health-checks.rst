@@ -1450,7 +1450,54 @@ To reset ``target_size_bytes`` to zero, run a command of the following form:
 
    ceph osd pool set <pool-name> target_size_bytes 0
 
-For more information, see :ref:`specifying_pool_target_size`.
+POOL_EFFECTIVE_RATIO_OVERCOMMITTED
+__________________________________
+
+The ``effective_ratio`` values of the pools that share an autoscaler
+budget domain (a CRUSH root or device-class shadow root) sum to more than
+1.0. The pg_autoscaler cannot plan every pool at its full share; lower one
+or more ratios, or raise ``mon_target_pg_per_osd`` if the OSDs have the
+resources to carry more placement groups.
+
+POOL_AUTOSCALE_PENDING
+______________________
+
+One or more pools have an autoscaler plan awaiting acceptance: the plan
+(visible as ``planned_pg_num`` and in the NEW PG_NUM column of ``ceph osd
+pool autoscale-status``) diverged from the pool's current ``pg_num``,
+typically because OSDs were added or removed, ``mon_target_pg_per_osd``
+changed, or the pool's ``effective_ratio`` was edited. A mode ``warn``
+pool always waits for the operator; a mode ``on`` pool appears here only
+when its plan is a large merge held for manual confirmation (see
+``mon_osd_pool_pg_merge_confirm_bytes``). Nothing will move until each
+listed pool's plan is accepted:
+
+.. prompt:: bash #
+
+   ceph osd pool autoscale-accept <pool-name>
+
+For more information, see :ref:`simple_autoscaling`.
+
+POOL_PLAN_CLAMPED_BY_PG_NUM_MAX
+_______________________________
+
+One or more pools have an ``effective_ratio`` whose plan implies a
+``pg_num`` larger than the pool's ``pg_num_max``. ``pg_num_max`` wins, so
+the pool runs with fewer PGs than its ratio promises. Raise or unset
+``pg_num_max``, or lower the ratio.
+
+POOL_PG_SIZE_DRIFT
+__________________
+
+A simple-mode pool stores substantially more data per PG than the cluster
+median (by default more than 4x, tunable via
+``mgr/pg_autoscaler/pg_size_drift_warn_multiple``). Planned pools do not
+gain PGs as they fill, so oversized PGs degrade scrub, backfill, and
+balancer granularity until the ratio is raised. Raise the pool's
+``effective_ratio`` (lowering another pool's ratio first if the budget is
+fully committed).
+
+For more information, see :ref:`simple_autoscaling`.
 
 TOO_FEW_OSDS
 ____________

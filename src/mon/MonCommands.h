@@ -887,13 +887,13 @@ COMMAND("osd erasure-code-profile ls",
 COMMAND("osd set "
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"
 	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|"
-	"notieragent|nosnaptrim|pglog_hardlimit|noautoscale "
+	"notieragent|nosnaptrim|pglog_hardlimit|noautoscale|simpleautoscale "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set <key>", "osd", "rw")
 COMMAND("osd unset "
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"\
 	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|"
-	"notieragent|nosnaptrim|noautoscale",
+	"notieragent|nosnaptrim|noautoscale|simpleautoscale",
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
 	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef|squid|tentacle|umbrella "
@@ -1145,6 +1145,8 @@ COMMAND("osd pool create "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
+	"name=effective_ratio,type=CephFloat,range=0.0|1.0,req=false "\
+	"name=dry_run,type=CephBool,req=false "\
 	"name=yes_i_really_mean_it,type=CephBool,req=false"
 	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
@@ -1195,6 +1197,7 @@ COMMAND("osd pool get "
           "|dedup_tier"
           "|ec_coding_shard_count"
           "|ec_data_shard_count"
+          "|effective_ratio"
           "|eio"
           "|erasure_code_profile"
           "|fast_read"
@@ -1217,10 +1220,12 @@ COMMAND("osd pool get "
           "|pct_update_delay"
           "|pg_autoscale_bias"
           "|pg_autoscale_mode"
+          "|pg_autoscale_plan"
           "|pg_num"
           "|pg_num_max"
           "|pg_num_min"
           "|pgp_num"
+          "|planned_pg_num"
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"
@@ -1260,6 +1265,7 @@ COMMAND("osd pool set "
           "|dedup_cdc_chunk_size"
           "|dedup_chunk_algorithm"
           "|dedup_tier"
+          "|effective_ratio"
           "|eio"
           "|fast_read"
           "|fingerprint_algorithm"
@@ -1286,6 +1292,7 @@ COMMAND("osd pool set "
           "|pg_num_min"
           "|pgp_num"
           "|pgp_num_actual"
+          "|planned_pg_num"
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"
@@ -1302,11 +1309,18 @@ COMMAND("osd pool set "
           "|use_gmt_hitset"
           "|write_fadvise_dontneed "
 	"name=val,type=CephString "
+	"name=dry_run,type=CephBool,req=false "
 	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set pool parameter <var> to <val>", "osd", "rw")
 // 'val' is a CephString because it can include a unit.  Perhaps
 // there should be a Python type for validation/conversion of strings
 // with units.
+COMMAND("osd pool autoscale-accept "
+	"name=pools,type=CephString,n=N,req=false "
+	"name=all,type=CephBool,req=false "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
+	"accept the pg_autoscaler's planned pg_num for the given pools "
+	"(or --all) in one atomic osdmap change", "osd", "rw")
 COMMAND("osd pool set-quota "
 	"name=pool,type=CephPoolname "
 	"name=field,type=CephChoices,strings=max_objects|max_bytes "

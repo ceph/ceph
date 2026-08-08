@@ -142,8 +142,12 @@ The output will resemble the following::
      that collectively they target cluster capacity. For example, four pools
      with target_ratio 1.0 would each have an effective ratio of 0.25.
 
-  The system's calculations use whichever of these two ratios (that is, the 
+  The system's calculations use whichever of these two ratios (that is, the
   target ratio and the effective ratio) is greater.
+
+  Pools with an ``effective_ratio`` (see :ref:`simple_autoscaling`)
+  display their declared ratio here verbatim; neither of the two
+  adjustments above applies to them.
 
 - **BIAS** is used as a multiplier to manually adjust a pool's PG in accordance
   with prior information about how many PGs a specific pool is expected to
@@ -406,6 +410,140 @@ will be raised.
 Note that in most cases it is advised to not set both a bias value other than 1.0
 and a target ratio on the same pool.  Use a higher bias value for metadata /
 omap-rich pools and a target ratio for RADOS data-heavy pools.
+
+.. _simple_autoscaling:
+
+Simple autoscaling: ratio-driven plans
+--------------------------------------
+
+Operators who provision placement groups as a per-OSD budget ("every OSD
+should carry roughly 200 PG replicas") can hand each pool an absolute share
+of that budget with ``effective_ratio``. The ``simpleautoscale`` cluster
+flag is the master switch: while it is set, the autoscaler plans every
+pool's ``pg_num`` from its ratio; while it is unset, ratios are stored but
+inert and autoscaling behaves exactly as described above.
+
+.. prompt:: bash #
+
+   ceph osd pool set simpleautoscale
+   ceph config set global mon_target_pg_per_osd 250
+   ceph osd pool create foo erasure ec22 --effective-ratio 0.5
+   ceph osd pool create bar --effective-ratio 0.4
+   ceph osd pool create baz --effective-ratio 0.1
+
+A pool created this way is *born at its planned size*: the monitor computes
+``pg_num`` = ratio x budget / size (where the budget is OSD count x
+``mon_target_pg_per_osd`` in PG replicas, and size is the replica count or
+``k+m`` for erasure-coded pools), rounds to a power of two, and creates the
+pool with it. One set of ratios works irrespective of replication factor or
+erasure-code profile, and ``ceph osd pool get <pool> effective_ratio``
+always returns exactly the ratio that was declared. Add ``--dry-run`` to
+preview the plan without creating anything.
+
+Mode and plan are orthogonal: the ratio decides what the *plan* is, while
+``pg_autoscale_mode`` keeps its classic values and its classic meaning —
+whether the autoscaler may *act*. Each pool's plan state is derived, never
+stored, and is reported by ``ceph osd pool get <pool> pg_autoscale_plan``
+and the PLAN column of ``autoscale-status``:
+
+* ``learn`` — the pool has no ``effective_ratio`` yet (see
+  :ref:`transitioning <simple_autoscale_transition>` below).
+* ``pending`` — the plan differs from the pool's current ``pg_num``. The
+  planned value is stamped on the pool (visible as ``planned_pg_num`` and
+  in the NEW PG_NUM column) and the ``POOL_AUTOSCALE_PENDING`` health
+  notice lists it.
+* ``current`` — plan and ``pg_num`` agree; there is nothing to do.
+
+When the world changes — OSDs added or removed, ``mon_target_pg_per_osd``
+changed, a pool's ``effective_ratio`` edited — plans diverge and are
+stamped. What happens next is decided by each pool's mode:
+
+* Mode ``warn``: **nothing moves** until the operator reviews ``ceph osd
+  pool autoscale-status`` and accepts:
+
+  .. prompt:: bash #
+
+     ceph osd pool autoscale-accept <pool>
+
+  Acceptance applies exactly the stamped plan the operator reviewed —
+  never a newer one — and clears the stamp. Several pools may be named
+  at once, or ``--all`` to accept every pending plan: the whole set is
+  validated up front and applied in a single osdmap transaction, so a
+  reviewed plan-set commits as one atomic change. Accepting a plan that
+  reduces ``pg_num`` by more than half on a pool storing more than
+  ``mon_osd_pool_pg_merge_confirm_bytes`` (default 1 TiB) requires
+  ``--yes-i-really-mean-it``.
+
+* Mode ``on``: the autoscaler invokes the same acceptance automatically,
+  with one exception: a plan that would require the confirmation above — a
+  large merge, for example after OSDs are lost — is *held* in ``pending``
+  for manual, confirmed acceptance. Growth is hands-off; destructive
+  shrinks get a human sign-off.
+
+* Mode ``off``: the planner ignores the pool entirely.
+
+While the flag is set, the legacy autoscaler knobs —
+``target_size_ratio``, ``target_size_bytes``, ``pg_autoscale_bias`` and
+``bulk`` — are rejected cluster-wide (values already set are simply
+inert), and ``autoscale-status`` switches to a concise table (POOL,
+EFFECTIVE RATIO, PG_NUM, NEW PG_NUM, AUTOSCALE, PLAN; the JSON output
+remains complete).
+
+Actual usage never overrides a plan: a pool that outgrows its share stores
+more data per PG instead, reported by the ``POOL_PG_SIZE_DRIFT`` health
+warning when its bytes-per-PG exceeds a multiple (default 4x, tunable via
+``mgr/pg_autoscaler/pg_size_drift_warn_multiple``) of the cluster median.
+Ratios summing past 1.0 on one budget domain raise
+``POOL_EFFECTIVE_RATIO_OVERCOMMITTED``, and a plan capped by the pool's
+``pg_num_max`` raises ``POOL_PLAN_CLAMPED_BY_PG_NUM_MAX``. Note that
+``mon_target_pg_per_osd`` should be set globally so that the monitor
+(which computes birth sizes, dry runs, and acceptance) and the manager
+(which plans) agree on the budget.
+
+Budget domains
+~~~~~~~~~~~~~~
+
+A ratio is scoped to the pool's autoscaler budget domain: the CRUSH
+subtree that the pool's rule resolves to. For rules that select a device
+class this is the class's shadow root (for example ``default~ssd``), so
+pools on different device classes draw from separate budgets even under
+one nominal root. When an OSD serves more than one budget domain — for
+example, when a class-less rule (used by pools such as ``.mgr``) keeps the
+nominal root in play alongside device-class shadow roots — its per-OSD
+budget is split evenly between those domains and plans are prorated by the
+same split. Unreserved pools receive whatever budget the ratios leave
+behind (pools with ``target_size_ratio`` normalize into that remainder),
+and the autoscaler's per-pool minimum (32 PGs, or ``pg_num_min``) bounds
+any plan from below.
+
+.. _simple_autoscale_transition:
+
+Transitioning an existing cluster
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The recommended runbook makes the transition a reviewed,
+no-op-by-construction process:
+
+.. prompt:: bash #
+
+   ceph osd pool ls | while read p; do ceph osd pool set $p pg_autoscale_mode warn; done
+   ceph osd pool set simpleautoscale
+
+Setting every pool to ``warn`` first guarantees nothing acts during the
+transition; a pool deliberately left in ``on`` keeps its autonomy, because
+that is what ``on`` means. Once the flag is set, a pool without a ratio
+has no plan — so no mode can move it — and shows plan ``learn`` while its
+``effective_ratio`` is *learned* from its current ``pg_num`` (fill-only:
+a declared ratio is never overwritten). Ratios may also be pre-staged with
+``ceph osd pool set <pool> effective_ratio`` before the flag is flipped.
+A learned ratio reproduces the pool's current ``pg_num``, so its plan
+lands ``current``: nothing is pending and nothing moves. From then on,
+divergences surface as ``pending`` plans to accept at leisure — or flip a
+pool to ``on`` once you trust its ratio to run hands-off.
+
+``ceph osd pool unset simpleautoscale`` rolls back completely: the
+machinery never touches ``pg_autoscale_mode``, ratios remain stored but
+inert, and every pool resumes legacy autoscaling.
 
 
 Specifying bounds on a pool's PGs

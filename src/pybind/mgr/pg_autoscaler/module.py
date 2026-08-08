@@ -72,18 +72,21 @@ def nearest_power_of_two(n: float, direction: str = "nearest") -> int:
 def effective_target_ratio(target_ratio: float,
                            total_target_ratio: float,
                            total_target_bytes: int,
-                           capacity: int) -> float:
+                           capacity: int,
+                           total_pinned_ratio: float = 0.0) -> float:
     """
     Returns the target ratio after normalizing for ratios across pools and
-    adjusting for capacity reserved by pools that have target_size_bytes set.
+    adjusting for capacity reserved by pools that have target_size_bytes or
+    an effective_ratio set.
     """
     target_ratio = float(target_ratio)
     if total_target_ratio:
         target_ratio = target_ratio / total_target_ratio
 
+    fraction_available = 1.0 - min(1.0, total_pinned_ratio)
     if total_target_bytes and capacity:
-        fraction_available = 1.0 - min(1.0, float(total_target_bytes) / capacity)
-        target_ratio *= fraction_available
+        fraction_available -= min(1.0, float(total_target_bytes) / capacity)
+    target_ratio *= max(0.0, fraction_available)
 
     return target_ratio
 
@@ -126,6 +129,7 @@ class CrushRootResourceStatus:
         self.pool_used = 0
         self.total_target_ratio = 0.0
         self.total_target_bytes = 0  # including replication / EC overhead
+        self.total_pinned_ratio = 0.0  # sum of planner pools' effective_ratio
 
 
 class BacktrackNode(NamedTuple):
@@ -207,6 +211,17 @@ class PgAutoscaler(MgrModule):
                        '`PG_NUM` before being accepted. Cannot be less than 1.0'),
             default=3.0,
             min=1.0),
+
+        Option(
+            name='pg_size_drift_warn_multiple',
+            type='float',
+            desc='bytes-per-PG drift multiple for simple-provisioned pools',
+            long_desc=('Warn when a pool with an effective_ratio stores more '
+                       'than this multiple of the cluster median bytes per PG. '
+                       'Planned pools do not gain PGs as they grow, so this is '
+                       'the signal that a ratio has fallen behind the data.'),
+            default=4.0,
+            min=1.0),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
@@ -221,6 +236,7 @@ class PgAutoscaler(MgrModule):
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
             self.threshold = 3.0
+            self.pg_size_drift_warn_multiple = 4.0
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -246,6 +262,39 @@ class PgAutoscaler(MgrModule):
 
         if format in ('json', 'json-pretty'):
             return 0, json.dumps(ps, indent=4, sort_keys=True), ''
+        elif self.has_simpleautoscale_flag():
+            # simple autoscaling: the legacy columns describe the model
+            # being left behind, so show only what the plan/accept
+            # lifecycle needs (JSON output remains complete)
+            table = PrettyTable(['POOL', 'EFFECTIVE RATIO', 'PG_NUM',
+                                 'NEW PG_NUM', 'AUTOSCALE', 'PLAN'],
+                                border=False)
+            table.left_padding_width = 0
+            table.right_padding_width = 2
+            table.align['POOL'] = 'l'
+            table.align['EFFECTIVE RATIO'] = 'r'
+            table.align['PG_NUM'] = 'r'
+            table.align['NEW PG_NUM'] = 'r'
+            table.align['AUTOSCALE'] = 'l'
+            table.align['PLAN'] = 'l'
+            for p in ps:
+                if p.get('planner') and p['pg_num_final'] != p['pg_num_target']:
+                    final = str(p['pg_num_final'])
+                else:
+                    final = ''
+                if p['effective_target_ratio'] > 0.0:
+                    etr = '%.4f' % p['effective_target_ratio']
+                else:
+                    etr = ''
+                table.add_row([
+                    p['pool_name'],
+                    etr,
+                    p['pg_num_target'],
+                    final,
+                    str(p['pg_autoscale_mode']),
+                    str(p.get('pg_autoscale_plan', '')),
+                ])
+            return 0, table.get_string(), ''
         else:
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',
@@ -385,6 +434,61 @@ class PgAutoscaler(MgrModule):
             })
             return 0, "", "noautoscale is unset, all pools now back to its previous mode"
 
+    def has_simpleautoscale_flag(self) -> bool:
+        flags = self.get_osdmap().dump().get('flags', '')
+        if 'simpleautoscale' in flags:
+            return True
+        else:
+            return False
+
+    @PGAutoscalerCLICommand.Write("osd pool set simpleautoscale")
+    def set_simpleautoscale(self) -> Tuple[int, str, str]:
+        """
+        Switch to simple (ratio-driven) autoscaling: the autoscaler plans
+        each pool's pg_num from its effective_ratio share of the PG budget
+        and learns a ratio for pools that lack one from their current
+        pg_num. Divergent plans are stamped as planned_pg_num: mode 'on'
+        pools apply them automatically (large merges are held), mode
+        'warn' pools wait for 'osd pool autoscale-accept'. Unset the flag
+        to roll back to legacy autoscaling; ratios remain stored but
+        inert.
+        """
+        if self.has_simpleautoscale_flag():
+            return 0, "", "simpleautoscale is already set!"
+        r = self.mon_command({
+            'prefix': 'osd set',
+            'key': 'simpleautoscale'
+        })
+        if r[0] != 0:
+            return r[0], "", r[2]
+        return 0, "", "simpleautoscale is set: planning from effective " \
+            "ratios, learning missing ones"
+
+    @PGAutoscalerCLICommand.Write("osd pool unset simpleautoscale")
+    def unset_simpleautoscale(self) -> Tuple[int, str, str]:
+        """
+        Unset the simpleautoscale flag: all pools resume legacy
+        (usage-driven) autoscaling per their pg_autoscale_mode. Declared
+        and learned effective ratios remain stored but inert.
+        """
+        if not self.has_simpleautoscale_flag():
+            return 0, "", "simpleautoscale is already unset!"
+        self.mon_command({
+            'prefix': 'osd unset',
+            'key': 'simpleautoscale'
+        })
+        return 0, "", "simpleautoscale is unset, legacy autoscaling resumes"
+
+    @PGAutoscalerCLICommand.Read("osd pool get simpleautoscale")
+    def get_simpleautoscale(self) -> Tuple[int, str, str]:
+        """
+        Get the simpleautoscale flag.
+        """
+        if self.has_simpleautoscale_flag():
+            return 0, "", "simpleautoscale is on"
+        else:
+            return 0, "", "simpleautoscale is off"
+
     @PGAutoscalerCLICommand.Write("osd pool set noautoscale")
     def set_noautoscale(self) -> Tuple[int, str, str]:
         """
@@ -435,6 +539,7 @@ class PgAutoscaler(MgrModule):
 
         # We identify subtrees from osdmap
 
+        simple_flag = self.has_simpleautoscale_flag()
         for pool_name, pool in pools.items():
             crush_rule = crush.get_rule_by_id(pool['crush_rule'])
             assert crush_rule is not None
@@ -455,8 +560,13 @@ class PgAutoscaler(MgrModule):
             s.pool_ids.append(pool['pool'])
             s.pool_names.append(pool_name)
             s.pg_current += pool['pg_num_target'] * pool['size']
+            ratio = pool['options'].get('effective_ratio', 0.0)
+            planner = ratio > 0.0 and pool['pg_autoscale_mode'] != 'off' \
+                and simple_flag
             target_ratio = pool['options'].get('target_size_ratio', 0.0)
-            if target_ratio:
+            if planner:
+                s.total_pinned_ratio += ratio
+            elif target_ratio:
                 s.total_target_ratio += target_ratio
             else:
                 target_bytes = pool['options'].get('target_size_bytes', 0)
@@ -732,11 +842,15 @@ class PgAutoscaler(MgrModule):
             bulk: bool,
             p: Dict[str, Any],
             pool_metrics: Dict[str, Dict[str, Any]],
+            simple_flag: bool,
     ) -> None:
         raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
+        ratio = p['options'].get('effective_ratio', 0.0)
+        planner = ratio > 0.0 and p['pg_autoscale_mode'] != 'off' \
+            and simple_flag
         target_bytes = 0
         # ratio takes precedence if both are set
-        if p['options'].get('target_size_ratio', 0.0) == 0.0:
+        if p['options'].get('target_size_ratio', 0.0) == 0.0 and not planner:
             target_bytes = p['options'].get('target_size_bytes', 0)
 
         # What proportion of space are we using?
@@ -751,10 +865,19 @@ class PgAutoscaler(MgrModule):
             root_map[root_id].total_target_bytes,
             capacity))
 
-        target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
-                                            root_map[root_id].total_target_ratio,
-                                            root_map[root_id].total_target_bytes,
-                                            int(capacity))
+        pinned_pgs = 0.0
+        if planner:
+            # simple provisioning: the pool's plan is its declared share of
+            # the domain budget, never normalized against other pools and
+            # never overridden by actual usage
+            pinned_pgs = ratio * root_map[root_id].pg_target
+            target_ratio = ratio
+        else:
+            target_ratio = effective_target_ratio(p['options'].get('target_size_ratio', 0.0),
+                                                root_map[root_id].total_target_ratio,
+                                                root_map[root_id].total_target_bytes,
+                                                int(capacity),
+                                                root_map[root_id].total_pinned_ratio)
         pool_id = p['pool']
         pool_metrics[pool_id] = {
             'target_bytes': target_bytes,
@@ -764,6 +887,8 @@ class PgAutoscaler(MgrModule):
             'pool_raw_used': pool_raw_used,
             'capacity_ratio': capacity_ratio,
             'target_ratio': target_ratio,
+            'pinned_pgs': pinned_pgs,
+            'planner': planner,
             'bulk': bulk,
         }
 
@@ -854,6 +979,7 @@ class PgAutoscaler(MgrModule):
                     'would_adjust': adjust,
                     'bias': p.get('options', {}).get('pg_autoscale_bias', 1.0),
                     'bulk': metrics['bulk'],
+                    'planner': metrics.get('planner', False),
                 })
 
             for copy in ret_copy:
@@ -876,6 +1002,7 @@ class PgAutoscaler(MgrModule):
         Add pools to PoolGroups where all pools with the same GroupKey are
         allocated the same number of PGs
         """
+        simple_flag = self.has_simpleautoscale_flag()
         for pool_name, p in pools.items():
             pool_id = p['pool']
             if pool_id not in pool_stats:
@@ -900,13 +1027,21 @@ class PgAutoscaler(MgrModule):
             flags = p['flags_names'].split(",")
             if "bulk" in flags:
                 bulk = True
-            self._calculate_pool_metrics(osdmap, root_map, root_id, pool_id, pool_stats, capacity, bulk, p, pool_metrics)
+            self._calculate_pool_metrics(osdmap, root_map, root_id, pool_id, pool_stats, capacity, bulk, p, pool_metrics, simple_flag)
             metrics = pool_metrics[pool_id]
             pg_left = root_map[root_id].pg_left
             self.log.debug("{} metrics: {}".format(p['pool_name'], metrics))
 
-            capacity_ratio = max(metrics['capacity_ratio'], metrics['target_ratio'])
-            pg_target_managed = int(capacity_ratio * pg_left)
+            if metrics['pinned_pgs'] > 0:
+                # planner pools get exactly their planned replica count:
+                # usage does not override the plan, bias does not scale it,
+                # and the pool is never subject to bulk/even distribution
+                pg_target_managed = int(metrics['pinned_pgs'])
+                bulk = False
+                bias = 1.0
+            else:
+                capacity_ratio = max(metrics['capacity_ratio'], metrics['target_ratio'])
+                pg_target_managed = int(capacity_ratio * pg_left)
             pg_target_unmanaged = p['pg_num_target'] * p['size']
             autoscale = p['pg_autoscale_mode'] != 'off'
             self.log.debug("pool {} capacity ratio: {} target ratio {} pg_num_target {}".format(pool_name, metrics['capacity_ratio'], metrics['target_ratio'], p['pg_num_target']))
@@ -971,6 +1106,30 @@ class PgAutoscaler(MgrModule):
             for p in ret:
                 p['pg_autoscale_mode'] = 'off'
 
+        # derive the plan state, mirroring 'osd pool get pg_autoscale_plan':
+        # learn until a pool has an effective_ratio, pending while its plan
+        # differs from pg_num, current once they agree
+        simple_flag = self.has_simpleautoscale_flag()
+        for p in ret:
+            if not simple_flag:
+                p['pg_autoscale_plan'] = ''
+                continue
+            if p.get('planner'):
+                p['pg_autoscale_plan'] = (
+                    'pending' if p['pg_num_final'] != p['pg_num_target']
+                    else 'current')
+                continue
+            opts = pools[p['pool_name']]['options']
+            if opts.get('effective_ratio', 0.0) > 0.0:
+                # mode 'off': the planner ignores the pool, so report
+                # against whatever stamp it may still carry
+                planned = opts.get('planned_pg_num', 0)
+                p['pg_autoscale_plan'] = (
+                    'pending' if planned > 0 and planned != p['pg_num_target']
+                    else 'current')
+            else:
+                p['pg_autoscale_plan'] = 'learn'
+
         return (ret, root_map)
 
     def _get_pool_by_id(self,
@@ -1030,6 +1189,25 @@ class PgAutoscaler(MgrModule):
         total_bytes = dict([(r, 0) for r in iter(root_map)])
         total_target_bytes = dict([(r, 0.0) for r in iter(root_map)])
         target_bytes_pools: Dict[int, List[int]] = dict([(r, []) for r in iter(root_map)])
+        simple_flag = self.has_simpleautoscale_flag()
+        total_pinned = dict([(r, 0.0) for r in iter(root_map)])
+        pinned_pools: Dict[int, List[str]] = dict([(r, []) for r in iter(root_map)])
+        plan_clamped: List[str] = []
+        pg_drift: List[str] = []
+        pending_accept: List[str] = []
+        # cluster median bytes-per-PG, used to detect pinned pools whose
+        # data has outgrown their pinned PG count
+        all_bytes_per_pg = sorted(
+            p['logical_used'] / max(p['pg_num_target'], 1)
+            for p in ps if p['logical_used'] > 0)
+        median_bytes_per_pg = 0.0
+        if len(all_bytes_per_pg) >= 2:
+            mid = len(all_bytes_per_pg) // 2
+            if len(all_bytes_per_pg) % 2:
+                median_bytes_per_pg = all_bytes_per_pg[mid]
+            else:
+                median_bytes_per_pg = (
+                    all_bytes_per_pg[mid - 1] + all_bytes_per_pg[mid]) / 2.0
 
         for p in ps:
             pool_id = p['pool_id']
@@ -1043,6 +1221,98 @@ class PgAutoscaler(MgrModule):
             if p['target_bytes'] > 0:
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
+            ratio = pool_opts.get('effective_ratio', 0.0)
+            mode = p['pg_autoscale_mode']
+            planner = ratio > 0.0 and mode != 'off' and simple_flag
+            if planner:
+                total_pinned[p['crush_root_id']] += ratio
+                pinned_pools[p['crush_root_id']].append(p['pool_name'])
+                root = root_map[p['crush_root_id']]
+                size = pools[p['pool_name']]['size']
+                ideal_pg_num = int(ratio * root.pg_target / size)
+                pg_num_max = pool_opts.get('pg_num_max', 0)
+                if pg_num_max and pg_num_max < ideal_pg_num:
+                    plan_clamped.append(
+                        'Pool %s effective_ratio %.4f implies pg_num %d but '
+                        'pg_num_max %d clamps it' % (
+                            p['pool_name'], ratio, ideal_pg_num, pg_num_max))
+                if median_bytes_per_pg > 0 and p['logical_used'] > 0:
+                    bytes_per_pg = p['logical_used'] / max(p['pg_num_target'], 1)
+                    if bytes_per_pg > self.pg_size_drift_warn_multiple * median_bytes_per_pg:
+                        pg_drift.append(
+                            'Pool %s stores %s per PG, more than %.1fx the '
+                            'cluster median of %s; consider raising its '
+                            'effective_ratio' % (
+                                p['pool_name'],
+                                mgr_util.format_bytes(int(bytes_per_pg), 5, colored=False),
+                                self.pg_size_drift_warn_multiple,
+                                mgr_util.format_bytes(int(median_bytes_per_pg), 5, colored=False)))
+                # planner actions: the planner's only write is stamping (or
+                # clearing) planned_pg_num; the pool's mode is operator-owned
+                # and pg_num moves only through 'osd pool autoscale-accept',
+                # invoked automatically here for mode 'on' pools
+                planned = pool_opts.get('planned_pg_num', 0)
+                plan = p['pg_num_final']
+                current = p['pg_num_target']
+                if plan != current and planned != plan:
+                    self.mon_command({
+                        'prefix': 'osd pool set',
+                        'pool': p['pool_name'],
+                        'var': 'planned_pg_num',
+                        'val': str(plan)})
+                elif plan == current and planned:
+                    self.mon_command({
+                        'prefix': 'osd pool set',
+                        'pool': p['pool_name'],
+                        'var': 'planned_pg_num',
+                        'val': '0'})
+                if plan != current:
+                    if mode == 'on':
+                        # hands-off pools accept their own plans; the mon
+                        # holds a large merge for manual confirmation
+                        # (mon_osd_pool_pg_merge_confirm_bytes)
+                        r = self.mon_command({
+                            'prefix': 'osd pool autoscale-accept',
+                            'pools': [p['pool_name']]})
+                        if r[0] == 0:
+                            pool_data = pools[p['pool_name']]
+                            pg_num = pool_data['pg_num']
+                            if pool_id in self._event:
+                                self._event[pool_id].reset(pg_num, plan)
+                            else:
+                                self._event[pool_id] = PgAdjustmentProgress(
+                                    pool_id, pg_num, plan)
+                            self._event[pool_id].update(self, 0.0)
+                        else:
+                            self.log.info(
+                                'plan for %s held for manual acceptance: %s',
+                                p['pool_name'], r[2])
+                            pending_accept.append(
+                                'Pool %s plan pg_num %d held for manual '
+                                'acceptance (current pg_num %d): %s' % (
+                                    p['pool_name'], plan, current, r[2]))
+                    else:
+                        pending_accept.append(
+                            'Pool %s plan pg_num %d awaits acceptance '
+                            '(current pg_num %d)' % (
+                                p['pool_name'], plan, current))
+                continue
+            if simple_flag and mode in ('on', 'warn'):
+                # a pool with no ratio has no plan, so there is nothing any
+                # mode may execute; learn its ratio from its current pg_num
+                # (fill-only, never overwriting)
+                if ratio == 0.0:
+                    root = root_map[p['crush_root_id']]
+                    size = pools[p['pool_name']]['size']
+                    if root.pg_target:
+                        learned = min(
+                            1.0, p['pg_num_target'] * size / root.pg_target)
+                        self.mon_command({
+                            'prefix': 'osd pool set',
+                            'pool': p['pool_name'],
+                            'var': 'effective_ratio',
+                            'val': '%.9f' % learned})
+                continue
             if p['pg_autoscale_mode'] == 'warn':
                 msg = 'Pool %s has %d placement groups, should have %d' % (
                     p['pool_name'],
@@ -1135,6 +1405,46 @@ class PgAutoscaler(MgrModule):
                 'detail': too_much_target_bytes,
             }
 
+        overcommitted_pinned = []
+        for root_id, total in total_pinned.items():
+            # tolerate FP error for ratios meant to sum to exactly 1.0
+            if total > 1.0 + 1e-6:
+                overcommitted_pinned.append(
+                    'Pools %s declare a total effective_ratio of %.4f, '
+                    'exceeding their budget domain' % (
+                        pinned_pools[root_id], total))
+        if overcommitted_pinned:
+            health_checks['POOL_EFFECTIVE_RATIO_OVERCOMMITTED'] = {
+                'severity': 'warning',
+                'summary': "%d subtrees have overcommitted pool effective_ratio" % len(
+                    overcommitted_pinned),
+                'count': len(overcommitted_pinned),
+                'detail': overcommitted_pinned,
+            }
+        if plan_clamped:
+            health_checks['POOL_PLAN_CLAMPED_BY_PG_NUM_MAX'] = {
+                'severity': 'warning',
+                'summary': "%d pools have autoscaler plans clamped by pg_num_max" % len(
+                    plan_clamped),
+                'count': len(plan_clamped),
+                'detail': plan_clamped,
+            }
+        if pg_drift:
+            health_checks['POOL_PG_SIZE_DRIFT'] = {
+                'severity': 'warning',
+                'summary': "%d pools have outgrown their planned PG count" % len(
+                    pg_drift),
+                'count': len(pg_drift),
+                'detail': pg_drift,
+            }
+        if pending_accept:
+            health_checks['POOL_AUTOSCALE_PENDING'] = {
+                'severity': 'warning',
+                'summary': "%d pools have autoscaler plans awaiting acceptance" % len(
+                    pending_accept),
+                'count': len(pending_accept),
+                'detail': pending_accept,
+            }
         if bytes_and_ratio:
             health_checks['POOL_HAS_TARGET_SIZE_BYTES_AND_RATIO'] = {
                 'severity': 'warning',
