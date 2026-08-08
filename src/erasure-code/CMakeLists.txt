@@ -37,6 +37,7 @@ target_link_libraries(erasure_code $<$<PLATFORM_ID:Windows>:dlfcn_win32>
                       ${CMAKE_DL_LIBS})
 
 add_library(erasure_code_objs OBJECT ErasureCode.cc)
+add_library(erasure_code_log OBJECT ErasureCodeLog.cc)
 
 add_custom_target(erasure_code_plugins DEPENDS
     ${EC_ISA_LIB}

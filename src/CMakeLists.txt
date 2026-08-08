@@ -606,7 +606,8 @@ set(ceph_common_objs
   $<TARGET_OBJECTS:common_mountcephfs_objs>
   $<TARGET_OBJECTS:crush_objs>
   $<TARGET_OBJECTS:json_spirit>
-  $<TARGET_OBJECTS:erasure_code>)
+  $<TARGET_OBJECTS:erasure_code>
+  $<TARGET_OBJECTS:erasure_code_log>)
 set(ceph_common_deps
   common_utf8 extblkdev arch crc32
   ${LIB_RESOLV}

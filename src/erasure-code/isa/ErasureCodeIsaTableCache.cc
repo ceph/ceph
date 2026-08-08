@@ -24,24 +24,10 @@
  */
 
 // -----------------------------------------------------------------------------
+#include <cstring>
+
 #include "ErasureCodeIsaTableCache.h"
-#include "common/debug.h"
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
-#define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_osd
-#undef dout_prefix
-#define dout_prefix _tc_prefix(_dout)
-// -----------------------------------------------------------------------------
-
-// -----------------------------------------------------------------------------
-
-static std::ostream&
-_tc_prefix(std::ostream* _dout)
-{
-  return *_dout << "ErasureCodeIsaTableCache: ";
-}
+#include "erasure-code/ErasureCodeLog.h"
 
 // -----------------------------------------------------------------------------
 
@@ -247,7 +233,7 @@ ErasureCodeIsaTableCache::getDecodingTableFromCache(std::string &signature,
   // bytes and depends on both k and m.
   // --------------------------------------------------------------------------
 
-  dout(12) << "[ get table    ] = " << signature << dendl;
+  EC_LOG(12, "[ get table    ] = %s", signature.c_str());
 
   // we try to fetch a decoding table from an LRU cache
   std::lock_guard lock{codec_tables_guard};
@@ -263,11 +249,11 @@ ErasureCodeIsaTableCache::getDecodingTableFromCache(std::string &signature,
     return false;
   }
   const auto& [lru_list_it, cached_table] = lru_map_it->second;
-  dout(12) << "[ cached table ] = " << signature << dendl;
+  EC_LOG(12, "[ cached table ] = %s", signature.c_str());
   // copy the table out of the cache
   memcpy(table, cached_table.c_str(), k * (m + k)*32);
   // find item in LRU queue and push back
-  dout(12) << "[ cache size   ] = " << decode_tbls_lru->size() << dendl;
+  EC_LOG(12, "[ cache size   ] = %zu", decode_tbls_lru->size());
   decode_tbls_lru->splice( (decode_tbls_lru->begin()), *decode_tbls_lru, lru_list_it);
   return true;
 }
@@ -288,7 +274,7 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
   // cache key uniqueness. See getDecodingTableFromCache() for details.
   // --------------------------------------------------------------------------
 
-  dout(12) << "[ put table    ] = " << signature << dendl;
+  EC_LOG(12, "[ put table    ] = %s", signature.c_str());
 
   // we store a new table to the cache
 
@@ -304,7 +290,7 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
 
   // evt. shrink the LRU queue/map
   if ((int) decode_tbls_lru->size() >= ErasureCodeIsaTableCache::decoding_tables_lru_length) {
-    dout(12) << "[ shrink lru   ] = " << signature << dendl;
+    EC_LOG(12, "[ shrink lru   ] = %s", signature.c_str());
     // reuse old buffer
     cachetable = (*decode_tbls_map)[decode_tbls_lru->back()].second;
 
@@ -322,12 +308,12 @@ ErasureCodeIsaTableCache::putDecodingTableToCache(std::string &signature,
     // add the new to the map
     (*decode_tbls_map)[signature] = std::make_pair(decode_tbls_lru->begin(), cachetable);
   } else {
-    dout(12) << "[ store table  ] = " << signature << dendl;
+    EC_LOG(12, "[ store table  ] = %s", signature.c_str());
     // allocate a new buffer
     cachetable = ceph::buffer::create(k * (m + k)*32);
     decode_tbls_lru->push_front(signature);
     (*decode_tbls_map)[signature] = std::make_pair(decode_tbls_lru->begin(), cachetable);
-    dout(12) << "[ cache size   ] = " << decode_tbls_lru->size() << dendl;
+    EC_LOG(12, "[ cache size   ] = %zu", decode_tbls_lru->size());
   }
 
   // copy-in the new table
