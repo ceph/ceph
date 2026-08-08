@@ -339,7 +339,6 @@ int RGWBucketStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& 
 }
 
 class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
-  const DoutPrefixProvider *dpp;
   std::atomic<bool> down_flag = { false };
   ceph::shared_mutex mutex = ceph::make_shared_mutex("RGWOwnerStatsCache");
   map<rgw_bucket, rgw_owner> modified_buckets;
@@ -502,8 +501,8 @@ protected:
   }
 
 public:
-  RGWOwnerStatsCache(const DoutPrefixProvider *dpp, rgw::sal::Driver* _driver, bool quota_threads)
-    : RGWQuotaCache<rgw_owner>(_driver, _driver->ctx()->_conf->rgw_bucket_quota_cache_size), dpp(dpp)
+  RGWOwnerStatsCache(rgw::sal::Driver* _driver, bool quota_threads)
+    : RGWQuotaCache<rgw_owner>(_driver, _driver->ctx()->_conf->rgw_bucket_quota_cache_size)
   {
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(driver->ctx(), this);
@@ -557,11 +556,12 @@ int RGWOwnerStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& b
   boost::intrusive_ptr cb = new OwnerAsyncRefreshHandler(
       this, std::move(waiter), owner, bucket);
 
-  ldpp_dout(dpp, 20) << "initiating async quota refresh for owner=" << owner << dendl;
+  const DoutPrefix dp(driver->ctx(), dout_subsys, "rgw owner async refresh handler: ");
+  ldpp_dout(&dp, 20) << "initiating async quota refresh for owner=" << owner << dendl;
 
-  int r = driver->load_stats_async(dpp, owner, std::move(cb));
+  int r = driver->load_stats_async(&dp, owner, std::move(cb));
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "could not read stats for owner=" << owner << dendl;
+    ldpp_dout(&dp, 0) << "could not read stats for owner=" << owner << dendl;
     return r;
   }
 
@@ -925,9 +925,9 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
     return 0;
   }
 public:
-  RGWQuotaHandlerImpl(const DoutPrefixProvider *dpp, rgw::sal::Driver* _driver, bool quota_threads) : driver(_driver),
+  RGWQuotaHandlerImpl(rgw::sal::Driver* _driver, bool quota_threads) : driver(_driver),
                                     bucket_stats_cache(_driver),
-                                    owner_stats_cache(dpp, _driver, quota_threads) {}
+                                    owner_stats_cache(_driver, quota_threads) {}
 
   int check_quota(const DoutPrefixProvider *dpp,
                   const rgw_owner& owner,
@@ -981,9 +981,9 @@ public:
 }; // class RGWQuotaHandlerImpl
 
 
-RGWQuotaHandler *RGWQuotaHandler::generate_handler(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, bool quota_threads)
+RGWQuotaHandler *RGWQuotaHandler::generate_handler(rgw::sal::Driver* driver, bool quota_threads)
 {
-  return new RGWQuotaHandlerImpl(dpp, driver, quota_threads);
+  return new RGWQuotaHandlerImpl(driver, quota_threads);
 }
 
 void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
