@@ -4344,7 +4344,7 @@ void MDSRank::inmemory_logger() {
   if (client_eviction_dump ||
       beacon.missed_beacon_ack_dump ||
       beacon.missed_internal_heartbeat_dump) {
-    //dump the in-memory logs if any of these events occured recently
+    //dump the in-memory logs if any of these events occurred recently
     dout(0) << __func__ << " client_eviction_dump "<< client_eviction_dump
             << ", missed_beacon_ack_dump " << beacon.missed_beacon_ack_dump
             << ", missed_internal_heartbeat_dump " << beacon.missed_internal_heartbeat_dump
