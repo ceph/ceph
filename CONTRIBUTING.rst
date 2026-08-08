@@ -6,6 +6,10 @@ For the general process of submitting patches to Ceph, read the below
 
 `Submitting Patches`_
 
+You should not hit *merge* on a patch without being familiar with the
+
+`Merge Requirements`_
+
 For documentation patches the following guide will help you get started
 
 `Documenting Ceph`_
@@ -19,5 +23,6 @@ relates to coding style or modifies whitespace is discouraged,
 primarily because it can cause problems when rebasing and backporting.
 
 .. _Submitting Patches: SubmittingPatches.rst
+.. _Merge Requirements:  MergeRequirements.rst
 .. _Documenting Ceph:  doc/start/documenting-ceph.rst
 .. _Governance:  doc/governance.rst
