@@ -127,21 +127,6 @@ int JournalTool::main(std::vector<const char*> &argv)
   }
   mode = std::string(*arg);
   arg = argv.erase(arg);
-
-  // RADOS init
-  // ==========
-  r = rados.init_with_context(g_ceph_context);
-  if (r < 0) {
-    derr << "RADOS unavailable, cannot scan filesystem journal" << dendl;
-    return r;
-  }
-
-  dout(4) << "JournalTool: connecting to RADOS..." << dendl;
-  r = rados.connect();
-  if (r < 0) {
-    derr << "couldn't connect to cluster: " << cpp_strerror(r) << dendl;
-    return r;
-  }
  
   auto& fs = fsmap->get_filesystem(role_selector.get_ns());
   stringstream (rank_str.substr(rank_str.find(':') + 1)) >> rank;
@@ -200,6 +185,30 @@ int JournalTool::main(std::vector<const char*> &argv)
   }
 
   return r;
+}
+
+int JournalTool::connect_rados()
+{
+  int r = rados.init_with_context(g_ceph_context);
+  if (r < 0) {
+    derr << "RADOS unavailable, cannot scan filesystem journal" << dendl;
+    return r;
+  }
+
+  dout(4) << "JournalTool: connecting to RADOS..." << dendl;
+  r = rados.connect();
+  if (r < 0) {
+    derr << "couldn't connect to cluster: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  rados_connected = true;
+  return 0;
+}
+
+librados::Rados& JournalTool::get_rados_handle()
+{
+  ceph_assert(rados_connected);
+  return rados;
 }
 
 int JournalTool::validate_type(const std::string &type)

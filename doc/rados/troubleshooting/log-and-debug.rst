@@ -386,6 +386,8 @@ values to their defaults or to a level suitable for normal operations.
 +--------------------------+-----------+--------------+
 | ``trace``                |     1     |      5       |
 +--------------------------+-----------+--------------+
+| ``audit_logging``        |     0     |      5       |
++--------------------------+-----------+--------------+
 
 
 Logging and Debugging Settings

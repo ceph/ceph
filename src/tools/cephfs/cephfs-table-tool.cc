@@ -7,6 +7,8 @@
 
 #include "TableTool.h"
 
+#include "ToolsAuditLogger.h"
+
 using namespace std;
 
 int main(int argc, const char **argv)
@@ -34,8 +36,24 @@ int main(int argc, const char **argv)
       return rc;
   }
 
+  rc = tt.connect_rados();
+  if (rc != 0) {
+    return rc;
+  }
+
+  std::unique_ptr<ToolsAuditLogger> logger = nullptr;
+  if (auto logger_r = ToolsAuditLogger::create_for_tool(cct.get(), tt.get_rados_handle(), "cephfs_table_tool"); logger_r.has_value()) {
+    logger = std::move(logger_r.value());
+    logger->log_begin(argv[0], ToolsAuditLogger::get_audit_cmd_args(args), ceph_clock_now().sec());
+  }
+
   // Finally, execute the user's commands
   rc = tt.main(args);
+
+  if (logger) {
+    logger->log_end(ceph_clock_now().sec(), rc < 0 ? tt.get_audit_status().empty() ? "unknown_error" : tt.get_audit_status() : "completed", rc);
+  }
+
   if (rc != 0) {
     std::cerr << "Error (" << cpp_strerror(rc) << ")" << std::endl;
   }
