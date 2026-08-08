@@ -225,7 +225,7 @@ troubleshoot the SSH connection between ``cephadm`` and the Monitor:
 
       [root@mon1 ~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
       INFO:cephadm:Inferring fsid f8edc08a-7f17-11ea-8707-000c2915dd98
-      INFO:cephadm:Using recent ceph image docker.io/ceph/ceph:v15 obtained 'mgr/cephadm/ssh_identity_key'
+      INFO:cephadm:Using recent ceph image quay.io/ceph/ceph:v20 obtained 'mgr/cephadm/ssh_identity_key'
       [root@mon1 ~]# chmod 0600 ~/cephadm_private_key
 
    If this fails, cephadm doesn't have a key. Fix this by running the following command:
