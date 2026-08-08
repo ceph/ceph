@@ -23,8 +23,13 @@ Notifier::C_AioNotify::C_AioNotify(Notifier *notifier, NotifyResponse *response,
 }
 
 void Notifier::C_AioNotify::finish(int r) {
+  // convert ETIMEOUT errors to EBUSY to distinguish the notifier errors
+  // from real RPC timeout errors
+  if (r == -ETIMEDOUT) {
+    r = -EBUSY;
+  }
   if (response != nullptr) {
-    if (r == 0 || r == -ETIMEDOUT) {
+    if (r == 0 || r == -EBUSY) {
       try {
         auto it = out_bl.cbegin();
         decode(*response, it);
