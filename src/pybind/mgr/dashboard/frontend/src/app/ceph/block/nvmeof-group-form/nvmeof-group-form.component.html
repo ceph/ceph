@@ -45,30 +45,33 @@
               [readonly]="editing"
             />
           </cds-text-label>
-          <span
-            class="invalid-feedback"
-            *ngIf="groupForm.showError('groupName', formDir, 'required')"
-            i18n
-            >This field is required.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="
-              groupForm.get('groupName')?.hasError('notUnique') &&
-              (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)
-            "
-            i18n
-            >Group name must be unique.</span
-          >
-          <span
-            class="invalid-feedback"
-            *ngIf="
-              groupForm.get('groupName')?.hasError('invalidChars') &&
-              (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)
-            "
-            i18n
-            >Special characters are not allowed.</span
-          >
+          @if (groupForm.showError('groupName', formDir, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+          }
+          @if (
+            groupForm.get('groupName')?.hasError('notUnique') &&
+            (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)
+          ) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Group name must be unique.</span
+            >
+          }
+          @if (
+            groupForm.get('groupName')?.hasError('invalidChars') &&
+            (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)
+          ) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Special characters are not allowed.</span
+            >
+          }
         </div>
       </div>
 
@@ -87,213 +90,129 @@
           cdsCol
           class="cds-pt-3 cds-pb-3"
         >
-          <cd-nvmeof-gateway-node (hostsLoaded)="onHostsLoaded($event)"></cd-nvmeof-gateway-node>
+          <cd-nvmeof-gateway-node
+            [preSelectedHostnames]="preSelectedHostnames"
+            (hostsLoaded)="onHostsLoaded($event)"
+          ></cd-nvmeof-gateway-node>
         </div>
       </div>
+      <!-- Encryption — same cdsRow/cdsCol layout as the nodes table for horizontal alignment -->
       <div
         cdsRow
-        class="form-item cds-mb-0"
+        class="form-item"
       >
         <div cdsCol>
-          <cds-tile [cdsLayer]="1">
-            <!-- Encryption -->
-            <div
-              cdsRow
-              class="form-item"
-            >
-              <div cdsCol>
-                <div class="cds--stack cds--stack-horizontal">
-                  <cds-label
-                    class="cds--type-label-01 cds-mr-2"
-                    for="enableEncryption"
-                    i18n
-                    cdOptionalField="Enable encryption"
-                    >Enable encryption</cds-label
-                  >
-                </div>
-                <cds-checkbox
-                  id="enableEncryption"
-                  formControlName="enableEncryption"
-                >
-                  <span
-                    class="cds--type-body-01"
-                    i18n
-                    >Secures group metadata and unlocks advanced authentication features.</span
-                  >
-                </cds-checkbox>
-              </div>
-            </div>
-
-            @if (!groupForm.controls.enableEncryption.value) {
-              <div
-                cdsRow
-                class="cds-mt-2"
-              >
-                <div cdsCol>
-                  <cd-alert-panel
-                    type="warning"
-                    spacingClass="mb-0"
-                    i18n
-                  >
-                    <span class="cds--type-heading-01">Enable encryption to use DH-CHAP.</span>
-                  </cd-alert-panel>
-                </div>
-              </div>
-            }
-
-            @if (groupForm.controls.enableEncryption.value) {
-              <div
-                cdsRow
-                class="form-item"
-              >
-                <div cdsCol>
-                  <cds-textarea-label
-                    labelInputID="encryptionKey"
-                    helperText="Provide the encryption key used for securing the gateway group."
-                    i18n
-                    i18n-helperText
-                    cdOptionalField="Encryption key"
-                  >
-                    Encryption key
-                    <textarea
-                      cdsTextArea
-                      id="encryptionKey"
-                      formControlName="encryptionKey"
-                      rows="4"
-                      cols="100"
-                      cdsTheme="g10"
-                    >
-                    </textarea>
-                  </cds-textarea-label>
-                </div>
-              </div>
-            }
-          </cds-tile>
-
-          <cds-tile
-            [cdsLayer]="1"
-            class="cds-mt-3"
+          <div
+            [cdsStack]="'horizontal'"
+            [gap]="3"
+            class="cds-mb-2"
           >
-            <div
-              cdsRow
-              class="form-item"
+            <cds-label
+              class="cds--type-label-01"
+              for="enableEncryption"
+              i18n
+              cdOptionalField="Enable encryption"
+              >Enable encryption</cds-label
             >
-              <div cdsCol>
-                <div class="cds--stack cds--stack-horizontal cds-mb-3">
-                  <cds-label
-                    class="cds--type-label-01"
-                    for="enableMtls"
-                    cdOptionalField="Enable Mutual TLS (mTLS)"
-                    i18n
-                    >Enable Mutual TLS (mTLS)</cds-label
-                  >
-                </div>
-                <cds-checkbox
-                  id="enableMtls"
-                  formControlName="enableMtls"
-                >
-                  <span
-                    class="cds--type-body-01"
-                    i18n
-                    >Use mutual TLS (mTLS) to encrypt control and monitoring commands exchanged with
-                    NVMe-oF gateways.</span
-                  >
-                </cds-checkbox>
-              </div>
-            </div>
+          </div>
+          <cds-checkbox
+            id="enableEncryption"
+            formControlName="enableEncryption"
+          >
+            <span
+              class="cds--type-body-01 cds-mb-3"
+              i18n
+              >Secures group metadata and unlocks advanced authentication features.</span
+            >
+          </cds-checkbox>
 
-            @if (!groupForm.controls.enableMtls.value) {
-              <div
-                cdsRow
-                class="cds-mt-3"
-              >
-                <div cdsCol>
-                  <cd-alert-panel
-                    type="warning"
-                    spacingClass="mb-0"
-                    class="cds--type-heading-01"
-                    i18n
-                  >
-                    Disabling mTLS leaves gateway control and monitoring communication unencrypted.
-                  </cd-alert-panel>
-                </div>
-              </div>
-            }
+          @if (!groupForm.controls.enableEncryption.value) {
+            <cd-alert-panel
+              type="warning"
+              i18n
+            >
+              <p class="cds--type-heading-01">
+                Encryption is required if you plan to use DH-CHAP or mTLS authentication.
+              </p>
+            </cd-alert-panel>
+          }
 
-            @if (groupForm.controls.enableMtls.value) {
-              <div
-                cdsRow
-                class="form-item"
+          @if (groupForm.controls.enableEncryption.value) {
+            <cds-textarea-label
+              labelInputID="encryptionKey"
+              helperText="Required. Provide the encryption key used for securing the gateway group."
+              i18n
+              i18n-helperText
+            >
+              <textarea
+                class="nvmeof-group-form__textarea--full"
+                cdsTextArea
+                id="encryptionKey"
+                formControlName="encryptionKey"
+                rows="5"
+                cdsTheme="g10"
               >
-                <div cdsCol>
-                  <label
-                    class="cds--label fw-bold"
-                    for="certificateType"
-                    i18n
-                    >Choose Certificate Authority</label
-                  >
-                  <cds-radio-group
-                    formControlName="certificateType"
-                    orientation="horizontal"
-                    helperText="Select how certificates will be signed for this service. Choose internal to use the cluster's CA, or external to upload certificates signed by your organization."
-                    i18n-helperText
-                  >
-                    <cds-radio
-                      value="internal"
-                      [checked]="
-                        groupForm.controls.certificateType.value === CertificateType.internal
-                      "
-                      (change)="onCertificateTypeChange(CertificateType.internal)"
-                      i18n
-                    >
-                      Internal
-                    </cds-radio>
-                    <cds-radio
-                      value="external"
-                      [checked]="
-                        groupForm.controls.certificateType.value === CertificateType.external
-                      "
-                      (change)="onCertificateTypeChange(CertificateType.external)"
-                      i18n
-                    >
-                      External
-                    </cds-radio>
-                  </cds-radio-group>
-                </div>
-              </div>
+              </textarea>
+            </cds-textarea-label>
+            @if (groupForm.showError('encryptionKey', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
             }
-          </cds-tile>
+          }
         </div>
       </div>
 
-      @if (
-        groupForm.controls.enableMtls.value &&
-        groupForm.controls.certificateType.value === CertificateType.internal
-      ) {
-        <div
-          cdsRow
-          class="form-item"
-        >
-          <div cdsCol>
-            <cd-alert-panel
-              type="info"
-              spacingClass="mb-3"
+      <!-- mTLS — same cdsRow/cdsCol layout as the nodes table for horizontal alignment -->
+      <div
+        cdsRow
+        class="form-item"
+      >
+        <div cdsCol>
+          <cds-label
+            class="cds--type-label-01 cds-mb-3"
+            for="enableMtls"
+            i18n
+            cdOptionalField="Enable Mutual TLS (mTLS)"
+            >Enable Mutual TLS (mTLS)</cds-label
+          >
+          <cds-checkbox
+            id="enableMtls"
+            formControlName="enableMtls"
+          >
+            <p
+              class="cds--type-body-01 cds-mb-3"
               i18n
             >
-              Certificate will be generated automatically by Cephadm CA for internal certificate
-              type.
-            </cd-alert-panel>
-            <cd-text-label-list
-              formControlName="custom_sans"
-              label="Custom SAN Entries"
-              i18n-label
-              helperText="Optional list of Subject Alternative Names (hostnames, IPs, or DNS names) to include in the auto-generated certificate."
-              i18n-helperText
+              Use mutual TLS (mTLS) to encrypt control and monitoring commands exchanged with
+              NVMe-oF gateways.
+            </p>
+          </cds-checkbox>
+
+          @if (!groupForm.controls.enableMtls.value) {
+            <cd-alert-panel
+              type="warning"
+              class="cds--type-heading-01"
+              i18n
             >
-            </cd-text-label-list>
-          </div>
+              Disabling mTLS leaves gateway control and monitoring communication unencrypted.
+            </cd-alert-panel>
+          }
+
+          @if (groupForm.controls.enableMtls.value) {
+            <cd-certificate-authority-form
+              [formGroup]="groupForm"
+              [editing]="editing"
+              [currentCertificate]="currentCertificate"
+              [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+              (certificateTypeChange)="onCertificateTypeChange($event)"
+            >
+            </cd-certificate-authority-form>
+          }
         </div>
-      }
+      </div>
 
       @if (
         groupForm.controls.enableMtls.value &&
@@ -310,7 +229,6 @@
               i18n
               i18n-helperText
               helperText="Upload a Root CA certificate file, or paste the Root CA certificate PEM content directly."
-              cdOptionalField="Root CA Certificate Input"
             >
               Root CA Certificate Input
             </cds-text-label>
@@ -340,13 +258,20 @@
                 cdsTextArea
                 id="rootCACertText"
                 formControlName="rootCACert"
+                class="nvmeof-group-form__textarea--full"
                 placeholder="Paste certificate or private key PEM content"
                 i18n-placeholder
-                cols="100"
                 rows="4"
               >
               </textarea>
             </cds-textarea-label>
+            @if (groupForm.showError('rootCACert', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </div>
         </div>
 
@@ -361,7 +286,6 @@
               i18n
               i18n-helperText
               helperText="Upload a client certificate file, or paste the client certificate PEM content directly."
-              cdOptionalField="Client Certificate Input"
             >
               Client Certificate Input
             </cds-text-label>
@@ -391,13 +315,20 @@
                 cdsTextArea
                 id="clientCertText"
                 formControlName="clientCert"
+                class="nvmeof-group-form__textarea--full"
                 placeholder="Paste certificate or private key PEM content"
                 i18n-placeholder
-                cols="100"
                 rows="4"
               >
               </textarea>
             </cds-textarea-label>
+            @if (groupForm.showError('clientCert', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </div>
         </div>
 
@@ -412,7 +343,6 @@
               i18n
               i18n-helperText
               helperText="Upload a client key file, or paste the client key PEM content directly."
-              cdOptionalField="Client Key Input"
             >
               Client Key Input
             </cds-text-label>
@@ -442,13 +372,20 @@
                 cdsTextArea
                 id="clientKeyText"
                 formControlName="clientKey"
+                class="nvmeof-group-form__textarea--full"
                 placeholder="Paste certificate or private key PEM content"
                 i18n-placeholder
-                cols="100"
                 rows="4"
               >
               </textarea>
             </cds-textarea-label>
+            @if (groupForm.showError('clientKey', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </div>
         </div>
 
@@ -463,7 +400,6 @@
               i18n
               i18n-helperText
               helperText="Upload a server certificate file, or paste the server certificate PEM content directly."
-              cdOptionalField="Server Certificate Input"
             >
               Server Certificate Input
             </cds-text-label>
@@ -493,13 +429,20 @@
                 cdsTextArea
                 id="serverCertText"
                 formControlName="serverCert"
+                class="nvmeof-group-form__textarea--full"
                 placeholder="Paste certificate or private key PEM content"
                 i18n-placeholder
-                cols="100"
                 rows="4"
               >
               </textarea>
             </cds-textarea-label>
+            @if (groupForm.showError('serverCert', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </div>
         </div>
 
@@ -514,7 +457,6 @@
               i18n
               i18n-helperText
               helperText="Upload a server key file, or paste the server key PEM content directly."
-              cdOptionalField="Server Key Input"
             >
               Server Key Input
             </cds-text-label>
@@ -544,13 +486,20 @@
                 cdsTextArea
                 id="serverKeyText"
                 formControlName="serverKey"
+                class="nvmeof-group-form__textarea--full"
                 placeholder="Paste certificate or private key PEM content"
                 i18n-placeholder
-                cols="100"
                 rows="4"
               >
               </textarea>
             </cds-textarea-label>
+            @if (groupForm.showError('serverKey', formDir, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
           </div>
         </div>
       }

@@ -91,6 +91,7 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   orchStatus: OrchestratorStatus | undefined;
   private destroy$ = new Subject<void>();
   private sub: Subscription | undefined;
+  private pendingHostReload = false;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -285,6 +286,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
   ngOnDestroy(): void {
     this.destroy$.next();
     this.destroy$.complete();
+    // Clear before unsubscribe so finalize() does not call getHosts() on a
+    // destroyed component when a reload was queued mid-flight.
+    this.pendingHostReload = false;
     if (this.sub) {
       this.sub.unsubscribe();
     }
@@ -299,20 +303,36 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
     return this.selection.selected.map((host: Host) => host.hostname);
   }
 
+  /**
+   * Edit mode needs groups + all hosts so already-placed nodes can be
+   * preselected. Create mode only needs available hosts.
+   */
+  private shouldUseEditHostFetch(): boolean {
+    return this.mode === NvmeofGatewayNodeMode.SELECTOR && this.preSelectedHostnames?.length > 0;
+  }
+
   getHosts(context: CdTableFetchDataContext): void {
     this.tableContext =
       context || this.tableContext || new CdTableFetchDataContext(() => undefined);
     if (this.isLoadingHosts) {
+      // Preselection / refresh arrived while a fetch is in-flight — retry after
+      // the current request finishes so we pick up the latest inputs.
+      this.pendingHostReload = true;
       return;
     }
     this.isLoadingHosts = true;
+    this.pendingHostReload = false;
 
     if (this.sub) {
       this.sub.unsubscribe();
     }
 
-    const useEditMode =
-      this.mode === NvmeofGatewayNodeMode.SELECTOR && this.preSelectedHostnames?.length > 0;
+    // Capture the fetch strategy for THIS request. The response shape differs
+    // between edit (groups+hosts) and create (host list), so the matching
+    // processor must stay paired with the request that produced the data.
+    // If preselection arrives mid-flight, pendingHostReload triggers a fresh
+    // getHosts() that re-evaluates shouldUseEditHostFetch() against live inputs.
+    const useEditMode = this.shouldUseEditHostFetch();
 
     const fetchData$: Observable<any> =
       this.mode === NvmeofGatewayNodeMode.DETAILS || useEditMode
@@ -323,10 +343,26 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       .pipe(
         finalize(() => {
           this.isLoadingHosts = false;
+          if (this.pendingHostReload) {
+            this.pendingHostReload = false;
+            // Retry with current inputs (e.g. preSelectedHostnames set by parent).
+            // The retry path re-reads shouldUseEditHostFetch() and
+            // processEditModeData() always ends in applyPreSelection() — so
+            // preselection does not depend on ngOnChanges firing again.
+            this.getHosts(this.tableContext);
+          }
         })
       )
       .subscribe({
         next: (result: any) => {
+          // A newer reload was requested while this request was in-flight
+          // (typical edit race: table mounts → fetch starts → parent sets
+          // preSelectedHostnames → ngOnChanges queues refresh). Drop this
+          // stale payload; finalize will re-fetch with the correct strategy.
+          if (this.pendingHostReload) {
+            return;
+          }
+
           if (this.mode === NvmeofGatewayNodeMode.DETAILS) {
             this.processDetailsData(result.groups, result.hosts);
           } else if (useEditMode) {
@@ -335,6 +371,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
             this.hosts = result;
             this.count = this.hosts.length;
             this.hostsLoaded.emit(this.count);
+            // Safe no-op when preSelectedHostnames is empty; covers the edge
+            // case where selection is set without forcing edit-mode fetch.
+            this.applyPreSelection();
           }
         },
         error: () => context?.error()
