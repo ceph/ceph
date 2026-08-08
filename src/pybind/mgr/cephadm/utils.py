@@ -217,3 +217,11 @@ def get_node_proxy_status_value(data: Any, key: str, lower: bool = False) -> str
     if not isinstance(value, str):
         return ''
     return value.lower() if lower else value
+
+
+def is_fips_enabled() -> bool:
+    try:
+        with open('/proc/sys/crypto/fips_enabled', 'r') as f:
+            return f.read().strip() == '1'
+    except OSError:
+        return False
