@@ -1,3 +1,27 @@
+{% if acme_enabled and acme_challenge_endpoints %}
+server {
+    {% if spec.virtual_ip %}
+    listen                    {{ spec.virtual_ip }}:80;
+    {% else %}
+    listen                    0.0.0.0:80;
+    listen                    [::]:80;
+    {% endif %}
+
+    location ^~ /.well-known/acme-challenge/ {
+        proxy_pass http://acme_challenge_servers;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto http;
+        proxy_buffering off;
+    }
+
+    location / {
+        return 301 https://$host{% if spec.port and spec.port != 443 %}:{{ spec.port }}{% endif %}$request_uri;
+    }
+}
+{% endif %}
+
 
 server {
 {% if not spec.ssl %}
