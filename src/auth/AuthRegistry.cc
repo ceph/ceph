@@ -101,6 +101,8 @@ void AuthRegistry::_parse_mode_list(const string& s,
       v->push_back(CEPH_CON_MODE_CRC);
     } else if (i == "secure") {
       v->push_back(CEPH_CON_MODE_SECURE);
+    } else if (i == "secure-psp") {
+      v->push_back(CEPH_CON_MODE_SECURE_PSP);
     } else {
       lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
     }

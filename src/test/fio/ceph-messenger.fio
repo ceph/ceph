@@ -13,6 +13,13 @@ port=5555
 
 ms_type=async+posix # or async+dpdk or async+rdma
 
+# Split each send payload into N non-owning bufferptrs to mimic
+# RGW-multipart / EC scatter (0/1 = single contiguous ptr). Watch the
+# msgr_send_iov_segments histogram shift in the teardown dump.
+#payload_frags=64
+# Skew fragment boundaries so ptr starts are not page-aligned.
+#payload_frag_unalign=1
+
 [client]
 receiver=0
 rw=write

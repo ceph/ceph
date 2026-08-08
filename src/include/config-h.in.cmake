@@ -121,6 +121,9 @@
 /* ibverbs experimental conditional compilation */
 #cmakedefine HAVE_IBV_EXP
 
+/* AsyncMessenger PSP Security Protocol conditional compilation */
+#cmakedefine HAVE_PSP
+
 /* define if bluestore enabled */
 #cmakedefine WITH_BLUESTORE
 

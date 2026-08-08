@@ -93,7 +93,7 @@ Similarly, two options control whether IPv4 and IPv6 addresses are used:
 Connection modes
 ----------------
 
-The v2 protocol supports two connection modes:
+The v2 protocol supports the following connection modes:
 
 * *crc* mode provides:
 
@@ -123,6 +123,24 @@ The v2 protocol supports two connection modes:
   <https://en.wikipedia.org/wiki/Galois/Counter_Mode>`_ stream cipher,
   which is generally very fast on modern processors (e.g., faster than
   a SHA-256 cryptographic hash).
+
+* *secure-psp* mode provides the same guarantees as *secure*, and is
+  intended to carry them with the encryption offloaded to the NIC via
+  the Linux PSP Security Protocol. It is opt-in, is not present in any
+  default mode list, and currently behaves identically to *secure*
+  (the AES-GCM work is still done in process); the kernel offload
+  lands in later work.
+
+  .. warning::
+
+     Daemons older than the release that introduced *secure-psp* do not
+     recognize the name. Such a daemon parses a mode list containing it
+     as an *empty* list and will then refuse every msgr2 connection.
+     Because the mode options are read at startup and may live in the
+     monitor configuration database, this can lock old monitors out of
+     quorum. Do not configure *secure-psp* until every daemon is
+     upgraded, and always leave a mode such as *secure* or *crc* in the
+     list.
 
 Connection mode configuration options
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

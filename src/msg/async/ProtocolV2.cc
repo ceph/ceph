@@ -1344,6 +1344,22 @@ CtPtr ProtocolV2::ready() {
   {
     std::lock_guard<std::mutex> l(connection->write_lock);
     can_write = true;
+    // MSG_ZEROCOPY is pointless and adds pin-lifetime risk for
+    // secure connections - the payload is already copied during
+    // encryption (crypto_onwire), so there is no copy left to elide.
+    // Keyed on in-process AEAD, not confidentiality: when secure-psp
+    // moves the AEAD into the NIC there is a copy left to elide again,
+    // and this exclusion must stop applying to it.
+    if (auth_meta->is_mode_in_process_aead()) {
+      connection->cs.set_zerocopy_eligible(false);
+    }
+    // Telemetry: count secure-psp negotiations (still aesgcm under
+    // the hood until the kernel attach engages). ready() runs again on
+    // every reconnect and on session replacement, so this counts
+    // negotiations, not distinct connections - hence the name.
+    if (auth_meta->is_mode_secure_psp()) {
+      connection->logger->inc(l_msgr_psp_negotiations);
+    }
     if (!out_queue.empty()) {
       connection->center->dispatch_event_external(connection->write_handler);
     }

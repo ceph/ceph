@@ -47,6 +47,28 @@ class ConnectedSocketImpl {
   virtual void close() = 0;
   virtual int fd() const = 0;
   virtual void set_priority(int sd, int prio, int domain) = 0;
+
+  // MSG_ZEROCOPY send support. The default implementations make
+  // this a no-op for stacks/paths that do not implement it (RDMA,
+  // DPDK, the Windows Posix path); only PosixConnectedSocketImpl
+  // overrides them.
+  struct zerocopy_drain {
+    uint64_t completed = 0;       // completion notifications retired
+    uint64_t fallback = 0;        // kernel degraded to a copy
+    uint64_t retired_bytes = 0;   // pinned bytes released
+  };
+  // Disable MSG_ZEROCOPY for this connection (e.g. secure mode).
+  virtual void set_zerocopy_eligible(bool) {}
+  // Payload bytes of the most recent send() pinned for MSG_ZEROCOPY
+  // (awaiting kernel completion) rather than copied.
+  virtual size_t last_send_zerocopy_bytes() const { return 0; }
+  // MSG_ZEROCOPY sendmsg() calls the most recent send() submitted.
+  virtual unsigned last_send_zerocopy_submitted() const { return 0; }
+  // Bytes / count still pinned awaiting kernel completion.
+  virtual uint64_t pinned_zerocopy_bytes() const { return 0; }
+  virtual unsigned pending_zerocopy_count() const { return 0; }
+  // Drain MSG_ERRQUEUE completions and retire pinned buffers.
+  virtual zerocopy_drain drain_zerocopy_completions() { return {}; }
 };
 
 class ConnectedSocket;
@@ -142,6 +164,27 @@ class ConnectedSocket {
     _csi->set_priority(sd, prio, domain);
   }
 
+  // MSG_ZEROCOPY forwards (safe when _csi is null).
+  void set_zerocopy_eligible(bool e) {
+    if (_csi) _csi->set_zerocopy_eligible(e);
+  }
+  size_t last_send_zerocopy_bytes() const {
+    return _csi ? _csi->last_send_zerocopy_bytes() : 0;
+  }
+  unsigned last_send_zerocopy_submitted() const {
+    return _csi ? _csi->last_send_zerocopy_submitted() : 0;
+  }
+  uint64_t pinned_zerocopy_bytes() const {
+    return _csi ? _csi->pinned_zerocopy_bytes() : 0;
+  }
+  unsigned pending_zerocopy_count() const {
+    return _csi ? _csi->pending_zerocopy_count() : 0;
+  }
+  ConnectedSocketImpl::zerocopy_drain drain_zerocopy_completions() {
+    return _csi ? _csi->drain_zerocopy_completions()
+                : ConnectedSocketImpl::zerocopy_drain{};
+  }
+
   explicit operator bool() const {
     return _csi.get();
   }
@@ -225,6 +268,29 @@ enum {
   l_msgr_recv_encrypted_bytes,
   l_msgr_send_encrypted_bytes,
 
+  // copy / zero-copy accounting on the send path.
+  // _copied and _iov_segments are driven by the copying send path;
+  // the zerocopy_* counters are driven at the socket event sites of
+  // the MSG_ZEROCOPY send path (PosixStack).
+  l_msgr_send_bytes_copied,
+  l_msgr_send_bytes_zerocopy,
+  l_msgr_send_iov_segments,
+  l_msgr_zerocopy_submitted,
+  l_msgr_zerocopy_completed,
+  l_msgr_zerocopy_force_dropped,
+  l_msgr_zerocopy_fallback,
+  l_msgr_zerocopy_pinned_bytes,
+
+  // PSP Security Protocol negotiation telemetry.
+  // Increments per completed handshake that landed on secure-psp, not
+  // per connection: a reconnect or a session replacement re-runs the
+  // negotiation on the same connection and counts again. Independent
+  // of whether the kernel offload is engaged (today secure-psp still
+  // does aesgcm AEAD under the hood; the kernel-offload follow-up
+  // lights up the netlink attach and will add _attach_failed,
+  // _fallback_to_aesgcm, _handshake_bytes, _active_assocs).
+  l_msgr_psp_negotiations,
+
   l_msgr_last,
 };
 
@@ -282,6 +348,50 @@ class Worker {
 
     plb.add_u64_counter(l_msgr_recv_encrypted_bytes, "msgr_recv_encrypted_bytes", "Network received encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
     plb.add_u64_counter(l_msgr_send_encrypted_bytes, "msgr_send_encrypted_bytes", "Network sent encrypted bytes", NULL, 0, unit_t(UNIT_BYTES));
+
+    plb.add_u64_counter(l_msgr_send_bytes_copied, "msgr_send_bytes_copied",
+                        "Network sent bytes that passed through a kernel copy",
+                        NULL, 0, unit_t(UNIT_BYTES));
+    plb.add_u64_counter(l_msgr_send_bytes_zerocopy, "msgr_send_bytes_zerocopy",
+                        "Network sent bytes via zero-copy",
+                        NULL, 0, unit_t(UNIT_BYTES));
+    PerfHistogramCommon::axis_config_d msgr_send_iov_segs_x_axis{
+      "iovec segments",                ///< scatter/gather segment count
+      PerfHistogramCommon::SCALE_LOG2, ///< covers 1 .. >IOV_MAX
+      0,                               ///< start at 0
+      1,                               ///< quantization unit
+      14,                              ///< top bucket starts at 2048
+    };
+    PerfHistogramCommon::axis_config_d msgr_send_iov_bytes_y_axis{
+      "sent bytes (bytes)",
+      PerfHistogramCommon::SCALE_LOG2, ///< logarithmic byte scale
+      0,                               ///< start at 0
+      4096,                            ///< quantization unit
+      13,                              ///< enough to cover 4+M sends
+    };
+    plb.add_u64_counter_histogram(
+      l_msgr_send_iov_segments, "msgr_send_iov_segments",
+      msgr_send_iov_segs_x_axis, msgr_send_iov_bytes_y_axis,
+      "Histogram of pending iovec segment count vs. bytes drained per socket write");
+    plb.add_u64_counter(l_msgr_zerocopy_submitted, "msgr_zerocopy_submitted",
+                        "Zero-copy sends submitted (pins created)");
+    plb.add_u64_counter(l_msgr_zerocopy_completed, "msgr_zerocopy_completed",
+                        "Zero-copy pins retired by a kernel completion");
+    plb.add_u64_counter(l_msgr_zerocopy_force_dropped,
+                        "msgr_zerocopy_force_dropped",
+                        "Zero-copy pins abandoned at close (abortive); "
+                        "submitted == completed + force_dropped, and a "
+                        "non-zero value means completions were not arriving");
+    plb.add_u64_counter(l_msgr_zerocopy_fallback, "msgr_zerocopy_fallback",
+                        "Zero-copy requested but degraded to a copy "
+                        "(ENOBUFS or kernel-side copy)");
+    plb.add_u64(l_msgr_zerocopy_pinned_bytes, "msgr_zerocopy_pinned_bytes",
+                "Bytes currently pinned awaiting zero-copy completion");
+
+    plb.add_u64_counter(l_msgr_psp_negotiations, "msgr_psp_negotiations",
+                        "Handshakes that negotiated secure-psp mode "
+                        "(counts reconnects and session replacements, "
+                        "so it exceeds the live connection count)");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);

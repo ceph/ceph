@@ -959,7 +959,7 @@ options:
 - name: ms_mon_cluster_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for intra-mon connections in order of preference
+  desc: Connection modes (crc, secure, secure-psp) for intra-mon connections in order of preference
   fmt_desc: the connection mode (or permitted modes) to use between monitors.
   default: secure crc
   see_also:
@@ -973,7 +973,7 @@ options:
 - name: ms_mon_service_mode
   type: str
   level: basic
-  desc: Allowed connection modes (crc, secure) for connections to mons
+  desc: Allowed connection modes (crc, secure, secure-psp) for connections to mons
   fmt_desc: A list of permitted modes for clients or
     other Ceph daemons to use when connecting to monitors.
   default: secure crc
@@ -988,7 +988,7 @@ options:
 - name: ms_mon_client_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for connections from clients to monitors in
+  desc: Connection modes (crc, secure, secure-psp) for connections from clients to monitors in
     order of preference
   fmt_desc: A list of connection modes, in order of
     preference, for clients or non-monitor daemons to use when
@@ -1005,7 +1005,7 @@ options:
 - name: ms_cluster_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for intra-cluster connections in order of preference
+  desc: Connection modes (crc, secure, secure-psp) for intra-cluster connections in order of preference
   fmt_desc: connection mode (or permitted modes) used
     for intra-cluster communication between Ceph daemons.  If multiple
     modes are listed, the modes listed first are preferred.
@@ -1018,7 +1018,7 @@ options:
 - name: ms_service_mode
   type: str
   level: basic
-  desc: Allowed connection modes (crc, secure) for connections to daemons
+  desc: Allowed connection modes (crc, secure, secure-psp) for connections to daemons
   fmt_desc: a list of permitted modes for clients to use
     when connecting to the cluster.
   default: crc secure
@@ -1030,7 +1030,7 @@ options:
 - name: ms_client_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for connections from clients in order of preference
+  desc: Connection modes (crc, secure, secure-psp) for connections from clients in order of preference
   fmt_desc: A list of connection modes, in order of
     preference, for clients to use (or allow) when talking to a Ceph
     cluster.
@@ -1125,6 +1125,38 @@ options:
   level: advanced
   desc: Maximum amount of data to prefetch out of the socket receive buffer
   default: 64_K
+  with_legacy: true
+- name: ms_tcp_zerocopy
+  type: bool
+  level: advanced
+  desc: Use MSG_ZEROCOPY for large plaintext sends on the Posix messenger stack
+  long_desc: When enabled, the Posix stack opts each TCP socket into
+   SO_ZEROCOPY at connect/accept and sends data segments at or above
+   ms_tcp_zerocopy_min_size with MSG_ZEROCOPY, eliminating the kernel
+   send copy. Only applies to crc-mode connections (secure mode already
+   copies during encryption) and only to connections established after
+   the option is set. Transparent fallback to a normal copying send on
+   ENOBUFS or when the kernel/socket does not support it. Disabled by
+   default; the benefit is only realized over a real NIC.
+  default: false
+  see_also:
+  - ms_tcp_zerocopy_min_size
+  with_legacy: true
+- name: ms_tcp_zerocopy_min_size
+  type: size
+  level: advanced
+  desc: Minimum per-send size to use MSG_ZEROCOPY (below this, send copies)
+  long_desc: MSG_ZEROCOPY pins user pages and incurs a per-send
+   completion notification; below this threshold the copy is cheaper
+   than the pinning plus notification overhead, so small sends (control
+   frames, small replies) always use the normal copying path. Only
+   consulted when ms_tcp_zerocopy is enabled. Very low values are
+   counterproductive - they pin control frames and handshake traffic
+   for no bandwidth gain.
+  default: 16_K
+  min: 1_K
+  see_also:
+  - ms_tcp_zerocopy
   with_legacy: true
 - name: ms_initial_backoff
   type: float
