@@ -34,4 +34,25 @@ export interface Bucket {
   };
   read_tracker: number;
   bid: string;
+  tagset?: Record<string, string | number | boolean | null | undefined>;
+  acl?: string;
+  lock_enabled?: boolean;
+  lock_mode?: 'GOVERNANCE' | 'COMPLIANCE';
+  lock_retention_period_days?: number;
+  encryption?: string;
+  encryption_type?: string;
+  key_id?: string;
+  mfa_delete?: string;
+  bucket_policy?: string | Record<string, unknown>;
+  replication?: {
+    sync_policy_active?: boolean;
+    replication_rules_configured?: boolean;
+    policy?: Record<string, any>;
+  };
+  lifecycle?: string | Record<string, unknown>;
+  lifecycle_progress?: Array<{ bucket: string; status: string; started: string }>;
+  bucket_size?: number;
+  size_usage?: number;
+  num_objects?: number;
+  object_usage?: number;
 }

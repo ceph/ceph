@@ -27,6 +27,7 @@ import { Lifecycle, Rule } from '../models/rgw-bucket-lifecycle';
 })
 export class RgwBucketLifecycleListComponent implements OnInit {
   @Input() bucket: Bucket;
+  @Input() showHeading = true;
   @Output() updateBucketDetails = new EventEmitter();
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;
