@@ -2,7 +2,7 @@
           [ngClass]="{'productive-card--shadow': applyShadow}"
           [cdsLayer]="0">
   <div class="productive-card-header">
-    <ng-container *ngTemplateOutlet="headerTemplate"></ng-container>
+    <ng-container *ngTemplateOutlet="headerTemplate || null"></ng-container>
   </div>
   <section class="productive-card-section cds--type-body-compact-01"
            [ngClass]="{'productive-card-section--footer': footerTemplate}">
@@ -10,7 +10,7 @@
   </section>
   @if(!!footerTemplate) {
   <footer class="productive-card-footer">
-    <ng-container *ngTemplateOutlet="footerTemplate"></ng-container>
+    <ng-container *ngTemplateOutlet="footerTemplate || null"></ng-container>
   </footer>
   }
 </cds-tile>
