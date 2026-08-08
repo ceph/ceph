@@ -3212,11 +3212,11 @@ bool OSDMonitor::can_mark_out(int i)
   float in_ratio = (float)in / (float)num_osds;
   if (in_ratio < g_conf()->mon_osd_min_in_ratio) {
     if (i >= 0)
-      dout(5) << __func__ << " current in_ratio " << in_ratio << " < min "
+      dout(1) << __func__ << " current in_ratio " << in_ratio << " < min "
 	      << g_conf()->mon_osd_min_in_ratio
 	      << ", will not mark osd." << i << " out" << dendl;
     else
-      dout(5) << __func__ << " current in_ratio " << in_ratio << " < min "
+      dout(1) << __func__ << " current in_ratio " << in_ratio << " < min "
 	      << g_conf()->mon_osd_min_in_ratio
 	      << ", will not mark osds out" << dendl;
     return false;
