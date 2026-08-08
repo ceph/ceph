@@ -1,3 +1,21 @@
+* CephFS: MDS now supports adaptive Group Commit for safe-reply journal flushing.
+  Operations that allocate inode numbers (create, mkdir, mknod, symlink) cannot use
+  early_reply and must wait for journal durability before replying. Previously each
+  operation called ``mdlog->flush()`` individually, creating one RADOS write per
+  operation. With Group Commit, multiple safe-reply operations are batched into a
+  single journal flush, reducing RADOS write round-trips.
+
+  The feature uses a piggyback design that adds no extra ``mds_lock`` contention.
+  Adaptive auto-tuning adjusts the batch window from 5μs to 5ms based on observed
+  workload concurrency. It is beneficial for burst metadata workloads (container
+  builds, CI/CD pipelines, package installs, shared web deployments) and is
+  expected to show larger gains on HDD-backed metadata pools.
+
+  New config options:
+  ``mds_group_commit_enable`` (bool, default: false),
+  ``mds_group_commit_max_entries`` (size, default: 8),
+  ``mds_group_commit_max_interval`` (float, default: 0 = adaptive).
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file

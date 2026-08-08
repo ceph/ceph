@@ -31,3 +31,11 @@ add_executable(unittest_mds_quiesce_agent
 )
 add_ceph_unittest(unittest_mds_quiesce_agent)
 target_link_libraries(unittest_mds_quiesce_agent ceph-common global)
+
+# unittest_mds_group_commit
+add_executable(unittest_mds_group_commit
+  TestGroupCommit.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mds_group_commit)
+target_link_libraries(unittest_mds_group_commit ceph-common global)
