@@ -3170,10 +3170,10 @@ options:
   type: str
   level: advanced
   desc: Where the SSE-KMS encryption keys are stored. Supported KMS systems are OpenStack
-    Barbican ('barbican', the default) and HashiCorp Vault ('vault').
+    Barbican ('barbican', the default), HashiCorp Vault ('vault'), and KMIP ('kmip')
   fmt_desc: Where the SSE-KMS encryption keys are stored. Supported KMS
-    systems are OpenStack Barbican (``barbican``, the default) and
-    HashiCorp Vault (``vault``).
+    systems are OpenStack Barbican (``barbican``, the default),
+    HashiCorp Vault (``vault``), and KMIP (``kmip``).
   default: barbican
   services:
   - rgw
@@ -3433,6 +3433,35 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_crypt_kmip_socket_io_timeout_sec
+  type: int
+  level: advanced
+  desc: KMIP TLS per-socket read/write timeout (SO_RCVTIMEO/SO_SNDTIMEO), seconds
+  long_desc: >
+    Applied after TCP+TLS connect on the BIO used for KMIP. Limits how long
+    each socket recv/send may block. Use 0 to disable (falls back to the
+    kernel TCP retransmit timeout). Does not bound total KMIP request time by itself.
+  default: 300
+  min: 0
+  max: 300
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_crypt_kmip_worker_threads
+  type: int
+  level: advanced
+  desc: parallel KMIP client worker threads for SSE-S3
+  long_desc: >
+    Requests are queued and processed concurrently up to this many workers.
+    Each worker keeps at most one cached TLS sessions to the KMIP server,
+    reused across requests until idle longer than 5 seconds. Set this as per
+    KMIP server limits and RGW load. Minimum 1, maximum 32
+  default: 1
+  min: 1
+  max: 32
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_crypt_suppress_logs
   type: bool
   level: advanced
@@ -3463,15 +3492,16 @@ options:
 - name: rgw_crypt_sse_s3_backend
   type: str
   level: advanced
-  desc: Where the SSE-S3 encryption keys are stored. The only valid choice here is
-    HashiCorp Vault ('vault').
-  fmt_desc: Where the SSE-S3 encryption keys are stored. The only valid
-    choice is HashiCorp Vault (``vault``).
+  desc: Where the SSE-S3 encryption keys are stored. Valid choices are HashiCorp
+    Vault ('vault') and KMIP ('kmip').
+  fmt_desc: Where the SSE-S3 encryption keys are stored. Valid choices are
+    HashiCorp Vault (``vault``) and KMIP (``kmip``).
   default: vault
   services:
   - rgw
   enum_values:
   - vault
+  - kmip
   with_legacy: true
 
 - name: rgw_crypt_sse_s3_vault_secret_engine

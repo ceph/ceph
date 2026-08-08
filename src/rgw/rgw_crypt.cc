@@ -14,6 +14,7 @@
 #include <auth/Crypto.h>
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
+#include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "include/function2.hpp"
 #include "crypto/crypto_accel.h"
@@ -21,6 +22,7 @@
 #include "rgw/rgw_kms.h"
 #include "rgw_range_projection.h"
 #include "rgw/rgw_process_env.h"
+#include "rgw/rgw_kmip_sse_s3.h"
 #include "rapidjson/document.h"
 #include "rapidjson/writer.h"
 #include "rapidjson/error/error.h"
@@ -1814,48 +1816,112 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
 static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
                                  std::string &key_id)
 {
-  int res;
-  std::string saved_key;
+  int res = 0;
+  std::string saved_key = fetch_bucket_key_id(s);
 
-  key_id = expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template);
-
-  if (key_id == cant_expand_key) {
-    ldpp_dout(s, 5) << "ERROR: unable to expand key_id " <<
-      s->cct->_conf->rgw_crypt_sse_s3_key_template << " on bucket" << dendl;
-    s->err.message = "Server side error - unable to expand key_id";
-    return -EINVAL;
+  // Return existing key if metadata is already present
+  if (!saved_key.empty()) {
+    key_id = saved_key;
+    return 0;
   }
 
-  saved_key = fetch_bucket_key_id(s);
-  if (saved_key != "") {
-    ldpp_dout(s, 5) << "Found KEK ID: " << key_id << dendl;
-  }
-  if (saved_key != key_id) {
-    res = create_sse_s3_bucket_key(s, key_id, y);
-    if (res != 0) {
-      return res;
+  const std::string& backend = s->cct->_conf->rgw_crypt_sse_s3_backend;
+  // Expand key name for Vault
+  if (backend == RGW_SSE_KMS_BACKEND_VAULT) {
+    key_id = expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template);
+    if (key_id == cant_expand_key) {
+      ldpp_dout(s, 5) << "ERROR: unable to expand key_id template" << dendl;
+      s->err.message = "Server side error - unable to expand key_id";
+      return -EINVAL;
     }
-    bufferlist key_id_bl;
-    key_id_bl.append(key_id.c_str(), key_id.length());
-    for (int count = 0; count < 15; ++count) {
-      rgw::sal::Attrs attrs = s->bucket->get_attrs();
-      attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = key_id_bl;
-      res = s->bucket->merge_and_store_attrs(s, attrs, s->yield);
-      if (res != -ECANCELED) {
-        break;
+  }
+
+  // Create the key on the KMIP/Vault backend
+  // Use bucket UUID to create unique bucket name to avoid bucket name collisions.
+  res = create_sse_s3_bucket_key(s, key_id, y, s->bucket->get_bucket_id());
+  if (res != 0) {
+    ldpp_dout(s, 0) << "ERROR: create_sse_s3_bucket_key failed, res=" << res << dendl;
+    return res;
+  }
+
+  //  Persist the ID to Bucket Attributes (The Link)
+  bufferlist bl;
+  bl.append(key_id);
+
+  // Retry loop for metadata synchronization
+  for (int count = 0; count < 15; ++count) {
+    rgw::sal::Attrs attrs = s->bucket->get_attrs();
+    attrs[RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID] = bl;
+
+    res = s->bucket->merge_and_store_attrs(s, attrs, y);
+    if (res == 0) {
+      ldpp_dout(s, 10) << "Successfully linked KEK ID: " << key_id << dendl;
+      return 0;
+    }
+
+    if (res != -ECANCELED) {
+      ldpp_dout(s, 0) << "ERROR: failed to save bucket attr, res=" << res << dendl;
+      break;
+    }
+
+    // Conflict (ECANCELED): someone else may have committed a KEK while we
+    // were trying. Refresh and check.
+    int r = s->bucket->try_refresh_info(s, nullptr, y);
+    if (r < 0) {
+      ldpp_dout(s, 0) << "ERROR: try_refresh_info() failed: " << dendl;
+      //One quick try before giving up, blips mon/rados blips are usually momentary.
+      r = s->bucket->try_refresh_info(s, nullptr, y);
+    }
+    if (r < 0) {
+      ldpp_dout(s, 0) << "ERROR: try_refresh_info() failed: "
+                    << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    rgw::sal::Attrs refreshed = s->bucket->get_attrs();
+    auto it = refreshed.find(RGW_ATTR_BUCKET_ENCRYPTION_KEY_ID);
+    if (it != refreshed.end() && it->second.length() > 0) {
+      // Someone else committed a KEK. Destroy our orphan, adopt theirs.
+      std::string winner_id = it->second.to_str();
+      if (winner_id != key_id) {
+        int worker_id = -1;
+        int cleanup_res = remove_sse_s3_bucket_key(s, key_id, y, &worker_id);
+        ldpp_dout(s, 5) << "kmip_worker[" << worker_id << "] "
+                        << "Lost KEK race; destroying our orphan KEK "
+                           "(id_len=" << key_id.length()
+                        << ") and adopting winner (id_len="
+                        << winner_id.length() << ")" << dendl;
+        if (cleanup_res != 0) {
+          ldpp_dout(s, 0) << "kmip_worker[" << worker_id << "] "
+                          << "WARN: failed to destroy orphan KEK after losing "
+                             "race (id_len=" << key_id.length()
+                          << "); manual cleanup may be required" << dendl;
+        }
+        key_id = winner_id;
       }
-      res = s->bucket->try_refresh_info(s, nullptr, s->yield);
-      if (res != 0) {
-        break;
+      return 0;
+    }
+
+    // Bucket attr still empty — retry our commit
+    ldpp_dout(s, 5) << "Metadata conflict (ECANCELED), retrying..." << dendl;
+  }
+
+  if (res != 0) {
+    ldpp_dout(s, 0) << "ERROR: unable to save key_id on bucket metadata" << dendl;
+    s->err.message = "Server side error - unable to save key_id";
+    /* The key was created on the backend but we failed to persist its ID.
+     * Best-effort cleanup to avoid orphaning the key on the KMS server. */
+    if (!key_id.empty()) {
+      int cleanup_res = remove_sse_s3_bucket_key(s, key_id, y);
+      if (cleanup_res != 0) {
+        ldpp_dout(s, 0) << "ERROR: failed to clean up orphaned backend key after "
+                           "metadata save failure (id_len=" << key_id.size()
+                        << "); manual cleanup may be required" << dendl;
       }
     }
-    if (res != 0) {
-      ldpp_dout(s, 5) << "ERROR: unable to save new key_id on bucket" << dendl;
-      s->err.message = "Server side error - unable to save key_id";
-      return res;
-    }
   }
-  return 0;
+
+  return res;
 }
 
 
@@ -2023,7 +2089,6 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
   CryptAttributes crypt_attributes { s };
   const bool is_copy = (s->op_type == RGW_OP_COPY_OBJ);
   crypt_http_responses.clear();
-
   {
     std::string_view req_sse_ca =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM);
@@ -2283,7 +2348,8 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         return -EINVAL;
       }
 
-      if (s->cct->_conf->rgw_crypt_sse_s3_backend != "vault") {
+      if (s->cct->_conf->rgw_crypt_sse_s3_backend != RGW_SSE_KMS_BACKEND_VAULT &&
+          s->cct->_conf->rgw_crypt_sse_s3_backend != RGW_SSE_KMS_BACKEND_KMIP) {
         s->err.message = "Request specifies Server Side Encryption "
             "but server configuration does not support this.";
         return -EINVAL;
@@ -2302,6 +2368,10 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
         return res;
       }
 
+      std::string key_selector = create_random_key_selector(s->cct);
+      set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
+      ldpp_dout(s, 10) << "SSE-S3: resolved bucket key id (len=" << key_id.size()
+                       << ")" << dendl;
       set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
       set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
       std::string actual_key;
@@ -2977,34 +3047,55 @@ int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
 int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 {
   int res;
-  auto key_id { expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template) };
+  const std::string& backend = s->cct->_conf->rgw_crypt_sse_s3_backend;
   auto saved_key { fetch_bucket_key_id(s) };
-  size_t i;
 
-  if (key_id == cant_expand_key) {
-    ldpp_dout(s, 5) << "ERROR: unable to expand key_id " <<
-      s->cct->_conf->rgw_crypt_sse_s3_key_template << " on bucket" << dendl;
-    s->err.message = "Server side error - unable to expand key_id";
-    return -EINVAL;
+  if (backend == RGW_SSE_KMS_BACKEND_KMIP) {
+    if (saved_key.empty()) {
+      return 0;
+    }
+    ldpp_dout(s, 5) << "KMIP: Removing bucket KEK: " << saved_key.length() << dendl;
+    res = remove_sse_s3_bucket_key(s, saved_key, y);
+    if (res != 0) {
+      ldpp_dout(s, 0) << "ERROR: KMIP failed to remove KEK id_len=" << saved_key.length()
+                      << dendl;
+    }
+    return res;
   }
 
-  if (saved_key == "") {
-    return 0;
-  } else if (saved_key != key_id) {
-    ldpp_dout(s, 5) << "Found but will not delete strange KEK ID: " << saved_key << dendl;
-    return 0;
+  if (backend == RGW_SSE_KMS_BACKEND_VAULT) {
+    size_t i;
+    auto key_id{expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template)};
+    if (key_id == cant_expand_key) {
+      ldpp_dout(s, 5) << "ERROR: unable to expand key_id "
+                      << s->cct->_conf->rgw_crypt_sse_s3_key_template
+                      << " on bucket" << dendl;
+      s->err.message = "Server side error - unable to expand key_id";
+      return -EINVAL;
+    }
+
+    if (saved_key == "") {
+      return 0;
+    } else if (saved_key != key_id) {
+      ldpp_dout(s, 5) << "Found but will not delete strange KEK id_len=" << saved_key.length()
+                      << dendl;
+      return 0;
+    }
+    i = s->cct->_conf->rgw_crypt_sse_s3_key_template.find("%bucket_id");
+    if (i == std::string_view::npos) {
+      ldpp_dout(s, 5) << "Kept valid KEK id_len=" << saved_key.length() << dendl;
+      return 0;
+    }
+    ldpp_dout(s, 5) << "Removing valid KEK id_len=" << saved_key.length() << dendl;
+    res = remove_sse_s3_bucket_key(s, saved_key, y);
+    if (res != 0) {
+      ldpp_dout(s, 0) << "ERROR: Unable to remove KEK id_len=" << saved_key.length()
+                      << " got " << res << dendl;
+    }
+    return res;
   }
-  i = s->cct->_conf->rgw_crypt_sse_s3_key_template.find("%bucket_id");
-  if (i == std::string_view::npos) {
-    ldpp_dout(s, 5) << "Kept valid KEK ID: " << saved_key << dendl;
-    return 0;
-  }
-  ldpp_dout(s, 5) << "Removing valid KEK ID: " << saved_key << dendl;
-  res = remove_sse_s3_bucket_key(s, saved_key, y);
-  if (res != 0) {
-    ldpp_dout(s, 0) << "ERROR: Unable to remove KEK ID: " << saved_key << " got " << res << dendl;
-  }
-  return res;
+
+  return 0;
 }
 
 /*********************************************************************
