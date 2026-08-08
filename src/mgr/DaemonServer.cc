@@ -3094,10 +3094,24 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
+  dout(10) << "The max Queue length of the module '" << mod_name << "' is: " << py_modules.get_max_queue_len() <<dendl; 
+  //py_modules.inc_mod_finisher_cnt();
+  if (py_modules.is_overloaded())  {
+    ss << "Mgr Module '" << mod_name << "' has reached its finisher thread limit. "
+              "Set the threshold limit using the 'max_queue_length' config ";
+        dout(10) << ss.str() << dendl;
+        cmdctx->reply(-EAGAIN, ss);
+        return true;
+  }
+
   op->mark_queued_for_module();
 
+  dout(10) << "The count of finisher thread is: " << py_modules.get_mod_finisher_cnt() <<dendl;
   dout(10) << "passing through command '" << prefix << "' size " << cmdctx->cmdmap.size() << dendl;
   Finisher& mod_finisher = py_modules.get_active_module_finisher(mod_name);
+
+  py_modules.inc_mod_finisher_cnt();
+  dout(10) << "Incrementing the value and the count is: " << py_modules.get_mod_finisher_cnt()<< dendl;
 
   mod_finisher.queue(new LambdaContext([this, cmdctx, session, py_command, prefix, op, py_handler_name, module]
                                        (int r_) mutable {
@@ -3134,6 +3148,8 @@ bool DaemonServer::_handle_command(
     if (!accept_command) {
       dout(4) << ss.str() << dendl;
       cmdctx->reply(-EIO, ss);
+      py_modules.dec_mod_finisher_cnt();
+      dout(10) << "decrementing the value and the count is: " << py_modules.get_mod_finisher_cnt()<< dendl;
       return;
     }
 
@@ -3149,6 +3165,9 @@ bool DaemonServer::_handle_command(
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
     dout(10) << " command returned " << r << dendl;
+    py_modules.dec_mod_finisher_cnt();
+    dout(10) << "Decrementing the value and the count is: " << py_modules.get_mod_finisher_cnt()<< dendl;
+    dout(10) << "The max Queue length of the module '" << py_handler_name << "' is: " << py_modules.get_max_queue_len() <<dendl;
   }));
   return true;
 }

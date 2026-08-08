@@ -1171,6 +1171,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             Option(name='log_to_file', type='bool', default=False, runtime=True))
         cls.MODULE_OPTIONS.append(
             Option(name='sqlite3_killpoint', level=OptionLevel.DEV, type='int', default=0, runtime=True))
+        cls.MODULE_OPTIONS.append(
+            Option(name='max_queue_length', type='int', default=0, runtime=True))
         if not [x for x in cls.MODULE_OPTIONS if x['name'] == 'log_to_cluster']:
             cls.MODULE_OPTIONS.append(
                 Option(name='log_to_cluster', type='bool', default=False,
@@ -1472,6 +1474,12 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return self._ceph_get_context()
 
+    @API.expose
+    def _set_max_queue_len(self, val: int) -> None:
+        self.log.debug(f"has found: {'_ceph_set_max_queue_len' in dir(self)}")
+        return _ceph_set_max_queue_len(val)
+        self.log.debug(f"found: {'_ceph_set_max_queue_len' in dir(self)}")
+    
     def notify(self, notify_type: NotifyType, notify_id: str) -> None:
         """
         Called by the ceph-mgr service to notify the Python plugin
@@ -1500,6 +1508,8 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         log_to_cluster = self.get_module_option("log_to_cluster", False)
         assert isinstance(log_to_cluster, bool)
         self._set_log_level(mgr_level, module_level, cluster_level)
+        max_q = self.get_module_option("max_queue_length")
+        self.log.debug(f"MAX_QUEUE_LENGTH= {max_q}")
 
         if log_to_file != self.log_to_file:
             if log_to_file:
@@ -1511,6 +1521,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
                 self._enable_cluster_log()
             else:
                 self._disable_cluster_log()
+
+        if max_q:
+            self._set_max_queue_len(max_q)
 
         # call module subclass implementations
         self.config_notify()
