@@ -673,6 +673,7 @@ void PG::initiate_snap_trim()
       });
     }, [this](std::exception_ptr eptr) {
       logger().debug("{}: snap trimming interrupted", *this);
+      background_process_lock.unlock();
     }, pg_ref, pg_ref->get_osdmap_epoch()).finally([pg_ref, this] {
       publish_stats_to_osd();
     });
@@ -1077,7 +1078,9 @@ PG::interruptible_future<> PG::repair_object(
 PG::interruptible_future<>
 PG::BackgroundProcessLock::lock() noexcept
 {
-  return interruptor::make_interruptible(mutex.lock());
+  return interruptor::make_interruptible(mutex.lock()).then_interruptible([this] {
+    locked = true;
+  });
 }
 
 // We may need to rollback the ObjectContext on failed op execution.
