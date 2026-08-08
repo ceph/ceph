@@ -382,7 +382,7 @@ class NFSService(CephService):
         result = subprocess.run(
             cmd + ['get', objname, '-'],
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            timeout=10)
+            timeout=cast(int, self.mgr.get_module_option('nfs_ganesha_rados_grace_timeout')))
         if not result.returncode and not clobber:
             logger.info('Rados config object exists: %s' % objname)
             config_file_data = result.stdout
@@ -391,7 +391,7 @@ class NFSService(CephService):
             result = subprocess.run(
                 cmd + ['put', objname, '-'],
                 stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                timeout=10)
+                timeout=cast(int, self.mgr.get_module_option('nfs_ganesha_rados_grace_timeout')))
             if result.returncode:
                 self.mgr.log.warning(
                     f'Unable to create rados config object {objname}: {result.stderr.decode("utf-8")}'
@@ -470,7 +470,7 @@ class NFSService(CephService):
             ]
             self.mgr.log.debug(cmd)
             result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    timeout=10)
+                                    timeout=cast(int, self.mgr.get_module_option('nfs_ganesha_rados_grace_timeout')))
             if result.returncode:
                 stderr = result.stderr.decode("utf-8")
                 self.mgr.log.warning(
@@ -545,7 +545,7 @@ class NFSService(CephService):
                 cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
-                timeout=10
+                timeout=cast(int, self.mgr.get_module_option('nfs_ganesha_rados_grace_timeout'))
             )
         except Exception as e:
             err_msg = f'Got unexpected exception trying to remove ganesha grace file for nfs.{spec.service_id} service: {str(e)}'
