@@ -34,10 +34,11 @@ import { SmbShareFormComponent } from './smb-share-form/smb-share-form.component
 import { SmbUsersgroupsListComponent } from './smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbTabsComponent } from './smb-tabs/smb-tabs.component';
 import { SmbJoinAuthListComponent } from './smb-join-auth-list/smb-join-auth-list.component';
-import { SmbUsersgroupsDetailsComponent } from './smb-usersgroups-details/smb-usersgroups-details.component';
+import { SmbUsersgroupsResourceSidebarComponent } from './smb-usersgroups-resource-sidebar/smb-usersgroups-resource-sidebar.component';
 import { SmbJoinAuthFormComponent } from './smb-join-auth-form/smb-join-auth-form.component';
 import { SmbUsersgroupsFormComponent } from './smb-usersgroups-form/smb-usersgroups-form.component';
 import { SmbOverviewComponent } from './smb-overview/smb-overview.component';
+import { SmbUsersgroupsResourcePageComponent } from './smb-usersgroups-resource-page/smb-usersgroups-resource-page.component';
 
 @NgModule({
   imports: [
@@ -74,10 +75,10 @@ import { SmbOverviewComponent } from './smb-overview/smb-overview.component';
     SmbClusterTabsComponent,
     SmbShareListComponent,
     SmbUsersgroupsListComponent,
-    SmbUsersgroupsDetailsComponent,
+    SmbUsersgroupsResourceSidebarComponent,
     SmbTabsComponent,
     SmbJoinAuthListComponent,
-    SmbUsersgroupsDetailsComponent,
+    SmbUsersgroupsResourcePageComponent,
     SmbJoinAuthFormComponent,
     SmbUsersgroupsFormComponent,
     SmbShareFormComponent,
