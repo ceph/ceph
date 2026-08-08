@@ -83,6 +83,19 @@ Mgr::~Mgr()
 {
 }
 
+void Mgr::shutdown()
+{
+  if (initialized) {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    admin_socket->unregister_commands(this);
+  }
+
+  finisher.wait_for_empty();
+  finisher.stop();
+
+  server.shutdown();
+}
+
 static std::string crush_hostname_for_osd(ClusterState& cluster_state, int osd_id)
 {
   std::string hostname;
