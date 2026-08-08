@@ -5568,7 +5568,7 @@ namespace {
     SIZE, MIN_SIZE,
     PG_NUM, PGP_NUM, CRUSH_RULE, HASHPSPOOL, EC_OVERWRITES,
     NODELETE, NOPGCHANGE, NOSIZECHANGE,
-    WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB,
+    WRITE_FADVISE_DONTNEED, NOSCRUB, NODEEP_SCRUB, NOBACKFILL,
     HIT_SET_TYPE, HIT_SET_PERIOD, HIT_SET_COUNT, HIT_SET_FPP,
     USE_GMT_HITSET, TARGET_MAX_OBJECTS, TARGET_MAX_BYTES,
     CACHE_TARGET_DIRTY_RATIO, CACHE_TARGET_DIRTY_HIGH_RATIO,
@@ -6349,6 +6349,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"allow_ec_overwrites", EC_OVERWRITES}, {"nodelete", NODELETE},
       {"nopgchange", NOPGCHANGE}, {"nosizechange", NOSIZECHANGE},
       {"noscrub", NOSCRUB}, {"nodeep-scrub", NODEEP_SCRUB},
+      {"nobackfill", NOBACKFILL},
       {"write_fadvise_dontneed", WRITE_FADVISE_DONTNEED},
       {"hit_set_type", HIT_SET_TYPE}, {"hit_set_period", HIT_SET_PERIOD},
       {"hit_set_count", HIT_SET_COUNT}, {"hit_set_fpp", HIT_SET_FPP},
@@ -6536,6 +6537,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case WRITE_FADVISE_DONTNEED:
 	  case NOSCRUB:
 	  case NODEEP_SCRUB:
+	  case NOBACKFILL:
 	    f->dump_bool(i->first.c_str(),
 			   p->has_flag(pg_pool_t::get_flag_by_name(i->first)));
 	    break;
@@ -6784,6 +6786,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case WRITE_FADVISE_DONTNEED:
 	  case NOSCRUB:
 	  case NODEEP_SCRUB:
+	  case NOBACKFILL:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -9105,7 +9108,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     p.crush_rule = id;
-  } else if (var == "nodelete" || var == "nopgchange" ||
+  } else if (var == "nodelete" || var == "nopgchange" || var == "nobackfill" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
 	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk" ||
 	     var == "crimson_allow_pg_merge") {

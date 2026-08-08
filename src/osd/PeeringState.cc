@@ -5807,27 +5807,25 @@ PeeringState::Backfilling::Backfilling(my_context ctx)
   pl->publish_stats_to_osd();
 }
 
-void PeeringState::Backfilling::backfill_release_reservations()
+void PeeringState::backfill_release_reservations()
 {
-  DECLARE_LOCALS;
   pl->cancel_local_background_io_reservation();
-  for (auto it = ps->backfill_targets.begin();
-       it != ps->backfill_targets.end();
+  for (auto it = backfill_targets.begin();
+       it != backfill_targets.end();
        ++it) {
-    ceph_assert(*it != ps->pg_whoami);
+    ceph_assert(*it != pg_whoami);
     pl->send_cluster_message(
       it->osd,
       TOPNSPC::make_message<MBackfillReserve>(
 	MBackfillReserve::RELEASE,
-	spg_t(ps->info.pgid.pgid, it->shard),
-	ps->get_osdmap_epoch()),
-      ps->get_osdmap_epoch());
+	spg_t(info.pgid.pgid, it->shard),
+	get_osdmap_epoch()),
+      get_osdmap_epoch());
   }
 }
 
-void PeeringState::Backfilling::suspend_backfill()
+void PeeringState::suspend_backfill()
 {
-  DECLARE_LOCALS;
   backfill_release_reservations();
   pl->on_backfill_suspended();
 }
@@ -5835,7 +5833,8 @@ void PeeringState::Backfilling::suspend_backfill()
 boost::statechart::result
 PeeringState::Backfilling::react(const Backfilled &c)
 {
-  backfill_release_reservations();
+  DECLARE_LOCALS;
+  ps->backfill_release_reservations();
   return transit<Recovered>();
 }
 
@@ -5847,7 +5846,7 @@ PeeringState::Backfilling::react(const DeferBackfill &c)
     psdout(10) << "defer backfill, retry delay " << c.delay << dendl;
     ps->state_set(PG_STATE_BACKFILL_WAIT);
     ps->state_clear(PG_STATE_BACKFILLING);
-    suspend_backfill();
+    ps->suspend_backfill();
 
     pl->schedule_event_after(
       std::make_shared<PGPeeringEvent>(
@@ -5866,13 +5865,32 @@ PeeringState::Backfilling::react(const DeferBackfill &c)
 }
 
 boost::statechart::result
+PeeringState::Backfilling::react(const PauseBackfill &evt)
+{
+  DECLARE_LOCALS;
+  if (ps->needs_backfill()) {
+    psdout(10) << "pausing backfill" << dendl;
+    ps->state_set(PG_STATE_BACKFILL_PAUSED);
+    ps->state_clear(PG_STATE_BACKFILLING);
+    ps->suspend_backfill();
+    return transit<NotBackfilling>();
+  } else {
+    // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
+    psdout(10) << "discarding stale PauseBackfill event , pg does not need "
+		  "backfill anymore"
+	       << dendl;
+    return discard_event();
+  }
+}
+
+boost::statechart::result
 PeeringState::Backfilling::react(const UnfoundBackfill &c)
 {
   DECLARE_LOCALS;
   psdout(10) << "backfill has unfound, can't continue" << dendl;
   ps->state_set(PG_STATE_BACKFILL_UNFOUND);
   ps->state_clear(PG_STATE_BACKFILLING);
-  suspend_backfill();
+  ps->suspend_backfill();
   return transit<NotBackfilling>();
 }
 
@@ -5883,7 +5901,7 @@ PeeringState::Backfilling::react(const RemoteReservationRevokedTooFull &)
 
   ps->state_set(PG_STATE_BACKFILL_TOOFULL);
   ps->state_clear(PG_STATE_BACKFILLING);
-  suspend_backfill();
+  ps->suspend_backfill();
 
   pl->schedule_event_after(
     std::make_shared<PGPeeringEvent>(
@@ -5901,7 +5919,7 @@ PeeringState::Backfilling::react(const RemoteReservationRevoked &)
   DECLARE_LOCALS;
   if (ps->needs_backfill()) {
     ps->state_set(PG_STATE_BACKFILL_WAIT);
-    suspend_backfill();
+    ps->suspend_backfill();
     return transit<WaitLocalBackfillReserved>();
   } else {
     // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
@@ -5933,6 +5951,17 @@ PeeringState::WaitRemoteBackfillReserved::WaitRemoteBackfillReserved(my_context 
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   pl->publish_stats_to_osd();
   post_event(RemoteBackfillReserved());
+}
+
+boost::statechart::result
+PeeringState::WaitRemoteBackfillReserved::react(const PauseBackfill &evt)
+{
+  DECLARE_LOCALS;
+
+  ps->state_clear(PG_STATE_BACKFILL_WAIT);
+  ps->state_set(PG_STATE_BACKFILL_PAUSED);
+  ps->suspend_backfill();
+  return transit<NotBackfilling>();
 }
 
 boost::statechart::result
@@ -6030,6 +6059,7 @@ PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ct
   context< PeeringMachine >().log_enter(state_name);
   DECLARE_LOCALS;
 
+  ceph_assert(!ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL));
   ps->state_set(PG_STATE_BACKFILL_WAIT);
   pl->request_local_background_io_reservation(
     ps->get_backfill_priority(),
@@ -6042,6 +6072,16 @@ PeeringState::WaitLocalBackfillReserved::WaitLocalBackfillReserved(my_context ct
       ps->get_osdmap_epoch(),
       DeferBackfill(0.0)));
   pl->publish_stats_to_osd();
+}
+
+boost::statechart::result
+PeeringState::WaitLocalBackfillReserved::react(const PauseBackfill &evt)
+{
+  DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_BACKFILL_WAIT);
+  ps->state_set(PG_STATE_BACKFILL_PAUSED);
+  pl->cancel_local_background_io_reservation();
+  return transit<NotBackfilling>();
 }
 
 void PeeringState::WaitLocalBackfillReserved::exit()
@@ -6063,6 +6103,19 @@ PeeringState::NotBackfilling::NotBackfilling(my_context ctx)
   pl->publish_stats_to_osd();
 }
 
+boost::statechart::result
+PeeringState::NotBackfilling::react(const RequestBackfill &evt)
+{
+  DECLARE_LOCALS;
+
+  if (ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    ceph_assert(ps->state_test(PG_STATE_BACKFILL_PAUSED));
+    return discard_event();
+  }
+  ps->state_clear(PG_STATE_BACKFILL_PAUSED);
+  return transit<WaitLocalBackfillReserved>();
+}
+
 boost::statechart::result PeeringState::NotBackfilling::react(const QueryUnfound& q)
 {
   DECLARE_LOCALS;
@@ -6078,8 +6131,23 @@ PeeringState::NotBackfilling::react(const RemoteBackfillReserved &evt)
 }
 
 boost::statechart::result
+PeeringState::NotBackfilling::react(const LocalBackfillReserved &evt)
+{
+  return discard_event();
+}
+
+boost::statechart::result
 PeeringState::NotBackfilling::react(const RemoteReservationRejectedTooFull &evt)
 {
+  return discard_event();
+}
+
+boost::statechart::result
+PeeringState::NotBackfilling::react(const PauseBackfill &evt)
+{
+  DECLARE_LOCALS;
+  ps->state_clear(PG_STATE_BACKFILL_WAIT);
+  ps->state_set(PG_STATE_BACKFILL_PAUSED);
   return discard_event();
 }
 
@@ -6089,6 +6157,7 @@ void PeeringState::NotBackfilling::exit()
 
   DECLARE_LOCALS;
   ps->state_clear(PG_STATE_BACKFILL_UNFOUND);
+  ps->state_clear(PG_STATE_BACKFILL_PAUSED);
   utime_t dur = ceph_clock_now() - enter_time;
   pl->get_peering_perf().tinc(rs_notbackfilling_latency, dur);
 }
@@ -6387,6 +6456,18 @@ PeeringState::Activating::Activating(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 }
 
+boost::statechart::result
+PeeringState::Activating::react(const RequestBackfill &evt)
+{
+  DECLARE_LOCALS;
+
+  if (ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    ps->state_set(PG_STATE_BACKFILL_PAUSED);
+    return transit<NotBackfilling>();
+  }
+  return transit<WaitLocalBackfillReserved>();
+}
+
 void PeeringState::Activating::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -6574,6 +6655,11 @@ PeeringState::Recovering::react(const RequestBackfill &evt)
     pg_shard_t get_log_shard;
     // FIXME: Uh-oh we have to check this return value; choose_acting can fail!
     ps->choose_acting(get_log_shard, true);
+  }
+
+  if (ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    ps->state_set(PG_STATE_BACKFILL_PAUSED);
+    return transit<NotBackfilling>();
   }
   return transit<WaitLocalBackfillReserved>();
 }
@@ -6855,6 +6941,11 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
                              << unfound << " objects unfound and apparently lost";
   }
 
+  if (ps->state_test(PG_STATE_BACKFILL_PAUSED) &&
+      !ps->pool.info.has_flag(pg_pool_t::FLAG_NOBACKFILL)) {
+    // The pool's nobackfill flag has been cleared, restart backfilling
+    post_event(RequestBackfill());
+  }
   return forward_event();
 }
 
