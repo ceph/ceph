@@ -14,8 +14,6 @@
 #include "librbd/internal.h"
 #include "librbd/Journal.h"
 #include "librbd/Types.h"
-#include <boost/asio/dispatch.hpp>
-#include <boost/asio/post.hpp>
 
 #ifdef WITH_LTTNG
 #include "tracing/librbd.h"
@@ -134,9 +132,7 @@ void AioCompletion::queue_complete() {
   add_request();
 
   // ensure completion fires in clean lock context
-  boost::asio::post(ictx->asio_engine->get_api_strand(), [this]() {
-      complete_request(0);
-    });
+  ictx->asio_engine->post_serial([this]() { complete_request(0); });
 }
 
 void AioCompletion::block(CephContext* cct) {
@@ -249,7 +245,7 @@ void AioCompletion::complete_external_callback() {
 
   // ensure librbd external users never experience concurrent callbacks
   // from multiple librbd-internal threads.
-  boost::asio::dispatch(ictx->asio_engine->get_api_strand(), [this]() {
+  ictx->asio_engine->dispatch_serial([this]() {
       complete_cb(rbd_comp, complete_arg);
       mark_complete_and_notify();
       put();

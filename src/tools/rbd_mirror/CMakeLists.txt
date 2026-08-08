@@ -76,6 +76,7 @@ target_link_libraries(rbd-mirror
   rbd_mirror_types
   rbd_api
   rbd_internal
+  rbd_asio_context_wq
   rbd_types
   journal
   libneorados
