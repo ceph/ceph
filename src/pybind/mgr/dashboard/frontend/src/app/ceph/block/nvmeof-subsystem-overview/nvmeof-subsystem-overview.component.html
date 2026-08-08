@@ -89,8 +89,10 @@
               [gap]="2"
             >
               <span class="cds--type-label-01">{{ detail.label }}</span>
-              <div class="cds--type-label-02">
-                <span>{{ detail.value ? 'Allow all hosts' : 'Restrict to specific hosts' }}</span>
+              <div>
+                <!-- Host access is a configuration mode (not a health state), so
+                     avoid success/error status icons that imply one mode is broken. -->
+                <span class="cds--type-label-02">{{ detail.value }}</span>
                 <a
                   cdsLink
                   (click)="openEditHostAccessModal()"

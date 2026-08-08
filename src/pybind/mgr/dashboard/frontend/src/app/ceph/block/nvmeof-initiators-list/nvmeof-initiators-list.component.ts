@@ -16,7 +16,9 @@ import {
   NvmeofSubsystemInitiator,
   ALLOW_ALL_HOST,
   NvmeofSubsystemAuthType,
-  getSubsystemAuthStatus
+  getSubsystemAuthStatus,
+  isSubsystemAllowAllHosts,
+  normalizeInitiators
 } from '~/app/shared/models/nvmeof';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -117,9 +119,10 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
         name: this.actionLabels.ADD,
         permission: 'create',
         icon: Icons.add,
+        buttonKind: 'primary',
         click: () => this.openAddInitiatorForm(),
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSelection,
-        disable: () => this.hasAllHostsAllowed()
+        canBePrimary: () => true,
+        disable: () => false
       },
       {
         name: $localize`Edit host key`,
@@ -183,11 +186,7 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
   }
 
   hasAllHostsAllowed(): boolean {
-    return (
-      !!this.subsystem?.allow_any_host &&
-      (this.initiators.length === 0 ||
-        this.initiators.some((initiator) => initiator.nqn === ALLOW_ALL_HOST))
-    );
+    return isSubsystemAllowAllHosts(this.subsystem, this.initiators);
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -195,13 +194,10 @@ export class NvmeofInitiatorsListComponent implements OnInit, OnDestroy {
   }
 
   listInitiators() {
-    this.nvmeofService
-      .getInitiators(this.subsystemNQN, this.group)
-      .subscribe((response: NvmeofSubsystemInitiator[] | { hosts: NvmeofSubsystemInitiator[] }) => {
-        const initiators = Array.isArray(response) ? response : response?.hosts || [];
-        this.initiators = initiators;
-        this.updateAuthStatus();
-      });
+    this.nvmeofService.getInitiators(this.subsystemNQN, this.group).subscribe((response) => {
+      this.initiators = normalizeInitiators(response);
+      this.updateAuthStatus();
+    });
   }
 
   getSubsystem() {

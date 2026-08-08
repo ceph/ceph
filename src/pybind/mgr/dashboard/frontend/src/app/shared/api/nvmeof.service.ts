@@ -8,6 +8,7 @@ import { CephServiceSpec } from '../models/service.interface';
 import {
   AUTHENTICATION,
   ListenerItem,
+  NvmeofInitiatorsResponse,
   NvmeofSubsystem,
   NvmeofSubsystemNamespace
 } from '../models/nvmeof';
@@ -296,8 +297,10 @@ export class NvmeofService {
   }
 
   // Initiators
-  getInitiators(subsystemNQN: string, group: string) {
-    return this.http.get(`${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`);
+  getInitiators(subsystemNQN: string, group: string): Observable<NvmeofInitiatorsResponse> {
+    return this.http.get<NvmeofInitiatorsResponse>(
+      `${API_PATH}/subsystem/${subsystemNQN}/host?gw_group=${group}`
+    );
   }
 
   addSubsystemInitiators(subsystemNQN: string, request: SubsystemInitiatorRequest) {
