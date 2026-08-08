@@ -168,6 +168,7 @@ def with_cephadm_ctx(
     _cephadm = import_cephadm()
     with contextlib.ExitStack() as stack:
         stack.enter_context(mock.patch('cephadmlib.net_utils.attempt_bind'))
+        stack.enter_context(mock.patch('cephadmlib.net_utils.run_in_host', return_value=0))
         stack.enter_context(mock.patch('cephadmlib.exe_utils.find_executable', return_value='foo'))
         stack.enter_context(mock.patch('cephadmlib.container_lookup.get_container_info', return_value=None))
         stack.enter_context(mock.patch('cephadm.is_available', return_value=True))

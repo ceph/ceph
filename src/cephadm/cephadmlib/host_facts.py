@@ -20,6 +20,7 @@ from ceph.utils import bytes_to_human
 from cephadmlib.exe_utils import find_executable
 from cephadmlib.file_utils import read_file
 from cephadmlib.net_utils import get_fqdn, get_ipv4_address, get_ipv6_address
+from cephadmlib.systemd import host_ip
 
 logger = logging.getLogger()
 
@@ -918,23 +919,18 @@ def _list_ipv4_networks(
 
     When *allow_lo_routes* is false, routes on ``lo`` are ignored by the parsers.
     When true, ``_parse_ipv4_lo_route`` supplements the base table.
+
+    ``ip`` is executed on the host via host_ip()/run_in_host() so this works
+    when cephadm itself runs inside a container without host networking.
     """
-    execstr: Optional[str] = find_executable('ip')
-    if not execstr:
-        raise FileNotFoundError("unable to find 'ip' command")
-    out, _, _ = call_throws(
-        ctx,
-        [execstr, 'route', 'ls'],
-        verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-    )
+    out = host_ip(['route', 'ls'], name='cephadm-ip-route.service')
     res = _parse_ipv4_route(out, allow_lo_routes)
     if allow_lo_routes:
         _merge_ipv4_network_dicts(res, _parse_ipv4_lo_route(out))
     if allow_bgp_routes:
-        bgp_out, _, _ = call_throws(
-            ctx,
-            [execstr, '-j', 'route', 'ls', 'proto', 'bgp'],
-            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        bgp_out = host_ip(
+            ['-j', 'route', 'ls', 'proto', 'bgp'],
+            name='cephadm-ip-route-bgp.service',
         )
         _merge_ipv4_network_dicts(
             res, _parse_ipv4_bgp_route(bgp_out, allow_lo_routes)
@@ -1131,26 +1127,17 @@ def _list_ipv6_networks(
     are not listed. When *allow_bgp_routes* is true, ``ip -6 route ls proto bgp``
     is merged into the same shape as the main table (respecting *allow_lo_routes*
     for ``lo`` BGP paths).
+
+    ``ip`` is executed on the host via host_ip()/run_in_host() so this works
+    when cephadm itself runs inside a container without host networking.
     """
-    execstr: Optional[str] = find_executable('ip')
-    if not execstr:
-        raise FileNotFoundError("unable to find 'ip' command")
-    routes, _, _ = call_throws(
-        ctx,
-        [execstr, '-6', 'route', 'ls'],
-        verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-    )
-    ips, _, _ = call_throws(
-        ctx,
-        [execstr, '-6', 'addr', 'ls'],
-        verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
-    )
+    routes = host_ip(['-6', 'route', 'ls'], name='cephadm-ip6-route.service')
+    ips = host_ip(['-6', 'addr', 'ls'], name='cephadm-ip6-addr.service')
     res = _parse_ipv6_route(routes, ips, allow_lo_routes)
     if allow_bgp_routes:
-        bgp_out, _, _ = call_throws(
-            ctx,
-            [execstr, '-6', '-j', 'route', 'ls', 'proto', 'bgp'],
-            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        bgp_out = host_ip(
+            ['-6', '-j', 'route', 'ls', 'proto', 'bgp'],
+            name='cephadm-ip6-route-bgp.service',
         )
         _merge_ipv4_network_dicts(
             res, _parse_ipv6_bgp_route(bgp_out, allow_lo_routes)

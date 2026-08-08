@@ -1,0 +1,64 @@
+ARG CEPH_RELEASE="20.2.2"
+ARG DNF="dnf"
+ARG DNF_OPTS="--setopt=install_weak_deps=False --nodocs"
+ARG RHEL_MAJOR="10"
+
+# ---------------------------------------------------------------------------
+# base – shared runtime dependencies (no Ceph packages)
+# ---------------------------------------------------------------------------
+FROM registry.access.redhat.com/ubi10/ubi:latest AS base
+
+ARG DNF
+ARG DNF_OPTS
+ARG RHEL_MAJOR
+
+RUN ${DNF} install -y ${DNF_OPTS} \
+        podman \
+        python3 \
+        python3-pyyaml \
+        python3-jinja2 \
+        lvm2 \
+        which \
+    && ${DNF} clean all
+
+# Install EPEL and pystemd (needed by cephadmlib/systemd.py).
+# TODO: Remove the EPEL bootstrap once pystemd is available without it /
+# defined as a proper packaging dependency for UBI-based images.
+RUN ${DNF} install -y ${DNF_OPTS} \
+        "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${RHEL_MAJOR}.noarch.rpm" \
+    && ${DNF} install -y ${DNF_OPTS} python3-pystemd \
+    && ${DNF} clean all
+
+USER root
+
+# ---------------------------------------------------------------------------
+# cephadm-dev – no Ceph RPM install; ENTRYPOINT expects /cephadm bind-mount
+# ---------------------------------------------------------------------------
+FROM base AS cephadm-dev
+ENV PYTHONPATH=/ceph/src/cephadm:/ceph/src/python-common
+WORKDIR /ceph
+ENTRYPOINT ["python3", "/ceph/src/cephadm/cephadm.py"]
+
+# ---------------------------------------------------------------------------
+# cephadm – packaged binary from download.ceph.com (default build target)
+# ---------------------------------------------------------------------------
+FROM base AS cephadm
+
+ARG CEPH_RELEASE
+ARG DNF
+ARG DNF_OPTS
+ARG RHEL_MAJOR
+
+# Install the Ceph release repository package so that the cephadm RPM can be
+# found by name.  The Ceph GPG key is imported first so that RPM signature
+# verification succeeds on a fresh base image.
+RUN ${DNF} install -y ${DNF_OPTS} curl \
+    && RPM_URL="https://download.ceph.com/rpm-${CEPH_RELEASE}/el${RHEL_MAJOR}/noarch/ceph-release-1-0.el${RHEL_MAJOR}.noarch.rpm" \
+    && curl -fsSL https://download.ceph.com/keys/release.asc \
+       | rpm --import /dev/stdin \
+    && ${DNF} install -y ${DNF_OPTS} "${RPM_URL}" \
+    && ${DNF} install -y ${DNF_OPTS} cephadm \
+    && ${DNF} clean all
+
+
+ENTRYPOINT ["/usr/sbin/cephadm"]
