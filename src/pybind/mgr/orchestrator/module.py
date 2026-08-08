@@ -18,9 +18,14 @@ except ImportError:
 from ceph.deployment.inventory import Device  # noqa: F401; pylint: disable=unused-variable
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod, OSDType
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, TracingSpec
+from ceph.deployment.service_spec_schema import (
+    build_service_spec_schema,
+    format_service_spec_schema_plain,
+)
 from ceph.deployment.hostspec import SpecValidationError
 from ceph.deployment.utils import unwrap_ipv6
 from ceph.utils import datetime_now
+from orchestrator._interface import service_to_daemon_types
 from ceph.cephadm.images import NonCephImageServiceTypes
 from mgr_util import (
     is_valid_container_image_ref,
@@ -983,6 +988,22 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         completion = self.zap_device(hostname, path)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
+
+    @OrchestratorCLICommand.Read('orch spec schema')
+    def _spec_schema(self,
+                     service_type: Optional[str] = None,
+                     format: Format = Format.plain) -> HandleCommandResult:
+        """
+        Show ServiceSpec field metadata (types, defaults, service-specific options).
+        """
+        try:
+            schema = build_service_spec_schema(service_type, service_to_daemon_types)
+        except ValueError as e:
+            return HandleCommandResult(-errno.EINVAL, '', str(e))
+
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(schema, format, many=False, cls=None))
+        return HandleCommandResult(stdout=format_service_spec_schema_plain(schema))
 
     @OrchestratorCLICommand.Read('orch ls')
     def _list_services(self,

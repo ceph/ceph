@@ -26,6 +26,10 @@ from ceph.deployment.service_spec import (
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import SpecValidationError
+from ceph.deployment.service_spec_schema import (
+    build_service_spec_schema,
+    format_service_spec_schema_plain,
+)
 
 
 @pytest.mark.parametrize("test_input,expected, require_network",
@@ -1652,3 +1656,42 @@ def test_tuned_profile_spec_profile_name_validation(spec_yaml, expect_error, err
         assert spec.placement is not None
         # round-trip
         assert TunedProfileSpec.from_json(spec.to_json()).profile_name == spec.profile_name
+
+
+def test_service_spec_schema_all_known_types():
+    schemas = build_service_spec_schema()
+    assert len(schemas) == len(ServiceSpec.KNOWN_SERVICE_TYPES)
+    returned = {s['service_type'] for s in schemas}
+    assert returned == set(ServiceSpec.KNOWN_SERVICE_TYPES)
+    for entry in schemas:
+        assert entry['spec_class']
+        assert 'fields' in entry
+        assert isinstance(entry['daemon_types'], list)
+
+
+def test_service_spec_schema_osd():
+    osd = build_service_spec_schema('osd')
+    assert osd['spec_class'] == 'DriveGroupSpec'
+    assert osd['requires_service_id'] is True
+    assert 'encrypted' in osd['spec']
+    assert osd['spec']['encrypted']['default'] is False
+    assert 'placement' in osd['fields']
+
+
+def test_service_spec_schema_rgw():
+    rgw = build_service_spec_schema('rgw')
+    assert rgw['requires_service_id'] is True
+    assert rgw['requires_certificates']['user_cert_allowed'] is True
+    assert 'rgw_realm' in rgw['spec']
+
+
+def test_service_spec_schema_unknown_type():
+    with pytest.raises(ValueError, match='Unknown service type'):
+        build_service_spec_schema('not-a-service')
+
+
+def test_service_spec_schema_plain_format():
+    text = format_service_spec_schema_plain(build_service_spec_schema('mgr'))
+    assert 'service_type: mgr' in text
+    assert 'spec_class: ServiceSpec' in text
+    assert 'fields:' in text
