@@ -694,6 +694,15 @@ public:
     background_process.release_projected_usage(usage);
   }
 
+  bool is_storage_full() const {
+    auto *cleaner = background_process.get_main_cleaner();
+    return cleaner ? cleaner->is_storage_full() : false;
+  }
+
+  void account_conflict_pending_free(std::size_t bytes) {
+    background_process.account_conflict_pending_free(bytes);
+  }
+
   backend_type_t get_main_backend_type() const {
     if (!background_process.is_no_background()) {
       return background_process.get_main_backend_type();
@@ -1041,6 +1050,12 @@ private:
       }
     }
 
+    void account_conflict_pending_free(std::size_t bytes) {
+      if (main_cleaner) {
+        main_cleaner->account_conflict_pending_free(bytes);
+      }
+    }
+
     void commit_space_used(paddr_t addr, extent_len_t len) {
       if (state < state_t::SCAN_SPACE) {
         return;
@@ -1110,6 +1125,10 @@ private:
         return cold_cleaner->get_alive_ratio() >= 0.99;
       }
       return main_cleaner->get_alive_ratio() >= 0.99;
+    }
+
+    const AsyncCleaner* get_main_cleaner() const {
+      return main_cleaner.get();
     }
 
     void maybe_wake_background() final {

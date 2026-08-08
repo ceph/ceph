@@ -1285,18 +1285,37 @@ RandomBlockOolWriter::alloc_write_ool_extents(
     try {
       co_await trans_intr::make_interruptible(
         token_bucket.get(size));
+      // Apply backpressure if the accumulated deferred-free byte count of
+      // conflicted OOL writes exceeds the safety threshold, preventing
+      // allocator exhaustion.
+      co_await trans_intr::make_interruptible(
+        rb_cleaner->wait_for_conflict_drain());
       seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
           seastar::make_lw_shared<rbm_pending_ool_t>();
       ptr->pending_extents = t.get_pre_alloc_list();
       assert(!t.is_conflicted());
       t.set_pending_ool(ptr);
+      // The conflicted check, the deferred frees and clear_pending_ool() must
+      // all run in the same continuation that completes the write: it makes
+      // them atomic w.r.t. reactor task interleaving (a conflict marked between
+      // write completion and coroutine resumption could otherwise observe a
+      // stale pending_ool whose frees were already decided), and it guarantees
+      // pending_ool is cleared on every exit path, including errors and
+      // conflict-driven unwinds. t outlives the future: the submit fiber is
+      // suspended awaiting this coroutine.
       co_await do_write(t, extents
-      ).finally([this, ptr=ptr] {
+      ).finally([this, ptr=ptr, &t] {
         if (ptr->is_conflicted) {
+          std::size_t freed = 0;
           for (auto &e : ptr->pending_extents) {
             rb_cleaner->mark_space_free(e->get_paddr(), e->get_length());
+            freed += e->get_length();
+          }
+          if (freed > 0) {
+            rb_cleaner->deaccount_conflict_pending_free(freed);
           }
         }
+        t.clear_pending_ool();
       });
     } catch (...) {
       token_bucket.release(size);
@@ -1401,7 +1420,7 @@ RandomBlockOolWriter::do_write(
       trans_stats.num_records += writes.size();
       return alloc_write_ertr::parallel_for_each(writes,
         [](auto& info) {
-        return info.rbm->write(info.offset, info.bp
+        return info.rbm->write(info.offset, std::move(info.bp)
         ).handle_error(
           alloc_write_ertr::pass_further{},
           crimson::ct_error::assert_all(
