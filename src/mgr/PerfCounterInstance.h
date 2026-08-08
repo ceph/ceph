@@ -15,6 +15,7 @@
 #define PERF_COUNTER_INSTANCE_H_
 
 #include <cstdint>
+#include <optional>
 
 #include <boost/circular_buffer.hpp>
 
@@ -70,6 +71,39 @@ class PerfCounterInstance
   }
   void push(utime_t t, uint64_t const &v);
   void push_avg(utime_t t, uint64_t const &s, uint64_t const &c);
+
+  // Compute a per-op average latency for display. Prefers the delta
+  // between the two most recent samples in which the op count advanced
+  // (walking back through the buffer past any idle samples), since that
+  // reflects current behavior. `max_age` bounds the walk-back: samples
+  // older than `latest.t - max_age` are ignored, so a long idle stretch
+  // can't drag a stale "busy" reference point into the displayed value.
+  // Pass a zero utime_t to disable the bound.
+  //
+  // Falls back to the lifetime cumulative `s/c` only when a single
+  // sample is buffered (right after a mgr restart, before any delta is
+  // possible). When multiple samples are buffered but none within the
+  // window show op activity, returns nullopt - the counter is currently
+  // idle and the caller can render a dash rather than a stale value.
+  std::optional<uint64_t> get_current_avg(utime_t max_age = utime_t()) const {
+    if (avg_buffer.empty()) {
+      return std::nullopt;
+    }
+    const auto& latest = avg_buffer.back();
+    for (size_t i = avg_buffer.size() - 1; i-- > 0; ) {
+      const auto& prev = avg_buffer[i];
+      if (!max_age.is_zero() && (latest.t - prev.t) > max_age) {
+        break;
+      }
+      if (latest.c > prev.c) {
+        return (latest.s - prev.s) / (latest.c - prev.c);
+      }
+    }
+    if (avg_buffer.size() == 1 && latest.c > 0) {
+      return latest.s / latest.c;
+    }
+    return std::nullopt;
+  }
 
   PerfCounterInstance(enum perfcounter_type_d type)
   {
