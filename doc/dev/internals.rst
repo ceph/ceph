@@ -85,6 +85,7 @@ Core Architecture
    mempool_accounting
    iana
    cxx
+   lockstat
 
 RADOS and Object Store
 ======================
