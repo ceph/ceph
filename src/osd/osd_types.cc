@@ -1693,8 +1693,10 @@ void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* t
 
 void pg_pool_t::calc_pg_masks()
 {
-  pg_num_mask = (1 << cbits(pg_num-1)) - 1;
-  pgp_num_mask = (1 << cbits(pgp_num-1)) - 1;
+  // Use 1ULL: pg_num==0 makes pg_num-1 wrap to UINT_MAX, cbits() returns 32;
+  // (1 << 32) on int is UB, but (1ULL << 32) - 1 is well-defined and equals UINT_MAX.
+  pg_num_mask = static_cast<unsigned>((1ULL << cbits(pg_num - 1)) - 1);
+  pgp_num_mask = static_cast<unsigned>((1ULL << cbits(pgp_num - 1)) - 1);
 }
 
 unsigned pg_pool_t::get_pg_num_divisor(pg_t pgid) const
