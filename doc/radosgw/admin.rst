@@ -896,6 +896,80 @@ all unauthenticated users:
    --commit``. If no period is present, the RGW instances must be restarted
    for the changes to take effect.
 
+.. _radosgw-rate-limit-backends:
+
+Distributed Rate Limit Backends
+--------------------------------
+
+By default, each RGW instance tracks rate limit counters in its own memory, so
+the configured limits are enforced *per gateway* rather than across the cluster
+(see `How Metrics Work`_). This means the limits must be divided by the number
+of active gateways, and unbalanced load can leave the limit underutilized.
+
+The :confval:`rgw_ratelimit_backend` option selects where RGW stores the runtime
+rate limit counters, so that the limits can optionally be enforced cluster-wide:
+
+- ``local`` (default): Each RGW keeps counters in its own memory. This preserves
+  the historical behavior and requires no additional configuration. The limits
+  are enforced per gateway.
+
+- ``rados``: Counters are stored in a dedicated RADOS pool using the
+  ``cls_rgw_ratelimit`` object class, so all gateways share the same counters and
+  the limits are enforced cluster-wide. Counter keys are hashed across
+  :confval:`rgw_ratelimit_rados_num_shards` objects (whose names are prefixed with
+  :confval:`rgw_ratelimit_rados_oid_prefix`) in the pool named by
+  :confval:`rgw_ratelimit_rados_pool`.
+
+- ``redis``: Counters are stored in a cluster-wide shared counter registry, keyed
+  with :confval:`rgw_ratelimit_redis_key_prefix`.
+
+  .. note:: This backend currently uses an in-process shared registry and does
+     not yet connect to an external Redis or Valkey server. Connecting to an
+     external server is planned for a future release.
+
+:confval:`rgw_ratelimit_backend` is a startup option: change it in central
+config or in ``ceph.conf`` and restart all RGW instances. The per-user,
+per-bucket, and global rate limit configuration described above is unchanged and
+applies to every backend.
+
+When a distributed backend is enabled, dividing the configured limits by the
+number of gateways is no longer required, because the counters are shared.
+
+Availability and fail-open behavior
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The :confval:`rgw_ratelimit_fail_open` option (enabled by default) controls what
+happens when the distributed backend is unavailable:
+
+- When enabled, requests are allowed to proceed if the backend cannot be reached.
+  For the ``rados`` backend, RGW falls back to in-memory counters for the
+  affected operation. This favors availability over strict enforcement.
+
+- When disabled, requests are throttled when the backend cannot be reached, which
+  favors strict enforcement over availability.
+
+If the ``rados`` backend cannot be initialized at startup (for example, when
+:confval:`rgw_ratelimit_rados_pool` is empty or the pool does not exist), RGW
+falls back to the in-memory shared registry.
+
+Example: enabling the RADOS backend
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a pool for the rate limit counters and configure RGW to use it:
+
+.. prompt:: bash #
+
+   ceph osd pool create .rgw.ratelimit 32 32
+   ceph config set client.rgw rgw_ratelimit_backend rados
+   ceph config set client.rgw rgw_ratelimit_rados_pool .rgw.ratelimit
+
+Restart the RGW instances for the change to take effect. Optional tuning:
+
+.. prompt:: bash #
+
+   ceph config set client.rgw rgw_ratelimit_rados_num_shards 256
+   ceph config set client.rgw rgw_ratelimit_fail_open true
+
 Usage
 =====
 
