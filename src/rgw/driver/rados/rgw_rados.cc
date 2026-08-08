@@ -1107,6 +1107,11 @@ void RGWRados::finalize()
   }
   delete sync_tracer;
   
+  if (use_restore_thread) {
+    restore->stop_processor();
+  }
+  restore = NULL;
+
   delete lc;
   lc = NULL; 
 
@@ -5496,6 +5501,7 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
                              RGWObjTier& tier_config,
                              std::optional<uint64_t> days,
 			     bool& in_progress,
+			     uint64_t& size,
                              const DoutPrefixProvider *dpp,
                              optional_yield y) {
 
@@ -5534,6 +5540,17 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   rgw_placement_rule dest_placement(dest_bucket_info.placement_rule, tier_ctx.restore_storage_class);
+
+  // check if the dest placement is still valid
+  if (!tier_ctx.driver->valid_placement(dest_placement)) {
+    ret = -EINVAL;
+    ldpp_dout(dpp, 0) << "ERROR: non existent restore storage class:"
+	  	      << tier_ctx.restore_storage_class
+		      << ". Restore of object(" << dest_obj << ") , failed, ret="
+		      << ret << dendl;
+    return ret;
+  }
+
   RGWRadosPutObj cb(dpp, cct, plugin, compressor, &processor, progress_cb, progress_data,
                     [&](map<string, bufferlist> obj_attrs) {
                       processor.set_tail_placement(dest_placement);
@@ -5717,7 +5734,9 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
     return ret;
   }
 
-  return ret; 
+  // set size to be used to send bucket notification
+  size = accounted_size;
+  return 0;
 }
 
 int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, optional_yield y)
