@@ -738,7 +738,7 @@
   usage: rbd disk-usage [--pool <pool>] [--namespace <namespace>] 
                         [--image <image>] [--snap <snap>] [--format <format>] 
                         [--pretty-format] [--from-snap <from-snap>] [--exact] 
-                        [--merge-snapshots] 
+                        [--merge-snapshots] [--all-snapshots] 
                         <image-or-snap-spec> 
   
   Show disk usage stats for pool, image or snapshot.
@@ -758,6 +758,8 @@
     --from-snap arg       snapshot starting point
     --exact               compute exact disk usage (slow)
     --merge-snapshots     merge snapshot sizes with its image
+    --all-snapshots       allow inspecting the disk usage of all snapshots, like
+                          group/trash/mirror snapshots
   
   rbd help encryption format
   usage: rbd encryption format [--pool <pool>] [--namespace <namespace>] 
