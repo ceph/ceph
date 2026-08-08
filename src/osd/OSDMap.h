@@ -34,6 +34,7 @@
 
 #include "include/btree_map.h"
 #include "include/common_fwd.h"
+#include "common/Formatter.h"
 #include "include/fs_types.h" // for struct file_layout_t
 #include "include/types.h"
 #include "common/ceph_releases.h"
