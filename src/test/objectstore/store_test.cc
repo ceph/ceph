@@ -9557,6 +9557,84 @@ TEST_P(StoreTestSpecificAUSize, DeferredOnBigOverwrite5) {
   }
 }
 
+TEST_P(StoreTestSpecificAUSize, BluestoreReshardDBOnMountTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  // create a store with a non-sharded RocksDB database, as created by
+  // OSDs deployed prior to Pacific
+  SetVal(g_conf(), "bluestore_rocksdb_cf", "false");
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(4096);
+
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  bufferlist bl;
+  bl.append("1234512345");
+  int r;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    t.omap_setkeys(cid, hoid, map<string, bufferlist>{{"key1", bl}});
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ch.reset();
+
+  std::string sharding;
+  ASSERT_FALSE(bstore->get_db_sharding(sharding));
+
+  // restart with automatic resharding enabled
+  r = store->umount();
+  ASSERT_EQ(r, 0);
+  SetVal(g_conf(), "bluestore_rocksdb_cf", "true");
+  SetVal(g_conf(), "bluestore_reshard_db_on_mount", "true");
+  g_conf().apply_changes(nullptr);
+  r = store->mount();
+  ASSERT_EQ(r, 0);
+
+  // the db is now sharded as defined by bluestore_rocksdb_cfs
+  ASSERT_TRUE(bstore->get_db_sharding(sharding));
+  ASSERT_EQ(sharding, g_conf().get_val<std::string>("bluestore_rocksdb_cfs"));
+
+  // and the data is still there
+  ch = store->open_collection(cid);
+  ASSERT_TRUE(ch != nullptr);
+  {
+    bufferlist readback;
+    r = store->read(ch, hoid, 0, bl.length(), readback);
+    ASSERT_EQ(r, (int)bl.length());
+    ASSERT_TRUE(bl_eq(bl, readback));
+  }
+  {
+    bufferlist header;
+    map<string, bufferlist> keys;
+    r = store->omap_get(ch, hoid, &header, &keys);
+    ASSERT_EQ(r, 0);
+    ASSERT_EQ(keys.count("key1"), 1u);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  // a second remount with the option still set is a no-op
+  ch.reset();
+  r = store->umount();
+  ASSERT_EQ(r, 0);
+  r = store->mount();
+  ASSERT_EQ(r, 0);
+  ASSERT_TRUE(bstore->get_db_sharding(sharding));
+}
+
 TEST_P(StoreTestSpecificAUSize, DeferredDifferentChunks) {
 
   if (string(GetParam()) != "bluestore")
