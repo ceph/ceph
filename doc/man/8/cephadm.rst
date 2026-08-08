@@ -54,6 +54,7 @@ Synopsis
 
 | **cephadm** **bootstrap** [-h] [--config CONFIG] [--mon-id MON_ID]
 |                           [--mon-addrv MON_ADDRV] [--mon-ip MON_IP]
+|                           [--mon-net MON_NET]
 |                           [--mgr-id MGR_ID] [--fsid FSID]
 |                           [--log-to-file] [--single-host-defaults]
 |                           [--output-dir OUTPUT_DIR]
@@ -234,6 +235,7 @@ Arguments:
 * [--config CONFIG, -c CONFIG]    ceph conf file to incorporate
 * [--mon-id MON_ID]               mon id (default: local hostname)
 * [--mon-addrv MON_ADDRV]         mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])
+* [--mon-net MON_NET]             mon network in CIDR notation (e.g., 192.168.1.0/24)
 * [--mon-ip MON_IP]               mon IP
 * [--mgr-id MGR_ID]               mgr id (default: randomly generated)
 * [--fsid FSID]                   cluster FSID
