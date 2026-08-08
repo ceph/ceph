@@ -183,7 +183,7 @@ Commands
 add-repo
 --------
 
-configure local package repository to also include the ceph repository.
+configure local package repository to also include the Ceph repository.
 
 Arguments:
 
@@ -215,7 +215,7 @@ Configuration:
 When starting the shell, cephadm looks for configuration in the following order.
 Only the first values found are used:
 
-1. An explicit, user provided path to a config file (``-c/--config`` option)
+1. An explicit, user-provided path to a config file (``-c/--config`` option)
 2. Config file for daemon specified with ``--name`` parameter (``/var/lib/ceph/<fsid>/<daemon-name>/config``)
 3. ``/var/lib/ceph/<fsid>/config/ceph.conf`` if it exists
 4. The config file for a ``mon`` daemon (``/var/lib/ceph/<fsid>/mon.<mon-id>/config``) if it exists
@@ -225,13 +225,13 @@ Only the first values found are used:
 bootstrap
 ---------
 
-Bootstrap a cluster on the local host. It deploys a MON and a MGR and then also automatically
+Bootstrap a cluster on the local host. It deploys a Monitor and a Manager and then also automatically
 deploys the monitoring stack on this host (see --skip-monitoring-stack) and calls
 ``ceph orch host add $(hostname)`` (see --skip-ssh).
 
 Arguments:
 
-* [--config CONFIG, -c CONFIG]    ceph conf file to incorporate
+* [--config CONFIG, -c CONFIG]    Ceph configuration file to incorporate
 * [--mon-id MON_ID]               mon id (default: local hostname)
 * [--mon-addrv MON_ADDRV]         mon IPs (e.g., [v2:localipaddr:3300,v1:localipaddr:6789])
 * [--mon-ip MON_IP]               mon IP
@@ -243,7 +243,7 @@ Arguments:
 * [--output-keyring OUTPUT_KEYRING] location to write keyring file with new cluster admin and mon keys
 * [--output-config OUTPUT_CONFIG] location to write conf file to connect to new cluster
 * [--output-pub-ssh-key OUTPUT_PUB_SSH_KEY] location to write the cluster's public SSH key
-* [--skip-ssh                     skip setup of ssh key on local host
+* [--skip-ssh]                    skip setup of ssh key on local host
 * [--initial-dashboard-user INITIAL_DASHBOARD_USER] Initial user for the dashboard
 * [--initial-dashboard-password INITIAL_DASHBOARD_PASSWORD] Initial password for the initial dashboard user
 * [--ssl-dashboard-port SSL_DASHBOARD_PORT] Port number used to connect with dashboard using SSL
@@ -252,7 +252,7 @@ Arguments:
 * [--ssh-config SSH_CONFIG] SSH config
 * [--ssh-private-key SSH_PRIVATE_KEY] SSH private key
 * [--ssh-public-key SSH_PUBLIC_KEY] SSH public key
-* [--ssh-user SSH_USER]           set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users'
+* [--ssh-user SSH_USER]           set user for SSHing to cluster hosts, passwordless sudo will be needed for non-root users
 * [--skip-mon-network]            set mon public_network based on bootstrap mon ip
 * [--skip-dashboard]              do not enable the Ceph Dashboard
 * [--dashboard-password-noupdate] stop forced dashboard password change
@@ -264,7 +264,7 @@ Arguments:
 * [--allow-fqdn-hostname]         allow hostname that is fully-qualified (contains ".")
 * [--skip-prepare-host]           Do not prepare host
 * [--orphan-initial-daemons]      Set mon and mgr service to unmanaged and do not create the crash service
-* [--skip-monitoring-stack]       Do not automatically provision monitoring stack] (prometheus, grafana, alertmanager, node-exporter)
+* [--skip-monitoring-stack]       Do not automatically provision monitoring stack (prometheus, grafana, alertmanager, node-exporter)
 * [--apply-spec APPLY_SPEC]       Apply cluster spec after bootstrap (copy ssh key, add hosts and apply services)
 * [--registry-url REGISTRY_URL]   url of custom registry to login to. e.g. docker.io, quay.io
 * [--registry-username REGISTRY_USERNAME] username of account to login to on custom registry
@@ -280,6 +280,7 @@ Run ceph-volume inside a container::
     cephadm ceph-volume inventory
 
 Positional arguments:
+
 * [command]               command
 
 Arguments:
@@ -343,7 +344,7 @@ Arguments:
 * [--key KEY]                 key for new daemon
 * [--osd-fsid OSD_FSID]       OSD uuid, if creating an OSD container
 * [--skip-firewalld]          Do not configure firewalld
-* [--tcp-ports                List of tcp ports to open in the host firewall
+* [--tcp-ports]               List of TCP ports to open in the host firewall
 * [--reconfig]                Reconfigure a previously deployed daemon
 * [--allow-ptrace]            Allow SYS_PTRACE on daemon container
 
@@ -356,6 +357,7 @@ Run an interactive shell inside a running daemon container::
     cephadm enter --name mgr.myhost.ysubfo
 
 Positional arguments:
+
 * [command]               command
 
 Arguments:
@@ -366,7 +368,7 @@ Arguments:
 install
 -------
 
-install ceph package(s)
+install Ceph package(s)
 
 Positional arguments:
 
@@ -503,7 +505,7 @@ Arguments:
 pull
 ----
 
-Pull the ceph image::
+Pull the Ceph image::
 
     cephadm pull
 
@@ -584,7 +586,7 @@ remove package repository configuration
 run
 ---
 
-run a ceph daemon, in a container, in the foreground
+run a Ceph daemon, in a container, in the foreground
 
 Arguments:
 
@@ -647,18 +649,18 @@ Update the OSD service for specific OSDs
 Arguments:
 
 * [--fsid FSID]                 cluster FSID
-* --osd-ids OSD_IDS             Comma-separated OSD IDs
-* --service-name SERVICE_NAME   OSD service name
+* [--osd-ids OSD_IDS]           Comma-separated OSD IDs
+* [--service-name SERVICE_NAME] OSD service name
 
 
 Availability
 ============
 
 :program:`cephadm` is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the documentation at http://docs.ceph.com/ for more information.
+the documentation at https://docs.ceph.com/ for more information.
 
 
 See also
 ========
 
-:doc:`ceph-volume <ceph-volume>`\(8),
+:doc:`ceph-volume <ceph-volume>`\(8)

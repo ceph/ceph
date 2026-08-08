@@ -16,7 +16,7 @@ Synopsis
 Description
 ===========
 
-**rbd** is a utility for manipulating rados block device (RBD) images,
+**rbd** is a utility for manipulating RADOS block device (RBD) images,
 used by the Linux rbd driver and the rbd storage driver for QEMU/KVM.
 RBD images are simple block devices that are striped over objects and
 stored in a RADOS object store. The size of the objects the image is
@@ -29,11 +29,11 @@ Options
 .. option:: -c ceph.conf, --conf ceph.conf
 
    Use ceph.conf configuration file instead of the default /etc/ceph/ceph.conf to
-   determine monitor addresses during startup.
+   determine Monitor addresses during startup.
 
 .. option:: -m monaddress[:port]
 
-   Connect to specified monitor (instead of looking through ceph.conf).
+   Connect to specified Monitor (instead of looking through ceph.conf).
 
 .. option:: --cluster cluster-name
 
@@ -45,7 +45,7 @@ Options
 
 .. option:: --namespace namespace-name
 
-   Use a pre-defined image namespace within a pool
+   Use a predefined image namespace within a pool
 
 .. option:: --no-progress
 
@@ -77,7 +77,7 @@ Parameters
 
 .. option:: --object-size size-in-B/K/M
 
-   Specifies the object size in B/K/M.  Object size will be rounded up the
+   Specifies the object size in B/K/M.  Object size will be rounded up to the
    nearest power of two; if no suffix is given, unit B is assumed.  The default
    object size is 4M, smallest is 4K and maximum is 32M.
 
@@ -263,7 +263,7 @@ Commands
   (default) or other supported device (*nbd* or *ubbd* on Linux or *ggate* on
   FreeBSD).
 
-  The --options argument is a comma separated list of device type
+  The --options argument is a comma-separated list of device type
   specific options (opt1,opt2=val,...).
 
 :command:`device unmap` [-t | --device-type *device-type*] [-o | --options *device-options*] [--snap-id *snap-id*] *image-spec* | *snap-spec* | *device-path*
@@ -303,7 +303,7 @@ Commands
   If the RBD fast-diff feature is not enabled on images, this operation will
   require querying the OSDs for every potential object within the image.
 
-  The --merge-snapshots will merge snapshots used space into their parent images.
+  The --merge-snapshots option will merge snapshots' used space into their parent images.
 
 :command:`encryption format` *image-spec* *format* *passphrase-file* [--cipher-alg *alg*]
   Formats image to an encrypted format.
@@ -313,8 +313,8 @@ Commands
 
 :command:`export` [--export-format *format (1 or 2)*] (*image-spec* | *snap-spec*) [*dest-path*]
   Export image to dest path (use - for stdout).
-  The --export-format accepts '1' or '2' currently. Format 2 allow us to export not only the content
-  of image, but also the snapshots and other properties, such as image_order, features.
+  The --export-format accepts '1' or '2' currently. Format 2 allows us to export not only the content
+  of the image, but also the snapshots and other properties, such as image_order and features.
 
 :command:`export-diff` [--from-snap *snap-name*] [--whole-object] (*image-spec* | *snap-spec*) *dest-path*
   Export an incremental diff for an image to dest path (use - for stdout).  If
@@ -390,7 +390,7 @@ Commands
   Remove metadata key with the value.
 
 :command:`image-meta set` *image-spec* *key* *value*
-  Set metadata key with the value. They will displayed in `image-meta list`.
+  Set metadata key with the value. They will be displayed in `image-meta list`.
 
 :command:`import` [--export-format *format (1 or 2)*] [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*] [--estimated-size *size-in-M/G/T*]... [--image-shared] *src-path* [*image-spec*]
   Create a new image and import its data from path (use - for
@@ -401,15 +401,15 @@ Commands
   The --stripe-unit and --stripe-count arguments are optional, but must be
   used together.
 
-  The --export-format accepts '1' or '2' currently. Format 2 allow us to import not only the content
-  of image, but also the snapshots and other properties, such as image_order, features.
+  The --export-format accepts '1' or '2' currently. Format 2 allows us to import not only the content
+  of image, but also the snapshots and other properties, such as image_order and features.
 
 :command:`import-diff` *src-path* *image-spec*
   Import an incremental diff of an image and apply it to the current image.  If the diff
   was generated relative to a start snapshot, we verify that snapshot already exists before
   continuing.  If there was an end snapshot we verify it does not already exist before
   applying the changes, and create the snapshot when we are done.
-  
+
 :command:`info` *image-spec* | *snap-spec*
   Will dump information (such as size and object size) about a specific rbd image.
   If the image is a clone, information about its parent is also displayed.
@@ -419,7 +419,7 @@ Commands
   Flag image journal client as disconnected.
 
 :command:`journal export` [--verbose] [--no-error] *src-journal-spec* *path-name*
-  Export image journal to path (use - for stdout). It can be make a backup
+  Export image journal to path (use - for stdout). It can be used to make a backup
   of the image journal especially before attempting dangerous operations.
 
   Note that this command may not always work if the journal is badly corrupted.
@@ -462,11 +462,11 @@ Commands
 
 :command:`merge-diff` *first-diff-path* *second-diff-path* *merged-diff-path*
   Merge two continuous incremental diffs of an image into one single diff. The
-  first diff's end snapshot must be equal with the second diff's start snapshot.
+  first diff's end snapshot must be equal to the second diff's start snapshot.
   The first diff could be - for stdin, and merged diff could be - for stdout, which
   enables multiple diff files to be merged using something like
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
-  currently only support the source incremental diff with stripe-count == 1
+  currently only supports the source incremental diff with stripe-count == 1
 
 :command:`migration abort` *image-spec*
   Cancel image migration. This step may be run after successful or
@@ -492,9 +492,9 @@ Commands
   by its destination spec.
 
   An image can also be migrated from a read-only import source by adding the
-  *--import-only* optional and providing a JSON-encoded *--source-spec* or a
+  *--import-only* option and providing a JSON-encoded *--source-spec* or a
   path to a JSON-encoded source-spec file using the *--source-spec-path*
-  optionals.
+  option.
 
 :command:`mirror image demote` *image-spec*
   Demote a primary image to non-primary for RBD mirroring.
@@ -564,7 +564,7 @@ Commands
 :command:`mirror pool peer set` [*pool-name*] *uuid* *key* *value*
   Update mirroring peer settings.
   The key can be either ``client`` or ``cluster``, and the value
-  is corresponding to remote client name or remote cluster name.
+  corresponds to remote client name or remote cluster name.
 
 :command:`mirror pool promote` [--force] [*pool-name*]
   Promote all non-primary images within a pool or namespace to primary.
@@ -667,7 +667,7 @@ Commands
 :command:`sparsify` [--sparse-size *sparse-size*] *image-spec*
   Reclaim space for zeroed image extents. The default sparse size is
   4096 bytes and can be changed via --sparse-size option with the
-  following restrictions: it should be power of two, not less than
+  following restrictions: it should be a power of two, not less than
   4096, and not larger than image object size.
 
 :command:`status` *image-spec*
@@ -680,7 +680,7 @@ Commands
   Move an image to the trash. Images, even ones actively in-use by 
   clones, can be moved to the trash and deleted at a later time. Use
   ``--expires-at`` to set the expiration time of an image after which
-  it's allowed to be removed.
+  it is allowed to be removed.
 
 :command:`trash purge` [*pool-name*]
   Remove all expired images from trash.
@@ -738,7 +738,7 @@ The striping is controlled by three parameters:
 
 .. option:: object-size
 
-  The size of objects we stripe over is a power of two. It will be rounded up the nearest power of two.
+  The size of objects we stripe over is a power of two. It will be rounded up to the nearest power of two.
   The default object size is 4 MB, smallest is 4K and maximum is 32M.
 
 .. option:: stripe-unit
@@ -832,7 +832,7 @@ Per mapping (block device) `rbd device map` options:
   manually zeroing.
 
 * abort_on_full - Fail write requests with -ENOSPC when the cluster is full or
-  the data pool reaches its quota (since 5.0).  The default behaviour is to
+  the data pool reaches its quota (since 5.0).  The default behavior is to
   block until the full condition is cleared.
 
 * alloc_size - Minimum allocation unit of the underlying OSD object store
@@ -857,7 +857,7 @@ Per mapping (block device) `rbd device map` options:
   Each key-value pair stands on its own: "myrack" doesn't need to reside in
   "mydc", which in turn doesn't need to reside in "myregion".  The location
   is not a path to the root of the hierarchy but rather a set of nodes that
-  are matched independently, owning to the fact that bucket names are unique
+  are matched independently, owing to the fact that bucket names are unique
   within a CRUSH map.  "Multipath" locations are supported, so it is possible
   to indicate locality for multiple parallel hierarchies::
 
@@ -919,8 +919,8 @@ Per mapping (block device) `rbd device map` options:
   mode, agree to 'crc' mode.
 
 * rxbounce - Use a bounce buffer when receiving data (since 5.17).  The default
-  behaviour is to read directly into the destination buffer.  A bounce buffer
-  is needed if the destination buffer isn't guaranteed to be stable (i.e. remain
+  behavior is to read directly into the destination buffer.  A bounce buffer
+  is needed if the destination buffer is not guaranteed to be stable (i.e. remain
   unchanged while it is being read to).  In particular this is the case for
   Windows where a system-wide "dummy" (throwaway) page may be mapped into the
   destination buffer in order to generate a single large I/O.  Otherwise,
@@ -982,7 +982,7 @@ To map an image via the kernel with cephx enabled::
 
        rbd device map mypool/myimage --id admin --keyfile secretfile
 
-To map an image via the kernel with different cluster name other than default *ceph*::
+To map an image via the kernel with a cluster name other than the default *ceph*::
 
        rbd device map mypool/myimage --cluster cluster-name
 
