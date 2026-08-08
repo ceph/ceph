@@ -1596,6 +1596,9 @@ Usage:
                                             'journal_devices']:
                         drive_group_spec[drv_grp_spec_arg] = []
                         drive_group_spec[drv_grp_spec_arg].append(value)
+                    elif drv_grp_spec_arg in ['extra_container_args',
+                                              'extra_entrypoint_args']:
+                        drive_group_spec[drv_grp_spec_arg] = value.split()
                     else:
                         if value.lower() in ['true', 'false']:
                             list_drive_group_spec_bool_arg.append(drv_grp_spec_arg)
