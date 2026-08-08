@@ -115,6 +115,42 @@ Example with RDMA enabled:
    address is RDMA-capable. On the host, run ``rdma link show`` and confirm the
    netdev for the interface with the bind IP is listed.
 
+Ceph Client Object Cache
+------------------------
+
+NFS Ganesha's Ceph FSAL supports Ceph client object caching. These settings apply
+only to **CephFS** exports (not RGW exports). Object caching is **disabled by
+default** (``enable_client_object_cache: false``); enabling it increases Ganesha
+memory use. Tune it via the NFS service specification:
+
+* ``enable_client_object_cache`` (bool, default ``false``) — enable Ceph client object caching
+* ``client_object_cache_size`` (int or size string, optional) — maximum size of the object
+  cache. Accepts an integer number of bytes, or a size string with units
+  ``KB``, ``MB``, ``GB``, ``KiB``, ``MiB``, or ``GiB`` (for example,
+  ``512KiB``, ``100MB``, ``1GiB``).
+* ``client_object_cache_max_dirty`` (int or size string, optional) — maximum dirty data in
+  the object cache (same units as above). When both size fields are set,
+  ``client_object_cache_size`` must be greater than ``client_object_cache_max_dirty``.
+
+Example with object caching enabled:
+
+.. code-block:: yaml
+
+    service_type: nfs
+    service_id: mynfs
+    placement:
+      count: 1
+      hosts: [host1]
+    spec:
+      port: 2049
+      enable_client_object_cache: true
+      client_object_cache_size: 1MiB
+      client_object_cache_max_dirty: 0
+
+These values are converted to bytes when written into a ``CEPH`` block in
+``ganesha.conf`` (as ``client_oc``, ``client_oc_size``, and
+``client_oc_max_dirty``) when object caching is enabled.
+
 NFS Daemon Colocation
 ----------------------
 
