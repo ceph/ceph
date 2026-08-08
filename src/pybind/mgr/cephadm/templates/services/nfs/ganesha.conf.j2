@@ -100,4 +100,10 @@ TLS_CONFIG{
 {% endif %}
 }
 {% endif %}
+GRPC {
+        GRPC_Server_Cert = "/etc/ganesha/certs/server.crt";
+        GRPC_Server_Key  = "/etc/ganesha/certs/server.key";
+        GRPC_CA_Cert     = "/etc/ganesha/certs/ca.crt";
+}
+
 %url    {{ url }}

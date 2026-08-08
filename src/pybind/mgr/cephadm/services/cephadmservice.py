@@ -425,6 +425,7 @@ class CephadmService(metaclass=ABCMeta):
         ips: Optional[List[str]] = None,
         fqdns: Optional[List[str]] = None,
         feature: Optional[str] = None,
+        label: Optional[str] = None,
     ) -> TLSCredentials:
 
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
@@ -441,7 +442,8 @@ class CephadmService(metaclass=ABCMeta):
         elif cert_source == CertificateSource.REFERENCE.value:
             return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name, ca_cert_name)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
-            return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
+            return self._get_cephadm_signed_certificates(
+                svc_spec, daemon_spec, ips, fqdns, custom_sans, label=label)
         else:
             logger.error(f'Invalid cert_source: {cert_source}')
             return EMPTY_TLS_CREDENTIALS
@@ -524,24 +526,62 @@ class CephadmService(metaclass=ABCMeta):
         ips: List[str],
         fqdns: List[str],
         custom_sans: List[str],
+        label: Optional[str] = None,
     ) -> TLSCredentials:
+        """Generate or reuse a cephadm-signed per-host server cert.
+
+        When label is provided the cert is stored under a dedicated storage key
+        so it does not conflict with the service's primary TLS cert (e.g. label='grpc').
+        When label is None the standard unlabeled TLS path is used.
+        """
+        svc_name = svc_spec.service_name()
+
+        if label:
+            self.mgr.cert_mgr.register_self_signed_cert_key_pair(svc_name, label=label)
+            creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, daemon_spec.host, label)
+            if creds:
+                cert_ips, cert_fqdns = extract_ips_and_fqdns_from_cert(creds.cert)
+                if sorted(cert_ips) == sorted(ips) and sorted(cert_fqdns) == sorted(fqdns):
+                    return creds
+            creds = self.mgr.cert_mgr.generate_cert(fqdns, ips)
+            self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, creds, host=daemon_spec.host, label=label)
+            return creds
 
         custom_sans = custom_sans or svc_spec.custom_sans or []
         ips = ips or [self.mgr.inventory.get_addr(daemon_spec.host)]
         fqdns = fqdns or [self.mgr.get_fqdn(daemon_spec.host)]
-        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_spec.service_name(), daemon_spec.host)
+        tls_creds = self.mgr.cert_mgr.get_self_signed_tls_credentials(svc_name, daemon_spec.host)
         if tls_creds:
             combined_fqdns = sorted(set(s.lower() for s in fqdns + custom_sans))
             cert_ips, cert_fqdns = extract_ips_and_fqdns_from_cert(tls_creds.cert)
             if sorted(cert_ips) == sorted(ips) and sorted(cert_fqdns) == sorted(combined_fqdns):
-                # Nothing has changed, use the stored certifiactes
                 return tls_creds
 
-        # Either there were not certs or ips/fqdns have changed generate new cets
         tls_creds = self.mgr.cert_mgr.generate_cert(fqdns, ips, custom_sans)
-        self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_spec.service_name(), tls_creds, host=daemon_spec.host)
-
+        self.mgr.cert_mgr.save_self_signed_cert_key_pair(svc_name, tls_creds, host=daemon_spec.host)
         return tls_creds
+
+    def _get_or_generate_service_cert(
+        self,
+        cert_name: str,
+        key_name: str,
+        cn: str,
+        svc_name: str,
+    ) -> Tuple[str, str]:
+        """Fetch a SERVICE-scoped cert/key from cert_mgr; generate a simple cert if absent.
+
+        The generated cert carries only a CN with no host IP or FQDN in the SAN,
+        making it suitable for client certificates not bound to a specific host.
+        Returns (cert_pem, key_pem).
+        """
+        cert = self.mgr.cert_mgr.get_cert(cert_name, service_name=svc_name)
+        key = self.mgr.cert_mgr.get_key(key_name, service_name=svc_name)
+        if not (cert and key):
+            creds = self.mgr.cert_mgr.generate_cert([cn], [cn])
+            cert, key = creds.cert, creds.key
+            self.mgr.cert_mgr.save_cert(cert_name, cert, service_name=svc_name)
+            self.mgr.cert_mgr.save_key(key_name, key, service_name=svc_name)
+        return cert, key
 
     def allow_colo(self) -> bool:
         """
