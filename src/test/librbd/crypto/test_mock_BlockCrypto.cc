@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <librbd/crypto/DataCryptor.h>
+#include "gmock/gmock.h"
 #include "test/librbd/test_fixture.h"
 #include "librbd/crypto/BlockCrypto.h"
 #include "test/librbd/mock/crypto/MockDataCryptor.h"
@@ -75,8 +77,10 @@ struct TestMockCryptoBlockCrypto : public TestFixture {
     void expect_update_context(const std::string& in_str, int out_ret) {
       _set_last_expectation(
               EXPECT_CALL(*cryptor, update_context(_,
-                                                  CompareArrayToString(in_str),
-                                                  _, in_str.length()))
+                AllOf(
+                  testing::Field(&CryptArgs::len, in_str.length()),
+                  testing::Field(&CryptArgs::in, CompareArrayToString(in_str))
+                )))
               .After(*expectation_set).WillOnce(Return(out_ret)));
     }
 
@@ -147,7 +151,7 @@ TEST_F(TestMockCryptoBlockCrypto, UpdateContextError) {
   data.append(std::string(4096, '1'));
   expect_get_context(CipherMode::CIPHER_MODE_ENC);
   EXPECT_CALL(*cryptor, init_context(_, _, _));
-  EXPECT_CALL(*cryptor, update_context(_, _, _, _)).WillOnce(Return(-123));
+  EXPECT_CALL(*cryptor, update_context(_, _)).WillOnce(Return(-123));
   expect_return_context(CipherMode::CIPHER_MODE_ENC);
   ASSERT_EQ(-123, bc->encrypt(&data, 0));
 }
