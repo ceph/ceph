@@ -1031,11 +1031,15 @@ options:
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
-# Weighted Priority Queue (wpq), mClock Scheduler (mclock_scheduler: default)
-# or debug_random. "mclock_scheduler" is based on the mClock/dmClock
+# Weighted Priority Queue (wpq), mClock Scheduler (mclock_scheduler: default),
+# BFQ (bfq) or debug_random. "mclock_scheduler" is based on the mClock/dmClock
 # algorithm (Gulati, et al. 2010). "mclock_scheduler" prioritizes based on
 # the class the operation belongs to. "wpq" dequeues ops based on their
-# priorities. "debug_random" chooses among the two with equal probability.
+# priorities. "bfq" is modeled on the Linux BFQ elevator as exposed via the
+# cgroups v2 io controller: purely proportional weighted sharing between
+# background work and client workload types, with no device capacity
+# estimate. "debug_random" chooses between wpq and mclock_scheduler with
+# equal probability.
 # Note: PrioritzedQueue (prio) implementation is not used for scheduling ops
 # within OSDs and is therefore not listed.
 - name: osd_op_queue
@@ -1044,7 +1048,7 @@ options:
   desc: which operation priority queue algorithm to use
   long_desc: which operation priority queue algorithm to use
   fmt_desc: This sets the type of queue to be used for prioritizing ops
-    within each OSD. Both queues feature a strict sub-queue which is
+    within each OSD. All queues feature a strict sub-queue which is
     dequeued before the normal queue. The normal queue is different
     between implementations. The WeightedPriorityQueue (``wpq``)
     dequeues operations in relation to their priorities to prevent
@@ -1052,13 +1056,17 @@ options:
     are more overloaded than others. The mClockQueue
     (``mclock_scheduler``) prioritizes operations based on which class
     they belong to (recovery, scrub, snaptrim, client op, osd subop).
-    See `QoS Based on mClock`_. Requires a restart.
+    See `QoS Based on mClock`_. The bfq scheduler (``bfq``,
+    experimental) provides weighted proportional sharing of OSD
+    throughput between background work and client workload types,
+    modeled on the Linux BFQ elevator. Requires a restart.
   default: mclock_scheduler
   see_also:
   - osd_op_queue_cut_off
   enum_values:
   - wpq
   - mclock_scheduler
+  - bfq
   - debug_random
   with_legacy: true
 # Min priority to go to strict queue. (low, high)
@@ -1086,6 +1094,289 @@ options:
   - high
   - debug_random
   with_legacy: true
+# BFQ (Budget Fair Queueing) op scheduler options.  Modeled on the Linux
+# BFQ elevator as exposed via the cgroups v2 io controller: OSD service
+# is shared between weighted groups purely proportionally, with no
+# estimate of the device's absolute capacity.  Weights follow the
+# cgroups v2 io.bfq.weight convention (1..1000, default 100).
+- name: osd_bfq_client_group_weight
+  type: uint
+  level: advanced
+  desc: Weight of the client op group for the bfq op queue
+  fmt_desc: Weight of the client op group relative to the background op
+    group when ``osd_op_queue`` is ``bfq``. Client ops receive a share of
+    OSD throughput proportional to this weight whenever both groups are
+    backlogged. Runtime changes take effect the next time the group is
+    (re)activated, typically within one scheduling round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_background_group_weight
+  type: uint
+  level: advanced
+  desc: Weight of the background op group for the bfq op queue
+  fmt_desc: Weight of the background op group (recovery, scrub, snaptrim,
+    PG deletion) relative to the client op group when ``osd_op_queue`` is
+    ``bfq``. Runtime changes take effect the next time the group is
+    (re)activated, typically within one scheduling round.
+  default: 25
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_client_block_weight
+  type: uint
+  level: advanced
+  desc: Weight of block (rbd pool) client ops within the bfq client group
+  fmt_desc: Weight of ops from pools tagged with the ``rbd`` application,
+    relative to the other client streams, when ``osd_op_queue`` is ``bfq``.
+    Runtime changes take effect the next time the stream is (re)activated,
+    typically within one scheduling round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_client_object_weight
+  type: uint
+  level: advanced
+  desc: Weight of object-data (rgw data pool) client ops within the bfq
+    client group
+  fmt_desc: Weight of ops from ``rgw``-tagged pools without a
+    ``traffic-class metadata`` application key, relative to the other
+    client streams, when ``osd_op_queue`` is ``bfq``. Runtime changes
+    take effect the next time the stream is (re)activated, typically
+    within one scheduling round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_client_object_meta_weight
+  type: uint
+  level: advanced
+  desc: Weight of object-metadata (rgw index/meta/log pool) client ops
+    within the bfq client group
+  fmt_desc: Weight of ops from ``rgw``-tagged pools explicitly marked
+    metadata-class (``ceph osd pool application set <pool> rgw
+    traffic-class metadata`` -- appropriate for bucket index, metadata,
+    and log pools), relative to the other client streams, when
+    ``osd_op_queue`` is ``bfq``. A dedicated stream keeps bucket
+    listings and other index I/O from queueing behind bulk object data;
+    raise this weight to further shield index latency. Runtime changes
+    take effect the next time the stream is (re)activated, typically
+    within one scheduling round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_client_file_weight
+  type: uint
+  level: advanced
+  desc: Weight of file-data (cephfs data pool) client ops within the bfq
+    client group
+  fmt_desc: Weight of ops from ``cephfs``-tagged data pools (pools the
+    mon stamped with the ``data`` application key at ``fs new`` / ``fs
+    add_data_pool`` time), relative to the other client streams, when
+    ``osd_op_queue`` is ``bfq``. Runtime changes take effect the next
+    time the stream is (re)activated, typically within one scheduling
+    round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_client_file_meta_weight
+  type: uint
+  level: advanced
+  desc: Weight of file-metadata (cephfs metadata pool) client ops within
+    the bfq client group
+  fmt_desc: Weight of ops from ``cephfs``-tagged metadata pools (pools
+    the mon stamped with the ``metadata`` application key at ``fs new``
+    time), relative to the other client streams, when ``osd_op_queue``
+    is ``bfq``. A dedicated stream keeps latency-critical MDS metadata
+    I/O from queueing behind bulk file data; raise this weight to
+    further shield metadata latency. Runtime changes take effect the
+    next time the stream is (re)activated, typically within one
+    scheduling round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_client_other_weight
+  type: uint
+  level: advanced
+  desc: Weight of client ops from untagged pools within the bfq client group
+  fmt_desc: Weight of ops from pools without a recognized application tag
+    (or with ambiguous tags), relative to the other client streams, when
+    ``osd_op_queue`` is ``bfq``. Runtime changes take effect the next
+    time the stream is (re)activated, typically within one scheduling
+    round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_background_recovery_weight
+  type: uint
+  level: advanced
+  desc: Weight of recovery ops within the bfq background group
+  fmt_desc: Weight of recovery and backfill ops relative to best-effort
+    background ops when ``osd_op_queue`` is ``bfq``. Runtime changes take
+    effect the next time the stream is (re)activated, typically within
+    one scheduling round.
+  default: 100
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_background_best_effort_weight
+  type: uint
+  level: advanced
+  desc: Weight of best-effort ops within the bfq background group
+  fmt_desc: Weight of best-effort background ops (scrub, snaptrim, PG
+    deletion) relative to recovery ops when ``osd_op_queue`` is ``bfq``.
+    Runtime changes take effect the next time the stream is
+    (re)activated, typically within one scheduling round.
+  default: 50
+  min: 1
+  max: 1000
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+- name: osd_bfq_max_budget
+  type: size
+  level: advanced
+  desc: Maximum service budget, in bytes, granted to a bfq stream per
+    scheduling round (0 = automatic, by device type)
+  fmt_desc: The maximum number of (scaled) bytes a stream may be served
+    within one scheduling round when ``osd_op_queue`` is ``bfq``. Larger
+    budgets favor throughput (longer exclusive rounds); smaller budgets
+    favor latency (faster rotation between streams). While one stream is
+    in service the others wait, so a small op on an idle stream can
+    queue for up to roughly ``osd_bfq_max_budget`` divided by the device
+    bandwidth per competing backlogged stream. The default of 0 selects
+    the budget by device type -- 1 MiB on non-rotational devices, where
+    rotation is cheap and the bandwidth-proportional latency floor is
+    what matters, and 8 MiB (the spirit of the kernel BFQ default) on
+    rotational devices, where longer rounds preserve sequentiality.
+  default: 0
+  min: 0
+  max: 4_G
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+  - osd_bfq_budget_timeout
+- name: osd_bfq_min_cost
+  type: size
+  level: advanced
+  desc: Minimum scaled cost, in bytes, charged for any op by the bfq op
+    queue
+  fmt_desc: A floor on the per-op service charge accounting for fixed
+    per-IO overhead when ``osd_op_queue`` is ``bfq``. Unlike mclock this
+    is a plain configuration value, not derived from a device capacity
+    estimate. Ignored when either ``osd_bfq_cost_per_op`` or
+    ``osd_bfq_cost_per_io`` is set; on HDDs, where seek time dominates
+    ops up to several hundred KiB, consider raising this floor (or
+    setting ``osd_bfq_cost_per_io``) so small random ops are charged
+    closer to their true device time.
+  default: 64_K
+  min: 1
+  max: 4_G
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+  - osd_bfq_cost_per_op
+  - osd_bfq_cost_per_io
+- name: osd_bfq_cost_per_op
+  type: size
+  level: advanced
+  desc: Fixed per-op pipeline overhead, in byte-equivalents, added to
+    every op's scaled cost by the bfq op queue
+  fmt_desc: Models the fixed OSD pipeline cost any op pays regardless of
+    size (network decode, WAL append, RocksDB update, checksums) in
+    byte-equivalents when ``osd_op_queue`` is ``bfq``. When this or
+    ``osd_bfq_cost_per_io`` is non-zero, each op is charged
+    ``osd_bfq_cost_per_op + osd_bfq_cost_per_io + op bytes`` and the
+    ``osd_bfq_min_cost`` floor is ignored. The default of 0 (pure byte
+    counting above the floor) needs no calibration and works well on
+    flash; small-block NVMe workloads that are CPU- rather than
+    bandwidth-bound can set it to the op size at which the OSD's ops/s
+    ceiling and bandwidth ceiling meet (for example 16-64 KiB) so that
+    tiny ops are charged for the pipeline time they actually consume.
+  default: 0
+  min: 0
+  max: 4_G
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+  - osd_bfq_cost_per_io
+  - osd_bfq_min_cost
+- name: osd_bfq_cost_per_io
+  type: size
+  level: advanced
+  desc: Seek-time equivalent, in byte-equivalents, added to every op's
+    scaled cost by the bfq op queue
+  fmt_desc: Models the device positioning cost of an I/O in
+    byte-equivalents when ``osd_op_queue`` is ``bfq``. When this or
+    ``osd_bfq_cost_per_op`` is non-zero, each op is charged
+    ``osd_bfq_cost_per_op + osd_bfq_cost_per_io + op bytes`` and the
+    ``osd_bfq_min_cost`` floor is ignored. Leave at 0 for flash. For
+    HDDs a value around the seek-bandwidth product (roughly 512 KiB to
+    1 MiB for a 7200 rpm drive) charges every random op its seek
+    equivalent, so a 4 KiB and a 256 KiB random read cost nearly the
+    same -- as they do on the platter -- instead of 64x apart.
+  default: 0
+  min: 0
+  max: 4_G
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+  - osd_bfq_cost_per_op
+  - osd_bfq_min_cost
+- name: osd_bfq_budget_timeout
+  type: millisecs
+  level: advanced
+  desc: Maximum wall-clock duration of a bfq scheduling round
+  fmt_desc: A stream that has not consumed its budget within this time is
+    rotated out (charged only for what it actually used) when
+    ``osd_op_queue`` is ``bfq``. Matches the kernel BFQ default of 125
+    milliseconds. A very small timeout degenerates into per-op stream
+    rotation, defeating budget batching.
+  default: 125
+  min: 1
+  flags:
+  - runtime
+  see_also:
+  - osd_op_queue
+  - osd_bfq_max_budget
 - name: osd_mclock_scheduler_client_res
   type: float
   level: advanced

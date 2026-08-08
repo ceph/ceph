@@ -1676,9 +1676,10 @@ public:
 
   /// get message priority for recovery messages
   int get_recovery_op_priority() const {
-    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
-      /* For mclock, we use special priority values which will be
-       * translated into op classes within PGRecoveryMsg::get_scheduler_class
+    if (op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
+      /* For the QoS schedulers (mclock, bfq), we use special priority
+       * values which will be translated into op classes within
+       * PGRecoveryMsg::get_scheduler_class
        */
       if (is_forced_recovery_or_backfill()) {
 	return recovery_msg_priority_t::FORCED;
