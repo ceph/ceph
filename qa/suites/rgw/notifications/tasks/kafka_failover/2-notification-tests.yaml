@@ -1,7 +1,4 @@
 tasks:
-- kafka-failover:
-    client.0:
-      kafka_version: 3.9.2
 - notification-tests:
     client.0:
       extra_attr: ["kafka_failover"]
