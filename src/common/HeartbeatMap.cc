@@ -169,8 +169,12 @@ int HeartbeatMap::get_total_workers() const
 
 void HeartbeatMap::check_touch_file()
 {
+  if (!is_healthy()) {
+    return;
+  }
+
   string path = m_cct->_conf->heartbeat_file;
-  if (path.length() && is_healthy()) {
+  if (path.length()) {
     int fd = ::open(path.c_str(), O_WRONLY|O_CREAT|O_CLOEXEC, 0644);
     if (fd >= 0) {
       ::utime(path.c_str(), NULL);
