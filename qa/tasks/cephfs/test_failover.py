@@ -1028,3 +1028,70 @@ for killpoint, name in enumerate(SHUTDOWN_KILLPOINTS):
         continue
     test_export_killpoints = TestShutdownKillpoints.make_test_killpoint(killpoint, name)
     setattr(TestShutdownKillpoints, f"test_shutdown_killpoint_{name}", test_export_killpoints)
+
+
+MDS_REJOIN_RESTART_GRACE = 120
+
+class TestRejoinKillpoints(CephFSTestCase):
+    """
+    Test that an MDS killed during rejoin in open_undef_inodes_dirfrags()
+    recovers correctly.  This exercises the fix for
+    https://tracker.ceph.com/issues/77786, where a race between strong
+    rejoin handling and the survivor's ACK could leave a dirfrag in
+    rejoin_undef_dirfrags with a non-zero version, triggering the assert
+      ceph_assert(dir->get_version() == 0).
+    """
+    CLIENTS_REQUIRED = 0
+    MDSS_REQUIRED = 3
+
+    def _test_rejoin_kill(self, killpoint):
+        log.info(f"testing mds_kill_undef_dirfrag_at={killpoint}")
+
+        # Ensure 2 active ranks and 1 standby
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        rank0 = self.fs.get_rank(rank=0, status=status)
+        rank1 = self.fs.get_rank(rank=1, status=status)
+        log.info(f"rank0={rank0['name']}, rank1={rank1['name']}")
+
+        # Set the kill point globally so it persists across daemon restarts.
+        self.fs.run_ceph_cmd("config", "set", "mds", "mds_kill_undef_dirfrag_at", str(killpoint))
+
+        # Freeze rank 1 to prevent automatic failover when it crashes.
+        self.fs.rank_freeze(True, rank=1)
+
+        # Fail and restart rank 1: the daemon will restart, replay its
+        # journal, enter rejoin, and hit the kill point in
+        # open_undef_inodes_dirfrags().
+        self.fs.mds_fail_restart(rank1['name'])
+        log.info("waiting for rank 1 to become laggy (kill point hit)...")
+        self.wait_until_true(
+            lambda: "laggy_since" in self.fs.get_rank(rank=1),
+            timeout=self.fs.beacon_timeout * 2
+        )
+
+        # Clean up the coredump from the kill-point crash.
+        self.delete_mds_coredump(rank1['name'])
+
+        # Remove the global kill point so the next restart succeeds.
+        self.fs.run_ceph_cmd("config", "rm", "mds", "mds_kill_undef_dirfrag_at")
+
+        # Unfreeze so the mon can replace the laggy daemon with a standby.
+        try:
+            self.fs.rank_freeze(False, rank=1)
+        except CommandFailedError:
+            # Rank may already be unfrozen due to state transition
+            log.info("rank_freeze(False) failed, rank may already be unfrozen")
+            self.fs.rank_fail(rank=1)
+        # Restart the daemon that crashed (will become new standby after recovery).
+        self.fs.mds_restart(rank1['name'])
+        self.wait_for_daemon_start([rank1['name']])
+
+        # Wait for the rank to rejoin and become active.
+        self.fs.wait_for_state('up:active', rank=1, timeout=MDS_REJOIN_RESTART_GRACE)
+        status = self.fs.wait_for_daemons()
+        log.info(f"recovery complete: rank1={rank1['name']} is active")
+        self.assertTrue(self.fs.get_rank(rank=1, status=status)['state'] == 'up:active')
+
+    def test_rejoin_killpoint_open_undef(self):
+        self._test_rejoin_kill(1)
