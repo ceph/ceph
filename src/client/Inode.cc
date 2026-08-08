@@ -29,10 +29,10 @@ Inode::~Inode()
     snapdir_parent.reset();
   }
 
-  if (!oset.objects.empty()) {
+  if (!oset.empty()) {
     lsubdout(client->cct, client, 0) << __func__ << ": leftover objects on inode 0x"
       << std::hex << ino << std::dec << dendl;
-    ceph_assert(oset.objects.empty());
+    ceph_assert(oset.empty());
   }
 
   if (!delegations.empty()) {
@@ -186,6 +186,7 @@ bool Inode::put_open_ref(int mode)
 
 void Inode::get_cap_ref(int cap)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
   int n = 0;
   while (cap) {
     if (cap & 1) {
@@ -200,6 +201,7 @@ void Inode::get_cap_ref(int cap)
 
 bool Inode::is_last_cap_ref(int c)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
   if (c != CEPH_CAP_FILE_BUFFER) {
     return cap_refs[c] == 0;
   }
@@ -214,6 +216,7 @@ bool Inode::is_last_cap_ref(int c)
 
 int Inode::put_cap_ref(int cap)
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
   int last = 0;
   int n = 0;
   while (cap) {
@@ -239,12 +242,27 @@ bool Inode::is_any_caps()
   return !caps.empty() || snap_caps;
 }
 
+namespace {
+bool auth_cap_is_live(const Inode *in)
+{
+  if (!in->auth_cap)
+    return false;
+  for (const auto &[mds, cap] : in->caps) {
+    if (&cap == in->auth_cap)
+      return true;
+  }
+  return false;
+}
+} // namespace
+
 bool Inode::cap_is_valid(const Cap &cap) const
 {
   /*cout << "cap_gen     " << cap->session-> cap_gen << std::endl
     << "session gen " << cap->gen << std::endl
     << "cap expire  " << cap->session->cap_ttl << std::endl
     << "cur time    " << ceph_clock_now(cct) << std::endl;*/
+  if (!cap.session)
+    return false;
   if ((cap.session->cap_gen <= cap.gen)
       && (ceph_clock_now() < cap.session->cap_ttl)) {
     return true;
@@ -265,7 +283,7 @@ int Inode::caps_issued(int *implemented) const
   // exclude caps issued by non-auth MDS, but are been revoking by
   // the auth MDS. The non-auth MDS should be revoking/exporting
   // these caps, but the message is delayed.
-  if (auth_cap)
+  if (auth_cap_is_live(this))
     c &= ~auth_cap->implemented | auth_cap->issued;
 
   if (implemented)
@@ -302,6 +320,9 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 {
   int c = snap_caps;
   int i = 0;
+
+  if (auth_cap && !auth_cap_is_live(this))
+    auth_cap = nullptr;
 
   if ((c & mask) == mask)
     return true;
@@ -345,6 +366,7 @@ bool Inode::caps_issued_mask(unsigned mask, bool allow_impl)
 
 int Inode::caps_used()
 {
+  ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
   int w = 0;
   for (const auto &[cap, cnt] : cap_refs)
     if (cnt)

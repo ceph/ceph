@@ -16,6 +16,7 @@
 #include "common/snap_types.h" // for class SnapContext
 #include "common/Thread.h"
 #include "common/zipkin_trace.h"
+#include "common/reentrant_lock.h"
 
 #include "Striper.h"
 
@@ -280,14 +281,17 @@ class ObjectCacher {
       last_write_tid(0), last_commit_tid(0),
       dirty_or_tx(0) {
       // add to set
-      os->objects.push_back(&set_item);
+      os->push_back(&set_item);
     }
     ~Object() {
       reads.clear();
       ceph_assert(ref == 0);
       ceph_assert(data.empty());
       ceph_assert(dirty_or_tx == 0);
-      set_item.remove_myself();
+      if (oset) {
+	std::scoped_lock ol(oset->oset_lock);
+	set_item.remove_myself();
+      }
     }
 
     sobject_t get_soid() const { return oid; }
@@ -387,21 +391,135 @@ class ObjectCacher {
 
 
   struct ObjectSet {
-    void *parent;
+    mutable ceph::mutex oset_lock = ceph::make_mutex("ObjectSet::oset_lock");
+    // mutable ceph::ReentrantLock oset_lock = ceph::make_reentrant("ObjectSet::oset_lock", false); // disable deadlock detection
 
-    inodeno_t ino;
-    uint64_t truncate_seq, truncate_size;
+    void * const parent;
 
-    int64_t poolid;
-    xlist<Object*> objects;
+    const inodeno_t ino;
+    const int64_t poolid;
+    const bool return_enoent;
 
-    int dirty_or_tx;
-    bool return_enoent;
+    std::atomic<uint64_t> truncate_seq;
+    std::atomic<uint64_t> truncate_size;
 
+    std::atomic<int> dirty_or_tx;
+    bool flush_callback_pending = false;
+    bool invalidated = false;
+
+    void push_back(xlist<Object*>::item* obj) { std::scoped_lock lock(oset_lock); objects.push_back(obj); }
+    size_t size() const { std::scoped_lock lock(oset_lock); return objects.size(); }
+    bool empty() const { std::scoped_lock lock(oset_lock); return objects.empty(); }
+
+    /**
+     * Get first object with lock held
+     * @return First Object* or nullptr if empty
+     */
+    Object* get_first_object() const {
+      std::scoped_lock lock(oset_lock);
+      if (objects.empty()) return nullptr;
+      return *objects.begin();
+    }
+
+    /**
+     * Iterate objects with lock held and apply predicate
+     *
+     * @param predicate Function to apply to each Object*. Return false to stop iteration.
+     * @note The oset_lock is held during the entire iteration
+     */
+    template<typename Predicate>
+    void for_each_object(Predicate&& predicate) {
+      std::unique_lock lock(oset_lock);
+      for (auto p = objects.begin(); !p.end(); ++p) {
+        if (!predicate(*p)) {
+          break;
+        }
+      }
+    }
+
+    /**
+     * Iterate objects with lock held, allowing safe removal during iteration
+     *
+     * @param predicate Function to apply to each Object*. Return false to stop iteration.
+     * @note The oset_lock is held during the entire iteration
+     * @note Safe for predicates that may cause object removal
+     */
+    template<typename Predicate>
+    void for_each_object_safe(Predicate&& predicate) {
+      std::unique_lock lock(oset_lock);
+      xlist<Object*>::iterator q;
+      for (auto p = objects.begin(); !p.end(); ) {
+        q = p;
+        ++q;
+        if (!predicate(*p)) {
+          break;
+        }
+        p = q;
+      }
+    }
+
+    bool set_is_empty()
+    {
+      std::unique_lock cl(oset_lock);
+      if (objects.empty())
+        return true;
+
+      for (xlist<Object*>::iterator p = objects.begin(); !p.end(); ++p)
+        if (!(*p)->is_empty())
+          return false;
+
+      return true;
+    }
+
+    bool set_is_cached()
+    {
+      std::unique_lock cl(oset_lock);
+      if (objects.empty())
+        return false;
+
+      for (xlist<Object*>::iterator p = objects.begin(); !p.end(); ++p) {
+        Object *ob = *p;
+        for (auto q = ob->data.begin(); q != ob->data.end(); ++q) {
+          BufferHead *bh = q->second;
+          if (!bh->is_dirty() && !bh->is_tx()) {
+            return true;
+          }
+        }
+      }
+
+      return false;
+    }
+     bool set_is_dirty_or_committing()
+    {
+      std::unique_lock cl(oset_lock);
+
+      if (objects.empty())
+        return false;
+
+      for (auto i = objects.begin(); !i.end(); ++i) {
+        Object *ob = *i;
+
+        for (auto p = ob->data.begin();
+             p != ob->data.end();
+             ++p) {
+          BufferHead *bh = p->second;
+          if (bh->is_dirty() || bh->is_tx())
+            return true;
+        }
+      }
+
+      return false;
+    }
     ObjectSet(void *p, int64_t _poolid, inodeno_t i)
-      : parent(p), ino(i), truncate_seq(0),
-	truncate_size(0), poolid(_poolid), dirty_or_tx(0),
-	return_enoent(false) {}
+      : parent(p), ino(i), poolid(_poolid),
+	return_enoent(false), truncate_seq(0),
+	truncate_size(0), dirty_or_tx(0) {}
+
+  private:
+
+
+
+    xlist<Object*> objects;
 
   };
 
@@ -413,7 +531,9 @@ class ObjectCacher {
   bool scattered_write;
 
   std::string name;
-  ceph::mutex& lock;
+  // objectcacher lock
+  // ceph::mutex cache_lock = ceph::make_mutex("ObjectCacher::cache_lock");
+  mutable ceph::ReentrantLock cache_lock = ceph::make_reentrant("ObjectCacher::cache_lock");
 
   uint64_t max_dirty, target_dirty, max_size, max_objects;
   ceph::timespan max_dirty_age;
@@ -423,6 +543,7 @@ class ObjectCacher {
 
   flush_set_callback_t flush_set_callback;
   void *flush_set_callback_arg;
+  void _schedule_flush_set_callback(ObjectSet *oset);
 
   // indexed by pool_id
   std::vector<std::unordered_map<sobject_t, Object*>> objects;
@@ -435,7 +556,7 @@ class ObjectCacher {
   LRU   bh_lru_dirty, bh_lru_rest;
   LRU   ob_lru;
 
-  ceph::condition_variable flusher_cond;
+  ceph::reentrant_condition_variable flusher_cond;
   bool flusher_stop;
   void flusher_entry();
   class FlusherThread : public Thread {
@@ -462,10 +583,11 @@ class ObjectCacher {
   Object *get_object(sobject_t oid, uint64_t object_no, ObjectSet *oset,
 		     object_locator_t &l, uint64_t truncate_size,
 		     uint64_t truncate_seq);
+  // Caller must hold ob->oset->oset_lock when ob->oset is non-null.
   void close_object(Object *ob);
 
   // bh stats
-  ceph::condition_variable  stat_cond;
+  ceph::reentrant_condition_variable  stat_cond;
 
   loff_t stat_clean;
   loff_t stat_zero;
@@ -567,7 +689,7 @@ class ObjectCacher {
   void purge(Object *o);
 
   int64_t reads_outstanding;
-  ceph::condition_variable read_cond;
+  ceph::reentrant_condition_variable read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	     bool external_call, ZTracer::Trace *trace,
@@ -579,20 +701,24 @@ class ObjectCacher {
   void bh_read_finish(int64_t poolid, sobject_t oid, ceph_tid_t tid,
 		      loff_t offset, uint64_t length,
 		      ceph::buffer::list &bl, int r,
-		      bool trust_enoent);
+		      bool trust_enoent,
+		      xlist<C_ReadFinish*>::item *read_item = nullptr);
   void bh_write_commit(int64_t poolid, sobject_t oid,
 		       std::vector<std::pair<loff_t, uint64_t> >& ranges,
 		       ceph_tid_t t, int r);
 
   class C_WriteCommit;
   class C_WaitForWrite;
+  class C_FlushSetCallback;
+  class C_BHWriteCommitWaiters;
+  class C_BHReadFinishWaiters;
 
   void perf_start();
   void perf_stop();
 
 
 
-  ObjectCacher(CephContext *cct_, std::string name, WritebackHandler& wb, ceph::mutex& l,
+  ObjectCacher(CephContext *cct_, std::string name, WritebackHandler& wb,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg,
 	       uint64_t max_bytes, uint64_t max_objects,
@@ -605,10 +731,10 @@ class ObjectCacher {
   }
   void stop() {
     ceph_assert(flusher_thread.is_started());
-    lock.lock();  // hmm.. watch out for deadlock!
+    cache_lock.lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;
     flusher_cond.notify_all();
-    lock.unlock();
+    cache_lock.unlock();
     flusher_thread.join();
   }
 
@@ -663,6 +789,25 @@ public:
   loff_t release_set(ObjectSet *oset);
   uint64_t release_all();
 
+  // Hold cache_lock across inode teardown so no ObjectCacher I/O uses oset_lock
+  // while ObjectSet is destroyed.
+  std::unique_lock<ceph::ReentrantLock> acquire_cache_lock()
+  {
+    return std::unique_lock<ceph::ReentrantLock>(cache_lock);
+  }
+
+  bool finisher_am_self() const {
+    return finisher.am_self();
+  }
+
+  void wait_for_flush_callbacks() {
+    // Never block the finisher thread on its own queue (e.g. _put_inode from a
+    // flush completion callback).
+    if (!finisher.am_self()) {
+      finisher.wait_for_empty();
+    }
+  }
+
   void discard_set(ObjectSet *oset, const std::vector<ObjectExtent>& ex);
   void discard_writeback(ObjectSet *oset, const std::vector<ObjectExtent>& ex,
                          Context* on_finish);
@@ -678,18 +823,23 @@ public:
 
   // cache sizes
   void set_max_dirty(uint64_t v) {
+    std::scoped_lock lock(cache_lock);
     max_dirty = v;
   }
   void set_target_dirty(int64_t v) {
+    std::scoped_lock lock(cache_lock);
     target_dirty = v;
   }
   void set_max_size(int64_t v) {
+    std::scoped_lock lock(cache_lock);
     max_size = v;
   }
   void set_max_dirty_age(double a) {
+    std::scoped_lock lock(cache_lock);
     max_dirty_age = ceph::make_timespan(a);
   }
   void set_max_objects(int64_t v) {
+    std::scoped_lock lock(cache_lock);
     max_objects = v;
   }
 
@@ -784,7 +934,7 @@ inline std::ostream& operator<<(std::ostream &out,
 {
   return out << "objectset[" << os.ino
 	     << " ts " << os.truncate_seq << "/" << os.truncate_size
-	     << " objects " << os.objects.size()
+	     << " objects " << os.size()
 	     << " dirty_or_tx " << os.dirty_or_tx
 	     << "]";
 }

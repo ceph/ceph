@@ -8,6 +8,7 @@
 
 #include "include/compat.h"
 #include "include/ceph_assert.h"
+#include "common/reentrant_lock.h"
 #include "include/types.h"
 #include "include/xlist.h"
 
@@ -274,7 +275,7 @@ struct Inode : RefCountedObject {
   std::vector<Context*> waitfor_caps;
   std::vector<Context*> waitfor_caps_pending;
   std::vector<Context*> waitfor_commit;
-  std::list<ceph::condition_variable*> waitfor_deleg;
+  std::list<ceph::tracked_condition_variable*> waitfor_deleg;
 
   Dentry *get_first_parent() {
     ceph_assert(!dentries.empty());
