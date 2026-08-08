@@ -651,6 +651,33 @@ def test_nfs_spec_from_json_rdma():
     assert out.get('spec', {}).get('rdma_port') == 1234
 
 
+def test_nfs_spec_cephfs_client_log_dir_path():
+    """cephfs_client_log_dir must be an absolute path and not '/' when set."""
+    spec = NFSServiceSpec(
+        service_id='mynfs',
+        placement=PlacementSpec(count=1),
+        enable_cephfs_client_log=True,
+        cephfs_client_log_dir='/var/log/ceph/custom',
+    )
+    spec.validate()
+
+    with pytest.raises(SpecValidationError, match='absolute path'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir='relative/log/dir',
+        ).validate()
+
+    with pytest.raises(SpecValidationError, match='filesystem root'):
+        NFSServiceSpec(
+            service_id='mynfs',
+            placement=PlacementSpec(count=1),
+            enable_cephfs_client_log=True,
+            cephfs_client_log_dir='/',
+        ).validate()
+
+
 def test_repr():
     val = """ServiceSpec.from_json(yaml.safe_load('''service_type: crash
 service_name: crash
