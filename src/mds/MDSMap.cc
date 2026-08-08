@@ -1279,6 +1279,18 @@ bool MDSMap::is_laggy_gid(mds_gid_t gid) const {
 bool MDSMap::is_degraded() const {
   if (!failed.empty() || !damaged.empty())
     return true;
+
+  // When no rank is failed, every rank in the cluster must have a daemon
+  // assigned to it.  An inconsistent map must not be treated as resizeable.
+  if (in.size() != up.size()) {
+    return true;
+  }
+  for (const auto& p : up) {
+    if (!in.count(p.first)) {
+      return true;
+    }
+  }
+
   for (const auto& p : mds_info) {
     if (p.second.is_degraded())
       return true;
