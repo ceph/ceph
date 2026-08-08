@@ -875,6 +875,12 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
     // go to laggy state
     state_set(PG_STATE_LAGGY);
+    const auto& acting_osds = recovery_state.get_acting();
+    auto msg = fmt::format("PG {} marked LAGGY; acting [{}]",
+                           get_pgid(), fmt::join(acting_osds, ","));
+    dout(0) << __func__ << " " << msg << dendl;
+    osd->clog->warn() << msg;
+
     publish_stats_to_osd();
   }
   dout(10) << __func__ << " not readable" << dendl;
