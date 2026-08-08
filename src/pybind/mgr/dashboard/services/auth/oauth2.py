@@ -142,6 +142,8 @@ class OAuth2(SSOAuth):
         # set user last update to token time issued
         user.last_update = jwt_payload.get('iat', 0)
         cherrypy.request.user = user
+        from ..telemetry import DashboardTelemetryService
+        DashboardTelemetryService.increment_login_count()
 
     @classmethod
     def reset_user(cls):
