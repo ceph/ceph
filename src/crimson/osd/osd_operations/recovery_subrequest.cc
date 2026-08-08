@@ -27,21 +27,39 @@ SET_SUBSYS(osd);
 
 namespace crimson::osd {
 
+RecoverySubRequest::interruptible_future<>
+RecoverySubRequest::with_pg_interruptible(
+  ShardServices &shard_services, Ref<PG> pgref)
+{
+  LOG_PREFIX(RecoverySubRequest::with_pg_interruptible);
+  DEBUGI("{}: {}", "RecoverySubRequest::with_pg", *this);
+  // use message priority matching classic OSD's PGRecoveryMsg::get_scheduler_class()
+  // which calls priority_to_scheduler_class(op->get_req()->get_priority())
+  auto recovery_prio = static_cast<int>(m->get_priority());
+  auto kclass = (recovery_prio >= PeeringState::recovery_msg_priority_t::DEGRADED)
+    ? SchedulerClass::background_recovery
+    : SchedulerClass::background_best_effort;
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services.get_throttle(
+      scheduler::params_t{
+        std::max<int>(pgref->get_average_object_size(), 1),
+        static_cast<unsigned>(recovery_prio),
+        0,
+        kclass}));
+  co_await pgref->get_recovery_backend()->handle_recovery_op(
+    m, get_remote_connection());
+  DEBUGI("{}: complete", *this);
+  co_await interruptor::make_interruptible(handle.complete());
+  // throttle destructs here -> release_throttle()
+}
+
 seastar::future<> RecoverySubRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pgref)
 {
   track_event<StartEvent>();
   IRef opref = this;
-  return interruptor::with_interruption([this, pgref] {
-    LOG_PREFIX(RecoverySubRequest::with_pg);
-    DEBUGI("{}: {}", "RecoverySubRequest::with_pg", *this);
-    return pgref->get_recovery_backend()->handle_recovery_op(
-      m, get_remote_connection()
-    ).then_interruptible([this] {
-      LOG_PREFIX(RecoverySubRequest::with_pg);
-      DEBUGI("{}: complete", *this);
-      return handle.complete();
-    });
+  return interruptor::with_interruption([this, pgref, &shard_services] {
+    return with_pg_interruptible(shard_services, pgref);
   }, [](std::exception_ptr) {
     return seastar::now();
   }, pgref, pgref->get_osdmap_epoch()).finally([this, opref=std::move(opref), pgref] {
