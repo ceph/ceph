@@ -15,6 +15,16 @@ counters for all reporting entities are returned in the Prometheus exposition
 format.  (See the Prometheus `documentation
 <https://prometheus.io/docs/instrumenting/exposition_formats/#text-format-details>`_.)
 
+.. note:: Ceph daemon performance counters are no longer exported by
+   this module by default. That job has moved to the ``ceph-exporter``
+   daemon, which cephadm deploys on every host and which reads the
+   counters directly from the local daemon admin sockets. The
+   ``prometheus`` module continues to provide cluster-level metrics,
+   the service discovery endpoint, and RBD image metrics. See
+   :ref:`monitoring` for an overview of the monitoring stack and
+   `Ceph daemon performance counters metrics`_ below for how to
+   re-enable the old behavior.
+
 Enabling Prometheus output
 ==========================
 
