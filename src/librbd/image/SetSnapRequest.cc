@@ -197,6 +197,15 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
     parent_md = *parent_info;
     refresh_parent = RefreshParentRequest<I>::is_refresh_required(
         m_image_ctx, parent_md, m_image_ctx.migration_info);
+
+    // A clone snapshot's object map isn't immutable: a copyup anywhere in
+    // the parent chain (e.g. the parent gets flattened or removed) can
+    // invalidate it at any time, with no watch to ever refresh it (e.g. a
+    // read-only open). Avoid loading it while this snapshot still has a
+    // live parent overlap of its own.
+    m_skip_object_map = (m_snap_id != CEPH_NOSNAP &&
+                         parent_md.overlap > 0 &&
+                         m_image_ctx.migration_info.empty());
   }
 
   if (!refresh_parent) {
@@ -252,7 +261,8 @@ Context *SetSnapRequest<I>::handle_refresh_parent(int *result) {
 
 template <typename I>
 Context *SetSnapRequest<I>::send_open_object_map(int *result) {
-  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP)) {
+  if (!m_image_ctx.test_features(RBD_FEATURE_OBJECT_MAP) ||
+      m_skip_object_map) {
     *result = apply();
     if (*result < 0) {
       finalize();
