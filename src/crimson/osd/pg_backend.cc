@@ -1332,6 +1332,17 @@ PGBackend::cmp_xattr_ierrorator::future<> PGBackend::cmp_xattr(
             osd_op.rval = 1;
             return cmp_xattr_errorator::now();
           }
+        } else if (osd_op.op.xattr.cmp_mode == CEPH_OSD_CMPXATTR_MODE_U64) {
+          uint64_t lhs = 0;
+          try {
+            decode(lhs, bp);
+          } catch (ceph::buffer::error&) {
+            return crimson::ct_error::invarg::make();
+          }
+          if (lhs == 0) {
+            osd_op.rval = 1;
+            return cmp_xattr_errorator::now();
+          }
         }
       }
       logger().debug("cmpxattr: xattr does not exist, comparison failed");
@@ -1376,13 +1387,8 @@ maybe_get_omap_vals_by_keys(
   const object_info_t& oi,
   const std::set<std::string>& keys_to_get)
 {
-  if (oi.is_omap()) {
-    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
-      store, coll, ghobject_t{oi.soid}, keys_to_get, 0);
-  } else {
-    logger().error("{} on {}: backend has no OMAP support",__func__, oi.soid);
-    return crimson::ct_error::enodata::make();
-  }
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
+    store, coll, ghobject_t{oi.soid}, keys_to_get, 0);
 }
 
 using get_omap_iterate_ertr =
@@ -1398,13 +1404,8 @@ maybe_do_omap_iterate(
   ObjectStore::omap_iter_seek_t start_from,
   omap_iterate_cb_t callback)
 {
-  if (oi.is_omap()) {
-    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
-      store, coll, ghobject_t{oi.soid}, start_from, callback, 0, nullptr);
-  } else {
-    logger().error("{} on {}: backend has no OMAP support",__func__, oi.soid);
-    return crimson::ct_error::enodata::make();
-  }
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_iterate>(
+    store, coll, ghobject_t{oi.soid}, start_from, callback, 0, nullptr);
 }
 
 PGBackend::ll_read_ierrorator::future<ceph::bufferlist>
@@ -1430,22 +1431,20 @@ PGBackend::omap_get_header(
   object_stat_sum_t& delta_stats,
   uint32_t op_flags) const
 {
-  if (os.oi.is_omap()) {
-    return omap_get_header(
-      coll, ghobject_t{os.oi.soid}, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED
-    ).safe_then_interruptible(
-      [&delta_stats, &osd_op] (ceph::bufferlist&& header) {
-        osd_op.outdata = std::move(header);
-        delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
-        delta_stats.num_rd++;
-        return seastar::now();
-      });
-  } else {
+  if (!os.exists || os.oi.is_whiteout()) {
     // no omap? return empty data but not ENOENT. This is imporant for
     // the case when the object is being creating due to to may_write().
-    logger().error("{} on {}: backend has no OMAP support",__func__, os.oi.soid);
     return seastar::now();
   }
+  return omap_get_header(
+    coll, ghobject_t{os.oi.soid}, CEPH_OSD_OP_FLAG_FADVISE_DONTNEED
+  ).safe_then_interruptible(
+    [&delta_stats, &osd_op] (ceph::bufferlist&& header) {
+      osd_op.outdata = std::move(header);
+      delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+      delta_stats.num_rd++;
+      return seastar::now();
+    });
 }
 
 PGBackend::ll_read_ierrorator::future<>
@@ -1489,9 +1488,6 @@ PGBackend::omap_get_keys(
 
   co_await maybe_do_omap_iterate(store, coll, os.oi, start_from, callback
   ).safe_then([&delta_stats, &osd_op, &result, &num, &truncated](auto ret){
-    if (ret != ObjectStore::omap_iter_ret_t::STOP) {
-      logger().warn("omap_iterate not meet a stop condition");
-    }
     encode(num, osd_op.outdata);
     osd_op.outdata.claim_append(result);
     encode(truncated, osd_op.outdata);
@@ -1562,21 +1558,16 @@ PGBackend::omap_cmp(
   }
 
   delta_stats.num_rd++;
-  if (os.oi.is_omap()) {
-    std::set<std::string> to_get;
-    for (auto &i: assertions) {
-      to_get.insert(i.first);
-    }
-    return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
-      store, coll, ghobject_t{os.oi.soid}, to_get, 0)
-      .safe_then([=, &osd_op] (auto&& out) -> omap_cmp_iertr::future<> {
-      osd_op.rval = 0;
-      return  do_omap_val_cmp(out, assertions);
-    });
-  } else {
-    logger().error("{} on {}: backend has no OMAP support", __func__, os.oi.soid);
-    return crimson::ct_error::ecanceled::make();
+  std::set<std::string> to_get;
+  for (auto &i: assertions) {
+    to_get.insert(i.first);
   }
+  return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::omap_get_values>(
+    store, coll, ghobject_t{os.oi.soid}, to_get, 0)
+    .safe_then([=, &osd_op] (auto&& out) -> omap_cmp_iertr::future<> {
+    osd_op.rval = 0;
+    return  do_omap_val_cmp(out, assertions);
+  });
 }
 PGBackend::ll_read_ierrorator::future<>
 PGBackend::omap_get_vals(
@@ -1630,9 +1621,6 @@ PGBackend::omap_get_vals(
 
   co_await maybe_do_omap_iterate(store, coll, os.oi, start_from, callback
   ).safe_then([&osd_op, &delta_stats, &result, &num, &truncated](auto ret) {
-    if (ret != ObjectStore::omap_iter_ret_t::STOP) {
-      logger().warn("omap_iterate not meet a stop condition");
-    }
     encode(num, osd_op.outdata);
     osd_op.outdata.claim_append(result);
     encode(truncated, osd_op.outdata);
@@ -1670,6 +1658,12 @@ PGBackend::omap_get_vals_by_keys(
       encode(vals, osd_op.outdata);
       return ll_read_errorator::now();
     }).handle_error_interruptible(
+      crimson::ct_error::enoent::handle([&osd_op] {
+        uint32_t num = 0;
+        encode(num, osd_op.outdata);
+        osd_op.rval = 0;
+        return ll_read_errorator::now();
+      }),
       crimson::ct_error::enodata::handle([&osd_op] {
         uint32_t num = 0;
         encode(num, osd_op.outdata);
@@ -1785,9 +1779,6 @@ PGBackend::omap_clear(
   if (!os.exists || os.oi.is_whiteout()) {
     logger().debug("object does not exist: {}", os.oi.soid);
     return crimson::ct_error::enoent::make();
-  }
-  if (!os.oi.is_omap()) {
-    return omap_clear_ertr::now();
   }
   txn.omap_clear(coll->get_cid(), ghobject_t{os.oi.soid});
   osd_op_params.clean_regions.mark_omap_dirty();
