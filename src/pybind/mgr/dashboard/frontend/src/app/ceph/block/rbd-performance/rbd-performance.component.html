@@ -1,11 +1,134 @@
 <cd-rbd-tabs></cd-rbd-tabs>
 
-<cd-grafana
-  i18n-title
-  title="RBD overview"
-  [grafanaPath]="'ceph-block-overview?'"
-  [type]="'metrics'"
-  uid="41FrpeUiz"
-  grafanaStyle="two"
+<main
+  cdsGrid
+  [fullWidth]="true"
+  [narrow]="true"
+  class="rbd-overview cds-mt-5"
 >
-</cd-grafana>
+  <!-- TIER 1: Summary Cards -->
+  <div
+    cdsRow
+    class="cds-mb-5"
+  >
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 16 }"
+    >
+      <cd-productive-card [applyShadow]="false">
+        <ng-template #header>
+          <h2
+            class="cds--type-heading-compact-02"
+            i18n
+          >
+            RBD Overview
+          </h2>
+        </ng-template>
+
+        <ng-container *ngIf="loading">
+          <cds-skeleton-text [lines]="3"></cds-skeleton-text>
+        </ng-container>
+        
+        <ng-container *ngIf="!loading">
+          <div class="rbd-overview-grid">
+            <div class="rbd-overview-grid__item">
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Pools</span
+              >
+              <a
+                class="cds--link cds--type-body-compact-01"
+                routerLink="/block/rbd"
+                >{{ totalPools }}</a
+              >
+            </div>
+            <div class="rbd-overview-grid__item">
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Images</span
+              >
+              <a
+                class="cds--link cds--type-body-compact-01"
+                routerLink="/block/rbd"
+                >{{ totalImages }}</a
+              >
+            </div>
+            <div class="rbd-overview-grid__item">
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Namespaces</span
+              >
+              <a
+                class="cds--link cds--type-body-compact-01"
+                routerLink="/block/rbd/namespaces"
+                >{{ totalNamespaces }}</a
+              >
+            </div>
+            <div class="rbd-overview-grid__item">
+              <span
+                class="cds--type-label-01"
+                i18n
+                >Trash Images</span
+              >
+              <a
+                class="cds--link cds--type-body-compact-01"
+                routerLink="/block/rbd/trash"
+                >{{ totalTrashImages }}</a
+              >
+            </div>
+          </div>
+        </ng-container>
+      </cd-productive-card>
+    </div>
+  </div>
+
+  <!-- TIER 2: Performance Row (Native Charts) -->
+  <div
+    cdsRow
+    class="cds-mb-5"
+  >
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 16 }"
+    >
+      <cd-performance-card></cd-performance-card>
+    </div>
+  </div>
+
+  <!-- TIER 3: Replication / Mirroring Status -->
+  <div cdsRow>
+    <div
+      cdsCol
+      [columnNumbers]="{ lg: 16 }"
+    >
+      <cd-productive-card [applyShadow]="false">
+        <ng-template #header>
+          <h2
+            class="cds--type-heading-compact-02"
+            i18n
+          >
+            Mirroring Status
+          </h2>
+        </ng-template>
+
+        <div class="mirroring-summary">
+          <p class="cds--type-body-compact-01" i18n>
+            Replication status is managed at the pool and image levels. To check or configure mirroring, please visit the RBD image details or mirroring management page.
+          </p>
+          <div>
+            <a
+              cdsLink
+              routerLink="/block/mirroring"
+              i18n
+            >
+              Go to Mirroring Settings →
+            </a>
+          </div>
+        </div>
+      </cd-productive-card>
+    </div>
+  </div>
+</main>

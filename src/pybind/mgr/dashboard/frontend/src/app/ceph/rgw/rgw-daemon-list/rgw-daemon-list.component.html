@@ -29,28 +29,6 @@
 
   <ng-container
     ngbNavItem
-    *ngIf="grafanaPermission.read"
-  >
-    <a
-      ngbNavLink
-      i18n
-      >Overall Performance</a
-    >
-    <ng-template ngbNavContent>
-      <cd-grafana
-        i18n-title
-        title="RGW overview"
-        [grafanaPath]="'ceph-object-overview?'"
-        [type]="'metrics'"
-        uid="WAkugZpiz"
-        grafanaStyle="three"
-      >
-      </cd-grafana>
-    </ng-template>
-  </ng-container>
-
-  <ng-container
-    ngbNavItem
     *ngIf="grafanaPermission.read && isMultiSite"
   >
     <a
@@ -59,15 +37,7 @@
       >Sync Performance</a
     >
     <ng-template ngbNavContent>
-      <cd-grafana
-        i18n-title
-        title="Radosgw sync overview"
-        [grafanaPath]="'ceph-object-sync-overview?'"
-        [type]="'metrics'"
-        uid="rgw-sync-overview"
-        grafanaStyle="two"
-      >
-      </cd-grafana>
+      <!-- Native Sync Performance can be implemented here if needed -->
     </ng-template>
   </ng-container>
 </nav>
