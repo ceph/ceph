@@ -3,14 +3,20 @@
 
 #include <errno.h>
 #include <ctime>
+#include <algorithm>
+#include <memory>
 #include <regex>
+#include <string_view>
 #include <boost/format.hpp>
 #include <boost/algorithm/string/replace.hpp>
+
+#include <openssl/evp.h>
 
 #include "common/errno.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/ceph_time.h"
+#include "common/ceph_crypto.h"
 #include "auth/Crypto.h"
 #include "include/ceph_fs.h"
 #include "common/iso_8601.h"
@@ -25,13 +31,281 @@
 #include "driver/rados/rgw_user.h"
 #include "rgw_iam_policy.h"
 #include "rgw_sts.h"
+#include "rgw_sts_keyring.h"
+#include "rgw_sts_keyring_cache.h"
 #include "rgw_sal.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
 
+namespace {
+
+// AEAD-sealed tokens carry this prefix; legacy CBC tokens have none.
+constexpr std::string_view STS_AEAD_PREFIX = "v2.";
+constexpr size_t STS_AEAD_IV_SIZE = 12;
+constexpr size_t STS_AEAD_TAG_SIZE = 16;
+constexpr size_t STS_AEAD_SALT_SIZE = 32; // per-token key-derivation salt
+
+constexpr unsigned char STS_AEAD_ZERO_IV[STS_AEAD_IV_SIZE] = {0};
+
+using rgw::sts::STS_AEAD_KEY_ID_SIZE;
+using rgw::sts::sts_aead_key;
+
+// the sealed envelope prepends the key id and salt to the ciphertext
+constexpr size_t STS_AEAD_HEADER_SIZE = STS_AEAD_KEY_ID_SIZE + STS_AEAD_SALT_SIZE;
+
+bool sts_gcm_seal(const unsigned char* key,
+                  const unsigned char* in, int in_len,
+                  unsigned char* out, unsigned char* tag)
+{
+  std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>
+    ctx{EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free};
+  int len = 0;
+  if (! ctx ||
+      1 != EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) ||
+      1 != EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, STS_AEAD_IV_SIZE, nullptr) ||
+      1 != EVP_EncryptInit_ex(ctx.get(), nullptr, nullptr, key, STS_AEAD_ZERO_IV) ||
+      1 != EVP_EncryptUpdate(ctx.get(), out, &len, in, in_len)) {
+    return false;
+  }
+  int final_len = 0;
+  if (1 != EVP_EncryptFinal_ex(ctx.get(), out + len, &final_len) ||
+      1 != EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_GET_TAG, STS_AEAD_TAG_SIZE, tag)) {
+    return false;
+  }
+  return true;
+}
+
+bool sts_gcm_open(const unsigned char* key,
+                  const unsigned char* in, int in_len,
+                  const unsigned char* tag, unsigned char* out)
+{
+  std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>
+    ctx{EVP_CIPHER_CTX_new(), EVP_CIPHER_CTX_free};
+  int len = 0;
+  if (! ctx ||
+      1 != EVP_DecryptInit_ex(ctx.get(), EVP_aes_256_gcm(), nullptr, nullptr, nullptr) ||
+      1 != EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_IVLEN, STS_AEAD_IV_SIZE, nullptr) ||
+      1 != EVP_DecryptInit_ex(ctx.get(), nullptr, nullptr, key, STS_AEAD_ZERO_IV) ||
+      1 != EVP_DecryptUpdate(ctx.get(), out, &len, in, in_len) ||
+      1 != EVP_CIPHER_CTX_ctrl(ctx.get(), EVP_CTRL_GCM_SET_TAG, STS_AEAD_TAG_SIZE,
+                               const_cast<unsigned char*>(tag))) {
+    return false;
+  }
+  int final_len = 0;
+  return 1 == EVP_DecryptFinal_ex(ctx.get(), out + len, &final_len);
+}
+
+/*
+ * Derive a per-token key from the salt so the GCM nonce can stay zero and
+ * still never repeat a (key, nonce) pair. Returns false, and wipes out, if the
+ * HMAC fails.
+ */
+bool sts_derive_token_key(const std::string& master,
+                          const unsigned char* salt,
+                          unsigned char (&out)[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE])
+{
+  try {
+    ceph::crypto::HMACSHA256 hmac(
+      reinterpret_cast<const unsigned char*>(master.data()), master.size());
+    hmac.Update(salt, STS_AEAD_SALT_SIZE);
+    hmac.Final(out);
+  } catch (const ceph::crypto::DigestException&) {
+    ::ceph::crypto::zeroize_for_security(out, sizeof(out));
+    return false;
+  }
+  return true;
+}
+
+int get_sts_cbc_key_handler(const DoutPrefixProvider* dpp, CephContext* cct,
+                            STS::KeyringCache* keyring_cache,
+                            std::unique_ptr<CryptoKeyHandler>& out)
+{
+  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+  if (! cryptohandler) {
+    ldpp_dout(dpp, 0) << "ERROR: No AES crypto handler found !" << dendl;
+    return -EINVAL;
+  }
+  // rgw_sts_key always takes precedence over the stored legacy key
+  std::string secret_s = cct->_conf.get_val<std::string>("rgw_sts_key");
+  if (secret_s.empty() && keyring_cache) {
+    if (const auto legacy = keyring_cache->get_legacy(); legacy) {
+      secret_s = *legacy;
+    }
+  }
+  if (secret_s.empty()) {
+    ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
+    return -EINVAL;
+  }
+  bufferptr secret(secret_s.c_str(), secret_s.length());
+  if (int ret = cryptohandler->validate_secret(secret); ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure it is an alphanumeric key of length 16" << dendl;
+    return ret;
+  }
+  std::string error;
+  out.reset(cryptohandler->get_key_handler(secret, error));
+  if (! out) {
+    ldpp_dout(dpp, 0) << "ERROR: No Key handler found !" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int get_sts_keyring(const DoutPrefixProvider* dpp,
+                    STS::KeyringCache* keyring_cache,
+                    STS::KeyringSnapshot& out)
+{
+  out = keyring_cache ? keyring_cache->get() : nullptr;
+  if (! out) {
+    ldpp_dout(dpp, 0) << "ERROR: the STS keyring is not available" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+bool sts_aead_token_format(CephContext* cct)
+{
+  return cct->_conf.get_val<std::string>("rgw_sts_token_format") == "aead";
+}
+
+} // anonymous namespace
+
 namespace STS {
+
+int seal_session_token(const DoutPrefixProvider* dpp, CephContext* cct,
+                       const sts_aead_key& active,
+                       bufferlist plaintext, std::string& out)
+{
+  unsigned char salt[STS_AEAD_SALT_SIZE];
+  cct->random()->get_bytes(reinterpret_cast<char*>(salt), sizeof(salt));
+  unsigned char key[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  if (! sts_derive_token_key(active.key, salt, key)) {
+    ldpp_dout(dpp, 0) << "ERROR: session token key derivation failed" << dendl;
+    return -ERR_INTERNAL_ERROR;
+  }
+
+  const int in_len = static_cast<int>(plaintext.length());
+  std::string envelope;
+  envelope.reserve(STS_AEAD_HEADER_SIZE + in_len + STS_AEAD_TAG_SIZE);
+  envelope.append(active.id);
+  envelope.append(reinterpret_cast<const char*>(salt), STS_AEAD_SALT_SIZE);
+  const size_t cipher_off = envelope.size();
+  envelope.resize(cipher_off + in_len + STS_AEAD_TAG_SIZE);
+  auto* cipher = reinterpret_cast<unsigned char*>(envelope.data()) + cipher_off;
+
+  const bool ok = sts_gcm_seal(key,
+                               reinterpret_cast<const unsigned char*>(plaintext.c_str()),
+                               in_len, cipher, cipher + in_len);
+  ::ceph::crypto::zeroize_for_security(key, sizeof(key));
+  if (! ok) {
+    ldpp_dout(dpp, 0) << "ERROR: AES-256-GCM sealing of session token failed" << dendl;
+    return -ERR_INTERNAL_ERROR;
+  }
+
+  out.assign(STS_AEAD_PREFIX);
+  out += rgw::to_base64(envelope);
+  return 0;
+}
+
+int unseal_session_token(const DoutPrefixProvider* dpp,
+                         const rgw::sts::StsKeyring& keyring,
+                         std::string_view token, bufferlist& plaintext)
+{
+  std::string envelope;
+  try {
+    envelope = rgw::from_base64(token.substr(STS_AEAD_PREFIX.size()));
+  } catch (...) {
+    ldpp_dout(dpp, 0) << "ERROR: session token is not valid base64" << dendl;
+    return -EINVAL;
+  }
+  if (envelope.size() <= STS_AEAD_HEADER_SIZE + STS_AEAD_TAG_SIZE) {
+    ldpp_dout(dpp, 0) << "ERROR: session token is truncated" << dendl;
+    return -EINVAL;
+  }
+
+  const std::string_view key_id{envelope.data(), STS_AEAD_KEY_ID_SIZE};
+  const auto* buf = reinterpret_cast<const unsigned char*>(envelope.data());
+  const unsigned char* salt = buf + STS_AEAD_KEY_ID_SIZE;
+  const unsigned char* cipher = buf + STS_AEAD_HEADER_SIZE;
+  const int cipher_len = static_cast<int>(
+    envelope.size() - STS_AEAD_HEADER_SIZE - STS_AEAD_TAG_SIZE);
+  const unsigned char* tag = cipher + cipher_len;
+
+  const sts_aead_key* active = keyring.find(key_id);
+  if (! active) {
+    ldpp_dout(dpp, 0) << "ERROR: session token sealed with an unknown key id" << dendl;
+    return -EPERM;
+  }
+
+  unsigned char key[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
+  if (! sts_derive_token_key(active->key, salt, key)) {
+    ldpp_dout(dpp, 0) << "ERROR: session token key derivation failed" << dendl;
+    return -ERR_INTERNAL_ERROR;
+  }
+
+  bufferptr opened(cipher_len);
+  const bool ok = sts_gcm_open(key, cipher, cipher_len, tag,
+                               reinterpret_cast<unsigned char*>(opened.c_str()));
+  ::ceph::crypto::zeroize_for_security(key, sizeof(key));
+  if (! ok) {
+    // this plaintext isn't authenticated, so wipe it
+    ::ceph::crypto::zeroize_for_security(opened.c_str(), opened.length());
+    ldpp_dout(dpp, 0) << "ERROR: session token failed authentication" << dendl;
+    return -EPERM;
+  }
+
+  plaintext.clear();
+  plaintext.push_back(std::move(opened));
+  return 0;
+}
+
+int decode_session_token(const DoutPrefixProvider* dpp, CephContext* cct,
+                         STS::KeyringCache* keyring_cache,
+                         std::string_view session_token, SessionToken& token)
+{
+  bufferlist plaintext;
+  if (session_token.starts_with(STS_AEAD_PREFIX)) {
+    STS::KeyringSnapshot keyring;
+    if (int ret = get_sts_keyring(dpp, keyring_cache, keyring); ret < 0) {
+      return ret;
+    }
+    if (int ret = unseal_session_token(dpp, *keyring, session_token, plaintext); ret < 0) {
+      return ret;
+    }
+  } else {
+    if (sts_aead_token_format(cct)) {
+      ldpp_dout(dpp, 0) << "ERROR: legacy session token rejected because rgw_sts_token_format is aead" << dendl;
+      return -EPERM;
+    }
+    std::string decoded;
+    try {
+      decoded = rgw::from_base64(session_token);
+    } catch (...) {
+      ldpp_dout(dpp, 0) << "ERROR: Invalid session token, not base64 encoded." << dendl;
+      return -EINVAL;
+    }
+    std::unique_ptr<CryptoKeyHandler> keyhandler;
+    if (int ret = get_sts_cbc_key_handler(dpp, cct, keyring_cache, keyhandler); ret < 0) {
+      return ret;
+    }
+    std::string error;
+    bufferlist encrypted = bufferlist::static_from_string(decoded);
+    if (int ret = keyhandler->decrypt(encrypted, plaintext, &error); ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
+      return -EPERM;
+    }
+    plaintext.append('\0');
+  }
+  try {
+    auto iter = plaintext.cbegin();
+    decode(token, iter);
+  } catch (const buffer::error& e) {
+    ldpp_dout(dpp, 0) << "ERROR: decode SessionToken failed" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
 
 void Credentials::dump(Formatter *f) const
 {
@@ -43,6 +317,7 @@ void Credentials::dump(Formatter *f) const
 
 int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
                           CephContext* cct,
+                          STS::KeyringCache* keyring_cache,
                           const uint64_t& duration,
                           const boost::optional<std::string>& policy,
                           const boost::optional<std::string>& roleId,
@@ -68,31 +343,18 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   real_clock::time_point exp = t + std::chrono::seconds(duration);
   expiration = ceph::to_iso_8601(exp);
 
-  //Session Token - Encrypt using AES
-  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
-  if (! cryptohandler) {
-    ldpp_dout(dpp, 0) << "ERROR: No AES crypto handler found !" << dendl;
-    return -EINVAL;
-  }
-  string secret_s = cct->_conf->rgw_sts_key;
-  if (secret_s.empty()) {
-    ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
-    return -EINVAL;
-  }
-
-  buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid rgw sts key, please ensure it is an alphanumeric key of length 16" << dendl;
+  const bool aead = sts_aead_token_format(cct);
+  STS::KeyringSnapshot keyring;
+  std::unique_ptr<CryptoKeyHandler> keyhandler;
+  if (aead) {
+    if (int ret = get_sts_keyring(dpp, keyring_cache, keyring); ret < 0) {
+      return ret;
+    }
+  } else if (int ret = get_sts_cbc_key_handler(dpp, cct, keyring_cache,
+                                               keyhandler); ret < 0) {
     return ret;
   }
-  string error;
-  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
-  if (! keyhandler) {
-    ldpp_dout(dpp, 0) << "ERROR: No Key handler found !" << dendl;
-    return -EINVAL;
-  }
-  error.clear();
+
   //Storing policy and roleId as part of token, so that they can be extracted
   // from the token itself for policy evaluation.
   SessionToken token;
@@ -140,10 +402,17 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   if (session_princ_tags) {
     token.principal_tags = std::move(*session_princ_tags);
   }
-  buffer::list input, enc_output;
+
+  buffer::list input;
   encode(token, input);
 
-  if (ret = keyhandler->encrypt(input, enc_output, &error); ret < 0) {
+  if (aead) {
+    return seal_session_token(dpp, cct, keyring->sealing_key(), std::move(input), sessionToken);
+  }
+
+  string error;
+  buffer::list enc_output;
+  if (int ret = keyhandler->encrypt(input, enc_output, &error); ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: Encrypting session token returned an error !" << dendl;
     return ret;
   }
@@ -153,7 +422,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   encoded_op.append('\0');
   sessionToken = encoded_op.c_str();
 
-  return ret;
+  return 0;
 }
 
 void AssumedRoleUser::dump(Formatter *f) const
@@ -381,7 +650,7 @@ AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(const Do
 
   //Generate Credentials
   //Role and Policy provide the authorization info, user id and applier info are not needed
-  response.assumeRoleResp.retCode = response.assumeRoleResp.creds.generateCredentials(dpp, cct, req.getDuration(),
+  response.assumeRoleResp.retCode = response.assumeRoleResp.creds.generateCredentials(dpp, cct, keyring_cache, req.getDuration(),
                                                                                       req.getPolicy(), roleId,
                                                                                       req.getRoleSessionName(),
                                                                                       token_claims,
@@ -432,7 +701,7 @@ AssumeRoleResponse STSService::assumeRole(const DoutPrefixProvider *dpp,
 
   //Generate Credentials
   //Role and Policy provide the authorization info, user id and applier info are not needed
-  response.retCode = response.creds.generateCredentials(dpp, cct, req.getDuration(),
+  response.retCode = response.creds.generateCredentials(dpp, cct, keyring_cache, req.getDuration(),
                                               req.getPolicy(), roleId,
                                               req.getRoleSessionName(),
                                               boost::none,
@@ -463,7 +732,7 @@ GetSessionTokenResponse STSService::getSessionToken(const DoutPrefixProvider *dp
   Credentials cred;
 
   //Generate Credentials
-  if (ret = cred.generateCredentials(dpp, cct,
+  if (ret = cred.generateCredentials(dpp, cct, keyring_cache,
                                       req.getDuration(),
                                       boost::none,
                                       boost::none,

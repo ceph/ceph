@@ -537,6 +537,7 @@ namespace rgw {
     register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
 
     main.init_tracepoints();
+    main.init_sts_keyring();
     r = main.init_frontends2(this /* rgwlib */);
     if (r != 0) {
       derr << "ERROR: unable to initialize frontend, r = " << r << dendl;

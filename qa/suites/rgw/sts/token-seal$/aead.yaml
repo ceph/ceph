@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        rgw sts token format: aead
+        rgw sts keyring refresh interval: 1

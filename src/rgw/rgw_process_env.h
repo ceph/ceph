@@ -7,6 +7,7 @@
 
 #include "rgw_auth_registry.h"
 #include "rgw_kms_cache.h"
+#include "rgw_sts_keyring_cache.h"
 
 class ActiveRateLimiter;
 class OpsLogSink;
@@ -52,6 +53,7 @@ struct RGWProcessEnv {
   std::unique_ptr<rgw::auth::StrategyRegistry> auth_registry;
   ActiveRateLimiter* ratelimiting = nullptr;
   std::unique_ptr<rgw::kms::KMSCache> kms_cache;
+  std::unique_ptr<STS::KeyringCache> sts_keyring;
 
 #ifdef WITH_ARROW_FLIGHT
   // managed by rgw:flight::FlightFrontend in rgw_flight_frontend.cc
