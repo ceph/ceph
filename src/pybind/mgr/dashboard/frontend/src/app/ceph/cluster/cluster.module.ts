@@ -52,7 +52,8 @@ import { PipesModule } from '~/app/shared/pipes/pipes.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { PerformanceCounterModule } from '../performance-counter/performance-counter.module';
 import { CephSharedModule } from '../shared/ceph-shared.module';
-import { ConfigurationDetailsComponent } from './configuration/configuration-details/configuration-details.component';
+import { ConfigurationResourcePageComponent } from './configuration/configuration-resource-page/configuration-resource-page.component';
+import { ConfigurationResourceSidebarComponent } from './configuration/configuration-resource-sidebar/configuration-resource-sidebar.component';
 import { ConfigurationFormComponent } from './configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { CreateClusterReviewComponent } from './create-cluster/create-cluster-review.component';
@@ -165,7 +166,8 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     OsdFlagsModalComponent,
     HostSidebarComponent,
     HostResourcePageComponent,
-    ConfigurationDetailsComponent,
+    ConfigurationResourcePageComponent,
+    ConfigurationResourceSidebarComponent,
     ConfigurationFormComponent,
     OsdReweightModalComponent,
     CrushmapComponent,
