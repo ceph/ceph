@@ -47,6 +47,80 @@ macro(list_replace list old new)
   unset(where)
 endmacro()
 
+# Populate a shared, version-partitioned Boost source cache exactly once, so
+# multiple out-of-source build directories can reuse it read-only. Runs at
+# configure time. The cache holds only pristine source plus the b2 engine; all
+# variant-specific build artifacts are redirected into each build's own
+# directory by do_build_boost(). Trailing arguments (${ARGN}) are the mirror
+# URLs to try, in order.
+function(prepare_shared_boost_source cache_dir source_dir version_underscore sha256 toolset)
+  set(sentinel "${source_dir}/.ceph-boost-prepared")
+  file(MAKE_DIRECTORY "${cache_dir}")
+  # Serialize cold-start population across concurrent configures; GUARD FUNCTION
+  # releases the (inter-process) lock when this function returns.
+  file(LOCK "${cache_dir}/boost_${version_underscore}.lock"
+    GUARD FUNCTION TIMEOUT 3600)
+  if(EXISTS "${sentinel}")
+    return()
+  endif()
+  message(STATUS "Boost cache: preparing shared source in ${source_dir}")
+
+  set(downloads_dir "${cache_dir}/downloads")
+  file(MAKE_DIRECTORY "${downloads_dir}")
+  set(tarball "${downloads_dir}/boost_${version_underscore}.tar.bz2")
+  if(NOT EXISTS "${tarball}")
+    set(_downloaded OFF)
+    # file(DOWNLOAD) takes a single URL, so fall through the mirrors manually.
+    foreach(url ${ARGN})
+      message(STATUS "Boost cache: downloading ${url}")
+      file(DOWNLOAD "${url}" "${tarball}"
+        EXPECTED_HASH SHA256=${sha256}
+        STATUS _dl_status)
+      list(GET _dl_status 0 _dl_code)
+      if(_dl_code EQUAL 0)
+        set(_downloaded ON)
+        break()
+      endif()
+      list(GET _dl_status 1 _dl_msg)
+      message(STATUS "Boost cache: mirror failed (${_dl_msg}); trying next")
+      file(REMOVE "${tarball}")
+    endforeach()
+    if(NOT _downloaded)
+      message(FATAL_ERROR "Boost cache: could not download Boost ${version_underscore} into ${tarball}")
+    endif()
+  endif()
+
+  # The tarball's top-level directory is boost_<version_underscore>/, so
+  # extracting into cache_dir yields ${source_dir}.
+  if(NOT EXISTS "${source_dir}/boost/version.hpp")
+    message(STATUS "Boost cache: extracting ${tarball}")
+    file(ARCHIVE_EXTRACT INPUT "${tarball}" DESTINATION "${cache_dir}")
+  endif()
+
+  # Build the b2 engine once and place it OUTSIDE the source tree so the shared
+  # source stays pristine (b2 finds the project via its working directory, not
+  # via its own location).
+  if(NOT EXISTS "${cache_dir}/b2")
+    message(STATUS "Boost cache: building b2 engine")
+    execute_process(
+      COMMAND ./tools/build/src/engine/build.sh --cxx=${CMAKE_CXX_COMPILER} ${toolset}
+      WORKING_DIRECTORY "${source_dir}"
+      RESULT_VARIABLE _b2_result)
+    if(NOT _b2_result EQUAL 0)
+      message(FATAL_ERROR "Boost cache: failed to build b2 engine (exit ${_b2_result})")
+    endif()
+    file(COPY "${source_dir}/tools/build/src/engine/b2"
+      DESTINATION "${cache_dir}"
+      FILE_PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+        WORLD_READ WORLD_EXECUTE)
+  endif()
+
+  # Mark the cache ready only after every step above succeeded.
+  file(WRITE "${sentinel}" "boost ${version_underscore}\n")
+endfunction()
+
 function(do_build_boost root_dir version)
   cmake_parse_arguments(Boost_BUILD "" "" COMPONENTS ${ARGN})
   if(CMAKE_BUILD_TYPE STREQUAL Debug)
@@ -83,7 +157,9 @@ function(do_build_boost root_dir version)
     endif()
   endforeach()
   list_replace(boost_with_libs "unit_test_framework" "test")
-  string(REPLACE ";" "," boost_with_libs "${boost_with_libs}")
+  # keep the list form (used for per-library --with-<lib> flags) and derive the
+  # comma-separated form bootstrap.sh's --with-libraries expects
+  string(REPLACE ";" "," boost_with_libs_csv "${boost_with_libs}")
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
@@ -93,21 +169,53 @@ function(do_build_boost root_dir version)
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
   endif()
 
-  # prepare the project-config.jam for boost
-  set(bjam <SOURCE_DIR>/b2)
-  set(configure_command
-    ./bootstrap.sh --prefix=<INSTALL_DIR>
-    --with-libraries=${boost_with_libs}
-    --with-toolset=${toolset}
-    --with-bjam=${bjam})
+  # Boost tarball coordinates, shared by every source-provisioning path below.
+  # NOTE: If you change this version number make sure the package is available
+  # at the three URLs below (may involve uploading to download.ceph.com)
+  set(boost_version 1.87.0)
+  set(boost_sha256 af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
+  string(REPLACE "." "_" boost_version_underscore ${boost_version})
+  set(boost_url
+    https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2
+    https://archives.boost.io//release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2
+    https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
 
-  set(b2 ${bjam})
-  if(BOOST_J)
-    message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
-    list(APPEND b2 -j${BOOST_J})
+  # Resolve where the Boost source lives and how b2 builds against it.
+  #   boost_shared_source ON  -> the source tree is shared and kept pristine, so
+  #                              b2 builds out of the source tree (WITH_BOOST_CACHE).
+  set(boost_shared_source OFF)
+  if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
+    check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
+    set(source_dir SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
+  elseif(WITH_BOOST_CACHE)
+    if(version VERSION_GREATER 1.87)
+      message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
+    endif()
+    get_filename_component(boost_cache_dir "${WITH_BOOST_CACHE}" ABSOLUTE)
+    set(boost_cache_source "${boost_cache_dir}/boost_${boost_version_underscore}")
+    prepare_shared_boost_source("${boost_cache_dir}" "${boost_cache_source}"
+      "${boost_version_underscore}" "${boost_sha256}" "${toolset}" ${boost_url})
+    check_boost_version("${boost_cache_source}" ${version})
+    set(source_dir SOURCE_DIR "${boost_cache_source}")
+    set(boost_shared_source ON)
+  elseif(version VERSION_GREATER 1.87)
+    message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
+  else()
+    message(STATUS "boost will be downloaded...")
+    set(source_dir
+      URL ${boost_url}
+      URL_HASH SHA256=${boost_sha256}
+      DOWNLOAD_NO_PROGRESS 1)
   endif()
-  # suppress all debugging levels for b2
-  list(APPEND b2 -d0)
+
+  # b2 driver: for the shared cache the engine was built during prep and lives
+  # outside the pristine source; otherwise it is built in-tree by the build-bjam
+  # step below.
+  if(boost_shared_source)
+    set(bjam "${boost_cache_dir}/b2")
+  else()
+    set(bjam <SOURCE_DIR>/b2)
+  endif()
 
   set(user_config ${CMAKE_BINARY_DIR}/user-config.jam)
   # edit the user-config.jam so b2 will be able to use the specified
@@ -130,8 +238,15 @@ function(do_build_boost root_dir version)
       " : ${Python3_LIBRARIES}"
       " ;\n")
   endif()
-  list(APPEND b2 --user-config=${user_config})
 
+  set(b2 ${bjam})
+  if(BOOST_J)
+    message(STATUS "BUILDING Boost Libraries at j ${BOOST_J}")
+    list(APPEND b2 -j${BOOST_J})
+  endif()
+  # suppress all debugging levels for b2
+  list(APPEND b2 -d0)
+  list(APPEND b2 --user-config=${user_config})
   list(APPEND b2 toolset=${toolset})
   if(with_python_version)
     list(APPEND b2 python=${with_python_version})
@@ -158,51 +273,95 @@ function(do_build_boost root_dir version)
     list(PREPEND b2_targets libs/context/build)
     list(PREPEND b2_install_targets libs/context/build)
   endif()
-  set(build_command
-    ${b2} ${b2_targets}
-    #"--buildid=ceph" # changes lib names--can omit for static
-    ${boost_features})
-  set(install_command
-    ${b2} ${b2_install_targets})
-  if(EXISTS "${PROJECT_SOURCE_DIR}/src/boost/bootstrap.sh")
-    check_boost_version("${PROJECT_SOURCE_DIR}/src/boost" ${version})
-    set(source_dir
-      SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/boost")
-  elseif(version VERSION_GREATER 1.87)
-    message(FATAL_ERROR "Unknown BOOST_REQUESTED_VERSION: ${version}")
-  else()
-    message(STATUS "boost will be downloaded...")
-    # NOTE: If you change this version number make sure the package is available
-    # at the three URLs below (may involve uploading to download.ceph.com)
-    set(boost_version 1.87.0)
-    set(boost_sha256 af57be25cb4c4f4b413ed692fe378affb4352ea50fbe294a11ef548f4d527d89)
-    string(REPLACE "." "_" boost_version_underscore ${boost_version} )
-    list(APPEND boost_url
-      https://download.ceph.com/qa/boost_${boost_version_underscore}.tar.bz2
-      https://archives.boost.io//release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2
-      https://boostorg.jfrog.io/artifactory/main/release/${boost_version}/source/boost_${boost_version_underscore}.tar.bz2)
-    set(source_dir
-      URL ${boost_url}
-      URL_HASH SHA256=${boost_sha256}
-      DOWNLOAD_NO_PROGRESS 1)
-  endif()
-  # build all components in a single shot
+
   include(ExternalProject)
-  ExternalProject_Add(Boost
-    ${source_dir}
-    CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
-    BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
-    BUILD_IN_SOURCE 1
-    BUILD_BYPRODUCTS ${Boost_LIBRARIES}
-    INSTALL_COMMAND ${install_command}
-    PREFIX "${root_dir}")
-  ExternalProject_Add_Step(Boost build-bjam
-    COMMAND ./tools/build/src/engine/build.sh --cxx=${CMAKE_CXX_COMPILER} ${toolset}
-    COMMAND ${CMAKE_COMMAND} -E copy ./tools/build/src/engine/b2 ${bjam}
-    DEPENDEES download
-    DEPENDERS configure
-    COMMENT "Building B2 engine.."
-    WORKING_DIRECTORY <SOURCE_DIR>)
+  if(boost_shared_source)
+    # Redirect every variant-specific output out of the shared source tree and
+    # into this build's own directory, so the cache stays pristine and safe to
+    # share across concurrent builds.
+    set(boost_artifacts "${CMAKE_BINARY_DIR}/boost-artifacts")
+    set(boost_config_dir "${CMAKE_BINARY_DIR}/boost-config")
+    file(MAKE_DIRECTORY "${boost_config_dir}")
+    # Run the real bootstrap.sh at configure time rather than reimplementing the
+    # platform detection it performs (ICU discovery and whatever future Boost
+    # versions add). --with-bjam reuses the engine built during cache prep, so
+    # nothing is compiled and the shared source is never written to; bootstrap
+    # writes project-config.jam into this build's own boost-config/ (its cwd),
+    # capturing ICU, the library selection and the install prefix exactly as a
+    # normal build would. Removed first so repeated configures don't make
+    # bootstrap accumulate project-config.jam.N backups.
+    file(REMOVE "${boost_config_dir}/project-config.jam")
+    execute_process(
+      COMMAND "${boost_cache_source}/bootstrap.sh"
+        --with-bjam=${bjam}
+        --with-toolset=${toolset}
+        --with-libraries=${boost_with_libs_csv}
+        --prefix=${root_dir}
+      WORKING_DIRECTORY "${boost_config_dir}"
+      RESULT_VARIABLE _bootstrap_result
+      OUTPUT_VARIABLE _bootstrap_output
+      ERROR_VARIABLE _bootstrap_output)
+    if(NOT _bootstrap_result EQUAL 0)
+      message(FATAL_ERROR
+        "Boost cache: bootstrap.sh failed (exit ${_bootstrap_result}):\n${_bootstrap_output}")
+    endif()
+    list(APPEND b2
+      --project-config=${boost_config_dir}/project-config.jam
+      --build-dir=${boost_artifacts}/build
+      --stagedir=${boost_artifacts}/stage)
+    # `b2 stage` builds the libraries listed in project-config.jam into a stable,
+    # flat directory. No `headers` target: the release tarball already ships the
+    # monolithic boost/ header tree, so it is a no-op that would only risk
+    # touching the source.
+    set(build_command ${b2} stage ${boost_features})
+    # Deliberately skip `b2 install`: it would re-copy the entire (~180 MB)
+    # header tree - already present, pristine, in the shared cache - plus the
+    # libraries into this build dir. Instead expose the expected
+    # ${CMAKE_BINARY_DIR}/boost/{include,lib} layout (which downstream BOOST_ROOT
+    # consumers such as Arrow and OpenTelemetry, and the imported targets set by
+    # build_boost(), rely on) as symlinks: headers point back at the cache, libs
+    # at this build's staged libs. Nothing is duplicated on disk. (Symlinks are
+    # a Unix-only feature, matching the bash-based cache prep above.)
+    ExternalProject_Add(Boost
+      ${source_dir}
+      CONFIGURE_COMMAND ""
+      BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
+      BUILD_IN_SOURCE 1
+      BUILD_BYPRODUCTS ${Boost_LIBRARIES}
+      INSTALL_COMMAND ${CMAKE_COMMAND} -E rm -rf <INSTALL_DIR>/include <INSTALL_DIR>/lib
+              COMMAND ${CMAKE_COMMAND} -E make_directory <INSTALL_DIR>/include
+              COMMAND ${CMAKE_COMMAND} -E create_symlink "${boost_cache_source}/boost" <INSTALL_DIR>/include/boost
+              COMMAND ${CMAKE_COMMAND} -E create_symlink "${boost_artifacts}/stage/lib" <INSTALL_DIR>/lib
+      PREFIX "${root_dir}")
+  else()
+    set(configure_command
+      ./bootstrap.sh --prefix=<INSTALL_DIR>
+      --with-libraries=${boost_with_libs_csv}
+      --with-toolset=${toolset}
+      --with-bjam=${bjam})
+    set(build_command
+      ${b2} headers stage
+      #"--buildid=ceph" # changes lib names--can omit for static
+      ${boost_features})
+    set(install_command
+      ${b2} install)
+    # build all components in a single shot
+    ExternalProject_Add(Boost
+      ${source_dir}
+      CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
+      BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
+      BUILD_IN_SOURCE 1
+      BUILD_BYPRODUCTS ${Boost_LIBRARIES}
+      INSTALL_COMMAND ${install_command}
+      PREFIX "${root_dir}")
+    ExternalProject_Add_Step(Boost build-bjam
+      COMMAND ./tools/build/src/engine/build.sh --cxx=${CMAKE_CXX_COMPILER} ${toolset}
+      COMMAND ${CMAKE_COMMAND} -E copy ./tools/build/src/engine/b2 ${bjam}
+      DEPENDEES download
+      DEPENDERS configure
+      COMMENT "Building B2 engine.."
+      WORKING_DIRECTORY <SOURCE_DIR>)
+  endif()
 endfunction()
 
 set(Boost_context_DEPENDENCIES thread chrono system date_time)

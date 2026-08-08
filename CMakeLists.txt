@@ -796,6 +796,19 @@ endif()
 # Boost
 option(WITH_SYSTEM_BOOST "require and build with system Boost" OFF)
 
+# When building the bundled Boost (WITH_SYSTEM_BOOST=OFF), WITH_BOOST_CACHE lets
+# several out-of-source build directories share one Boost *source* tree across
+# configurations, so the download/extract is not repeated for every build
+# directory. Variant-specific build artifacts always stay under each build's own
+# directory, so the shared cache is safe for concurrent/parallel builds.
+#
+# It points at a shared, version-partitioned Boost source cache
+# (e.g. -DWITH_BOOST_CACHE=$HOME/.cache/ceph/boost). The tarball is downloaded
+# and extracted there once, into boost_<version>/, and reused read-only by every
+# build directory needing that version; b2 then builds out of the source tree.
+set(WITH_BOOST_CACHE "" CACHE PATH
+  "Shared, version-partitioned Boost source cache directory (empty = per-build download/extract).")
+
 # Boost::thread depends on Boost::atomic, so list it explicitly.
 set(BOOST_COMPONENTS
   atomic chrono headers thread regex random program_options date_time
