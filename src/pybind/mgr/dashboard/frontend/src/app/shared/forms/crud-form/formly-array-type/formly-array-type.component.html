@@ -27,7 +27,7 @@
         type="button"
         (click)="addWrapper()"
       >
-        <i [ngClass]="icons.add"></i>
+        <cd-icon type="add"></cd-icon>
       </button>
       <button
         class="btn btn-light ms-1"
@@ -35,7 +35,7 @@
         (click)="remove(i)"
         *ngIf="field.props.removable !== false"
       >
-        <i [ngClass]="icons.trash"></i>
+        <cd-icon type="trash"></cd-icon>
       </button>
     </div>
   </div>
@@ -49,7 +49,7 @@
       (click)="addWrapper()"
       i18n
     >
-      <i [ngClass]="icons.add"></i>
+      <cd-icon type="add"></cd-icon>
       Add {{ props.label }}
     </button>
   </div>
