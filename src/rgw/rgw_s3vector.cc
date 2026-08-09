@@ -1553,20 +1553,6 @@ namespace rgw::s3vector {
     }
   }
 
-  int put_vector_bucket_policy(const put_vector_bucket_policy_t& configuration, 
-    rgw::sal::VectorBucket* bucket, DoutPrefixProvider* dpp, optional_yield y) {
-    log_configuration(dpp, "PutVectorBucketPolicy", configuration);
-
-    rgw::sal::Attrs &attrs = bucket->get_attrs();
-    attrs[RGW_ATTR_IAM_POLICY].clear();
-    attrs[RGW_ATTR_IAM_POLICY].append(configuration.policy);
-    int ret = bucket->set_attrs(std::move(attrs));
-    if(ret < 0) {
-      ldpp_dout(dpp, 1)<<"ERROR: PutVectorBucketPolicy failed to store attrs, ret="<< ret << dendl;
-    }
-    return ret;
-  }
-
   // get vector bucket policy
 
   void get_vector_bucket_policy_t::dump(ceph::Formatter* f) const {
