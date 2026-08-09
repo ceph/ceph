@@ -3006,9 +3006,6 @@ if cluster_running; then
   "$RGW_ADMIN" user rm --uid "$_test_uid" --purge-data >/dev/null 2>&1
 fi
 
-# NOTE: ceph-global stripping and --cli11-help footer tests live in
-# test_cli11_globals.sh (they are cross-cutting, not bucket-specific).
-
 # ============================================================
 echo ""
 echo "========================================"

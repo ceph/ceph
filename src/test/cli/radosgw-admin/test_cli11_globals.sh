@@ -122,16 +122,24 @@ check_help_content() {
 # ============================================================
 echo ""
 echo "=== ceph globals stripped before CLI11 (with cluster) ==="
-_SHARD='bucket object shard --object foo --num-shards 11'
-check_cluster "global tier1 --cluster (space) stripped"            0 '"shard": 10' -- $_SHARD --cluster ceph
-check_cluster "global tier1 --cluster=ceph (= form) stripped"      0 '"shard": 10' -- $_SHARD --cluster=ceph
-check_cluster "global tier1 --no-config-file (no value) stripped"  0 '"shard": 10' -- $_SHARD --no-config-file
-check_cluster "global tier2 -d (no value) stripped"                0 '"shard": 10' -- $_SHARD -d
-check_cluster "global tier3 --rgw-zone (space) stripped [regression]" 0 '"shard": 10' -- $_SHARD --rgw-zone default
-check_cluster "global tier3 --rgw-zone=default (= form) stripped"   0 '"shard": 10' -- $_SHARD --rgw-zone=default
-check_cluster "global tier3 --debug-rgw (space) stripped"          0 '"shard": 10' -- $_SHARD --debug-rgw 5
-check_cluster "global tier3 --debug-rgw=5 (= form) stripped"       0 '"shard": 10' -- $_SHARD --debug-rgw=5
-check_cluster "global --rgw-zone default before command stripped"  0 '"shard": 10' -- --rgw-zone default $_SHARD
+check_cluster "global tier1 --cluster (space) stripped"               0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --cluster ceph
+check_cluster "global tier1 --cluster=ceph (= form) stripped"         0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --cluster=ceph
+check_cluster "global tier1 --no-config-file (no value) stripped"     0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --no-config-file
+check_cluster "global tier2 -d (no value) stripped"                   0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 -d
+check_cluster "global tier3 --rgw-zone (space) stripped [regression]" 0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --rgw-zone default
+check_cluster "global tier3 --rgw-zone=default (= form) stripped"     0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --rgw-zone=default
+check_cluster "global tier3 --debug-rgw (space) stripped"             0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --debug-rgw 5
+check_cluster "global tier3 --debug-rgw=5 (= form) stripped"          0 '"shard": 10' -- \
+  bucket object shard --object foo --num-shards 11 --debug-rgw=5
+check_cluster "global --rgw-zone default before command stripped"     0 '"shard": 10' -- \
+  --rgw-zone default bucket object shard --object foo --num-shards 11
 check_cluster "global --rgw-zone default (space) on bucket list"        0 "" -- bucket list --rgw-zone default
 check_cluster "global --rgw-zone=default (= form) on bucket list"       0 "" -- bucket list --rgw-zone=default
 check_cluster "global --debug-rgw 5 (space) on bucket list"             0 "" -- bucket list --debug-rgw 5
