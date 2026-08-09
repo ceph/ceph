@@ -1,7 +1,7 @@
 import errno
 import logging
 import json
-from typing import List, cast, Optional
+from typing import Dict, List, cast, Optional
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
@@ -39,15 +39,29 @@ class NvmeofService(CephService):
         # this may raise
         self.mgr._check_pool_exists(spec.pool, spec.service_name())
 
+    def bind_addr(self,
+                  listener: str,
+                  host: str,
+                  placement_addr: Optional[str],
+                  addr_map: Optional[Dict[str, str]],
+                  addr: Optional[str]) -> str:
+        """Where a gateway's `listener` listens on `host`: the per host map,
+        then the service wide address, then what the scheduler resolved for the
+        placement from `networks`, and only then the address cephadm reaches
+        the host at.
+        """
+        mapped_addr = addr_map.get(host) if addr_map else None
+        host_addr = self.mgr.inventory.get_addr(host)
+        chosen = mapped_addr or addr or placement_addr or host_addr
+        self.mgr.log.info(f'{listener} address on {host}: {chosen}, from '
+                          f'{mapped_addr=} {addr=} {placement_addr=} {host_addr=}')
+        return chosen
+
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
 
         spec = cast(NvmeofServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
         nvmeof_gw_id = daemon_spec.daemon_id
-        host_ip = self.mgr.inventory.get_addr(daemon_spec.host)
-        map_addr = spec.addr_map.get(daemon_spec.host) if spec.addr_map else None
-        map_discovery_addr = spec.discovery_addr_map.get(daemon_spec.host) if spec.discovery_addr_map else None
-
         keyring = self.get_keyring_with_caps(self.get_auth_entity(nvmeof_gw_id),
                                              ['mon', 'profile rbd',
                                               'osd', 'profile rbd'])
@@ -58,13 +72,10 @@ class NvmeofService(CephService):
         name = '{}.{}'.format(utils.name_to_config_section('nvmeof'), nvmeof_gw_id)
         rados_id = name[len('client.'):] if name.startswith('client.') else name
 
-        # The address is first searched in the per node address map,
-        # then in the spec address configuration.
-        # If neither is defined, the host IP is used as a fallback.
-        addr = map_addr or spec.addr or host_ip
-        self.mgr.log.info(f"gateway address: {addr} from {map_addr=} {spec.addr=} {host_ip=}")
-        discovery_addr = map_discovery_addr or spec.discovery_addr or host_ip
-        self.mgr.log.info(f"discovery address: {discovery_addr} from {map_discovery_addr=} {spec.discovery_addr=} {host_ip=}")
+        addr = self.bind_addr('gateway', daemon_spec.host, daemon_spec.ip,
+                              spec.addr_map, spec.addr)
+        discovery_addr = self.bind_addr('discovery', daemon_spec.host, daemon_spec.ip,
+                                        spec.discovery_addr_map, spec.discovery_addr)
         context = {
             'spec': spec,
             'name': name,
