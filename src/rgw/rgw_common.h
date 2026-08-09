@@ -1120,6 +1120,7 @@ struct RGWBucketInfo {
   bool mfa_enabled() const { return (versioning_status() & BUCKET_MFA_ENABLED) != 0; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
   bool obj_lock_enabled() const { return (flags & BUCKET_OBJ_LOCK_ENABLED) != 0; }
+  bool bucket_suspended() const { return (flags & BUCKET_SUSPENDED) != 0; }
   bool bucket_deleted() const { return (flags & BUCKET_DELETED) != 0; }
 
   bool has_swift_versioning() const {
