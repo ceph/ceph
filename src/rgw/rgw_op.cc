@@ -435,7 +435,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
                               rgw_bucket& bucket,
 			      optional_yield y)
 {
-  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.bucket_suspended()) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
     return -ERR_BUCKET_SUSPENDED;
@@ -472,7 +472,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   std::unique_ptr<rgw::sal::Object> mpobj;
   rgw_obj obj;
 
-  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.bucket_suspended()) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
     return -ERR_BUCKET_SUSPENDED;
@@ -625,6 +625,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 			     s->bucket->get_attrs(),
 			     s->bucket_acl, s->bucket->get_key(), y);
     if (ret < 0) {
+      ldpp_dout(dpp, 0) << "failed to read bucket policy, err: "
+          << cpp_strerror(ret) << dendl;
       return ret;
     }
 
