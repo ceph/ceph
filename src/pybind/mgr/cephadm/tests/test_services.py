@@ -330,9 +330,38 @@ class TestNVMEOFService:
     def test_nvmeof_client_caps(self):
         pass
 
-    @patch('cephadm.utils.resolve_ip')
-    def test_nvmeof_dashboard_config(self, mock_resolve_ip):
-        pass
+    @pytest.mark.parametrize(
+        "addr,addr_map,daemon_ip,expected",
+        [
+            # Nothing declared: the address cephadm reaches the host at.
+            (None, None, None, '1.2.3.4:5500'),
+            # Declared per host: that one. Registering the host address instead
+            # is what leaves the gateway unreachable.
+            (None, {'testhost1': '10.0.0.7'}, None, '10.0.0.7:5500'),
+            # Resolved for the placement, which is how a `networks` CIDR arrives.
+            (None, None, '10.0.0.9', '10.0.0.9:5500'),
+            # A wildcard listener is not something to dial. The host address is
+            # among the ones it answers on, so register that instead.
+            ('0.0.0.0', None, None, '1.2.3.4:5500'),
+            ('::', None, None, '1.2.3.4:5500'),
+            # A v6 address is bracketed before the port is appended.
+            ('fd00::7', None, None, '[fd00::7]:5500'),
+        ])
+    @patch('cephadm.utils.resolve_ip', lambda addr: addr)
+    def test_nvmeof_dashboard_config(self, addr, addr_map, daemon_ip, expected):
+        spec = NvmeofServiceSpec(service_type='nvmeof', service_id='a',
+                                 addr=addr, addr_map=addr_map)
+        dd = DaemonDescription(daemon_type='nvmeof', hostname='testhost1',
+                               daemon_id='a', ip=daemon_ip)
+        with patch.object(self.mgr, 'check_mon_command') as check_mon_command, \
+                patch.object(self.mgr.spec_store.all_specs, 'get', return_value=spec):
+            check_mon_command.return_value = (0, '{"gateways": {}}', '')
+            self.nvmeof_service.config_dashboard([dd])
+            adds = [c.args for c in check_mon_command.mock_calls
+                    if c.args and c.args[0].get('prefix') == 'dashboard nvmeof-gateway-add']
+        # _check_and_set_dashboard pops 'inbuf' and passes it as the second
+        # positional argument, so the registered URL is args[1].
+        assert [a[1] for a in adds] == [expected]
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     def test_nvmeof_config_bind_addr(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
