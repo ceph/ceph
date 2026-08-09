@@ -1221,10 +1221,20 @@ private:
     librados::snap_set_t snaps;
   };
 
-  void file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, uint64_t max_objects,
+  struct FileBlockDiffSnapshot;
+
+  void file_blockdiff(CInode *in1, snapid_t snapid1,
+                      CInode *in2, snapid_t snapid2,
+                      BlockDiff *block_diff, uint64_t max_objects,
+                      MDSContext *ctx);
+  void file_blockdiff(const FileBlockDiffSnapshot *in1,
+                      const FileBlockDiffSnapshot *in2,
+                      BlockDiff *block_diff, uint64_t max_objects,
                       MDSContext *ctx);
   void aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetContext>> &snap_set_ctx,
-                           CInode *in1, CInode *in2, BlockDiff *block_diff, Context *on_finish);
+                           const FileBlockDiffSnapshot *in1,
+                           const FileBlockDiffSnapshot *in2,
+                           BlockDiff *block_diff, Context *on_finish);
 
  protected:
   // track leader requests whose peers haven't acknowledged commit
