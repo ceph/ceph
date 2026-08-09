@@ -713,6 +713,12 @@ int ceph_file_blockdiff_init(struct ceph_mount_info* cmount,
 /**
  * Get a set of file blockdiff's
  *
+ * The returned extents include every block that changed between the two
+ * snapshots, but may also include unchanged blocks: the whole file is
+ * reported when the snapshots have different file layouts, or when the
+ * two snapshot versions of the inode are authoritative on different MDS
+ * ranks. Callers must not assume that every reported block changed.
+ *
  * @param info blockdiff stream handle
  * @param blocks next set of file blockdiff's (offset, length)
  * @returns 0 or 1 on success and negative error code otherwise
