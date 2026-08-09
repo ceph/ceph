@@ -2002,7 +2002,7 @@ def test_bucket_log_trim_after_delete_bucket_secondary_reshard():
     secondary.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
         '--num-shards', '13',
-        '--yes-i-really-mean-it'])
+        '--yes-i-really-mean-it'] + secondary.zone.zone_args())
 
     # Delete the objects
     for obj in ('a', 'b', 'c', 'd'):
