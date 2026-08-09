@@ -13,7 +13,7 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
+using rgw::IAM::Policy;
 namespace {
 
 class RGWS3VectorBase : public RGWDefaultResponseOp {
@@ -990,8 +990,24 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::put_vector_bucket_policy(configuration, bucket.get(), this, y);
-    // policy TODO: implement
+    try{
+      const Policy p(s->cct, &s->bucket_tenant, configuration.policy,
+                      s->cct->_conf.get_val<bool> ("rgw_policy_reject_invalid_principals"));
+
+      if(s->public_access_block.BlockPublicPolicy && rgw::IAM::is_public(p)){
+        op_ret = -EACCES;
+        return;
+      }
+      op_ret = retry_raced_bucket_write(this, bucket.get(), [&p, this, &bucket]{
+              rgw::sal::Attrs attrs = bucket->get_attrs();
+              attrs[RGW_ATTR_IAM_POLICY].clear();
+              attrs[RGW_ATTR_IAM_POLICY].append(p.text);
+              return bucket->set_attrs(std::move(attrs));}, y);
+    }catch(rgw::IAM::PolicyParseException& e) {
+      ldpp_dout(this, 5) << "failed to parse the policy" << e.what() << dendl;
+      op_ret = -EINVAL;
+      s->err.message = e.what();
+    }
   }
 };
 
