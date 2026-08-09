@@ -1,7 +1,8 @@
+import contextlib
 import json
 import pytest
-from unittest.mock import MagicMock, patch
-from typing import Dict, List, cast
+from unittest.mock import ANY, MagicMock, patch
+from typing import Any, Dict, List, cast
 from ceph.utils import datetime_now
 
 from cephadm.services.nvmeof import NvmeofService, NVMEOF_CLIENT_CERT_LABEL
@@ -311,6 +312,33 @@ timeout = 1.0\n"""
             placement=PlacementSpec(hosts=['host1']), networks=['10.0.0.0/24'],
             addr_map={'host1': '10.0.0.8'}))
         assert 'addr = 10.0.0.8\n' in conf
+
+    def test_nvmeof_addr_dependencies(self, cephadm_module: CephadmOrchestrator):
+        def deps(**kwargs: Any) -> List[str]:
+            spec = NvmeofServiceSpec(service_id='testpool.groupa', group='groupa',
+                                     pool='testpool', **kwargs)
+            return NvmeofService.get_dependencies(cephadm_module, spec, 'nvmeof')
+
+        # A spec that names no address carries what it carried before these
+        # were tracked, so upgrading to them reconfigures nothing.
+        assert deps() == []
+
+        # Each declaration bind_addr reads is one the daemon has to be told
+        # about, having been deployed with the address it resolved to.
+        assert deps(addr='10.0.0.7') != deps()
+        assert deps(addr_map={'host1': '10.0.0.7'}) != deps()
+        assert deps(discovery_addr='10.0.0.7') != deps()
+        assert deps(discovery_addr_map={'host1': '10.0.0.7'}) != deps()
+        assert deps(addr_map={'host1': '10.0.0.7'}) != deps(addr_map={'host1': '10.0.0.8'})
+
+        # The same map written in another order is the same map. Deps that
+        # differ from one pass to the next reconfigure on every pass.
+        assert (deps(addr_map={'host1': '10.0.0.7', 'host2': '10.0.0.8'})
+                == deps(addr_map={'host2': '10.0.0.8', 'host1': '10.0.0.7'}))
+
+        # `networks` is left to the placement, which the scheduler already
+        # compares against the daemon it deployed.
+        assert deps(networks=['10.0.0.0/24']) == []
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_validate_no_group_duplicate_on_apply(self, cephadm_module: CephadmOrchestrator):
@@ -1132,3 +1160,19 @@ class TestNvmeofTLSBundle:
         assert bundle.client_cert == ''
         assert bundle.client_key == ''
         assert bundle.ca_cert == ''
+
+
+def test_nvmeof_choose_next_action_on_addr_change(cephadm_module, mock_cephadm):
+    spec = NvmeofServiceSpec(service_id='testpool.groupa', group='groupa',
+                             pool='testpool', placement=PlacementSpec(hosts=['test']))
+    with contextlib.ExitStack() as stack:
+        stack.enter_context(with_host(cephadm_module, 'test'))
+        stack.enter_context(with_service(cephadm_module, spec))
+        mock_cephadm._daemon_action.reset_mock()
+        # Moving the gateway has to reach the gateway. While the address was
+        # not a dependency the spec moved under a daemon that went on
+        # listening where it was, and only the dashboard registry followed.
+        spec.addr_map = {'test': '10.0.0.7'}
+        cephadm_module.apply([spec])
+        mock_cephadm.serve(cephadm_module)._check_daemons()
+        mock_cephadm._daemon_action.assert_called_with(ANY, action='reconfig')
