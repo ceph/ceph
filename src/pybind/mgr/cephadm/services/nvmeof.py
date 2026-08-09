@@ -1,11 +1,11 @@
 import errno
 import logging
 import json
-from typing import Dict, List, cast, Optional
+from typing import Dict, List, cast, Optional, TYPE_CHECKING
 from ipaddress import ip_address, IPv6Address
 
 from mgr_module import HandleCommandResult
-from ceph.deployment.service_spec import NvmeofServiceSpec
+from ceph.deployment.service_spec import NvmeofServiceSpec, ServiceSpec
 
 from orchestrator import (
     OrchestratorError,
@@ -16,6 +16,9 @@ from orchestrator import (
 from .cephadmservice import CephadmDaemonDeploySpec, CephService
 from .service_registry import register_cephadm_service
 from .. import utils
+
+if TYPE_CHECKING:
+    from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +59,36 @@ class NvmeofService(CephService):
         self.mgr.log.info(f'{listener} address on {host}: {chosen}, from '
                           f'{mapped_addr=} {addr=} {placement_addr=} {host_addr=}')
         return chosen
+
+    @classmethod
+    def get_dependencies(cls, mgr: "CephadmOrchestrator",
+                         spec: Optional[ServiceSpec] = None,
+                         daemon_type: Optional[str] = None) -> List[str]:
+        deps: List[str] = []
+        if spec:
+            nvmeof_spec = cast(NvmeofServiceSpec, spec)
+            # The declarations bind_addr reads. A gateway keeps the address it
+            # was deployed with, so moving one has to reach the daemon as a
+            # reconfig. `networks` is not here: the address it resolves to
+            # lands on the placement, which the scheduler already compares
+            # against the daemon it deployed.
+            #
+            # Only what is set, so a spec that declares no address at all
+            # carries the deps it carried before and upgrading to this does
+            # not reconfigure it. A map renders in insertion order, which a
+            # reload of the spec need not repeat, so sort it: deps that differ
+            # from one pass to the next reconfigure on every pass.
+            if nvmeof_spec.addr:
+                deps.append(f'addr: {nvmeof_spec.addr}')
+            if nvmeof_spec.addr_map:
+                deps.append(f'addr_map: {sorted(nvmeof_spec.addr_map.items())}')
+            if nvmeof_spec.discovery_addr:
+                deps.append(f'discovery_addr: {nvmeof_spec.discovery_addr}')
+            if nvmeof_spec.discovery_addr_map:
+                deps.append(
+                    f'discovery_addr_map: {sorted(nvmeof_spec.discovery_addr_map.items())}')
+        parent_deps = super().get_dependencies(mgr, spec, daemon_type)
+        return sorted(deps + parent_deps)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
