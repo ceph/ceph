@@ -2676,58 +2676,15 @@ extern "C" void ceph_free_snap_info_buffer(struct snap_info *snap_info) {
   free(snap_info->snap_metadata);
 }
 
-extern "C" int ceph_get_perf_counters_struct(struct ceph_mount_info *cmount,
-                                              struct ceph_perf_counters_t **out)
+extern "C" int ceph_get_perf_counters_range(struct ceph_mount_info *cmount,
+                                             int from, int count,
+                                             struct ceph_perf_counter_entry *entries)
 {
-  if (!out) {
-    return -EINVAL;
-  }
-  *out = NULL;
-
   Client *client = cmount->get_client();
   if (!client) {
     return -ENOTCONN;
   }
-  PerfCounters *logger = client->get_logger();
-  if (!logger) {
-    return -ENOTCONN;
-  }
-
-  // Get the actual counter range from the logger — no compile-time constants.
-  int lo = logger->get_lower_bound();  // l_c_first (exclusive)
-  int hi = logger->get_upper_bound();  // l_c_last (exclusive)
-  int n  = hi - lo - 1;               // number of real counters
-
-  if (n <= 0) {
-    return -EINVAL;
-  }
-
-  // Allocate struct with variable-length entries array.
-  // Size = sizeof(struct) + (n * sizeof(entry))
-  size_t sz = sizeof(struct ceph_perf_counters_t) +
-              (n * sizeof(struct ceph_perf_counter_entry_t));
-  struct ceph_perf_counters_t *s = (struct ceph_perf_counters_t *)malloc(sz);
-  if (!s) {
-    return -ENOMEM;
-  }
-
-  s->num_counters = n;
-
-  // Fill each entry dynamically 
-  for (int i = 0; i < n; ++i) {
-    int idx = lo + 1 + i;
-    bool is_time = false;
-    int64_t v = client->get_perf_counter_value(idx, &is_time);
-
-    s->entries[i].value = v;
-    s->entries[i].type  = is_time ? CEPH_PERF_KIND_TIME : CEPH_PERF_KIND_U64;
-    strncpy(s->entries[i].name, logger->get_name_for_idx(idx),
-            CEPH_PERF_NAME_LEN - 1);
-    s->entries[i].name[CEPH_PERF_NAME_LEN - 1] = '\0';
-  }
-
-  *out = s;
-  return 0;
+  return client->get_perf_counters_range(from, count, entries);
 }
 
 extern "C" int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump) {

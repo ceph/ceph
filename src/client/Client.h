@@ -33,6 +33,7 @@
 #include "include/lru.h"
 #include "include/types.h"
 #include "include/cephfs/metrics/Types.h"
+#include "include/cephfs/ceph_perf_counter_entry.h"
 #include "mds/mdstypes.h"
 #include "mds/MDSAuthCaps.h"
 #include "include/cephfs/types.h"
@@ -523,20 +524,8 @@ public:
   /** Return the internal PerfCounters logger (nullptr if not yet initialised). */
   PerfCounters *get_logger() const { return logger.get(); }
 
-  /**
-   * Read a single perf counter value directly from the internal PerfCounters
-   * object.  @p idx must be in [l_c_first, l_c_last).
-   *
-   * For U64 counters returns the raw count cast to int64_t.
-   * For TIME counters returns nanoseconds as a large int (tget().to_nsec()).
-   * Returns -ENOTCONN if the client is not initialised.
-   * Returns -ERANGE  if idx is out of bounds.
-   *
-   * @p is_time is set to true when @p idx refers to a time counter.
-   */
-  int64_t get_perf_counter_value(int idx, bool *is_time);
-
-
+  int get_perf_counters_range(int from, int count, struct ceph_perf_counter_entry *entries);
+                            
   /*
    * Get the next snapshot delta entry.
    *

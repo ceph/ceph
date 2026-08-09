@@ -18,6 +18,7 @@
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/ceph_fs.h"
+#include "include/cephfs/ceph_perf_counter_entry.h"
 #include "mds/mdstypes.h"
 #include "include/stat.h"
 #include <errno.h>
@@ -5169,38 +5170,31 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
   ceph_userperm_destroy(perms);
 }
 
-TEST(LibCephFS, PerfCountersStruct) {
+TEST(LibCephFS, PerfCountersRange) {
   struct ceph_mount_info *cmount;
   ASSERT_EQ(0, ceph_create(&cmount, NULL));
   ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
   ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
 
-  // NULL out-pointer must be rejected before mount.
-  ASSERT_EQ(-EINVAL, ceph_get_perf_counters_struct(cmount, NULL));
-
   // unmounted handle must return -ENOTCONN
-  struct ceph_perf_counters_t *s = NULL;
-  ASSERT_EQ(-ENOTCONN, ceph_get_perf_counters_struct(cmount, &s));
-  ASSERT_EQ(nullptr, s);
+  struct ceph_perf_counter_entry buf[CEPH_PERF_COUNTERS_MAX];
+  ASSERT_EQ(-ENOTCONN, ceph_get_perf_counters_range(cmount, 0, CEPH_PERF_COUNTERS_MAX, buf));
 
   ASSERT_EQ(0, ceph_mount(cmount, "/"));
 
-  // NULL pointer must be rejected after mount too.
-  ASSERT_EQ(-EINVAL, ceph_get_perf_counters_struct(cmount, NULL));
-
-  ASSERT_EQ(0, ceph_get_perf_counters_struct(cmount, &s));
-  ASSERT_NE(nullptr, s);
-  ASSERT_GT(s->num_counters, 0);
+  // Fetch all counters in one call.
+  int n = ceph_get_perf_counters_range(cmount, 0, CEPH_PERF_COUNTERS_MAX, buf);
+  ASSERT_GT(n, 0);
 
   // Every entry must have a non-empty name and a non-negative value.
-  for (int i = 0; i < s->num_counters; i++) {
-    EXPECT_NE('\0', s->entries[i].name[0])
+  for (int i = 0; i < n; i++) {
+    EXPECT_NE('\0', buf[i].name[0])
         << "slot " << i << " has empty name";
-    EXPECT_GE(s->entries[i].value, 0)
+    EXPECT_GE(buf[i].value, 0)
         << "negative value at slot " << i
-        << " (name=" << s->entries[i].name << ")";
-    EXPECT_TRUE(s->entries[i].type == CEPH_PERF_KIND_U64 ||
-                s->entries[i].type == CEPH_PERF_KIND_TIME)
+        << " (name=" << buf[i].name << ")";
+    EXPECT_TRUE(buf[i].type == CEPH_PERF_KIND_U64 ||
+                buf[i].type == CEPH_PERF_KIND_TIME)
         << "unknown type at slot " << i;
   }
 
@@ -5218,34 +5212,48 @@ TEST(LibCephFS, PerfCountersStruct) {
   };
   for (auto &e : expected) {
     bool found = false;
-    for (int i = 0; i < s->num_counters; i++) {
-      if (strcmp(s->entries[i].name, e.name) == 0) {
+    for (int i = 0; i < n; i++) {
+      if (strcmp(buf[i].name, e.name) == 0) {
         found = true;
-        EXPECT_EQ(e.kind, (int)s->entries[i].type)
+        EXPECT_EQ(e.kind, (int)buf[i].type)
             << "wrong kind for counter '" << e.name << "'";
         if (e.check_zero) {
-          EXPECT_EQ(0, s->entries[i].value)
+          EXPECT_EQ(0, buf[i].value)
               << "'" << e.name << "' must be 0 on fresh mount";
         }
         break;
       }
     }
-    EXPECT_TRUE(found) << "counter '" << e.name << "' not found in struct";
+    EXPECT_TRUE(found) << "counter '" << e.name << "' not found";
   }
 
-  printf("ceph_perf_counters_t  num_counters=%d\n", s->num_counters);
+  // Verify batched iteration returns the same entries as the single-shot fetch.
+  // Iterate two at a time and collect all results.
+  std::vector<std::string> batched_names;
+  int from = 0, got;
+  struct ceph_perf_counter_entry batch[2];
+  while ((got = ceph_get_perf_counters_range(cmount, from, 2, batch)) > 0) {
+    for (int i = 0; i < got; i++)
+      batched_names.push_back(batch[i].name);
+    from += got;
+  }
+  ASSERT_EQ(0, got); // 0 = end-of-entries, not an error
+  ASSERT_EQ((size_t)n, batched_names.size());
+  for (int i = 0; i < n; i++)
+    EXPECT_EQ(std::string(buf[i].name), batched_names[i])
+        << "batched entry " << i << " name mismatch";
+
+  printf("ceph_get_perf_counters_range  n=%d\n", n);
   printf("  %-4s  %-5s  %-32s  %s\n", "idx", "type", "name", "value");
   printf("  %-4s  %-5s  %-32s  %s\n", "---", "----", "----", "-----");
-  for (int i = 0; i < s->num_counters; i++) {
-    const auto &e = s->entries[i];
+  for (int i = 0; i < n; i++) {
     printf("  %-4d  %-5s  %-32s  %lld%s\n",
            i,
-           e.type == CEPH_PERF_KIND_TIME ? "TIME" : "U64",
-           e.name,
-           (long long)e.value,
-           e.type == CEPH_PERF_KIND_TIME ? " ns" : "");
+           buf[i].type == CEPH_PERF_KIND_TIME ? "TIME" : "U64",
+           buf[i].name,
+           (long long)buf[i].value,
+           buf[i].type == CEPH_PERF_KIND_TIME ? " ns" : "");
   }
 
-  free(s);
   ceph_shutdown(cmount);
 }

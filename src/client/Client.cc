@@ -119,7 +119,7 @@ using namespace std::literals::string_view_literals;
 #include "include/ceph_assert.h"
 #include "include/cephfs/keys_and_values.h"
 #include "include/stat.h"
-
+#include "include/cephfs/ceph_perf_counter_entry.h"
 #include "include/cephfs/ceph_ll_client.h"
 
 #if HAVE_GETGROUPLIST
@@ -19219,31 +19219,31 @@ int Client::get_perf_counters(bufferlist *outbl) {
   return cct->get_admin_socket()->execute_command(cmd, inbl, err, outbl);
 }
 
-
-
-int64_t Client::get_perf_counter_value(int idx, bool *is_time)
+int Client::get_perf_counters_range(int from, int count,
+                                     struct ceph_perf_counter_entry *entries)
 {
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   if (!iref_reader.is_state_satisfied()) {
     return -ENOTCONN;
   }
-  // Valid counter indices are (l_c_first, l_c_last) exclusive — l_c_first and
-  // l_c_last are sentinels only; PerfCounters asserts idx > lower_bound.
-  if (idx <= l_c_first || idx >= l_c_last) {
-    return -ERANGE;
-  }
 
-  // Ask the PerfCounters object directly for the type flag
-  // Adding or removing a counter in Client.h and _finish_init()
-  // automatically propagates here.
-  bool t = (logger->get_type(idx) & PERFCOUNTER_TIME) != 0;
-  if (is_time) {
-    *is_time = t;
+  int written = 0;
+  int idx = 0;
+  for (int i = l_c_first + 1; i < l_c_last && written < count; ++i) {
+    const char *name = logger->get_name_for_idx(i);
+    if (!name)
+      continue;
+    if (idx++ < from)
+      continue;
+    bool is_time = (logger->get_type(i) & PERFCOUNTER_TIME) != 0;
+    entries[written].value = is_time ? (int64_t)logger->tget(i).to_nsec()
+                                     : (int64_t)logger->get(i);
+    entries[written].type  = is_time ? CEPH_PERF_KIND_TIME : CEPH_PERF_KIND_U64;
+    strncpy(entries[written].name, name, CEPH_PERF_NAME_LEN - 1);
+    entries[written].name[CEPH_PERF_NAME_LEN - 1] = '\0';
+    ++written;
   }
-  if (t) {
-    return (int64_t)logger->tget(idx).to_nsec();
-  }
-  return (int64_t)logger->get(idx);
+  return written;
 }
 
 std::vector<std::string> Client::get_tracked_keys() const noexcept
