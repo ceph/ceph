@@ -247,7 +247,16 @@ class NvmeofService(CephService):
                     logger.warning(f'No ServiceSpec found for {service_name}')
                     continue
 
-                ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
+                # Register where the gateway listens, not where cephadm reaches
+                # the host, or the mgr dials an address nothing is bound to.
+                ip = utils.resolve_ip(
+                    self.bind_addr('gateway', dd.hostname, dd.ip,
+                                   spec.addr_map, spec.addr))
+                if ip_address(ip).is_unspecified:
+                    # a wildcard listener takes in every interface and so names
+                    # none of them. The host address is one it answers on, and
+                    # the mgr already reaches the host there.
+                    ip = utils.resolve_ip(self.mgr.inventory.get_addr(dd.hostname))
                 if type(ip_address(ip)) is IPv6Address:
                     ip = f'[{ip}]'
                 service_url = '{}:{}'.format(ip, spec.port or '5500')

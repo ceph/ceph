@@ -10,7 +10,7 @@ from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import NvmeofServiceSpec, PlacementSpec
 from cephadm.tests.fixtures import with_host, with_service, wait, _run_cephadm, async_side_effect
-from orchestrator import OrchestratorError
+from orchestrator import OrchestratorError, DaemonDescription
 from cephadm.tlsobject_types import TLSCredentials
 
 cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\nmZbKSphWfh0qipoqxqhfkw==\n-----END CERTIFICATE-----\n"""
@@ -80,9 +80,38 @@ class TestNVMEOFService:
     def test_nvmeof_client_caps(self):
         pass
 
-    @patch('cephadm.utils.resolve_ip')
-    def test_nvmeof_dashboard_config(self, mock_resolve_ip):
-        pass
+    @pytest.mark.parametrize(
+        "addr,addr_map,daemon_ip,expected",
+        [
+            # Nothing declared: the address cephadm reaches the host at.
+            (None, None, None, '1.2.3.4:5500'),
+            # Declared per host: that one. Registering the host address instead
+            # is what leaves the gateway unreachable.
+            (None, {'testhost1': '10.0.0.7'}, None, '10.0.0.7:5500'),
+            # Resolved for the placement, which is how a `networks` CIDR arrives.
+            (None, None, '10.0.0.9', '10.0.0.9:5500'),
+            # A wildcard listener is not something to dial. The host address is
+            # among the ones it answers on, so register that instead.
+            ('0.0.0.0', None, None, '1.2.3.4:5500'),
+            ('::', None, None, '1.2.3.4:5500'),
+            # A v6 address is bracketed before the port is appended.
+            ('fd00::7', None, None, '[fd00::7]:5500'),
+        ])
+    @patch('cephadm.utils.resolve_ip', lambda addr: addr)
+    def test_nvmeof_dashboard_config(self, addr, addr_map, daemon_ip, expected):
+        spec = NvmeofServiceSpec(service_type='nvmeof', service_id='a',
+                                 addr=addr, addr_map=addr_map)
+        dd = DaemonDescription(daemon_type='nvmeof', hostname='testhost1',
+                               daemon_id='a', ip=daemon_ip)
+        with patch.object(self.mgr, 'check_mon_command') as check_mon_command, \
+                patch.object(self.mgr.spec_store.all_specs, 'get', return_value=spec):
+            check_mon_command.return_value = (0, '{"gateways": {}}', '')
+            self.nvmeof_service.config_dashboard([dd])
+            adds = [c.args for c in check_mon_command.mock_calls
+                    if c.args and c.args[0].get('prefix') == 'dashboard nvmeof-gateway-add']
+        # _check_and_set_dashboard pops 'inbuf' and passes it as the second
+        # positional argument, so the registered URL is args[1].
+        assert [a[1] for a in adds] == [expected]
 
     @patch("cephadm.inventory.Inventory.get_addr", lambda _, __: '192.168.100.100')
     @patch("cephadm.serve.CephadmServe._run_cephadm")
