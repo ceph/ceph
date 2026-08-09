@@ -1,0 +1,143 @@
+@if (selection) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Filesystem details"
+        [columns]="3"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+
+      <section class="pool-resource-section cds-mt-6 cds-mb-6">
+        <h2
+          class="cephfs-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Ranks
+        </h2>
+        <cd-table
+          [data]="details.ranks"
+          [columns]="columns.ranks"
+          [toolHeader]="false"
+        >
+        </cd-table>
+      </section>
+
+      <section class="pool-resource-section cds-mb-6">
+        <h2
+          class="cephfs-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Pools
+        </h2>
+        <cd-table
+          [data]="details.pools"
+          [columns]="columns.pools"
+          [toolHeader]="false"
+        >
+        </cd-table>
+      </section>
+
+      <section class="pool-resource-section cds-mb-6">
+        <h2
+          class="cephfs-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Standbys
+        </h2>
+        <cd-table-key-value [data]="standbys"> </cd-table-key-value>
+      </section>
+
+      <section class="pool-resource-section cds-mb-6">
+        <h2
+          class="cephfs-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          MDS performance counters
+        </h2>
+        <div
+          class="row"
+          *ngFor="let mdsCounter of objectValues(details.mdsCounters); trackBy: trackByFn"
+        >
+          <div class="col-md-12">
+            <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
+          </div>
+        </div>
+      </section>
+    }
+    @case ('directories') {
+      <cd-cephfs-directories [id]="id"></cd-cephfs-directories>
+    }
+    @case ('subvolumes') {
+      <cd-cephfs-subvolume-list
+        [fsName]="fsName"
+        [pools]="details.pools"
+        [id]="id"
+      ></cd-cephfs-subvolume-list>
+    }
+    @case ('subvolume-groups') {
+      <cd-cephfs-subvolume-group
+        [fsName]="fsName"
+        [pools]="details.pools"
+      >
+      </cd-cephfs-subvolume-group>
+    }
+    @case ('snapshots') {
+      <cd-cephfs-subvolume-snapshots-list [fsName]="fsName"> </cd-cephfs-subvolume-snapshots-list>
+    }
+    @case ('snapshot-schedules') {
+      <cd-cephfs-snapshotschedule-list
+        [fsName]="fsName"
+        [id]="id"
+      ></cd-cephfs-snapshotschedule-list>
+    }
+    @case ('clients') {
+      <cd-cephfs-clients
+        [id]="id"
+        [clients]="clients"
+        (triggerApiUpdate)="refresh()"
+      >
+      </cd-cephfs-clients>
+    }
+    @case ('performance') {
+      <cd-grafana
+        i18n-title
+        title="CephFS performance"
+        [grafanaPath]="'ceph-filesystem-overview?var-name=' + (details.name || fsName)"
+        [type]="'metrics'"
+        uid="718Bruins"
+        grafanaStyle="five"
+        scrollable="no"
+        *ngIf="permissions.grafana.read"
+      >
+      </cd-grafana>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No CephFS filesystem found.</cd-alert-panel
+  >
+}
+
+<!-- templates -->
+<ng-template
+  #poolUsageTpl
+  let-row="data.row"
+>
+  <cd-usage-bar
+    [total]="row.size"
+    [used]="row.used"
+    [title]="row.pool_name"
+  ></cd-usage-bar>
+</ng-template>
+
+<ng-template
+  #activityTmpl
+  let-row="data.row"
+  let-value="data.value"
+>
+  {{ row.state === 'standby-replay' ? 'Evts' : 'Reqs' }}: {{ value | dimless }} /s
+</ng-template>

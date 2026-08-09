@@ -33,6 +33,8 @@ import { CephfsMountDetailsComponent } from './cephfs-mount-details/cephfs-mount
 import { CephfsAuthModalComponent } from './cephfs-auth-modal/cephfs-auth-modal.component';
 import { CephfsMirroringListComponent } from './cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { CephfsMirroringErrorComponent } from './cephfs-mirroring-error/cephfs-mirroring-error.component';
+import { CephfsResourcePageComponent } from './cephfs-resource-page/cephfs-resource-page.component';
+import { CephfsResourceSidebarComponent } from './cephfs-resource-sidebar/cephfs-resource-sidebar.component';
 import {
   ButtonModule,
   CheckboxModule,
@@ -130,7 +132,9 @@ import { CephfsMirroringEntityComponent } from './cephfs-mirroring-entity/cephfs
     CephfsMirroringWizardComponent,
     CephfsFilesystemSelectorComponent,
     CephfsMirroringErrorComponent,
-    CephfsMirroringEntityComponent
+    CephfsMirroringEntityComponent,
+    CephfsResourcePageComponent,
+    CephfsResourceSidebarComponent
   ],
   providers: [provideCharts(withDefaultRegisterables())]
 })

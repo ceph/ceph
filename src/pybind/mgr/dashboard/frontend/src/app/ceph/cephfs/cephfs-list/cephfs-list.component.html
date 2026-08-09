@@ -27,15 +27,9 @@
     identifier="id"
     forceIdentifier="true"
     selectionType="single"
-    [hasDetails]="true"
-    (setExpandedRow)="setExpandedRow($event)"
+    [hasDetails]="false"
     (updateSelection)="updateSelection($event)"
   >
-    <cd-cephfs-tabs
-      *cdTableDetail
-      [selection]="expandedRow"
-    >
-    </cd-cephfs-tabs>
     <div class="table-actions">
       <cd-table-actions
         [permission]="permissions.cephfs"

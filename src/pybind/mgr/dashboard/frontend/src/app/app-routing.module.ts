@@ -4,6 +4,9 @@ import { ActivatedRouteSnapshot, PreloadAllModules, RouterModule, Routes } from 
 import _ from 'lodash';
 
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
+import { CephfsResourceBreadcrumbResolver } from './ceph/cephfs/cephfs-resource-page/cephfs-resource-breadcrumb.resolver';
+import { CephfsResourcePageComponent } from './ceph/cephfs/cephfs-resource-page/cephfs-resource-page.component';
+import { CephfsResourceSidebarComponent } from './ceph/cephfs/cephfs-resource-sidebar/cephfs-resource-sidebar.component';
 import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
 import { CreateClusterComponent } from './ceph/cluster/create-cluster/create-cluster.component';
@@ -477,6 +480,57 @@ const routes: Routes = [
             path: `fs/${URLVerbs.EDIT}/:id`,
             component: CephfsVolumeFormComponent,
             data: { breadcrumbs: ActionLabels.EDIT }
+          },
+          {
+            path: 'fs/:id',
+            component: CephfsResourceSidebarComponent,
+            data: {
+              breadcrumbs: CephfsResourceBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Overview', section: 'overview' }
+              },
+              {
+                path: 'directories',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Directories', section: 'directories' }
+              },
+              {
+                path: 'subvolumes',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Subvolumes', section: 'subvolumes' }
+              },
+              {
+                path: 'subvolume-groups',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Subvolume groups', section: 'subvolume-groups' }
+              },
+              {
+                path: 'snapshots',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Snapshots', section: 'snapshots' }
+              },
+              {
+                path: 'snapshot-schedules',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Snapshot schedules', section: 'snapshot-schedules' }
+              },
+              {
+                path: 'clients',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Clients', section: 'clients' }
+              },
+              {
+                path: 'performance',
+                component: CephfsResourcePageComponent,
+                data: { breadcrumbs: 'Performance', section: 'performance' }
+              }
+            ]
           },
           {
             path: 'mirroring',
