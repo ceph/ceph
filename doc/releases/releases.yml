@@ -16,6 +16,12 @@
 #      in descending order.
 
 releases:
+  umbrella:
+    target_eol: 2028-08-24
+    releases:
+      - version: 21.1.0
+        released: 2026-08-24
+
   tentacle:
     target_eol: 2027-11-18
     releases:
