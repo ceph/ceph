@@ -1,13 +1,15 @@
 import json
 import pytest
 from unittest.mock import MagicMock, patch
-from typing import Dict, List
+from typing import Dict, List, cast
 from ceph.utils import datetime_now
 
 from cephadm.services.nvmeof import NvmeofService, NVMEOF_CLIENT_CERT_LABEL
+from cephadm.services.service_registry import service_registry
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.module import CephadmOrchestrator
-from ceph.deployment.service_spec import NvmeofServiceSpec
-from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
+from ceph.deployment.service_spec import NvmeofServiceSpec, PlacementSpec
+from cephadm.tests.fixtures import with_host, with_service, wait, _run_cephadm, async_side_effect
 from orchestrator import OrchestratorError
 from cephadm.tlsobject_types import TLSCredentials
 
@@ -247,6 +249,39 @@ timeout = 1.0\n"""
                     error_ok=True,
                     use_current_daemon_image=False,
                 )
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_nvmeof_config_bind_addr(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        def gateway_conf(spec: NvmeofServiceSpec) -> str:
+            # prepare_create is what fills final_config, and it is also where the
+            # address is chosen, so the rendered conf is what to assert on.
+            with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+                cephadm_module.cache.update_host_networks('host1', {
+                    '1.2.3.0/24': {'if0': ['1.2.3.7']},
+                    '10.0.0.0/24': {'if1': ['10.0.0.7', '10.0.0.8']},
+                })
+                with with_service(cephadm_module, spec, status_running=True):
+                    dd = wait(cephadm_module, cephadm_module.list_daemons())[0]
+                    daemon_spec = service_registry.get_service('nvmeof').prepare_create(
+                        CephadmDaemonDeploySpec.from_daemon_description(dd))
+                    return cast(str, daemon_spec.final_config['files']['ceph-nvmeof.conf'])
+
+        # Gateway and discovery listener both take the address the scheduler
+        # resolved from `networks`, not the one cephadm reaches the host at.
+        conf = gateway_conf(NvmeofServiceSpec(
+            service_id='testpool.groupa', group='groupa', pool='testpool',
+            placement=PlacementSpec(hosts=['host1']), networks=['10.0.0.0/24']))
+        assert conf.count('addr = 10.0.0.7\n') == 2
+        assert 'addr = 1.2.3.7\n' not in conf
+
+        # An explicit per-host address still wins over the resolved one.
+        conf = gateway_conf(NvmeofServiceSpec(
+            service_id='testpool.groupb', group='groupb', pool='testpool',
+            placement=PlacementSpec(hosts=['host1']), networks=['10.0.0.0/24'],
+            addr_map={'host1': '10.0.0.8'}))
+        assert 'addr = 10.0.0.8\n' in conf
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_validate_no_group_duplicate_on_apply(self, cephadm_module: CephadmOrchestrator):
