@@ -538,14 +538,14 @@ ExtentPlacementManager::dispatch_delayed_extents(Transaction &t)
   res.delayed_extents = t.get_delayed_alloc_list();
 
   // init projected usage
-  for (auto &extent : t.get_inline_block_list()) {
+  for (auto& extent : t.get_inline_block_list()) {
     if (extent->is_valid()) {
       res.usage.inline_usage += extent->get_length();
       res.usage.cleaner_usage.main_usage += extent->get_length();
     }
   }
 
-  for (auto &extent : res.delayed_extents) {
+  for (auto& extent : res.delayed_extents) {
     if (dispatch_delayed_extent(extent)) {
       res.usage.inline_usage += extent->get_length();
       res.usage.cleaner_usage.main_usage += extent->get_length();
@@ -590,8 +590,8 @@ ExtentPlacementManager::write_delayed_ool_extents(
 
 ExtentPlacementManager::alloc_paddr_iertr::future<>
 ExtentPlacementManager::write_preallocated_ool_extents(
-    Transaction &t,
-    std::list<CachedExtentRef> &extents)
+    Transaction& t,
+    std::vector<CachedExtentRef>& extents)
 {
   LOG_PREFIX(ExtentPlacementManager::write_preallocated_ool_extents);
   DEBUGT("start with {} allocated extents",
@@ -1287,7 +1287,8 @@ RandomBlockOolWriter::alloc_write_ool_extents(
         token_bucket.get(size));
       seastar::lw_shared_ptr<rbm_pending_ool_t> ptr =
           seastar::make_lw_shared<rbm_pending_ool_t>();
-      ptr->pending_extents = t.get_pre_alloc_list();
+      auto& pal = t.get_pre_alloc_list();
+      ptr->pending_extents.assign(pal.begin(), pal.end());
       assert(!t.is_conflicted());
       t.set_pending_ool(ptr);
       co_await do_write(t, extents
