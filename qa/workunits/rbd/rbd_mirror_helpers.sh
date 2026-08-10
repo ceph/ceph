@@ -2671,6 +2671,75 @@ mirror_group_resync()
     run_cmd "rbd --cluster=${cluster} mirror group resync ${group_spec}"
 }
 
+# Return:
+#   0 - group resync marker exists
+#   1 - group resync marker does not exist
+#   2 - failed to determine marker state
+test_group_resync_marker()
+{
+    local cluster=$1
+    local group_spec=$2
+    local group_id
+
+    get_id_from_group_info "${cluster}" "${group_spec}" group_id "try_cmd" || { fail; return 2; }
+
+    local group_header_oid="rbd_group_header.${group_id}"
+    local pool="${group_spec%%/*}"
+    local remainder="${group_spec#*/}"
+    local namespace_args=""
+
+    if [[ "${remainder}" == */* ]]; then
+        namespace_args="--namespace ${remainder%/*}"
+    fi
+
+    local rc=0
+    try_admin_cmd "rados --cluster ${cluster} --pool ${pool} ${namespace_args} getomapval ${group_header_oid} metadata_rbd_group_resync >/dev/null" || rc=$?
+
+    return ${rc}
+}
+
+# Verify that the group resync marker exists.
+# Return:
+#   0 - group resync marker exists
+#   1 - group resync marker does not exist or the check failed
+group_resync_marker_exists()
+{
+    local rc=0
+
+    test_group_resync_marker "$@" || rc=$?
+
+    if [[ ${rc} -eq 0 ]]; then
+        return 0
+    elif [[ ${rc} -eq 1 ]]; then
+        fail "group resync marker is not set"
+        return 1
+    else
+        fail "failed to determine group resync marker state"
+        return 1
+    fi
+}
+
+# Verify that the group resync marker is removed.
+# Return:
+#   0 - group resync marker is removed
+#   1 - group resync marker still exists or the check failed
+group_resync_marker_removed()
+{
+    local rc=0
+
+    test_group_resync_marker "$@" || rc=$?
+
+    if [[ ${rc} -eq 0 ]]; then
+        fail "group resync marker is still set"
+        return 1
+    elif [[ ${rc} -eq 1 ]]; then
+        return 0
+    else
+        fail "failed to determine group resync marker state"
+        return 1
+    fi
+}
+
 test_group_present()
 {
     local cluster=$1
@@ -2738,7 +2807,7 @@ test_group_id_changed()
 
     get_id_from_group_info "${cluster}" "${group_spec}" current_group_id "try_cmd" || { fail; return 1; }
     test "${orig_group_id}" != "${current_group_id}" || { fail; return 1; }
-  }
+}
 
 wait_for_group_id_changed()
 {
@@ -2749,7 +2818,10 @@ wait_for_group_id_changed()
 
     for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
         sleep ${s}
-        test_group_id_changed "${cluster}" "${group_spec}" "${orig_group_id}" && return 0
+        if test_group_id_changed "${cluster}" "${group_spec}" "${orig_group_id}"; then
+            group_resync_marker_removed "${cluster}" "${group_spec}" || return 1
+            return 0
+        fi
     done
     fail "wait for group with name ${group} to change id from ${orig_group_id} failed on ${cluster}"
     return 1
