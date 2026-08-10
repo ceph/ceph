@@ -68,11 +68,15 @@ extern "C" {
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sync.h"
+#endif
 #include "rgw_trim_bilog.h"
 #include "rgw_trim_datalog.h"
 #include "rgw_trim_mdlog.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_data_sync.h"
+#endif
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
@@ -2019,6 +2023,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 }
 #endif
 
+#ifdef WITH_RADOSGW_RADOS
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver,
                                                     const RGWZoneGroup& zonegroup,
@@ -2053,6 +2058,7 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver
   }
   return conn;
 }
+#endif // WITH_RADOSGW_RADOS
 
 // we expect a very small response
 static constexpr size_t MAX_REST_RESPONSE = 128 * 1024;
@@ -2171,6 +2177,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
   if (!remote.empty()) {
+#ifdef WITH_RADOSGW_RADOS
     conn = get_remote_conn(static_cast<rgw::sal::RadosStore*>(driver), period.get_map(), remote);
     if (!conn) {
       cerr << "failed to find a zone or zonegroup for remote "
@@ -2178,6 +2185,11 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
       return -ENOENT;
     }
     remote_conn = &*conn;
+#else
+    cerr << "ERROR: sending the period to a remote zone by id (--remote) "
+        "requires the RADOS backend; use --url instead" << std::endl;
+    return -ENOTSUP;
+#endif
   }
 
   // push period to the master with an empty period id
@@ -3402,10 +3414,12 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return -EINVAL;
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (num_shards > (int)static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards()) {
     cerr << "ERROR: num_shards too high, max value: " << static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards() << std::endl;
     return -EINVAL;
   }
+#endif
 
   if (num_shards < 0) {
     cerr << "ERROR: num_shards must be non-negative integer" << std::endl;
@@ -5800,6 +5814,7 @@ int main(int argc, const char **argv)
         // validate --tier-type if specified
         const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
           auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
           if (!sync_mgr->get_module(*ptier_type, nullptr)) {
             ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -5807,6 +5822,10 @@ int main(int argc, const char **argv)
                 << sync_mgr->get_registered_module_names() << dendl;
             return EINVAL;
           }
+#else
+          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+          return EINVAL;
+#endif
         }
 
         if (enable_features.empty()) { // enable all features by default
@@ -6473,6 +6492,7 @@ int main(int argc, const char **argv)
           // validate --tier-type if specified
           const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
           if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
             auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
             if (!sync_mgr->get_module(*ptier_type, nullptr)) {
               ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -6480,6 +6500,10 @@ int main(int argc, const char **argv)
                   << sync_mgr->get_registered_module_names() << dendl;
               return EINVAL;
             }
+#else
+            ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+            return EINVAL;
+#endif
           }
 
           if (enable_features.empty()) { // enable all features by default
@@ -6753,6 +6777,7 @@ int main(int argc, const char **argv)
         // validate --tier-type if specified
         const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
           auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
           if (!sync_mgr->get_module(*ptier_type, nullptr)) {
             ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -6760,6 +6785,10 @@ int main(int argc, const char **argv)
                 << sync_mgr->get_registered_module_names() << dendl;
             return EINVAL;
           }
+#else
+          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+          return EINVAL;
+#endif
         }
 
         if (enable_features.empty()) { // enable all features by default

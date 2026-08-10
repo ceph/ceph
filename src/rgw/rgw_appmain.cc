@@ -46,7 +46,9 @@
 #include "rgw_rest_account.h"
 #include "rgw_rest_bucket.h"
 #include "rgw_rest_metadata.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_rest_log.h"
+#endif
 #include "rgw_rest_config.h"
 #include "rgw_rest_realm.h"
 #include "rgw_rest_ratelimit.h"
