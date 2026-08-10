@@ -1246,7 +1246,8 @@ void ECTransaction::Generate::written_shards() {
       }
       if (update) {
         bufferlist bl;
-        oi.encode(bl, osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+        oi.encode(bl, osdmap->get_features(CEPH_ENTITY_TYPE_OSD, nullptr),
+                  osdmap->require_osd_release);
         op.attr_updates[OI_ATTR] = bl;
         // Update cached OI
         obc->obs.oi.shard_versions = oi.shard_versions;

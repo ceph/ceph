@@ -49,6 +49,7 @@
 #include "include/interval_set.h"
 #include "include/inline_memory.h"
 #include "common/Formatter.h"
+#include "common/ceph_releases.h"
 #include "common/hobject.h"
 #include "common/snap_types.h"
 #include "common/ceph_mutex.h"
@@ -6621,18 +6622,20 @@ struct object_info_t {
     return iter->second;
   }
 
-  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void encode(ceph::buffer::list& bl, uint64_t features,
+              ceph_release_t min_peer_release = ceph_release_t::max) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void decode(const ceph::buffer::list& bl) {
     auto p = std::cbegin(bl);
     decode(p);
   }
 
-  void encode_no_oid(ceph::buffer::list& bl, uint64_t features) {
+  void encode_no_oid(ceph::buffer::list& bl, uint64_t features,
+                     ceph_release_t min_peer_release = ceph_release_t::max) {
     // TODO: drop soid field and remove the denc no_oid methods
     auto tmp_oid = hobject_t(hobject_t::get_max());
     tmp_oid.swap(soid);
-    encode(bl, features);
+    encode(bl, features, min_peer_release);
     soid = tmp_oid;
   }
   void decode_no_oid(ceph::buffer::list::const_iterator& bl) {

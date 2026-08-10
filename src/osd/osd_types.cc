@@ -6605,14 +6605,22 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   force_allocated_extents = other.force_allocated_extents;
 }
 
-void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
+void object_info_t::encode(ceph::buffer::list& bl, uint64_t features,
+                            ceph_release_t min_peer_release) const
 {
+  // [temp]: Umbrella needs to replaced with Vampire here once it is available
+  const bool encode_fae =
+    min_peer_release >= ceph_release_t::umbrella;
+
   object_locator_t myoloc(soid);
   map<entity_name_t, watch_info_t> old_watchers;
   for (auto i = watchers.cbegin(); i != watchers.cend(); ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(19, 8, bl);
+
+  int encode_version = 19;
+  if (!encode_fae) encode_version = std::min(encode_version, 18);
+  ENCODE_START(encode_version, 8, bl);
   encode(soid, bl);
   encode(myoloc, bl);	//Retained for compatibility
   encode((__u32)0, bl); // was category, no longer used
@@ -6647,7 +6655,9 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(manifest, bl);
   }
   encode(shard_versions, bl);
-  encode(force_allocated_extents, bl);
+  if (encode_fae) {
+    encode(force_allocated_extents, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
