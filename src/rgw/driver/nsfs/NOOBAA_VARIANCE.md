@@ -87,6 +87,26 @@ NFS).  Both use a `mtime-ino` format that prevents S3 SDKs from
 MD5-validating.  Our DESIGN.md states this "matches noobaa format" —
 this is one of the few areas of deliberate compatibility.
 
+### Bucket cache etag vs xattr etag
+
+NooBaa's `_get_etag(stat)` (namespace_fs.js:2881) first checks the
+`user.content_md5` xattr and returns the real MD5 digest when present;
+the mtime-ino synthesis is only a fallback for sideloaded files.  This
+means S3-created objects (including multipart uploads with composite
+`hash-N` etags) always return the correct etag to clients.
+
+Our NSFS driver uses `synthesize_etag(stx)` (mtime-ino) unconditionally
+when populating bucket listing cache entries — including for S3-created
+objects that have a proper etag stored in `user.nsfs.rgw.etag`.  This
+means LIST results may return a synthetic etag that differs from the
+actual object etag returned by HEAD/GET.  The correct behavior is to
+read the etag from xattrs when present and fall back to synthesis only
+for sideloaded files, matching NooBaa's precedence.
+
+**Corrective action:** Audit all `synthesize_etag` call sites in cache
+population paths (`fill_cache`, `add_entry` in multipart complete, copy,
+versioned demote) and prefer the xattr-stored etag when available.
+
 ---
 
 ## 2. Multipart staging directory layout
