@@ -257,9 +257,16 @@ read_ertr::future<uint32_t> RBMDevice::get_shard_nums()
   co_return sb.shard_num;
 }
 
-EphemeralRBMDeviceRef create_test_ephemeral(uint64_t journal_size, uint64_t data_size) {
+EphemeralRBMDeviceRef create_test_ephemeral(
+  device_id_t id,
+  uint64_t journal_size,
+  uint64_t data_size)
+{
+  std::string path;
   return EphemeralRBMDeviceRef(
     new EphemeralRBMDevice(
+      path,
+      DEVICE_ID_RANDOM_BLOCK_MIN + id,
       (journal_size + data_size) * seastar::this_smp_shard_count() +
 	random_block_device::RBMDevice::get_shard_reserved_size(),
 	EphemeralRBMDevice::TEST_BLOCK_SIZE));

@@ -25,9 +25,12 @@ std::ostream &operator<<(std::ostream &lhs, const ephemeral_config_t &c) {
              << std::dec << ")";
 }
 
-EphemeralSegmentManagerRef create_test_ephemeral() {
+EphemeralSegmentManagerRef create_test_ephemeral(
+  device_id_t id,
+  device_type_t dtype)
+{
   return EphemeralSegmentManagerRef(
-    new EphemeralSegmentManager(DEFAULT_TEST_EPHEMERAL));
+    new EphemeralSegmentManager(id, dtype, DEFAULT_TEST_EPHEMERAL));
 }
 
 device_config_t get_ephemeral_device_config(

@@ -128,10 +128,10 @@ public:
   BlockSegmentManager(
     const std::string &path,
     device_type_t dtype,
+    device_id_t id,
     store_index_t store_index = 0)
-  : device_path(path),
+  : SegmentManager(path, dtype, id),
     store_index(store_index) {
-    ceph_assert(get_device_type() == device_type_t::NONE);
     superblock.config.spec.dtype = dtype;
   }
 
@@ -151,9 +151,6 @@ public:
 
   read_ertr::future<uint32_t> get_shard_nums() override;
 
-  device_type_t get_device_type() const override {
-    return superblock.config.spec.dtype;
-  }
   size_t get_available_size() const override {
     return shard_info.size;
   }
@@ -164,10 +161,6 @@ public:
     return superblock.segment_size;
   }
 
-  device_id_t get_device_id() const override {
-    assert(device_id <= DEVICE_ID_MAX_VALID);
-    return device_id;
-  }
   secondary_device_set_t& get_secondary_devices() override {
     return superblock.config.secondary_devices;
   }
@@ -218,7 +211,6 @@ private:
   void register_metrics(store_index_t store_index);
   seastar::metrics::metric_group metrics;
 
-  std::string device_path;
   std::unique_ptr<SegmentStateTracker> tracker;
   device_shard_info_t shard_info;
   device_superblock_t superblock;

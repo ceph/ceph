@@ -120,16 +120,17 @@ seastar::future<DeviceRef>
 Device::make_device(
   const std::string& device,
   device_type_t dtype,
-  backend_type_t btype)
+  backend_type_t btype,
+  device_id_t id)
 {
   if (btype == backend_type_t::SEGMENTED) {
-    return SegmentManager::get_segment_manager(device, dtype
+    return SegmentManager::get_segment_manager(device, dtype, id
     ).then([](DeviceRef ret) {
       return ret;
     });
   } else {
     ceph_assert(btype != backend_type_t::NONE);
-    return get_rb_device(device, dtype
+    return get_rb_device(device, dtype, id
     ).then([](DeviceRef ret) {
       return ret;
     });
