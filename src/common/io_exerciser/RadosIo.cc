@@ -221,6 +221,8 @@ void RadosIo::applyIoOp(IoOp& op) {
       [[fallthrough]];
     case OpType::Read3:
       [[fallthrough]];
+    case OpType::SparseRead:
+      [[fallthrough]];
     case OpType::Write:
       [[fallthrough]];
     case OpType::Write2:
@@ -361,6 +363,44 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       start_io();
       TripleReadOp& readOp = static_cast<TripleReadOp&>(op);
       applyReadOp(readOp);
+      break;
+    }
+    case OpType::SparseRead: {
+      // Issues CEPH_OSD_OP_SPARSE_READ — the only client op that routes to
+      // PrimaryLogPG::do_sparse_read(). Used to exercise the rep_repair path.
+      start_io();
+      SingleSparseReadOp& sparseOp = static_cast<SingleSparseReadOp&>(op);
+      auto op_info = std::make_shared<AsyncOpInfo<1>>(sparseOp.offset,
+                                                      sparseOp.length);
+      librados::ObjectReadOperation rop;
+      auto extents = std::make_shared<std::map<uint64_t, uint64_t>>();
+      rop.sparse_read(sparseOp.offset[0] * block_size,
+                      sparseOp.length[0] * block_size,
+                      extents.get(),
+                      &op_info->bufferlist[0],
+                      nullptr);
+      int flags = 0;
+      if (sparseOp.balanced_read.has_value() && *sparseOp.balanced_read) {
+        flags = librados::OPERATION_BALANCE_READS;
+      } else if (!sparseOp.balanced_read.has_value()) {
+        // Honour balanced_read_percentage just like normal reads
+        uint64_t rand_value = rng();
+        if ((int)(rand_value % 100) < balanced_read_percentage) {
+          flags = librados::OPERATION_BALANCE_READS;
+        }
+      }
+      auto sparse_read_cb = [this, extents](boost::system::error_code ec,
+                                            version_t ver, bufferlist bl) {
+        // The call must succeed (or return EIO/EAGAIN after fix).
+        // A crash on the OSD side would be visible as a connection error.
+        ceph_assert(ec == boost::system::errc::success ||
+                    ec == boost::system::errc::io_error ||
+                    ec.value() == EAGAIN);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(rop), flags, nullptr, sparse_read_cb);
+      num_io++;
       break;
     }
     case OpType::Write: {
