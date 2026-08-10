@@ -17,7 +17,11 @@ seastar::future<> RotationalDevice::start(uint32_t shard_nums) {
   LOG_PREFIX(NVMeBlockDevice::start);
   DEBUG("device_shard_nums={} seastar::smp={}, num_shard_services={}",
     device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
-  return shard_devices.start(num_shard_services, device_path);
+  return shard_devices.start(
+    num_shard_services,
+    device_path,
+    get_device_type(),
+    get_device_id());
 }
 
 RotationalDevice::mkfs_ret RotationalDevice::mkfs(device_config_t config) {

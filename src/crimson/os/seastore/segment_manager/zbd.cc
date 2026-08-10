@@ -855,11 +855,6 @@ Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
     metadata.block_size);
 }
 
-device_id_t ZBDSegmentManager::get_device_id() const
-{
-  return metadata.config.spec.id;
-};
-
 secondary_device_set_t& ZBDSegmentManager::get_secondary_devices()
 {
   return metadata.config.secondary_devices;

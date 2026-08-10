@@ -517,7 +517,9 @@ SegmentManager::read_ertr::future<uint32_t> BlockSegmentManager::get_shard_nums(
     device = std::move(p.first);
     auto sd = p.second;
     return read_superblock(device, sd);
-  }).safe_then([](auto sb) {
+  }).safe_then([this](auto sb) {
+    ceph_assert(sb.config.spec.id == get_device_id());
+    ceph_assert(sb.config.spec.dtype == get_device_type());
     return read_ertr::make_ready_future<uint32_t>(sb.shard_num);
   }).handle_error(
     crimson::ct_error::assert_all(
@@ -549,6 +551,8 @@ BlockSegmentManager::mount_ret BlockSegmentManager::shard_mount()
     auto sd = p.second;
     return read_superblock(device, sd);
   }).safe_then([=, this](auto sb) ->mount_ertr::future<> {
+    ceph_assert(sb.config.spec.id == get_device_id());
+    ceph_assert(sb.config.spec.dtype == get_device_type());
     set_device_id(sb.config.spec.id);
     if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= sb.shard_num) {
       INFO("{} shard_id {} out of range {}",
@@ -647,6 +651,8 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::shard_mkfs()
     auto sd = p.second;
     return read_superblock(device, sd);
   }).safe_then([this, FNAME](auto sb) {
+    ceph_assert(sb.config.spec.id == get_device_id());
+    ceph_assert(sb.config.spec.dtype == get_device_type());
     set_device_id(sb.config.spec.id);
     shard_info = sb.shard_infos[seastar::this_shard_id()];
     INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);

@@ -131,7 +131,7 @@ struct btree_test_base :
 
   virtual LBAManager::mkfs_ret test_structure_setup(Transaction &t) = 0;
   seastar::future<> set_up_fut() final {
-    segment_manager = segment_manager::create_test_ephemeral();
+    segment_manager = segment_manager::create_test_ephemeral(0, device_type_t::EPHEMERAL_MAIN);
     return segment_manager->init(
     ).safe_then([this] {
       return segment_manager->mkfs(

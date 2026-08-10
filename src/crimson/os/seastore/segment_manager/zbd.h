@@ -64,8 +64,12 @@ namespace crimson::os::seastore::segment_manager::zbd {
     mount_ret mount() override;
     mkfs_ret mkfs(device_config_t meta) override;
 
-    ZBDSegmentManager(const std::string &path, store_index_t store_index = 0)
-    : device_path(path),
+    ZBDSegmentManager(
+      const std::string &path,
+      device_type_t dtype,
+      device_id_t id,
+      store_index_t store_index = 0)
+    : SegmentManager(path, dtype, id),
       store_index(store_index) {}
 
     ~ZBDSegmentManager() override = default;
@@ -88,10 +92,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
     read_ertr::future<uint32_t> get_shard_nums() override;
 
-    device_type_t get_device_type() const override {
-      return device_type_t::ZBD;
-    };
-
     size_t get_available_size() const override {
       return shard_info.size;
     };
@@ -108,8 +108,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
       return metadata.config.meta;
     };
 
-    device_id_t get_device_id() const override;
-
     secondary_device_set_t& get_secondary_devices() override;
 
     magic_t get_magic() const override;
@@ -121,7 +119,6 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
   private:
     friend class ZBDSegment;
-    std::string device_path;
     device_shard_info_t shard_info;
     device_superblock_t metadata;
     seastar::file device;

@@ -305,6 +305,8 @@ using DeviceRef = std::unique_ptr<Device>;
 class Device {
 // interfaces used by device
 public:
+  Device(const std::string &path, device_type_t dtype, device_id_t id)
+    : device_path(path), dtype(dtype), device_id(id) {}
   virtual ~Device() {}
 
   virtual seastar::future<> start(uint32_t shard_nums) {
@@ -336,15 +338,21 @@ public:
   static seastar::future<DeviceRef> make_device(
     const std::string &device,
     device_type_t dtype,
-    backend_type_t btype);
+    backend_type_t btype,
+    device_id_t id);
 
 // interfaces used by each device shard
 public:
-  virtual device_id_t get_device_id() const = 0;
+  device_id_t get_device_id() const {
+    assert(device_id <= DEVICE_ID_MAX_VALID);
+    return device_id;
+  }
 
   virtual magic_t get_magic() const = 0;
 
-  virtual device_type_t get_device_type() const = 0;
+  device_type_t get_device_type() const {
+    return dtype;
+  }
 
   virtual backend_type_t get_backend_type() const = 0;
 
@@ -390,6 +398,10 @@ public:
   virtual read_ertr::future<uint32_t> get_shard_nums() {
     return read_ertr::make_ready_future<uint32_t>(seastar::this_smp_shard_count());
   }
+protected:
+  const std::string device_path;
+  const device_type_t dtype = device_type_t::NONE;
+  const device_id_t device_id = DEVICE_ID_NULL;
 };
 
 using check_create_device_ertr = Device::access_ertr;
