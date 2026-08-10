@@ -265,11 +265,6 @@ options:
   level: advanced
   desc: Size in bytes per second written to the cache devices, 0 indicates no limit
   default: 0
-- name: seastore_cold_devices_count
-  type: uint
-  level: dev
-  desc: create cold devices during mkfs
-  default: 0
 - name: seastore_data_device_type
   type: str
   level: dev
