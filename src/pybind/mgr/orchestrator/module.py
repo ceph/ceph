@@ -2228,8 +2228,9 @@ Usage:
             nvmeof_pool_helper = NvmeofMetadataPoolHelper(self)
             nvmeof_pool_helper.create_pool_if_needed()
 
+        cleanpool = pool.lstrip('.')
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}' if group else pool,
+            service_id=f'{cleanpool}.{group}' if group else cleanpool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),
