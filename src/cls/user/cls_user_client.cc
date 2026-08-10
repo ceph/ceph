@@ -17,13 +17,12 @@ using librados::ObjectOperationCompletion;
 using librados::ObjectReadOperation;
 using namespace cls::user;
 
-void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries, bool add, bool reset)
+void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_bucket_entry>& entries, bool add)
 {
   bufferlist in;
   cls_user_set_buckets_op call;
   call.entries = entries;
   call.add = add;
-  call.reset = reset;
   call.time = real_clock::now();
   encode(call, in);
   op.exec(method::set_buckets_info, in);

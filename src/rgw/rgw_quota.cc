@@ -266,8 +266,8 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_owner& owner, const 
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
-    std::map<std::string, RGWStorageStats>{}
+  std::optional<std::map<std::string, RGWStorageClassStats>> sc_stats{
+    std::map<std::string, RGWStorageClassStats>{}
   };
   r = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver,
 			 &master_ver, bucket_stats, sc_stats, nullptr);
@@ -610,7 +610,7 @@ int RGWOwnerStatsCache::sync_bucket(const rgw_owner& owner, const rgw_bucket& b,
   }
 
   RGWBucketEnt ent;
-  r = bucket->sync_owner_stats(dpp, y, false, &ent);
+  r = bucket->sync_owner_stats(dpp, y, &ent);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: sync_owner_stats() for bucket=" << bucket << " returned " << r << dendl;
     return r;
@@ -676,7 +676,7 @@ int RGWOwnerStatsCache::sync_owner(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  ret = rgw_sync_all_stats(dpp, y, driver, owner, false, tenant);
+  ret = rgw_sync_all_stats(dpp, y, driver, owner, tenant);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
     return ret;

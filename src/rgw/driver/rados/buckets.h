@@ -64,8 +64,7 @@ int write_stats(const DoutPrefixProvider* dpp,
                 optional_yield y,
                 librados::Rados& rados,
                 const rgw_raw_obj& obj,
-                const RGWBucketEnt& bucket,
-                bool reset);
+                const RGWBucketEnt& bucket);
 
 /// Read the total usage stats of all buckets.
 int read_stats(const DoutPrefixProvider* dpp,

@@ -245,7 +245,7 @@ static void set_bucket(librados::IoCtx& ioctx, const std::string& oid,
 {
   std::list<cls_user_bucket_entry> entries = {entry};
   librados::ObjectWriteOperation op;
-  cls_user_set_buckets(op, entries, add, false);
+  cls_user_set_buckets(op, entries, add);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
@@ -293,7 +293,7 @@ TEST_F(ClsUserStorageClass, LegacyBucketConversion) {
   // Add 3 bucket entries to get nonzero stats
   for (int i = 0; i < 3; i++) {
     cls_user_bucket_entry entry;
-    entry.bucket.name = str_int("bucket", i);
+    entry.bucket.name = "bucket" + std::to_string(i);
     entry.size = 1024;
     entry.size_rounded = 1024;
     entry.count = 1;
@@ -321,7 +321,7 @@ TEST_F(ClsUserStorageClass, LegacyBucketConversion) {
   // Remove all buckets (decrement stats toward zero)
   for (int i = 0; i < 3; i++) {
     cls_user_bucket_entry entry;
-    entry.bucket.name = str_int("bucket", i);
+    entry.bucket.name = "bucket" + std::to_string(i);
     entry.size = 1024;
     entry.size_rounded = 1024;
     entry.count = 1;

@@ -26,7 +26,7 @@ namespace rgwrados::buckets {
 
 static int set(const DoutPrefixProvider* dpp, optional_yield y,
                librados::Rados& rados, const rgw_raw_obj& obj,
-               cls_user_bucket_entry&& entry, bool add, bool reset,
+               cls_user_bucket_entry&& entry, bool add,
                const RGWBucketEnt* ent)
 {
   std::list<cls_user_bucket_entry> entries;
@@ -39,7 +39,7 @@ static int set(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   librados::ObjectWriteOperation op;
-  ::cls_user_set_buckets(op, entries, add, reset);
+  ::cls_user_set_buckets(op, entries, add);
   return ref.operate(dpp, std::move(op), y);
 }
 
@@ -57,7 +57,7 @@ int add(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   constexpr bool add = true; // create/update entry
-  return set(dpp, y, rados, obj, std::move(entry), add, false, nullptr);
+  return set(dpp, y, rados, obj, std::move(entry), add, nullptr);
 }
 
 int remove(const DoutPrefixProvider* dpp, optional_yield y,
@@ -142,13 +142,13 @@ int list(const DoutPrefixProvider* dpp, optional_yield y,
 
 int write_stats(const DoutPrefixProvider* dpp, optional_yield y,
                 librados::Rados& rados, const rgw_raw_obj& obj,
-                const RGWBucketEnt& ent, bool reset)
+                const RGWBucketEnt& ent)
 {
   cls_user_bucket_entry entry;
   ent.convert(&entry);
 
   constexpr bool add = false; // bucket entry must exist
-  return set(dpp, y, rados, obj, std::move(entry), add, reset, &ent);
+  return set(dpp, y, rados, obj, std::move(entry), add, &ent);
 }
 
 int read_stats(const DoutPrefixProvider* dpp, optional_yield y,

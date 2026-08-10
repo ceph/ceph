@@ -139,36 +139,6 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     return ret;
   }
 
-  if (op.reset) {
-    for (auto &new_entry: op.entries) {
-      string key;
-      get_key_by_bucket_name(new_entry.bucket.name, &key);
-      cls_user_bucket_entry old_entry;
-      ret = get_existing_bucket_entry(hctx, key, old_entry);
-      if (ret == -ENOENT) {
-        continue;
-      }
-      old_entry.size = 0;
-      old_entry.size_rounded = 0;
-      old_entry.count = 0;
-      old_entry.storage_class_stats.emplace();
-      ret = write_entry(hctx, key, old_entry);
-      if (ret < 0)
-        return ret;
-
-    }
-    header.stats.total_entries = 0;
-    header.stats.total_bytes = 0;
-    header.stats.total_bytes_rounded = 0;
-    header.storage_class_stats.emplace();
-    bufferlist bl;
-    encode(header, bl);
-    ret = cls_cxx_map_write_header(hctx, &bl);
-    if (ret < 0)
-      return ret;
-    return 0;
-  }
-
   for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& update_entry = *iter;
     std::optional<std::unordered_map<std::string, cls_user_bucket_entry>> storage_class_stats = update_entry.storage_class_stats;
@@ -325,13 +295,6 @@ static int cls_user_remove_bucket(cls_method_context_t hctx, bufferlist *in, buf
     CLS_LOG(0, "ERROR: get existing bucket entry, key=%s ret=%d", key.c_str(), ret);
     return ret;
   }
-  if (header.storage_class_stats.has_value()) {
-    for(auto it = header.storage_class_stats.value().begin(); it != header.storage_class_stats.value().end(); ++it){
-      auto new_key = key + "-" + it->first;
-      CLS_LOG(20, "removing entry at %s", new_key.c_str());
-      remove_entry(hctx, new_key);
-    }
-  }
   CLS_LOG(20, "removing entry at %s", key.c_str());
 
   ret = remove_entry(hctx, key);
@@ -461,8 +424,10 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
   }
 
   cls_user_header header;
+  header.storage_class_stats.emplace();
   bool truncated = false;
   string from_index, prefix;
+  bool storage_classes_present = true;
   do {
     map<string, bufferlist> keys;
     int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
@@ -486,6 +451,18 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
 	return -EIO;
       }
       add_header_stats(&header.stats, e);
+      if (storage_classes_present && e.storage_class_stats.has_value()) {
+        for (auto it = e.storage_class_stats.value().begin(); it != e.storage_class_stats.value().end(); ++it) {
+          std::string storage_class = it->first;
+          cls_user_bucket_entry stats = it->second;
+          header.storage_class_stats.value()[storage_class].total_entries += stats.count;
+          header.storage_class_stats.value()[storage_class].total_bytes += stats.size;
+          header.storage_class_stats.value()[storage_class].total_bytes_rounded += stats.size_rounded;
+        }
+      } else {
+        storage_classes_present = false;
+        header.storage_class_stats.reset();
+      }
     }
     if (!keys.empty()) {
       from_index = keys.rbegin()->first;
@@ -518,9 +495,10 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   }
 
   cls_user_header header;
+  header.storage_class_stats.emplace();
   string from_index{op.marker}, prefix;
   cls_user_reset_stats2_ret ret;
-
+  bool storage_classes_present = true;
   map<string, buffer::list> keys;
   int rc = cls_cxx_map_get_vals(hctx, from_index, prefix, MAX_ENTRIES,
 				&keys, &ret.truncated);
@@ -543,6 +521,18 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
       return -EIO;
     }
     add_header_stats(&ret.acc_stats, e);
+    if (storage_classes_present && e.storage_class_stats.has_value()) {
+      for (auto it = e.storage_class_stats.value().begin(); it != e.storage_class_stats.value().end(); ++it) {
+        std::string storage_class = it->first;
+        cls_user_bucket_entry stats = it->second;
+        header.storage_class_stats.value()[storage_class].total_entries += stats.count;
+        header.storage_class_stats.value()[storage_class].total_bytes += stats.size;
+        header.storage_class_stats.value()[storage_class].total_bytes_rounded += stats.size_rounded;
+      }
+    } else {
+      storage_classes_present = false;
+      header.storage_class_stats.reset();
+    }
   }
 
   if (! ret.truncated) {
