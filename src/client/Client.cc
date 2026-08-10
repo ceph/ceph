@@ -3924,17 +3924,6 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
     return r;
 
   while (1) {
-    // For quarantine access check, we need the absolute path (including mount
-    // root prefix) because the client's caps use absolute filesystem paths.
-    // Using relative path would fail for clients mounted at subdirectories.
-    std::string path;
-    if (!make_absolute_path_string(fh->inode, path)) {
-      in->make_path_string(path);  // fallback to relative path
-    }
-    if (in->is_under_quarantine() && !has_qtine_auth_caps(path)) {
-      return -EACCES;
-    }
-
     int file_wanted = in->caps_file_wanted();
     if ((file_wanted & need) != need) {
       ldout(cct, 10) << "get_caps " << *in << " need " << ccap_string(need)
@@ -7103,35 +7092,8 @@ int Client::mount(const std::string &mount_root, const UserPerm& perms,
   ldout(cct, 3) << "op: int fd;" << dendl;
   */
 
-  load_auth_caps();
   mref_writer.update_state(CLIENT_MOUNTED);
   return 0;
-}
-
-// called in mount()
-void Client::load_auth_caps()
-{
-  auto& auth_keys = monclient->keyring->get_keys();
-  EntityName client_name;
-  client_name.set_name(entity_name_t::CLIENT(whoami.v));
-
-  if (auth_keys.find(client_name) != auth_keys.end()) {
-    auto& bl = auth_keys[client_name].caps["mds"];
-    has_mds_auth_caps = mds_auth_caps.parse(bl.c_str(), nullptr);
-  }
-}
-
-bool Client::has_qtine_auth_caps(const std::string_view path)
-{
-  if (has_mds_auth_caps) {
-    return mds_auth_caps.quarantine_access_in_caps(mdsmap->get_fs_name(), path);
-  }
-  auto& auth_keys = monclient->keyring->get_keys();
-  EntityName client_name;
-  client_name.set_name(entity_name_t::CLIENT(whoami.v));
-  // is there's no cephx key then we have "all" caps
-  auto& caps = auth_keys[client_name].caps;
-  return (caps.find("key") == caps.end());
 }
 
 // UNMOUNT
@@ -8388,18 +8350,6 @@ int Client::_readlink(const InodeRef& diri, const char* relpath, char *buf, size
 
 int Client::_getattr(const InodeRef& in, int mask, const UserPerm& perms, bool force)
 {
-  {
-    // For quarantine access check, we need the absolute path (including mount
-    // root prefix) because the client's caps use absolute filesystem paths.
-    std::string path;
-    if (!make_absolute_path_string(in, path)) {
-      in->make_path_string(path);  // fallback to relative path
-    }
-    if (in->is_under_quarantine() && !has_qtine_auth_caps(path)) {
-      return -EACCES;
-    }
-  }
-
   bool yes = in->caps_issued_mask(mask, true);
 
   ldout(cct, 10) << __func__ << " mask " << ccap_string(mask) << " issued=" << yes << dendl;
