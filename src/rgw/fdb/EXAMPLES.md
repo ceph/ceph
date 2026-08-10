@@ -91,8 +91,32 @@ if (lfdb::commit(txn, stamp)) {
 }
 ```
 
+```cpp
+// Use one version stamp for several operations in the same transaction:
+auto txn = lfdb::make_transaction(dbh);
+lfdb::versionstamp stamp;
+
+lfdb::set(txn,
+          lfdb::versioned("person/grace-hopper/event/", "/created", stamp),
+          "created");
+lfdb::set(txn,
+          lfdb::versioned("person/grace-hopper/event/", "/updated", stamp),
+          "updated");
+lfdb::set(txn,
+          "person/grace-hopper/version",
+          lfdb::versioned("", stamp));
+
+if (lfdb::commit(txn) && stamp.is_resolved()) {
+  const auto& version_stamp_bytes = stamp.resolved_bytes();
+}
+```
+
 Note that version stamping a key or a value is strictly an either/or proposition: there is no call
 to set a stamped key and value all at once.
+
+Version stamps become readable and orderable only after commit resolution.
+Trying to read an unresolved stamp is a `std::invalid_argument`; trying to reuse a
+resolved stamp as a new commit output is a `std::invalid_argument`.
 
 ## Setup
 
@@ -410,7 +434,7 @@ txr([](auto& txn) {
 ```
 
 ```cpp
-/* Retryable FoundationDB errors are handled before control returns here. */
+/* Retryable FoundationDB errors may replay the transaction body. */
 auto txr = lfdb::make_transactor(dbh);
 
 try {
@@ -423,9 +447,35 @@ try {
     });
 }
 catch (const lfdb::libfdb_exception& e) {
-    /* FoundationDB reported an error that libfdb could not recover from. */
+    /* libfdb operation failure: FDB status failure, retry exhaustion, decode
+     * failure, or invalid data at the FoundationDB boundary. */
+}
+catch (const std::invalid_argument& e) {
+    /* The caller passed an argument that violates the libfdb API contract. */
 }
 catch (const std::exception& e) {
-    /* Application or system error from user code. */
+    /* Application or other runtime error. */
 }
 ```
+
+## Appendix: Exception Summary
+
+libfdb tries to keep its exception surface small. Ordinary library operation
+failures are reported as `lfdb::libfdb_exception`; direct caller contract
+violations use standard exceptions.
+
+The categories are intentionally coarse: they are meant to be useful to
+callers, not to divide every possible misuse into a separate exception type. For
+example, some versionstamp state violations are treated as `std::invalid_argument`
+to avoid a crazy taxonomy explosion.
+
+| Condition | Exception |
+| --- | --- |
+| FoundationDB C API returns `fdb_error_t` | `lfdb::libfdb_exception` |
+| FoundationDB option setup fails | `lfdb::libfdb_exception` |
+| Retry recovery fails or retry limit is exceeded | `lfdb::libfdb_exception` |
+| zpp_bits cannot decode stored bytes into the requested type | `lfdb::libfdb_exception` |
+| Invalid result at the FoundationDB boundary | `lfdb::libfdb_exception` |
+| Caller uses libfdb after shutdown | `lfdb::libfdb_exception` |
+| Caller passes an impossible selector prefix or invalid versionstamp bytes | `std::invalid_argument` |
+| Caller reads, compares, reuses, or overwrites a versionstamp in the wrong state | `std::invalid_argument` |

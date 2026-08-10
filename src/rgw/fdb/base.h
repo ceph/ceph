@@ -46,6 +46,7 @@
 #include <compare>
 #include <concepts>
 #include <exception>
+#include <stdexcept>
 #include <functional>
 #include <filesystem>
 #include <type_traits>
@@ -161,7 +162,8 @@ inline bool get_value_range_from_transaction(ceph::libfdb::transaction& txn, con
 
 } // namespace ceph::libfdb::detail
 
-// libfdb_exception: How to deal, when Bad Things(TM) happen:
+// libfdb_exception represents libfdb operation failures.
+// Caller contract errors use standard exceptions such as std::invalid_argument.
 namespace ceph::libfdb {
 
 // Should we commit after the (possibly) mutating operation?
@@ -243,7 +245,7 @@ inline std::string make_range_end_key_for_prefix(std::string_view prefix)
  }
 
  if (0xFF == static_cast<unsigned char>(prefix.front())) {
-  throw libfdb_exception("requested prefix has no (finite) end key");
+  throw std::invalid_argument("requested prefix has no finite end key");
  }
 
  auto i = prefix.find_last_not_of(static_cast<char>(0xFF));
@@ -270,12 +272,13 @@ struct versionstamp final
  const versionstamp_data_t& resolved_bytes() const
  {
   if (not is_resolved()) {
-   throw libfdb_exception("attempt to access unresolved version stamp");
+   throw std::invalid_argument("attempt to access unresolved version stamp");
   }
 
   return result->value();
  }
 
+ // Versionstamps become orderable only after commit resolution.
  bool operator==(const versionstamp& rhs) const
  {
   return resolved_bytes() == rhs.resolved_bytes();
@@ -378,7 +381,7 @@ versioned_bytes versioned(const PrefixT& prefix, versionstamp stamp)
 inline void versionstamp::store_result(const std::span<const std::uint8_t> versionstamp_result)
 {
  if (versionstamp_result.size() != std::tuple_size_v<versionstamp_data_t>) {
-  throw libfdb_exception("invalid version stamp (size)");
+  throw std::invalid_argument("invalid version stamp size");
  }
 
  versionstamp_data_t result_value;
@@ -390,7 +393,7 @@ inline void versionstamp::store_result(const std::span<const std::uint8_t> versi
  }
 
  if (result->value() != result_value) {
-  throw libfdb_exception("attempt to overwrite resolved version stamp");
+  throw std::invalid_argument("attempt to overwrite resolved version stamp");
  }
 }
 
@@ -735,6 +738,10 @@ class transaction final
 
  void mark_version(const versionstamp& stamp)
  {
+  if (stamp.is_resolved()) {
+   throw std::invalid_argument("attempt to reuse resolved version stamp");
+  }
+
   version_stamps.push_back(stamp);
  }
 
@@ -937,8 +944,19 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
    throw libfdb_exception(r);
   }
 
+  constexpr auto expected_versionstamp_size =
+   std::tuple_size_v<versionstamp::versionstamp_data_t>;
+
+  if (expected_versionstamp_size != static_cast<std::size_t>(out_versionstamp_size) ||
+      nullptr == out_versionstamp_data) {
+   throw libfdb_exception("invalid version stamp result");
+  }
+
+  const auto versionstamp_result =
+   std::span(out_versionstamp_data, expected_versionstamp_size);
+
   for (auto& stamp : version_stamps) {
-   stamp.store_result(std::span(out_versionstamp_data, out_versionstamp_size));
+   stamp.store_result(versionstamp_result);
   }
 
   version_stamps.clear();

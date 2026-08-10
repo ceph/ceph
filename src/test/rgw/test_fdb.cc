@@ -39,6 +39,7 @@
 #include <chrono>
 #include <cstdint>
 #include <compare>
+#include <stdexcept>
 #include <utility>
 
 #include <ranges>
@@ -234,8 +235,18 @@ TEST_CASE("version stamps", "[fdb]") {
   lfdb::versionstamp stamp;
 
   CHECK_FALSE(stamp.is_resolved());
-  CHECK_THROWS_WITH(stamp.resolved_bytes(),
-                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
+  CHECK_THROWS_MATCHES(stamp.resolved_bytes(),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
+ }
+
+ SECTION("invalid versionstamp bytes are an API error") {
+  lfdb::versionstamp stamp;
+  const std::array<std::uint8_t, 1> invalid_stamp_bytes {};
+
+  CHECK_THROWS_AS(lfdb::from::convert(std::span(invalid_stamp_bytes), stamp),
+                  std::invalid_argument);
  }
 
  SECTION("commit resolves explicit version stamp") {
@@ -249,18 +260,43 @@ TEST_CASE("version stamps", "[fdb]") {
   CHECK(10 == stamp.resolved_bytes().size());
  }
 
+ SECTION("resolved versionstamp cannot be reused for commit") {
+  lfdb::versionstamp stamp;
+
+  auto txn = lfdb::make_transaction(dbh);
+  lfdb::set(txn, "versionstamp/reuse/first", "value");
+  REQUIRE(lfdb::commit(txn, stamp));
+  REQUIRE(stamp.is_resolved());
+
+  auto reuse_txn = lfdb::make_transaction(dbh);
+  lfdb::set(reuse_txn, "versionstamp/reuse/second", "value");
+
+  CHECK_THROWS_MATCHES(lfdb::commit(reuse_txn, stamp),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring("attempt to reuse resolved version stamp")));
+ }
+
  SECTION("versionstamp comparison requires resolved values") {
   lfdb::versionstamp unresolved;
   const auto resolved = resolved_stamp(stamp_data(1));
 
-  CHECK_THROWS_WITH((void)(unresolved == resolved),
-                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
-  CHECK_THROWS_WITH((void)(resolved == unresolved),
-                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
-  CHECK_THROWS_WITH((void)(unresolved < resolved),
-                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
-  CHECK_THROWS_WITH((void)(resolved < unresolved),
-                    Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp"));
+  CHECK_THROWS_MATCHES((void)(unresolved == resolved),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
+  CHECK_THROWS_MATCHES((void)(resolved == unresolved),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
+  CHECK_THROWS_MATCHES((void)(unresolved < resolved),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
+  CHECK_THROWS_MATCHES((void)(resolved < unresolved),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring("attempt to access unresolved version stamp")));
  }
 
  SECTION("versionstamp comparison algebra") {
@@ -286,6 +322,8 @@ TEST_CASE("version stamps", "[fdb]") {
  }
 
  SECTION("versionstamp key") {
+  lfdb::erase(dbh, lfdb::select { "versionstamp/key/" });
+
   lfdb::versionstamp stamp;
 
   lfdb::set(dbh,
@@ -449,6 +487,11 @@ TEST_CASE("check selectors", "[fdb][rgw]") {
  CHECK("abc" == lfdb::select { "abc" }.begin_key);
  CHECK("abd" == lfdb::select { "abc" }.end_key);
  CHECK("abd" == lfdb::select { std::string("abc\xFF", 4) }.end_key);
+ CHECK_THROWS_AS([] {
+   const auto invalid_prefix = std::string("\xFF", 1);
+   const auto selector = lfdb::select { invalid_prefix };
+   (void)selector;
+ }(), std::invalid_argument);
 
  // Make sure that there's nothing in our test range:
  dbh.drop_test_namespace();

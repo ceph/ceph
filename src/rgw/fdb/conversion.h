@@ -103,12 +103,9 @@ inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
  try 
   {
      ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
-  }
+ }
  catch (const std::system_error& e) {
-     // Translate from underlying (e.g. zpp_bits) conversion error into the right type:
-     // This is a bit bound to zpp_bits for the moment, but there's not a more direct way to distinguish this
-     // from a different system_error. We could do that, by using zpp_bits' non-throwing modes and throwing a
-     // special type, but this will do for now.
+     // Decode failures still surface as libfdb operation failures to callers.
      throw ceph::libfdb::libfdb_exception(e.what());
   }
 

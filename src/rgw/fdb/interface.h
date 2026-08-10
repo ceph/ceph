@@ -72,9 +72,7 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
 
 // Note: only rarely is a direct call to this needed. You can use transactors or pass database_handles
 // to get automagic.
-// Note: after a transaction is committed, it cannot be used again; but right now, that is NOT
-// an error with respect to the object. So, don't do operations on the object after you've committed
-// it or the behavior could be surprising.
+// Note: after a transaction is committed, it cannot be used again.
 // On false, the client should retry the transaction:
 [[nodiscard]] inline bool commit(transaction_handle& txn)
 {
