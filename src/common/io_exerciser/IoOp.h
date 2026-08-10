@@ -107,6 +107,19 @@ class SingleReadOp : public ReadWriteOp<OpType::Read, 1> {
                                 uint64_t length, bool balanced_read);
 };
 
+// Issues CEPH_OSD_OP_SPARSE_READ via ObjectReadOperation::sparse_read(),
+// the only client op that routes to PrimaryLogPG::do_sparse_read().
+class SingleSparseReadOp : public ReadWriteOp<OpType::SparseRead, 1> {
+ public:
+  SingleSparseReadOp(uint64_t offset, uint64_t length,
+                     std::optional<bool> balanced_read);
+  static std::unique_ptr<SingleSparseReadOp> generate(uint64_t offset,
+                                                      uint64_t length);
+  static std::unique_ptr<SingleSparseReadOp> generate(uint64_t offset,
+                                                      uint64_t length,
+                                                      bool balanced_read);
+};
+
 class DoubleReadOp : public ReadWriteOp<OpType::Read2, 2> {
  public:
   DoubleReadOp(uint64_t offset1, uint64_t length1, uint64_t offset2,

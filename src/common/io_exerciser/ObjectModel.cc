@@ -7,6 +7,7 @@
 #include <random>
 
 using ObjectModel = ceph::io_exerciser::ObjectModel;
+using SingleSparseReadOp = ceph::io_exerciser::SingleSparseReadOp;
 
 ObjectModel::ObjectModel(const std::string& primary_oid, const std::string& secondary_oid,
                          uint64_t block_size, int seed, bool delete_objects)
@@ -179,6 +180,15 @@ void ObjectModel::applyIoOp(IoOp& op) {
     case OpType::Read: {
       SingleReadOp& readOp = static_cast<SingleReadOp&>(op);
       verify_and_record_read_op(readOp);
+    } break;
+    case OpType::SparseRead: {
+      // SparseRead skips primary_created/size assertions because it may target
+      // a pre-existing object of unknown size (e.g. interactive mode).
+      // Still track ranges for concurrent-io conflict detection.
+      SingleSparseReadOp& readOp = static_cast<SingleSparseReadOp&>(op);
+      ceph_assert(!writes.intersects(readOp.offset[0], readOp.length[0]));
+      reads.union_insert(readOp.offset[0], readOp.length[0]);
+      num_io++;
     } break;
     case OpType::Read2: {
       DoubleReadOp& readOp = static_cast<DoubleReadOp&>(op);
