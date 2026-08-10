@@ -38,9 +38,9 @@ the placement of daemons.
 Service Specification
 =====================
 
-A MON service can be deployed or updated using a YAML service specification
+The Monitor service can be deployed or updated via a YAML specification
 file with ``ceph orch apply -i``. The following is a complete example
-showing all available parameters:
+showing all parameters available as of August 2026:
 
 .. code-block:: yaml
 
@@ -92,16 +92,16 @@ showing all available parameters:
 Top-level Parameters
 --------------------
 
-The following parameters are available at the top level of the MON service
+The following parameters are available at the top level of the Monitor service
 specification:
 
 ``service_type``
     **Required.** Must be ``mon``.
 
 ``placement``
-    Specifies where and how many monitor daemons to deploy. See
+    Specifies where and how many Monitor daemons to deploy. See
     `Placement Parameters`_ below for available sub-fields. If omitted,
-    cephadm uses its default placement strategy (up to 5 monitors).
+    cephadm uses its default placement strategy (up to 5 Monitors).
 
 ``config``
     A mapping of Ceph configuration option names to values. These are
@@ -116,7 +116,7 @@ specification:
 
 ``unmanaged``
     Boolean (default: ``false``). When ``true``, cephadm will not
-    automatically deploy, remove, or reconfig monitor daemons. Daemons
+    automatically deploy, remove, or reconfig Monitor daemons. Daemons
     must be manually added with ``ceph orch daemon add mon``.
 
 ``preview_only``
@@ -125,7 +125,7 @@ specification:
 
 ``networks``
     A list of IP networks in CIDR notation (e.g., ``10.1.2.0/24``) to
-    which monitor daemons should bind. If specified, monitors will only
+    which Monitor daemons should bind. If specified, Monitors will only
     be deployed on hosts with IP addresses matching one of the listed
     networks.
 
@@ -137,7 +137,7 @@ specification:
 
 ``extra_container_args``
     A list of additional arguments passed to the container runtime
-    (podman/docker) when starting the monitor container. Each entry can
+    (podman/docker) when starting the Monitor container. Each entry can
     be a plain string or an object with ``argument`` and ``split`` fields.
 
     .. code-block:: yaml
@@ -148,7 +148,7 @@ specification:
             split: false
 
 ``extra_entrypoint_args``
-    A list of additional arguments appended to the monitor daemon's
+    A list of additional arguments appended to the Monitor daemon's
     entrypoint command. Each entry can be a plain string or an object with
     ``argument`` and ``split`` fields.
 
@@ -158,7 +158,7 @@ specification:
           - "--mon-data=/var/lib/ceph/mon"
 
 ``custom_configs``
-    A list of custom configuration files to mount inside the monitor
+    A list of custom configuration files to mount inside the Monitor
     container. Each entry has ``mount_path`` (the path inside the
     container) and ``content`` (the file contents).
 
@@ -173,11 +173,12 @@ specification:
 Placement Parameters
 --------------------
 
-The ``placement`` section controls which hosts monitors are deployed on and
-how many. The following sub-fields are available:
+The ``placement`` section specifies the number of Monitors to deploy and
+the hosts on which they may be placed. The following sub-fields are
+available:
 
 ``hosts``
-    A list of hostnames where monitors should be deployed. Each entry can
+    A list of hostnames where Monitors should be deployed. Each entry can
     be a simple hostname or an extended format with network and name:
 
     - ``hostname`` — deploy on this host
@@ -194,7 +195,7 @@ how many. The following sub-fields are available:
             - host3=custom-name
 
 ``count``
-    Integer (>= 1). The total number of monitor daemons to deploy.
+    Integer (>= 1). The total number of Monitor daemons to deploy.
     Cephadm will choose hosts automatically if ``hosts`` is not specified.
     Mutually exclusive with ``count_per_host``.
 
@@ -204,8 +205,8 @@ how many. The following sub-fields are available:
     Mutually exclusive with ``count``.
 
 ``label``
-    A host label string. Monitors will be deployed on all hosts that
-    have this label assigned. Mutually exclusive with ``hosts``.
+    A host label string. Monitor daemons will be deployed on all hosts
+    that have this label assigned. Mutually exclusive with ``hosts``.
 
     .. code-block:: yaml
 
@@ -213,9 +214,10 @@ how many. The following sub-fields are available:
           label: mon
 
 ``host_pattern``
-    An fnmatch-style pattern or regex to select hosts by name.
-    Mutually exclusive with ``hosts``. Can be a string (fnmatch) or
-    an object with ``pattern`` and ``pattern_type`` fields:
+    An `fnmatch <https://docs.python.org/3/library/fnmatch.html>`_-style
+    pattern or regex to select hosts by name. Mutually exclusive with
+    ``hosts``. Can be a string (fnmatch) or an object with ``pattern``
+    and ``pattern_type`` fields:
 
     .. code-block:: yaml
 
@@ -229,10 +231,10 @@ how many. The following sub-fields are available:
             pattern: "mon[0-9]+"
             pattern_type: regex
 
-MON-Specific Parameters (``spec`` section)
-------------------------------------------
+``mon``-Specific Parameters (``spec`` section)
+-----------------------------------------------
 
-The following parameters are specific to the MON service and are placed
+The following parameters are specific to the ``mon`` service and are placed
 under the ``spec:`` section:
 
 ``crush_locations``
@@ -260,20 +262,21 @@ under the ``spec:`` section:
     .. note::
 
        Setting the CRUSH location in the spec is the recommended way of
-       replacing tiebreaker mon daemons, as they require having a location
-       set when they are added.
+       replacing tiebreaker Monitor daemons, as they require having a
+       location set when they are added. Tiebreaker Monitors are only
+       relevant for stretch mode clusters; see :ref:`stretch_mode`.
 
     .. note::
 
-       Mon daemons will only get the ``--set-crush-location`` flag set
-       when cephadm actually deploys them. If a spec is applied that
-       includes a CRUSH location for a mon that is already deployed, the
-       flag may not be set until a redeploy command is issued.
+       Monitor daemons will only get the ``--set-crush-location`` flag
+       set when cephadm actually deploys them. If a spec is applied that
+       includes a CRUSH location for a Monitor that is already deployed,
+       the flag may not be set until a ``redeploy`` command is issued.
 
 Complete Minimal Examples
 -------------------------
 
-Deploy 5 monitors on labeled hosts:
+Deploy 5 Monitors on labeled hosts:
 
 .. code-block:: yaml
 
@@ -282,7 +285,7 @@ Deploy 5 monitors on labeled hosts:
       count: 5
       label: mon
 
-Deploy monitors on specific hosts with network binding:
+Deploy Monitors on specific hosts with network binding:
 
 .. code-block:: yaml
 
@@ -295,7 +298,7 @@ Deploy monitors on specific hosts with network binding:
     networks:
     - 10.1.2.0/24
 
-Deploy monitors with CRUSH locations for stretch mode:
+Deploy Monitors with CRUSH locations for stretch mode:
 
 .. code-block:: yaml
 
