@@ -191,6 +191,14 @@ form:
 
    radosgw-admin user suspend --uid=johndoe
 
+Suspending a user also marks that user's buckets as suspended
+(``BUCKET_SUSPENDED``), which blocks access for anyone using those buckets.
+
+For :ref:`RGW accounts <radosgw-account>`, bucket ownership belongs to the
+account. Suspending an *account root* user therefore suspends the account's
+buckets. Suspending a non-root account user only disables that identity; other
+users and roles in the account keep access to the account's buckets.
+
 User Enable
 -----------
 To re-enable a suspended user, provide ``user enable`` and specify the user ID
