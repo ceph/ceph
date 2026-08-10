@@ -146,11 +146,15 @@ void TMDriver::init()
 {
   shard_stats = {};
 
-  std::vector<Device*> sec_devices;
+  std::vector<Device*> cache_devices;
+  std::vector<Device*> data_devices;
+  data_devices.emplace_back(device.get());
 #ifndef NDEBUG
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, true);
+  tm = make_transaction_manager(
+    device.get(), cache_devices, data_devices, shard_stats, 0, true);
 #else
-  tm = make_transaction_manager(device.get(), sec_devices, shard_stats, 0, false);
+  tm = make_transaction_manager(
+    device.get(), cache_devices, data_devices, shard_stats, 0, false);
 #endif
 }
 
@@ -187,7 +191,7 @@ seastar::future<> TMDriver::mkfs()
 	  0
 	},
         meta,
-        secondary_device_set_t()});
+        cache_device_set_t()});
   }).safe_then([this] {
     logger().debug("device mkfs done");
     return device->mount();
