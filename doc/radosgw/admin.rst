@@ -195,9 +195,12 @@ Suspending a user also marks that user's buckets as suspended
 (``BUCKET_SUSPENDED``), which blocks access for anyone using those buckets.
 
 For :ref:`RGW accounts <radosgw-account>`, bucket ownership belongs to the
-account. Suspending an *account root* user therefore suspends the account's
-buckets. Suspending a non-root account user only disables that identity; other
-users and roles in the account keep access to the account's buckets.
+account. Prefer ``account suspend`` / ``account enable`` to freeze or restore
+an entire account (sets ``AccountInfo.suspended`` and suspends account-owned
+buckets). Suspending an *account root* user has the same effect on account
+buckets for compatibility with the older per-user workflow. Suspending a
+non-root account user only disables that identity; other users and roles in
+the account keep access unless the account itself is suspended.
 
 User Enable
 -----------
