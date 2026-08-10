@@ -1687,6 +1687,53 @@ static int adopt_user_buckets(const DoutPrefixProvider* dpp, optional_yield y,
   return 0;
 }
 
+/* Enable or disable buckets owned by this user. Account root users own buckets
+ * under the account id (after adopt_user_buckets), so list that owner instead
+ * of the uid. Non-root account members must not suspend the whole account. */
+static int set_user_bucket_suspended(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     rgw::sal::Driver* driver,
+                                     const RGWUserInfo& user_info,
+                                     bool suspended,
+                                     std::string* err_msg)
+{
+  if (user_info.user_id.empty()) {
+    set_err_msg(err_msg, "empty user id passed...aborting");
+    return -EINVAL;
+  }
+
+  rgw_owner owner = user_info.user_id;
+  if (user_info.type == TYPE_ROOT && !user_info.account_id.empty()) {
+    owner = user_info.account_id;
+  }
+
+  const size_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  rgw::sal::BucketList listing;
+  do {
+    int ret = driver->list_buckets(dpp, owner, user_info.user_id.tenant,
+                                   listing.next_marker, string(),
+                                   max_buckets, false, listing, y);
+    if (ret < 0) {
+      set_err_msg(err_msg, "could not get buckets for owner: " +
+                  to_string(owner));
+      return ret;
+    }
+
+    std::vector<rgw_bucket> bucket_names;
+    for (auto& ent : listing.buckets) {
+      bucket_names.push_back(std::move(ent.bucket));
+    }
+
+    ret = driver->set_buckets_enabled(dpp, bucket_names, !suspended, y);
+    if (ret < 0) {
+      set_err_msg(err_msg, "failed to modify bucket");
+      return ret;
+    }
+  } while (!listing.next_marker.empty());
+
+  return 0;
+}
+
 int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 			 optional_yield y)
 {
@@ -2042,40 +2089,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     user_info.quota.user_quota = op_state.get_user_quota();
 
   if (op_state.has_suspension_op()) {
-    __u8 suspended = op_state.get_suspension_status();
-    user_info.suspended = suspended;
-
-
-    if (user_id.empty()) {
-      set_err_msg(err_msg, "empty user id passed...aborting");
-      return -EINVAL;
-    }
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(user_id);
-
-    size_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
-
-    rgw::sal::BucketList listing;
-    do {
-      ret = driver->list_buckets(dpp, user->get_id(), user->get_tenant(),
-                                 listing.next_marker, string(),
-                                 max_buckets, false, listing, y);
-      if (ret < 0) {
-        set_err_msg(err_msg, "could not get buckets for uid:  " + user_id.to_str());
-        return ret;
-      }
-
-      std::vector<rgw_bucket> bucket_names;
-      for (auto& ent : listing.buckets) {
-        bucket_names.push_back(std::move(ent.bucket));
-      }
-
-      ret = driver->set_buckets_enabled(dpp, bucket_names, !suspended, y);
-      if (ret < 0) {
-        set_err_msg(err_msg, "failed to modify bucket");
-        return ret;
-      }
-
-    } while (!listing.next_marker.empty());
+    user_info.suspended = op_state.get_suspension_status();
   }
 
   if (op_state.mfa_ids_specified) {
@@ -2136,6 +2150,16 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       return -EINVAL;
     }
     user_info.type = op_state.account_root ? TYPE_ROOT : TYPE_RGW;
+  }
+
+  /* Apply bucket suspension after account_id / account-root are resolved so
+   * account root users disable account-owned buckets, not an empty uid list. */
+  if (op_state.has_suspension_op()) {
+    ret = set_user_bucket_suspended(dpp, y, driver, user_info,
+                                    user_info.suspended, err_msg);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
   if (!user_info.account_id.empty()) {
