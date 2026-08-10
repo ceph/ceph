@@ -602,6 +602,173 @@ async fn test_multipart_overwrite_multipart_list_and_get() {
     assert_eq!(body, mp2_data);
 }
 
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_versioned_multipart_overwrite_regular_list_and_get() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+    let key = "obj";
+    let regular_body = vec![b'A'; 1024];
+    let mp_size: usize = 10 * 1024 * 1024;
+
+    // PUT regular object
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from(regular_body.clone()))
+        .send()
+        .await
+        .unwrap();
+
+    // Verify LIST shows the regular object
+    let list = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list.contents().len(), 1);
+    assert_eq!(list.contents()[0].size().unwrap_or(0), 1024);
+
+    // Overwrite with multipart
+    let mp_data = do_multipart(&client, &bucket_name, key, mp_size).await;
+
+    // Verify LIST shows correct size
+    let list = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list.contents().len(), 1);
+    assert_eq!(list.contents()[0].size().unwrap_or(0), mp_size as i64);
+
+    // Verify GET returns correct content
+    let response = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.content_length().unwrap_or(0), mp_size as i64);
+    let body = get_body(response).await;
+    assert_eq!(body, mp_data);
+}
+
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_versioned_regular_overwrite_multipart_list_and_get() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+    let key = "obj";
+    let mp_size: usize = 10 * 1024 * 1024;
+    let regular_body = vec![b'B'; 1024];
+
+    // Create multipart object
+    do_multipart(&client, &bucket_name, key, mp_size).await;
+
+    // Verify LIST shows the multipart object
+    let list = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list.contents().len(), 1);
+    assert_eq!(list.contents()[0].size().unwrap_or(0), mp_size as i64);
+
+    // Overwrite with regular object
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from(regular_body.clone()))
+        .send()
+        .await
+        .unwrap();
+
+    // Verify LIST shows correct size
+    let list = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list.contents().len(), 1);
+    assert_eq!(list.contents()[0].size().unwrap_or(0), 1024);
+
+    // Verify GET returns correct content
+    let response = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.content_length().unwrap_or(0), 1024);
+    let body = get_body(response).await;
+    assert_eq!(body, regular_body);
+}
+
+#[cfg_attr(feature = "fails_on_posix", ignore = "posix: versioning WIP")]
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_versioned_multipart_overwrite_multipart_list_and_get() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+    let key = "obj";
+    let first_size: usize = 5 * 1024 * 1024;
+    let second_size: usize = 10 * 1024 * 1024;
+
+    // Create first multipart object
+    do_multipart(&client, &bucket_name, key, first_size).await;
+
+    // Verify LIST shows the first multipart object
+    let list = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list.contents().len(), 1);
+    assert_eq!(list.contents()[0].size().unwrap_or(0), first_size as i64);
+
+    // Overwrite with second multipart
+    let mp2_data = do_multipart(&client, &bucket_name, key, second_size).await;
+
+    // Verify LIST shows correct size
+    let list = client
+        .list_objects_v2()
+        .bucket(&bucket_name)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(list.contents().len(), 1);
+    assert_eq!(list.contents()[0].size().unwrap_or(0), second_size as i64);
+
+    // Verify GET returns correct content
+    let response = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(response.content_length().unwrap_or(0), second_size as i64);
+    let body = get_body(response).await;
+    assert_eq!(body, mp2_data);
+}
+
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_multipart_copy_small() {
