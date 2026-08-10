@@ -721,6 +721,7 @@ private:
   SnapshotDataReplayers m_data_replayers;
   std::unique_ptr<TickThread> m_tick_thread;
   std::atomic<int> m_active_datasync_threads{0};
+  ceph::mutex m_mirror_obj_write_l = ceph::make_mutex("PeerReplayer::m_mirror_obj_write_l");
 
   ceph::mutex smq_lock;
   ceph::condition_variable smq_cv;

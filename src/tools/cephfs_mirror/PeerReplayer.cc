@@ -961,7 +961,12 @@ void PeerReplayer::remove_persisted_dir_sync_stat(const std::string &dir_root) {
 
   Context *ctx = new C_RemovePersistedSyncStatAio(dir_root);
   librados::AioCompletion *aio_comp = create_rados_callback(ctx);
-  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+
+  int r;
+  {
+    std::lock_guard<ceph::mutex> lock(m_mirror_obj_write_l);
+    r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  }
   if (r < 0) {
     delete ctx;
     derr << ": failed to submit aio remove persisted sync stats for dir_root="
@@ -1142,7 +1147,12 @@ void PeerReplayer::persist_dir_sync_stat(const std::string &dir_root) {
 
   Context *ctx = new C_PersistSyncStatAio(dir_root);
   librados::AioCompletion *aio_comp = create_rados_callback(ctx);
-  int r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+
+  int r;
+  {
+    std::lock_guard<ceph::mutex> lock(m_mirror_obj_write_l);
+    r = m_local_ioctx->aio_operate(CEPHFS_MIRROR_OBJECT, aio_comp, &write_op);
+  }
   if (r < 0) {
     delete ctx;
     derr << ": failed to submit aio persist sync stats for dir_root=" << dir_root
