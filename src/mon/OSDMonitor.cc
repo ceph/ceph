@@ -9304,6 +9304,12 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     }
     bool enable = (var == "set_pool_flags");
     if (enable) {
+      if ((n & pg_pool_t::FLAG_PRESERVE_ALLOCATION) &&
+          osdmap.require_osd_release < ceph_release_t::vampire) {
+        ss << "FLAG_PRESERVE_ALLOCATION requires require_osd_release >= vampire";
+        return -EPERM;
+      }
+
       p.set_flag(n);
     } else {
       p.unset_flag(n);

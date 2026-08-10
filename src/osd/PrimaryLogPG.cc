@@ -161,8 +161,12 @@ static force_allocated_extents_t detect_zero_blocks(
 
 static bool should_track_zero_blocks(
   const pg_pool_t& pool_info,
-  PrimaryLogPG::OpContext *ctx)
+  PrimaryLogPG::OpContext *ctx,
+  ceph_release_t min_osd_release)
 {
+  if (min_osd_release < ceph_release_t::vampire) {
+    return false;
+  }
   if (pool_info.tracks_zero_blocks()) {
     return true;
   }
@@ -6220,10 +6224,13 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     if (length > 0) {
       auto *sparse_ctx = new ECSparseReadResult(
         this, ctx, &osd_op.rval, &osd_op.outdata, &op.extent.length);
-      int r = pgbackend->objects_sparse_read_async(
-        soid, offset, length, size, op.flags,
-        &sparse_ctx->ext_map, &sparse_ctx->data_bl,
-        sparse_ctx, oi.force_allocated_extents.get_intervals());
+      int r = -EOPNOTSUPP;
+      if (get_osdmap()->require_osd_release >= ceph_release_t::vampire) {
+        r = pgbackend->objects_sparse_read_async(
+          soid, offset, length, size, op.flags,
+          &sparse_ctx->ext_map, &sparse_ctx->data_bl,
+          sparse_ctx, oi.force_allocated_extents.get_intervals());
+      }
       if (r == -EOPNOTSUPP) {
         // legacy EC: fall back to translating sparse read to a normal async read
         delete sparse_ctx;
@@ -6473,9 +6480,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     /* map extents */
     case CEPH_OSD_OP_MAPEXT:
       tracepoint(osd, do_osd_op_pre_mapext, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
-      if (pool.info.is_erasure() && !pool.info.allows_ecoptimizations()) {
- result = -EOPNOTSUPP;
- break;
+      if (pool.info.is_erasure() &&
+          (!pool.info.allows_ecoptimizations() ||
+           get_osdmap()->require_osd_release < ceph_release_t::vampire)) {
+        result = -EOPNOTSUPP;
+        break;
       }
       ++ctx->num_read;
       if (pool.info.is_erasure()) {
@@ -7206,7 +7215,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 				    op.extent.offset, op.extent.length);
 	ctx->clean_regions.mark_data_region_dirty(op.extent.offset, op.extent.length);
-	if (should_track_zero_blocks(pool.info, ctx)) {
+	if (should_track_zero_blocks(pool.info, ctx,
+	                             get_osdmap()->require_osd_release)) {
 	  if (op.extent.length > 0) {
 	    oi.force_allocated_extents.remove(op.extent.offset,
 	                                      op.extent.length);
@@ -7255,7 +7265,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           std::max((uint64_t)op.extent.length, oi.size));
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 	    0, op.extent.length, true);
-	if (should_track_zero_blocks(pool.info, ctx)) {
+	if (should_track_zero_blocks(pool.info, ctx,
+	                             get_osdmap()->require_osd_release)) {
 	  // WRITEFULL replaces the entire object: reset FAE and re-detect.
 	  oi.force_allocated_extents.clear();
 	  oi.force_allocated_extents.union_of(
@@ -7340,7 +7351,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           ctx->clean_regions.mark_data_region_dirty(zero_off, zero_len);
           ctx->delta_stats.num_wr++;
           oi.clear_data_digest();
-          if (should_track_zero_blocks(pool.info, ctx)) {
+          if (should_track_zero_blocks(pool.info, ctx,
+                                       get_osdmap()->require_osd_release)) {
             // ZERO punches holes only in fully-covered 4K blocks; partial
             // leading/trailing blocks are written as zeros (not holes) so
             // their FAE entries must not be removed here.
@@ -7442,7 +7454,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	// do no set exists, or we will break above DELETE -> TRUNCATE munging.
 
 	oi.clear_data_digest();
-	if (should_track_zero_blocks(pool.info, ctx)) {
+	if (should_track_zero_blocks(pool.info, ctx,
+	                             get_osdmap()->require_osd_release)) {
 	  // TRUNCATE removes all data at or beyond the new size:
 	  // drop any FAE entries that fall beyond the truncate point.
 	  oi.force_allocated_extents.truncate(op.extent.offset);
@@ -9840,10 +9853,13 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
       if (cb) {
         async_read_started = true;
         // Fast EC: try sparse read to get data + extent map in one pass.
-        int sparse_r = pgbackend->objects_sparse_read_async(
-          oi.soid, cursor.data_offset, max_read, oi.size, osd_op.op.flags,
-          &cb->ext_map, &cb->data_bl, cb,
-          oi.force_allocated_extents.get_intervals());
+        int sparse_r = -EOPNOTSUPP;
+        if (get_osdmap()->require_osd_release >= ceph_release_t::vampire) {
+          sparse_r = pgbackend->objects_sparse_read_async(
+            oi.soid, cursor.data_offset, max_read, oi.size, osd_op.op.flags,
+            &cb->ext_map, &cb->data_bl, cb,
+            oi.force_allocated_extents.get_intervals());
+        }
         if (sparse_r == 0) {
           // Sparse read accepted: completion will fire cb->finish().
           cb->sparse_read = true;
@@ -10593,7 +10609,8 @@ void PrimaryLogPG::_write_copy_chunk(CopyOpRef cop, PGTransaction *t)
       }
     }
     const bool track_fae = pool.info.is_erasure() &&
-                           pool.info.allows_ecoptimizations();
+                           pool.info.allows_ecoptimizations() &&
+                           get_osdmap()->require_osd_release >= ceph_release_t::vampire;
     if (!cop->extent_map.empty()) {
       // Sparse path: write only the extents that have data, leaving holes.
       // cop->data holds the non-hole bytes packed sequentially
@@ -10679,7 +10696,9 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   }
   cb->results->fill_in_final_tx(ctx->op_t.get());
 
-  obs.oi.force_allocated_extents = cb->results->force_allocated_extents;
+  if (get_osdmap()->require_osd_release >= ceph_release_t::vampire) {
+    obs.oi.force_allocated_extents = cb->results->force_allocated_extents;
+  }
 
   // CopyFromCallback fills this in for us
   obs.oi.user_version = ctx->user_at_version;
@@ -14150,9 +14169,10 @@ uint64_t PrimaryLogPG::recover_primary(uint64_t max, ThreadPool::TPHandle &handl
 
 	      ObjectStore::Transaction t;
 	      bufferlist b2;
-	      obc->obs.oi.encode(
-		b2,
-		get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
+              obc->obs.oi.encode(
+                b2,
+                get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr),
+                get_osdmap()->require_osd_release);
 	      ceph_assert(!pool.info.require_rollback());
 	      t.setattr(coll, ghobject_t(soid), OI_ATTR, b2);
 
