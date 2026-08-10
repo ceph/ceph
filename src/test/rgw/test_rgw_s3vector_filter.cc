@@ -469,6 +469,26 @@ TEST_F(S3VectorFilterTest, AllSixComparisonOps) {
 
 // ---- error cases ----
 
+TEST_F(S3VectorFilterTest, DotInFieldNameRejected) {
+  // a metadata key may not contain a '.', so such a field could never be matched
+  auto result = build(R"({"user.name": "alice"})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, DotInFieldNameOnColumnRejected) {
+  std::vector<filterable_metadata_key_t> keys = {{"genre", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"genre.name": {"$eq": "rock"}})", keys);
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, DotInFieldNameInsideLogicalRejected) {
+  auto result = build(R"({"$and": [{"color": "red"}, {"user.name": "alice"}]})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
 TEST_F(S3VectorFilterTest, NonfilterableKeyRejected) {
   std::vector<std::string> nonfilterable = {"secret"};
   auto result = build(R"({"secret": "value"})", {}, nonfilterable);
