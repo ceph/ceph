@@ -24,12 +24,15 @@ import { NvmeofSubsystemsStepThreeComponent } from './nvmeof-subsystem-step-3/nv
 import { AUTHENTICATION, HOST_TYPE } from '~/app/shared/models/nvmeof';
 import { NvmeofSubsystemsStepTwoComponent } from './nvmeof-subsystem-step-2/nvmeof-subsystem-step-2.component';
 import { NvmeofSubsystemsStepFourComponent } from './nvmeof-subsystem-step-4/nvmeof-subsystem-step-4.component';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
+import { NvmeofStateService } from '../nvmeof-state.service';
+import { Router } from '@angular/router';
 
 describe('NvmeofSubsystemsFormComponent', () => {
   let component: NvmeofSubsystemsFormComponent;
   let fixture: ComponentFixture<NvmeofSubsystemsFormComponent>;
   let nvmeofService: NvmeofService;
+  let nvmeofStateService: { requestRefresh: jest.Mock };
   const mockTimestamp = 1720693470789;
   const mockGroupName = 'default';
   const mockPayload: SubsystemPayload = {
@@ -45,6 +48,7 @@ describe('NvmeofSubsystemsFormComponent', () => {
 
   beforeEach(async () => {
     spyOn(Date, 'now').and.returnValue(mockTimestamp);
+    nvmeofStateService = { requestRefresh: jest.fn() };
     await TestBed.configureTestingModule({
       declarations: [
         NvmeofSubsystemsFormComponent,
@@ -60,7 +64,8 @@ describe('NvmeofSubsystemsFormComponent', () => {
           useValue: {
             queryParams: of({ group: mockGroupName })
           }
-        }
+        },
+        { provide: NvmeofStateService, useValue: nvmeofStateService }
       ],
       imports: [
         HttpClientTestingModule,
@@ -234,6 +239,31 @@ describe('NvmeofSubsystemsFormComponent', () => {
 
       expect(component.showAuthStep).toBeTruthy();
       expect(component.steps.some((step) => step.label === 'Authentication')).toBeTruthy();
+    });
+
+    it('should request list refresh after successful create', () => {
+      const router = TestBed.inject(Router);
+      spyOn(router, 'navigate').and.returnValue(Promise.resolve(true));
+      mockPayload['nqn'] = 'test-nqn';
+      component.group = mockGroupName;
+
+      component.onSubmit(mockPayload);
+
+      expect(nvmeofStateService.requestRefresh).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not request list refresh after failed create', () => {
+      (nvmeofService.createSubsystem as jasmine.Spy).and.returnValue(
+        throwError(() => ({ error: { detail: 'create failed' }, preventDefault() {} }))
+      );
+      const router = TestBed.inject(Router);
+      spyOn(router, 'navigate').and.returnValue(Promise.resolve(true));
+      mockPayload['nqn'] = 'test-nqn';
+      component.group = mockGroupName;
+
+      component.onSubmit(mockPayload);
+
+      expect(nvmeofStateService.requestRefresh).not.toHaveBeenCalled();
     });
   });
 });
