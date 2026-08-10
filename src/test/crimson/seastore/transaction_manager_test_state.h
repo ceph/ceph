@@ -63,9 +63,15 @@ public:
   }
 
   seastar::future<> setup() final {
-    segment_manager = segment_manager::create_test_ephemeral();
+    device_id_t id = 0;
+    segment_manager = segment_manager::create_test_ephemeral(id, device_type_t::EPHEMERAL_MAIN);
     for (auto &sec_sm : secondary_segment_managers) {
-      sec_sm = segment_manager::create_test_ephemeral();
+      id++;
+      sec_sm = segment_manager::create_test_ephemeral(
+        id,
+        id < num_main_device_managers
+          ? device_type_t::EPHEMERAL_MAIN
+          : device_type_t::EPHEMERAL_COLD);
     }
     return segment_manager->init(
     ).safe_then([this] {
@@ -142,7 +148,7 @@ public:
   }
   
   seastar::future<> setup() final {
-    rb_device = random_block_device::create_test_ephemeral();
+    rb_device = random_block_device::create_test_ephemeral(0);
     device_config_t config = get_rbm_ephemeral_device_config(0, 1);
     return rb_device->mkfs(config).handle_error(crimson::ct_error::assert_all("unexpected error"));
   }

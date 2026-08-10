@@ -171,7 +171,8 @@ seastar::future<> TMDriver::mkfs()
   return Device::make_device(
     *config.path,
     device_type_t::SSD,
-    backend_type_t::SEGMENTED
+    backend_type_t::SEGMENTED,
+    0
   ).then([this](DeviceRef dev) {
     device = std::move(dev);
     seastore_meta_t meta;
@@ -219,7 +220,8 @@ seastar::future<> TMDriver::mount()
     return Device::make_device(
       *config.path,
       device_type_t::SSD,
-      backend_type_t::SEGMENTED);
+      backend_type_t::SEGMENTED,
+      0);
   }).then([this](DeviceRef dev) {
     device = std::move(dev);
     return device->mount();

@@ -39,7 +39,9 @@ constexpr ephemeral_config_t DEFAULT_TEST_EPHEMERAL = {
 
 std::ostream &operator<<(std::ostream &, const ephemeral_config_t &);
 
-EphemeralSegmentManagerRef create_test_ephemeral();
+EphemeralSegmentManagerRef create_test_ephemeral(
+  device_id_t id,
+  device_type_t dtype);
 
 device_config_t get_ephemeral_device_config(
     std::size_t index,
@@ -71,11 +73,6 @@ class EphemeralSegmentManager final : public SegmentManager {
   const ephemeral_config_t config;
   std::optional<device_config_t> device_config;
 
-  device_type_t get_device_type() const override {
-    assert(device_config);
-    return device_config->spec.dtype;
-  }
-
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();
     return (seg_addr.get_segment_id().device_segment_id() * config.segment_size) +
@@ -90,8 +87,11 @@ class EphemeralSegmentManager final : public SegmentManager {
 
 public:
   EphemeralSegmentManager(
+    device_id_t id,
+    device_type_t dtype,
     ephemeral_config_t config)
-    : config(config) {
+    : SegmentManager(std::string(), dtype, id),
+      config(config) {
     config.validate();
   }
 
@@ -99,11 +99,6 @@ public:
 
   close_ertr::future<> close() override {
     return close_ertr::now();
-  }
-
-  device_id_t get_device_id() const override {
-    assert(device_config);
-    return device_config->spec.id;
   }
 
   mount_ret mount() override {
