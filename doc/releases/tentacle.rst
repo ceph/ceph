@@ -1048,7 +1048,7 @@ RADOS
   ``allow_ec_optimizations`` must be set on each pool to switch to using the
   new code. Existing pools can be upgraded once the OSD and Monitor daemons
   have been updated. There is no need to update the clients. See
-  :ref:`rados_ops_erasure_coding_optimizations` for how to enable the
+  :ref:`rados_ops_erasure_coding_optimizations` for how to enable
   optimizations and for tuning guidance.
 
 * The default plugin for erasure coded pools has been changed from Jerasure to

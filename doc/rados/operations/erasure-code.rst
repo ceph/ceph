@@ -219,8 +219,8 @@ with a per-pool setting. These optimizations, known collectively as
 *FastEC*, add support for partial reads and partial writes: small
 reads are served directly from the relevant shards, and small writes
 no longer require reading and rewriting the full stripe. This improves
-performance for smaller I/Os and eliminates padding, which can
-significantly reduce space amplification and wasted capacity:
+performance for smaller I/Os and eliminates padding, significantly
+reducing space amplification and wasted capacity:
 
 .. prompt:: bash $
 
@@ -245,12 +245,14 @@ upgrading gateways and clients.
 Optimizations are currently only supported with the ISA-L plugin and with
 the Jerasure plugin when using the ``reed_sol_van`` technique (these are
 the current and previous default plugins and the most widely used
-technique). Attempting to set the flag for a pool using an unsupported
-combination of plugin and technique, such as CLAY, LRC, or SHEC, is
-blocked with an error message.
+technique). Prefer ISA-L for new pools: it is the default plugin for
+pools created on Tentacle or later, and the Jerasure library is no
+longer maintained. Attempting to set the flag for a pool using an
+unsupported combination of plugin and technique, such as CLAY, LRC, or
+SHEC, is blocked with an error message.
 
 The default stripe unit is 4K which works well for standard EC pools.
-The stripe unit must be a multiple of 4K for optimizations to be
+The stripe unit must be a multiple of 4 KiB for optimizations to be
 enabled; enabling the flag on a pool with any other stripe unit is
 rejected.
 For the majority of I/O workloads it is recommended to increase the stripe
