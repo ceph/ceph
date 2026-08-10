@@ -471,7 +471,7 @@ target_include_directories(unittest_rgw_posix_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
 target_link_libraries(unittest_rgw_posix_driver
   ${UNITTEST_LIBS}
-  rgw_a_standalone
+  ${rgw_libs}
   ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
