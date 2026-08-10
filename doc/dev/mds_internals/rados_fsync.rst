@@ -62,13 +62,8 @@ or directly to RADOS for synchronous writes).
 an mtime up-front, and attach it on the relevant writes.)
 
 The change_attr is, unfortunately, not persisted and not recoverable from RADOS.
-But I also don't know if it matters in the slightest -- stx_version is not yet
-generally available, and a number of situations where Ganesha could rely on our
-internal change_attr it instead substitutes in the ctime. Update rules in the
-current implementation are also quite strange (individual clients with shared
-caps can separately bump the change_attr, and the MDS tries to reconcile by
-further bumping it when it receives those updates, but it's certainly not a
-single consistent view like our other metadata is!).
+We would need to extend probe in some fashion to recover change_attribute from
+information the client persists to recover that.
 
 5. The Proposal
 ---------------
@@ -84,7 +79,8 @@ updating the MDS if it has sufficient caps, so we will need to detect that case
 and do a real fsync if we hit it.
 
 There are some available further enhancements:
-1) we can generate the mtime stamp upfront when doing a write(), and send that
+1) [COMPLETED]
+   we can generate the mtime stamp upfront when doing a write(), and send that
    timestamp to the OSDs when doing the object write. This will ensure an
    entirely consistent view of the mtime and ctime. This is also pretty
    straightforward: all the places where the Client directly writes to RADOS via
@@ -93,16 +89,14 @@ There are some available further enhancements:
    mtime -- it internally stores a BufferHead::last_write value which is
    locally generated in ObjectCacher::writex(), but it is easy enough to make
    that an input parameter.
-   This enhancment lets us preserve mtime exactly, but still does not preserve
+   This enhancement lets us preserve mtime exactly, but still does not preserve
    change_attr or let us avoid the MDS when flushing other metadata.
-2) We can extend the Filer::probe() functionality and interfaces to support
-   fsyncing directly to a RADOS object, and let the Client simply flush out
-   the necessary file data and piggyback any metadata changes on top of that as
-   xattr or omap writes to the file data objects which the MDS then recovers on
-   Client crash. This would let us scale fsync capability directly with data
-   IO capability.
-   This enhancement lets us preserve all metadata without needing to do an MDS
-   commit, but is significantly more complicated at all layers of the stack.
+2) We can persist the change_attr to a rados xattr and update it using compound
+   operations alongside the write. (This DOES NOT need to be a conditional write
+   like I previously thought it would: if there are multiple writers, the file
+   is in MIX mode and change_attr won't be exposed to clients without cycling
+   through lock states and updating from all the clients.)
+
 
 6. Why don't we already have these behaviors?
 ---------------------------------------------
@@ -118,12 +112,23 @@ mean that a different client will be able to see the update results -- instead,
 the other client attempting to access the file will initiate a separate MDS
 commit that it must wait for.)
 
+7. Implementing fsync-metadata-to-RADOS
+---------------------------------------
+We need to build a bunch of internal interfaces for this.
 
-Development todo:
-- Track when we do a write that matches or extends in->size, so that we can do
-an mds fsync if we extend file size without writing to it.
-- is it okay that we don't fsync after somebody sets the
-  CEPH_SETATTR_FSCRYPT_FILE field?
-- is it okay that we don't fsync after somebody sets atime? I didn't think we
-  maintained atime at all, wild.
-- probably I should just track more explicitly on what dirtied the cap
+
+8. Completed tasks
+------------------
+- Stable mtime.
+- client-side config option enabling us to skip fsync
+
+9. Development todo
+-------------------
+- Track when setattr() is invoked and don't fsync-to-rados when those fields
+  aren't acknowledged by the MDS. (This covers several bits of metadata and
+  scenarios that are otherwise difficult to separate from the caps dirtied by
+  a write() call.)
+- implement MDS feature bits shared with the client authorizing it to write
+  out the change_attr to RADOS.
+- Actually write out change_attr to RADOS.
+- Include change_attr param in MClientRequest (for Client::_do_setattr).
