@@ -384,6 +384,8 @@ int KernelDevice::refresh_size()
   }
 
   size = new_size;
+  // round size down to an even block
+  size &= ~(block_size - 1);
   return 0;
 }
 
