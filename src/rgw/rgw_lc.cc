@@ -3384,7 +3384,8 @@ std::string s3_expiration_header(
 	      continue;
     }
 
-    // compute a uniform expiration date (current-version Expiration only)
+    // compute a uniform expiration date (only Expiration rules produce
+    // the x-amz-expiration header; NoncurrentVersionExpiration does not)
     boost::optional<ceph::real_time> rule_expiration_date;
     const LCExpiration& rule_expiration = expiration;
 
