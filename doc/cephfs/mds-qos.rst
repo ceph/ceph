@@ -48,19 +48,19 @@ Enable the scheduler on all MDS daemons:
 
    ceph config set mds mds_dmclock_enable true
 
-The setting takes effect on active MDS daemons and requires that the
-reservation, weight, and limit defaults are all greater than zero,
-which is the case out of the box. The defaults apply to every
-subvolume that has no explicit override and can be changed at runtime:
+The :confval:`mds_dmclock_enable` setting takes effect on active MDS
+daemons. The scheduler engages only when the reservation, weight, and
+limit values are all greater than zero; the default values of
+:confval:`mds_dmclock_reservation`, :confval:`mds_dmclock_weight`, and
+:confval:`mds_dmclock_limit` satisfy this requirement. These
+cluster-wide defaults apply to every subvolume that has no explicit
+override and can be changed at runtime:
 
 .. prompt:: bash #
 
-   ceph config set mds mds_dmclock_reservation 1000
-   ceph config set mds mds_dmclock_weight 1000
-   ceph config set mds mds_dmclock_limit 1000
-
-See :confval:`mds_dmclock_enable`, :confval:`mds_dmclock_reservation`,
-:confval:`mds_dmclock_weight`, and :confval:`mds_dmclock_limit`.
+   ceph config set mds mds_dmclock_reservation <value>
+   ceph config set mds mds_dmclock_weight <value>
+   ceph config set mds mds_dmclock_limit <value>
 
 Per-subvolume settings
 ======================
@@ -72,6 +72,14 @@ reservation must not exceed the limit:
 .. prompt:: bash #
 
    ceph tell mds.<id> qos set <subvolume-path> <reservation> <weight> <limit>
+
+.. note:: Per-subvolume values are held in the running MDS only. They
+   are not persisted across MDS restarts or failover, and they cannot
+   be stored in the central configuration store, which carries only
+   the cluster-wide defaults. Re-apply per-subvolume overrides after
+   an MDS restart. The values currently in effect are shown by the
+   ``qos get`` and ``dump qos`` commands below, not by ``ceph fs
+   status``.
 
 To inspect a subvolume's current settings and statistics, including
 throttle counts and session counts:
@@ -98,7 +106,8 @@ Example
 Suppose the subvolume mounted at ``/volumes/_nogroup/build`` runs a
 batch job that floods the MDS with file creations, starving an
 interactive workload in ``/volumes/_nogroup/home``. To cap the batch
-subvolume and guarantee the interactive one a minimum rate:
+subvolume and guarantee the interactive one a minimum rate, run
+commands of the following forms:
 
 .. prompt:: bash #
 
