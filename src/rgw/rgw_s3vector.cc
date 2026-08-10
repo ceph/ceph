@@ -14,7 +14,10 @@
 #include <algorithm>
 #include <charconv>
 #include <cmath>
+#include <filesystem>
 #include <set>
+#include "rgw_rest_conn.h"
+#include "rgw_xml.h"
 #include "rgw_s3vector_background.h"
 #include "rgw_s3vector_filter.h"
 #include "rgw/rgw_sal.h"
@@ -1301,12 +1304,152 @@ namespace rgw::s3vector {
     decode_vector_bucket_name(vector_bucket_name, vector_bucket_arn, obj);
   }
 
+  // LanceDB writes the manifest of its database into the backing bucket when the
+  // bucket is opened, and does not remove it when the tables are dropped. it is
+  // removed when the vector bucket is deleted, so that no objects are left behind.
+  // note that only the manifest is removed: the backing bucket may hold objects
+  // that do not belong to the vector bucket
+  static constexpr const char* manifest_prefix = "__manifest/";
+
+  int remove_manifest_local(const DoutPrefixProvider* dpp, const std::string& bucket_name) {
+    const std::string local_path = dpp->get_cct()->_conf.get_val<std::string>("rgw_s3vector_local_path");
+    const auto path = std::filesystem::path(local_path) / bucket_name / manifest_prefix;
+    std::error_code ec;
+    std::filesystem::remove_all(path, ec);
+    if (ec) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to remove: " << path << ". error: " << ec.message() << dendl;
+      return -EIO;
+    }
+    return 0;
+  }
+
+  int remove_manifest_rgw(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+      const std::string* tenant, const std::string& bucket_name, optional_yield y) {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    if (const int ret = driver->load_bucket(dpp, rgw_bucket(tenant ? *tenant : "", bucket_name), &bucket, y); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to load backing bucket: " << bucket_name << ". error: " << ret << dendl;
+      return ret;
+    }
+    rgw::sal::Bucket::ListParams params;
+    params.prefix = manifest_prefix;
+    rgw::sal::Bucket::ListResults results;
+    do {
+      if (const int ret = bucket->list(dpp, params, 1000, results, y); ret < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to list the manifest of: " << bucket_name << ". error: " << ret << dendl;
+        return ret;
+      }
+      for (const auto& obj : results.objs) {
+        auto object = bucket->get_object(obj.key);
+        if (const int ret = object->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP, nullptr, nullptr); ret < 0) {
+          ldpp_dout(dpp, 1) << "ERROR: s3vector failed to remove: " << obj.key << " from: " << bucket_name <<
+            ". error: " << ret << dendl;
+          return ret;
+        }
+        ldpp_dout(dpp, 20) << "INFO: s3vector removed: " << obj.key << " from: " << bucket_name << dendl;
+      }
+      params.marker = results.next_marker;
+    } while (results.is_truncated);
+    return 0;
+  }
+
+  int remove_manifest_s3(const DoutPrefixProvider* dpp, const rgw::sal::User* user,
+      const std::string& bucket_name, optional_yield y) {
+    CephContext* cct = dpp->get_cct();
+    const auto& conf = cct->_conf;
+    const std::string endpoint = conf.get_val<std::string>("rgw_s3vector_s3_endpoint");
+    if (endpoint.empty()) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector S3 backend has no endpoint" << dendl;
+      return -EINVAL;
+    }
+    if (!user) {
+      return -EINVAL;
+    }
+    // the same credentials that are given to LanceDB are used here
+    RGWAccessKey cred;
+    for (const auto& [id, ak] : user->get_info().access_keys) {
+      if (ak.active) {
+        cred.id = ak.id;
+        cred.key = ak.key;
+        break;
+      }
+    }
+    if (cred.id.empty()) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector S3 backend: user has no access keys" << dendl;
+      return -EINVAL;
+    }
+
+    RGWRESTConn conn(cct, bucket_name, {endpoint}, cred,
+        conf.get_val<std::string>("rgw_s3vector_s3_region"), std::nullopt);
+
+    std::string marker;
+    bool truncated = false;
+    do {
+      bufferlist out_bl;
+      rgw_http_param_pair params[] = {
+        {"list-type", "2"},
+        {"prefix", manifest_prefix},
+        {"continuation-token", marker.empty() ? nullptr : marker.c_str()},
+        {nullptr, nullptr}};
+      if (const int ret = conn.send_resource(dpp, "GET", "/" + bucket_name, params, nullptr,
+            out_bl, nullptr, nullptr, y); ret < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to list the manifest of: " << bucket_name << ". error: " << ret << dendl;
+        return ret;
+      }
+      RGWXMLParser parser;
+      if (!parser.init() || !parser.parse(out_bl.c_str(), out_bl.length(), 1)) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to parse the listing of: " << bucket_name << dendl;
+        return -EIO;
+      }
+      truncated = false;
+      marker.clear();
+      auto* result = parser.find_first("ListBucketResult");
+      if (!result) {
+        return 0;
+      }
+      if (auto* is_truncated = result->find_first("IsTruncated"); is_truncated) {
+        truncated = (is_truncated->get_data() == "true");
+      }
+      if (auto* token = result->find_first("NextContinuationToken"); token) {
+        marker = token->get_data();
+      }
+      // all of the objects of the page are removed with a single multi-delete
+      std::string body = "<Delete><Quiet>true</Quiet>";
+      unsigned int num_objects = 0;
+      auto contents = result->find("Contents");
+      while (auto* entry = contents.get_next()) {
+        auto* key = entry->find_first("Key");
+        if (!key) {
+          continue;
+        }
+        body += "<Object><Key>" + key->get_data() + "</Key></Object>";
+        ++num_objects;
+        ldpp_dout(dpp, 20) << "INFO: s3vector removing: " << key->get_data() << " from: " << bucket_name << dendl;
+      }
+      body += "</Delete>";
+      if (num_objects == 0) {
+        continue;
+      }
+      bufferlist send_bl;
+      send_bl.append(body);
+      bufferlist delete_bl;
+      rgw_http_param_pair delete_params[] = {{"delete", ""}, {nullptr, nullptr}};
+      if (const int ret = conn.send_resource(dpp, "POST", "/" + bucket_name, delete_params, nullptr,
+            delete_bl, &send_bl, nullptr, y); ret < 0) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to remove " << num_objects <<
+          " objects from: " << bucket_name << ". error: " << ret << dendl;
+        return ret;
+      }
+    } while (truncated);
+    return 0;
+  }
+
   struct DeleteVectorBucketCtx {
     const delete_vector_bucket_t* configuration;
     rgw::sal::Driver* driver;
     const rgw::sal::User* user;
     const std::string* tenant;
     DoutPrefixProvider* dpp;
+    optional_yield y;
     int result;
   };
 
@@ -1343,15 +1486,39 @@ namespace rgw::s3vector {
       return;
     }
     lancedb_free_table_names(table_names, name_count);
+    lancedb_connection_free(conn);
+
+    const std::string backend_str = dpp->get_cct()->_conf.get_val<std::string>("rgw_s3vector_backend");
+    BackendType backend_type;
+    if (const int ret = get_backend_type(backend_str, backend_type); ret < 0) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector unrecognized backend type: " << backend_str << dendl;
+      ctx->result = ret;
+      return;
+    }
+
+    // the manifest of the database is not removed by LanceDB. failing to remove it
+    // leaves objects behind, but should not fail the deletion of the vector bucket
+    int ret = 0;
+    if (is_local_backend(backend_type)) {
+      ret = remove_manifest_local(dpp, bucket_name);
+    } else if (is_rgw_backend(backend_type)) {
+      ret = remove_manifest_rgw(dpp, driver, tenant, bucket_name, ctx->y);
+    } else {
+      ret = remove_manifest_s3(dpp, user, bucket_name, ctx->y);
+    }
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "WARNING: s3vector failed to remove the manifest of: " << bucket_name <<
+        ". error: " << ret << ". objects may be left in the backing bucket" << dendl;
+    }
+
     ldpp_dout(dpp, 20) << "INFO: deleting in-memory session (if it exists) for bucket: " << bucket_name << dendl;
     rgw::s3vector::notify_session_delete(dpp, bucket_name);
-    lancedb_connection_free(conn);
     ctx->result = 0;
   }
 
   int delete_vector_bucket(const delete_vector_bucket_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
     log_configuration(dpp, "DeleteVectorBucket", configuration);
-    DeleteVectorBucketCtx ctx{&configuration, driver, user, tenant, dpp, 0};
+    DeleteVectorBucketCtx ctx{&configuration, driver, user, tenant, dpp, y, 0};
     lancedb_run_on_stack(delete_vector_bucket_impl, &ctx, 256*1024, 1024*1024);
     return ctx.result;
   }

@@ -307,6 +307,47 @@ def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
             raise
 
 
+def _purge_bucket_versions(s3conn, bucket_name):
+    """
+    Remove all versions and delete markers from a versioned bucket. Note that
+    LanceDB is not deleting the objects it removes, so with versioning enabled
+    they are kept as noncurrent versions.
+    """
+    paginator = s3conn.get_paginator('list_object_versions')
+    for page in paginator.paginate(Bucket=bucket_name):
+        objects = []
+        for v in page.get('Versions', []):
+            objects.append({'Key': v['Key'], 'VersionId': v['VersionId']})
+        for dm in page.get('DeleteMarkers', []):
+            objects.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
+        if objects:
+            result = s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+            assert not result.get('Errors'), \
+                f"failed to purge objects from '{bucket_name}': {result['Errors']}"
+
+
+def _force_delete_s3_bucket(s3conn, bucket_name):
+    """
+    Remove a bucket and everything in it. This is the cleanup that is done in any
+    case, so that a failure does not leave buckets behind for the next run.
+    Failures here are only reported, since they should not hide the failure that
+    is being cleaned up after.
+    """
+    try:
+        paginator = s3conn.get_paginator('list_object_versions')
+        for page in paginator.paginate(Bucket=bucket_name):
+            objects = [{'Key': o['Key'], 'VersionId': o['VersionId']}
+                       for o in page.get('Versions', []) + page.get('DeleteMarkers', [])]
+            if objects:
+                s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+        s3conn.delete_bucket(Bucket=bucket_name)
+        log.info("Deleted S3 bucket '%s'", bucket_name)
+    except s3conn.exceptions.ClientError as err:
+        if err.response['Error']['Code'] in ('404', 'NoSuchBucket'):
+            return
+        log.warning("Failed to delete S3 bucket '%s': %s", bucket_name, str(err))
+
+
 def _delete_s3_bucket_for_vector_bucket(bucket_name):
     """
     When using S3/SAL backend, delete the regular S3 bucket that was created
@@ -316,19 +357,23 @@ def _delete_s3_bucket_for_vector_bucket(bucket_name):
         return
     s3conn = connection('s3')
     try:
-        paginator = s3conn.get_paginator('list_objects_v2')
-        for page in paginator.paginate(Bucket=bucket_name):
-            if 'Contents' in page:
-                objects = [{'Key': obj['Key']} for obj in page['Contents']]
-                if objects:
-                    s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
-        s3conn.delete_bucket(Bucket=bucket_name)
-        log.info("Deleted S3 bucket '%s'", bucket_name)
+        s3conn.head_bucket(Bucket=bucket_name)
     except s3conn.exceptions.ClientError as err:
         if err.response['Error']['Code'] in ('404', 'NoSuchBucket'):
             log.info("S3 bucket '%s' does not exist, nothing to delete", bucket_name)
-        else:
-            log.warning("Failed to delete S3 bucket '%s': %s", bucket_name, str(err))
+            return
+        raise
+
+    leftovers = []
+    paginator = s3conn.get_paginator('list_objects_v2')
+    for page in paginator.paginate(Bucket=bucket_name):
+        leftovers += [obj['Key'] for obj in page.get('Contents', [])]
+    try:
+        # deleting the vector bucket should not leave any object behind
+        assert not leftovers, \
+            f"S3 bucket '{bucket_name}' still holds objects after its vector bucket was deleted: {leftovers}"
+    finally:
+        _force_delete_s3_bucket(s3conn, bucket_name)
 
 
 def _delete_all_indexes(conn, bucket_name):
@@ -352,22 +397,33 @@ def _delete_all_vector_buckets(conn, conn2=None):
     Delete all vector buckets of a zone, and of the other zone when its
     connection is given. A backing bucket is shared by the zones, so it is
     deleted only after the vector buckets of both zones are gone.
+    Only the buckets of this run are deleted: buckets of other runs may have been
+    created with a different backend, and could not be used with the current one.
     """
     bucket_names = []
-    for c in filter(None, (conn, conn2)):
-        result = c.list_vector_buckets()
-        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-        for bucket in result['vectorBuckets']:
-            bucket_name = bucket['vectorBucketName']
-            if bucket_name not in bucket_names:
-                bucket_names.append(bucket_name)
-            try:
+    try:
+        for c in filter(None, (conn, conn2)):
+            result = c.list_vector_buckets()
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            for bucket in result['vectorBuckets']:
+                bucket_name = bucket['vectorBucketName']
+                if not bucket_name.startswith('kaboom' + run_prefix + '-'):
+                    log.info("Not deleting vector bucket '%s' of another run", bucket_name)
+                    continue
+                if bucket_name not in bucket_names:
+                    bucket_names.append(bucket_name)
+                # failures are not hidden, so that a vector bucket that cannot be
+                # deleted, e.g. because it still holds indexes, would fail the test
                 _ = _delete_vector_bucket(c, bucket_name)
-            except c.exceptions.ClientError as err:
-                log.warning("Failed to delete vector bucket '%s': %s", bucket_name, str(err))
 
-    for bucket_name in bucket_names:
-        _delete_s3_bucket_for_vector_bucket(bucket_name)
+        for bucket_name in bucket_names:
+            _delete_s3_bucket_for_vector_bucket(bucket_name)
+    finally:
+        # whatever happened above, no buckets should be left for the next run
+        if is_s3_backend():
+            s3conn = connection('s3')
+            for bucket_name in bucket_names:
+                _force_delete_s3_bucket(s3conn, bucket_name)
 
 
 @pytest.mark.vector_bucket_test
@@ -704,33 +760,9 @@ def test_vector_buckets_deletion_with_buckets():
     log.info("list_buckets result: %s", result)
     s3_bucket_names = [b['Name'] for b in result['Buckets']]
     assert bucket_name1 in s3_bucket_names
-    # create another vector bucket
-    bucket_name2 = gen_bucket_name()
-    _ensure_s3_bucket_for_vector_bucket(bucket_name2)
-    result = conn.create_vector_bucket(vectorBucketName=bucket_name2)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    # and an s3 bucket with the same name
-    _create_s3bucket(s3conn, bucket_name2)
-    # delete the s3 bucket: for S3/SAL backends, empty it first (LanceDB data files);
-    # for local backend, the bucket is empty since LanceDB uses local filesystem.
-    if is_s3_backend():
-        paginator = s3conn.get_paginator('list_objects_v2')
-        for page in paginator.paginate(Bucket=bucket_name2):
-            if 'Contents' in page:
-                objects = [{'Key': obj['Key']} for obj in page['Contents']]
-                if objects:
-                    s3conn.delete_objects(Bucket=bucket_name2, Delete={'Objects': objects})
-    s3conn.delete_bucket(Bucket=bucket_name2)
-    # verify s3 bucket is not there
-    pytest.raises(s3conn.exceptions.ClientError, s3conn.head_bucket, Bucket=bucket_name2)
-    # verify vector bucket still exists (via get and list)
-    result = conn.get_vector_bucket(vectorBucketName=bucket_name2)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    result = conn.list_vector_buckets()
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    log.info("list_vector_buckets result: %s", result)
-    vector_bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
-    assert bucket_name2 in vector_bucket_names
+    # note that the opposite case, of deleting the backing bucket of a vector
+    # bucket that still exists, is not tested: the vector bucket would be left
+    # without its data, and could no longer be used or deleted
     # cleanup
     _delete_all_vector_buckets(conn)
 
@@ -1423,7 +1455,9 @@ def verify_list_vectors_pagination(conn, bucket_name, index_name, expected_vecto
         if return_data:
             expected = expected_by_key[retrieved['key']]
             vector_pairs = zip(retrieved['data']['float32'], expected['data']['float32'])
-            assert all(abs(a - b) < 1e-6 for a, b in vector_pairs), \
+            # the vectors are stored as 32 bit floats, while python is using 64 bit
+            # ones, so the comparison cannot be more accurate than that
+            assert all(abs(a - b) < 1e-4 for a, b in vector_pairs), \
                 f"returned data don't match expected data for key {retrieved['key']}"
 
     log.info('pagination verification completed: %d vectors across %d pages',
@@ -2698,10 +2732,11 @@ def test_query_vectors_post_filtering():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     # v0 (index=0) and v3 (index=10) are rock; v1 and v2 are jazz.
-    # query is centered at index 0, so v0 is nearest and v3 is far away.
-    # with topK=2: pre-filtering on genre=rock searches only rock vectors
-    # and returns both (v0, v3). post-filtering fetches the 2 nearest
-    # overall (v0, v1), then filters to rock, returning only v0.
+    # the query is centered at index 0, so v3 is far away, while v0, v1 and v2 are
+    # all close to it, and their order may change between runs.
+    # with topK=3: pre-filtering on genre=rock searches only rock vectors and
+    # returns both of them (v0, v3). post-filtering fetches the 3 nearest overall
+    # (v0, v1, v2), and then filters to rock, returning only v0.
     vectors = [
         {'key': 'v0', 'data': generate_data(dimension, 0),
          'metadata': json.dumps({'genre': 'rock', 'year': 2020, 'popular': True, 'color': 'red'})},
@@ -2726,10 +2761,10 @@ def test_query_vectors_post_filtering():
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
         return sorted([v['key'] for v in result['vectors']])
 
-    # pre-filtering on genre=rock with topK=2 returns both rock vectors
-    assert query_keys({'genre': 'rock'}, top_k=2) == ['v0', 'v3']
-    # post-filtering with topK=2 only sees the 2 nearest (v0, v1), so v3 is excluded
-    assert query_keys({'genre': 'rock'}, top_k=2, post_filtering=True) == ['v0']
+    # pre-filtering on genre=rock with topK=3 returns both rock vectors
+    assert query_keys({'genre': 'rock'}, top_k=3) == ['v0', 'v3']
+    # post-filtering with topK=3 only sees the 3 nearest (v0, v1, v2), so v3 is excluded
+    assert query_keys({'genre': 'rock'}, top_k=3, post_filtering=True) == ['v0']
 
     # post-filtering allows mixed $or (column + JSON fields)
     assert query_keys({'$or': [{'genre': 'rock'}, {'color': 'blue'}]}, top_k=10, post_filtering=True) == ['v0', 'v1', 'v3']
@@ -3141,8 +3176,9 @@ def test_sal_error_propagation():
     result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # delete the backing S3 bucket to trigger SAL errors
-    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    # delete the backing S3 bucket to trigger SAL errors. it still holds the data
+    # of the vector bucket, so it is force deleted
+    _force_delete_s3_bucket(connection('s3'), bucket_name)
 
     # put_vectors should now fail since the backing store is gone
     new_vectors = generate_vectors(2, 4)
@@ -3155,10 +3191,13 @@ def test_sal_error_propagation():
         log.info("put_vectors correctly failed after backing bucket deletion: %s", err)
         assert err.response['ResponseMetadata']['HTTPStatusCode'] >= 400
 
-    # cleanup - recreate backing bucket so delete_vector_bucket can clean up
+    # cleanup - recreate backing bucket so delete_vector_bucket can clean up.
+    # this test removes the backing bucket of a vector bucket that still exists,
+    # which is not a supported way of using the API, so the bucket is force deleted
+    # and not verified to be empty
     _ensure_s3_bucket_for_vector_bucket(bucket_name)
     _ = _delete_vector_bucket(conn, bucket_name)
-    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    _force_delete_s3_bucket(connection('s3'), bucket_name)
 
 
 @pytest.mark.vector_bucket_test
@@ -3284,16 +3323,11 @@ def test_versioned_s3_bucket():
     # so the vector bucket would still look like it holds indexes if the versions
     # are not purged before it is deleted
     _delete_all_indexes(conn, bucket_name)
-    paginator = s3conn.get_paginator('list_object_versions')
-    for page in paginator.paginate(Bucket=bucket_name):
-        objects = []
-        for v in page.get('Versions', []):
-            objects.append({'Key': v['Key'], 'VersionId': v['VersionId']})
-        for dm in page.get('DeleteMarkers', []):
-            objects.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
-        if objects:
-            s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+    _purge_bucket_versions(s3conn, bucket_name)
     result = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # LanceDB writes its manifest whenever the bucket is opened, which the
+    # deletion of the vector bucket did, so it has to be purged again
+    _purge_bucket_versions(s3conn, bucket_name)
     s3conn.delete_bucket(Bucket=bucket_name)
 

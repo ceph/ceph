@@ -9,6 +9,7 @@ import logging
 import os
 import random
 import string
+import time
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
@@ -70,6 +71,32 @@ def _config_user(s3vtests_conf, section, user):
         base64.b64encode(os.urandom(40)).decode())
 
 
+def wait_for_user(ctx, client, uid, testdir, retries=24, delay=5):
+    """
+    Wait for a user that was created on the master zone to be synced to the zone
+    of a client. The tests are using the same user in all of the zones.
+    """
+    (remote,) = ctx.cluster.only(client).remotes.keys()
+    cluster_name, daemon_type, client_id = teuthology.split_role(client)
+    args = [
+        'adjust-ulimits',
+        'ceph-coverage',
+        '{tdir}/archive/coverage'.format(tdir=testdir),
+        'radosgw-admin',
+        '-n', daemon_type + '.' + client_id,
+        'user', 'info',
+        '--uid', uid,
+        '--cluster', cluster_name,
+        ]
+    for _ in range(retries):
+        proc = remote.run(args=args, check_status=False)
+        if proc.exitstatus == 0:
+            log.info('user %s was synced to %s', uid, client)
+            return
+        time.sleep(delay)
+    raise Exception('user {uid} was not synced to {client}'.format(uid=uid, client=client))
+
+
 @contextlib.contextmanager
 def create_users(ctx, config):
     """
@@ -117,6 +144,16 @@ def create_users(ctx, config):
                     '--cluster', cluster_name,
                     ],
                 )
+
+    # the tests of the other zones use the user of the master zone, so they can
+    # only start after it was synced to them
+    if master_client:
+        master_conf = config['s3vtests_conf'][master_client]
+        others = set(clients) | set(config.get('secondaries') or [])
+        others.discard(master_client)
+        for client in others:
+            for section in users:
+                wait_for_user(ctx, client, master_conf[section]['user_id'], testdir)
 
     try:
         yield
@@ -292,6 +329,8 @@ def task(ctx,config):
     log.debug('config is %s', config)
 
     s3vtests_conf = {}
+    # clients of other zones that are used by the tests of a client
+    secondaries = set()
 
     s3vector_backend = ctx.config.get('overrides', {}).get('ceph', {}).get('conf', {}).get('client', {}).get('rgw_s3vector_backend', 'rgw')
 
@@ -343,6 +382,8 @@ def task(ctx,config):
                 'host':secondary_endpoint.dns_name,
                 'cluster':secondary_cluster,
             }
+            # the tests are using the same user in both zones
+            secondaries.add(secondary)
 
         s3vtests_conf[client] = ConfigObj(
             indent_type='',
@@ -355,6 +396,7 @@ def task(ctx,config):
                 clients=clients,
                 s3vtests_conf=s3vtests_conf,
                 master_client=master_client,
+                secondaries=secondaries,
                 )),
         lambda: configure(ctx=ctx, config=dict(
                 clients=config,

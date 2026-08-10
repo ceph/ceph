@@ -37,6 +37,11 @@ overrides:
       global:
         osd_min_pg_log_entries: 10
         osd_max_pg_log_entries: 10
+      client:
+        # the tests are using the user and the buckets of the master zone in the
+        # other zone as well, so they should not wait long for the metadata sync
+        rgw md log max shards: 4
+        rgw meta sync poll interval: 5
   rgw-multisite:
     realm:
       name: test-realm
