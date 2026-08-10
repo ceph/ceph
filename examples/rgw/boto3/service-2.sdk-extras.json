@@ -283,19 +283,19 @@
         },
         "UsageStatsSummary":{
             "type":"structure",
-            "members":{
+            "members": {
                 "User":{
-                    "shape":"UsageStatsSummaryUserList",
-                    "locationName":"User"
+                    "shape": "UsageStatsSummaryUserList",
+                    "locationName": "User"
                 },
-                "QuotaMaxBytes":{"shape":"QuotaMaxBytes"},
-                "QuotaMaxBuckets":{"shape":"QuotaMaxBuckets"},
-                "QuotaMaxObjCount":{"shape":"QuotaMaxObjCount"},
-                "QuotaMaxBytesPerBucket":{"shape":"QuotaMaxBytesPerBucket"},
-                "QuotaMaxObjCountPerBucket":{"shape":"QuotaMaxObjCountPerBucket"},
-                "TotalBytes":{"shape":"TotalBytes"},
-                "TotalBytesRounded":{"shape":"TotalBytesRounded"},
-                "TotalEntries":{"shape":"TotalEntries"}
+                "QuotaMaxBytes":{"shape": "QuotaMaxBytes"},
+                "QuotaMaxBuckets":{"shape": "QuotaMaxBuckets"},
+                "QuotaMaxObjCount":{"shape": "QuotaMaxObjCount"},
+                "QuotaMaxBytesPerBucket":{"shape": "QuotaMaxBytesPerBucket" },
+                "QuotaMaxObjCountPerBucket":{"shape": "QuotaMaxObjCountPerBucket"},
+                "TotalBytes":{"shape": "TotalBytes"},
+                "TotalBytesRounded":{"shape": "TotalBytesRounded"},
+                "TotalEntries":{"shape": "TotalEntries"}
             }
         },
         "QuotaMaxBytes":{"type":"integer"},
