@@ -16,6 +16,8 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/common/smp_helpers.h"
 
+struct rbm_test_t;
+
 namespace crimson::os::seastore {
 
 using magic_t = uint64_t;
@@ -406,6 +408,11 @@ protected:
   const std::string device_path;
   const device_type_t dtype = device_type_t::NONE;
   const device_id_t device_id = DEVICE_ID_NULL;
+private:
+  void set_device_id(device_id_t id) {
+    const_cast<device_id_t&>(device_id) = id;
+  }
+  friend struct ::rbm_test_t;
 };
 
 using check_create_device_ertr = Device::access_ertr;
