@@ -63,7 +63,7 @@ def generate_caps(type_):
             mds='allow',
         ),
         client=dict(
-            mon='allow rw',
+            mon='allow rw, allow command "config-key get" with key prefix rgw/',
             mgr='allow r',
             osd='allow rwx',
             mds='allow',

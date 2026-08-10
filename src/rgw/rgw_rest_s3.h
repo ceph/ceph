@@ -1219,9 +1219,6 @@ class STSEngine : public AWSEngine {
   acl_strategy_t get_acl_strategy() const { return nullptr; };
   auth_info_t get_creds_info(const STS::SessionToken& token) const noexcept;
 
-  int get_session_token(const DoutPrefixProvider* dpp, const std::string_view& session_token,
-                        STS::SessionToken& token) const;
-
   result_t authenticate(const DoutPrefixProvider* dpp,
                         const std::string_view& access_key_id,
                         const std::string_view& signature,

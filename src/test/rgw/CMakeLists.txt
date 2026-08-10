@@ -290,6 +290,14 @@ add_executable(unittest_rgw_throttle test_rgw_throttle.cc)
 add_ceph_unittest(unittest_rgw_throttle)
 target_link_libraries(unittest_rgw_throttle ${rgw_libs} ${UNITTEST_LIBS})
 
+add_executable(unittest_rgw_sts test_rgw_sts.cc)
+add_ceph_unittest(unittest_rgw_sts)
+target_link_libraries(unittest_rgw_sts ${rgw_libs} ${UNITTEST_LIBS})
+
+add_executable(unittest_rgw_sts_keyring_cache test_rgw_sts_keyring_cache.cc)
+add_ceph_unittest(unittest_rgw_sts_keyring_cache)
+target_link_libraries(unittest_rgw_sts_keyring_cache ${rgw_libs} ${UNITTEST_LIBS})
+
 if(WITH_RADOSGW_RADOS)
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)

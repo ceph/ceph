@@ -29,6 +29,8 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+* RGW: STS session tokens can now be sealed with AES-256-GCM. See the STS
+  documentation for keyring setup and switching ``rgw_sts_token_format``.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.

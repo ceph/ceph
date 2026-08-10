@@ -73,7 +73,7 @@ namespace rgw {
       ,8,6
       > b64_iter;
 
-    while (sview.back() == '=')
+    while (!sview.empty() && sview.back() == '=')
       sview.remove_suffix(1);
 
     std::string outstr(b64_iter(sview.data()),

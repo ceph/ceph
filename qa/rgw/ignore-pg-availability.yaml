@@ -2,6 +2,7 @@
 # https://tracker.ceph.com/issues/51282
 # https://tracker.ceph.com/issues/61168
 # https://tracker.ceph.com/issues/62504
+# https://tracker.ceph.com/issues/78672
 overrides:
   ceph:
     log-ignorelist:
@@ -9,3 +10,4 @@ overrides:
     - \(PG_DEGRADED\)
     - \(POOL_APP_NOT_ENABLED\)
     - not have an application enabled
+    - rgw is configured to optionally allow insecure connections to the monitors
