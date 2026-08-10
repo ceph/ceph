@@ -6593,10 +6593,23 @@ static bool is_empty_stats(const rgw_bucket_dir_header& header) {
   return true;
 }
 
+static void accumulate_sc_stats(const rgw_bucket_dir_header& header,
+                                 std::map<std::string, RGWStorageClassStats>& sc_stats)
+{
+  for (auto it = header.storage_class_stats.value().begin(); it != header.storage_class_stats.value().end(); ++it) {
+    std::string storage_class = it->first;
+    rgw_bucket_category_stats stats = it->second;
+    RGWStorageClassStats& s = sc_stats[storage_class];
+
+    s.size += stats.total_size;
+    s.size_rounded += stats.total_size_rounded;
+    s.size_utilized += stats.actual_size;
+    s.num_objects += stats.num_entries;
+  }
+}
 
 static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
-                                 map<RGWObjCategory, RGWStorageStats>& stats,
-                                 std::optional<map<std::string, RGWStorageStats>>& sc_stats)
+                                 map<RGWObjCategory, RGWStorageStats>& stats)
 {
   for (const auto& pair : header.stats) {
     const RGWObjCategory category = static_cast<RGWObjCategory>(pair.first);
@@ -6610,22 +6623,6 @@ static void accumulate_raw_stats(const rgw_bucket_dir_header& header,
     s.size_utilized += header_stats.actual_size;
     s.num_objects += header_stats.num_entries;
   }
-  if (sc_stats.has_value()) {
-    if (header.storage_class_stats.has_value()) {
-      for (auto it = header.storage_class_stats.value().begin(); it != header.storage_class_stats.value().end(); ++it) {
-        std::string storage_class = it->first;
-        rgw_bucket_category_stats stats = it->second;
-        RGWStorageStats& s = sc_stats.value()[storage_class];
-
-        s.size += stats.total_size;
-        s.size_rounded += stats.total_size_rounded;
-        s.size_utilized += stats.actual_size;
-        s.num_objects += stats.num_entries;
-      }
-    } else {
-      sc_stats.reset();
-    }
-  }
 }
 
 int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y,
@@ -6638,17 +6635,14 @@ int RGWRados::bucket_check_index(const DoutPrefixProvider *dpp, optional_yield y
   if (ret < 0) {
     return ret;
   }
-  std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
-    std::map<std::string, RGWStorageStats>{}
-  };
   try {
     // decode and accumulate the results
     for (const auto& kv : buffers) {
       rgw_cls_check_index_ret result;
       cls_rgw_bucket_check_index_decode(kv.second, result);
 
-      accumulate_raw_stats(result.existing_header, *existing_stats, sc_stats);
-      accumulate_raw_stats(result.calculated_header, *calculated_stats, sc_stats);
+      accumulate_raw_stats(result.existing_header, *existing_stats);
+      accumulate_raw_stats(result.calculated_header, *calculated_stats);
     }
   } catch (const ceph::buffer::error&) {
     return -EIO;
@@ -10321,7 +10315,7 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			       const rgw::bucket_index_layout_generation& idx_layout,
 			       int shard_id, string *bucket_ver, string *master_ver,
 			       map<RGWObjCategory, RGWStorageStats>& stats,
-			       std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
+			       std::optional<std::map<std::string, RGWStorageClassStats>>& sc_stats,
 			       string *max_marker, bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
@@ -10331,7 +10325,9 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
   if (r < 0) {
     return r;
   }
-
+  if (!sc_stats.has_value()) {
+    sc_stats.emplace();
+  }
   ceph_assert(headers.size() == bucket_instance_ids.size());
 
   auto iter = headers.begin();
@@ -10344,7 +10340,7 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
     if (is_empty_stats(*iter)) {
       iter->storage_class_stats.emplace();
     }
-    accumulate_raw_stats(*iter, stats, sc_stats);
+    accumulate_raw_stats(*iter, stats);
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->ver);
     ver_mgr.add(viter->first, string(buf));
     snprintf(buf, sizeof(buf), "%lu", (unsigned long)iter->master_ver);
@@ -10356,6 +10352,20 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
     }
     if (syncstopped != NULL)
       *syncstopped = iter->syncstopped;
+    if (!sc_stats) {
+      // per-storage-class stats already invalidated
+      continue;
+    }
+    if (is_empty_stats(*iter)) {
+      // empty shard, so no per-storage-class stats to accumulate or invalidate
+      continue;
+    }
+    if (!iter->storage_class_stats) {
+      // invalidate per-storage-class stats until all shards are initialized
+      sc_stats = std::nullopt;
+      continue;
+    }
+    accumulate_sc_stats(*iter, *sc_stats);
   }
   ver_mgr.to_string(bucket_ver);
   master_ver_mgr.to_string(master_ver);

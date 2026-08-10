@@ -2330,7 +2330,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   }
 
   if (op_state.sync_stats) {
-    ret = rgw_sync_all_stats(dpp, y, driver, owner, false, ruser->get_tenant());
+    ret = rgw_sync_all_stats(dpp, y, driver, owner, ruser->get_tenant());
     if (ret < 0) {
       return ret;
     }

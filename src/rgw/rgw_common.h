@@ -1239,6 +1239,17 @@ struct RGWBucketEntryPoint
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 
+struct RGWStorageClassStats
+{
+  uint64_t size{0};
+  uint64_t size_rounded{0};
+  uint64_t num_objects{0};
+  uint64_t size_utilized{0}; //< size after compression, encryption
+  bool dump_utilized;        // whether dump should include utilized values
+
+  void dump(Formatter *f) const;
+}; // RGWStorageClassStats
+
 struct RGWStorageStats
 {
   RGWObjCategory category;
@@ -1247,7 +1258,7 @@ struct RGWStorageStats
   uint64_t num_objects;
   uint64_t size_utilized{0}; //< size after compression, encryption
   bool dump_utilized;        // whether dump should include utilized values
-  std::optional<std::map<std::string, RGWStorageStats>> storage_class_stats;
+  std::optional<std::map<std::string, RGWStorageClassStats>> storage_class_stats;
 
   RGWStorageStats(bool _dump_utilized=true)
     : category(RGWObjCategory::None),
@@ -1486,6 +1497,31 @@ void set_req_state_err(req_state*, int, const std::string&);
 void set_req_state_err(struct rgw_err&, int, const int);
 void dump(req_state*);
 
+struct RGWStorageClassBucketEnt {
+  rgw_bucket bucket;
+  size_t size{0};
+  size_t size_rounded{0};
+  uint64_t count{0};
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(bucket, bl);
+    encode(size, bl);
+    encode(size_rounded, bl);
+    encode(count, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(bucket, bl);
+    decode(size, bl);
+    decode(size_rounded, bl);
+    decode(count, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(RGWStorageClassBucketEnt)
+
 /** Store basic data on bucket */
 struct RGWBucketEnt {
   rgw_bucket bucket;
@@ -1499,7 +1535,7 @@ struct RGWBucketEnt {
    * of the Swift API. Although the info available in RGWBucketInfo, we need
    * to duplicate it here to not affect the performance of buckets listing. */
   rgw_placement_rule placement_rule;
-  std::map<std::string, RGWBucketEnt> storage_class_ents;
+  std::map<std::string, RGWStorageClassBucketEnt> storage_class_ents;
 
   RGWBucketEnt()
     : size(0),
@@ -1524,11 +1560,13 @@ struct RGWBucketEnt {
     b->size_rounded = size_rounded;
     b->creation_time = creation_time;
     b->count = count;
+    if (!b->storage_class_stats.has_value()) {
+      b->storage_class_stats.emplace();
+    }
     for (auto it = storage_class_ents.begin(); it != storage_class_ents.end(); ++it) {
       std::string storage_class = it->first;
-      RGWBucketEnt bent = it->second;
+      RGWStorageClassBucketEnt bent = it->second;
       std::string placement_target = placement_rule.name;
-      b->storage_class_stats.emplace();
       cls_user_bucket_entry stats;
       stats.count = bent.count;
       stats.size = bent.size;

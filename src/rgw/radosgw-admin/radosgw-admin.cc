@@ -10035,7 +10035,7 @@ next:
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        ret = bucket->sync_owner_stats(dpp(), null_yield, false, nullptr);
+        ret = bucket->sync_owner_stats(dpp(), null_yield, nullptr);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -10043,15 +10043,11 @@ next:
         }
       } else {
         int ret = rgw_sync_all_stats(dpp(), null_yield, driver,
-                                   user->get_id(), fix, user->get_tenant());
+                                   user->get_id(), user->get_tenant());
         if (ret < 0) {
           cerr << "ERROR: could not sync user stats: " <<
                cpp_strerror(-ret) << std::endl;
           return -ret;
-        }
-        if (fix) {
-          ret = rgw_sync_all_stats(dpp(), null_yield, driver,
-                                       user->get_id(), false, user->get_tenant());
         }
         if (ret < 0) {
           cerr << "ERROR: could not sync user stats: " <<

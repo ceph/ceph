@@ -1610,9 +1610,7 @@ int RGWReshard::process_entry(const cls_rgw_reshard_entry& entry,
 
     // determine how many entries there are in the bucket index
     std::map<RGWObjCategory, RGWStorageStats> stats;
-    std::optional<std::map<std::string, RGWStorageStats>> sc_stats{
-      std::map<std::string, RGWStorageStats>{}
-    };
+    std::optional<std::map<std::string, RGWStorageClassStats>> sc_stats;
     ret = store->getRados()->get_bucket_stats(dpp, y, bucket_info,
 					      bucket_info.layout.current_index,
 					      -1, nullptr, nullptr, stats, sc_stats, nullptr, nullptr);

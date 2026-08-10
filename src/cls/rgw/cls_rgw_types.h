@@ -987,11 +987,10 @@ struct rgw_usage_data {
   uint64_t bytes_received;
   uint64_t ops;
   uint64_t successful_ops;
-  std::optional<std::string> storage_class;
 
-  rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0), storage_class({}) {}
-  rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0), storage_class({}) {}
-  rgw_usage_data(uint64_t sent, uint64_t received, std::string stg_cls) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0), storage_class(stg_cls) {}
+  rgw_usage_data() : bytes_sent(0), bytes_received(0), ops(0), successful_ops(0) {}
+  rgw_usage_data(uint64_t sent, uint64_t received) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
+  rgw_usage_data(uint64_t sent, uint64_t received, std::string stg_cls) : bytes_sent(sent), bytes_received(received), ops(0), successful_ops(0) {}
 
 
     void encode(ceph::buffer::list& bl) const {
@@ -1000,7 +999,6 @@ struct rgw_usage_data {
     encode(bytes_received, bl);
     encode(ops, bl);
     encode(successful_ops, bl);
-    encode(storage_class, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1010,9 +1008,6 @@ struct rgw_usage_data {
     decode(bytes_received, bl);
     decode(ops, bl);
     decode(successful_ops, bl);
-    if (struct_v >= 2) {
-      decode(storage_class, bl);
-    }
     DECODE_FINISH(bl);
   }
 
@@ -1021,9 +1016,6 @@ struct rgw_usage_data {
     bytes_received += usage.bytes_received;
     ops += usage.ops;
     successful_ops += usage.successful_ops;
-    if (!storage_class && usage.storage_class){
-      storage_class = { *usage.storage_class };
-    }
   }
   void dump(ceph::Formatter *f) const;
   static std::list<rgw_usage_data> generate_test_instances();
@@ -1039,7 +1031,6 @@ struct rgw_usage_log_entry {
   rgw_usage_data total_usage; /* this one is kept for backwards compatibility */
   std::map<std::string, rgw_usage_data> usage_map;
   rgw_s3select_usage_data s3select_usage;
-  std::unordered_map<std::string, std::map<std::string, rgw_usage_data>> usage_by_storage_class_map;
 
   rgw_usage_log_entry() : epoch(0) {}
   rgw_usage_log_entry(std::string& o, std::string& b) : owner(o), bucket(b), epoch(0) {}
@@ -1057,8 +1048,6 @@ struct rgw_usage_log_entry {
     encode(usage_map, bl);
     encode(payer.to_str(), bl);
     encode(s3select_usage, bl);
-    encode(total_usage.storage_class, bl);
-    encode(usage_by_storage_class_map, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -1087,10 +1076,6 @@ struct rgw_usage_log_entry {
     if (struct_v >= 4) {
       decode(s3select_usage, bl);
     }
-    if (struct_v >= 5) {
-      decode(total_usage.storage_class, bl);
-      decode(usage_by_storage_class_map, bl);
-    }
     DECODE_FINISH(bl);
   }
 
@@ -1103,12 +1088,9 @@ struct rgw_usage_log_entry {
       payer = e.payer;
     }
 
-    for (auto iter = e.usage_by_storage_class_map.begin(); iter != e.usage_by_storage_class_map.end(); ++iter) {
-      for (auto iter2 = iter->second.begin(); iter2 != iter->second.end(); ++iter2) {
-        if (!categories || !categories->size() || categories->count(iter2->first)) {
-          add_usage(iter->first, iter2->first, iter2->second);
-          add_usage(iter2->first, iter2->second);
-        }
+    for (auto iter = e.usage_map.begin(); iter != e.usage_map.end(); ++iter) {
+      if (!categories || !categories->size() || categories->count(iter->first)) {
+        add_usage(iter->first, iter->second);
       }
     }
 
@@ -1133,7 +1115,8 @@ struct rgw_usage_log_entry {
   }
 
   void add_usage(const std::string &storage_class, const std::string &category, const rgw_usage_data &data) {
-    usage_by_storage_class_map[storage_class][category].aggregate(data);
+    usage_map[category].aggregate(data);
+    usage_map[storage_class + "::" + category].aggregate(data);
     total_usage.aggregate(data);
   }
 

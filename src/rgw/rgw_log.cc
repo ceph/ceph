@@ -242,7 +242,7 @@ static void log_usage(req_state *s, const string& op_name)
 	<< ", bytes_processed=" << s->s3select_usage.bytes_processed
 	<< ", bytes_returned=" << s->s3select_usage.bytes_returned << dendl;
 
-  entry.add_usage(s->dest_placement.name + "::" + s->dest_placement.get_storage_class(), op_name, data);
+  entry.add_usage(s->dest_placement.to_str(), op_name, data);
   entry.s3select_usage = s->s3select_usage;
 
   utime_t ts = ceph_clock_now();
