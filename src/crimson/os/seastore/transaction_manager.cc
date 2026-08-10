@@ -1731,16 +1731,17 @@ TransactionManager::~TransactionManager() {}
 
 TransactionManagerRef make_transaction_manager(
     Device *primary_device,
-    const std::vector<Device*> &secondary_devices,
+    const std::vector<Device*> &cache_devices,
+    const std::vector<Device*> &data_devices,
     shard_stats_t& shard_stats,
     store_index_t store_index,
     bool is_test)
 {
   LOG_PREFIX(make_transaction_manager);
   rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
-    "seastore_hot_tier_generations");
+    "seastore_cache_device_generations");
   rewrite_gen_t cold_tier_generations = crimson::common::get_conf<uint64_t>(
-    "seastore_cold_tier_generations");
+    "seastore_data_device_generations");
   auto epm = std::make_unique<ExtentPlacementManager>(
     hot_tier_generations, cold_tier_generations, store_index);
   auto cache = std::make_unique<Cache>(*epm, store_index);
@@ -1748,72 +1749,102 @@ TransactionManagerRef make_transaction_manager(
   auto sms = std::make_unique<SegmentManagerGroup>();
   auto rbs = std::make_unique<RBMDeviceGroup>();
   auto backref_manager = create_backref_manager(*cache);
-  SegmentManagerGroupRef cold_sms = nullptr;
-  RBMDeviceGroupRef cold_rbs = nullptr;
+  SegmentManagerGroupRef cache_sms = nullptr;
+  RBMDeviceGroupRef cache_rbs = nullptr;
   std::vector<SegmentProvider*> segment_providers_by_id{DEVICE_ID_MAX, nullptr};
+  backend_type_t data_backend_type = backend_type_t::NONE;
+  segment_off_t segment_size = 0;
+  for (auto &device : data_devices) {
+    auto d_backend_type = device->get_backend_type();
+    if (data_backend_type == backend_type_t::NONE) {
+      data_backend_type = d_backend_type;
+    }
+    ceph_assert(data_backend_type == d_backend_type);
+    INFO("data device backend: {}", d_backend_type);
 
-  auto p_backend_type = primary_device->get_backend_type();
-  INFO("primary backend: {}", p_backend_type);
-
-  if (p_backend_type == backend_type_t::SEGMENTED) {
-    auto dtype = primary_device->get_device_type();
-    ceph_assert(dtype != device_type_t::HDD &&
-		dtype != device_type_t::EPHEMERAL_COLD);
-    sms->add_segment_manager(static_cast<SegmentManager*>(primary_device));
-  } else {
-    assert(p_backend_type != backend_type_t::NONE);
-    auto rbm = std::make_unique<BlockRBManager>(
-      static_cast<RBMDevice*>(primary_device), "", is_test);
-    rbs->add_rb_manager(std::move(rbm));
-  }
-
-  for (auto &p_dev : secondary_devices) {
-    if (p_dev->get_backend_type() == backend_type_t::SEGMENTED) {
-      if (p_dev->get_device_type() == primary_device->get_device_type()) {
-	INFO("add {} to main segment backend", device_id_printer_t{p_dev->get_device_id()});
-        sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
-      } else {
-        if (!cold_sms) {
-          cold_sms = std::make_unique<SegmentManagerGroup>();
-        }
-	INFO("add {} to cold segment backend", device_id_printer_t{p_dev->get_device_id()});
-        cold_sms->add_segment_manager(static_cast<SegmentManager*>(p_dev));
+    if (d_backend_type == backend_type_t::SEGMENTED) {
+      auto sm = static_cast<SegmentManager*>(device);
+      if (segment_size == 0) {
+        segment_size = sm->get_segment_size();
       }
+      ceph_assert(segment_size == sm->get_segment_size());
+      sms->add_segment_manager(sm);
     } else {
-      assert(p_backend_type != backend_type_t::NONE);
+      assert(d_backend_type != backend_type_t::NONE);
       auto rbm = std::make_unique<BlockRBManager>(
-	static_cast<RBMDevice*>(p_dev), "", is_test);
-      if (p_dev->get_device_type() == primary_device->get_device_type()) {
-	INFO("add {} to rbm backend", device_id_printer_t{p_dev->get_device_id()});
-	rbs->add_rb_manager(std::move(rbm));
-      } else {
-	if (!cold_rbs) {
-	  cold_rbs = std::make_unique<RBMDeviceGroup>();
-	}
-	INFO("add {} to cold rbm backend", device_id_printer_t{p_dev->get_device_id()});
-	cold_rbs->add_rb_manager(std::move(rbm));
-      }
+        static_cast<RBMDevice*>(device), "", is_test);
+      rbs->add_rb_manager(std::move(rbm));
     }
   }
 
-  auto backend_type = p_backend_type;
+  backend_type_t cache_backend_type = backend_type_t::NONE;
+  segment_size = 0;
+  for (auto &dev : cache_devices) {
+    auto dtype = dev->get_device_type();
+    ceph_assert(dtype == device_type_t::SSD ||
+                dtype == device_type_t::RANDOM_BLOCK_SSD ||
+                dtype == device_type_t::EPHEMERAL_MAIN);
+    auto c_backend_type = dev->get_backend_type();
+    if (cache_backend_type == backend_type_t::NONE) {
+      cache_backend_type = c_backend_type;
+    }
+    ceph_assert(cache_backend_type == c_backend_type);
+    if (c_backend_type == backend_type_t::SEGMENTED) {
+      if (!cache_sms) {
+        cache_sms = std::make_unique<SegmentManagerGroup>();
+      }
+      INFO("add {} to cache segment backend", device_id_printer_t{dev->get_device_id()});
+      auto sm = static_cast<SegmentManager*>(dev);
+      if (segment_size == 0) {
+        segment_size = sm->get_segment_size();
+      }
+      ceph_assert(segment_size == sm->get_segment_size());
+      cache_sms->add_segment_manager(sm);
+    } else {
+      assert(c_backend_type != backend_type_t::NONE);
+      auto rbm = std::make_unique<BlockRBManager>(
+      static_cast<RBMDevice*>(dev), "", is_test);
+      if (!cache_rbs) {
+        cache_rbs = std::make_unique<RBMDeviceGroup>();
+      }
+      INFO("add {} to cache rbm backend", device_id_printer_t{dev->get_device_id()});
+      cache_rbs->add_rb_manager(std::move(rbm));
+    }
+  }
+
+  auto journal_backend_type =
+    (cache_backend_type == backend_type_t::NONE)
+      ? data_backend_type : cache_backend_type;
   device_off_t roll_size;
   device_off_t roll_start;
-  if (backend_type == backend_type_t::SEGMENTED) {
-    roll_size = static_cast<SegmentManager*>(primary_device)->get_segment_size();
+  if (journal_backend_type == backend_type_t::SEGMENTED) {
+    if (!cache_devices.empty()) {
+      roll_size = static_cast<SegmentManager*>(
+        cache_devices.front())->get_segment_size();
+    } else {
+      roll_size = static_cast<SegmentManager*>(
+        data_devices.front())->get_segment_size();
+    }
     roll_start = 0;
   } else {
-    roll_size = static_cast<random_block_device::RBMDevice*>(primary_device)
-		->get_journal_size() - primary_device->get_block_size();
+    random_block_device::RBMDevice* rbm_dev = nullptr;
+    if (!cache_devices.empty()) {
+      rbm_dev = static_cast<random_block_device::RBMDevice*>(
+        cache_devices.front());
+    } else {
+      rbm_dev = static_cast<random_block_device::RBMDevice*>(
+        data_devices.front());
+    }
+
+    roll_size = rbm_dev->get_journal_size() - rbm_dev->get_block_size();
     // see CircularBoundedJournal::get_records_start()
-    roll_start = static_cast<random_block_device::RBMDevice*>(primary_device)
-		 ->get_shard_journal_start() + primary_device->get_block_size();
+    roll_start = rbm_dev->get_shard_journal_start() + rbm_dev->get_block_size();
     ceph_assert_always(roll_size <= DEVICE_OFF_MAX);
     ceph_assert_always((std::size_t)roll_size + roll_start <=
-                       primary_device->get_available_size());
+                       rbm_dev->get_available_size());
+    ceph_assert(roll_size % rbm_dev->get_block_size() == 0);
+    ceph_assert(roll_start % rbm_dev->get_block_size() == 0);
   }
-  ceph_assert(roll_size % primary_device->get_block_size() == 0);
-  ceph_assert(roll_start % primary_device->get_block_size() == 0);
 
   bool cleaner_is_detailed;
   SegmentCleaner::config_t cleaner_config;
@@ -1822,20 +1853,22 @@ TransactionManagerRef make_transaction_manager(
     cleaner_is_detailed = true;
     cleaner_config = SegmentCleaner::config_t::get_test();
     trimmer_config = JournalTrimmerImpl::config_t::get_test(
-        roll_size, backend_type);
+        roll_size, journal_backend_type);
   } else {
     cleaner_is_detailed = false;
     cleaner_config = SegmentCleaner::config_t::get_default();
     trimmer_config = JournalTrimmerImpl::config_t::get_default(
-        roll_size, backend_type);
+        roll_size, journal_backend_type);
   }
 
   bool pure_rbm_backend =
-      (p_backend_type == backend_type_t::RANDOM_BLOCK) && !cold_sms;
+    (cache_backend_type == backend_type_t::RANDOM_BLOCK ||
+     cache_backend_type == backend_type_t::NONE) &&
+    (data_backend_type == backend_type_t::RANDOM_BLOCK);
   auto journal_trimmer = JournalTrimmerImpl::create(
       store_index,
       *backref_manager, trimmer_config,
-      backend_type, roll_start, roll_size,
+      journal_backend_type, roll_start, roll_size,
       !pure_rbm_backend
         || crimson::common::get_conf<bool>(
             "seastore_logical_bucket_cache_test_stress")
@@ -1844,62 +1877,80 @@ TransactionManagerRef make_transaction_manager(
   AsyncCleanerRef cleaner;
   JournalRef journal;
 
-  AsyncCleanerRef cold_cleaner = nullptr;
-  bool scan_alloc_on_boot = false;
+  AsyncCleanerRef cache_cleaner = nullptr;
 
-  if (cold_sms) {
-    assert(!cold_rbs);
-    auto segment_cleaner = SegmentCleaner::create(
-      store_index,
-      cleaner_config,
-      std::move(cold_sms),
-      *backref_manager,
-      epm->get_ool_segment_seq_allocator(),
-      hot_tier_generations + cold_tier_generations - 1,
-      cleaner_is_detailed,
-      /* is_cold = */ true);
-    if (backend_type == backend_type_t::SEGMENTED) {
-      for (auto id : segment_cleaner->get_device_ids()) {
-        segment_providers_by_id[id] =
-          static_cast<SegmentProvider*>(segment_cleaner.get());
-      }
-    }
-    cold_cleaner = std::move(segment_cleaner);
-  } else if (cold_rbs) {
-    scan_alloc_on_boot = true;
-    cold_cleaner = RBMCleaner::create(
-      store_index,
-      std::move(cold_rbs),
-      *backref_manager,
-      *lba_manager,
-      cleaner_is_detailed,
-      true);
-  }
-
-  if (backend_type == backend_type_t::SEGMENTED) {
+  if (data_backend_type == backend_type_t::SEGMENTED) {
+    ceph_assert(sms);
     cleaner = SegmentCleaner::create(
       store_index,
       cleaner_config,
       std::move(sms),
       *backref_manager,
       epm->get_ool_segment_seq_allocator(),
-      hot_tier_generations - 1,
-      cleaner_is_detailed);
+      ((cache_backend_type == backend_type_t::NONE)
+        ? hot_tier_generations - 1
+        : hot_tier_generations + cold_tier_generations - 1),
+      cleaner_is_detailed,
+      !cache_devices.empty() /*if we have cache devices, data devices are
+                               considered cold*/);
     auto segment_cleaner = static_cast<SegmentCleaner*>(cleaner.get());
     for (auto id : segment_cleaner->get_device_ids()) {
       segment_providers_by_id[id] =
         static_cast<SegmentProvider*>(segment_cleaner);
+    }
+    if (cache_backend_type == backend_type_t::NONE) {
+      segment_cleaner->set_journal_trimmer(*journal_trimmer);
+      journal = journal::make_segmented(
+        store_index,
+        *segment_cleaner,
+        *journal_trimmer,
+        cache_backend_type == backend_type_t::RANDOM_BLOCK);
+    }
+  } else {
+    ceph_assert(rbs);
+    cleaner = RBMCleaner::create(
+      store_index,
+      std::move(rbs),
+      *backref_manager,
+      *lba_manager,
+      cleaner_is_detailed,
+      !cache_devices.empty() /*if we have cache devices, data devices are
+                               considered cold*/);
+    if (cache_backend_type == backend_type_t::NONE) {
+      journal = journal::make_circularbounded(
+        store_index,
+        *journal_trimmer,
+        static_cast<random_block_device::RBMDevice*>(primary_device),
+        "");
+    }
+  }
+
+  if (cache_sms) {
+    assert(!cache_rbs);
+    auto segment_cleaner = SegmentCleaner::create(
+      store_index,
+      cleaner_config,
+      std::move(cache_sms),
+      *backref_manager,
+      epm->get_ool_segment_seq_allocator(),
+      hot_tier_generations - 1,
+      cleaner_is_detailed,
+      false);
+    for (auto id : segment_cleaner->get_device_ids()) {
+      segment_providers_by_id[id] =
+        static_cast<SegmentProvider*>(segment_cleaner.get());
     }
     segment_cleaner->set_journal_trimmer(*journal_trimmer);
     journal = journal::make_segmented(
       store_index,
       *segment_cleaner,
       *journal_trimmer,
-      scan_alloc_on_boot);
-  } else {
-    cleaner = RBMCleaner::create(
+      data_backend_type == backend_type_t::RANDOM_BLOCK);
+    cache_cleaner = std::move(segment_cleaner);
+  } else if (cache_rbs) {
+    cache_cleaner = RBMCleaner::create(
       store_index,
-      std::move(rbs),
+      std::move(cache_rbs),
       *backref_manager,
       *lba_manager,
       cleaner_is_detailed,
@@ -1910,17 +1961,21 @@ TransactionManagerRef make_transaction_manager(
       static_cast<random_block_device::RBMDevice*>(primary_device),
       "");
   }
-
-  cache->set_segment_providers(std::move(segment_providers_by_id));
-
-  epm->init(std::move(journal_trimmer),
-	    std::move(cleaner),
-	    std::move(cold_cleaner),
-	    cache->get_extent_pinboard());
+  if (cache_backend_type != backend_type_t::NONE) {
+    epm->init(std::move(journal_trimmer),
+              std::move(cache_cleaner),
+              std::move(cleaner),
+              cache->get_extent_pinboard());
+  } else {
+    epm->init(std::move(journal_trimmer),
+              std::move(cleaner),
+              nullptr,
+              cache->get_extent_pinboard());
+  }
   epm->set_primary_device(primary_device);
 
   INFO("main backend type: {}, cold tier: {}",
-    epm->get_main_backend_type(), (bool)cold_sms);
+    epm->get_main_backend_type(), (bool)cache_cleaner);
   return std::make_unique<TransactionManager>(
     std::move(journal),
     std::move(cache),

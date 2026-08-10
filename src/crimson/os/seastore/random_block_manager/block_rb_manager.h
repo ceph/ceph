@@ -30,7 +30,9 @@ using RBMDevice = random_block_device::RBMDevice;
 using RBMDeviceRef = std::unique_ptr<RBMDevice>;
 
 device_config_t get_rbm_ephemeral_device_config(
-    std::size_t index, std::size_t num_devices);
+  device_id_t id,
+  cache_device_set_t cache_devices,
+  bool is_major_device);
 
 class BlockRBManager final : public RandomBlockManager {
 public:

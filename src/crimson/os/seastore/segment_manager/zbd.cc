@@ -51,7 +51,11 @@ seastar::future<> ZBDSegmentManager::start(uint32_t shard_nums)
   device_shard_nums = shard_nums;
   auto num_shard_services = (device_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
   INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
-  return shard_devices.start(num_shard_services, device_path);
+  return shard_devices.start(
+    num_shard_services,
+    device_path,
+    get_device_type(),
+    get_device_id());
 
 }
 
@@ -486,7 +490,9 @@ ZBDSegmentManager::read_ertr::future<uint32_t> ZBDSegmentManager::get_shard_nums
     device = std::move(p.first);
     auto sd = p.second;
     return read_metadata(device, sd);
-  }).safe_then([](auto meta){
+  }).safe_then([this](auto meta){
+    ceph_assert(meta.config.spec.id == get_device_id());
+    ceph_assert(meta.config.spec.dtype == get_device_type());
     return read_ertr::make_ready_future<uint32_t>(meta.shard_num);
   }).handle_error(
     crimson::ct_error::assert_all(
@@ -516,6 +522,8 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
     auto sd = p.second;
     return read_metadata(device, sd);
   }).safe_then([=, this](auto meta){
+    ceph_assert(meta.config.spec.id == get_device_id());
+    ceph_assert(meta.config.spec.dtype == get_device_type());
     LOG_PREFIX(ZBDSegmentManager::shard_mount);
     if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= meta.shard_num) {
       INFO("{} shard_id {} out of range {}",
@@ -608,6 +616,7 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
 	    zone_capacity_sects,
 	    nr_cnv_zones,
 	    nr_zones);
+          ceph_assert(sb.config.spec.id == device_id);
 	  metadata = sb;
 	  stats.metadata_write.increment(
 	    ceph::encoded_sizeof<device_superblock_t>(sb));
@@ -627,7 +636,7 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::primary_mkfs(
 ZBDSegmentManager::mkfs_ret ZBDSegmentManager::shard_mkfs()
 {
   LOG_PREFIX(ZBDSegmentManager::shard_mkfs);
-  INFO("starting, device_path {}", device_path);
+  INFO("starting, device_path {}", get_device_path());
   return open_device(
     device_path, seastar::open_flags::rw
   ).safe_then([=, this](auto p) {
@@ -635,6 +644,8 @@ ZBDSegmentManager::mkfs_ret ZBDSegmentManager::shard_mkfs()
     auto sd = p.second;
     return read_metadata(device, sd);
   }).safe_then([=, this](auto meta){
+    ceph_assert(meta.config.spec.id == get_device_id());
+    ceph_assert(meta.config.spec.dtype == get_device_type());
     shard_info = meta.shard_infos[seastar::this_shard_id()];
     metadata = meta;
     return device.close();
@@ -855,9 +866,9 @@ Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
     metadata.block_size);
 }
 
-secondary_device_set_t& ZBDSegmentManager::get_secondary_devices()
+cache_device_set_t& ZBDSegmentManager::get_cache_devices()
 {
-  return metadata.config.secondary_devices;
+  return metadata.config.cache_devices;
 };
 
 magic_t ZBDSegmentManager::get_magic() const
