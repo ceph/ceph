@@ -6564,10 +6564,13 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     if (length > 0) {
       auto *sparse_ctx = new ECSparseReadResult(
         this, ctx, &osd_op.rval, &osd_op.outdata, &op.extent.length);
-      int r = pgbackend->objects_sparse_read_async(
-        soid, offset, length, size, op.flags,
-        &sparse_ctx->ext_map, &sparse_ctx->data_bl,
-        sparse_ctx, oi.force_allocated_extents.get_intervals());
+      int r = -EOPNOTSUPP;
+      if (pool.info.supports_sparse_reads()) {
+        r = pgbackend->objects_sparse_read_async(
+          soid, offset, length, size, op.flags,
+          &sparse_ctx->ext_map, &sparse_ctx->data_bl,
+          sparse_ctx, oi.force_allocated_extents.get_intervals());
+      }
       if (r == -EOPNOTSUPP) {
         // legacy EC: fall back to translating sparse read to a normal async read
         delete sparse_ctx;
@@ -6817,9 +6820,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     /* map extents */
     case CEPH_OSD_OP_MAPEXT:
       tracepoint(osd, do_osd_op_pre_mapext, soid.oid.name.c_str(), soid.snap.val, op.extent.offset, op.extent.length);
-      if (pool.info.is_erasure() && !pool.info.allows_ecoptimizations()) {
- result = -EOPNOTSUPP;
- break;
+      if (pool.info.is_erasure() &&
+          (!pool.info.allows_ecoptimizations() ||
+           !pool.info.supports_sparse_reads())) {
+        result = -EOPNOTSUPP;
+        break;
       }
       ++ctx->num_read;
       if (pool.info.is_erasure()) {
@@ -10211,6 +10216,10 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 
   int64_t left = out_max - osd_op.outdata.length();
 
+  // Read the pool flag once, so every data chunk of this call is read the
+  // same way
+  const bool sparse_ok = pool.info.supports_sparse_reads();
+
   // data
   bufferlist& bl = reply_obj.data;
   if (left > 0 && !cursor.data_complete) {
@@ -10219,10 +10228,13 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
       if (cb) {
         async_read_started = true;
         // Fast EC: try sparse read to get data + extent map in one pass.
-        int sparse_r = pgbackend->objects_sparse_read_async(
-          oi.soid, cursor.data_offset, max_read, oi.size, osd_op.op.flags,
-          &cb->ext_map, &cb->data_bl, cb,
-          oi.force_allocated_extents.get_intervals());
+        int sparse_r = -EOPNOTSUPP;
+        if (sparse_ok) {
+          sparse_r = pgbackend->objects_sparse_read_async(
+            oi.soid, cursor.data_offset, max_read, oi.size, osd_op.op.flags,
+            &cb->ext_map, &cb->data_bl, cb,
+            oi.force_allocated_extents.get_intervals());
+        }
         if (sparse_r == 0) {
           // Sparse read accepted: completion will fire cb->finish().
           cb->sparse_read = true;
