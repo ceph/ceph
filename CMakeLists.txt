@@ -791,6 +791,16 @@ endif()
 option(WITH_SYSTEM_ROCKSDB "require and build with system rocksdb" OFF)
 if (WITH_SYSTEM_ROCKSDB)
   find_package(RocksDB 9.10 REQUIRED)
+else()
+  # westmere is the oldest microarchitecture with the SSE4.2 and PCLMULQDQ
+  # that RocksDB's CRC32C needs. set to ON to target the x86-64 baseline.
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64|AMD64)$")
+    set(ROCKSDB_PORTABLE "westmere" CACHE STRING
+      "oldest CPU microarchitecture targeted by the bundled RocksDB")
+  else()
+    set(ROCKSDB_PORTABLE "ON" CACHE STRING
+      "oldest CPU microarchitecture targeted by the bundled RocksDB")
+  endif()
 endif()
 
 # Boost
