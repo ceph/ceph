@@ -94,7 +94,6 @@ def test_new_docker():
         "/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.stop'",
         'ExecStopPost=-/bin/bash '
         '/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.poststop',
-        'KillMode=none',
         'Restart=on-failure',
         'RestartSec=10s',
         'TimeoutStartSec=200',
@@ -133,7 +132,6 @@ def test_new_podman():
         "/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.stop'",
         'ExecStopPost=-/bin/bash '
         '/var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/%i/unit.poststop',
-        'KillMode=none',
         'Restart=on-failure',
         'RestartSec=10s',
         'TimeoutStartSec=200',

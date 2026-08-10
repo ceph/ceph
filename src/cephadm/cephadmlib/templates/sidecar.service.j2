@@ -19,7 +19,6 @@ EnvironmentFile=-/etc/environment
 ExecStart=/bin/bash {{ sidecar_script }} start
 ExecStop=/bin/bash {{ sidecar_script }} stop
 ExecStopPost=-/bin/bash {{ sidecar_script }} poststop
-KillMode=none
 Restart=on-failure
 RestartSec=10s
 TimeoutStartSec=200
