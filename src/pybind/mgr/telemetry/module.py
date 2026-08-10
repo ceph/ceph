@@ -1398,9 +1398,9 @@ class Module(MgrModule):
                 'key': 'mgr/dashboard/telemetry/metrics/user_persona_distribution'
             })
             user_persona_raw = outb.strip() if r == 0 and outb else None
-            
-            report.setdefault('dashboard', {})
-            report['dashboard']['user_persona_distribution'] = json.loads(user_persona_raw or '{}')
+            dashboard_section: Dict[str, Any] = cast(Dict[str, Any],
+                                                     report.setdefault('dashboard', {}))
+            dashboard_section['user_persona_distribution'] = json.loads(user_persona_raw or '{}')
         except Exception as e:  # pylint: disable=broad-except
             self.log.warning('telemetry: failed to attach dashboard user_persona_distribution: %s', e)
 
