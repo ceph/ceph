@@ -1400,11 +1400,17 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     const realmControl = this.serviceForm.get('realm_name');
     const zonegroupControl = this.serviceForm.get('zonegroup_name');
     const zoneControl = this.serviceForm.get('zone_name');
+    const virtualHostControl = this.serviceForm.get('virtual_host_enabled');
 
     if (this.realmList.length === 0) {
       realmControl.disable({ emitEvent: false });
+      virtualHostControl.setValue(false, { emitEvent: false });
+      virtualHostControl.disable({ emitEvent: false });
     } else {
       realmControl.enable({ emitEvent: false });
+      if (this.rgwModuleEnabled) {
+        virtualHostControl.enable({ emitEvent: false });
+      }
     }
 
     if (this.filteredZonegroupList.length === 0) {
@@ -1454,7 +1460,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
     this.rgwMultisiteService.getRgwModuleStatus().subscribe((enabled: boolean) => {
       this.rgwModuleEnabled = enabled;
       const virtualHostControl = this.serviceForm.get('virtual_host_enabled');
-      if (enabled) {
+      if (enabled && this.realmList.length > 0) {
         virtualHostControl.enable({ emitEvent: false });
         if (this.serviceForm.get('zonegroup_hostnames').value?.length) {
           virtualHostControl.setValue(true, { emitEvent: false });

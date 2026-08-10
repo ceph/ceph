@@ -41,6 +41,7 @@ Ceph-CSI-Operator (Recommended)
 
 The `Ceph-CSI-Operator`_ manages the deployment, configuration, and
 lifecycle of Ceph-CSI drivers through Kubernetes custom resources.
+For complete documentation, see the `Ceph-CSI Operator documentation`_.
 To install the operator:
 
 .. prompt:: bash $
@@ -58,18 +59,24 @@ deploy the RBD driver:
      name: rbd.csi.ceph.com
      namespace: ceph-csi-operator-system
 
-The CephFS and NFS drivers are deployed the same way, using the names
-``cephfs.csi.ceph.com`` and ``nfs.csi.ceph.com``. Connection details
-for the Ceph cluster are supplied through the operator's
-``CephConnection`` and ``ClientProfile`` resources; CephX credentials
-are stored in Kubernetes Secrets referenced from the StorageClass. See
-the `operator quick start`_ and `operator installation guide`_ pages
-for complete walkthroughs, supported Kubernetes versions, and
-Helm-based installation of the operator itself.
+The CephFS, NFS, and NVMe-oF drivers are deployed the same way, using
+the names ``cephfs.csi.ceph.com``, ``nfs.csi.ceph.com``, and
+``nvmeof.csi.ceph.com``. Connection details for the Ceph cluster are
+supplied through the operator's ``CephConnection`` and
+``ClientProfile`` resources; CephX credentials are stored in
+Kubernetes Secrets referenced from the StorageClass. See the
+`operator quick start`_ and `operator installation guide`_ pages for
+complete walkthroughs, supported Kubernetes versions, and Helm-based
+installation of the operator itself.
 
 
-Helm Charts
-===========
+Helm Charts (Deprecated)
+========================
+
+.. note::
+
+   For new deployments, the `Ceph-CSI-Operator`_ is recommended over
+   Helm charts. See the `Ceph-CSI Operator documentation`_ for details.
 
 The Ceph-CSI project publishes per-driver Helm charts:
 
@@ -83,8 +90,13 @@ A ``ceph-csi-cephfs`` chart is available for the CephFS driver. Chart
 values are documented in the `Ceph-CSI charts`_ directory.
 
 
-Raw Manifests
-=============
+Raw Manifests (Deprecated)
+==========================
+
+.. note::
+
+   For new deployments, the `Ceph-CSI-Operator`_ is recommended over
+   Raw Manifests. See the `Ceph-CSI Operator documentation`_ for details.
 
 Per-driver Kubernetes manifests are maintained in the ``deploy/``
 directory of the Ceph-CSI repository, together with deployment
@@ -93,6 +105,7 @@ most control but requires you to track and apply manifest changes on
 every upgrade.
 
 .. _Ceph-CSI-Operator: https://github.com/ceph/ceph-csi-operator
+.. _Ceph-CSI Operator documentation: https://ceph.github.io/ceph-csi-operator
 .. _Rook: https://rook.io
 .. _operator quick start: https://github.com/ceph/ceph-csi-operator/blob/main/docs/quick-start.md
 .. _operator installation guide: https://github.com/ceph/ceph-csi-operator/blob/main/docs/installation.md

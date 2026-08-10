@@ -172,6 +172,16 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
       pg.wait_for_active_blocker,
       &decltype(pg.wait_for_active_blocker)::wait));
 
+  int cost  = std::max<int>(m->get_cost(), 1);
+  unsigned prio  = m->get_priority();
+  uint64_t owner = m->get_source().num();
+
+  // admit in QoS order, then HOLD the slot for the op's lifetime
+  // (its destructor == mClock RequestCompletion).
+  auto throttle = co_await interruptor::make_interruptible(
+    shard_services->get_throttle(
+      scheduler::params_t{cost, prio, owner, SchedulerClass::client}));
+
   DEBUGDPP("{}.{}: waited for active, entering get_obc stage ",
            pg, *this, this_instance_id);
 
@@ -225,6 +235,7 @@ ClientRequest::interruptible_future<> ClientRequest::with_pg_process_interruptib
   DEBUGDPP("{}.{}: process[_pg]_op complete, completing handle",
 	   *pgref, *this, this_instance_id);
   co_await interruptor::make_interruptible(ihref.handle.complete());
+  // `throttle` destructs here -> release_throttle()
 }
 
 seastar::future<> ClientRequest::with_pg_process(

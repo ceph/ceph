@@ -2133,6 +2133,8 @@ exit 0
 %{_bindir}/rgw-gap-list
 %{_bindir}/rgw-gap-list-comparator
 %{_bindir}/rgw-orphan-list
+%{_bindir}/rgw-policy-check
+%{_bindir}/rgw-policy-test
 %{_bindir}/rgw-restore-bucket-index
 %{_sbindir}/mount.ceph
 %if 0%{?suse_version} && 0%{?suse_version} < 1550
@@ -2164,6 +2166,8 @@ exit 0
 %{_mandir}/man8/rbd-replay-prep.8*
 %{_mandir}/man8/rgw-orphan-list.8*
 %{_mandir}/man8/rgw-gap-list.8*
+%{_mandir}/man8/rgw-policy-check.8*
+%{_mandir}/man8/rgw-policy-test.8*
 %{_mandir}/man8/rgw-restore-bucket-index.8*
 %dir %{_datadir}/ceph/
 %{_datadir}/ceph/known_hosts_drop.ceph.com
@@ -2636,11 +2640,7 @@ fi
 %{_bindir}/radosgw-token
 %{_bindir}/radosgw-es
 %{_bindir}/radosgw-object-expirer
-%{_bindir}/rgw-policy-check
-%{_bindir}/rgw-policy-test
 %{_mandir}/man8/radosgw.8*
-%{_mandir}/man8/rgw-policy-check.8*
-%{_mandir}/man8/rgw-policy-test.8*
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
