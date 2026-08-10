@@ -278,7 +278,10 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
               this.groupHandler.group
             )
           })
-          .pipe(tap({ complete: () => this.nvmeofStateService.requestRefresh() }))
+          .pipe(
+            tap({ complete: () => this.nvmeofStateService.requestRefresh() }),
+            finalize(() => this.table?.refreshBtn())
+          )
     });
   }
 

@@ -1,4 +1,5 @@
-import { Inject, Injectable, OnDestroy, DOCUMENT } from '@angular/core';
+import { Inject, Injectable, OnDestroy } from '@angular/core';
+import { DOCUMENT } from '@angular/common';
 
 import { Subscription } from 'rxjs';
 
