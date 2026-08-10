@@ -5,8 +5,6 @@
   [columns]="columns"
   columnMode="flex"
   selectionType="single"
-  [hasDetails]="true"
-  (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
   identifier="bid"
   (fetchData)="getBucketList($event)"
@@ -19,12 +17,22 @@
     [tableActions]="tableActions"
   >
   </cd-table-actions>
-  <cd-rgw-bucket-details
-    *cdTableDetail
-    [selection]="expandedRow"
-  >
-  </cd-rgw-bucket-details>
 </cd-table>
+
+<ng-template
+  #bucketNameTpl
+  let-row="data.row"
+>
+  <span data-testid="bucket-name">
+    <a
+      cdsLink
+      [routerLink]="[viewUrl, row.bid, row.owner]"
+      (click)="$event.stopPropagation()"
+    >
+      {{ row.bid }}
+    </a>
+  </span>
+</ng-template>
 
 <ng-template
   #bucketSizeTpl
