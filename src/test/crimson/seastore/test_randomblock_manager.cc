@@ -52,11 +52,11 @@ struct rbm_test_t :
 
   seastar::future<> set_up_fut() final {
     device = random_block_device::create_test_ephemeral(
-      random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, DEFAULT_TEST_SIZE);
+      0, random_block_device::DEFAULT_TEST_CBJOURNAL_SIZE, DEFAULT_TEST_SIZE);
     block_size = device->get_block_size();
     size = device->get_available_size();
     rbm_manager.reset(new BlockRBManager(device.get(), std::string(), false));
-    config = get_rbm_ephemeral_device_config(0, 1);
+    config = get_rbm_ephemeral_device_config(0, cache_device_set_t{}, true);
     return device->mkfs(config).handle_error(crimson::ct_error::assert_all("unexpected error")
     ).then([this] {
       return device->mount().handle_error(crimson::ct_error::assert_all("unexpected error")
