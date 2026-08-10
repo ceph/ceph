@@ -170,5 +170,5 @@ Sample screenshot running `cephfs-top` with 2 filesystems:
 .. image:: cephfs-top.png
 
 .. note:: The minimum compatible Python version for cephfs-top is 3.6.0.
-   cephfs-top runs on any distribution that provides a compatible Python
-   version; see :ref:`os-recommendations` for the supported platforms.
+   cephfs-top runs on any distribution that provides a compatible
+   Python version.

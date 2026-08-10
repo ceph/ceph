@@ -45,7 +45,7 @@ Linux Kernel
   Older kernel client versions may not support your :ref:`CRUSH
   tunables <crush-map-tunables>` profile or other newer features of the Ceph
   cluster, requiring the storage cluster to be configured with those features
-  disabled. For RBD, a kernel of version 5.3 or later is the minimum
+  disabled. For RBD, a kernel of version 5.3 or EL 8.2 is the minimum
   necessary for reasonable support for RBD image features.
 
 - **Ceph MS Windows Client**
