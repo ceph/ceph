@@ -483,11 +483,11 @@ static void dump_superblock(
     formatter.dump_unsigned("spec_id", sb.config.spec.id);
     formatter.dump_stream("meta") << sb.config.meta;
 
-    // secondary devices (in the config)
+    // cache devices (in the config)
     {
       Formatter::ArraySection secondary_devices_section(
-          formatter, "secondary_devices");
-      for (const auto& [dev_id, spec] : sb.config.secondary_devices) {
+          formatter, "cache_devices");
+      for (const auto& [dev_id, spec] : sb.config.cache_devices) {
         Formatter::ObjectSection device_section(formatter, "device");
         formatter.dump_unsigned("device_id", dev_id);
         formatter.dump_format(
