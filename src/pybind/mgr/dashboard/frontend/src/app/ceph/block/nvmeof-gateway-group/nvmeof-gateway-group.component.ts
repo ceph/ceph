@@ -33,7 +33,6 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { DeleteGuardModalComponent } from '~/app/shared/components/delete-guard-modal/delete-guard-modal.component';
 import { NvmeofStateService } from '../nvmeof-state.service';
-import { DetailItem } from '~/app/shared/components/details-card/details-card.component';
 
 const BASE_URL = 'block/nvmeof/gateways';
 
@@ -70,15 +69,15 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
   selection: CdTableSelection = new CdTableSelection();
   gatewayGroup$: Observable<CephServiceSpec[]> = of([]);
   subject = new BehaviorSubject<CephServiceSpec[]>([]);
-  context!: CdTableFetchDataContext;
+  context?: CdTableFetchDataContext;
   gatewayGroupName = '';
   subsystemCount = 0;
   gatewayCount = 0;
-  selectedGatewayDetails: DetailItem[] = [];
   private lastGroupCount = 0;
 
   viewUrl = `/${BASE_URL}/view`;
   icons = Icons;
+
   iconSize = IconSize;
 
   constructor(
@@ -131,7 +130,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => this.urlBuilder.getEdit(this.selection.first()?.name),
+      click: () => this.editSelectedGatewayGroup(),
       name: this.actionLabels.EDIT,
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
     };
@@ -139,7 +138,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
     const viewAction: CdTableAction = {
       permission: 'read',
       icon: Icons.eye,
-      routerLink: () => `${this.viewUrl}/${this.selection.first()?.name}`,
+      click: () => this.getViewDetails(),
       name: $localize`View details`,
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection
     };
@@ -191,8 +190,7 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
           }),
           catchError(() => {
             return of([]);
-          }),
-          finalize(() => this.setTableLoading(false))
+          })
         )
       ),
       shareReplay({ bufferSize: 1, refCount: true }),
@@ -210,20 +208,12 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       .subscribe(() => this.fetchData());
   }
   fetchData(): void {
-    this.setTableLoading(true);
     this.subject.next([]);
     this.checkNodesAvailability();
   }
 
-  private setTableLoading(loading: boolean): void {
-    if (this.table) {
-      this.table.loadingIndicator = loading;
-    }
-  }
-
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
-    this.selectedGatewayDetails = this.buildGatewayDetails(selection.first());
   }
 
   deleteGatewayGroupModal() {
@@ -349,37 +339,6 @@ export class NvmeofGatewayGroupComponent implements OnInit, OnDestroy {
       return;
     }
     this.router.navigate([this.urlBuilder.getEdit(selectedGroup.name)]);
-  }
-
-  private buildGatewayDetails(selectedGroup: any): DetailItem[] {
-    if (!selectedGroup) {
-      return [];
-    }
-
-    const runningGateways = selectedGroup.statusCount?.running ?? 0;
-    const errorGateways = selectedGroup.statusCount?.error ?? 0;
-    const totalGateways = runningGateways + errorGateways;
-
-    return [
-      {
-        label: $localize`Gateway name`,
-        value: selectedGroup.name
-      },
-      {
-        label: $localize`Gateway nodes`,
-        value: totalGateways
-      },
-      {
-        label: $localize`Encryption`,
-        value: selectedGroup.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
-        type: 'status'
-      },
-      {
-        label: $localize`mTLS`,
-        value: selectedGroup.spec?.enable_mtls ? $localize`Enabled` : $localize`Disabled`,
-        type: 'status'
-      }
-    ];
   }
 
   ngOnDestroy(): void {

@@ -1,20 +1,6 @@
 <div class="nvmeof-content-layout">
   <div class="nvmeof-content-main">
     <ng-container *ngIf="gatewayGroup$ | async as gateways">
-      <!-- Details Card Section -->
-      <ng-container *ngIf="selection.hasSelection">
-        <cd-details-card
-          cardTitle="Details"
-          i18n-cardTitle
-          [details]="selectedGatewayDetails"
-          [showEditButton]="true"
-          [editButtonLabel]="actionLabels.EDIT"
-          [columns]="4"
-          (editClicked)="editSelectedGatewayGroup()"
-        >
-        </cd-details-card>
-      </ng-container>
-
       <cd-table
         #table
         [data]="gateways"

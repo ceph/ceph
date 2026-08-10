@@ -268,14 +268,41 @@ describe('NvmeofGatewayGroupComponent', () => {
     });
   });
 
+  describe('Edit action', () => {
+    it('should navigate to the edit page for the selected group', () => {
+      const router = TestBed.inject(Router);
+      component.selection.first = jest.fn().mockReturnValue({ name: 'Test1' });
+      const editAction = component.tableActions.find((a) => a.name === 'Edit');
+      expect(editAction).toBeTruthy();
+      expect(editAction!.routerLink).toBeUndefined();
+      expect(editAction!.click).toBeDefined();
+
+      (editAction!.click as Function)();
+
+      expect(router.navigate).toHaveBeenCalledWith(['/block/nvmeof/gateways/edit/Test1']);
+    });
+  });
+
   describe('View details action', () => {
-    it('should use routerLink and navigate to the resource page for the selected group', () => {
+    it('should navigate to the resource page for the selected group', () => {
+      const router = TestBed.inject(Router);
       component.selection.first = jest.fn().mockReturnValue({ name: 'default' });
       const viewAction = component.tableActions.find((a) => a.name === 'View details');
       expect(viewAction).toBeTruthy();
-      expect(viewAction!.click).toBeUndefined();
-      const link = (viewAction!.routerLink as Function)();
-      expect(link).toBe('/block/nvmeof/gateways/view/default');
+      expect(viewAction!.routerLink).toBeUndefined();
+      expect(viewAction!.click).toBeDefined();
+
+      (viewAction!.click as Function)();
+
+      expect(router.navigate).toHaveBeenCalledWith(['/block/nvmeof/gateways/view', 'default']);
+    });
+
+    it('should not navigate when no group is selected', () => {
+      const router = TestBed.inject(Router);
+      (router.navigate as jest.Mock).mockClear();
+      component.selection.first = jest.fn().mockReturnValue(undefined);
+      component.getViewDetails();
+      expect(router.navigate).not.toHaveBeenCalled();
     });
 
     it('should set canBePrimary true for single selection only', () => {

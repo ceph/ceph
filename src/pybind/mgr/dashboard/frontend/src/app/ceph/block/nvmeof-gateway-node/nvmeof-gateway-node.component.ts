@@ -437,8 +437,6 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
     this.hostsLoaded.emit(this.count);
   }
 
-  onEditGateway(): void {}
-
   private buildGatewayDetails(
     serviceSpec: CephServiceSpec,
     gatewayNodeCount: number
@@ -460,9 +458,9 @@ export class NvmeofGatewayNodeComponent implements OnInit, OnDestroy, OnChanges 
       },
       {
         label: $localize`mTLS`,
-        value: $localize`Disabled`,
+        value: serviceSpec.spec?.enable_auth ? $localize`Enabled` : $localize`Disabled`,
         type: 'status',
-        statusIcon: 'error'
+        statusIcon: serviceSpec.spec?.enable_auth ? 'success' : 'error'
       }
     ];
   }
