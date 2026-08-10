@@ -1729,7 +1729,9 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
 
         const interval_set<uint64_t> *force_alloc_ptr = nullptr;
         interval_set<uint64_t> shard_fae;
-        if (op.obc && !sinfo.get_parity_shards().contains(pg_shard.shard)) {
+        // [temp]: Umbrella needs to replaced with Vampire here once it is available
+        if (get_osdmap()->require_osd_release >= ceph_release_t::umbrella &&
+            op.obc && !sinfo.get_parity_shards().contains(pg_shard.shard)) {
           const interval_set<uint64_t> ro_fae =
             op.obc->obs.oi.force_allocated_extents.get_intervals();
           if (!ro_fae.empty()) {
@@ -1768,7 +1770,8 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
               dout(10) << __func__ << ": partial write OI attr: oi=" << oi << dendl;
               bufferlist bl;
               oi.encode(bl, get_osdmap()->get_features(
-                CEPH_ENTITY_TYPE_OSD, nullptr));
+                CEPH_ENTITY_TYPE_OSD, nullptr),
+                get_osdmap()->require_osd_release);
               pop.attrset[OI_ATTR] = bl;
             }
           } else {
