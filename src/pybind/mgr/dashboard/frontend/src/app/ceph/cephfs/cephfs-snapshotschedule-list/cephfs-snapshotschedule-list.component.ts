@@ -252,12 +252,16 @@ export class CephfsSnapshotscheduleListComponent
     const { path, start, fs, schedule, subvol, group, retention } = this.selection.first();
     const retentionPolicy = retention
       ?.split(/\s/gi)
-      ?.filter((r: string) => !!r)
+      ?.filter((r: string) => !!r && r !== '-')
       ?.map((r: string) => {
         const frequency = r.substring(r.length - 1);
         const interval = r.substring(0, r.length - 1);
+        if (!frequency || !interval || !/^[nmhdwMy]$/.test(frequency)) {
+          return '';
+        }
         return `${interval}-${frequency}`;
       })
+      ?.filter(Boolean)
       ?.join('|');
 
     this.modalRef = this.modalService.show(DeleteConfirmationModalComponent, {

@@ -26,7 +26,7 @@ export class CephfsSnapshotScheduleService {
 
   update({ fs, path, ...rest }: Record<string, any>): Observable<any> {
     return this.http.put(
-      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}`,
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(this.normalizePathForUrl(path))}`,
       rest,
       { observe: 'response' }
     );
@@ -34,7 +34,7 @@ export class CephfsSnapshotScheduleService {
 
   activate({ fs, path, ...rest }: Record<string, any>): Observable<any> {
     return this.http.post(
-      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}/activate`,
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(this.normalizePathForUrl(path))}/activate`,
       rest,
       { observe: 'response' }
     );
@@ -42,7 +42,7 @@ export class CephfsSnapshotScheduleService {
 
   deactivate({ fs, path, ...rest }: Record<string, any>): Observable<any> {
     return this.http.post(
-      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(path)}/deactivate`,
+      `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(this.normalizePathForUrl(path))}/deactivate`,
       rest,
       { observe: 'response' }
     );
@@ -57,16 +57,28 @@ export class CephfsSnapshotScheduleService {
     subvol,
     group
   }: Record<string, any>): Observable<any> {
+    const normalizedPath = this.normalizePathForUrl(path);
     let deleteUrl = `${this.baseURL}/snapshot/schedule/${fs}/${encodeURIComponent(
-      path
+      normalizedPath
     )}/delete_snapshot?schedule=${schedule}&start=${encodeURIComponent(start)}`;
-    if (retentionPolicy) {
-      deleteUrl += `&retention_policy=${retentionPolicy}`;
+    if (retentionPolicy && retentionPolicy !== '--') {
+      deleteUrl += `&retention_policy=${encodeURIComponent(retentionPolicy)}`;
     }
-    if (subvol && group) {
-      deleteUrl += `&subvol=${encodeURIComponent(subvol)}&group=${encodeURIComponent(group)}`;
+    if (subvol) {
+      deleteUrl += `&subvol=${encodeURIComponent(subvol)}`;
+      if (group) {
+        deleteUrl += `&group=${encodeURIComponent(group)}`;
+      }
     }
     return this.http.delete(deleteUrl);
+  }
+
+  private normalizePathForUrl(path: string): string {
+    if (!path || path === '/') {
+      return '/';
+    }
+    const parts = path.split('/').filter((part) => part && part !== '.' && part !== '..');
+    return parts.length ? `/${parts.join('/')}` : '/';
   }
 
   checkScheduleExists(

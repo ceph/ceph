@@ -16,6 +16,7 @@ import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { MirrorDirStatus, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
 import { MirrorPathSchedule } from '~/app/shared/models/snapshot-schedule';
+import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 
 interface MirrorPath {
   path: string;
@@ -342,27 +343,31 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       return;
     }
 
-    const retentionPolicy = policy.retention
-      ? Object.entries(policy.retention)
-          .filter(([, interval]) => interval !== null && interval !== undefined)
-          .map(([frequency, interval]) => `${interval}-${frequency}`)
-          .join('|')
-      : undefined;
+    const retentionPolicy =
+      policy.retentionCopy?.length && Object.keys(policy.retention || {}).length
+        ? this.buildRetentionPolicyParam(policy.retention)
+        : undefined;
+    const path = this.normalizePath(policy.path);
+    const { subvol, group } = this.getSubvolumeParams(path, policy.subvol);
 
-    this.removingSchedule = `${policy.path}@${policy.schedule}`;
+    this.removingSchedule = `${path}@${policy.schedule}`;
     this.subscriptions.add(
       this.snapshotScheduleService
         .delete({
-          path: policy.path,
+          path,
           schedule: policy.schedule,
           start: policy.start,
           fs: policy.fs || this.fsName,
-          retentionPolicy
+          retentionPolicy,
+          subvol,
+          group
         })
         .subscribe(
           () => {
             this.removingSchedule = '';
-            this.loadSchedulePolicies(policy.path);
+            if (this.selectedPath?.path) {
+              this.loadSchedulePolicies(this.selectedPath.path);
+            }
           },
           () => {
             this.removingSchedule = '';
@@ -532,9 +537,55 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     }
   }
 
-  private normalizePath(p?: string): string {
-    if (!p) return '';
-    return p.replace(/([/](\.\.?)){1,}\s*$/, '').replace(/\/$/, '') || '/';
+  private normalizePath(path?: string): string {
+    if (!path || path === '/') {
+      return '/';
+    }
+    const parts = path.split('/').filter((part) => part && part !== '.' && part !== '..');
+    return parts.length ? `/${parts.join('/')}` : '/';
+  }
+
+  private buildRetentionPolicyParam(
+    retention?: Record<string, number> | string
+  ): string | undefined {
+    if (!retention || typeof retention === 'string') {
+      return undefined;
+    }
+
+    const policies = Object.entries(retention)
+      .filter(([frequency, interval]) => {
+        if (!frequency || !/^[nmhdwMy]$/.test(frequency)) {
+          return false;
+        }
+        if (interval === null || interval === undefined) {
+          return false;
+        }
+        const intervalText = String(interval).trim();
+        if (!intervalText || intervalText === '-' || !/^\d+$/.test(intervalText)) {
+          return false;
+        }
+        return true;
+      })
+      .map(([frequency, interval]) => `${interval}-${frequency}`);
+
+    return policies.length ? policies.join('|') : undefined;
+  }
+
+  private getSubvolumeParams(
+    path: string,
+    subvolFromPolicy?: string
+  ): { subvol?: string; group?: string } {
+    const parts = path.split('/').filter(Boolean);
+    if (parts[0] !== 'volumes' || parts.length < 3) {
+      return subvolFromPolicy ? { subvol: subvolFromPolicy } : {};
+    }
+
+    const groupName = parts[1];
+    const subvol = subvolFromPolicy || parts[2];
+    if (groupName === DEFAULT_SUBVOLUME_GROUP) {
+      return { subvol };
+    }
+    return { subvol, group: groupName };
   }
 
   private toTitleCase(value: string): string {
