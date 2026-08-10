@@ -75,8 +75,28 @@ test $((flags & BUCKET_SUSPENDED)) -eq 0
 # root can still access
 aws s3api head-object --bucket test-account-root-suspend --key obj
 
+radosgw-admin user enable --uid test-account-member-suspend
+
+# account suspend freezes account-owned buckets and blocks members
+radosgw-admin account suspend --account-id=$accountid
+suspended=$(radosgw-admin account get --account-id=$accountid | jq -r '.AccountInfo.suspended // .suspended')
+test "$suspended" = "1"
+flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
+test $((flags & BUCKET_SUSPENDED)) -eq $BUCKET_SUSPENDED
+set +e
+aws s3api head-object --bucket test-account-root-suspend --key obj
+rc=$?
+set -e
+test $rc -ne 0
+
+radosgw-admin account enable --account-id=$accountid
+suspended=$(radosgw-admin account get --account-id=$accountid | jq -r '.AccountInfo.suspended // .suspended')
+test "$suspended" = "0"
+flags=$(radosgw-admin bucket stats --bucket test-account-root-suspend | jq -r .flags)
+test $((flags & BUCKET_SUSPENDED)) -eq 0
+aws s3api head-object --bucket test-account-root-suspend --key obj
+
 # clean up
-radosgw-admin user enable --uid test-account-member-suspend || true
 radosgw-admin bucket rm --bucket test-account-root-suspend --purge-objects
 radosgw-admin user rm --uid test-account-member-suspend
 radosgw-admin user rm --uid test-account-root-suspend
