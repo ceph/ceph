@@ -833,6 +833,19 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return -ret;
   }
 
+  /* renameat cannot replace a directory with a file; if the target is a
+   * directory (e.g. a completed multipart object), remove it first */
+  struct statx tstx;
+  if (statx(parent->get_fd(), get_name().c_str(),
+	    AT_SYMLINK_NOFOLLOW, STATX_ALL, &tstx) == 0 &&
+      S_ISDIR(tstx.stx_mode)) {
+    ret = delete_directory(parent->get_fd(), get_name().c_str(), true, dpp);
+    if (ret < 0) {
+      return ret;
+    }
+    stat_done = false;
+  }
+
   ret = renameat(parent->get_fd(), temp_fname.c_str(), parent->get_fd(), get_name().c_str());
   if(ret < 0) {
     ret = errno;
@@ -5532,9 +5545,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
-  // save shadow name before rename changes info.bucket.name
-  std::string shadow_cache_name = shadow->get_name();
-
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
@@ -5545,6 +5555,16 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   POSIXObject *to = static_cast<POSIXObject*>(target_obj);
   POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
+
+  /* stat the renamed object and update the bucket listing cache;
+   * MPDirectory::stat sums part sizes into stx_size */
+  to->stat(dpp);
+  to->fill_cache(dpp, y,
+      [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
+	driver->get_bucket_cache()->add_entry(dpp, sb->get_name(), bde);
+	return 0;
+      });
+
   if (sb->versioned()) {
     ret = to->set_cur_version(dpp);
     if (ret < 0) {
