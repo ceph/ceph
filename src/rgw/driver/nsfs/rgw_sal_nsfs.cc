@@ -6636,6 +6636,35 @@ int NSFSMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
+  /* non-versioned: update bucket listing cache after rename */
+  if (!versioned && leaf_fd >= 0) {
+    struct statx new_stx;
+    if (statx(leaf_fd, leaf_name.c_str(), AT_SYMLINK_NOFOLLOW,
+              STATX_ALL, &new_stx) == 0) {
+      auto* bcache = driver->get_bucket_cache();
+      std::string obj_name = target_obj->get_key().get_index_key_name();
+      rgw_bucket_dir_entry bde{};
+      bde.key.name = obj_name;
+      bde.ver.pool = 1;
+      bde.ver.epoch = 1;
+      bde.exists = true;
+      bde.meta.category = RGWObjCategory::Main;
+      bde.meta.size = new_stx.stx_size;
+      bde.meta.accounted_size = new_stx.stx_size;
+      bde.meta.mtime = from_statx_timestamp(new_stx.stx_mtime);
+      bde.meta.storage_class = RGW_STORAGE_CLASS_STANDARD;
+      bde.meta.etag = synthesize_etag(new_stx);
+      {
+        ACLOwner acl_owner;
+        if (decode_acl_owner(target_obj->get_attrs(), acl_owner) >= 0) {
+          bde.meta.owner = to_string(acl_owner.id);
+          bde.meta.owner_display_name = acl_owner.display_name;
+        }
+      }
+      bcache->add_entry(dpp, pb->get_name(), bde);
+    }
+  }
+
   // remove multipart cache entry and staging directory
   if (auto* mc = driver->get_multipart_cache()) {
     mc->remove({bucket->get_name(), mp_obj.meta});
