@@ -575,29 +575,36 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
 
   result->count = 0; 
   result->size = 0; 
-  result->size_rounded = 0; 
-
+  result->size_rounded = 0;
+  bool has_missing_storage_classes = false;
   auto hiter = headers.begin();
   for (; hiter != headers.end(); ++hiter) {
     RGWObjCategory category = RGWObjCategory::Main;
     auto iter = (hiter->stats).find(category);
+    bool stats_has_value = false;
     if (iter != hiter->stats.end()) {
       struct rgw_bucket_category_stats& stats = iter->second;
       result->count += stats.num_entries;
       result->size += stats.total_size;
       result->size_rounded += stats.total_size_rounded;
+      stats_has_value = stats.num_entries > 0;
     }
-    if (hiter->storage_class_stats.has_value()) {
-      for(auto it = hiter->storage_class_stats.value().begin(); it != hiter->storage_class_stats.value().end(); ++it){
-        std::string storage_class = it->first;
-        struct rgw_bucket_category_stats& stats = it->second;
-        result->storage_class_ents[storage_class].count += stats.num_entries;
-        result->storage_class_ents[storage_class].size += stats.total_size;
-        result->storage_class_ents[storage_class].size_rounded += stats.total_size_rounded;
-        result->storage_class_ents[storage_class].bucket = result->bucket;
-      }
+    if (has_missing_storage_classes || !stats_has_value) {
+      continue;
     }
-
+    if (!hiter->storage_class_stats.has_value()) {
+      result->storage_class_ents.clear();
+      has_missing_storage_classes = true;
+      continue;
+    }
+    for(auto it = hiter->storage_class_stats.value().begin(); it != hiter->storage_class_stats.value().end(); ++it){
+      std::string storage_class = it->first;
+      struct rgw_bucket_category_stats& stats = it->second;
+      result->storage_class_ents[storage_class].count += stats.num_entries;
+      result->storage_class_ents[storage_class].size += stats.total_size;
+      result->storage_class_ents[storage_class].size_rounded += stats.total_size_rounded;
+      result->storage_class_ents[storage_class].bucket = result->bucket;
+    }
   }
 
   result->placement_rule = std::move(bucket_info.placement_rule);
