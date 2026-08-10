@@ -1849,6 +1849,109 @@ async fn test_lifecycle_expiration_header_head() {
     assert!(check_lifecycle_expiration_header(response.expiration(), now, "rule1", 1));
 }
 
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_lifecycle_noncurrent_expiration_header_not_on_current() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let key = "ob1";
+
+    // upload two versions
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from_static(b"v1"))
+        .send()
+        .await
+        .unwrap();
+    let v2 = client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from_static(b"v2"))
+        .send()
+        .await
+        .unwrap();
+    let current_version_id = v2.version_id().unwrap().to_string();
+
+    // set lifecycle with NoncurrentVersionExpiration only (no Expiration rule)
+    let rules = vec![LifecycleRule::builder()
+        .id("expire-noncurrent")
+        .filter(LifecycleRuleFilter::builder().prefix("").build())
+        .noncurrent_version_expiration(
+            NoncurrentVersionExpiration::builder()
+                .noncurrent_days(30)
+                .build(),
+        )
+        .status(ExpirationStatus::Enabled)
+        .build()
+        .unwrap()];
+
+    let lc = aws_sdk_s3::types::BucketLifecycleConfiguration::builder()
+        .set_rules(Some(rules))
+        .build()
+        .unwrap();
+
+    client
+        .put_bucket_lifecycle_configuration()
+        .bucket(&bucket_name)
+        .lifecycle_configuration(lc)
+        .send()
+        .await
+        .unwrap();
+
+    // HEAD current version by versionId — should NOT have x-amz-expiration
+    let response = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&current_version_id)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.expiration().is_none(),
+        "current version should not get x-amz-expiration from NoncurrentVersionExpiration rule, \
+         got: {:?}",
+        response.expiration()
+    );
+
+    // HEAD current version without versionId — also should NOT have x-amz-expiration
+    let response = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.expiration().is_none(),
+        "current version should not get x-amz-expiration from NoncurrentVersionExpiration rule, \
+         got: {:?}",
+        response.expiration()
+    );
+
+    // GET current version by versionId — also should NOT have x-amz-expiration
+    let response = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&current_version_id)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        response.expiration().is_none(),
+        "current version should not get x-amz-expiration from NoncurrentVersionExpiration rule, \
+         got: {:?}",
+        response.expiration()
+    );
+}
+
 #[tokio::test]
 async fn test_lifecycle_expiration_header_tags_head() {
     let _guard = s3_tests_rs::fixtures::TestGuard::setup();
