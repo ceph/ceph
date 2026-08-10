@@ -328,6 +328,13 @@ as follows:
 :command:`data sync run`
   Run data sync for the specified source zone.
 
+:command:`sync status`
+  Show an overall metadata and data sync status summary for the
+  current zone. Default output is human-readable text. With
+  ``--format=json`` (or another formatter), emit a structured
+  summary with typed shard counts, behind-shard lists, and related
+  fields instead of dumping per-shard sync markers.
+
 :command:`sync error list`
   List sync errors.
 
