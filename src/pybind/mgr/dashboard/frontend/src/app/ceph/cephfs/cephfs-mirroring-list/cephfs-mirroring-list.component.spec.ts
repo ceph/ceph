@@ -299,7 +299,9 @@ describe('CephfsMirroringListComponent', () => {
     component.selection.selected = [
       {
         local_fs_name: 'fs1',
-        remote_cluster_name: 'clusterA',
+        remote_site_name: 'clusterA',
+        fs_name: 'fsA',
+        client_name: 'clientA',
         directory_count: 4,
         peer_uuid: 'peer-uuid',
         failure_count: 0,
