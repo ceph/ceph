@@ -44,6 +44,7 @@ using BarrierOp = ceph::io_exerciser::BarrierOp;
 using CreateOp = ceph::io_exerciser::CreateOp;
 using RemoveOp = ceph::io_exerciser::RemoveOp;
 using SingleReadOp = ceph::io_exerciser::SingleReadOp;
+using SingleSparseReadOp = ceph::io_exerciser::SingleSparseReadOp;
 using DoubleReadOp = ceph::io_exerciser::DoubleReadOp;
 using TripleReadOp = ceph::io_exerciser::TripleReadOp;
 using SingleWriteOp = ceph::io_exerciser::SingleWriteOp;
@@ -170,6 +171,7 @@ constexpr std::string_view usage[] = {
     "\t\t swap",
     "\t\t copy",
     "\t\t read <off> <len> [balanced]",
+    "\t\t sparseread <off> <len> [balanced]",
     "\t\t write|failedwrite <off> <len>",
     "\t\t read2 <off> <len> <off> <len> [balanced]",
     "\t\t write2|failedwrite2 <off> <len> <off> <len>",
@@ -1417,6 +1419,15 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
         ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length, true);
       } else {
         ioop = ceph::io_exerciser::SingleReadOp::generate(offset, length, false);
+      }
+    } else if (op == "sparseread") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      std::optional<std::string> token = get_optional_token();
+      if (token.has_value() && (*token == "-b" || *token == "balanced")) {
+        ioop = ceph::io_exerciser::SingleSparseReadOp::generate(offset, length, true);
+      } else {
+        ioop = ceph::io_exerciser::SingleSparseReadOp::generate(offset, length, false);
       }
     } else if (op == "read2") {
       uint64_t offset1 = get_numeric_token();
