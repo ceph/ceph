@@ -28,8 +28,8 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
       << "major_dev=" << conf.major_dev
       << ", spec=" << conf.spec
       << ", meta=" << conf.meta
-      << ", secondary(";
-  for (const auto& [k, v] : conf.secondary_devices) {
+      << ", cache(";
+  for (const auto& [k, v] : conf.cache_devices) {
     out << device_id_printer_t{k}
         << ": " << v << ", ";
   }
@@ -62,9 +62,9 @@ void device_superblock_t::validate() const
   ceph_assert(config.spec.btype != backend_type_t::NONE);
   ceph_assert(config.spec.id <= DEVICE_ID_MAX_VALID);
   if (!config.major_dev) {
-    ceph_assert(config.secondary_devices.empty());
+    ceph_assert(config.cache_devices.empty());
   }
-  for (const auto& [k, v] : config.secondary_devices) {
+  for (const auto& [k, v] : config.cache_devices) {
     ceph_assert(k != config.spec.id);
     ceph_assert(k <= DEVICE_ID_MAX_VALID);
     ceph_assert(k == v.id);
@@ -77,7 +77,7 @@ void device_superblock_t::validate() const
     ceph_assert(segment_capacity > 0);
     ceph_assert_always(segment_capacity <= SEGMENT_OFF_MAX);
   }
-  auto backend = get_default_backend_of_device(config.spec.dtype);
+  auto backend = config.spec.btype;
   if (backend == backend_type_t::SEGMENTED) {
     ceph_assert(segment_size > 0 && segment_size % block_size == 0);
     ceph_assert_always(segment_size <= SEGMENT_OFF_MAX);
@@ -101,8 +101,7 @@ void device_superblock_t::validate() const
   } else {
     // RBM
     ceph_assert(total_size > 0);
-    ceph_assert(get_default_backend_of_device(config.spec.dtype) ==
-                backend_type_t::RANDOM_BLOCK);
+    ceph_assert(config.spec.btype == backend_type_t::RANDOM_BLOCK);
     ceph_assert(shard_infos.size() >= shard_num);
     for (unsigned int i = 0; i < shard_num; i++) {
       ceph_assert(shard_infos[i].size > block_size &&

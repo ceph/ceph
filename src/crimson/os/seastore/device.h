@@ -37,28 +37,28 @@ struct device_spec_t {
 
 std::ostream& operator<<(std::ostream&, const device_spec_t&);
 
-using secondary_device_set_t =
+using cache_device_set_t =
   std::map<device_id_t, device_spec_t>;
 
 struct device_config_t {
   bool major_dev = false;
   device_spec_t spec;
   seastore_meta_t meta;
-  secondary_device_set_t secondary_devices;
+  cache_device_set_t cache_devices;
   DENC(device_config_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.major_dev, p);
     denc(v.spec, p);
     denc(v.meta, p);
-    denc(v.secondary_devices, p);
+    denc(v.cache_devices, p);
     DENC_FINISH(p);
   }
-  static device_config_t create_primary(
+  static device_config_t create_data(
     uuid_d new_osd_fsid,
     device_id_t id,
     device_type_t d_type,
     backend_type_t b_type,
-    secondary_device_set_t sds) {
+    cache_device_set_t sds) {
     return device_config_t{
              true,
              device_spec_t{
@@ -69,7 +69,7 @@ struct device_config_t {
              seastore_meta_t{new_osd_fsid},
              sds};
    }
-  static device_config_t create_secondary(
+  static device_config_t create_cache(
     uuid_d new_osd_fsid,
     device_id_t id,
     device_type_t d_type,
@@ -83,7 +83,7 @@ struct device_config_t {
                b_type,
                id},
              seastore_meta_t{new_osd_fsid},
-             secondary_device_set_t()};
+             cache_device_set_t()};
   }
 };
 
@@ -343,6 +343,10 @@ public:
 
 // interfaces used by each device shard
 public:
+  const std::string &get_device_path() const {
+    return device_path;
+  }
+
   device_id_t get_device_id() const {
     assert(device_id <= DEVICE_ID_MAX_VALID);
     return device_id;
@@ -362,7 +366,7 @@ public:
 
   virtual std::size_t get_available_size() const = 0;
 
-  virtual secondary_device_set_t& get_secondary_devices() = 0;
+  virtual cache_device_set_t& get_cache_devices() = 0;
 
   virtual bool is_end_to_end_data_protection() const {
     return false;

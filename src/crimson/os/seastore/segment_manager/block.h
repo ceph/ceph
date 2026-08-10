@@ -161,8 +161,8 @@ public:
     return superblock.segment_size;
   }
 
-  secondary_device_set_t& get_secondary_devices() override {
-    return superblock.config.secondary_devices;
+  cache_device_set_t& get_cache_devices() override {
+    return superblock.config.cache_devices;
   }
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
@@ -216,14 +216,6 @@ private:
   device_superblock_t superblock;
   seastar::file device;
 
-  void set_device_id(device_id_t id) {
-    assert(id <= DEVICE_ID_MAX_VALID);
-    assert(device_id == DEVICE_ID_NULL ||
-           device_id == id);
-    device_id = id;
-  }
-  device_id_t device_id = DEVICE_ID_NULL;
-
   size_t get_offset(paddr_t addr) {
     auto& seg_addr = addr.as_seg_paddr();
     return shard_info.first_segment_offset +
@@ -261,12 +253,13 @@ private:
     public:
     MultiShardDevices(size_t count,
                       const std::string path,
-                      device_type_t dtype)
+                      device_type_t dtype,
+                      device_id_t id)
     : mshard_devices() {
       mshard_devices.reserve(count);
       for (size_t store_index = 0; store_index < count; ++store_index) {
         mshard_devices.emplace_back(std::make_unique<BlockSegmentManager>(
-          path, dtype, store_index));
+          path, dtype, id, store_index));
       }
     }
     ~MultiShardDevices() {

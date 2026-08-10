@@ -494,8 +494,11 @@ seastar::future<> BlockSegmentManager::start(uint32_t shard_nums)
   device_shard_nums = shard_nums;
   auto num_shard_services = (device_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
   INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
-  return shard_devices.start(num_shard_services, device_path, superblock.config.spec.dtype);
-
+  return shard_devices.start(
+    num_shard_services,
+    device_path,
+    get_device_type(),
+    get_device_id());
 }
 
 seastar::future<> BlockSegmentManager::stop()
@@ -553,7 +556,6 @@ BlockSegmentManager::mount_ret BlockSegmentManager::shard_mount()
   }).safe_then([=, this](auto sb) ->mount_ertr::future<> {
     ceph_assert(sb.config.spec.id == get_device_id());
     ceph_assert(sb.config.spec.dtype == get_device_type());
-    set_device_id(sb.config.spec.id);
     if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= sb.shard_num) {
       INFO("{} shard_id {} out of range {}",
       device_id_printer_t{get_device_id()},
@@ -615,7 +617,6 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::primary_mkfs(
 {
   LOG_PREFIX(BlockSegmentManager::primary_mkfs);
   ceph_assert(sm_config.spec.dtype == superblock.config.spec.dtype);
-  set_device_id(sm_config.spec.id);
   INFO("{} path={}, {}",
        device_id_printer_t{get_device_id()}, device_path, sm_config);
 
@@ -653,7 +654,6 @@ BlockSegmentManager::mkfs_ret BlockSegmentManager::shard_mkfs()
   }).safe_then([this, FNAME](auto sb) {
     ceph_assert(sb.config.spec.id == get_device_id());
     ceph_assert(sb.config.spec.dtype == get_device_type());
-    set_device_id(sb.config.spec.id);
     shard_info = sb.shard_infos[seastar::this_shard_id()];
     INFO("{} read {}", device_id_printer_t{get_device_id()}, shard_info);
     sb.validate();

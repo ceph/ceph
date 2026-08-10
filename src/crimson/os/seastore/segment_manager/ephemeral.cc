@@ -34,54 +34,25 @@ EphemeralSegmentManagerRef create_test_ephemeral(
 }
 
 device_config_t get_ephemeral_device_config(
-    std::size_t index,
-    std::size_t num_main_devices,
-    std::size_t num_cold_devices)
+  device_id_t id,
+  cache_device_set_t cache_devices,
+  bool is_major_device)
 {
-  auto num_devices = num_main_devices + num_cold_devices;
-  assert(num_devices > index);
-  auto get_sec_dtype = [num_main_devices](std::size_t idx) {
-    if (idx < num_main_devices) {
-      return device_type_t::EPHEMERAL_MAIN;
-    } else {
-      return device_type_t::EPHEMERAL_COLD;
-    }
-  };
-
   magic_t magic = 0xabcd;
-  bool is_major_device;
-  secondary_device_set_t secondary_devices;
-  if (index == 0) {
-    is_major_device = true;
-    for (std::size_t secondary_index = index + 1;
-         secondary_index < num_devices;
-         ++secondary_index) {
-      device_id_t secondary_id = static_cast<device_id_t>(secondary_index);
-      secondary_devices.insert({
-        secondary_index,
-	device_spec_t{
-	  magic,
-	  get_sec_dtype(secondary_index),
-	  backend_type_t::SEGMENTED,
-	  secondary_id
-	}
-      });
-    }
-  } else { // index > 0
-    is_major_device = false;
-  }
-
-  device_id_t id = static_cast<device_id_t>(index);
   seastore_meta_t meta = {};
+  device_type_t dtype = device_type_t::EPHEMERAL_MAIN;
+  if (!cache_devices.empty()) {
+    dtype = device_type_t::EPHEMERAL_COLD;
+  }
   return {is_major_device,
           device_spec_t{
             magic,
-	    get_sec_dtype(index),
+            dtype,
 	    backend_type_t::SEGMENTED,
             id
           },
           meta,
-          secondary_devices};
+          cache_devices};
 }
 
 EphemeralSegment::EphemeralSegment(
@@ -136,6 +107,8 @@ EphemeralSegmentManager::mkfs(device_config_t _config)
   logger().info(
     "Mkfs ephemeral segment manager with {}",
     _config);
+  ceph_assert(_config.spec.id == device_id);
+  ceph_assert(_config.spec.dtype == dtype);
   device_config = _config;
   return mkfs_ertr::now();
 }

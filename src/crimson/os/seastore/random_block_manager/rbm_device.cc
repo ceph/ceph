@@ -70,6 +70,7 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
     std::move(config),
     std::move(shard_infos));
   DEBUG("super {} ", super);
+  ceph_assert(super.config.spec.id == device_id);
 
   // write super block
   co_await open(get_device_path(),
@@ -179,6 +180,7 @@ read_ertr::future<device_superblock_t> RBMDevice::read_rbm_superblock(
     ceph_assert_always(crc == (checksum_t)-1);
   }
   super_block.crc = crc;
+  ceph_assert(super_block.config.spec.id == device_id);
   super = super_block;
   DEBUG("got {} ", super);
   co_return co_await read_ertr::future<device_superblock_t>(
@@ -269,7 +271,7 @@ EphemeralRBMDeviceRef create_test_ephemeral(
       DEVICE_ID_RANDOM_BLOCK_MIN + id,
       (journal_size + data_size) * seastar::this_smp_shard_count() +
 	random_block_device::RBMDevice::get_shard_reserved_size(),
-	EphemeralRBMDevice::TEST_BLOCK_SIZE));
+      EphemeralRBMDevice::TEST_BLOCK_SIZE));
 }
 
 open_ertr::future<> EphemeralRBMDevice::open(

@@ -120,8 +120,8 @@ public:
     return super.config.meta;
   }
 
-  secondary_device_set_t& get_secondary_devices() final {
-    return super.config.secondary_devices;
+  cache_device_set_t& get_cache_devices() final {
+    return super.config.cache_devices;
   }
   std::size_t get_available_size() const { return super.total_size; }
   extent_len_t get_block_size() const { return super.block_size; }

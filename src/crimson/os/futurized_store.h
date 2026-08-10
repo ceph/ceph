@@ -269,11 +269,11 @@ public:
 
   virtual seastar::future<std::string> get_default_device_class() = 0;
 
-  virtual seastar::future<std::string> get_primary_backend_type_name() {
+  virtual seastar::future<std::string> get_data_backend_type_name() {
     return seastar::make_ready_future<std::string>();
   }
 
-  virtual seastar::future<std::string> get_secondary_backend_type_name() {
+  virtual seastar::future<std::string> get_cache_backend_type_name() {
     return seastar::make_ready_future<std::string>();
   }
 

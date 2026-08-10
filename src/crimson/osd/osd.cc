@@ -718,13 +718,13 @@ seastar::future<> OSD::_send_boot()
   if (ret == 0) {
     m->metadata["osd_objectstore"] = type;
   }
-  auto primary_backend = co_await store.get_primary_backend_type_name();
-  if (!primary_backend.empty()) {
-    m->metadata["seastore_primary_backend"] = primary_backend;
+  auto data_backend = co_await store.get_data_backend_type_name();
+  if (!data_backend.empty()) {
+    m->metadata["seastore_data_backend"] = data_backend;
   }
-  auto secondary_backend = co_await store.get_secondary_backend_type_name();
-  if (!secondary_backend.empty()) {
-    m->metadata["seastore_secondary_backend"] = secondary_backend;
+  auto cache_backend = co_await store.get_cache_backend_type_name();
+  if (!cache_backend.empty()) {
+    m->metadata["seastore_cache_backend"] = cache_backend;
   }
   co_await monc->send_message(std::move(m));
 }

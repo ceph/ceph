@@ -108,7 +108,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
       return metadata.config.meta;
     };
 
-    secondary_device_set_t& get_secondary_devices() override;
+    cache_device_set_t& get_cache_devices() override;
 
     magic_t get_magic() const override;
 
@@ -178,12 +178,14 @@ namespace crimson::os::seastore::segment_manager::zbd {
 
     public:
     MultiShardDevices(size_t count,
-                      const std::string path)
+                      const std::string path,
+                      device_type_t dtype,
+                      device_id_t id)
     : mshard_devices() {
       mshard_devices.reserve(count);
       for (size_t store_index = 0; store_index < count; ++store_index) {
         mshard_devices.emplace_back(std::make_unique<ZBDSegmentManager>(
-          path, store_index));
+          path, dtype, id, store_index));
       }
     }
     ~MultiShardDevices() {
