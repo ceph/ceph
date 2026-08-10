@@ -20,9 +20,24 @@ overlapping on the internal node itself -- e.g. two transactions both
 writing the routing entry for the same child boundary, not a data
 collision, but the same disjoint-key check applies one level up).
 
+Also breaks out traversal/lookup conflicts (cache_lba_traversal_conflicts_
+mergeable/overlapping), split by the ext label into two sub-mechanisms
+that share the same counters:
+  - "internal routing" (ext=LADDR_INTERNAL): the conflicting transaction
+    never edited the internal node, it only routed some addr through it.
+    mergeable means none of the committer's edited keys could have
+    changed that routing decision.
+  - "leaf lookup" (ext=LADDR_LEAF): the conflicting transaction never
+    edited the leaf, it only looked up some addr in it (e.g. resolving an
+    onode-tree block's laddr to a paddr before the transaction's real
+    edit elsewhere). mergeable means the committer never touched that
+    exact key.
+(see count_lba_traversal_conflict_mergeability in cache.cc for both)
+
 Everything left over after that (true read-only conflicts, where the
-other transaction never edited the node at all) falls into "read
-conflicts" below -- a residual, not a directly-measured bucket.
+other transaction never edited, routed through, or looked up in the
+node) falls into "read conflicts" below -- a residual, not a directly-
+measured bucket.
 
 How to generate the input JSON:
 
@@ -39,7 +54,8 @@ How to generate the input JSON:
          --seastore_device_size 10G --track-metrics \
          "cache_trans_invalidated_by_extent,cache_lba_conflicts_mergeable,\
 cache_lba_conflicts_overlapping,cache_lba_retire_conflicts_mergeable,\
-cache_lba_retire_conflicts_overlapping" \
+cache_lba_retire_conflicts_overlapping,cache_lba_traversal_conflicts_mergeable,\
+cache_lba_traversal_conflicts_overlapping" \
          > run.json
 
   4. Feed the JSON into this script:
@@ -105,6 +121,34 @@ def internal_overlapping(track_metrics):
     )
 
 
+def internal_routing_mergeable(track_metrics):
+    return sum(
+        v for k, v in track_metrics.items()
+        if k.startswith("cache_lba_traversal_conflicts_mergeable") and INTERNAL_EXT_LABEL in k
+    )
+
+
+def internal_routing_overlapping(track_metrics):
+    return sum(
+        v for k, v in track_metrics.items()
+        if k.startswith("cache_lba_traversal_conflicts_overlapping") and INTERNAL_EXT_LABEL in k
+    )
+
+
+def leaf_lookup_mergeable(track_metrics):
+    return sum(
+        v for k, v in track_metrics.items()
+        if k.startswith("cache_lba_traversal_conflicts_mergeable") and LEAF_EXT_LABEL in k
+    )
+
+
+def leaf_lookup_overlapping(track_metrics):
+    return sum(
+        v for k, v in track_metrics.items()
+        if k.startswith("cache_lba_traversal_conflicts_overlapping") and LEAF_EXT_LABEL in k
+    )
+
+
 def main():
     if len(sys.argv) != 2:
         sys.exit(f"usage: {sys.argv[0]} <store-bench-output.json>")
@@ -120,11 +164,17 @@ def main():
     total_split_overlapping = 0
     total_internal_mergeable = 0
     total_internal_overlapping = 0
+    total_routing_mergeable = 0
+    total_routing_overlapping = 0
+    total_lookup_mergeable = 0
+    total_lookup_overlapping = 0
 
     print(f'{"shard":<6}{"ios_completed":<15}{"LBA conflicts":<15}{"pct":<8}'
           f'{"ins_merge":<11}{"ins_overlap":<13}'
           f'{"split_merge":<13}{"split_overlap":<15}'
-          f'{"int_merge":<11}{"int_overlap":<13}')
+          f'{"int_merge":<11}{"int_overlap":<13}'
+          f'{"rout_merge":<12}{"rout_overlap":<14}'
+          f'{"look_merge":<12}{"look_overlap":<14}')
     for result in data["results"]:
         ios = result["ios_completed"]
         metrics = result["track_metrics"]
@@ -135,6 +185,10 @@ def main():
         split_overlapping = leaf_split_overlapping(metrics)
         int_mergeable = internal_mergeable(metrics)
         int_overlapping = internal_overlapping(metrics)
+        rout_mergeable = internal_routing_mergeable(metrics)
+        rout_overlapping = internal_routing_overlapping(metrics)
+        look_mergeable = leaf_lookup_mergeable(metrics)
+        look_overlapping = leaf_lookup_overlapping(metrics)
         total_ios += ios
         total_conflicts += conflicts
         total_insert_mergeable += ins_mergeable
@@ -143,11 +197,17 @@ def main():
         total_split_overlapping += split_overlapping
         total_internal_mergeable += int_mergeable
         total_internal_overlapping += int_overlapping
+        total_routing_mergeable += rout_mergeable
+        total_routing_overlapping += rout_overlapping
+        total_lookup_mergeable += look_mergeable
+        total_lookup_overlapping += look_overlapping
         pct = 100 * conflicts / ios if ios else 0
         print(f'{result["shard"]:<6}{ios:<15}{conflicts:<15}{pct:<8.3f}'
               f'{ins_mergeable:<11}{ins_overlapping:<13}'
               f'{split_mergeable:<13}{split_overlapping:<15}'
-              f'{int_mergeable:<11}{int_overlapping:<13}')
+              f'{int_mergeable:<11}{int_overlapping:<13}'
+              f'{rout_mergeable:<12}{rout_overlapping:<14}'
+              f'{look_mergeable:<12}{look_overlapping:<14}')
 
     print("---")
     print(f"total ios_completed: {total_ios}")
@@ -161,13 +221,19 @@ def main():
           f"mergeable={total_split_mergeable}, non-mergeable={total_split_overlapping}")
     print(f"internal node conflicts: "
           f"mergeable={total_internal_mergeable}, non-mergeable={total_internal_overlapping}")
+    print(f"internal routing (traversal) conflicts: "
+          f"mergeable={total_routing_mergeable}, non-mergeable={total_routing_overlapping}")
+    print(f"leaf lookup conflicts: "
+          f"mergeable={total_lookup_mergeable}, non-mergeable={total_lookup_overlapping}")
 
     classified = (total_insert_mergeable + total_insert_overlapping
                   + total_split_mergeable + total_split_overlapping
-                  + total_internal_mergeable + total_internal_overlapping)
+                  + total_internal_mergeable + total_internal_overlapping
+                  + total_routing_mergeable + total_routing_overlapping
+                  + total_lookup_mergeable + total_lookup_overlapping)
     read_conflicts = total_conflicts - classified
     print(f"read conflicts (true read-only -- other transaction never edited "
-          f"the node at all): {read_conflicts}")
+          f"or routed through the node): {read_conflicts}")
 
     moderate_mergeable = total_insert_mergeable + total_split_mergeable
     if total_conflicts:

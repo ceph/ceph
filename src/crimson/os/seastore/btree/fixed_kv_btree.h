@@ -821,13 +821,28 @@ public:
       },
       min_depth,
       visitor
-    ).si_then([FNAME, c, min_depth](auto &&ret) {
+    ).si_then([FNAME, c, addr, min_depth](auto &&ret) {
       SUBTRACET(
         seastore_fixedkv_tree,
         "ret.leaf.pos {}",
         c.trans,
         ret.leaf.pos);
       std::ignore = min_depth;
+      // addr is what determined the routing decision at every internal
+      // level passed through above, not just the leaf -- record it
+      // against each one. This btree template is shared with the backref
+      // tree (node_key_t == paddr_t there), so only do this for the LBA
+      // tree, whose key type is laddr_t.
+      if constexpr (std::is_same_v<node_key_t, laddr_t>) {
+        for (auto &entry : ret.internal) {
+          if (entry.node) {
+            c.cache.capture_lba_routing_addr(c.trans, *entry.node, addr);
+          }
+        }
+        if (ret.leaf.node) {
+          c.cache.capture_lba_leaf_lookup_addr(c.trans, *ret.leaf.node, addr);
+        }
+      }
 #ifndef NDEBUG
       if (min_depth == 1) {
         ret.assert_valid();

@@ -932,6 +932,18 @@ private:
   };
   std::map<CachedExtent*, retired_leaf_notebook_t> keys_touched_in_retired_leaf;
 
+  /// A map of lba node and the set of keys a particluar transaction routed
+  // through in that node, we keep these keys so that we can compare if any of these keys
+  //conflict with teh other txn's insert.A transaction can route through
+  // the same internal node more than once (e.g. a multi-extent write),
+  /// each time with a different addr, hence the set rather than a number.
+  std::map<CachedExtent*, std::set<laddr_t>> lba_internal_routing_addrs;
+
+  /// same idea as lba_internal_routing_addrs, but for the terminal leaf of
+  /// a lookup: addrs this transaction looked up in a leaf without editing
+  /// it (e.g. resolving an onode-tree block's laddr to a paddr).
+  std::map<CachedExtent*, std::set<laddr_t>> lba_leaf_lookup_addrs;
+
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t omap_tree_stats; // exclude omap tree depth

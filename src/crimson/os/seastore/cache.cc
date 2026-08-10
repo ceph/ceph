@@ -257,6 +257,10 @@ void Cache::register_metrics(store_index_t store_index)
           get_by_ext(efforts.num_lba_retire_conflicts_mergeable, ext);
         auto& retire_overlapping_counter =
           get_by_ext(efforts.num_lba_retire_conflicts_overlapping, ext);
+        auto& traversal_mergeable_counter =
+          get_by_ext(efforts.num_lba_traversal_conflicts_mergeable, ext);
+        auto& traversal_overlapping_counter =
+          get_by_ext(efforts.num_lba_traversal_conflicts_overlapping, ext);
         std::vector<sm::label_instance> merged_labels = src_label;
         merged_labels.insert(merged_labels.end(), ext_label.begin(), ext_label.end());
         metrics.add_group(
@@ -290,6 +294,18 @@ void Cache::register_metrics(store_index_t store_index)
               "lba_retire_conflicts_overlapping",
               retire_overlapping_counter,
               sm::description("of trans_invalidated_by_extent, how many were retire-path (leaf split) LBA mutate-vs-mutate conflicts on overlapping keys"),
+              merged_labels
+            ),
+            sm::make_counter(
+              "lba_traversal_conflicts_mergeable",
+              traversal_mergeable_counter,
+              sm::description("of trans_invalidated_by_extent, how many were LBA conflicts where the conflicting txn only traversed (didn't edit) the node, and its routing addr was unaffected by the committer's edit"),
+              merged_labels
+            ),
+            sm::make_counter(
+              "lba_traversal_conflicts_overlapping",
+              traversal_overlapping_counter,
+              sm::description("of trans_invalidated_by_extent, how many were LBA conflicts where the conflicting txn only traversed (didn't edit) the node, and its routing addr may have been affected by the committer's edit"),
               merged_labels
             ),
           }
@@ -1135,19 +1151,19 @@ std::optional<std::set<laddr_t>> Cache::find_own_edit_keys(
   return get_touched_lba_keys(txn_node_own_copy);
 }
 
-void Cache::count_lba_conflict_mergeability(
+bool Cache::count_lba_conflict_mergeability(
     CachedExtent &committer_node_own_copy,
     Transaction &conflicting_txn)
 {
   auto committer_keys = get_touched_lba_keys(committer_node_own_copy);
   if (!committer_keys) {
-    return;
+    return false;
   }
 
   auto &original_node = *committer_node_own_copy.get_prior_instance();
   auto other_keys = find_own_edit_keys(original_node, conflicting_txn);
   if (!other_keys) {
-    return;
+    return false;
   }
 
   auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
@@ -1159,6 +1175,74 @@ void Cache::count_lba_conflict_mergeability(
     ++get_by_ext(efforts.num_lba_conflicts_overlapping,
                  committer_node_own_copy.get_type());
   }
+  return true;
+}
+
+// conflicting_txn only traversed/looked up in original_node, never edited
+// it. Two sub-cases, sharing the same counters (broken down by extent type
+// via get_by_ext below):
+//  - LADDR_INTERNAL: for each addr routed through the node, find the pivot
+//    key that governed that routing decision (largest key <= addr, in the
+//    pre-edit node) and check whether the committer touched any key in
+//    [that pivot, addr] -- only a key in that span could have changed
+//    which child addr resolves to.
+//  - LADDR_LEAF: for each addr looked up in the leaf, there's no routing
+//    ambiguity -- the lookup key *is* the key, so it's a direct membership
+//    check against the committer's edited keys.
+bool Cache::count_lba_traversal_conflict_mergeability(
+    CachedExtent &original_node,
+    CachedExtent &committer_node_own_copy,
+    Transaction &conflicting_txn)
+{
+  auto committer_keys = get_touched_lba_keys(committer_node_own_copy);
+  if (!committer_keys) {
+    return false;
+  }
+
+  bool overlapping = false;
+  if (original_node.get_type() == extent_types_t::LADDR_INTERNAL) {
+    auto routing_it = conflicting_txn.lba_internal_routing_addrs.find(&original_node);
+    if (routing_it == conflicting_txn.lba_internal_routing_addrs.end()) {
+      return false;
+    }
+    auto &internal_node = static_cast<lba::LBAInternalNode&>(original_node);
+    for (auto addr : routing_it->second) {
+      auto iter = internal_node.upper_bound(addr);
+      assert(iter != internal_node.begin());
+      --iter;
+      auto original_lower_range = iter.get_key();
+      //range check for commiter key in (lower_bound_of_addr,addr)
+      auto ckey = committer_keys->lower_bound(original_lower_range);
+      if (ckey != committer_keys->end() && *ckey <= addr) {
+        overlapping = true;
+        break;
+      }
+    }
+  } else if (original_node.get_type() == extent_types_t::LADDR_LEAF) {
+    auto lookup_it = conflicting_txn.lba_leaf_lookup_addrs.find(&original_node);
+    if (lookup_it == conflicting_txn.lba_leaf_lookup_addrs.end()) {
+      return false;
+    }
+    for (auto addr : lookup_it->second) {
+      if (committer_keys->contains(addr)) {
+        overlapping = true;
+        break;
+      }
+    }
+  } else {
+    return false;
+  }
+
+  auto& efforts = get_by_src(stats.invalidated_efforts_by_src,
+                              conflicting_txn.get_src());
+  if (overlapping) {
+    ++get_by_ext(efforts.num_lba_traversal_conflicts_overlapping,
+                 original_node.get_type());
+  } else {
+    ++get_by_ext(efforts.num_lba_traversal_conflicts_mergeable,
+                 original_node.get_type());
+  }
+  return true;
 }
 
 void Cache::count_lba_retire_conflict_mergeability(
@@ -1202,7 +1286,21 @@ void Cache::invalidate_extent(
       assert(!i.t->is_weak());
       account_conflict(t.get_src(), i.t->get_src());
       if (committer_node_own_copy && measure_lba_conflict_mergeability) {
-        count_lba_conflict_mergeability(*committer_node_own_copy, *i.t);
+        bool classified = count_lba_conflict_mergeability(
+          *committer_node_own_copy, *i.t);
+        if (!classified) {
+          classified = count_lba_traversal_conflict_mergeability(
+            extent, *committer_node_own_copy, *i.t);
+        }
+        if (!classified) {
+          SUBDEBUGT(
+            seastore_t,
+            "lba conflict unclassified -- extent={} conflicting_trans_id={} "
+            "conflicting_trans_src={} has_routing_data={} has_lookup_data={}",
+            t, extent, i.t->get_trans_id(), i.t->get_src(),
+            i.t->lba_internal_routing_addrs.contains(&extent),
+            i.t->lba_leaf_lookup_addrs.contains(&extent));
+        }
       }
       mark_transaction_conflicted(*i.t, extent);
       invalidated_trans.emplace_back(i.t);

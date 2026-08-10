@@ -155,6 +155,24 @@ public:
     t.add_present_to_retired_set(ref);
   }
 
+  /// Record that `t` resolved `addr` while routing through `node`, an LBA
+  /// internal node, without making its own edit to it.
+  void capture_lba_routing_addr(Transaction &t, CachedExtent &node, laddr_t addr) {
+    if (measure_lba_conflict_mergeability &&
+        node.get_type() == extent_types_t::LADDR_INTERNAL) {
+      t.lba_internal_routing_addrs[&node].insert(addr);
+    }
+  }
+
+  /// Record that `t` looked up `addr` in `node`, the terminal LBA leaf of
+  /// that lookup, without making its own edit to it.
+  void capture_lba_leaf_lookup_addr(Transaction &t, CachedExtent &node, laddr_t addr) {
+    if (measure_lba_conflict_mergeability &&
+        node.get_type() == extent_types_t::LADDR_LEAF) {
+      t.lba_leaf_lookup_addrs[&node].insert(addr);
+    }
+  }
+
   template <typename T, typename Func>
   TCachedExtentRef<T> retire_absent_extent_addr(
     Transaction &t,
@@ -1815,6 +1833,13 @@ private:
     // which this measurement does not attempt.
     counter_by_extent_t<uint64_t> num_lba_retire_conflicts_mergeable;
     counter_by_extent_t<uint64_t> num_lba_retire_conflicts_overlapping;
+    // Case 1: the conflicting transaction never edited this LBA internal
+    // node, it only traversed through it.In this case,we say meregable txn if
+    // none of the committer's edited keys fell in [original_lower_range, addr]
+    // for any addr the conflicting txn routed through this node
+
+    counter_by_extent_t<uint64_t> num_lba_traversal_conflicts_mergeable;
+    counter_by_extent_t<uint64_t> num_lba_traversal_conflicts_overlapping;
     uint64_t total_trans_invalidated = 0;
     uint64_t num_ool_records = 0;
     uint64_t ool_record_bytes = 0;
@@ -2040,8 +2065,19 @@ void stage_visibility_handoff(Transaction& t,
 
   /// for the replace (no split) path: get committer_node_own_copy's keys,
   /// find conflicting_txn's copy node, get its keys, and call the helper
-  /// function to check if the sets are disjoint.
-  void count_lba_conflict_mergeability(
+  /// function to check if the sets are disjoint. Returns false if
+  /// conflicting_txn never edited this node (Case 1, not handled here).
+  bool count_lba_conflict_mergeability(
+    CachedExtent &committer_node_own_copy,
+    Transaction &conflicting_txn);
+
+  /// Case 1: conflicting_txn only traversed/looked up in original_node,
+  /// never edited it. Handles both LADDR_INTERNAL (routing decision) and
+  /// LADDR_LEAF (exact-key lookup). Returns false if we have no
+  /// routing/lookup data for conflicting_txn on this node either (still
+  /// unclassified).
+  bool count_lba_traversal_conflict_mergeability(
+    CachedExtent &original_node,
     CachedExtent &committer_node_own_copy,
     Transaction &conflicting_txn);
 
