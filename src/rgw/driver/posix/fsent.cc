@@ -1500,32 +1500,48 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
     return ret;
   }
 
-  std::string tgtname;
-  ret = for_each(dpp, [this, &dest, &dest_key, &tgtname, &dpp, &y](const char* name) {
-    std::unique_ptr<FSEnt> sobj;
-
-    if (name[0] == '.') {
-      /* Skip dotfiles */
-      return 0;
+  if (instance_id.empty()) {
+    /* We were asked to copy the current version */
+    if (!cur_version) {
+      stat(dpp, /*force=*/false);
     }
-    rgw_obj_key key = decode_obj_key(name);
-    if (!dest_key.instance.empty() && dest_key.instance != key.instance) {
-      /* Were asked to copy a single version, and this is not it */
-      return 0;
+    if (!cur_version) {
+      /* Delete marker */
+      return -ENOENT;
     }
+    ret = cur_version->copy(dpp, y, dest.get(), dst_name);
+  } else {
+    /* Copy specific version */
+    ret = for_each(dpp, [this, &dest, &dst_name, &dpp, &y](const char* name) {
+      std::unique_ptr<FSEnt> sobj;
 
-    int r = this->get_ent(dpp, y, name, std::string(), sobj);
-    if (r < 0)
-      return r;
-    key.name = dest_key.name;
-    tgtname = get_key_fname(key, /*use_version=*/true);
-    return sobj->copy(dpp, y, dest.get(), tgtname);
-  });
+      if (name[0] == '.') {
+        /* Skip dotfiles */
+        return 0;
+      }
+      rgw_obj_key key = decode_obj_key(name);
+      if (instance_id != key.instance) {
+        return 0;
+      }
 
-  if (!dest_key.instance.empty()) {
-    /* We didn't copy the symlink, make a new one */
-    std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(basename, dest.get(), tgtname, ctx);
-    ret = sl->create(dpp, /*existed=*/nullptr, /*temp_file=*/false);
+      int r = this->get_ent(dpp, y, name, std::string(), sobj);
+      if (r < 0)
+        return r;
+      return sobj->copy(dpp, y, dest.get(), dst_name);
+    });
+  }
+  if (ret < 0) {
+    return ret;
+  }
+
+  {
+    /* Set current version symlink for new object */
+    std::unique_ptr<FSEnt> dobj;
+    ret = dest->get_ent(dpp, y, dst_name, std::string(), dobj);
+    if (ret < 0)
+      return ret;
+
+    ret = dest->set_cur_version_ent(dpp, dobj.get());
   }
 
   return ret;
