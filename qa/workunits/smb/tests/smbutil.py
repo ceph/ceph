@@ -177,14 +177,25 @@ class PathWrapper:
 
 
 def get_shares(smb_cfg):
-    """Get all SMB shares."""
+    """Get all SMB shares.
+
+    ``ceph smb show`` defaults to --results=collapsed: with exactly one
+    matching share it returns the share object itself; otherwise it returns
+    {"resources": [...]}. Normalize both shapes to a list.
+    """
     jres = cephutil.cephadm_shell_cmd(
         smb_cfg,
         ["ceph", "smb", "show", "ceph.smb.share"],
         load_json=True,
     )
     assert jres.obj
-    resources = jres.obj['resources']
+    obj = jres.obj
+    if 'resources' in obj:
+        resources = obj['resources']
+    elif obj.get('resource_type') == 'ceph.smb.share':
+        resources = [obj]
+    else:
+        raise AssertionError(f'unexpected smb show output: {obj!r}')
     assert len(resources) > 0
     assert all(r['resource_type'] == 'ceph.smb.share' for r in resources)
     return resources
