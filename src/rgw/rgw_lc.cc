@@ -1886,7 +1886,7 @@ int RGWLC::handle_lc_mp_ops(rgw::sal::Bucket* bucket,
     }
     if ((offset % 100) == 0) {
       if (worker_should_stop(stop_at, once)) {
-        ldpp_dout(this, 0) << __func__ << " interval budget EXPIRED bucket=" << bucket->get_name()
+        ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED bucket=" << bucket->get_name()
           << dendl;
         return 0;
       }
@@ -2303,6 +2303,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     }
 
     int num_shards = rgw::num_shards(bucket->get_info().layout.current_index.layout.normal);
+    num_shards = (num_shards <= 0 ? 1 : num_shards); // 0 num_shards means single shard
     for (int index_sid = 0; index_sid < num_shards; ++index_sid) {
       ldpp_dout(this, 20) << __func__ << "(): process shard=" << index_sid << " by worker ix: " << worker->ix << dendl;
       spawn_if(&workpool,
