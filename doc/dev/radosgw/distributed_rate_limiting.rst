@@ -100,6 +100,15 @@ Each gateway runs two independent paths:
 * A background coordinator exchanges membership and demand reports with
   peer gateways through RADOS watch-notify.
 
+v1 deliberately reuses proven RADOS mechanisms (watch-notify, and CLS
+only if a later optional persistence path needs it) rather than an
+external store. Experience from related RGW work (including d4n
+attempts to move CLS-style logic onto Redis) shows that Redis-style
+shared updates can hit atomicity limits that are hard to solve without
+hurting performance. FoundationDB or another transactional store may be
+evaluated later for membership and demand sharing; that is out of scope
+for the first implementation. See Alternatives below.
+
 The design uses dedicated objects in the zone's control pool. It follows
 the watch registration, re-registration, sharding, and asynchronous
 callback patterns used by ``RGWSI_Notify``, but does not reuse its
@@ -193,9 +202,13 @@ Only keys with an enabled limit and recent activity are reported.
 Reports are batched by demand-object shard and bounded by entry count
 and encoded size. Batching uses an in-process coordinator queue or
 buffer in each RGW; it is not a CLS queue and is not on the HTTP
-admission path. If that in-memory queue or the notify payload limit is
-reached, the coordinator drops demand detail and retains the base
-allocation described below.
+admission path. Before a notify is sent, the coordinator coalesces
+queued reports for the same rate-limit key and dimension: newer demand
+samples replace older ones still waiting in the same batch, so a single
+outbound message carries at most one entry per key rather than a
+history of superseded intervals. If that in-memory queue or the notify
+payload limit is reached, the coordinator drops demand detail and
+retains the base allocation described below.
 
 Messages use Ceph's versioned ``encode()`` and ``decode()`` conventions
 and include a sender instance identifier, sequence number, reporting
@@ -215,28 +228,42 @@ the number of live gateway instances.
 shorter gossip interval only controls how frequently demand and
 allocations converge; it does not create a second token-bucket window.
 
-Every gateway initially receives a base allocation of ``B / N``. A small
-portion of this base is retained as a reserve for a new request on a
-previously idle gateway. Base and reserve allocations together never
-exceed ``B``.
+Every gateway initially receives an equal base allocation of ``B / N``.
+A small portion of this base is retained as a reserve for a new request
+on a previously idle gateway. Base and reserve allocations together
+never exceed ``B``.
 
-The allocator then redistributes unused base capacity:
+The allocator then redistributes unused base capacity. Surplus is not
+simply re-split ``B / N`` again; it is filled in a max-min-fair way:
 
 #. Gateways whose reported demand is below their current allocation
    surrender the unused portion above their reserve.
-#. The surrendered capacity is divided among gateways whose attempted
-   demand exceeds their allocation.
+#. The surrendered capacity is shared equally among gateways that still
+   have unmet demand (demand above their current allocation), raising
+   each such gateway by the same increment until its demand is met or
+   the surplus is exhausted.
 #. These steps repeat until there is no unused capacity or no
    unsatisfied demand.
-#. Any remaining capacity is retained as equal burst reserve.
+#. Any capacity that remains after all reported demand is satisfied is
+   split equally across live members as burst reserve. That reserve is
+   still part of the same budget ``B``; it is not an extra pool on top
+   of ``B``.
 
 This is a max-min-fair water-filling calculation with a small reserve.
+Equal division applies to the initial base and to each filling step
+among the currently unsatisfied set; gateways with higher unmet demand
+receive more only because they remain in the unsatisfied set for more
+steps, not because surplus is proportional to raw demand in one shot.
 All gateways use the same ordered membership and demand inputs, so they
 converge on the same result without a leader.
 
-The resulting allocation controls both refill rate and burst capacity of
-the local token bucket. When an allocation shrinks, existing positive
-tokens are clamped to the new capacity. Existing byte debt is preserved.
+The resulting allocation ``L_i`` controls both refill rate and burst
+capacity of the local token bucket. Burst is therefore bounded by
+``L_i`` for the current gossip interval semantics of ``B``: an idle
+gateway does not accumulate tokens beyond its allocated capacity, and
+when ``L_i`` shrinks, existing positive tokens are clamped to the new
+capacity. There is no separate unbounded burst that grows with idle
+time. Existing byte debt is preserved.
 
 When membership and reports are stable, the sum of local allocations for
 a key and dimension is at most the configured budget. During startup, a
@@ -352,7 +379,14 @@ Alternatives Considered
   research only and does not replace watch-notify coordination.
 * **External Redis or Valkey:** shared counters and persistence, but
   normally add a network operation to each request and introduce another
-  operational dependency.
+  operational dependency. Related RGW work (d4n) also found that
+  expressing CLS-like atomic updates on Redis was difficult to keep both
+  correct and fast; v1 therefore does not depend on Redis.
+* **Non-RADOS coordination (for example FoundationDB):** worth
+  investigating later for membership maps and demand sharing if the
+  project adopts such a store more broadly. v1 stays on RADOS
+  watch-notify so the feature can ship on existing clusters without that
+  dependency.
 * **Startup-only counter restore:** reduces the effect of a restart, but
   does not coordinate gateways while they are running.
 
@@ -360,27 +394,48 @@ Alternatives Considered
 Testing
 -------
 
-Implementation should include:
+Implementation should cover several layers, following existing RGW
+practice:
 
-* allocator unit tests for balanced and skewed demand, idle peers,
-  saturation, rounding, changing membership, and all independently
-  limited operation and byte dimensions;
-* protocol tests for versioning, malformed payloads, duplicate and
-  out-of-order messages, payload bounds, peer expiry, and restart with a
-  new instance identifier;
-* concurrency tests that show request-path demand accounting and
-  allocation updates do not take a write mutex on the admission path;
-* multi-RGW tests that compare aggregate accepted traffic with the
-  configured budget, verify redistribution from idle gateways, exercise
-  join/leave/restart/partition, inject notify timeouts for both failure
-  modes, verify overshoot during join under ``hold``, verify that local
-  mode is unchanged, and verify that request threads issue no RADOS
-  coordination operations;
-* capacity tests that relate shard count and the tracked-key hard cap to
-  payload size and fallback-to-local behavior; and
-* scale tests that report request latency and throughput relative to the
-  local limiter, RADOS notification rate and bytes, convergence time,
-  overshoot, underutilization, and coordinator CPU and memory.
+Unit tests
+  Allocator and protocol logic that needs no cluster: balanced and
+  skewed demand, idle peers, saturation, rounding, changing membership,
+  all independently limited operation and byte dimensions, burst
+  clamping so idle members cannot grow unbounded tokens, versioning,
+  malformed payloads, duplicate and out-of-order messages, payload
+  bounds, coalesced batched reports, peer expiry, and restart with a new
+  instance identifier. Concurrency tests should show request-path demand
+  accounting and allocation updates do not take a write mutex on the
+  admission path.
+
+Coordinator / RADOS tests (between unit and full RGW system tests)
+  Similar in spirit to existing CLS-oriented tests: run against a
+  vstart or teuthology Ceph cluster without necessarily running RGW
+  frontends. Drive multiple coordinator clients against real
+  watch-notify objects to validate membership, demand exchange, and
+  allocation convergence with more control than full HTTP system tests.
+
+Local system tests (vstart)
+  Prefer extending any existing local rate-limiter functional coverage
+  so the same assertions pass with a single RGW under the distributed
+  backend (behavior should match local when ``N = 1``). Add multi-RGW
+  vstart cases for aggregate accepted traffic versus the configured
+  budget, redistribution from idle gateways, join/leave/restart, both
+  failure modes, overshoot during join under ``hold``, unchanged
+  ``local`` mode, and the absence of RADOS coordination on request
+  threads.
+
+Teuthology
+  Run the multi-RGW functional suite under different cluster setups when
+  practical.
+
+Perf / stability
+  There is little shared infrastructure for these today. Document
+  procedure and results for latency and throughput versus the local
+  limiter, RADOS notification rate and bytes, convergence time,
+  overshoot, underutilization, coordinator CPU and memory, and the
+  relationship between shard count, tracked-key cap, and fallback-to-local
+  behavior.
 
 Default gossip interval values will still be refined from those results
 after the capacity model for shards and tracked keys is fixed.
