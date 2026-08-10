@@ -183,9 +183,8 @@ are multiple fields at the top level of the filter::
    {"genre": "rock", "year": {"$gte": 2000}}   // genre == "rock" AND year >= 2000
 
 Field names always refer to top-level keys of the metadata document. Nested
-documents cannot be addressed: a name that contains a ``.`` is looked up as a
-single literal key, not as a path. Such a condition is not rejected, but it
-never matches, since a top-level metadata key may not contain a ``.``.
+documents cannot be addressed, and a name that contains a ``.`` is rejected with
+a validation error, since a metadata key may not contain a ``.`` either.
 
 A field that was declared in ``nonFilterableMetadataKeys`` may not appear in a filter at all,
 and a field that was declared in ``filterableMetadataKeys`` is matched against its column
