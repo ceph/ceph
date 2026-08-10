@@ -108,31 +108,19 @@ Deploying Your First Ceph Cluster
 
 The recommended way to deploy a Ceph cluster is with ``cephadm``, which
 bootstraps a cluster on a single host from a container image and then
-expands it to additional hosts. A minimal deployment looks like this:
+expands it to additional hosts. Once the ``cephadm`` command is
+available on the first host, creating a cluster comes down to a single
+command:
 
-#. Install the ``cephadm`` package on the first host. It is available in
-   the repositories of most major Linux distributions, for example:
+.. prompt:: bash #
 
-   .. prompt:: bash #
-
-      dnf install cephadm
-
-   or:
-
-   .. prompt:: bash #
-
-      apt install cephadm
-
-#. Bootstrap the cluster, supplying the IP address of the first host:
-
-   .. prompt:: bash #
-
-      cephadm bootstrap --mon-ip <ip-of-this-host>
+   cephadm bootstrap --mon-ip <ip-of-this-host>
 
 This creates a working single-host cluster, complete with a web-based
 dashboard, that can then be expanded with additional hosts and storage
-devices. See :ref:`cephadm_deploying_new_cluster` for the complete
-procedure, including requirements, adding hosts, and deploying OSDs.
+devices. Follow :ref:`cephadm_deploying_new_cluster` for the complete
+procedure: it covers the host requirements, how to obtain ``cephadm``
+for your distribution, and how to add hosts and deploy OSDs.
 
 If you are running Ceph inside Kubernetes, use `Rook
 <https://rook.io>`_ instead. An overview of all installation methods is
