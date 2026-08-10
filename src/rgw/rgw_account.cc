@@ -257,11 +257,42 @@ int modify(const DoutPrefixProvider* dpp,
     }
   }
 
+  const bool suspension_changed =
+    op_state.suspended && static_cast<bool>(*op_state.suspended) !=
+      static_cast<bool>(info.suspended);
+  if (op_state.suspended) {
+    info.suspended = *op_state.suspended ? 1 : 0;
+  }
+
   constexpr bool exclusive = false;
 
   ret = driver->store_account(dpp, y, exclusive, info, &old_info, attrs, objv);
   if (ret < 0) {
     return ret;
+  }
+
+  if (suspension_changed) {
+    const size_t max_buckets =
+      dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+    rgw::sal::BucketList listing;
+    do {
+      ret = driver->list_buckets(dpp, info.id, info.tenant,
+                                 listing.next_marker, "",
+                                 max_buckets, false, listing, y);
+      if (ret < 0) {
+        err_msg = "could not list account buckets to update suspension";
+        return ret;
+      }
+      std::vector<rgw_bucket> buckets;
+      for (auto& ent : listing.buckets) {
+        buckets.push_back(std::move(ent.bucket));
+      }
+      ret = driver->set_buckets_enabled(dpp, buckets, !info.suspended, y);
+      if (ret < 0) {
+        err_msg = "failed to modify account bucket suspension";
+        return ret;
+      }
+    } while (!listing.next_marker.empty());
   }
 
   flusher.start(0);

@@ -858,8 +858,10 @@ struct RGWAccountInfo {
   static constexpr int32_t DEFAULT_ACCESS_KEY_LIMIT = 4;
   int32_t max_access_keys = DEFAULT_ACCESS_KEY_LIMIT;
 
+  __u8 suspended{0};
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(id, bl);
     encode(tenant, bl);
     encode(name, bl);
@@ -871,11 +873,12 @@ struct RGWAccountInfo {
     encode(max_buckets, bl);
     encode(max_access_keys, bl);
     encode(bucket_quota, bl);
+    encode(suspended, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(id, bl);
     decode(tenant, bl);
     decode(name, bl);
@@ -888,6 +891,9 @@ struct RGWAccountInfo {
     decode(max_access_keys, bl);
     if (struct_v >= 2) {
       decode(bucket_quota, bl);
+    }
+    if (struct_v >= 3) {
+      decode(suspended, bl);
     }
     DECODE_FINISH(bl);
   }
