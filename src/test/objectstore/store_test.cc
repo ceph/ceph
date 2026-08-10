@@ -27,6 +27,8 @@
 #include <boost/random/binomial_distribution.hpp>
 #include <fmt/format.h>
 #include <gtest/gtest.h>
+#include <limits.h>
+#include <unistd.h>
 
 #include "global/global_context.h"
 #include "os/ObjectStore.h"
@@ -11982,7 +11984,7 @@ TEST_P(CorruptedOnodesTest, Fsck_TolerateCorruptedOnodes)
 // via ceph_assert (coredump/backtrace preserved).
 TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
 {
-  testing::FLAGS_gtest_death_test_style = "threadsafe";
+  GTEST_FLAG_SET(death_test_style, "threadsafe");
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
   SetVal(g_conf(), "bluestore_debug_onode_segmentation_random", "false");
   SetVal(g_conf(), "bluestore_onode_segment_size", "0");
@@ -12007,7 +12009,7 @@ TEST_P(CorruptedOnodesTest, CorruptedOnode_RegularPathStillCrashes)
     bufferlist bl;
     (void)store->read(ch2, hoid, 0, 4, bl);
     umount();
-  }, "");
+  }, "FAILED ceph_assert");
   cleanup_store();
 }
 
@@ -13069,6 +13071,13 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val_or_die(
     "enable_experimental_unrecoverable_data_corrupting_features", "*");
   g_ceph_context->_conf.apply_changes(nullptr);
+
+  char exe_path[PATH_MAX];
+  ssize_t exe_len = ::readlink("/proc/self/exe", exe_path, sizeof(exe_path) - 1);
+  if (exe_len > 0) {
+    exe_path[exe_len] = '\0';
+    argv[0] = exe_path;
+  }
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
