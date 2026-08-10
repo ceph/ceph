@@ -19,12 +19,12 @@ get_rb_device(
     return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
       std::make_unique<
         random_block_device::RotationalDevice
-      >(device + "/block", dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
+      >(device, dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
   } else {
     return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
       std::make_unique<
         random_block_device::nvme::NVMeBlockDevice
-      >(device + "/block", dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
+      >(device, dtype, DEVICE_ID_RANDOM_BLOCK_MIN + id));
   }
 }
 

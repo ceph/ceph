@@ -117,7 +117,9 @@ using crimson::common::get_conf;
 
 SeaStore::Shard::Shard(
   std::string root,
-  Device* dev,
+  Device* device,
+  std::vector<Device*> &cache_devs,
+  std::vector<Device*> &data_devs,
   bool is_test,
   uint32_t store_shard_nums,
   store_index_t store_index)
@@ -134,7 +136,14 @@ SeaStore::Shard::Shard(
     INFO("store_index {} is out of range - inactivating this store shard, store_shard_nums {}", store_index, store_shard_nums);
   }
 
-  device = &(dev->get_sharded_device(store_index));
+  ceph_assert(device);
+  primary_device = &(device->get_sharded_device(store_index));
+  for (auto &dev : cache_devs) {
+    cache_devices.emplace_back(&(dev->get_sharded_device(store_index)));
+  }
+  for (auto &dev : data_devs) {
+    data_devices.emplace_back(&(dev->get_sharded_device(store_index)));
+  }
 
   register_metrics(store_index);
 }
@@ -332,7 +341,7 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
   );
 }
 
-seastar::future<> SeaStore::get_shard_nums()
+seastar::future<> SeaStore::get_shard_nums(Device &device)
 {
   LOG_PREFIX(SeaStore::get_shard_nums);
   auto tuple = co_await read_meta("mkfs_done");
@@ -343,18 +352,21 @@ seastar::future<> SeaStore::get_shard_nums()
     co_return;
   } else {
     INFO("seastore mkfs done");
-    auto shard_nums = co_await device->get_shard_nums(
+    auto shard_nums = co_await device.get_shard_nums(
       ).handle_error(
         crimson::ct_error::assert_all(
-          "Invalid error in device->get_shard_nums"
+          "Invalid error in device.get_shard_nums"
       ));
     INFO("seastore shard nums {}", shard_nums);
     store_shard_nums = shard_nums;
-    if(crimson::common::get_conf<bool>("seastore_require_partition_count_match_reactor_count")) {
+    if (crimson::common::get_conf<bool>(
+      "seastore_require_partition_count_match_reactor_count")) {
       INFO("seastore doesn't allow shard change");
       if (store_shard_nums != seastar::this_smp_shard_count()) {
-        INFO("seastore shards {} do not match seastar::smp {}", store_shard_nums, seastar::this_smp_shard_count());
-        ceph_abort_msg("seastore_require_partition_count_match_reactor_count is true, seastore shards do not match seastar::smp");
+        INFO("seastore shards {} do not match seastar::smp {}",
+          store_shard_nums, seastar::this_smp_shard_count());
+        ceph_abort_msg("seastore_require_partition_count_match_reactor_count"
+                       " is true, seastore shards do not match seastar::smp");
       }
     }
     co_return;
@@ -364,9 +376,30 @@ seastar::future<> SeaStore::get_shard_nums()
 seastar::future<> SeaStore::shard_stores_start(bool is_test)
 {
   LOG_PREFIX(SeaStore::shard_stores_start);
-  auto num_shard_services = (store_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
-  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}", store_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
-  return shard_stores.start(num_shard_services, root, device.get(), is_test, store_shard_nums);
+  auto num_shard_services =
+    (store_shard_nums + seastar::this_smp_shard_count() - 1 ) /
+      seastar::this_smp_shard_count();
+  INFO("store_shard_nums={} seastar::smp={}, num_shard_services={}, "
+    "cache_devices: {}, data_devices: {}",
+    store_shard_nums, seastar::this_smp_shard_count(), num_shard_services,
+    cache_devices.size(), data_devices.size());
+
+  std::vector<Device*> cache_devs;
+  for (auto &dev : cache_devices) {
+    cache_devs.emplace_back(dev.get());
+  }
+  std::vector<Device*> data_devs;
+  for (auto &dev : data_devices) {
+    data_devs.emplace_back(dev.get());
+  }
+  return shard_stores.start(
+    num_shard_services,
+    root,
+    primary_device,
+    cache_devs,
+    data_devs,
+    is_test,
+    store_shard_nums);
 }
 
 seastar::future<> SeaStore::shard_stores_stop()
@@ -387,35 +420,144 @@ seastar::future<uint32_t> SeaStore::start()
 #else
   bool is_test = false;
 #endif
-  using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_hot_device_type");
-  device_type_t d_type = string_to_device_type(type);
-  assert(d_type == device_type_t::SSD ||
-         d_type == device_type_t::RANDOM_BLOCK_SSD);
-
-  type = get_conf<std::string>("seastore_hot_backend_type");
-  auto b_type = string_to_backend_type(type);
-  INFO("main device type: {}, main backend type: {}", d_type, b_type);
   ceph_assert(root != "");
-  DeviceRef device_obj = co_await Device::make_device(root, d_type, b_type, 0);
-  device = std::move(device_obj);
-  co_await get_shard_nums();
-  co_await device->start(store_shard_nums);
-  ceph_assert(device);
+  std::string type = get_conf<std::string>("seastore_cache_device_type");
+  device_type_t dtype = string_to_device_type(type);
+  assert(dtype == device_type_t::SSD ||
+         dtype == device_type_t::RANDOM_BLOCK_SSD);
+  auto btype = get_default_backend_of_device(dtype);
+  INFO("cache device type: {}, cache backend type: {}", dtype, btype);
+
+  using crimson::common::get_conf;
+  auto cache_dev_path = fmt::format("{}/{}", root, CACHE_DEV_PREFIX);
+  bool cache_exists = co_await seastar::file_exists(cache_dev_path);
+  if (cache_exists) {
+    // initialize cache devices
+    seastar::file rdir = co_await seastar::open_directory(cache_dev_path);
+    auto lister = rdir.experimental_list_directory();
+    while (auto de = co_await lister()) {
+      auto& entry = *de;
+      DEBUG("found for cache devices: {}", entry.name);
+      auto p = parse_device_id(entry.name, 0);
+      if (!p) {
+        continue;
+      }
+      device_id_t id = *p;
+      std::string path = fmt::format("{}/{}", cache_dev_path, entry.name);
+      DeviceRef cache_dev = co_await Device::make_device(
+        path, dtype, btype, id);
+      ceph_assert(cache_dev);
+      auto *p_cache_dev = cache_dev.get();
+      cache_devices.emplace_back(std::move(cache_dev));
+      co_await get_shard_nums(*p_cache_dev);
+      co_await p_cache_dev->start(store_shard_nums);
+      if (id == 0) {
+        ceph_assert(!primary_device);
+        primary_device = p_cache_dev;
+      }
+    }
+  }
+  if (!cache_exists && crimson::common::get_conf<bool>(
+        "seastore_logical_bucket_cache_test_stress")) {
+    // lbc test workload enabled while no secondary devices indicated, create one
+    co_await seastar::make_directory(cache_dev_path);
+    std::string path = fmt::format("{}/block", cache_dev_path);
+    DeviceRef cache_dev = co_await Device::make_device(path, dtype, btype, 0);
+    ceph_assert(cache_dev);
+    auto *p_cache_dev = cache_dev.get();
+    cache_devices.emplace_back(std::move(cache_dev));
+    co_await get_shard_nums(*p_cache_dev);
+    co_await p_cache_dev->start(store_shard_nums);
+    primary_device = p_cache_dev;
+  }
+
+  // initialize data devices
+  type = get_conf<std::string>("seastore_data_device_type");
+  dtype = string_to_device_type(type);
+  btype = get_default_backend_of_device(dtype);
+  INFO("data device type: {}, data backend type: {}", dtype, btype);
+  seastar::file rdir = co_await seastar::open_directory(root);
+  auto lister = rdir.experimental_list_directory();
+  while (auto de = co_await lister()) {
+    auto& entry = *de;
+    DEBUG("found for data devices: {}", entry.name);
+    std::string path = fmt::format("{}/{}", root, entry.name);
+    auto type = co_await seastar::file_type(path);
+    if (!type ||
+        (type != seastar::directory_entry_type::link &&
+         type != seastar::directory_entry_type::regular)) {
+      continue;
+    }
+    auto p = parse_device_id(entry.name, cache_devices.size());
+    if (!p) {
+      continue;
+    }
+    device_id_t id = *p;
+    DeviceRef data_dev = co_await Device::make_device(
+      path, dtype, btype, id);
+    ceph_assert(data_dev);
+    auto *p_data_dev = data_dev.get();
+    data_devices.emplace_back(std::move(data_dev));
+    co_await get_shard_nums(*p_data_dev);
+    co_await p_data_dev->start(store_shard_nums);
+    if (id == 0) {
+      ceph_assert(!primary_device);
+      primary_device = p_data_dev;
+    }
+  }
+  co_await rdir.close();
+
+  if (data_devices.empty()) {
+    WARN("Can't find any data devices, creating one");
+    // no data device is pointed before the OSD boots, create one
+    std::string path = fmt::format("{}/block", root);
+    DeviceRef data_dev = co_await Device::make_device(
+      path, dtype, btype, cache_devices.size());
+    ceph_assert(data_dev);
+    auto *p_data_dev = data_dev.get();
+    data_devices.emplace_back(std::move(data_dev));
+    co_await get_shard_nums(*p_data_dev);
+    co_await p_data_dev->start(store_shard_nums);
+    if (cache_devices.empty()) {
+      ceph_assert(!primary_device);
+      primary_device = p_data_dev;
+    }
+  }
   co_await shard_stores_start(is_test);
   INFO("done");
   co_return store_shard_nums;
 }
 
-seastar::future<> SeaStore::test_start(DeviceRef device_obj)
+seastar::future<> SeaStore::test_start(
+  Device* device,
+  std::vector<DeviceRef> &&cdevs,
+  std::vector<DeviceRef> &&ddevs)
 {
   LOG_PREFIX(SeaStore::test_start);
   INFO("...");
 
-  ceph_assert(device_obj);
+  ceph_assert(device);
   ceph_assert(root == "");
-  device = std::move(device_obj);
-  co_await shard_stores.start_single(1, root, device.get(), true, seastar::this_smp_shard_count());
+  primary_device = device;
+  cache_devices = std::move(cdevs);
+  data_devices = std::move(ddevs);
+
+  std::vector<Device*> cache_devs;
+  for (auto &dev : cache_devices) {
+    cache_devs.emplace_back(dev.get());
+  }
+  std::vector<Device*> data_devs;
+  for (auto &dev : data_devices) {
+    data_devs.emplace_back(dev.get());
+  }
+  co_await shard_stores.start_single(
+    1,
+    root,
+    primary_device,
+    cache_devs,
+    data_devs,
+    true,
+    seastar::this_smp_shard_count());
   INFO("done");
 }
 
@@ -425,12 +567,11 @@ seastar::future<> SeaStore::stop()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  for (auto& sec_dev : secondaries) {
-    co_await sec_dev->stop();
+  for (auto& cache_dev : cache_devices) {
+    co_await cache_dev->stop();
   }
-  secondaries.clear();
-  if (device) {
-    co_await device->stop();
+  for (auto& data_dev : data_devices) {
+    co_await data_dev->stop();
   }
   co_await shard_stores_stop();
   INFO("done");
@@ -454,39 +595,28 @@ Device::access_ertr::future<> SeaStore::_mount()
   INFO("...");
 
   ceph_assert(seastar::this_shard_id() == primary_core);
-  co_await device->mount();
-  {
+  for (auto &device : data_devices) {
+    co_await device->mount();
+    {
+      auto block_size = device->get_sharded_device(0).get_block_size();
+      ceph_assertf(block_size >= laddr_t::UNIT_SIZE,
+                   "seastore requires a device block size of at least %u bytes, "
+                   "but the primary device at '%s/block' reports block_size=%u; "
+                   "use a device whose logical block size is >= %u bytes",
+                   laddr_t::UNIT_SIZE, root.c_str(), block_size,
+                   laddr_t::UNIT_SIZE);
+    }
+  }
+
+  for (auto& device : cache_devices) {
+    co_await device->mount();
     auto block_size = device->get_sharded_device(0).get_block_size();
     ceph_assertf(block_size >= laddr_t::UNIT_SIZE,
                  "seastore requires a device block size of at least %u bytes, "
-                 "but the primary device at '%s/block' reports block_size=%u; "
-                 "use a device whose logical block size is >= %u bytes",
-                 laddr_t::UNIT_SIZE, root.c_str(), block_size,
-                 laddr_t::UNIT_SIZE);
-  }
-
-  auto &sec_devices = device->get_sharded_device(0).get_secondary_devices();
-  for (auto& device_entry : sec_devices) {
-    device_id_t id = device_entry.first;
-    [[maybe_unused]] magic_t magic = device_entry.second.magic;
-    device_type_t dtype = device_entry.second.dtype;
-    backend_type_t btype = device_entry.second.btype;
-    auto btype_conf_str = get_conf<std::string>("seastore_cold_backend_type");
-    ceph_assert(string_to_backend_type(btype_conf_str) == btype);
-    std::string path = fmt::format("{}/block.{}", root, std::to_string(id));
-    DeviceRef sec_dev = co_await Device::make_device(path, dtype, btype, id);
-    co_await sec_dev->start(store_shard_nums);
-    co_await sec_dev->mount();
-    auto sec_block_size = sec_dev->get_sharded_device(0).get_block_size();
-    ceph_assertf(sec_block_size >= laddr_t::UNIT_SIZE,
-                 "seastore requires a device block size of at least %u bytes, "
                  "but the secondary device at '%s' reports block_size=%u; "
                  "use a device whose logical block size is >= %u bytes",
-                 laddr_t::UNIT_SIZE, path.c_str(), sec_block_size,
-                 laddr_t::UNIT_SIZE);
-    assert(sec_dev->get_sharded_device(0).get_magic() == magic);
-    secondaries.emplace_back(std::move(sec_dev));
-    co_await set_secondaries();
+                 laddr_t::UNIT_SIZE, device->get_device_path().c_str(),
+                 block_size, laddr_t::UNIT_SIZE);
   }
   co_await shard_stores.invoke_on_all([](auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
@@ -536,11 +666,12 @@ base_ertr::future<> SeaStore::Shard::umount()
   if (transaction_manager) {
     co_await transaction_manager->close();
   }
-  for (auto& sec_dev : secondaries) {
-   co_await sec_dev->close();
+  for (auto& cache_dev : cache_devices) {
+    co_await cache_dev->close();
   }
-  co_await device->close();
-  secondaries.clear();
+  for (auto &data_dev : data_devices) {
+    co_await data_dev->close();
+  }
   transaction_manager.reset();
   collection_manager.reset();
   onode_manager.reset();
@@ -619,19 +750,6 @@ SeaStore::Shard::mkfs_managers()
   --(shard_stats.processing_postlock_io_num);
 }
 
-seastar::future<> SeaStore::set_secondaries()
-{
-  auto sec_dev_ite = secondaries.rbegin();
-  Device* sec_dev = sec_dev_ite->get();
-
-  return shard_stores.invoke_on_all([sec_dev](auto &local_store) {
-    return seastar::do_for_each(local_store.mshard_stores, [sec_dev](auto& mshard_store) {
-      unsigned int index = mshard_store->get_store_index();
-      mshard_store->set_secondaries(sec_dev->get_sharded_device(index));
-    });
-  });
-}
-
 SeaStore::mkfs_ertr::future<> SeaStore::test_mkfs(uuid_d new_osd_fsid)
 {
   LOG_PREFIX(SeaStore::test_mkfs);
@@ -668,19 +786,6 @@ seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
   co_await write_meta("mkfs_done", "yes");
 }
 
-std::optional<device_id_t> parse_device_id(const seastar::sstring &name) {
-  auto prefix_len = sizeof("block.") - 1;
-  if (name.starts_with("block.") && name.length() > prefix_len) {
-    int id = 0;
-    std::string id_str = name.substr(prefix_len);
-    std::istringstream iss(id_str);
-    iss >> id;
-    assert(id < std::numeric_limits<uint8_t>::max());
-    return std::make_optional<device_id_t>(id);
-  }
-  return std::nullopt;
-}
-
 Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
 {
   LOG_PREFIX(SeaStore::_mkfs);
@@ -693,74 +798,42 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     co_return;
   }
   DEBUG("mkfs_done does not exist, starting mkfs");
-  auto dtype_str = get_conf<std::string>("seastore_cold_device_type");
-  auto dtype = string_to_device_type(dtype_str);
-  auto btype_str = get_conf<std::string>("seastore_cold_backend_type");
-  auto btype = string_to_backend_type(btype_str);
   ceph_assert(!root.empty());
-  INFO("secondary device type: {}, secondary backend type: {}", dtype, btype);
-  secondary_device_set_t sds;
-  if (!root.empty()) {
-    seastar::file rdir = co_await seastar::open_directory(root);
-    // hmm?
-    auto lister = rdir.experimental_list_directory();
-    while (auto de = co_await lister()) {
-      auto& entry = *de;
-      DEBUG("found file: {}", entry.name);
-      auto p = parse_device_id(entry.name);
-      if (!p) {
-        continue;
-      }
-      std::string path = fmt::format("{}/{}", root, entry.name);
-      auto id = *p;
-      DeviceRef sec_dev = co_await Device::make_device(path, dtype, btype, id);
-      auto p_sec_dev = sec_dev.get();
-      secondaries.emplace_back(std::move(sec_dev));
-      co_await p_sec_dev->start(store_shard_nums);
-      magic_t magic = (magic_t)std::rand();
-      sds.emplace((device_id_t)id,
-                  device_spec_t{magic, dtype, btype, (device_id_t)id});
-      co_await p_sec_dev->mkfs(
-        device_config_t::create_secondary(new_osd_fsid, id, dtype, btype, magic)
-      ).handle_error(crimson::ct_error::assert_all("not possible"));
-      co_await set_secondaries();
-    }
-    co_await rdir.close();
+
+  cache_device_set_t cds;
+  for (auto &dev : cache_devices) {
+    auto dtype = dev->get_device_type();
+    auto btype = dev->get_backend_type();
+    assert(dtype == device_type_t::SSD ||
+      dtype == device_type_t::RANDOM_BLOCK_SSD);
+    magic_t magic = (magic_t)std::rand();
+    auto id = dev->get_device_id();
+    cds.emplace((device_id_t)id,
+                device_spec_t{magic, dtype, btype, (device_id_t)id});
+    co_await dev->mkfs(
+      device_config_t::create_cache(new_osd_fsid, id, dtype, btype, magic)
+    ).handle_error(crimson::ct_error::assert_all("not possible"));
   }
 
-  if (sds.empty() && crimson::common::get_conf<bool>(
-        "seastore_logical_bucket_cache_test_stress")) {
-    // lbc test workload enabled while no secondary devices indicated, create one
-    std::string path = fmt::format("{}/block.1", root);
-    co_await seastar::make_directory(path);
-    DeviceRef sec_dev = co_await Device::make_device(path, dtype, btype, 1);
-    auto p_sec_dev = sec_dev.get();
-    secondaries.emplace_back(std::move(sec_dev));
-    co_await p_sec_dev->start(store_shard_nums);
-    magic_t magic = (magic_t)std::rand();
-    device_id_t id = 0x1;
-    sds.emplace(id, device_spec_t{magic, dtype, btype, id});
-    co_await p_sec_dev->mkfs(
-      device_config_t::create_secondary(new_osd_fsid, id, dtype, btype, magic)
-    ).handle_error(crimson::ct_error::assert_all("not possible"));
-    co_await set_secondaries();
+  for (auto &dev : data_devices) {
+    device_id_t id = dev->get_device_id();
+    device_type_t d_type = dev->get_device_type();
+    backend_type_t b_type = dev->get_backend_type();
+    assert(b_type != backend_type_t::NONE);
+    DEBUG("creating primary device");
+    co_await dev->mkfs(
+      device_config_t::create_data(
+        new_osd_fsid, id, d_type, b_type, cds));
   }
-  device_id_t id = device->get_device_id();
-  device_type_t d_type = device->get_device_type();
-  backend_type_t b_type = device->get_backend_type();
-  assert(d_type == device_type_t::SSD ||
-      d_type == device_type_t::RANDOM_BLOCK_SSD);
-  assert(b_type != backend_type_t::NONE);
-  DEBUG("creating primary device");
-  co_await device->mkfs(
-    device_config_t::create_primary(
-      new_osd_fsid, id, d_type, b_type, sds));
-  DEBUG("mounting {} secondaries", secondaries.size());
-  for (auto& sec_dev : secondaries) {
-      co_await sec_dev->mount();
+
+  DEBUG("mounting {} cache_devices", cache_devices.size());
+  for (auto& dev : cache_devices) {
+      co_await dev->mount();
   }
-  DEBUG("mounting primary device");
-  co_await device->mount();
+  DEBUG("mounting {} data_devices", data_devices.size());
+  for (auto &dev : data_devices) {
+    co_await dev->mount();
+  }
   DEBUG("mkfs managers");
   co_await shard_stores.invoke_on_all([] (auto &local_store) {
     return seastar::do_for_each(local_store.mshard_stores, [](auto& mshard_store) {
@@ -1553,7 +1626,7 @@ seastar::future<struct stat> SeaStore::Shard::_stat(
   struct stat st;
   auto &olayout = onode.get_layout();
   st.st_size = olayout.size;
-  st.st_blksize = device->get_block_size();
+  st.st_blksize = primary_device->get_block_size();
   st.st_blocks = (st.st_size + st.st_blksize - 1) / st.st_blksize;
   st.st_nlink = 1;
   DEBUGT("oid={}, size=0x{:x}, blksize=0x{:x}",
@@ -2296,7 +2369,7 @@ SeaStore::Shard::_do_transaction_step(
 	    [&onode, &ctx, this](auto& mgr) {
 	    return mgr.initialize_omap(
 	      *ctx.transaction, 
-	      onode->get_metadata_hint(device->get_block_size()),
+	      onode->get_metadata_hint(primary_device->get_block_size()),
 	      omap_type_t::LOG
 	    ).si_then([&onode, &ctx](auto new_root) {
 	      onode->update_omap_root(*ctx.transaction, new_root);
@@ -3043,13 +3116,13 @@ SeaStore::read_meta(const std::string& key)
 seastar::future<std::string> SeaStore::get_default_device_class()
 {
   using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_hot_device_type");
+  std::string type = get_conf<std::string>("seastore_data_device_type");
   return seastar::make_ready_future<std::string>(type);
 }
 
 uuid_d SeaStore::Shard::get_fsid() const
 {
-  return device->get_meta().seastore_id;
+  return primary_device->get_meta().seastore_id;
 }
 
 void SeaStore::Shard::init_managers()
@@ -3063,7 +3136,12 @@ void SeaStore::Shard::init_managers()
   shard_stats = {};
 
   transaction_manager = make_transaction_manager(
-      device, secondaries, shard_stats, store_index, is_test);
+      primary_device,
+      cache_devices,
+      data_devices,
+      shard_stats,
+      store_index,
+      is_test);
   collection_manager = std::make_unique<collection_manager::FlatCollectionManager>(
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
@@ -3512,7 +3590,7 @@ SeaStore::Shard::omaptree_set_keys(
       base_iertr::future<> maybe_create_root = base_iertr::now();
       if (root.is_null()) {
 	maybe_create_root = manager.initialize_omap(t,
-	  onode.get_metadata_hint(device->get_block_size()),
+	  onode.get_metadata_hint(primary_device->get_block_size()),
 	  root.get_type()
 	).si_then([&root](auto new_root) {
 	  root = new_root;
