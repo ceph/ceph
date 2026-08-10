@@ -249,40 +249,14 @@ int KernelDevice::open(const string& p)
     }
   }
 
-  struct stat st;
-  r = ::fstat(fd_directs[WRITE_LIFE_NOT_SET], &st);
+  r = refresh_size();
   if (r < 0) {
     r = -errno;
-    derr << __func__ << " fstat got " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
 
-  // Operate as though the block size is 4 KB.  The backing file
-  // blksize doesn't strictly matter except that some file systems may
-  // require a read/modify/write if we write something smaller than
-  // it.
-  block_size = cct->_conf->bdev_block_size;
-  if (block_size != (unsigned)st.st_blksize) {
-    dout(1) << __func__ << " backing device/file reports st_blksize "
-	    << st.st_blksize << ", using bdev_block_size "
-	    << block_size << " anyway" << dendl;
-  }
-
-
   {
-    BlkDev blkdev_direct(fd_directs[WRITE_LIFE_NOT_SET]);
     BlkDev blkdev_buffered(fd_buffereds[WRITE_LIFE_NOT_SET]);
-
-    if (S_ISBLK(st.st_mode)) {
-      int64_t s;
-      r = blkdev_direct.get_size(&s);
-      if (r < 0) {
-	goto out_fail;
-      }
-      size = s;
-    } else {
-      size = st.st_size;
-    }
 
     char partition[PATH_MAX], devname[PATH_MAX];
     if ((r = blkdev_buffered.partition(partition, PATH_MAX)) ||
@@ -314,9 +288,6 @@ int KernelDevice::open(const string& p)
   }
 
   _discard_update_threads();
-
-  // round size down to an even block
-  size &= ~(block_size - 1);
 
   dout(1) << __func__
 	  << " size " << size
@@ -370,6 +341,17 @@ int KernelDevice::refresh_size()
     return r;
   }
 
+  // Operate as though the block size is 4 KB.  The backing file
+  // blksize doesn't strictly matter except that some file systems may
+  // require a read/modify/write if we write something smaller than
+  // it.
+  block_size = cct->_conf->bdev_block_size;
+  if (block_size != (unsigned)st.st_blksize) {
+    dout(1) << __func__ << " backing device/file reports st_blksize "
+	    << st.st_blksize << ", using bdev_block_size "
+	    << block_size << " anyway" << dendl;
+  }
+
   // logic taken from open() for block vs file
   int64_t new_size;
   if (S_ISBLK(st.st_mode)) {
@@ -383,9 +365,8 @@ int KernelDevice::refresh_size()
     new_size = st.st_size;
   }
 
-  size = new_size;
   // round size down to an even block
-  size &= ~(block_size - 1);
+  size = p2align(new_size, int64_t(block_size));
   return 0;
 }
 
