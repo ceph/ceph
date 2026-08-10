@@ -49,6 +49,16 @@ RADOS / OSD / Erasure Coding
   per-chassis/rack ordering), and upgrades can now be scoped to a CRUSH
   bucket.
 - ``pg-upmap-primary`` support and improved pg-upmap computing speed.
+- PG autoscaler: default ``mon_target_pg_per_osd`` increased 100 -> 200 and
+  ``mon_max_pg_per_osd`` increased 250 -> 500, letting the autoscaler compute
+  more parallelism-friendly ``pg_num`` values and improving the balancer's
+  ability to reach uniform OSD utilization. Existing pools may autoscale to
+  more PGs after upgrading as a result; ``pg_autoscale_during_upgrade``
+  (`pr#67694 <https://github.com/ceph/ceph/pull/67694>`_) paces that
+  splitting so it doesn't disrupt the upgrade itself. Clusters with a
+  smaller-than-4GiB effective ``bluestore_osd_memory_target``, or SSDs
+  split into more than two OSDs, may want to pin the old values before
+  upgrading (`pr#69452 <https://github.com/ceph/ceph/pull/69452>`_).
 - BlueStore: BlueFS Spillover Cleaner evolution, faster allocation
   recovery, static/runtime object-fragmentation tracking, full-device
   discard on mkfs now default, several spanning-blob/onode-cache-stall/
