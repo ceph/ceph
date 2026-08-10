@@ -4,6 +4,7 @@ import { of, throwError } from 'rxjs';
 
 import { HostActionService } from './host-action.service';
 import { HostService } from '~/app/shared/api/host.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
@@ -18,6 +19,7 @@ describe('HostActionService', () => {
   let notificationService: NotificationService;
   let cdsModalService: ModalCdsService;
   let taskWrapper: TaskWrapperService;
+  let actionLabels: ActionLabelsI18n;
 
   const mockHost: Host = {
     hostname: 'test-host',
@@ -66,6 +68,7 @@ describe('HostActionService', () => {
     notificationService = TestBed.inject(NotificationService);
     cdsModalService = TestBed.inject(ModalCdsService);
     taskWrapper = TestBed.inject(TaskWrapperService);
+    actionLabels = TestBed.inject(ActionLabelsI18n);
   });
 
   afterEach(() => {
@@ -96,6 +99,7 @@ describe('HostActionService', () => {
         // Simulate form submission
         const showCall = (cdsModalService.show as jasmine.Spy).calls.mostRecent();
         const modalConfig = showCall.args[1];
+        expect(modalConfig.submitButtonText).toBe(actionLabels.SAVE_CHANGES);
         modalConfig.onSubmit({ labels: updatedLabels });
 
         setTimeout(() => {
@@ -107,6 +111,18 @@ describe('HostActionService', () => {
           );
           done();
         }, 100);
+      }, 100);
+    });
+
+    it('should set submit button label to Save changes (not Edit Host)', (done) => {
+      service.openEditModal(mockHost, () => undefined);
+
+      setTimeout(() => {
+        const modalConfig = (cdsModalService.show as jasmine.Spy).calls.mostRecent().args[1];
+        expect(modalConfig.submitButtonText).toBe('Save changes');
+        expect(modalConfig.submitButtonText).toBe(actionLabels.SAVE_CHANGES);
+        expect(modalConfig.titleText).toContain('Edit Host');
+        done();
       }, 100);
     });
 
