@@ -43,15 +43,65 @@
         >Performance Details</a
       >
       <ng-template ngbNavContent>
-        <cd-grafana
-          i18n-title
-          title="RGW instance details"
-          [grafanaPath]="'ceph-object-instance-details?var-rgw_servers=rgw.' + serviceId"
-          [type]="'metrics'"
-          uid="x5ARzZtmk"
-          grafanaStyle="one"
+        <div class="cds-mb-4">
+          <cd-time-picker
+            [dropdownSize]="'sm'"
+            [label]="'Time Span'"
+            (selectedTime)="getPrometheusData($event)"
+          ></cd-time-picker>
+        </div>
+        <div
+          cdsGrid
+          [narrow]="true"
+          [condensed]="false"
+          [fullWidth]="true"
         >
-        </cd-grafana>
+          <div
+            cdsRow
+            [narrow]="true"
+          >
+            <div
+              cdsCol
+              class="cds-mb-5"
+              [columnNumbers]="{ lg: 8, md: 8, sm: 12 }"
+            >
+              <cd-area-chart
+                chartTitle="Requests/sec"
+                i18n-chartTitle
+                [dataUnit]="''"
+                [rawData]="requestsChartData"
+              >
+              </cd-area-chart>
+            </div>
+            <div
+              cdsCol
+              class="cds-mb-5"
+              [columnNumbers]="{ lg: 8, md: 8, sm: 12 }"
+            >
+              <cd-area-chart
+                chartTitle="Latency"
+                i18n-chartTitle
+                [dataUnit]="'ms'"
+                [decimals]="2"
+                [rawData]="latencyChartData"
+              >
+              </cd-area-chart>
+            </div>
+            <div
+              cdsCol
+              class="cds-mb-5"
+              [columnNumbers]="{ lg: 16, md: 8, sm: 12 }"
+            >
+              <cd-area-chart
+                chartTitle="Bandwidth"
+                i18n-chartTitle
+                [dataUnit]="'B'"
+                [rawData]="bandwidthChartData"
+              >
+              </cd-area-chart>
+            </div>
+          </div>
+        </div>
       </ng-template>
     </ng-container>
   </nav>
