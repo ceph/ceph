@@ -101,20 +101,20 @@ To upgrade to a specific release, run a command of the following form:
 
   ceph orch upgrade start --ceph-version <version>
 
-For example, to upgrade to v16.2.6, run the following command:
+For example, to upgrade to v20.2.3, run the following command:
 
 .. prompt:: bash #
 
-  ceph orch upgrade start --ceph-version 16.2.6
+  ceph orch upgrade start --ceph-version 20.2.3
 
 .. note::
 
-    From version v16.2.6 the Docker Hub registry is no longer used, so if you
+    Since version v16.2.6 the Docker Hub registry is no longer used, so if you
     use Docker you have to point it to the image in the quay.io registry:
 
     .. prompt:: bash #
 
-       ceph orch upgrade start --image quay.io/ceph/ceph:v16.2.6
+       ceph orch upgrade start --image quay.io/ceph/ceph:v20.2.3
 
 
 CRUSH bucket-scoped OSD upgrades (``osd ok-to-upgrade``)
@@ -180,7 +180,7 @@ looks like this:
 
   [...]
     progress:
-      Upgrade to docker.io/ceph/ceph:v15.2.1 (00h 20m 12s)
+      Upgrade to quay.io/ceph/ceph:v20.2.3 (00h 20m 12s)
         [=======.....................] (time remaining: 01h 43m 31s)
 
 
