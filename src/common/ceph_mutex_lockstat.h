@@ -260,7 +260,9 @@ public:
       mutex_base::lock();
     }
     if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-      record_wait_time(lockstat_clock::now() - wait_start_clock, LockMode::WRITE);
+      m_write_hold_start = lockstat_clock::now();
+      m_write_hold_mode = LockMode::WRITE;
+      record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
     }
   }
 
@@ -274,8 +276,9 @@ public:
             : lockstat_clock::zero();
     if (mutex_base::try_lock()) {
       if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(
-            lockstat_clock::now() - wait_start_clock, LockMode::TRY_WRITE);
+        m_write_hold_start = lockstat_clock::now();
+        m_write_hold_mode = LockMode::TRY_WRITE;
+        record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
       }
       return true;
     } else {
@@ -286,7 +289,16 @@ public:
   void
   unlock()
   {
-    mutex_base::unlock();
+    const auto hold_start = m_write_hold_start;
+    if (unlikely(hold_start != lockstat_clock::zero())) {
+      const auto hold_time = lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_write_hold_mode;
+      m_write_hold_start = lockstat_clock::zero();
+      mutex_base::unlock();
+      record_hold_time(hold_time, hold_mode);
+    } else {
+      mutex_base::unlock();
+    }
   }
 
   template <typename Rep, typename Period>
@@ -300,8 +312,9 @@ public:
               : lockstat_clock::zero();
       if (mutex_base::try_lock_for(awhile)) {
         if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-          record_wait_time(
-              lockstat_clock::now() - wait_start_clock, LockMode::TRY_WRITE);
+          m_write_hold_start = lockstat_clock::now();
+          m_write_hold_mode = LockMode::TRY_WRITE;
+          record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
         }
         return true;
       } else {
@@ -323,8 +336,9 @@ public:
               : lockstat_clock::zero();
       if (mutex_base::try_lock_until(when)) {
         if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-          record_wait_time(
-              lockstat_clock::now() - wait_start_clock, LockMode::TRY_WRITE);
+          m_write_hold_start = lockstat_clock::now();
+          m_write_hold_mode = LockMode::TRY_WRITE;
+          record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
         }
         return true;
       } else {
@@ -357,6 +371,7 @@ public:
     }
     if (unlikely(wait_start_clock != lockstat_clock::zero())) {
       record_wait_time(lockstat_clock::now() - wait_start_clock, LockMode::READ);
+      begin_shared_hold(LockMode::READ);
     }
   }
 
@@ -372,6 +387,7 @@ public:
       if (unlikely(wait_start_clock != lockstat_clock::zero())) {
         record_wait_time(
             lockstat_clock::now() - wait_start_clock, LockMode::TRY_READ);
+        begin_shared_hold(LockMode::TRY_READ);
       }
       return true;
     } else {
@@ -382,6 +398,7 @@ public:
   void
   unlock_shared()
   {
+    end_shared_hold();
     mutex_base::unlock_shared();
   }
 
@@ -398,6 +415,7 @@ public:
         if (unlikely(wait_start_clock != lockstat_clock::zero())) {
           record_wait_time(
               lockstat_clock::now() - wait_start_clock, LockMode::TRY_READ);
+          begin_shared_hold(LockMode::TRY_READ);
         }
         return true;
       } else {
@@ -423,6 +441,7 @@ public:
         if (unlikely(wait_start_clock != lockstat_clock::zero())) {
           record_wait_time(
               lockstat_clock::now() - wait_start_clock, LockMode::TRY_READ);
+          begin_shared_hold(LockMode::TRY_READ);
         }
         return true;
       } else {
@@ -432,6 +451,10 @@ public:
       return false;
     }
   }
+
+private:
+  lockstat_clock::time_point m_write_hold_start{lockstat_clock::zero()};
+  LockMode m_write_hold_mode{LockMode::WRITE};
 };
 
 template <typename mutex_base>
