@@ -177,19 +177,32 @@ public:
     ceph_assert(r == 0);
 #ifdef CEPH_LOCKSTAT
     if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
-      record_wait_time(
-          lockstat_detail::lockstat_clock::now() - wait_start_clock,
-          lockstat_detail::LockMode::WRITE);
+      m_hold_start = lockstat_detail::lockstat_clock::now();
+      m_hold_mode = lockstat_detail::LockMode::WRITE;
+      record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
     }
 #endif
   }
 
   void unlock_impl() noexcept {
+#ifdef CEPH_LOCKSTAT
+    const auto hold_start = m_hold_start;
+    if (unlikely(hold_start != lockstat_detail::lockstat_clock::zero())) {
+      const auto hold_time =
+          lockstat_detail::lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_hold_mode;
+      m_hold_start = lockstat_detail::lockstat_clock::zero();
+      int r = pthread_mutex_unlock(&m);
+      ceph_assert(r == 0);
+      record_hold_time(hold_time, hold_mode);
+      return;
+    }
+#endif
     int r = pthread_mutex_unlock(&m);
     ceph_assert(r == 0);
   }
 
-  bool try_lock_impl() {
+  bool try_lock_impl(bool explicit_try = true) {
 #ifdef CEPH_LOCKSTAT
     const auto wait_start_clock =
         unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
@@ -201,9 +214,11 @@ public:
     case 0:
 #ifdef CEPH_LOCKSTAT
       if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
-        record_wait_time(
-            lockstat_detail::lockstat_clock::now() - wait_start_clock,
-            lockstat_detail::LockMode::TRY_WRITE);
+        m_hold_start = lockstat_detail::lockstat_clock::now();
+        m_hold_mode = explicit_try
+            ? lockstat_detail::LockMode::TRY_WRITE
+            : lockstat_detail::LockMode::WRITE;
+        record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
       }
 #endif
       return true;
@@ -216,6 +231,34 @@ public:
   pthread_mutex_t* native_handle() {
     return &m;
   }
+
+#ifdef CEPH_LOCKSTAT
+  void
+  condvar_wait_begin()
+  {
+    const auto hold_start = m_hold_start;
+    if (unlikely(hold_start != lockstat_detail::lockstat_clock::zero())) {
+      const auto hold_time =
+          lockstat_detail::lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_hold_mode;
+      m_hold_start = lockstat_detail::lockstat_clock::zero();
+      record_hold_time(hold_time, hold_mode);
+    }
+  }
+
+  void
+  condvar_wait_end(
+      lockstat_detail::lockstat_clock::time_point wait_start_clock)
+  {
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+      const auto now = lockstat_detail::lockstat_clock::now();
+      record_wait_time(
+          now - wait_start_clock, lockstat_detail::LockMode::WRITE);
+      m_hold_start = now;
+      m_hold_mode = lockstat_detail::LockMode::WRITE;
+    }
+  }
+#endif
 
   void _post_lock() {
     if (!recursive) {
@@ -248,7 +291,7 @@ public:
     if (enable_lockdep(no_lockdep))
       _will_lock(recursive);
 
-    if (_try_lock(no_lockdep))
+    if (_try_lock(no_lockdep, false))
       return;
 
     lock_impl();
@@ -265,8 +308,8 @@ public:
   }
 
 private:
-  bool _try_lock(bool no_lockdep) {
-    bool locked = try_lock_impl();
+  bool _try_lock(bool no_lockdep, bool explicit_try = true) {
+    bool locked = try_lock_impl(explicit_try);
     if (locked) {
       if (enable_lockdep(no_lockdep))
 	_locked();
@@ -274,6 +317,12 @@ private:
     }
     return locked;
   }
+
+#ifdef CEPH_LOCKSTAT
+  lockstat_detail::lockstat_clock::time_point m_hold_start{
+      lockstat_detail::lockstat_clock::zero()};
+  lockstat_detail::LockMode m_hold_mode{lockstat_detail::LockMode::WRITE};
+#endif
 };
 
 
