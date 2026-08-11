@@ -5,6 +5,7 @@ overrides:
   ceph:
     pool-config:
       ec_pool: true
+      min_size: 10
       erasure_code_profile:
         name: isa104profile
         plugin: isa
