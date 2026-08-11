@@ -292,6 +292,8 @@ def render_dump(data: Dict[str, Any], detail: bool):
         "wait_usec[R]",
         "wait_count[R]",
         "usec/wait[R]",
+        "hold_usec",
+        "usec/hold",
         "max_wait",
         "busy ratio",
         "(r + w)/w",
@@ -315,10 +317,11 @@ def render_dump(data: Dict[str, Any], detail: bool):
 
     # Column widths
     col_widths = [len(h) for h in headers]
+    base_cols = 13  # columns before histogram bins / name
     if detail:
         # Set histogram columns to 12 chars width as requested
-        # Histogram columns start after the first 11 columns
-        for i in range(11, 11 + len(bin_headers)):
+        # Histogram columns start after the base columns
+        for i in range(base_cols, base_cols + len(bin_headers)):
             col_widths[i] = 12
 
     rows = []
@@ -340,6 +343,14 @@ def render_dump(data: Dict[str, Any], detail: bool):
         r_wait_usec = r_stats.get("wait_duration_ns", 0) / 1000.0
         r_wait_count = r_stats.get("wait_count", 0)
         r_avg_wait = r_wait_usec / r_wait_count if r_wait_count > 0 else 0.0
+
+        # HOLD (aggregate across modes)
+        hold_usec = (
+            sum(s.get("hold_duration_ns", 0) for s in entry.get("stats", []))
+            / 1000.0
+        )
+        hold_count = sum(s.get("hold_count", 0) for s in entry.get("stats", []))
+        avg_hold = hold_usec / hold_count if hold_count > 0 else 0.0
 
         # Total wait for busy ratio
         total_wait_ns = sum(
@@ -364,12 +375,15 @@ def render_dump(data: Dict[str, Any], detail: bool):
             f"{r_wait_usec:.3f}",
             str(r_wait_count),
             f"{r_avg_wait:.3f}",
+            f"{hold_usec:.3f}",
+            f"{avg_hold:.3f}",
             f"{max_wait_ns/1000.0:.3f}",
             f"{busy_ratio:.6f}",
             f"{r_plus_w_over_w:.3f}",
             str(num_instances),
         ]
 
+        entry_row_start = len(rows)
         if detail:
             # To handle non-WRITE modes being displayed correctly, we first
             # ensure the main row has the WRITE histogram or empty histogram cells
@@ -391,10 +405,28 @@ def render_dump(data: Dict[str, Any], detail: bool):
                     while len(hist) < len(bin_headers):
                         hist.append(0)
 
-                    # Empty cells for the first 10 columns, label in 11th column (num_instances)
-                    # We use a space before the mode_name for slight indentation/distinction
-                    hist_row = [""] * 10
+                    # Empty cells for the first base_cols-1 columns, label in
+                    # num_instances column
+                    hist_row = [""] * (base_cols - 1)
                     hist_row.append(f"[{mode_name}]")
+                    for val in hist[: len(bin_headers)]:
+                        hist_row.append(str(val))
+                    hist_row.append("")  # Empty name column
+                    rows.append(hist_row)
+
+            # Hold time histogram rows after wait-mode rows
+            for mode_name in ["WRITE", "READ", "TRY_WRITE", "TRY_READ"]:
+                m_stats = stats.get(mode_name, {})
+                if m_stats.get("hold_count", 0) > 0:
+                    hist = m_stats.get("hold_time_histogram", [])
+                    while len(hist) < len(bin_headers):
+                        hist.append(0)
+
+                    hist_row = [""] * (base_cols - 1)
+                    if mode_name == "WRITE":
+                        hist_row.append("[HOLD]")
+                    else:
+                        hist_row.append(f"[HOLD {mode_name}]")
                     for val in hist[: len(bin_headers)]:
                         hist_row.append(str(val))
                     hist_row.append("")  # Empty name column
@@ -403,9 +435,8 @@ def render_dump(data: Dict[str, Any], detail: bool):
             row.append(name)
             rows.append(row)
 
-        # Update column widths for all rows we just added
-        # Since rows can have different lengths (if no detail), but format_str will handle it
-        for r in rows[-4:]:  # Check at most the last 4 rows added for this entry
+        # Update column widths for rows added for this entry
+        for r in rows[entry_row_start:]:
             if len(r) == len(col_widths):
                 for i, val in enumerate(r):
                     col_widths[i] = max(col_widths[i], len(val))
