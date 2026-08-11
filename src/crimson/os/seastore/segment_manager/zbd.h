@@ -172,27 +172,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
     store_index_t store_index = 0;
     bool shard_status = true;
 
-    class MultiShardDevices {
-    public:
-      std::vector<std::unique_ptr<ZBDSegmentManager>> mshard_devices;
-
-    public:
-    MultiShardDevices(size_t count,
-                      const std::string path,
-                      device_type_t dtype,
-                      device_id_t id)
-    : mshard_devices() {
-      mshard_devices.reserve(count);
-      for (size_t store_index = 0; store_index < count; ++store_index) {
-        mshard_devices.emplace_back(std::make_unique<ZBDSegmentManager>(
-          path, dtype, id, store_index));
-      }
-    }
-    ~MultiShardDevices() {
-     mshard_devices.clear();
-    }
-  };
-  seastar::sharded<MultiShardDevices> shard_devices;
+    seastar::sharded<MultiShardDevices<ZBDSegmentManager>> shard_devices;
   };
 
 }
