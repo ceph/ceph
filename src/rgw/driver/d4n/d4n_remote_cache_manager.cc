@@ -81,6 +81,8 @@ rgw::AioResultList RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp,
     uint64_t end_offset = op.offset + op.len - 1;
     std::string range_val = "bytes=" + std::to_string(op.offset) + "-" + std::to_string(end_offset);
     extra_headers["RANGE"] = std::move(range_val);
+    extra_headers["x-rgw-remote-cache-request"] = "true";
+    extra_headers["x-rgw-cache-object-version"] = op.version;
     param_vec_t params;
 	if (op.instance_id.size()) {
 	  params.push_back(param_pair_t("versionId", op.instance_id));
