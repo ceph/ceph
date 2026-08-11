@@ -2899,6 +2899,7 @@ test_force_promote_before_initial_sync()
   local group_id_before
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}"
   start_mirrors "${secondary_cluster}"
   wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
@@ -2913,6 +2914,7 @@ test_force_promote_before_initial_sync()
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}"
   start_mirrors "${secondary_cluster}"
   wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
 
@@ -3355,6 +3357,7 @@ test_odf_failover_failback()
   if [ "${scenario}" = 'resync_on_failback' ]; then
     # request resync - won't happen until other site is marked as primary
     mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
+    group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}"
   fi  
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
@@ -3470,6 +3473,7 @@ test_resync_marker()
   # demote primary and request resync on secondary - check that group does not get deleted (due to resync request flag)
   mirror_group_demote "${primary_cluster}" "${pool}/${group0}" 
   mirror_group_resync "${secondary_cluster}" "${pool}/${group0}" 
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group0}"
   wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+unknown'
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
@@ -3478,6 +3482,7 @@ test_resync_marker()
   test "${image_id_before}" = "${image_id_after}" || fail "image recreated with no primary"
 
   mirror_group_promote "${secondary_cluster}" "${pool}/${group0}"
+  group_resync_marker_removed "${secondary_cluster}" "${pool}/${group0}"
 
   get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_after
   test "${group_id_before}" = "${group_id_after}" || fail "group recreated"
