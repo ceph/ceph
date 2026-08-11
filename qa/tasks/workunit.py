@@ -392,31 +392,46 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     args=['mkdir', '-p', '--', scratch_tmp],
                     label=f"workunit sandbox creation test {workunit}",
                 )
-                client_keyring = f'/etc/ceph/{cluster}.client.{id_}.keyring'
-                admin_keyring = f'/etc/ceph/{cluster}.client.admin.keyring'
-                #tmp_keyring = f'{scratch_tmp}/workunit.client.{id_}.keyring'
+
                 try:
-                    tmp_keyring = ctx.ceph[cluster].keyring
+                    cluster_keyring = ctx.ceph[cluster].keyring
                 except AttributeError:
-                    tmp_keyring = f"/etc/ceph/{cluster}.keyring"
-                remote.run(
-                    args=[
-                        'sudo',
-                        'ceph-authtool',
-                        tmp_keyring,
-                        '--import-keyring',
-                        client_keyring,
-                    ],
-                )
-                remote.run(
-                    args=[
-                        'sudo',
-                        'ceph-authtool',
-                        tmp_keyring,
-                        '--import-keyring',
-                        admin_keyring,
-                    ],
-                )
+                    cluster_keyring = f"/etc/ceph/{cluster}.keyring"
+                    log.info("keyring not configured by cluster setup, using default: %s", cluster_keyring)
+
+                try:
+                    k = remote.read_file(cluster_keyring).decode()
+                    log.info("current keyring file:\n%s", k)
+                except FileNotFoundError:
+                    log.info("no cluster keyring found; skipping keyring imports")
+                else:
+                    client_keyring = f'/etc/ceph/{cluster}.client.{id_}.keyring'
+                    admin_keyring = f'/etc/ceph/{cluster}.client.admin.keyring'
+                    #tmp_keyring = f'{scratch_tmp}/workunit.client.{id_}.keyring'
+                    tmp_keyring = cluster_keyring
+                    remote.run(
+                        args=[
+                            'sudo',
+                            'ceph-authtool',
+                            tmp_keyring,
+                            '--import-keyring',
+                            client_keyring,
+                        ],
+                    )
+                    # admin_keyring may be a key type not understood
+                    try:
+                        remote.run(
+                            args=[
+                                'sudo',
+                                'ceph-authtool',
+                                tmp_keyring,
+                                '--import-keyring',
+                                admin_keyring,
+                            ],
+                        )
+                    except:
+                        log.info("admin key type not understood")
+
                 args = [
                     'cd', '--', scratch_tmp,
                     run.Raw('&&'),
@@ -424,7 +439,8 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     run.Raw('CEPH_REF={ref}'.format(ref=refspec)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw(f'CEPH_CLIENT_ID={id_}'), # used by src/test/librados/test_cxx.cc
-                    run.Raw(f'CEPH_ARGS="--cluster={cluster} --debug-ms=1 --debug-auth=20 --debug-monc=20 --log-to-stderr=true"'),
+                    # These debug log configs can be removed later.
+                    run.Raw(f'CEPH_ARGS="--cluster={cluster} --debug-ms=1 --debug-auth=20 --debug-monc=20 --log-to-stderr=false --log-to-file=true"'),
                     #run.Raw(f'CEPH_KEYRING="{tmp_keyring}"'),
                     run.Raw(f'CEPH_ID="{id_}"'), # used by rbd
                     run.Raw('PATH=$PATH:/usr/sbin'),
