@@ -769,6 +769,76 @@ async fn test_versioned_multipart_overwrite_multipart_list_and_get() {
     assert_eq!(body, mp2_data);
 }
 
+/// Requires rgw_multipart_min_part_size small enough for tiny parts
+/// (vstart uses 32 bytes).  With >1000 parts, complete_multipart_upload
+/// paginates list_parts() — this test catches accumulation bugs in
+/// that pagination loop.
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_multipart_complete_over_1000_parts() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    let key = "many-parts";
+    let num_parts: i32 = 1001;
+    let part_body = vec![b'x'; 64];
+
+    let create = client
+        .create_multipart_upload()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    let upload_id = create.upload_id().unwrap().to_string();
+
+    let mut completed_parts = Vec::new();
+    for part_num in 1..=num_parts {
+        let resp = client
+            .upload_part()
+            .bucket(&bucket_name)
+            .key(key)
+            .upload_id(&upload_id)
+            .part_number(part_num)
+            .body(ByteStream::from(part_body.clone()))
+            .send()
+            .await
+            .unwrap();
+        completed_parts.push(
+            CompletedPart::builder()
+                .e_tag(resp.e_tag().unwrap())
+                .part_number(part_num)
+                .build(),
+        );
+    }
+
+    let mp = CompletedMultipartUpload::builder()
+        .set_parts(Some(completed_parts))
+        .build();
+    client
+        .complete_multipart_upload()
+        .bucket(&bucket_name)
+        .key(key)
+        .upload_id(&upload_id)
+        .multipart_upload(mp)
+        .send()
+        .await
+        .unwrap();
+
+    // verify the object
+    let response = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(
+        response.content_length().unwrap_or(0),
+        (num_parts as i64) * (part_body.len() as i64)
+    );
+}
+
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_multipart_copy_small() {
