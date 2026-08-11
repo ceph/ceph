@@ -184,6 +184,8 @@ struct CacheObjectVersion {
   std::string version;
   std::string user_id;
   std::string display_name;
+
+  bool operator==(const CacheObjectVersion&) const = default;
 };
 
 struct CacheObj {
