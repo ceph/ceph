@@ -5,6 +5,8 @@
 
 #include "common/dout.h"
 #include "common/errno.h"
+#include "include/neorados/RADOS.hpp"
+#include "osd/osd_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/crypto/EncryptionFormat.h"
@@ -39,6 +41,22 @@ void FormatRequest<I>::send() {
     lderr(m_image_ctx->cct) << "cannot use encryption with journal" << dendl;
     finish(-ENOTSUP);
     return;
+  }
+
+  {
+    auto pool_id = m_image_ctx->data_ctx.get_id();
+    bool is_ec = m_image_ctx->rados_api.pool_has_flag(
+      pool_id, pg_pool_t::FLAG_EC_OPTIMIZATIONS);
+    bool has_preserve = is_ec && m_image_ctx->rados_api.pool_has_flag(
+      pool_id, pg_pool_t::FLAG_PRESERVE_ALLOCATION);
+    if (is_ec && !has_preserve) {
+      lderr(m_image_ctx->cct)
+        << "cannot format an EC pool image for encryption: "
+        << "pool does not have preserve_allocation enabled "
+        << dendl;
+      finish(-EINVAL);
+      return;
+    }
   }
   
   if (m_image_ctx->encryption_format.get() == nullptr) {
