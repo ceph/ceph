@@ -291,6 +291,13 @@ int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
                             &was_canceled,    /* canceled */
                             rctx, 0);
 
+  // Backend returns ERR_PRECONDITION_FAILED when if_match/if_nomatch fails;
+  // set canceled=1
+  if (ret == -ERR_PRECONDITION_FAILED) {
+    if (canceled) *canceled = 1;
+    return 0;
+  }
+
   if (canceled) *canceled = was_canceled ? 1 : 0;
   return ret;
 }
@@ -845,8 +852,9 @@ int rgw_init_multipart( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return ret;
   }
 
+  std::string initial_upload_id;
   std::unique_ptr<rgw::sal::MultipartUpload> upload =
-    bucket->get_multipart_upload(obj_id->key);
+    bucket->get_multipart_upload(obj_id->key, initial_upload_id);
   if (!upload) {
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_init_multipart: allocation failed" << dendl;
     return -ENOMEM;
@@ -900,10 +908,16 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     return -ENOMEM;
   }
 
+  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(make_obj_key(obj_id));
+  if (!obj) {
+    ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: failed to allocate object" << dendl;
+    return -ENOMEM;
+  }
+
   ACLOwner owner = bucket->get_acl().get_owner();
   const rgw_placement_rule& placement_rule = bucket->get_placement_rule();
   std::unique_ptr<rgw::sal::Writer> writer = upload->get_writer(
-    dpp, y, nullptr, owner, &placement_rule, part_num,
+    dpp, y, obj.get(), owner, &placement_rule, part_num,
     std::to_string(part_num));
 
   if (!writer) {
@@ -929,13 +943,28 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     return ret;
   }
 
+  // compute etag before complete() so the backend stores the correct value
+  unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  ceph::crypto::MD5 md5_hash;
+  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  md5_hash.Update(data, len);
+  md5_hash.Final(md5_digest);
+
+  std::string md5_hex;
+  md5_hex.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
+  buf_to_hex(md5_digest, std::back_inserter(md5_hex));
+
   rgw::sal::Attrs attrs;
+  bufferlist etag_bl;
+  etag_bl.append(md5_hex);
+  attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
   ceph::real_time mtime = ceph::real_clock::now();
   req_context rctx{dpp, y, nullptr};
 
   ret = writer->complete(
                             len,              /* accounted_size */
-                            "",               /* etag (part etag computed separately below) */
+                            md5_hex,          /* etag */
                             &mtime,           /* mtime (output) */
                             mtime,            /* set_mtime */
                             attrs,            /* attrs */
@@ -951,16 +980,6 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
   if (ret < 0) {
     return ret;
   }
-
-  unsigned char md5_digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  ceph::crypto::MD5 md5_hash;
-  md5_hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  md5_hash.Update(data, len);
-  md5_hash.Final(md5_digest);
-
-  std::string md5_hex;
-  md5_hex.reserve(CEPH_CRYPTO_MD5_DIGESTSIZE * 2);
-  buf_to_hex(md5_digest, std::back_inserter(md5_hex));
 
   *etag = strndup(md5_hex.c_str(), MAX_ETAG_LEN);
   if (!*etag) {
