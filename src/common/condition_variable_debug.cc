@@ -24,12 +24,22 @@ void condition_variable_debug::wait(std::unique_lock<mutex_debug>& lock)
          waiter_mutex == lock.mutex());
   waiter_mutex = lock.mutex();
   ceph_assert(waiter_mutex->is_locked());
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+  waiter_mutex->condvar_wait_begin();
+#endif
   waiter_mutex->_pre_unlock();
   if (int r = pthread_cond_wait(&cond, waiter_mutex->native_handle());
       r != 0) {
     throw std::system_error(r, std::generic_category());
   }
   waiter_mutex->_post_lock();
+#ifdef CEPH_LOCKSTAT
+  waiter_mutex->condvar_wait_end(wait_start_clock);
+#endif
 }
 
 void condition_variable_debug::notify_one()
@@ -63,9 +73,19 @@ std::cv_status condition_variable_debug::_wait_until(mutex_debug* mutex,
   waiter_mutex = mutex;
   ceph_assert(waiter_mutex->is_locked());
 
+#ifdef CEPH_LOCKSTAT
+  const auto wait_start_clock =
+      unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+          ? lockstat_detail::lockstat_clock::now()
+          : lockstat_detail::lockstat_clock::zero();
+  waiter_mutex->condvar_wait_begin();
+#endif
   waiter_mutex->_pre_unlock();
   int r = pthread_cond_timedwait(&cond, waiter_mutex->native_handle(), ts);
   waiter_mutex->_post_lock();
+#ifdef CEPH_LOCKSTAT
+  waiter_mutex->condvar_wait_end(wait_start_clock);
+#endif
   switch (r) {
   case 0:
     return std::cv_status::no_timeout;

@@ -236,6 +236,28 @@ LockStatTraits::record_wait_time(
   atomic_max(lockstat_entry->m_max_wait, wait_time);
 }
 
+void
+LockStatTraits::record_hold_time(
+    const LockStatTraits* traits,
+    const lockstat_clock::duration hold_time,
+    const LockMode mode)
+{
+  if (!traits || !traits->m_lockstat_entry) {
+    return;
+  }
+  LockStatEntry* lockstat_entry = traits->m_lockstat_entry;
+
+  LockStatEntry::LockStats& stats(lockstat_entry->m_stats_table[sched_getcpu()]);
+  stats.m_hold_count[static_cast<size_t>(mode)]++;
+  stats.m_hold_duration[static_cast<size_t>(mode)] += hold_time;
+  auto hold_ns =
+      std::chrono::duration_cast<std::chrono::nanoseconds>(hold_time).count();
+
+  stats.m_hold_time_histogram[static_cast<size_t>(
+      mode)][LockStatEntry::LockStats::LockStatLatBins::get_index(hold_ns)]++;
+  atomic_max(lockstat_entry->m_max_hold, hold_time);
+}
+
 LockStatEntry::LockStats::LockStats() { reset(); }
 
 void
@@ -245,6 +267,11 @@ LockStatEntry::LockStats::reset()
   m_wait_count.fill(0);
   for (auto& wait_time : m_wait_time_histogram) {
     wait_time.fill(0);
+  }
+  m_hold_duration.fill(lockstat_clock::duration{});
+  m_hold_count.fill(0);
+  for (auto& hold_time : m_hold_time_histogram) {
+    hold_time.fill(0);
   }
 }
 
@@ -263,6 +290,18 @@ LockStatEntry::LockStats::operator+=(const LockStats& other)
         other.m_wait_time_histogram[i].begin(),
         m_wait_time_histogram[i].begin(), std::plus<>());
   }
+  std::transform(
+      m_hold_duration.begin(), m_hold_duration.end(),
+      other.m_hold_duration.begin(), m_hold_duration.begin(), std::plus<>());
+  std::transform(
+      m_hold_count.begin(), m_hold_count.end(), other.m_hold_count.begin(),
+      m_hold_count.begin(), std::plus<>());
+  for (size_t i = 0; i < m_hold_time_histogram.size(); i++) {
+    std::transform(
+        m_hold_time_histogram[i].begin(), m_hold_time_histogram[i].end(),
+        other.m_hold_time_histogram[i].begin(),
+        m_hold_time_histogram[i].begin(), std::plus<>());
+  }
   return *this;
 }
 
@@ -270,6 +309,7 @@ LockStatEntry::LockStatEntry() :
   m_lock_id(0),
   m_num_instances(0),
   m_max_wait{},
+  m_max_hold{},
   m_lock_type(LockStatTraits::LockStatType::UNKNOWN),
   m_tripwire_enabled(false)
 
@@ -442,7 +482,11 @@ LockStatEntry::dump_formatted(Formatter* f)
            li_stats.m_wait_count[static_cast<size_t>(LockMode::WRITE)] ||
            li_stats.m_wait_count[static_cast<size_t>(LockMode::READ)] ||
            li_stats.m_wait_count[static_cast<size_t>(LockMode::TRY_WRITE)] ||
-           li_stats.m_wait_count[static_cast<size_t>(LockMode::TRY_READ)])) {
+           li_stats.m_wait_count[static_cast<size_t>(LockMode::TRY_READ)] ||
+           li_stats.m_hold_count[static_cast<size_t>(LockMode::WRITE)] ||
+           li_stats.m_hold_count[static_cast<size_t>(LockMode::READ)] ||
+           li_stats.m_hold_count[static_cast<size_t>(LockMode::TRY_WRITE)] ||
+           li_stats.m_hold_count[static_cast<size_t>(LockMode::TRY_READ)])) {
         f->open_object_section("entry");
         f->dump_unsigned("id", li.get_lock_id());
         f->dump_string("name", li.m_lock_name);
@@ -452,6 +496,10 @@ LockStatEntry::dump_formatted(Formatter* f)
         f->dump_unsigned(
             "max_wait_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(
                                li.m_max_wait.load(std::memory_order_relaxed))
+                               .count());
+        f->dump_unsigned(
+            "max_hold_ns", std::chrono::duration_cast<std::chrono::nanoseconds>(
+                               li.m_max_hold.load(std::memory_order_relaxed))
                                .count());
 
         f->open_array_section("stats");
@@ -471,6 +519,19 @@ LockStatEntry::dump_formatted(Formatter* f)
             f->dump_unsigned("count", li_stats.m_wait_time_histogram[m][b]);
           }
           f->close_section(); // wait_time_histogram
+
+          f->dump_unsigned("hold_count", li_stats.m_hold_count[m]);
+          f->dump_unsigned(
+              "hold_duration_ns",
+              std::chrono::duration_cast<std::chrono::nanoseconds>(
+                  li_stats.m_hold_duration[m])
+                  .count());
+
+          f->open_array_section("hold_time_histogram");
+          for (uint32_t b = 0; b < LockStats::num_bins + 2; b++) {
+            f->dump_unsigned("count", li_stats.m_hold_time_histogram[m][b]);
+          }
+          f->close_section(); // hold_time_histogram
           f->close_section(); // mode
         };
 

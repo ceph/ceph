@@ -108,7 +108,9 @@ public:
       mutex_base::lock();
     }
     if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-      record_wait_time(lockstat_clock::now() - wait_start_clock, LockMode::WRITE);
+      m_hold_start = lockstat_clock::now();
+      m_hold_mode = LockMode::WRITE;
+      record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
     }
   }
 
@@ -122,8 +124,9 @@ public:
             : lockstat_clock::zero();
     if (mutex_base::try_lock()) {
       if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-        record_wait_time(
-            lockstat_clock::now() - wait_start_clock, LockMode::TRY_WRITE);
+        m_hold_start = lockstat_clock::now();
+        m_hold_mode = LockMode::TRY_WRITE;
+        record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
       }
       return true;
     } else {
@@ -134,7 +137,16 @@ public:
   void
   unlock()
   {
-    mutex_base::unlock();
+    const auto hold_start = m_hold_start;
+    if (unlikely(hold_start != lockstat_clock::zero())) {
+      const auto hold_time = lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_hold_mode;
+      m_hold_start = lockstat_clock::zero();
+      mutex_base::unlock();
+      record_hold_time(hold_time, hold_mode);
+    } else {
+      mutex_base::unlock();
+    }
   }
 
   template <typename Rep, typename Period>
@@ -148,8 +160,9 @@ public:
               : lockstat_clock::zero();
       if (mutex_base::try_lock_for(awhile)) {
         if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-          record_wait_time(
-              lockstat_clock::now() - wait_start_clock, LockMode::TRY_WRITE);
+          m_hold_start = lockstat_clock::now();
+          m_hold_mode = LockMode::TRY_WRITE;
+          record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
         }
         return true;
       } else {
@@ -172,8 +185,9 @@ public:
               : lockstat_clock::zero();
       if (mutex_base::try_lock_until(when)) {
         if (unlikely(wait_start_clock != lockstat_clock::zero())) {
-          record_wait_time(
-              lockstat_clock::now() - wait_start_clock, LockMode::TRY_WRITE);
+          m_hold_start = lockstat_clock::now();
+          m_hold_mode = LockMode::TRY_WRITE;
+          record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
         }
         return true;
       } else {
@@ -183,6 +197,33 @@ public:
       return false;
     }
   }
+
+  void
+  condvar_wait_begin()
+  {
+    const auto hold_start = m_hold_start;
+    if (unlikely(hold_start != lockstat_clock::zero())) {
+      const auto hold_time = lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_hold_mode;
+      m_hold_start = lockstat_clock::zero();
+      record_hold_time(hold_time, hold_mode);
+    }
+  }
+
+  void
+  condvar_wait_end(lockstat_clock::time_point wait_start_clock)
+  {
+    if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+      const auto now = lockstat_clock::now();
+      record_wait_time(now - wait_start_clock, LockMode::WRITE);
+      m_hold_start = now;
+      m_hold_mode = LockMode::WRITE;
+    }
+  }
+
+private:
+  lockstat_clock::time_point m_hold_start{lockstat_clock::zero()};
+  LockMode m_hold_mode{LockMode::WRITE};
 };
 
 template <typename mutex_base>
@@ -420,12 +461,19 @@ public:
   wait(std::unique_lock<mutex_lockstat>& lock)
   {
     // make sure this cond is used with one mutex only
-    ceph_assert(waiter_mutex == nullptr || waiter_mutex == lock.mutex());
-    waiter_mutex = lock.mutex();
+    mutex_lockstat* mutex = lock.mutex();
+    ceph_assert(waiter_mutex == nullptr || waiter_mutex == mutex);
+    waiter_mutex = mutex;
+    const auto wait_start_clock =
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+            ? lockstat_clock::now()
+            : lockstat_clock::zero();
+    mutex->condvar_wait_begin();
     if (int r = pthread_cond_wait(&cond, waiter_mutex->native_handle());
         r != 0) {
       throw std::system_error(r, std::generic_category());
     }
+    mutex->condvar_wait_end(wait_start_clock);
   }
 
   template <class Predicate>
@@ -512,7 +560,13 @@ private:
     ceph_assert(waiter_mutex == nullptr || waiter_mutex == mutex);
     waiter_mutex = mutex;
 
+    const auto wait_start_clock =
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
+            ? lockstat_clock::now()
+            : lockstat_clock::zero();
+    waiter_mutex->condvar_wait_begin();
     int r = pthread_cond_timedwait(&cond, waiter_mutex->native_handle(), ts);
+    waiter_mutex->condvar_wait_end(wait_start_clock);
     switch (r) {
     case 0:
       return std::cv_status::no_timeout;
