@@ -282,26 +282,4 @@ EphemeralRBMDeviceRef create_test_ephemeral(
   uint64_t journal_size = DEFAULT_TEST_CBJOURNAL_SIZE,
   uint64_t data_size = DEFAULT_TEST_CBJOURNAL_SIZE);
 
-template <typename T>
-class MultiShardDevices {
-  public:
-    std::vector<std::unique_ptr<T>> mshard_devices;
-
-  public:
-  MultiShardDevices(size_t count,
-                    const std::string path,
-                    device_type_t dtype,
-                    device_id_t id)
-  : mshard_devices() {
-    mshard_devices.reserve(count);
-    for (size_t store_index = 0; store_index < count; ++store_index) {
-      mshard_devices.emplace_back(std::make_unique<T>(
-        path, dtype, id, store_index));
-    }
-  }
-  ~MultiShardDevices() {
-    mshard_devices.clear();
-  }
-};
-
 }
