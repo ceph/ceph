@@ -362,7 +362,12 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
         .subscribe(
           () => {
             this.removingSchedule = '';
-            this.loadSchedulePolicies(policy.path);
+            this.schedulePolicies = this.schedulePolicies.filter(
+              (entry) => entry.removeId !== policy.removeId
+            );
+            if (this.selectedPath?.path) {
+              this.loadSchedulePolicies(this.selectedPath.path);
+            }
           },
           () => {
             this.removingSchedule = '';
