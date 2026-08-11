@@ -252,20 +252,21 @@ options:
   level: advanced
   desc: maximum concurrent transactions that seastore allows (per reactor)
   default: 128
-- name: seastore_hot_device_type
+- name: seastore_primary_device_type
   type: str
   level: dev
-  desc: The type of the devices in the hot (or only) tier, valid values are HDD, SSD, RANDOM_BLOCK_SSD and RANDOM_BLOCK_HDD
+  desc: Device type of the primary device, valid values are HDD, SSD, RANDOM_BLOCK_SSD and RANDOM_BLOCK_HDD.
+        The primary device holds the journal, the root and the metadata trees.
   default: SSD
-- name: seastore_hot_backend_type
+- name: seastore_primary_backend_type
   type: str
   level: dev
-  desc: The back end used by the devices in the hot (or only) tier, valid values are SEGMENTED and RANDOM_BLOCK
+  desc: Backend used by the primary device, valid values are SEGMENTED and RANDOM_BLOCK
   default: SEGMENTED
-- name: seastore_hot_backend_bw_throttle
+- name: seastore_primary_bw_throttle
   type: size
   level: advanced
-  desc: Size in bytes per second written to the hot devices, 0 indicates no limit
+  desc: Size in bytes per second written to the primary device, 0 indicates no limit
   default: 0
 - name: seastore_cold_devices_count
   type: uint
@@ -291,7 +292,7 @@ options:
 - name: seastore_cbjournal_size
   type: size
   level: dev
-  desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_hot_device_type is RANDOM_BLOCK
+  desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_primary_backend_type is RANDOM_BLOCK
   default: 5_G
 - name: seastore_multiple_tiers_stop_evict_ratio
   type: float

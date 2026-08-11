@@ -229,8 +229,8 @@ declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
 declare -a secondary_block_devs
 declare -a cpu_table
-seastore_hot_device_type="SSD"
-seastore_hot_backend_type="SEGMENTED"
+seastore_primary_device_type="SSD"
+seastore_primary_backend_type="SEGMENTED"
 seastore_cold_device_type="SSD"
 seastore_cold_backend_type="SEGMENTED"
 
@@ -302,8 +302,8 @@ options:
 	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
-	--seastore-main-device-type: device type of main blockdevs. (SSD or RANDOM_BLOCK_SSD)
-	--seastore-main-backend-type: the driver used by main blockdevs (SEGMENTED or RANDOM_BLOCK)
+	--seastore-primary-device-type: device type of the primary blockdev. (SSD or RANDOM_BLOCK_SSD)
+	--seastore-primary-backend-type: the backend used by the primary blockdev (SEGMENTED or RANDOM_BLOCK)
 	--seastore-secondary-device-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--seastore-secondary-backend-type: the driver used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
 	--crimson-smp: number of cores to use for crimson
@@ -640,12 +640,12 @@ case $1 in
         parse_block_devs --seastore-devs "$2"
         shift
         ;;
-    --seastore-main-device-type)
-        seastore_hot_device_type="$2"
+    --seastore-primary-device-type)
+        seastore_primary_device_type="$2"
         shift
         ;;
-    --seastore-main-backend-type)
-        seastore_hot_backend_type="$2"
+    --seastore-primary-backend-type)
+        seastore_primary_backend_type="$2"
         shift
         ;;
     --seastore-secondary-devs)
@@ -978,8 +978,8 @@ EOF
         seastore device size = $seastore_size"
       fi
       SEASTORE_OPTS+="
-        seastore_hot_device_type=$seastore_hot_device_type
-        seastore_hot_backend_type=$seastore_hot_backend_type
+        seastore_primary_device_type=$seastore_primary_device_type
+        seastore_primary_backend_type=$seastore_primary_backend_type
         seastore_cold_device_type=$seastore_cold_device_type
         seastore_cold_backend_type=$seastore_cold_backend_type"
     fi

@@ -388,14 +388,14 @@ seastar::future<uint32_t> SeaStore::start()
   bool is_test = false;
 #endif
   using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_hot_device_type");
+  std::string type = get_conf<std::string>("seastore_primary_device_type");
   device_type_t d_type = string_to_device_type(type);
   assert(d_type == device_type_t::SSD ||
          d_type == device_type_t::RANDOM_BLOCK_SSD);
 
-  type = get_conf<std::string>("seastore_hot_backend_type");
+  type = get_conf<std::string>("seastore_primary_backend_type");
   auto b_type = string_to_backend_type(type);
-  INFO("main device type: {}, main backend type: {}", d_type, b_type);
+  INFO("primary device type: {}, primary backend type: {}", d_type, b_type);
   ceph_assert(root != "");
   DeviceRef device_obj = co_await Device::make_device(root, d_type, b_type);
   device = std::move(device_obj);
@@ -3046,7 +3046,7 @@ SeaStore::read_meta(const std::string& key)
 seastar::future<std::string> SeaStore::get_default_device_class()
 {
   using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_hot_device_type");
+  std::string type = get_conf<std::string>("seastore_primary_device_type");
   return seastar::make_ready_future<std::string>(type);
 }
 
