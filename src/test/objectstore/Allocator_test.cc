@@ -6,6 +6,7 @@
  * Author: Ramesh Chander, Ramesh.Chander@sandisk.com
  */
 #include <iostream>
+#include <thread>
 #include <boost/random/mersenne_twister.hpp> // for boost::mt11213b
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
@@ -19,6 +20,7 @@
 using namespace std;
 
 typedef boost::mt11213b gen_type;
+
 
 class AllocTest : public ::testing::TestWithParam<const char*> {
 
@@ -794,6 +796,225 @@ TEST_P(AllocTest, test_alloc_spatial_locality)
   }
 }
 
+// ====================================================================
+// claim_range
+// ====================================================================
+
+struct ClaimResult {
+  PExtentVector extents;
+  uint64_t claimed;
+};
+
+ClaimResult check_claim(Allocator *a, uint64_t offset, uint64_t length)
+{
+  // free space before the allocate call
+  interval_set<uint64_t> f_before;
+  a->foreach([&](uint64_t off, uint64_t len){
+    f_before.insert(off, len);
+  });
+  uint64_t free_before = a->get_free();
+
+  PExtentVector extents;
+  int64_t claimed = a->claim_range(offset, length, &extents);
+
+  interval_set<uint64_t> claimed_space;
+  for (auto& e : extents) {
+    claimed_space.insert(e.offset, e.length);
+  }
+
+  // claimed is the count of bytes newly allocated
+  EXPECT_EQ(claimed, static_cast<int64_t>(claimed_space.size()));
+
+  // Nothing outside [offset, offset+length) was reported.
+  // interval_set is strict - insert() asserts on a zero length - so the
+  // range-based invariants below are expressed against the empty set when
+  // length == 0. A zero-length claim can only be a no-op, which is exactly
+  // what "claimed_space is empty" says.
+  interval_set<uint64_t> requested;
+  if (length) {
+    requested.insert(offset, length);
+  }
+  EXPECT_TRUE(requested.contains(claimed_space))
+    << "claim_range() reported space outside the requested range";
+
+  interval_set<uint64_t> f_after;
+  a->foreach([&](uint64_t off, uint64_t len){
+    f_after.insert(off, len);
+  });
+
+  // free space lost exactly the claimed bytes
+  f_before.subtract(claimed_space);
+  EXPECT_EQ(f_before, f_after);
+
+  // no free space was left in the requested range
+  if (length) {
+    EXPECT_FALSE(f_after.intersects(offset, length));
+  }
+
+  // get_free() is a hand-maintained counter in some backends; check it
+  // independently of the foreach()-derived view above.
+  EXPECT_EQ(free_before - claimed, a->get_free());
+
+  return {std::move(extents), static_cast<uint64_t>(claimed)};
+}
+
+TEST_P(AllocTest, test_claim_range_zero_length)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 1024 * block_size;
+
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  auto free_before = alloc->get_free();
+
+  // length == 0 in the middle of a free range
+  auto result = check_claim(alloc.get(), block_size * 4, 0);
+  EXPECT_EQ(0u, result.claimed);
+  EXPECT_TRUE(result.extents.empty());
+  EXPECT_EQ(free_before, alloc->get_free());
+
+  // length == 0 at offset == capacity
+  result = check_claim(alloc.get(), capacity, 0);
+  EXPECT_EQ(0u, result.claimed);
+  EXPECT_TRUE(result.extents.empty());
+  EXPECT_EQ(free_before, alloc->get_free());
+}
+
+TEST_P(AllocTest, test_claim_range_geometry)
+{
+  int64_t block_size = 4096;
+
+  struct GeometryCase {
+    const char *name;
+    uint64_t capacity_blocks;
+    uint64_t req_off_blocks;
+    uint64_t req_len_blocks;
+    // {offset, length} pairs, in blocks, passed to init_add_free()
+    std::vector<std::pair<uint64_t, uint64_t>> free_runs_blocks;
+    uint64_t expected_claimed_blocks;
+  };
+
+  // unless noted, request range is blocks [8, 16) on a 32-block device
+  const std::vector<GeometryCase> cases = {
+    {"interior",         32, 8, 8, {{10, 4}},                     4},
+    {"left_flush",       32, 8, 8, {{8, 4}},                      4},
+    {"right_flush",      32, 8, 8, {{12, 4}},                     4},
+    {"straddle_left",    32, 8, 8, {{4, 8}},                      4},
+    {"straddle_right",   32, 8, 8, {{12, 8}},                     4},
+    {"straddle_both",    32, 8, 8, {{2, 24}},                     8},
+    {"outside_left",     32, 8, 8, {{4, 4}},                      0},
+    {"outside_right",    32, 8, 8, {{16, 4}},                     0},
+    {"fully_free",       32, 8, 8, {{0, 32}},                     8},
+    {"fully_allocated",  32, 8, 8, {},                            0},
+    {"alternating",      32, 8, 8, {{8, 1}, {10, 1}, {12, 1}, {14, 1}}, 4},
+    {"starts_at_zero",    8, 0, 4, {{0, 8}},                      4},
+    {"ends_at_capacity",  8, 4, 4, {{0, 8}},                      4},
+    {"single_block",     32, 8, 1, {{8, 1}},                      1},
+  };
+
+  for (auto& c : cases) {
+    SCOPED_TRACE(c.name);
+    init_alloc(c.capacity_blocks * block_size, block_size);
+    for (auto& [off, len] : c.free_runs_blocks) {
+      alloc->init_add_free(off * block_size, len * block_size);
+    }
+
+    auto result = check_claim(alloc.get(),
+                               c.req_off_blocks * block_size,
+                               c.req_len_blocks * block_size);
+    EXPECT_EQ(c.expected_claimed_blocks * block_size, result.claimed);
+    if (c.expected_claimed_blocks == 0) {
+      EXPECT_TRUE(result.extents.empty());
+    }
+  }
+}
+
+TEST_P(AllocTest, test_claim_range_round_trip)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 32 * block_size;
+
+  init_alloc(capacity, block_size);
+
+  // partial overlap: free run [10,14) sits inside the request range [8,16),
+  // so the claim actually changes state instead of being a degenerate
+  // fully-free/fully-allocated case.
+  alloc->init_add_free(10 * block_size, 4 * block_size);
+
+  interval_set<uint64_t> f_before;
+  alloc->foreach([&](uint64_t off, uint64_t len) {
+    f_before.insert(off, len);
+  });
+  uint64_t free_before = alloc->get_free();
+
+  auto claim1 = check_claim(alloc.get(), 8 * block_size, 8 * block_size);
+  EXPECT_EQ(4u * block_size, claim1.claimed);
+
+  // idempotency: claiming the same range again, without releasing first,
+  // must report nothing new - the range is now fully allocated.
+  auto claim2 = check_claim(alloc.get(), 8 * block_size, 8 * block_size);
+  EXPECT_EQ(0u, claim2.claimed);
+  EXPECT_TRUE(claim2.extents.empty());
+
+  // round trip: releasing exactly what claim_range() reported must restore
+  // the free set byte-identically to what it was before the claim.
+  alloc->release(claim1.extents);
+
+  interval_set<uint64_t> f_after_release;
+  alloc->foreach([&](uint64_t off, uint64_t len) {
+    f_after_release.insert(off, len);
+  });
+  EXPECT_EQ(f_before, f_after_release);
+  EXPECT_EQ(free_before, alloc->get_free());
+}
+
+TEST_P(AllocTest, test_claim_range_concurrent)
+{
+  int64_t block_size = 4096;
+  int64_t capacity = 1024 * block_size;
+
+  init_alloc(capacity, block_size);
+  alloc->init_add_free(0, capacity);
+
+  uint64_t free_before = alloc->get_free();
+
+  const size_t num_threads = 8;
+  uint64_t claim_offset = 0;
+  uint64_t claim_length = capacity;
+
+  // Each thread writes only its own slot - no data race on these vectors.
+  // The only shared touchpoint is alloc itself, which is what's under test.
+  std::vector<int64_t> claimed_per_thread(num_threads, 0);
+  std::vector<PExtentVector> extents_per_thread(num_threads);
+  std::vector<std::thread> threads;
+
+  for (size_t i = 0; i < num_threads; ++i) {
+    threads.push_back(std::thread([&, i]() {
+      claimed_per_thread[i] =
+        alloc->claim_range(claim_offset, claim_length, &extents_per_thread[i]);
+    }));
+  }
+  for (auto& t : threads) {
+    t.join();
+  }
+
+  // Every free byte went to exactly one thread: never zero, never two.
+  // A missing or wrong lock around claim_range() fails this immediately,
+  // either as a size mismatch below or as an overlap assert on insert().
+  int64_t total_claimed = 0;
+  interval_set<uint64_t> all_claimed;
+  for (size_t i = 0; i < num_threads; ++i) {
+    total_claimed += claimed_per_thread[i];
+    for (auto& e : extents_per_thread[i]) {
+      all_claimed.insert(e.offset, e.length);
+    }
+  }
+
+  EXPECT_EQ(static_cast<uint64_t>(total_claimed), free_before);
+  EXPECT_EQ(all_claimed.size(), free_before);
+  EXPECT_EQ(0u, alloc->get_free());
+}
 
 // ====================================================================
 // get_free_extents tests
