@@ -283,11 +283,11 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
   }
 
   private buildRows(daemons: Daemon[]): MirroringRow[] {
-    const rows: MirroringRow[] = [];
-    // Multiple cephfs-mirror daemons each report the same FS/peer topology
-    const rowsKeys = new Set<string>();
+    // Multiple cephfs-mirror daemons report the same FS/peer topology with
+    // per-daemon counters (directory_count, failure/recovery) that must be summed.
+    const rowsByKey = new Map<string, MirroringRow>();
     if (!daemons?.length) {
-      return rows;
+      return [];
     }
 
     for (const daemon of daemons) {
@@ -303,15 +303,16 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
             continue;
           }
           const key = `${fs.filesystem_id}-${peer.uuid}`;
-          if (rowsKeys.has(key)) {
-            continue;
+          const existing = rowsByKey.get(key);
+          if (existing) {
+            this.aggregatePeerStats(existing, fs, peer);
+          } else {
+            rowsByKey.set(key, this.peerToRow(fs, peer));
           }
-          rowsKeys.add(key);
-          rows.push(this.peerToRow(fs, peer));
         }
       }
     }
-    return rows;
+    return Array.from(rowsByKey.values());
   }
 
   private hasPeerInfo(peer: Peer): boolean {
@@ -319,11 +320,17 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
     return !!(remote?.cluster_name || remote?.fs_name || remote?.client_name);
   }
 
+  private aggregatePeerStats(row: MirroringRow, fs: Filesystem, peer: Peer): void {
+    row.directory_count += fs.directory_count ?? 0;
+    row.failure_count = (row.failure_count ?? 0) + (peer.stats?.failure_count ?? 0);
+    row.recovery_count = (row.recovery_count ?? 0) + (peer.stats?.recovery_count ?? 0);
+    this.applySyncStatus(row, row.failure_count);
+  }
+
   private peerToRow(fs: Filesystem, peer: Peer): MirroringRow {
     const failureCount = peer.stats?.failure_count ?? 0;
     const recoveryCount = peer.stats?.recovery_count ?? 0;
-
-    return {
+    const row: MirroringRow = {
       remote_site_name: peer.remote?.cluster_name ?? '-',
       local_fs_name: fs.name,
       fs_name: peer.remote?.fs_name ?? '-',
@@ -333,9 +340,14 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
       peer_uuid: peer.uuid,
       failure_count: failureCount,
       recovery_count: recoveryCount,
-      sync_status: failureCount > 0 ? MirroringSyncStatus.ERROR : MirroringSyncStatus.SYNCING,
-      sync_status_label: failureCount > 0 ? $localize`Error` : $localize`Syncing`,
       id: `${fs.filesystem_id}-${peer.uuid}`
     };
+    this.applySyncStatus(row, failureCount);
+    return row;
+  }
+
+  private applySyncStatus(row: MirroringRow, failureCount: number): void {
+    row.sync_status = failureCount > 0 ? MirroringSyncStatus.ERROR : MirroringSyncStatus.SYNCING;
+    row.sync_status_label = failureCount > 0 ? $localize`Error` : $localize`Syncing`;
   }
 }

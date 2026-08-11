@@ -88,7 +88,7 @@ MIRROR_LAST_SYNCED_SNAP_SCHEMA = {
     'crawl_duration': (str, 'Time taken to scan directory'),
     'datasync_queue_wait_duration': (str, 'Time in data sync queue'),
     'sync_duration': (str, 'Snapshot sync duration'),
-    'sync_time_stamp': (str, 'Time of the last sync'),
+    'sync_time_stamp': (str, 'Wall-clock time when the snapshot sync finished'),
     'sync_bytes': (str, 'Bytes synced for the snapshot'),
     'sync_files': (int, 'Number of files synced for the snapshot'),
 }
@@ -1648,7 +1648,7 @@ class CephFSMirror(RESTController):
 
     @EndpointDoc("Get mirror daemon and peers information",
                  responses={200: DAEMON_STATUS_SCHEMA})
-    @Endpoint('GET', path='/daemon-status')
+    @Endpoint('GET', path='/daemon/status')
     @ReadPermission
     def daemon_status(self):
         error_code, out, err = mgr.remote('mirroring', 'snapshot_mirror_daemon_status')

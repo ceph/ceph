@@ -216,32 +216,58 @@ describe('CephfsMirroringListComponent', () => {
         sync_status: MirroringSyncStatus.SYNCING,
         sync_status_label: 'Syncing',
         id: '10-peer-uuid',
-        bytes_replicated: '1.00 MiB',
+        bytes_replicated: '1 MiB',
         last_sync: expect.any(String)
       })
     );
   });
 
-  it('should deduplicate mirror relationships across multiple daemons', () => {
-    const peer = {
-      remote: {
-        cluster_name: 'clusterA',
-        fs_name: 'fsA',
-        client_name: 'clientA'
-      },
-      uuid: 'peer-uuid',
-      stats: { failure_count: 0, recovery_count: 0 }
-    };
-    const filesystem = {
-      filesystem_id: 10,
-      name: 'fs1',
-      directory_count: 3,
-      peers: [peer],
-      id: ''
-    };
+  it('should aggregate per-daemon stats into one peer summary row', () => {
     const mockData: Daemon[] = [
-      { daemon_id: 14318, filesystems: [filesystem] },
-      { daemon_id: 24149, filesystems: [{ ...filesystem }] }
+      {
+        daemon_id: 14318,
+        filesystems: [
+          {
+            filesystem_id: 10,
+            name: 'fs1',
+            directory_count: 3,
+            peers: [
+              {
+                remote: {
+                  cluster_name: 'clusterA',
+                  fs_name: 'fsA',
+                  client_name: 'clientA'
+                },
+                uuid: 'peer-uuid',
+                stats: { failure_count: 1, recovery_count: 0 }
+              }
+            ],
+            id: ''
+          }
+        ]
+      },
+      {
+        daemon_id: 24149,
+        filesystems: [
+          {
+            filesystem_id: 10,
+            name: 'fs1',
+            directory_count: 2,
+            peers: [
+              {
+                remote: {
+                  cluster_name: 'clusterA',
+                  fs_name: 'fsA',
+                  client_name: 'clientA'
+                },
+                uuid: 'peer-uuid',
+                stats: { failure_count: 2, recovery_count: 1 }
+              }
+            ],
+            id: ''
+          }
+        ]
+      }
     ];
 
     cephfsServiceMock.listDaemonStatus.mockReturnValue(of(mockData));
@@ -249,9 +275,8 @@ describe('CephfsMirroringListComponent', () => {
 
     let emitted: MirroringRow[] = [];
 
-    component.ngOnInit();
     component.daemonStatus$.subscribe((v) => (emitted = v || []));
-    component.loadDaemonStatus();
+    component.ngOnInit();
 
     expect(emitted.length).toBe(1);
     expect(cephfsServiceMock.getMirrorStatus).toHaveBeenCalledTimes(1);
@@ -260,6 +285,11 @@ describe('CephfsMirroringListComponent', () => {
         local_fs_name: 'fs1',
         peer_uuid: 'peer-uuid',
         filesystem_id: 10,
+        directory_count: 5,
+        failure_count: 3,
+        recovery_count: 1,
+        sync_status: MirroringSyncStatus.ERROR,
+        sync_status_label: 'Error',
         id: '10-peer-uuid'
       })
     );
