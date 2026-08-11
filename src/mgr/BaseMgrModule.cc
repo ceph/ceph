@@ -894,13 +894,15 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
   }
 
   std::string err;
+  bool crash_dump = true;
   std::optional<std::vector<std::byte>> maybe_pickled_ret =
     self->py_modules->dispatch_remote(
       other_module,
       method,
       pickled_args_span,
       pickled_kwargs_span,
-      &err);
+      &err,
+      &crash_dump);
 
   PyEval_RestoreThread(tstate);
 
@@ -913,7 +915,14 @@ ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
     std::stringstream ss;
     ss << "Remote method threw exception: " << err;
     PyErr_SetString(PyExc_RuntimeError, ss.str().c_str());
-    derr << ss.str() << dendl;
+    // NotImplementedError is the documented way for a module to signal
+    // that it doesn't implement an optional method (see dispatch_remote()
+    // in ActivePyModule.cc); it isn't a fault, so don't log it as one.
+    if (crash_dump) {
+      derr << ss.str() << dendl;
+    } else {
+      dout(10) << ss.str() << dendl;
+    }
     return nullptr;
   }
 

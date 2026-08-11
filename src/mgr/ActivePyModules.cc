@@ -641,13 +641,14 @@ std::optional<std::vector<std::byte>> ActivePyModules::dispatch_remote(
     const std::string &method,
     std::span<std::byte const> pickled_args,
     std::span<std::byte const> pickled_kwargs,
-    std::string *err)
+    std::string *err,
+    bool *crash_dump)
 {
   auto mod_iter = modules.find(other_module);
   ceph_assert(mod_iter != modules.end());
 
   return mod_iter->second->dispatch_remote(
-    method, pickled_args, pickled_kwargs, err);
+    method, pickled_args, pickled_kwargs, err, crash_dump);
 }
 
 

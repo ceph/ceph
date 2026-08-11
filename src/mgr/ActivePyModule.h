@@ -70,7 +70,8 @@ public:
       const std::string &method,
       std::span<std::byte const> pickled_args,
       std::span<std::byte const> pickled_kwargs,
-      std::string *err);
+      std::string *err,
+      bool *crash_dump = nullptr);
 
   int handle_command(
     const ModuleCommand& module_command,

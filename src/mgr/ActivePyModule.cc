@@ -132,9 +132,13 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
     const std::string &method,
     std::span<std::byte const> pickled_args,
     std::span<std::byte const> pickled_kwargs,
-    std::string *err)
+    std::string *err,
+    bool *crash_dump)
 {
   ceph_assert(err != nullptr);
+  if (crash_dump != nullptr) {
+    *crash_dump = true;
+  }
 
   // deserialize arguments.
 
@@ -201,9 +205,12 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
     // scrape, which pinned RECENT_MGR_MODULE_CRASH permanently and added
     // ~5,760 crash records per day. The exception is still reported to the
     // caller, it is just not treated as a crash.
-    const bool crash_dump = !PyErr_ExceptionMatches(PyExc_NotImplementedError);
+    const bool do_crash_dump = !PyErr_ExceptionMatches(PyExc_NotImplementedError);
     std::string caller = "ActivePyModule::dispatch_remote "s + method;
-    *err = handle_pyerror(crash_dump, get_name(), caller);
+    *err = handle_pyerror(do_crash_dump, get_name(), caller);
+    if (crash_dump != nullptr) {
+      *crash_dump = do_crash_dump;
+    }
     return std::nullopt;
   }
   dout(20) << "Success calling '" << method << "'" << dendl;
