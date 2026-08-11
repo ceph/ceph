@@ -756,6 +756,10 @@ COMMAND("osd crush reweight-by-scaling-factor "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"reweight all items in the crush map by a scaling factor",
 	"osd", "rw")
+COMMAND("osd crush test-reweight-by-scaling-factor "
+        "name=skip_metadata_lookup,type=CephBool,req=false",
+	"test reweighting all items in the crush map by a scaling factor (dry run)",
+	"osd", "r")
 COMMAND("osd crush tunables "
 	"name=profile,type=CephChoices,strings=legacy|argonaut|bobtail|firefly|hammer|jewel|optimal|default",
 	"set crush tunables values to <profile>", "osd", "rw")
@@ -860,6 +864,10 @@ COMMAND("osd set-backfillfull-ratio "
 COMMAND("osd set-nearfull-ratio "
 	"name=ratio,type=CephFloat,range=0.0|1.0",
 	"set usage ratio at which OSDs are marked near-full",
+	"osd", "rw")
+COMMAND("osd set-crush-scaling-factor "
+	"name=factor,type=CephFloat,range=0.0|1.0",
+	"set CRUSH scaling factor for OSD capacity calculations",
 	"osd", "rw")
 COMMAND("osd get-require-min-compat-client",
         "get the minimum client version we will maintain compatibility with",
