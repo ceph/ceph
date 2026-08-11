@@ -108,7 +108,8 @@ void format_image_disk_usage(const std::string& name,
 
 static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                          const char *imgname, const char *snapname,
-                         const char *from_snapname, bool exact, Formatter *f,
+                         const char *from_snapname, uint64_t from_id,
+                         uint64_t snap_id, bool exact, Formatter *f,
                          bool merge_snap, bool all_snap) {
   std::vector<librbd::image_spec_t> images;
   int r = rbd.list2(io_ctx, &images);
@@ -132,8 +133,6 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
   uint64_t used_size = 0;
   uint64_t total_prov = 0;
   uint64_t total_used = 0;
-  uint64_t snap_id = CEPH_NOSNAP;
-  uint64_t from_id = CEPH_NOSNAP;
   bool found = false;
   for (auto& image_spec : images) {
     if (imgname != NULL && image_spec.name != imgname) {
@@ -185,7 +184,7 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
                       snap_list.end());
     }
 
-    bool found_from_snap = (from_snapname == nullptr);
+    bool found_from_snap = ((from_snapname == nullptr) && (from_id == CEPH_NOSNAP));
     bool found_snap = (snapname == nullptr);
     bool found_from = (from_snapname == nullptr);
     uint64_t last_snap_id = 0;
@@ -222,6 +221,33 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
       }
     }
 
+    if (snap_id != CEPH_NOSNAP) {
+      bool found = false;
+      for (auto &snap_info : snap_list) {
+        if (snap_id == snap_info.id) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        std::cerr << "invalid snap id " << snap_id << std::endl;
+        return -EINVAL;
+      }
+    }
+    if (from_id != CEPH_NOSNAP) {
+      bool found = false;
+      for (auto &snap_info : snap_list) {
+        if (from_id == snap_info.id) {
+          found = true;
+          break;
+        }
+      }
+      if (!found) {
+        std::cerr << "invalid from snap id " << from_id << std::endl;
+        return -EINVAL;
+      }
+    }
+
     uint64_t image_full_used_size = 0;
 
     for (std::vector<librbd::snap_info_t>::const_iterator snap =
@@ -248,24 +274,26 @@ static int do_disk_usage(librbd::RBD &rbd, librados::IoCtx &io_ctx,
 
         image_full_used_size += used_size;
 
-        if (snapname != NULL) {
+        if (snapname != NULL && snap_id != CEPH_NOSNAP) {
           total_prov += snap->size;
         }
         total_used += used_size;
         ++count;
       }
 
-      if (!found_from_snap && from_snapname != nullptr &&
-          snap->name == from_snapname) {
+      if (!found_from_snap &&
+          ((from_snapname != nullptr && snap->name == from_snapname) ||
+           (from_id != CEPH_NOSNAP && snap->id == from_id))) {
         found_from_snap = true;
       }
-      if (snapname != nullptr && snap->name == snapname) {
+      if ((snapname != nullptr && snap->name == snapname) ||
+          (snap_id != CEPH_NOSNAP && snap->id == snap_id)) {
         break;
       }
       last_snap_id = snap->id;
     }
 
-    if (snapname == NULL) {
+    if (snapname == NULL && snap_id == CEPH_NOSNAP) {
       r = image.snap_set_by_id(CEPH_NOSNAP);
       if (r < 0) {
         std::cerr << "rbd: error setting image " << image_spec.name
@@ -324,15 +352,17 @@ void get_arguments(po::options_description *positional,
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_DEST);
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
+    (at::FROM_SNAPSHOT_ID.c_str(), po::value<uint64_t>(),
+     "starting snapshot id")
     ("exact", po::bool_switch(), "compute exact disk usage (slow)")
     ("merge-snapshots", po::bool_switch(),
      "merge snapshot sizes with its image")
     ("all-snapshots", po::bool_switch(),
-     "allow inspecting the disk usage of all snapshots, "
-     "like group/trash/mirror snapshots");
+     "include snapshots from all namespaces");
 }
 
 int execute(const po::variables_map &vm,
@@ -355,6 +385,32 @@ int execute(const po::variables_map &vm,
     from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
   }
 
+  uint64_t from_snap_id = CEPH_NOSNAP;
+  if (vm.count(at::FROM_SNAPSHOT_ID)) {
+    if (!from_snap_name.empty()) {
+      std::cerr << "--from-snap and --from-snap-id can't be set at the same time" << std::endl;
+      return -EINVAL;
+    }
+    from_snap_id = vm[at::FROM_SNAPSHOT_ID].as<uint64_t>();
+    if (from_snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --from-snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  uint64_t snap_id = CEPH_NOSNAP;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    if (!snap_name.empty()) {
+      std::cerr << "--snap and --snap-id can't be set at the same time" << std::endl;
+      return -EINVAL;
+    }
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    if (snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
   at::Format::Formatter formatter;
   r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
@@ -375,6 +431,7 @@ int execute(const po::variables_map &vm,
                     image_name.empty() ? nullptr: image_name.c_str(),
                     snap_name.empty() ? nullptr : snap_name.c_str(),
                     from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
+                    from_snap_id, snap_id,
                     vm["exact"].as<bool>(), formatter.get(),
                     vm["merge-snapshots"].as<bool>(),
                     vm["all-snapshots"].as<bool>());
