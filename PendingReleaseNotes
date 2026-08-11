@@ -1098,3 +1098,13 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   until they complete or abort.
 
   Relevant tracker: https://tracker.ceph.com/issues/77509
+
+* RGW: The new ``rgw_topic_ownership_update_period`` option sets how often a
+  radosgw refreshes the persistent topic queue list. The ownership (failover)
+  timeout of a persistent topic queue is three times this value, so lowering it
+  speeds up failover of persistent topics between gateways. Setting it too low
+  may cause false-positive failures. Changing it affects the ownership of an
+  existing persistent topic queue only on its next renewal. It defaults to 30
+  seconds, which matches the previously hardcoded behaviour.
+
+  Relevant tracker: https://tracker.ceph.com/issues/78727
