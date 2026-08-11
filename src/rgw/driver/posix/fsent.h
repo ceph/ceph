@@ -22,6 +22,7 @@
 #include <fcntl.h>
 #include <sys/xattr.h>
 #include <unistd.h>
+#include <dirent.h>
 
 
 namespace rgw { namespace sal {
