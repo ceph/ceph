@@ -1110,7 +1110,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     c_obj->set_instance("null");
   }
   rgw::d4n::CacheBlock block;
-  block.cacheObj.bucketName = c_obj->get_bucket()->get_bucket_id();
+  block.cacheObj.bucketName = e->bucket_id;
   ldpp_dout(dpp, 20) << __func__ << "(): bucket name: " << block.cacheObj.bucketName << dendl;
   block.cacheObj.objName = c_obj->get_name();
   block.size = 0;
@@ -1120,7 +1120,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     // hash entry for latest version
     op_ret = blockDir.get(dpp, &block, y);
     if (op_ret < 0) {
-      ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << block.cacheObj.objName << ", ret=" << op_ret << dendl;
       return op_ret;
     } else {
       // if this entry is not the latest, it could have been overwritten by a newer one
@@ -1131,7 +1131,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
         //hash entry for null block
         op_ret = blockDir.get(dpp, &null_block, y);
         if (op_ret < 0) {
-          ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << null_block.cacheObj.objName << ", ret=" << ret << dendl;
+          ldpp_dout(dpp, 0) << __func__ << "(): Failed to get latest entry in block directory for: " << null_block.cacheObj.objName << ", ret=" << op_ret << dendl;
         } else {
           if (null_block.version == e->version) {
             block.cacheObj.dirty = false;
@@ -1148,7 +1148,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Removing object name: "<< c_obj->get_name() << " score: " << std::setprecision(std::numeric_limits<double>::max_digits10) << e->creationTime << " from ordered set" << dendl;
     rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
       .objName = c_obj->get_name(),
-      .bucketName = c_obj->get_bucket()->get_bucket_id(),
+      .bucketName = e->bucket_id,
     };
     /* remove the entry from the ordered set using its score, as the object is already cleaned
         need not be part of a transaction as it is being removed based on its score which is its creation time. */
@@ -1164,7 +1164,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
       objName = "_:null_" + c_obj->get_name();
     }
     rgw::d4n::CacheBlock instance_block;
-    instance_block.cacheObj.bucketName = c_obj->get_bucket()->get_bucket_id();
+    instance_block.cacheObj.bucketName = e->bucket_id; 
     instance_block.cacheObj.objName = objName;
     instance_block.size = 0;
     instance_block.blockID = 0;
@@ -1203,7 +1203,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
       ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Removing object name: "<< c_obj->get_name() << " score: " << std::setprecision(std::numeric_limits<double>::max_digits10) << e->creationTime << " from ordered set" << dendl;
       rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
         .objName = c_obj->get_name(),
-        .bucketName = c_obj->get_bucket()->get_bucket_id(),
+        .bucketName = e->bucket_id,
       };
       ret = objDir.remove_version_by_creation_time(dpp, dir_obj.bucketName, dir_obj.objName, e->creationTime, y);
       if (ret < 0) {
