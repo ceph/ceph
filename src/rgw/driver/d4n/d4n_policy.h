@@ -170,7 +170,7 @@ class LFUDAPolicy : public CachePolicy {
     struct LFUDAObjEntry : public ObjEntry {
       using handle_type = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>::handle_type;
       handle_type handle;
-      int retry_count;
+      int retry_count = 0;  // Initialize to 0 to track retry attempts
 
       LFUDAObjEntry(const std::string& key, const std::string& version, bool deleteMarker, uint64_t size,
                      ceph::real_time creationTime, const rgw_user& user, const std::string& etag,
@@ -203,6 +203,7 @@ class LFUDAPolicy : public CachePolicy {
     BlockDirectory& blockDir;
     ObjectDirectory& objDir;
     BucketDirectory& bucketDir;
+    Lease* lease;
 
     optional_yield y = null_yield;
 
@@ -266,15 +267,17 @@ class LFUDAPolicy : public CachePolicy {
     LFUDAPolicy(Directory& dir,
              BlockDirectory& blockDir,
              ObjectDirectory& objDir,
-             BucketDirectory& bucketDir, 
-	     std::string_view dir_type, 
-	     rgw::cache::CacheDriver* cacheDriver, 
-	     optional_yield y) : 
+             BucketDirectory& bucketDir,
+             Lease* lease,
+	     std::string_view dir_type,
+	     rgw::cache::CacheDriver* cacheDriver,
+	     optional_yield y) :
 				 CachePolicy(cacheDriver),
 				 dir(dir),
 			         blockDir(blockDir),
     				 objDir(objDir),
     				 bucketDir(bucketDir),
+				 lease(lease),
 				 y(y)
     {
     }
@@ -345,9 +348,10 @@ class PolicyDriver {
              BlockDirectory& blockDir,
              ObjectDirectory& objDir,
              BucketDirectory& bucketDir,
+             Lease* lease,
 	     std::string directory_type,
 	     rgw::cache::CacheDriver* cacheDriver,
-	     const std::string& _policyName, 
+	     const std::string& _policyName,
 	     optional_yield y) : policyName(_policyName)
     {
       if (policyName == "lfuda") {
@@ -355,7 +359,8 @@ class PolicyDriver {
              blockDir,
              objDir,
              bucketDir,
-	     directory_type, 
+             lease,
+	     directory_type,
 	     cacheDriver, y);
       } else if (policyName == "lru") {
 	cachePolicy = std::make_unique<LRUPolicy>(cacheDriver);

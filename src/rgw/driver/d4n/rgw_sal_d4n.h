@@ -65,6 +65,51 @@ inline std::string get_key_in_cache(const std::string& prefix, const std::string
   return fmt::format("{}{}{}{}{}", prefix, CACHE_DELIM, offset, CACHE_DELIM, len);
 }
 
+// Builds the objName for a version-specific head block directory entry used for non-versioned
+// bucket objects. Format: "_:<d4n_version>_<obj_name>". Allows remote GETs to look up attrs
+// for a specific version without relying on the overwriteable "latest" head block.
+inline std::string get_versioned_head_block_name(const std::string& version, const std::string& obj_name)
+{
+  return "_:" + version + "_" + obj_name;
+}
+
+// Lease TTL for GET operations to prevent concurrent deletion (in nanoseconds)
+// 30 seconds = 30,000,000,000 nanoseconds
+constexpr uint64_t D4N_LEASE_TTL_NANOSECONDS = 30'000'000'000ULL;
+
+// Builds a unique lease resource key for preventing concurrent GET/PUT conflicts.
+// Format: "<bucket_id>:<object_name>:<version>:<operation>:<uuid>"
+inline std::string get_lease_resource_key(const std::string& bucket_id,
+                                          const std::string& object_name,
+                                          const std::string& version,
+                                          const std::string& operation,
+                                          const std::string& uuid)
+{
+  // Hierarchical format using '/' separator for prefix matching
+  // Each component is URL-encoded (including '/') to handle '/' in S3 object names
+  // e.g., "bucket123/photos%2F2024%2Fimg.jpg/v1/GET/uuid"
+  return fmt::format("{}/{}/{}/{}/{}",
+                     url_encode(bucket_id, true),
+                     url_encode(object_name, true),
+                     url_encode(version, true),
+                     url_encode(operation, true),
+                     url_encode(uuid, true));
+}
+
+// Hierarchical format using '/' separator for prefix matching
+// e.g., "bucket/object/version/GET" matches all GETs on that version (wildcard on uuid)
+inline std::string get_lease_resource_prefix(const std::string& bucket_id,
+                                             const std::string& object_name,
+                                             const std::string& version,
+                                             const std::string& operation)
+{
+  return fmt::format("{}/{}/{}/{}",
+                     url_encode(bucket_id, true),
+                     url_encode(object_name, true),
+                     url_encode(version, true),
+                     url_encode(operation, true));
+}
+
 inline std::optional<rgw::d4n::CacheBlock> parse_block_from_cache(const std::string& key)
 {
   rgw::d4n::CacheBlock block;
@@ -261,6 +306,7 @@ class D4NFilterDriver : public FilterDriver {
     std::unique_ptr<rgw::d4n::BlockDirectory> blockDir;
     std::unique_ptr<rgw::d4n::BucketDirectory> bucketDir;
     std::unique_ptr<rgw::d4n::PolicyDriver> policyDriver;
+    std::unique_ptr<rgw::d4n::Lease> lease;
     boost::asio::io_context& io_context;
     optional_yield y;
     std::string directory_type;
@@ -340,6 +386,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir.get(); }
     rgw::d4n::BucketDirectory* get_bucket_dir() { return bucketDir.get(); }
     rgw::d4n::PolicyDriver* get_policy_driver() { return policyDriver.get(); }
+    rgw::d4n::Lease* get_lease() { return lease.get(); }
     void save_y(optional_yield y) { this->y = y; }
     std::shared_ptr<rgw::d4n::DirectoryConnection> get_conn() { return conn; }
     std::shared_ptr<rgw::d4n::RedisPool> get_redis_pool() { return redis_pool; }
@@ -452,6 +499,11 @@ class D4NFilterObject : public FilterObject {
     bool attrs_read_from_cache{false};
     bool cache_request{false};
     bool remote_cache_request{false}; //sent by another rgw
+    // Lease management for concurrent GET/PUT protection
+    std::string lease_resource;    // Unique lease key for this GET
+    std::string lease_holder;      // Holder ID (node/process)
+    std::string lease_token;       // Unique token
+    bool lease_acquired = false;   // Track if lease was acquired
     uint64_t blk_offset;
     uint64_t blk_len;
     uint64_t obj_size; //sent by remote rgw
@@ -503,7 +555,7 @@ class D4NFilterObject : public FilterObject {
         {
           cb = std::make_unique<D4NFilterGetCB>(source->driver, source);
 	}
-	virtual ~D4NFilterReadOp() = default;
+	virtual ~D4NFilterReadOp();
 
 	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 	virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
@@ -603,7 +655,6 @@ class D4NFilterObject : public FilterObject {
     void set_attrs_from_obj_state(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool dirty = false);
     int calculate_version(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, rgw::sal::Attrs& attrs);
     int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false);
-    int update_head_block_hostslist(const DoutPrefixProvider* dpp, optional_yield y);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y);
