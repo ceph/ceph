@@ -536,4 +536,43 @@ if(WITH_SYSTEM_ARROW)
 else()
   target_include_directories(unittest_rgw_s3vector PRIVATE ${CMAKE_BINARY_DIR}/src/arrow/include)
 endif()
+
+add_executable(ceph_test_rgw_sal_wrapper test_rgw_sal_wrapper.cc)
+target_link_libraries(ceph_test_rgw_sal_wrapper
+  rgw_common
+  ${rgw_libs}
+  ${UNITTEST_LIBS})
+install(TARGETS ceph_test_rgw_sal_wrapper DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# libtest (used by the LanceDB ObjectStore cargo tests) owns main(), so the
+# ceph context and SAL driver are brought up in this shared library instead.
+# Linking rgw_common also makes it re-export the rgw_sal_wrapper API, so the
+# cargo test binary links this one .so rather than the full RGW link line.
+add_library(ceph_rgw_sal_test_env SHARED rgw_sal_test_env.cc)
+target_link_libraries(ceph_rgw_sal_test_env
+  rgw_common
+  ${rgw_libs})
+target_include_directories(ceph_rgw_sal_test_env PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/rgw)
+install(TARGETS ceph_rgw_sal_test_env DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# The LanceDB ObjectStore tests are Rust `cargo test` functions
+# (lancedb-rgw-store/tests/object_store.rs).  They link against
+# libceph_rgw_sal_test_env.so for driver bring-up and the rgw_sal_wrapper API.
+include(${CMAKE_CURRENT_SOURCE_DIR}/cargo_test_binary.cmake)
+add_rgw_cargo_test_binary(
+  NAME    ceph_test_rgw_lancedb_object_store
+  PACKAGE lancedb-rgw-store
+  TEST    object_store
+  DEPENDS ceph_rgw_sal_test_env)
+
+# The crate's own #[cfg(test)] unit tests (errno mapping in store.rs, FFI struct
+# defaults in ffi.rs).  They need no cluster, so they run under `make check`
+# rather than being installed.  They still link libceph_rgw_sal_test_env.so,
+# since the FFI reaches through it to rgw_sal_wrapper_version().
+add_rgw_cargo_test_binary(
+  NAME      unittest_rgw_lancedb_store
+  PACKAGE   lancedb-rgw-store
+  UNIT_TEST
+  DEPENDS   ceph_rgw_sal_test_env)
 endif()
