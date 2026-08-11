@@ -520,4 +520,11 @@ if(WITH_RADOSGW_LANCEDB)
 add_executable(unittest_rgw_s3vector test_rgw_s3vector.cc)
 add_ceph_unittest(unittest_rgw_s3vector)
 target_link_libraries(unittest_rgw_s3vector ${rgw_libs} heap_profiler ${UNITTEST_LIBS})
+
+add_executable(ceph_test_rgw_sal_wrapper test_rgw_sal_wrapper.cc)
+target_link_libraries(ceph_test_rgw_sal_wrapper
+  rgw_common
+  ${rgw_libs}
+  ${UNITTEST_LIBS})
+install(TARGETS ceph_test_rgw_sal_wrapper DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
