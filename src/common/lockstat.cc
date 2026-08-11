@@ -19,6 +19,7 @@
 #include <ranges>
 #include <mutex>
 #include <numeric>
+#include <unordered_map>
 
 #include "include/ceph_assert.h"
 
@@ -256,6 +257,46 @@ LockStatTraits::record_hold_time(
   stats.m_hold_time_histogram[static_cast<size_t>(
       mode)][LockStatEntry::LockStats::LockStatLatBins::get_index(hold_ns)]++;
   atomic_max(lockstat_entry->m_max_hold, hold_time);
+}
+
+struct SharedHoldState {
+  lockstat_clock::time_point hold_start{lockstat_clock::zero()};
+  unsigned depth = 0;
+  LockMode mode = LockMode::READ;
+};
+
+thread_local std::unordered_map<const LockStat*, SharedHoldState>
+    thread_shared_hold_states;
+
+void
+LockStat::begin_shared_hold(const LockMode mode) const
+{
+  SharedHoldState& state = thread_shared_hold_states[this];
+  if (state.depth == 0) {
+    state.hold_start =
+        unlikely(is_lockstat_enabled()) ? lockstat_clock::now() : lockstat_clock::zero();
+    state.mode = mode;
+  }
+  state.depth++;
+}
+
+void
+LockStat::end_shared_hold() const
+{
+  const auto it = thread_shared_hold_states.find(this);
+  if (it == thread_shared_hold_states.end()) {
+    return;
+  }
+  SharedHoldState& state = it->second;
+  ceph_assert(state.depth > 0);
+  state.depth--;
+  if (state.depth == 0) {
+    const auto hold_start = state.hold_start;
+    if (unlikely(hold_start != lockstat_clock::zero())) {
+      record_hold_time(lockstat_clock::now() - hold_start, state.mode);
+    }
+    thread_shared_hold_states.erase(it);
+  }
 }
 
 LockStatEntry::LockStats::LockStats() { reset(); }

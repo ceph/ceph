@@ -63,6 +63,13 @@ private:
   // shared locking
   void _pre_unlock_shared();
   void _post_lock_shared();
+
+#ifdef CEPH_LOCKSTAT
+  lockstat_detail::lockstat_clock::time_point m_write_hold_start{
+      lockstat_detail::lockstat_clock::zero()};
+  lockstat_detail::LockMode m_write_hold_mode{
+      lockstat_detail::LockMode::WRITE};
+#endif
 };
 
 } // namespace ceph

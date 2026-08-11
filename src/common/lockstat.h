@@ -624,6 +624,18 @@ public: // Methods
   }
 
   ///
+  /// @brief Begin tracking shared (read) hold time for this thread
+  ///
+  void
+  begin_shared_hold(LockMode mode) const;
+
+  ///
+  /// @brief End tracking shared (read) hold time for this thread
+  ///
+  void
+  end_shared_hold() const;
+
+  ///
   /// @brief True if lockstat is capturing stats
   ///
   static bool
