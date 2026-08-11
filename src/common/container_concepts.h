@@ -498,8 +498,8 @@ struct container_appender final {
   ContainerT& container;
 
  public:
-  explicit constexpr container_appender(ContainerT& container)
-    : container(container) {}
+  explicit constexpr container_appender(ContainerT& c)
+    : container(c) {}
 
  public:
   template <typename... ArgsT>
@@ -516,9 +516,9 @@ struct emplace_after_appender final {
   std::ranges::iterator_t<ContainerT> pos;
 
  public:
-  explicit constexpr emplace_after_appender(ContainerT& container)
-    : container(container),
-      pos(container.before_begin()) {}
+  explicit constexpr emplace_after_appender(ContainerT& c)
+    : container(c),
+      pos(c.before_begin()) {}
 
  public:
   template <typename... ArgsT>
