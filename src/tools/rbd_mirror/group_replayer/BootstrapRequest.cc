@@ -82,7 +82,8 @@ void BootstrapRequest<I>::send() {
 // TODO : Create this in PrepareLocalGroupRequest/PrepareRemoteGroupRequest ?
   *m_state_builder = GroupStateBuilder<I>::create(m_global_group_id);
 
-  prepare_local_group();
+  *m_resync_requested = false;
+  get_local_group_id();
 }
 
 template <typename I>
@@ -93,6 +94,128 @@ void BootstrapRequest<I>::cancel() {
 }
 
 template <typename I>
+void BootstrapRequest<I>::get_local_group_id() {
+  dout(10) << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::mirror_group_get_group_id_start(&op, m_global_group_id);
+  m_out_bl.clear();
+  auto comp = create_rados_callback<
+      BootstrapRequest<I>,
+      &BootstrapRequest<I>::handle_get_local_group_id>(this);
+
+  int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_get_local_group_id(int r) {
+  dout(10) << "r=" << r << ", global_group_id: " << m_global_group_id << dendl;
+
+  if (r == 0) {
+    auto iter = m_out_bl.cbegin();
+    r = librbd::cls_client::mirror_group_get_group_id_finish(
+          &iter, &m_local_group_id);
+  } else if (r < 0 && r != -ENOENT) {
+    derr << "error getting local group id: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (r == 0) {
+    group_get_info();
+  } else { // ENOENT
+    prepare_remote_group();
+  }
+}
+
+template <typename I>
+void BootstrapRequest<I>::group_get_info() {
+  dout(10) << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::mirror_group_get_start(&op, m_local_group_id);
+
+  auto comp = create_rados_callback<
+      BootstrapRequest<I>, &BootstrapRequest<I>::handle_group_get_info>(this);
+
+  m_out_bl.clear();
+  int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_group_get_info(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  m_mirror_group.state = cls::rbd::MIRROR_GROUP_STATE_DISABLED;
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = librbd::cls_client::mirror_group_get_finish(&it, &m_mirror_group);
+  } else if (r < 0 && r != -ENOENT) {
+    if (r == -EOPNOTSUPP) {
+      dout(5) << "group mirroring not supported by OSD" << dendl;
+    } else {
+      derr << "failed to get mirror info of group '" << m_local_group_id
+           << "': " << cpp_strerror(r) << dendl;
+    }
+    finish(r);
+    return;
+  }
+
+  check_resync_requested();
+}
+
+template <typename I>
+void BootstrapRequest<I>::check_resync_requested() {
+  dout(10) << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::metadata_get_start(&op, RBD_GROUP_RESYNC);
+
+  m_out_bl.clear();
+
+  std::string group_header_oid = librbd::util::group_header_name(
+      m_local_group_id);
+  auto aio_comp = create_rados_callback<BootstrapRequest<I>,
+    &BootstrapRequest<I>::handle_check_resync_requested>(this);
+
+  int r = m_local_io_ctx.aio_operate(group_header_oid, aio_comp,
+                                     &op, &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void BootstrapRequest<I>::handle_check_resync_requested(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  std::string data;
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = librbd::cls_client::metadata_get_finish(&it, &data);
+    if (r == 0) {
+      *m_resync_requested = true;
+    }
+  }
+
+  if (r < 0 && r != -ENOENT) {
+    derr << "failed to get group meta: " << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
+
+  if (*m_resync_requested) {
+    dout(10) << "resync requested; preparing remote group first" << dendl;
+    prepare_remote_group();
+  } else {
+    prepare_local_group();
+  }
+}
+
+template <typename I>
 void BootstrapRequest<I>::prepare_local_group() {
   dout(10) << dendl;
 
@@ -100,8 +223,8 @@ void BootstrapRequest<I>::prepare_local_group() {
   auto ctx = create_context_callback<
     BootstrapRequest, &BootstrapRequest<I>::handle_prepare_local_group>(this);
   auto req = PrepareLocalGroupRequest<I>::create(
-    m_local_io_ctx, m_global_group_id, &m_prepare_local_group_name,
-    m_state_builder, m_threads->work_queue, ctx);
+    m_local_io_ctx, m_global_group_id, m_local_group_id,
+    &m_prepare_local_group_name, m_state_builder, m_threads->work_queue, ctx);
   req->send();
 }
 
@@ -118,11 +241,24 @@ void BootstrapRequest<I>::handle_prepare_local_group(int r) {
     return;
   }
 
-  if (!m_prepare_local_group_name.empty()) {
-    std::lock_guard locker{m_lock};
-    m_local_group_name = m_prepare_local_group_name;
+  // On resync, remote preparation happens first. If the remote group was
+  // successfully prepared, the local preparation result determines the
+  // bootstrap path. Otherwise, continue using the remote preparation result.
+  if (*m_resync_requested) {
+    if (m_remote_group_prepare_result != 0) {
+      dout(10) << "continuing bootstrap with remote preparation result: "
+               << m_remote_group_prepare_result << dendl;
+      continue_bootstrap(m_remote_group_prepare_result);
+    } else {
+      dout(10) << "remote group already prepared, continuing bootstrap "
+               << "with local preparation result: " << r << dendl;
+      continue_bootstrap(r);
+    }
+    return;
   }
 
+  // Normal bootstrap path: local group is prepared first, followed by
+  // remote group preparation.
   prepare_remote_group();
 }
 
@@ -132,6 +268,7 @@ void BootstrapRequest<I>::prepare_remote_group() {
 
   Context *ctx = create_context_callback<
     BootstrapRequest, &BootstrapRequest<I>::handle_prepare_remote_group>(this);
+
   auto req = PrepareRemoteGroupRequest<I>::create(
     m_remote_io_ctx, m_global_group_id, &m_prepare_remote_group_name,
     m_state_builder, ctx);
@@ -142,27 +279,51 @@ template <typename I>
 void BootstrapRequest<I>::handle_prepare_remote_group(int r) {
   dout(10) << "r=" << r << dendl;
 
+  // Remember result of remote preparation attempt. If resync requires falling
+  // back to local preparation, handle_prepare_local_group() must continue
+  // bootstrap using this result instead of retrying the remote request.
+  m_remote_group_prepare_result = r;
+
+  auto state_builder = *m_state_builder;
+
+  if (!state_builder->is_remote_primary() && *m_resync_requested) {
+    dout(10) << "resync requested and remote group is not primary, "
+                "preparing local group" << dendl;
+
+    prepare_local_group();
+    return;
+  }
+
+  continue_bootstrap(r);
+}
+
+template <typename I>
+void BootstrapRequest<I>::continue_bootstrap(int r) {
+  dout(10) << "r=" << r << dendl;
+
   auto state_builder = *m_state_builder;
 
   if (state_builder->is_local_primary()) {
     dout(5) << "local group is primary" << dendl;
     finish(0);
     return;
-  } else if (r == -ENOENT) {
+  }
+
+  if (r == -ENOENT) {
     if (state_builder->remote_group_id.empty()) {
-      if (state_builder->local_group_id.empty()) {
-	// Neither group exists
-	m_local_group_removed = true; //FIXME
-	finish(0);
-	return;
+      if (m_local_group_id.empty()) {
+        // Neither group exists
+        m_local_group_removed = true; //FIXME
+        finish(0);
+        return;
       } else if (state_builder->local_promotion_state ==
-                 librbd::mirror::PROMOTION_STATE_NON_PRIMARY){
-	remove_local_group();
-	return;
+                 librbd::mirror::PROMOTION_STATE_NON_PRIMARY) {
+        remove_local_group();
+        return;
       } else {
-	// Do not remove the group if the promotion state is orphan or unknown
-	finish(-ENOLINK);
-	return;
+        // Do not remove the group if the promotion state is orphan or unknown
+        finish(-ENOLINK);
+        return;
       }
     }
   } else if (r < 0) {
@@ -172,9 +333,15 @@ void BootstrapRequest<I>::handle_prepare_remote_group(int r) {
     return;
   }
 
-  if (!state_builder->is_remote_primary()) {
-    if (state_builder->local_group_id.empty()) {
-      // local group does not exist and remote is not primary
+  if (state_builder->is_remote_primary()) {
+    if (*m_resync_requested && !m_local_group_id.empty()) {
+      dout(10) << "resync requested and remote is primary, removing local group"
+               << dendl;
+      remove_local_group();
+      return;
+    }
+  } else {
+    if (m_local_group_id.empty()) {
       dout(10) << "local group does not exist and remote group is not primary"
                << dendl;
       finish(-EREMOTEIO);
@@ -185,21 +352,28 @@ void BootstrapRequest<I>::handle_prepare_remote_group(int r) {
       finish(-EREMOTEIO);
       return;
     }
+
+    if (*m_resync_requested) {
+      dout(10) << "resync requested and remote group is not primary, "
+                  "removing local group" << dendl;
+      remove_local_group();
+      return;
+    }
   }
 
-  if (state_builder->local_group_id.empty()) {
+  if (m_local_group_id.empty()) {
     // create the local group
     create_local_group();
     return;
   } else {
     // Local group is secondary.
-    if (m_local_group_name != (*m_state_builder)->group_name) {
+    if (m_prepare_local_group_name != (*m_state_builder)->group_name) {
       finish(-EREMCHG);
       return;
     }
-    // See if resync is set.
-    get_local_group_meta();
   }
+
+  finish(0);
 }
 
 template <typename I>
@@ -229,15 +403,13 @@ template <typename I>
 void BootstrapRequest<I>::remove_local_group() {
   dout(10) << dendl;
 
-  ceph_assert(!(*m_state_builder)->local_group_id.empty());
-
   auto ctx = create_context_callback<
     BootstrapRequest,
     &BootstrapRequest<I>::handle_remove_local_group>(this);
 
   auto req = RemoveLocalGroupRequest<I>::create(
-    m_local_io_ctx, m_global_group_id, *m_resync_requested,
-    m_threads->work_queue, ctx);
+    m_local_io_ctx, m_global_group_id, m_local_group_id, m_mirror_group,
+    *m_resync_requested, m_threads->work_queue, ctx);
   req->send();
 }
 
@@ -464,54 +636,6 @@ int BootstrapRequest<I>::create_replayers() {
     return r;
   }
   return 0;
-}
-
-template <typename I>
-void BootstrapRequest<I>::get_local_group_meta() {
-  dout(10) << dendl;
-
-  *m_resync_requested = false;
-  librados::ObjectReadOperation op;
-  librbd::cls_client::metadata_get_start(&op, RBD_GROUP_RESYNC);
-
-  m_out_bl.clear();
-
-  std::string group_header_oid = librbd::util::group_header_name(
-        (*m_state_builder)->local_group_id);
-  auto aio_comp = create_rados_callback<
-    BootstrapRequest<I>,
-    &BootstrapRequest<I>::handle_get_local_group_meta>(this);
-
-  int r = m_local_io_ctx.aio_operate(group_header_oid, aio_comp,
-                                     &op, &m_out_bl);
-  ceph_assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void BootstrapRequest<I>::handle_get_local_group_meta(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  std::string data;
-  if (r == 0) {
-    auto it = m_out_bl.cbegin();
-    r = librbd::cls_client::metadata_get_finish(&it, &data);
-    if (r == 0) {
-      *m_resync_requested = true;
-    }
-  }
-  if (r != -ENOENT){
-    // ignore this for now ?
-    dout(10) << "failed to get group meta: " << r << dendl;
-  }
-  if (!*m_resync_requested) {
-    finish(0);
-    return;
-  } else {
-    // proceed to remove local group
-    remove_local_group();
-    return;
-  }
 }
 
 } // namespace group_replayer

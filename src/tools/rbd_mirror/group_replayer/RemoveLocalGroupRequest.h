@@ -31,21 +31,26 @@ public:
   static RemoveLocalGroupRequest *create(
       librados::IoCtx &io_ctx,
       const std::string &global_group_id,
+      const std::string &group_id,
+      cls::rbd::MirrorGroup mirror_group,
       bool resync,
       librbd::asio::ContextWQ *work_queue,
       Context *on_finish) {
-    return new RemoveLocalGroupRequest(io_ctx, global_group_id,
+    return new RemoveLocalGroupRequest(io_ctx, global_group_id, group_id, mirror_group,
                                        resync, work_queue, on_finish);
   }
 
   RemoveLocalGroupRequest(
       librados::IoCtx &io_ctx,
       const std::string &global_group_id,
+      const std::string &group_id,
+      cls::rbd::MirrorGroup mirror_group,
       bool resync,
       librbd::asio::ContextWQ *work_queue,
       Context *on_finish)
-    : m_io_ctx(io_ctx), m_global_group_id(global_group_id),
-      m_resync(resync), m_work_queue(work_queue), m_on_finish(on_finish) {
+    : m_io_ctx(io_ctx), m_global_group_id(global_group_id), m_group_id(group_id),
+      m_mirror_group(mirror_group), m_resync(resync), m_work_queue(work_queue),
+      m_on_finish(on_finish) {
   }
 
   void send();
@@ -57,13 +62,7 @@ private:
    * <start>
    *    |
    *    v
-   * GET_GROUP_ID
-   *    |
-   *    v
    * GET_GROUP_NAME
-   *    |
-   *    v
-   * GET_MIRROR_GROUP
    *    |
    *    v
    * DISABLE_MIRROR_GROUP
@@ -94,19 +93,18 @@ private:
 
   librados::IoCtx &m_io_ctx;
   std::string m_global_group_id;
+  std::string m_group_id;
+  cls::rbd::MirrorGroup m_mirror_group;
   bool m_resync;
   librbd::asio::ContextWQ *m_work_queue;
   Context *m_on_finish;
 
-  std::string m_group_id;
   std::string m_group_name;
   uint64_t m_num_images;
 
   bufferlist m_out_bl;
   std::list<cls::rbd::GroupImageStatus> m_images;
 
-  cls::rbd::MirrorGroup m_mirror_group;
-  librbd::mirror::PromotionState m_promotion_state;
   std::map<std::string /*global_image_id*/, std::pair<int64_t/*pool_id*/, std::string /*image_id*/>> m_trash_images;
 
   bool m_notify_watcher = false;
@@ -116,9 +114,6 @@ private:
 
   void get_local_group_name();
   void handle_get_local_group_name(int r);
-
-  void get_mirror_group();
-  void handle_get_mirror_group(int r);
 
   void disable_mirror_group();
   void handle_disable_mirror_group(int r);

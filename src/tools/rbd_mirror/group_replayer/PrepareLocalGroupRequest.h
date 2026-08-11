@@ -29,11 +29,12 @@ public:
   static PrepareLocalGroupRequest *create(
       librados::IoCtx &io_ctx,
       const std::string &global_group_id,
+      const std::string &local_group_id,
       std::string *local_group_name,
       GroupStateBuilder<ImageCtxT>** state_builder,
       librbd::asio::ContextWQ *work_queue,
       Context *on_finish) {
-    return new PrepareLocalGroupRequest(io_ctx, global_group_id,
+    return new PrepareLocalGroupRequest(io_ctx, global_group_id, local_group_id,
                                         local_group_name, state_builder,
                                         work_queue, on_finish);
   }
@@ -41,11 +42,12 @@ public:
   PrepareLocalGroupRequest(
       librados::IoCtx &io_ctx,
       const std::string &global_group_id,
+      const std::string &local_group_id,
       std::string *local_group_name,
       GroupStateBuilder<ImageCtxT>** state_builder,
       librbd::asio::ContextWQ *work_queue,
       Context *on_finish)
-    : m_io_ctx(io_ctx), m_global_group_id(global_group_id),
+    : m_io_ctx(io_ctx), m_global_group_id(global_group_id), m_local_group_id(local_group_id),
       m_local_group_name(local_group_name), m_state_builder(state_builder),
       m_work_queue(work_queue), m_on_finish(on_finish) {
   }
@@ -57,9 +59,6 @@ private:
    * @verbatim
    *
    * <start>
-   *    |
-   *    v
-   * GET_LOCAL_GROUP_ID
    *    |
    *    v
    * GET_LOCAL_GROUP_NAME
@@ -81,13 +80,13 @@ private:
 
   librados::IoCtx &m_io_ctx;
   std::string m_global_group_id;
+  std::string m_local_group_id;
   std::string *m_local_group_name;
   GroupStateBuilder<ImageCtxT>** m_state_builder;
   librbd::asio::ContextWQ *m_work_queue;
   Context *m_on_finish;
 
   bufferlist m_out_bl;
-  std::string m_local_group_id;
   cls::rbd::MirrorGroup m_mirror_group;
   librbd::mirror::PromotionState m_promotion_state;
   std::list<cls::rbd::GroupImageStatus> m_images;
