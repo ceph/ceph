@@ -5,6 +5,7 @@ overrides:
   ceph:
     pool-config:
       ec_pool: true
+      min_size: 8
       erasure_code_profile:
         name: isa86profile
         plugin: isa

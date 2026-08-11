@@ -1,6 +1,8 @@
 # SHEC plugin with k=4, m=3, c=2
 overrides:
   ceph:
+    log-ignorelist:
+      - \(DEPRECATED_EC_PLUGIN\)
     pool-config:
       ec_pool: true
       erasure_code_profile:
