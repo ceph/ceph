@@ -50,6 +50,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   currentCertificate: CephServiceCertificate = null;
   currentSpecCertificateSource = '';
   showCertSourceChangeWarning = false;
+  originalEncryptionEnabled = false;
+  originalMtlsEnabled = false;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -197,11 +199,55 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       });
   }
 
+  /**
+   * Existing create / initially-disabled edit alert.
+   * Hidden when the edit-specific disable warning applies instead.
+   */
+  get showEncryptionInitialAlert(): boolean {
+    if (this.groupForm?.controls?.enableEncryption?.value !== false) {
+      return false;
+    }
+    // Create flow, or edit where encryption was already disabled on load
+    return !this.editing || !this.originalEncryptionEnabled;
+  }
+
+  /** Edit-only: original enabled → user disabled. */
+  get showEncryptionDisableWarning(): boolean {
+    return (
+      this.editing &&
+      this.originalEncryptionEnabled &&
+      this.groupForm?.controls?.enableEncryption?.value === false
+    );
+  }
+
+  /**
+   * Existing create / initially-disabled edit alert.
+   * Hidden when the edit-specific disable warning applies instead.
+   */
+  get showMtlsInitialAlert(): boolean {
+    if (this.groupForm?.controls?.enableMtls?.value !== false) {
+      return false;
+    }
+    // Create flow, or edit where mTLS was already disabled on load
+    return !this.editing || !this.originalMtlsEnabled;
+  }
+
+  /** Edit-only: original enabled → user disabled. */
+  get showMtlsDisableWarning(): boolean {
+    return (
+      this.editing &&
+      this.originalMtlsEnabled &&
+      this.groupForm?.controls?.enableMtls?.value === false
+    );
+  }
+
   private populateFormFromService(group: CephServiceSpec, groupName: string) {
     this.existingServiceData = group;
     const spec: Partial<CephServiceAdditionalSpec> = group.spec || {};
     const encryptionKey = spec.encryption_key || '';
     const enableMtls = spec.enable_auth === true;
+    this.originalEncryptionEnabled = !!encryptionKey;
+    this.originalMtlsEnabled = enableMtls;
 
     this.preSelectedHostnames = group.placement?.hosts || [];
 

@@ -126,14 +126,25 @@
             >
           </cds-checkbox>
 
-          @if (!groupForm.controls.enableEncryption.value) {
+          @if (showEncryptionInitialAlert) {
             <cd-alert-panel
               type="warning"
               i18n
             >
-              <p class="cds--type-heading-01">
-                Encryption is required if you plan to use DH-CHAP or mTLS authentication.
-              </p>
+              <p class="cds--type-heading-01">Encryption is required if you plan to use DH-CHAP.</p>
+            </cd-alert-panel>
+          }
+
+          @if (showEncryptionDisableWarning) {
+            <cd-alert-panel
+              type="warning"
+              class="cds--type-heading-01"
+              alertTitle="Warning"
+              i18n-alertTitle
+              i18n
+            >
+              Disabling encryption will disable encryption for the gateway. The configured
+              encryption settings will no longer be used.
             </cd-alert-panel>
           }
 
@@ -191,13 +202,24 @@
             </p>
           </cds-checkbox>
 
-          @if (!groupForm.controls.enableMtls.value) {
+          @if (showMtlsInitialAlert) {
             <cd-alert-panel
               type="warning"
               class="cds--type-heading-01"
               i18n
             >
-              Disabling mTLS leaves gateway control and monitoring communication unencrypted.
+              Disabling mutual TLS (mTLS) will disable mTLS for the gateway. The configured mTLS
+              settings will no longer be used.
+            </cd-alert-panel>
+          }
+
+          @if (showMtlsDisableWarning) {
+            <cd-alert-panel
+              type="warning"
+              class="cds--type-heading-01"
+              i18n
+            >
+              Disabling mTLS will disable mTLS. The configured mTLS settings will no longer be used.
             </cd-alert-panel>
           }
 

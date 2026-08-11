@@ -92,6 +92,16 @@ describe('NvmeofGroupFormComponent', () => {
     expect(component.resource).toBe('gateway group');
   });
 
+  it('should show existing initial alerts in create mode, not edit disable warnings', () => {
+    expect(component.editing).toBe(false);
+    expect(form.controls.enableEncryption.value).toBe(false);
+    expect(form.controls.enableMtls.value).toBe(false);
+    expect(component.showEncryptionInitialAlert).toBe(true);
+    expect(component.showMtlsInitialAlert).toBe(true);
+    expect(component.showEncryptionDisableWarning).toBe(false);
+    expect(component.showMtlsDisableWarning).toBe(false);
+  });
+
   describe('form validation', () => {
     it('should require groupName', () => {
       formHelper.setValue('groupName', '');
@@ -368,6 +378,85 @@ describe('NvmeofGroupFormComponent', () => {
 
       component.onCertificateTypeChange(CertificateType.internal);
       expect(component.showCertSourceChangeWarning).toBe(false);
+    });
+
+    it('should show encryption disable warning only when edit changes enabled → disabled', () => {
+      expect(component.originalEncryptionEnabled).toBe(true);
+      expect(form.controls.enableEncryption.value).toBe(true);
+      expect(component.showEncryptionInitialAlert).toBe(false);
+      expect(component.showEncryptionDisableWarning).toBe(false);
+
+      form.controls.enableEncryption.setValue(false);
+      expect(component.showEncryptionDisableWarning).toBe(true);
+      expect(component.showEncryptionInitialAlert).toBe(false);
+
+      form.controls.enableEncryption.setValue(true);
+      expect(component.showEncryptionDisableWarning).toBe(false);
+      expect(component.showEncryptionInitialAlert).toBe(false);
+    });
+
+    it('should show existing initial encryption alert when encryption was already disabled on edit load', () => {
+      const encryptionDisabledService = {
+        ...mockService,
+        spec: {
+          ...mockService.spec,
+          encryption_key: null,
+          enable_auth: false,
+          ssl: false
+        }
+      };
+      (nvmeofService.listGatewayGroups as jasmine.Spy).and.returnValue(
+        of([[encryptionDisabledService]])
+      );
+      (cephServiceService.list as jasmine.Spy).and.returnValue(
+        new PaginateObservable<any>(of([encryptionDisabledService]))
+      );
+
+      component.createForm();
+      component.loadGatewayGroupData('Test1');
+
+      expect(component.originalEncryptionEnabled).toBe(false);
+      expect(component.groupForm.controls.enableEncryption.value).toBe(false);
+      expect(component.showEncryptionInitialAlert).toBe(true);
+      expect(component.showEncryptionDisableWarning).toBe(false);
+    });
+
+    it('should show mTLS disable warning only when edit changes enabled → disabled', () => {
+      expect(component.originalMtlsEnabled).toBe(true);
+      expect(form.controls.enableMtls.value).toBe(true);
+      expect(component.showMtlsInitialAlert).toBe(false);
+      expect(component.showMtlsDisableWarning).toBe(false);
+
+      form.controls.enableMtls.setValue(false);
+      expect(component.showMtlsDisableWarning).toBe(true);
+      expect(component.showMtlsInitialAlert).toBe(false);
+
+      form.controls.enableMtls.setValue(true);
+      expect(component.showMtlsDisableWarning).toBe(false);
+      expect(component.showMtlsInitialAlert).toBe(false);
+    });
+
+    it('should show existing initial mTLS alert when mTLS was already disabled on edit load', () => {
+      const mtlsDisabledService = {
+        ...mockService,
+        spec: {
+          ...mockService.spec,
+          enable_auth: false,
+          ssl: false
+        }
+      };
+      (nvmeofService.listGatewayGroups as jasmine.Spy).and.returnValue(of([[mtlsDisabledService]]));
+      (cephServiceService.list as jasmine.Spy).and.returnValue(
+        new PaginateObservable<any>(of([mtlsDisabledService]))
+      );
+
+      component.createForm();
+      component.loadGatewayGroupData('Test1');
+
+      expect(component.originalMtlsEnabled).toBe(false);
+      expect(component.groupForm.controls.enableMtls.value).toBe(false);
+      expect(component.showMtlsInitialAlert).toBe(true);
+      expect(component.showMtlsDisableWarning).toBe(false);
     });
 
     it('should make encryptionKey required when encryption is enabled', () => {
