@@ -24,3 +24,8 @@ target_link_libraries(ceph_test_objectcacher_misc
   )
 install(TARGETS ceph_test_objectcacher_misc
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(unittest_latest_osdmap_timeout
+  test_latest_osdmap_timeout.cc)
+add_ceph_unittest(unittest_latest_osdmap_timeout)
+target_link_libraries(unittest_latest_osdmap_timeout osdc global)

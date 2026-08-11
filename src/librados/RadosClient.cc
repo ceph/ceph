@@ -18,6 +18,7 @@
 #include <fcntl.h>
 
 #include <iostream>
+#include <optional>
 #include <string>
 #include <sstream>
 #include <pthread.h>
@@ -596,8 +597,13 @@ int librados::RadosClient::wait_for_osdmap()
 
 int librados::RadosClient::wait_for_latest_osdmap()
 {
+  std::optional<ceph::mono_time> deadline;
+  if (rados_mon_op_timeout.count() > 0) {
+    deadline = ceph::mono_clock::now() + rados_mon_op_timeout;
+  }
+
   bs::error_code ec;
-  objecter->wait_for_latest_osdmap(ca::use_blocked[ec]);
+  objecter->wait_for_latest_osdmap(deadline, ca::use_blocked[ec]);
   return ceph::from_error_code(ec);
 }
 

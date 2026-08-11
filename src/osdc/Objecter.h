@@ -2563,9 +2563,14 @@ public:
   std::map<ceph_tid_t, Op*> check_latest_map_ops;
   std::map<ceph_tid_t, CommandOp*> check_latest_map_commands;
 
-  std::map<epoch_t,
-	   std::vector<std::pair<OpCompletion,
-				 boost::system::error_code>>> waiting_for_map;
+  struct MapWaiter {
+    uint64_t id;
+    OpCompletion onfinish;
+    boost::system::error_code result;
+    uint64_t timeout_event = 0;
+  };
+  std::map<epoch_t, std::vector<MapWaiter>> waiting_for_map;
+  uint64_t last_map_waiter_id = 0;
 
   ceph::timespan mon_timeout;
   ceph::timespan osd_timeout;
@@ -2806,13 +2811,14 @@ private:
 	} else {
 	  auto e = boost::asio::get_associated_executor(
 	    handler, service.get_executor());
-	  waiting_for_map[0].emplace_back(
+	  waiting_for_map[0].push_back(MapWaiter{
+	    ++last_map_waiter_id,
 	    boost::asio::bind_executor(
 	      e, [c = std::move(handler)]
 	      (boost::system::error_code) mutable {
 		boost::asio::dispatch(std::move(c));
 	      }),
-	    boost::system::error_code{});
+	    boost::system::error_code{}});
 	  l.unlock();
 	}
       }, consigned);
@@ -2885,21 +2891,23 @@ public:
   struct CB_Objecter_GetVersion {
     Objecter *objecter;
     OpCompletion fin;
+    std::optional<ceph::mono_time> deadline;
 
-    CB_Objecter_GetVersion(Objecter *o, OpCompletion c)
-      : objecter(o), fin(std::move(c)) {}
+    CB_Objecter_GetVersion(
+      Objecter *o, OpCompletion c, std::optional<ceph::mono_time> d)
+      : objecter(o), fin(std::move(c)), deadline(d) {}
     void operator()(boost::system::error_code ec, version_t newest,
 		    version_t oldest) {
       if (ec == boost::system::errc::resource_unavailable_try_again) {
-	// try again as instructed
+	// try again as instructed, preserving the original deadline
 	objecter->_wait_for_latest_osdmap(std::move(*this));
       } else if (ec) {
 	boost::asio::post(objecter->service.get_executor(),
 			  boost::asio::append(std::move(fin), ec));
       } else {
 	auto l = std::unique_lock(objecter->rwlock);
-	objecter->_get_latest_version(oldest, newest, std::move(fin),
-				      std::move(l));
+	objecter->_get_latest_version(
+	  oldest, newest, std::move(fin), deadline, std::move(l));
       }
     }
   };
@@ -2919,31 +2927,43 @@ public:
 	} else {
 	  monc->get_version(
 	    "osdmap",
-	    CB_Objecter_GetVersion(this, std::move(handler)));
+	    CB_Objecter_GetVersion(this, std::move(handler), std::nullopt));
 	}
       }, consigned);
   }
-  void _wait_for_new_map(OpCompletion, epoch_t epoch,
-			 boost::system::error_code = {});
+  uint64_t _wait_for_new_map(
+    OpCompletion, epoch_t epoch, boost::system::error_code = {},
+    std::optional<ceph::mono_time> deadline = std::nullopt);
+  void _finish_map_waiters(epoch_t epoch);
+  void _timeout_map_waiter(epoch_t epoch, uint64_t waiter_id);
 
 private:
+  friend class ObjecterLatestOsdmapTimeoutTest;
+
   void _wait_for_latest_osdmap(CB_Objecter_GetVersion&& c) {
-    monc->get_version("osdmap", std::move(c));
+    auto deadline = c.deadline;
+    monc->get_version("osdmap", deadline, std::move(c));
   }
 
 public:
 
   template<typename CompletionToken>
   auto wait_for_latest_osdmap(CompletionToken&& token) {
+    return wait_for_latest_osdmap(
+      std::nullopt, std::forward<CompletionToken>(token));
+  }
+
+  template<typename CompletionToken>
+  auto wait_for_latest_osdmap(
+    std::optional<ceph::mono_time> deadline, CompletionToken&& token) {
     auto consigned = boost::asio::consign(
       std::forward<CompletionToken>(token), boost::asio::make_work_guard(
 	service.get_executor()));
     boost::asio::async_initiate<decltype(consigned), OpSignature>(
-      [this](auto handler) {
-	monc->get_version("osdmap",
-			  CB_Objecter_GetVersion(
-			    this,
-			    std::move(handler)));
+      [this, deadline](auto handler) {
+	monc->get_version(
+	  "osdmap", deadline,
+	  CB_Objecter_GetVersion(this, std::move(handler), deadline));
       }, consigned);
   }
 
@@ -2962,14 +2982,15 @@ public:
     return boost::asio::async_initiate<decltype(consigned), OpSignature>(
       [oldest, newest, this](auto handler) {
 	std::unique_lock wl(rwlock);
-	_get_latest_version(oldest, newest,
-			    std::move(handler), std::move(wl));
+	_get_latest_version(
+	  oldest, newest, std::move(handler), std::nullopt, std::move(wl));
       }, consigned);
   }
 
-  void _get_latest_version(epoch_t oldest, epoch_t neweset,
-			   OpCompletion fin,
-			   std::unique_lock<ceph::shared_mutex>&& ul);
+  void _get_latest_version(
+    epoch_t oldest, epoch_t neweset, OpCompletion fin,
+    std::optional<ceph::mono_time> deadline,
+    std::unique_lock<ceph::shared_mutex>&& ul);
 
   /** Get the current set of global op flags */
   int get_global_op_flags() const { return global_op_flags; }
