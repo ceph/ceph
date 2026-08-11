@@ -2168,6 +2168,23 @@ class Module(MgrModule, OrchestratorClientMixin):
         if not self.orch_is_available():
             return
 
+        # node-proxy is only implemented by the cephadm orchestrator backend.
+        # Other backends (e.g. rook) report available() as True but don't
+        # implement node_proxy_fullreport(), so calling it every scrape would
+        # raise NotImplementedError on every invocation for no reason.
+        #
+        # Read the backend name directly from config instead of asking the
+        # orchestrator module for it: orch_is_available() above already
+        # makes that exact remote() call internally (via available()), so
+        # a second self.remote() here would just repeat the same
+        # dispatch_remote() round trip for no benefit.
+        try:
+            if self.get_module_option_ex('orchestrator', 'orchestrator') != 'cephadm':
+                return
+        except Exception as e:
+            self.log.debug(f"Failed to determine orchestrator backend: {e}")
+            return
+
         try:
             report = raise_if_exception(self.node_proxy_fullreport())
         except Exception as e:
