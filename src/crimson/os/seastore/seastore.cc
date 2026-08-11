@@ -3050,6 +3050,24 @@ seastar::future<std::string> SeaStore::get_default_device_class()
   return seastar::make_ready_future<std::string>(type);
 }
 
+seastar::future<std::string> SeaStore::get_primary_backend_type_name()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  ceph_assert(device);
+  return seastar::make_ready_future<std::string>(
+    fmt::format("{}", device->get_backend_type()));
+}
+
+seastar::future<std::string> SeaStore::get_secondary_backend_type_name()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  if (secondaries.empty()) {
+    return seastar::make_ready_future<std::string>();
+  }
+  return seastar::make_ready_future<std::string>(
+    fmt::format("{}", secondaries.front()->get_backend_type()));
+}
+
 uuid_d SeaStore::Shard::get_fsid() const
 {
   return device->get_meta().seastore_id;
