@@ -10267,9 +10267,9 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
         // Clone needs to be trimmed by updating the snapset in the head object
         hobject_t hoid = oid.get_head();
         ObjectContextRef head_obc = get_object_context(hoid, false);
-        if (!head_obc) {
-          osd->clog->error() << __func__ << ": Can not trim " << oid
-                             << " repair needed, no snapset obc for " << hoid;
+        if (!head_obc || !head_obc->obs.exists || !head_obc->ssc || !head_obc->ssc->exists) {
+          dout(10) << __func__ << ": head object " << hoid
+                   << " does not exist, skipping trim for clone " << oid << dendl;
         } else {
           OpContextUPtr ctx = simple_opc_create(head_obc);
 
@@ -10295,6 +10295,7 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
           if (add_trim_to_ctx(ctx.get(), oid, oid.snap, cobc, head_obc, pool) < 0) {
             // Trim failed - cluster error logged
             close_op_ctx(ctx.release());
+            return;
           } else {
             simple_opc_submit(std::move(ctx));
             return;
@@ -10774,9 +10775,20 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   }
 
   if (cb->results->whiteout) {
-    dout(20) << __func__ << " setting whiteout flag on " << obs.oi.soid << dendl;
-    obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
-    ++ctx->delta_stats.num_whiteouts;
+    if (cb->pool_migration && ctx->new_snapset.clones.empty()) {
+      dout(10) << __func__ << " whiteout head object " << obs.oi.soid
+               << " has no clones left after pool migration trim, removing" << dendl;
+      cb->results->whiteout = false;
+      if (obs.exists) {
+        ctx->op_t->remove(obs.oi.soid);
+        ctx->delta_stats.num_objects--;
+        obs.exists = false;
+      }
+    } else {
+      dout(20) << __func__ << " setting whiteout flag on " << obs.oi.soid << dendl;
+      obs.oi.set_flag(object_info_t::FLAG_WHITEOUT);
+      ++ctx->delta_stats.num_whiteouts;
+    }
   }
 
   if (cb->pool_migration && obs.oi.soid.is_snap()) {
