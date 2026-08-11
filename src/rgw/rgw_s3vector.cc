@@ -232,28 +232,12 @@ namespace rgw::s3vector {
       }
       ldpp_dout(dpp, 10) << "INFO: s3vector connecting to local backend: " << uri << dendl;
     } else if (is_rgw_backend(backend_type)) {
-      LanceDBSessionOptions opts = {1, 1}; // minimize cache for short-lived sessions
-      LanceDBSession* session = create_rgw_session(dpp, driver, &opts);
-      if (!session) {
-        return nullptr;
-      }
-
       uri = make_rgw_uri(vector_bucket_name, tenant);
       builder = lancedb_connect(uri.c_str());
       if (!builder) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
-        lancedb_session_free(session);
         return nullptr;
       }
-
-      LanceDBConnectBuilder* new_builder = lancedb_connect_builder_session(builder, session);
-      if (!new_builder) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to attach session to connection builder" << dendl;
-        lancedb_connect_builder_free(builder);
-        lancedb_session_free(session);
-        return nullptr;
-      }
-      builder = new_builder;
 
       ldpp_dout(dpp, 10) << "INFO: s3vector connecting to RGW backend: " << uri << dendl;
     } else { // S3 backend
@@ -273,6 +257,29 @@ namespace rgw::s3vector {
       }
 
       ldpp_dout(dpp, 10) << "INFO: s3vector connecting to S3 backend: " << uri << dendl;
+    }
+
+    // connect() is used for vector bucket and index operations and therfore is using a short-lived session
+    // for vector operations that needs a loned lived session with a cache, use: connect_with_session_handle()
+    LanceDBSessionOptions opts = {1, 1};
+    // the RGW backend needs a session with the object store registry of the SAL
+    LanceDBSession* session = is_rgw_backend(backend_type) ?
+        create_rgw_session(dpp, driver, &opts) : lancedb_session_new(&opts);
+    if (!session) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create session for: " << uri << dendl;
+      lancedb_connect_builder_free(builder);
+      return nullptr;
+    }
+    {
+      // the builder is holding a reference of its own to the session
+      LanceDBConnectBuilder* new_builder = lancedb_connect_builder_session(builder, session);
+      lancedb_session_free(session);
+      if (!new_builder) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to attach session to connection builder" << dendl;
+        lancedb_connect_builder_free(builder);
+        return nullptr;
+      }
+      builder = new_builder;
     }
 
     LanceDBConnection* conn = nullptr;
