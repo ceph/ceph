@@ -527,4 +527,10 @@ target_link_libraries(ceph_test_rgw_sal_wrapper
   ${rgw_libs}
   ${UNITTEST_LIBS})
 install(TARGETS ceph_test_rgw_sal_wrapper DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+add_executable(ceph_test_rgw_lancedb_object_store test_rgw_lancedb_object_store.cc)
+target_link_libraries(ceph_test_rgw_lancedb_object_store
+  rgw_common
+  ${rgw_libs})
+install(TARGETS ceph_test_rgw_lancedb_object_store DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
