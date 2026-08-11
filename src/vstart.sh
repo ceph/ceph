@@ -302,9 +302,9 @@ options:
 	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
-	--seastore-primary-device-type: device type of the primary blockdev. (SSD or RANDOM_BLOCK_SSD)
+	--seastore-primary-device-type: device type of the primary blockdev. Only SSD(default) is supported
 	--seastore-primary-backend-type: the backend used by the primary blockdev (SEGMENTED or RANDOM_BLOCK)
-	--seastore-secondary-device-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-secondary-device-type: device type of all secondary blockdevs. HDD, SSD(default) or ZBD
 	--seastore-secondary-backend-type: the backend used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
 	--crimson-smp: number of cores to use for crimson
 	--crimson-alien-num-threads: number of alien-tp threads

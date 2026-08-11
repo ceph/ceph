@@ -21,7 +21,7 @@ device_config_t get_rbm_ephemeral_device_config(
 {
   assert(num_devices > index);
   magic_t magic = 0xfffa;
-  auto type = device_type_t::RANDOM_BLOCK_EPHEMERAL;
+  auto type = device_type_t::EPHEMERAL_MAIN;
   bool is_major_device;
   secondary_device_set_t secondary_devices;
   if (index == 0) {

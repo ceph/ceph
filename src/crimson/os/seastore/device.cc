@@ -109,7 +109,7 @@ void device_superblock_t::validate() const
                   shard_infos[i].size % block_size == 0);
       ceph_assert_always(shard_infos[i].size <= DEVICE_OFF_MAX);
       ceph_assert((journal_size > 0 && journal_size % block_size == 0) ||
-                   config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
+                   config.spec.dtype == device_type_t::HDD);
       ceph_assert(shard_infos[i].start_offset < total_size &&
                   shard_infos[i].start_offset % block_size == 0);
     }

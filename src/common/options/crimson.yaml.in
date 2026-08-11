@@ -255,8 +255,10 @@ options:
 - name: seastore_primary_device_type
   type: str
   level: dev
-  desc: Device type of the primary device, valid values are HDD, SSD, RANDOM_BLOCK_SSD and RANDOM_BLOCK_HDD.
-        The primary device holds the journal, the root and the metadata trees.
+  desc: Device type of the primary device, only SSD is supported. It selects the
+        driver within the configured backend, the backend itself is
+        seastore_primary_backend_type. The primary device holds the journal,
+        the root and the metadata trees.
   default: SSD
 - name: seastore_primary_backend_type
   type: str
@@ -276,8 +278,9 @@ options:
 - name: seastore_secondary_device_type
   type: str
   level: dev
-  desc: Device type of the secondary devices, valid values are RANDOM_BLOCK_SSD, RANDOM_BLOCK_HDD, SSD and HDD
-  default: RANDOM_BLOCK_HDD
+  desc: Device type of the secondary devices, valid values are HDD, SSD and ZBD.
+        It selects the driver within seastore_secondary_backend_type.
+  default: HDD
 - name: seastore_secondary_backend_type
   type: str
   level: dev

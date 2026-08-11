@@ -390,8 +390,7 @@ seastar::future<uint32_t> SeaStore::start()
   using crimson::common::get_conf;
   std::string type = get_conf<std::string>("seastore_primary_device_type");
   device_type_t d_type = string_to_device_type(type);
-  assert(d_type == device_type_t::SSD ||
-         d_type == device_type_t::RANDOM_BLOCK_SSD);
+  assert(d_type == device_type_t::SSD);
 
   type = get_conf<std::string>("seastore_primary_backend_type");
   auto b_type = string_to_backend_type(type);
@@ -748,10 +747,9 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   device_id_t id = 0;
   device_type_t d_type = device->get_device_type();
   backend_type_t b_type = device->get_backend_type();
-  assert(d_type == device_type_t::SSD ||
-      d_type == device_type_t::RANDOM_BLOCK_SSD);
+  assert(d_type == device_type_t::SSD);
   assert(b_type != backend_type_t::NONE);
-  if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
+  if (b_type == backend_type_t::RANDOM_BLOCK) {
       id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
   }
   DEBUG("creating primary device");
