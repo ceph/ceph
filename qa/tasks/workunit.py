@@ -439,8 +439,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                     run.Raw('CEPH_REF={ref}'.format(ref=refspec)),
                     run.Raw('TESTDIR="{tdir}"'.format(tdir=testdir)),
                     run.Raw(f'CEPH_CLIENT_ID={id_}'), # used by src/test/librados/test_cxx.cc
-                    # These debug log configs can be removed later.
-                    run.Raw(f'CEPH_ARGS="--cluster={cluster} --debug-ms=1 --debug-auth=20 --debug-monc=20 --log-to-stderr=false --log-to-file=true"'),
+                    run.Raw(f'CEPH_ARGS="--cluster={cluster}"'),
                     #run.Raw(f'CEPH_KEYRING="{tmp_keyring}"'),
                     run.Raw(f'CEPH_ID="{id_}"'), # used by rbd
                     run.Raw('PATH=$PATH:/usr/sbin'),
