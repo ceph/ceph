@@ -159,16 +159,18 @@ public:
   public:
     virtual seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
-      ceph::os::Transaction&& txn) = 0;
+      ceph::os::Transaction&& txn,
+      bool* ever_lba_conflicted_address = nullptr) = 0;
 
   public:
     seastar::future<> do_transaction(
       CollectionRef ch,
-      ceph::os::Transaction&& txn) {
+      ceph::os::Transaction&& txn,
+      bool* ever_lba_conflicted_address = nullptr) {
       std::unique_ptr<Context> on_commit(
 	ceph::os::Transaction::collect_all_contexts(txn));
       return do_transaction_no_callbacks(
-	std::move(ch), std::move(txn)
+	std::move(ch), std::move(txn), ever_lba_conflicted_address
       ).then([on_commit=std::move(on_commit)]() mutable {
 	auto c = on_commit.release();
 	if (c) c->complete(0);

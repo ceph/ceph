@@ -185,7 +185,8 @@ public:
 
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
-      ceph::os::Transaction&& txn) override final;
+      ceph::os::Transaction&& txn,
+      bool* ever_lba_conflicted_address = nullptr) override final;
 
     /* Note, flush() machinery must go through the same pipeline
      * stages and locks as do_transaction. */

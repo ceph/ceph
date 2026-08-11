@@ -944,6 +944,12 @@ private:
   /// it (e.g. resolving an onode-tree block's laddr to a paddr).
   std::map<CachedExtent*, std::set<laddr_t>> lba_leaf_lookup_addrs;
 
+  /// sticky, unlike `conflicted`: true if this transaction was ever marked
+  /// conflicted by an LBA node (LADDR_LEAF/LADDR_INTERNAL) on any attempt,
+  /// even after a later retry succeeds. Deliberately not cleared by
+  /// reset_preserve_handle, so it survives across retries of the same IO.
+  bool ever_lba_conflicted = false;
+
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t omap_tree_stats; // exclude omap tree depth

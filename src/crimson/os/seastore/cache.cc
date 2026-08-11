@@ -1302,6 +1302,10 @@ void Cache::invalidate_extent(
             i.t->lba_leaf_lookup_addrs.contains(&extent));
         }
       }
+      if (extent.get_type() == extent_types_t::LADDR_LEAF ||
+          extent.get_type() == extent_types_t::LADDR_INTERNAL) {
+        i.t->ever_lba_conflicted = true;
+      }
       mark_transaction_conflicted(*i.t, extent);
       invalidated_trans.emplace_back(i.t);
     }
