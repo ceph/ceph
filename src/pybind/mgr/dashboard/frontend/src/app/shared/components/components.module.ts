@@ -197,7 +197,8 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     ProductiveCardComponent,
     MenuButtonModule,
     ContextMenuModule,
-    BreadcrumbModule
+    BreadcrumbModule,
+    IconComponent
   ],
   declarations: [
     SparklineComponent,
@@ -239,7 +240,6 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     FormAdvancedFieldsetComponent,
     ProgressComponent,
     SidePanelComponent,
-    IconComponent,
     InlineMessageComponent,
     DetailsCardComponent,
     ToastComponent,

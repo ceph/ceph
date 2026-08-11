@@ -1,7 +1,11 @@
 import { inject, Injectable } from '@angular/core';
 import { PrometheusService } from './prometheus.service';
-import { PerformanceData } from '../models/performance-data';
-import { AllStoragetypesQueries } from '../enum/dashboard-promqls.enum';
+import { PerformanceData, StorageType } from '../models/performance-data';
+import {
+  BlockStorageQueries,
+  FilesystemStorageQueries,
+  ObjectStorageQueries
+} from '../enum/dashboard-promqls.enum';
 import { map } from 'rxjs/operators';
 import { Observable } from 'rxjs';
 import { ChartPoint } from '../models/area-chart-point';
@@ -12,8 +16,18 @@ import { ChartPoint } from '../models/area-chart-point';
 export class PerformanceCardService {
   private prometheusService = inject(PrometheusService);
 
-  getChartData(time: { start: number; end: number; step: number }): Observable<PerformanceData> {
-    return this.prometheusService.getRangeQueriesData(time, AllStoragetypesQueries, true).pipe(
+  getChartData(
+    time: { start: number; end: number; step: number },
+    storageType: StorageType = StorageType.Block
+  ): Observable<PerformanceData> {
+    const queries =
+      storageType === StorageType.Filesystem
+        ? FilesystemStorageQueries
+        : storageType === StorageType.Object
+          ? ObjectStorageQueries
+          : BlockStorageQueries;
+
+    return this.prometheusService.getRangeQueriesData(time, queries, true).pipe(
       map((raw) => {
         const chartData = this.convertPerformanceData(raw);
 
@@ -24,7 +38,12 @@ export class PerformanceCardService {
 
           latency: chartData.latency.length
             ? chartData.latency
-            : [{ timestamp: new Date(), values: { 'Read Latency': 0, 'Write Latency': 0 } }],
+            : [
+                {
+                  timestamp: new Date(),
+                  values: { 'p99 Latency': 0, 'p95 Latency': 0, 'Median Latency': 0 }
+                }
+              ],
 
           throughput: chartData.throughput.length
             ? chartData.throughput
@@ -35,15 +54,24 @@ export class PerformanceCardService {
   }
 
   convertPerformanceData(raw: any): PerformanceData {
+    const hasPercentileLatency = raw?.LATENCYP99 || raw?.LATENCYP95 || raw?.LATENCYMEDIAN;
+    const latencySeries = hasPercentileLatency
+      ? this.mergeSeries(
+          this.toSeries(raw?.LATENCYP99 || [], 'p99 Latency'),
+          this.toSeries(raw?.LATENCYP95 || [], 'p95 Latency'),
+          this.toSeries(raw?.LATENCYMEDIAN || [], 'Median Latency')
+        )
+      : this.mergeSeries(
+          this.toSeries(raw?.READLATENCY || [], 'Read Latency'),
+          this.toSeries(raw?.WRITELATENCY || [], 'Write Latency')
+        );
+
     return {
       iops: this.mergeSeries(
         this.toSeries(raw?.READIOPS || [], 'Read IOPS'),
         this.toSeries(raw?.WRITEIOPS || [], 'Write IOPS')
       ),
-      latency: this.mergeSeries(
-        this.toSeries(raw?.READLATENCY || [], 'Read Latency'),
-        this.toSeries(raw?.WRITELATENCY || [], 'Write Latency')
-      ),
+      latency: latencySeries,
       throughput: this.mergeSeries(
         this.toSeries(raw?.READCLIENTTHROUGHPUT || [], 'Read Throughput'),
         this.toSeries(raw?.WRITECLIENTTHROUGHPUT || [], 'Write Throughput')

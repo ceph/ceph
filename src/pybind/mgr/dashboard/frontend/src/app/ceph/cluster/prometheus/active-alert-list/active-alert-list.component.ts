@@ -27,6 +27,13 @@ const SeverityMap = {
   all: $localize`All`
 };
 
+const StorageTypeMap = {
+  block: $localize`Block`,
+  file: $localize`File`,
+  object: $localize`Object`,
+  all: $localize`All`
+};
+
 @Component({
   selector: 'cd-active-alert-list',
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
@@ -75,6 +82,35 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         if (value === SeverityMap['critical']) return row.labels?.severity === 'critical';
         else if (value === SeverityMap['warning']) return row.labels?.severity === 'warning';
         if (value === SeverityMap['all']) return true;
+        return false;
+      }
+    },
+    {
+      name: $localize`Storage Type`,
+      prop: 'labels.alertname',
+      filterOptions: [
+        StorageTypeMap['all'],
+        StorageTypeMap['block'],
+        StorageTypeMap['file'],
+        StorageTypeMap['object']
+      ],
+      filterInitValue: StorageTypeMap['all'],
+      filterPredicate: (row, value) => {
+        const name = (row.labels?.alertname || '').toLowerCase();
+        if (value === StorageTypeMap['block']) {
+          return (
+            name.includes('rbd') ||
+            name.includes('nvme') ||
+            name.includes('iscsi') ||
+            name.includes('tcmu') ||
+            name.includes('osd')
+          );
+        } else if (value === StorageTypeMap['file']) {
+          return name.includes('cephfs') || name.includes('mds') || name.includes('filesystem');
+        } else if (value === StorageTypeMap['object']) {
+          return name.includes('rgw') || name.includes('multisite') || name.includes('bucket');
+        }
+        if (value === StorageTypeMap['all']) return true;
         return false;
       }
     }
@@ -204,7 +240,13 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     this.prometheusAlertService.getGroupedAlerts(true);
     this.route.queryParams.subscribe((params) => {
       const severity = params['severity'];
-      this.filters[1].filterInitValue = SeverityMap[severity];
+      if (severity && SeverityMap[severity]) {
+        this.filters[1].filterInitValue = SeverityMap[severity];
+      }
+      const filterType = params['filterType'];
+      if (filterType && StorageTypeMap[filterType]) {
+        this.filters[2].filterInitValue = StorageTypeMap[filterType];
+      }
       if (params['search']) {
         setTimeout(() => {
           if (this.table) {
