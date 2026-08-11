@@ -1139,25 +1139,26 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
 
 bool RGWHandler_REST_STS::action_exists(const req_state* s)
 {
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
-    return op_generators.contains(action_name);
+  if (const auto action_name = s->info.args.get_optional("Action")) {
+    return op_generators.contains(*action_name);
   }
+
   return false;
 }
 
 RGWOp *RGWHandler_REST_STS::op_post()
 {
-  if (s->info.args.exists("Action")) {
-    const std::string action_name = s->info.args.get("Action");
-    const auto action_it = op_generators.find(action_name);
+  if (const auto action_name = s->info.args.get_optional("Action")) {
+    const auto action_it = op_generators.find(*action_name);
     if (action_it != op_generators.end()) {
       return action_it->second();
     }
-    ldpp_dout(s, 10) << "unknown action '" << action_name << "' for STS handler" << dendl;
-  } else {
-    ldpp_dout(s, 10) << "missing action argument in STS handler" << dendl;
+
+    ldpp_dout(s, 10) << "unknown action '" << *action_name << "' for STS handler" << dendl;
+    return nullptr;
   }
+
+  ldpp_dout(s, 10) << "missing action argument in STS handler" << dendl;
   return nullptr;
 }
 
@@ -1173,9 +1174,11 @@ int RGWHandler_REST_STS::init(rgw::sal::Driver* driver,
 
 int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  if (s->info.args.exists("Action") && s->info.args.get("Action") == "AssumeRoleWithWebIdentity") {
+  if (const auto action_name = s->info.args.get_optional("Action");
+      action_name && "AssumeRoleWithWebIdentity" == *action_name) {
     return RGW_Auth_STS::authorize(dpp, driver, auth_registry, s, y);
   }
+
   return RGW_Auth_S3::authorize(dpp, driver, auth_registry, s, y);
 }
 

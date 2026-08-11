@@ -493,6 +493,18 @@ public:
 
 void rgw_create_s3_canonical_header(
   const DoutPrefixProvider *dpp,
+  const std::string_view method,
+  const std::string_view content_md5,
+  const std::string_view content_type,
+  const std::string_view date,
+  const meta_map_t& meta_map,
+  const meta_map_t& qs_map,
+  const std::string_view request_uri,
+  const RGWHTTPArgs::name_value_map& sub_resources,
+  std::string& dest_str);
+
+void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
   const char *method,
   const char *content_md5,
   const char *content_type,
@@ -630,12 +642,17 @@ static inline std::string gen_v4_canonical_uri(const req_info& info) {
   return canonical_uri;
 }
 
-static inline const string calc_v4_payload_hash(const string& payload)
+static inline const string calc_v4_payload_hash(const std::string_view payload)
 {
   ceph::crypto::SHA256* sha256_hash = calc_hash_sha256_open_stream();
-  calc_hash_sha256_update_stream(sha256_hash, payload.c_str(), payload.length());
+  calc_hash_sha256_update_stream(sha256_hash, payload.data(), payload.length());
   const auto payload_hash = calc_hash_sha256_close_stream(&sha256_hash);
   return payload_hash;
+}
+
+static inline const string calc_v4_payload_hash(const string& payload)
+{
+  return calc_v4_payload_hash(std::string_view { payload });
 }
 
 static inline const char* get_v4_exp_payload_hash(const req_info& info)
