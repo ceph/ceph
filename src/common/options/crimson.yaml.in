@@ -268,26 +268,25 @@ options:
   level: advanced
   desc: Size in bytes per second written to the primary device, 0 indicates no limit
   default: 0
-- name: seastore_cold_devices_count
+- name: seastore_secondary_devices_count
   type: uint
   level: dev
-  desc: create cold devices during mkfs
+  desc: Number of secondary devices to create during mkfs. Secondary devices form the cold tier.
   default: 0
-- name: seastore_cold_device_type
+- name: seastore_secondary_device_type
   type: str
   level: dev
-  desc: The cold device type SeaStore uses, valid values are RANDOM_BLOCK_SSD, RANDOM_BLOCK_HDD, SSD and HDD.
-        This is only effective when there are two tiers, a hot one and a cold one.
+  desc: Device type of the secondary devices, valid values are RANDOM_BLOCK_SSD, RANDOM_BLOCK_HDD, SSD and HDD
   default: RANDOM_BLOCK_HDD
-- name: seastore_cold_backend_type
+- name: seastore_secondary_backend_type
   type: str
   level: dev
-  desc: The backend used by cold devices (SEGMENTED or RANDOM_BLOCK)
+  desc: Backend used by the secondary devices, valid values are SEGMENTED and RANDOM_BLOCK
   default: RANDOM_BLOCK
-- name: seastore_cold_backend_bw_throttle
+- name: seastore_secondary_bw_throttle
   type: size
   level: advanced
-  desc: Size in bytes per second written to cold devices, 0 indicates no limit
+  desc: Size in bytes per second written to the secondary devices, 0 indicates no limit
   default: 100_M
 - name: seastore_cbjournal_size
   type: size

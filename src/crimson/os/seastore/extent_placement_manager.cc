@@ -228,7 +228,7 @@ void ExtentPlacementManager::init(
   auto primary_bw_limit = crimson::common::get_conf<
     Option::size_t>("seastore_primary_bw_throttle");
   auto secondary_bw_limit = crimson::common::get_conf<
-    Option::size_t>("seastore_cold_backend_bw_throttle");
+    Option::size_t>("seastore_secondary_bw_throttle");
 
   token_buckets.emplace_back(std::make_unique<TokenBucket>(primary_bw_limit));
   token_buckets.back()->start();

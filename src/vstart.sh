@@ -231,8 +231,8 @@ declare -a secondary_block_devs
 declare -a cpu_table
 seastore_primary_device_type="SSD"
 seastore_primary_backend_type="SEGMENTED"
-seastore_cold_device_type="SSD"
-seastore_cold_backend_type="SEGMENTED"
+seastore_secondary_device_type="SSD"
+seastore_secondary_backend_type="SEGMENTED"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -305,7 +305,7 @@ options:
 	--seastore-primary-device-type: device type of the primary blockdev. (SSD or RANDOM_BLOCK_SSD)
 	--seastore-primary-backend-type: the backend used by the primary blockdev (SEGMENTED or RANDOM_BLOCK)
 	--seastore-secondary-device-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
-	--seastore-secondary-backend-type: the driver used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
+	--seastore-secondary-backend-type: the backend used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
 	--crimson-smp: number of cores to use for crimson
 	--crimson-alien-num-threads: number of alien-tp threads
 	--crimson-reactor-physical-only: use only one cpu per physical core for seastar reactors
@@ -653,11 +653,11 @@ case $1 in
         shift
         ;;
     --seastore-secondary-device-type)
-        seastore_cold_device_type="$2"
+        seastore_secondary_device_type="$2"
         shift
         ;;
     --seastore-secondary-backend-type)
-        seastore_cold_backend_type="$2"
+        seastore_secondary_backend_type="$2"
         shift
         ;;
     --crimson-smp)
@@ -980,8 +980,8 @@ EOF
       SEASTORE_OPTS+="
         seastore_primary_device_type=$seastore_primary_device_type
         seastore_primary_backend_type=$seastore_primary_backend_type
-        seastore_cold_device_type=$seastore_cold_device_type
-        seastore_cold_backend_type=$seastore_cold_backend_type"
+        seastore_secondary_device_type=$seastore_secondary_device_type
+        seastore_secondary_backend_type=$seastore_secondary_backend_type"
     fi
 
     wconf <<EOF
