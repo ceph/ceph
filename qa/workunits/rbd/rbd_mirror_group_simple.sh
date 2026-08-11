@@ -3420,6 +3420,184 @@ test_odf_failover_failback()
   check_daemon_running "${secondary_cluster}"
 }
 
+declare -a test_resync_with_missing_group_snap_order_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2)
+
+test_resync_with_missing_group_snap_order_scenarios=1
+
+# This test does the following:
+#
+# 1. enable mirroring and wait for secondary to get ready
+# 2. remove its snap_order OMAP key on the secondary, and
+# 3. verify that group resync recovers successfully.
+test_resync_with_missing_group_snap_order()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local group=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  group_create "${primary_cluster}" "${pool}/${group}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}/${group}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
+
+  # Remove the snapshot order key from the secondary group header.
+  local group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group}" group_id_before
+  remove_group_snap_order_key "${secondary_cluster}" "${pool}" "${group_id_before}"
+
+  # Request resync and verify that the group recovers.
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group}"
+
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group}" "${group_id_before}"
+
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
+
+  # tidy up
+  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
+declare -a test_resync_with_missing_primary_group_snap_order_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2)
+
+test_resync_with_missing_primary_group_snap_order_scenarios=1
+
+# This test does the following:
+#
+# 1. create and synchronize a mirrored group
+# 2. back up the primary group header and remove its snap_order key
+# 3. request resync on the secondary
+# 4. verify that the secondary group is not removed
+# 5. verify that disable fails while the primary metadata is corrupt
+# 6. restore the primary group header and disable mirroring
+test_resync_with_missing_primary_group_snap_order()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local group=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  group_create "${primary_cluster}" "${pool}/${group}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}/${group}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
+
+  local primary_group_id
+  get_id_from_group_info "${primary_cluster}" "${pool}/${group}" primary_group_id
+  backup_group_header "${primary_cluster}" "${pool}" "${primary_group_id}"
+  remove_group_snap_order_key "${primary_cluster}" "${pool}" "${primary_group_id}"
+
+  local secondary_group_id
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group}" secondary_group_id
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group}"
+
+  wait_for_group_id_not_changed "${secondary_cluster}" "${pool}/${group}" "${secondary_group_id}"
+  group_resync_marker_exists "${secondary_cluster}" "${pool}/${group}"
+
+  if mirror_group_disable_try "${primary_cluster}" "${pool}/${group}"; then
+    fail "disable succeeded with missing snapshot metadata"
+  fi
+
+  # tidy up
+  restore_group_header "${primary_cluster}" "${pool}" "${primary_group_id}"
+  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
+declare -a test_recover_after_primary_group_snap_order_corruption_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2)
+
+test_recover_after_primary_group_snap_order_corruption_scenarios=1
+
+# This test does the following:
+#
+# 1. start mirroring and synchronize a mirrored group
+# 2. back up the primary group header and remove its snap_order key
+# 3. force promote the secondary
+# 4. verify that disable fails while the old primary metadata is corrupt
+# 5. restore the old primary group header and disable mirroring
+# 6. remove the old primary group and images
+# 7. verify that the group is created again from the new primary
+# 8. verify that data synchronizes from the new primary
+test_recover_after_primary_group_snap_order_corruption()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local group=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  start_mirrors "${primary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}/${group}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
+
+  local old_group_id old_image_id
+  get_id_from_group_info "${primary_cluster}" "${pool}/${group}" old_group_id
+  get_image_id2 "${primary_cluster}" "${pool}/${image_prefix}0" old_image_id
+  backup_group_header "${primary_cluster}" "${pool}" "${old_group_id}"
+  remove_group_snap_order_key "${primary_cluster}" "${pool}" "${old_group_id}"
+
+  mirror_group_promote "${secondary_cluster}" "${pool}/${group}" '--force'
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+stopped' "${image_count}"
+
+  if mirror_group_disable_try "${primary_cluster}" "${pool}/${group}"; then
+    fail "disable succeeded with missing snapshot metadata"
+  fi
+
+  restore_group_header "${primary_cluster}" "${pool}" "${old_group_id}"
+  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+
+  wait_for_group_id_changed "${primary_cluster}" "${pool}/${group}" "${old_group_id}"
+  wait_for_group_replay_started "${primary_cluster}" "${pool}/${group}" "${image_count}"
+
+  local new_image_id
+  get_image_id2 "${primary_cluster}" "${pool}/${image_prefix}0" new_image_id
+  test "${old_image_id}" != "${new_image_id}" || fail "image was not recreated"
+
+  write_image "${secondary_cluster}" "${pool}" "${image_prefix}0" 10 4096
+  mirror_group_snapshot_and_wait_for_sync_complete "${primary_cluster}" "${secondary_cluster}" "${pool}/${group}"
+
+  # tidy up
+  mirror_group_disable "${secondary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+  group_remove "${secondary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+  images_remove "${secondary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
 # test ODF failover/failback sequence
 declare -a test_resync_marker_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'no_change' 3)
 
@@ -4082,6 +4260,9 @@ run_all_tests()
   # TODO this next test is disabled as it fails with incorrect state/description in mirror group status - issue 50
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_image_exists
   run_test_all_scenarios test_odf_failover_failback
+  run_test_all_scenarios test_resync_with_missing_group_snap_order
+  run_test_all_scenarios test_resync_with_missing_primary_group_snap_order
+  run_test_all_scenarios test_recover_after_primary_group_snap_order_corruption
   run_test_all_scenarios test_resync_marker
   run_test_all_scenarios test_force_promote_before_initial_sync
   run_test_all_scenarios test_image_snapshots_with_group
