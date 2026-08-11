@@ -236,6 +236,14 @@ public: // Methods
       LockMode mode);
 
   ///
+  /// @brief record the hold time of a lock
+  ///
+  static void record_hold_time(
+      const LockStatTraits* traits,
+      lockstat_clock::duration hold_time,
+      LockMode mode);
+
+  ///
   /// @brief Return the entry for given index
   ///
   [[nodiscard]] LockStatEntry*
@@ -337,8 +345,8 @@ public: // Constants and types
   /**
    * @brief LockStats holds the raw counters and histograms for a lock.
    *
-   * It tracks wait counts, total wait durations, and wait-time distributions
-   * (histograms) for different lock modes (READ, WRITE, etc.).
+   * It tracks wait/hold counts, total wait/hold durations, and wait/hold-time
+   * distributions (histograms) for different lock modes (READ, WRITE, etc.).
    */
   struct LockStats {
   public: // Constants and types
@@ -384,6 +392,25 @@ public: // Constants and types
         std::array<uint32_t, LockStatLatBins::bins>,
         static_cast<size_t>(LockMode::COUNT)>
         m_wait_time_histogram;
+
+    ///
+    /// @brief sum of hold time since start
+    ///
+    std::array<lockstat_clock::duration, static_cast<size_t>(LockMode::COUNT)>
+        m_hold_duration;
+
+    ///
+    /// @brief number of times lock has been released since start
+    ///
+    std::array<uint32_t, static_cast<size_t>(LockMode::COUNT)> m_hold_count;
+
+    ///
+    /// @brief histogram of hold times
+    ///
+    std::array<
+        std::array<uint32_t, LockStatLatBins::bins>,
+        static_cast<size_t>(LockMode::COUNT)>
+        m_hold_time_histogram;
   };
 
   ///
@@ -485,6 +512,11 @@ public: // member variables
   std::atomic<lockstat_clock::duration> m_max_wait;
 
   ///
+  /// @brief Highest number of cycles spent holding
+  ///
+  std::atomic<lockstat_clock::duration> m_max_hold;
+
+  ///
   /// @brief Type of lock for tracking
   ///
   LockStatTraits::LockStatType m_lock_type;
@@ -507,7 +539,8 @@ public: // member variables
  *
  * It is typically embedded within a mutex or lock implementation. On construction,
  * it associates itself with a LockStatTraits object. Its primary purpose is to
- * provide the `record_wait_time` method to update statistics when a lock is acquired.
+ * provide the `record_wait_time` and `record_hold_time` methods to update
+ * statistics when a lock is acquired and released.
  */
 class LockStat {
   friend class LockStatTraits;
@@ -570,6 +603,23 @@ public: // Methods
             !m_record_iopath_locks.load(std::memory_order_relaxed) ||
             m_thread_iopath_flag)) {
       LockStatTraits::record_wait_time(m_lockstat_traits, wait_time, mode);
+    }
+  }
+
+  ///
+  /// @brief Record the lock's hold time for its trait's
+  ///
+  void
+  record_hold_time(lockstat_clock::duration hold_time, LockMode mode) const
+  {
+    // record stats if hold threshold exceeded and if record_iopath_locks is set
+    // only record stats for threads with thread_iopath_flag set
+    if (unlikely(
+            hold_time >= g_threshold_cycles.load(std::memory_order_relaxed)) &&
+        unlikely(
+            !m_record_iopath_locks.load(std::memory_order_relaxed) ||
+            m_thread_iopath_flag)) {
+      LockStatTraits::record_hold_time(m_lockstat_traits, hold_time, mode);
     }
   }
 
