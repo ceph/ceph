@@ -1784,7 +1784,8 @@ static bool txn_is_batchable(ceph::os::Transaction& t)
 
 seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
   CollectionRef _ch,
-  ceph::os::Transaction&& _t)
+  ceph::os::Transaction&& _t,
+  bool* ever_lba_conflicted_address)
 {
   LOG_PREFIX(SeaStoreS::do_transaction_no_callbacks);
   assert(store_active);
@@ -1945,6 +1946,9 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   );
 
   DEBUGT("done", *ctx.transaction);
+  if (ever_lba_conflicted_address) {
+    *ever_lba_conflicted_address = ctx.transaction->ever_lba_conflicted;
+  }
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
   {
     auto& pd = ctx.transaction->get_phase_durations();

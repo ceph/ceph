@@ -24,6 +24,7 @@
    ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 --duration 10 --work-load-type pg_log --seastore_device_size 10G
  */
 
+#include <fstream>
 #include <random>
 #include <vector>
 #include <unordered_map>
@@ -251,6 +252,15 @@ run_concurrent_ios(
   co_return total_result_all_io;
 };
 
+// wip-shreya-lba-conflict-investigation has, at this point, a full
+// bucketing/track-metrics subsystem (format_metric_key(),
+// snapshot_metric_values(), the RawElapsedTimeIoWriter class, and
+// write_bucket_csv()) that 0dc4c3509dd's per-IO ever_lba_conflicted work was
+// built on top of. This branch deliberately doesn't carry that subsystem --
+// it's a separate feature tracked on its own branch -- so instead of
+// reintroducing all of it here, RandomWriteWorkload::run() below writes its
+// own minimal (elapsed_s, latency_s, ever_lba_conflicted) CSV directly,
+// with no bucketing/track-metrics dependency.
 /**
  * This function adds and removes log entries to a log object
  * It returns throughput(number of operations/nano sec)
@@ -588,6 +598,7 @@ class RandomWriteWorkload final : public StoreBenchWorkload {
   uint64_t size_per_obj = 4<<20;
   uint64_t colls_per_shard = 16;
   uint64_t io_concurrency_per_shard = 16;
+  std::string raw_conflict_csv;
   uint64_t get_obj_per_shard() const {
     return size_per_shard / size_per_obj;
   }
@@ -607,6 +618,9 @@ public:
        "Collections per shard")
       ("io-concurrency-per-shard", po::value<uint64_t>(&io_concurrency_per_shard),
        "IO Concurrency Per Shard")
+      ("raw-conflict-csv", po::value<std::string>(&raw_conflict_csv),
+       "if set, write a per-shard CSV of (elapsed_s,latency_s,"
+       "ever_lba_conflicted) for every IO in the write loop")
       ;
     return ret;
   }
@@ -635,6 +649,13 @@ seastar::future<results_t> RandomWriteWorkload::run(
 {
   LOG_PREFIX(random_write);
   auto &local_store = global_store.get_sharded_store();
+
+  std::ofstream raw_conflict_file;
+  if (!raw_conflict_csv.empty()) {
+    raw_conflict_file.open(
+      raw_conflict_csv + ".shard" + std::to_string(seastar::this_shard_id()));
+    raw_conflict_file << "elapsed_s,latency_s,ever_lba_conflicted\n";
+  }
 
   auto random_buffer = co_await generate_random_bp(16<<20);
   auto get_random_buffer = [&random_buffer](uint64_t size) {
@@ -690,22 +711,36 @@ seastar::future<results_t> RandomWriteWorkload::run(
   static constexpr unsigned io_concurrency_per_shard = 16;
   seastar::semaphore sem{io_concurrency_per_shard};
   results_t results;
+  // Only true once the actual write loop (not prefill) has started; matches
+  // when loop_start is set below.
+  bool record_raw = false;
+  auto loop_start = ceph::mono_clock::now();
   auto submit_transaction = [&](
     crimson::os::CollectionRef &col_ref,
     ceph::os::Transaction &&t) -> seastar::future<> {
     ++running;
     co_await sem.wait(1);
+    bool* ever_lba_conflicted_address = new bool(false);
     std::ignore = local_store.do_transaction(
       col_ref,
-      std::move(t)
-    ).finally([&, start = ceph::mono_clock::now()] {
+      std::move(t),
+      ever_lba_conflicted_address
+    ).finally([&, op_start = ceph::mono_clock::now(), ever_lba_conflicted_address] {
       --running;
       if (running == 0 && complete) {
         complete->set_value();
       }
       sem.signal(1);
       results.ios_completed++;
-      results.total_latency += ceph::mono_clock::now() - start;
+      auto now = ceph::mono_clock::now();
+      results.total_latency += now - op_start;
+      if (record_raw && raw_conflict_file.is_open()) {
+        std::chrono::duration<double> elapsed = now - loop_start;
+        std::chrono::duration<double> latency = now - op_start;
+        raw_conflict_file << elapsed.count() << "," << latency.count() << ","
+                           << (*ever_lba_conflicted_address ? 1 : 0) << "\n";
+      }
+      delete ever_lba_conflicted_address;
     });
   };
 
@@ -730,6 +765,8 @@ seastar::future<results_t> RandomWriteWorkload::run(
   INFO("finished populating");
 
   auto start = ceph::mono_clock::now();
+  loop_start = start;
+  record_raw = true;
   uint64_t writes_started = 0;
   while (ceph::mono_clock::now() - start < common.get_duration()) {
     auto obj_id = std::experimental::randint<uint64_t>(0, get_obj_per_shard() - 1);
