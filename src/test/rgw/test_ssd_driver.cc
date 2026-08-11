@@ -141,7 +141,13 @@ TEST_F(SSDDriverFixture, PutAndGet)
 		cacheDriver = nullptr;
     }, rethrow);
 
-    io.run();
+	std::vector<std::thread> threads;
+	for (int i = 0; i < 2; ++i) {
+	  threads.emplace_back([&] { io.run(); });
+	}
+	for (auto& thread : threads) {
+	  thread.join();
+	}
 }
 
 TEST_F(SSDDriverFixture, AppendData)
