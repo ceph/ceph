@@ -381,11 +381,23 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 				    RGWAccessControlPolicy& policy,
                                     string *storage_class,
 				    rgw::sal::Object* obj,
+                                    const RGWEnv& env,
                                     optional_yield y)
 {
   bufferlist bl;
   int ret = 0;
 
+#ifdef RGW_HAVE_D4N_FILTER
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (env.get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(obj);
+      d4n_obj->set_remote_cache_request();
+      if (auto object_version = env.get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+    }
+  }
+#endif
   std::unique_ptr<rgw::sal::Object::ReadOp> rop = obj->get_read_op();
 
   ret = rop->prepare(y, dpp);
@@ -531,7 +543,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->bucket_tenant);
 
   int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
-				     acl, storage_class, object, s->yield);
+				     acl, storage_class, object, *s->info.env, s->yield);
   if (ret == -ENOENT) {
     // the object doesn't exist, but we can't expose that information to clients
     // that don't have permission to list the bucket and learn that for
@@ -2783,6 +2795,19 @@ void RGWGetObj::execute(optional_yield y)
       d4n_obj->set_remote_cache_request();
       auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION");
       if (object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+    }
+  }
+#endif
+
+#ifdef RGW_HAVE_D4N_FILTER
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      ldpp_dout(this, 20) << "This is a remote cache GET request !!!" << dendl;
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+      d4n_obj->set_remote_cache_request();
+      if (auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
         d4n_obj->set_object_version(object_version.get());
       }
     }
