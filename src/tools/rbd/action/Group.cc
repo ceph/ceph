@@ -31,6 +31,50 @@ static const std::string IMAGE_POOL_NAME("image-" + at::POOL_NAME);
 static const std::string GROUP_NAMESPACE_NAME("group-" + at::NAMESPACE_NAME);
 static const std::string IMAGE_NAMESPACE_NAME("image-" + at::NAMESPACE_NAME);
 
+namespace {
+
+int purge_dependent_user_group_snapshots(librados::IoCtx& ioctx,
+                                         const std::string& group_name,
+                                         const std::string& image_name)
+{
+  librbd::RBD rbd;
+  std::vector<librbd::group_snap_info2_t> snaps;
+  int r = rbd.group_snap_list2(ioctx, group_name.c_str(), &snaps);
+  if (r < 0) {
+    return r;
+  }
+
+  for (const auto& snap : snaps) {
+    // only purge user-created snapshots
+    if (snap.namespace_type != RBD_GROUP_SNAP_NAMESPACE_TYPE_USER) {
+      continue;
+    }
+
+    auto match = std::find_if(snap.image_snaps.begin(),
+                              snap.image_snaps.end(),
+                              [&](const auto& image_snap) {
+                                return image_snap.image_name == image_name;
+                              });
+    if (match == snap.image_snaps.end()) {
+      continue;
+    }
+
+    std::cout << "purging dependent user group snapshot '" << snap.name
+              << "' from group '" << group_name
+              << "' for image '" << image_name << "'"
+              << std::endl;
+
+    r = rbd.group_snap_remove(ioctx, group_name.c_str(), snap.name.c_str());
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+} // anonymous namespace
+
 void add_prefixed_pool_option(po::options_description *opt,
                               const std::string &prefix) {
   std::string name = prefix + "-" + at::POOL_NAME;
@@ -445,6 +489,14 @@ int execute_remove_image(const po::variables_map &vm,
     return r;
   }
 
+  const bool purge = vm["purge-user-snaps"].as<bool>();
+  const bool force = vm["force"].as<bool>();
+  if (purge && force) {
+    std::cerr << "rbd: --force and --purge-user-snaps are mutually exclusive."
+              << std::endl;
+    return -EINVAL;
+  }
+
   if (group_namespace_name != image_namespace_name) {
     std::cerr << "rbd: group and image namespace must match." << std::endl;
     return -EINVAL;
@@ -467,15 +519,53 @@ int execute_remove_image(const po::variables_map &vm,
     return r;
   }
 
+  std::string purge_image_name = image_name;
   librbd::RBD rbd;
+  if (purge && !image_id.empty()) {
+    // Group snapshot metadata stores image names, not image IDs.
+    // Resolve the image name from the supplied image ID.
+    librbd::Image image;
+    r = rbd.open_by_id(image_io_ctx, image, image_id.c_str());
+    if (r < 0) {
+      std::cerr << "rbd: failed to open image id "
+                << image_id << ": " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    r = image.get_name(&purge_image_name);
+    image.close();
+    if (r < 0) {
+      std::cerr << "rbd: failed to get image name for image id "
+                << image_id << ": " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+
+  auto mode = RBD_GROUP_IMAGE_REMOVE_DEFAULT;
+  if (purge) {
+    r = purge_dependent_user_group_snapshots(cg_io_ctx, group_name,
+                                             purge_image_name);
+    if (r < 0) {
+      return r;
+    }
+  } else if (force) {
+    mode = RBD_GROUP_IMAGE_REMOVE_FORCE;
+  }
+
   if (image_id.empty()) {
     r = rbd.group_image_remove(cg_io_ctx, group_name.c_str(),
-                               image_io_ctx, image_name.c_str());
+                               image_io_ctx, image_name.c_str(), mode);
   } else {
     r = rbd.group_image_remove_by_id(cg_io_ctx, group_name.c_str(),
-                                     image_io_ctx, image_id.c_str());
+                                     image_io_ctx, image_id.c_str(), mode);
   }
-  if (r < 0) {
+  if (r == -EBUSY) {
+    std::cerr << "rbd: image is referenced by one or more user group snapshots.\n"
+              << "Use --force to keep dependent snapshots.\n"
+              << "Use --purge-user-snaps to delete dependent snapshots."
+              << std::endl;
+    return r;
+  } else if (r < 0) {
     std::cerr << "rbd: remove image error: " << cpp_strerror(r) << std::endl;
     return r;
   }
@@ -1070,6 +1160,15 @@ void get_remove_image_arguments(po::options_description *positional,
   at::add_image_option(options, at::ARGUMENT_MODIFIER_NONE);
 
   at::add_image_id_option(options);
+
+  options->add_options()
+    ("force",
+     po::bool_switch()->default_value(false),
+     "keep dependent user group snapshots");
+
+  options->add_options()
+    ("purge-user-snaps", po::bool_switch()->default_value(false),
+     "delete dependent user group snapshots");
 }
 
 void get_list_images_arguments(po::options_description *positional,

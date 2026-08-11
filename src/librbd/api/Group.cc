@@ -298,18 +298,49 @@ bool is_user_snapshot(const cls::rbd::GroupSnapshot &group_snap) {
   return ns != nullptr;
 }
 
+template <typename I>
+int has_user_group_snapshot_dependency(librados::IoCtx& group_ioctx,
+                                       const std::string& group_id,
+                                       const std::string& image_id,
+                                       bool* has_dependency) {
+  *has_dependency = false;
+  std::vector<cls::rbd::GroupSnapshot> snaps;
+  int r = group_snap_list<I>(group_ioctx, group_id,
+                             false, false, &snaps);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  for (const auto& snap : snaps) {
+    if (!is_user_snapshot(snap)) {
+      continue;
+    }
+
+    for (const auto& image_snap : snap.snaps) {
+      if (image_snap.image_id == image_id) {
+        *has_dependency = true;
+        return 0;
+      }
+    }
+  }
+
+  return 0;
+}
+
 } // anonymous namespace
 
 template <typename I>
 int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                                  const char *group_name,
                                  librados::IoCtx& image_ioctx,
-                                 const char *image_id)
+                                 const char *image_id,
+                                 group_image_remove_mode_t mode)
 {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
                  << ", group_name=" << group_name << ", image="
-                 << &image_ioctx << ", id=" << image_id << dendl;
+                 << &image_ioctx << ", id=" << image_id
+                 << ", mode=" << static_cast<int>(mode) << dendl;
 
   string group_id;
 
@@ -346,7 +377,7 @@ int Group<I>::image_remove_by_id(librados::IoCtx& group_ioctx,
                  << " group id " << group_id << dendl;
 
   r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
-                                   image_id);
+                                   image_id, mode);
 
   return r;
 }
@@ -456,7 +487,8 @@ int Group<I>::remove(librados::IoCtx& io_ctx, const char *group_name)
     }
 
     r = Group<I>::group_image_remove(io_ctx, group_id, image_ioctx,
-                                     image.spec.image_id);
+                                     image.spec.image_id,
+                                     RBD_GROUP_IMAGE_REMOVE_FORCE);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error removing image from a group" << dendl;
       return r;
@@ -711,11 +743,13 @@ template <typename I>
 int Group<I>::image_remove(librados::IoCtx& group_ioctx,
                            const char *group_name,
                            librados::IoCtx& image_ioctx,
-                           const char *image_name) {
+                           const char *image_name,
+                           group_image_remove_mode_t mode) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
   ldout(cct, 20) << "io_ctx=" << &group_ioctx
                  << ", group_name=" << group_name << ", image= "
-                 << &image_ioctx << ", name=" << image_name << dendl;
+                 << &image_ioctx << ", name=" << image_name
+                 << ", mode=" << static_cast<int>(mode) << dendl;
 
   if (group_ioctx.get_namespace() != image_ioctx.get_namespace()) {
     lderr(cct) << "group and image cannot be in different namespaces" << dendl;
@@ -765,7 +799,8 @@ int Group<I>::image_remove(librados::IoCtx& group_ioctx,
     return r;
   }
 
-  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx, image_id);
+  r = Group<I>::group_image_remove(group_ioctx, group_id, image_ioctx,
+                                   image_id, mode);
 
   return r;
 }
@@ -1501,9 +1536,11 @@ int Group<I>::snap_get_mirror_namespace(
 }
 
 template <typename I>
-int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
-		                 librados::IoCtx& image_ioctx,
-                                 string image_id) {
+int Group<I>::group_image_remove(librados::IoCtx& group_ioctx,
+                                 const std::string& group_id,
+                                 librados::IoCtx& image_ioctx,
+                                 const std::string& image_id,
+                                 group_image_remove_mode_t mode) {
   CephContext *cct = (CephContext *)group_ioctx.cct();
 
   string group_header_oid = librbd::util::group_header_name(group_id);
@@ -1511,7 +1548,33 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
   string image_header_oid = librbd::util::header_name(image_id);
 
   ldout(cct, 20) << "removing image " << image_id
-		 << " image id " << image_header_oid << dendl;
+                 << " image id " << image_header_oid
+                 << " mode " << static_cast<int>(mode) << dendl;
+
+  int r;
+  switch (mode) {
+    case RBD_GROUP_IMAGE_REMOVE_DEFAULT: {
+      bool has_dependency = false;
+      r = has_user_group_snapshot_dependency<I>(group_ioctx, group_id, image_id,
+                                                &has_dependency);
+      if (r < 0) {
+        return r;
+      }
+
+      if (has_dependency) {
+        lderr(cct) << "image is referenced by one or more user group snapshots"
+                   << dendl;
+        return -EBUSY;
+      }
+      break;
+    }
+    case RBD_GROUP_IMAGE_REMOVE_FORCE:
+      // skip dependency validation
+      break;
+    default:
+      lderr(cct) << "invalid group image remove mode" << dendl;
+      return -EINVAL;
+  }
 
   cls::rbd::GroupSpec group_spec(group_id, group_ioctx.get_id());
 
@@ -1520,8 +1583,8 @@ int Group<I>::group_image_remove(librados::IoCtx& group_ioctx, string group_id,
 
   cls::rbd::GroupImageSpec spec(image_id, image_ioctx.get_id());
 
-  int r = cls_client::group_image_set(&group_ioctx, group_header_oid,
-				      incomplete_st);
+  r = cls_client::group_image_set(&group_ioctx, group_header_oid,
+                                  incomplete_st);
 
   if (r < 0) {
     lderr(cct) << "couldn't put image into removing state: "
