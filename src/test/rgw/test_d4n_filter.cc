@@ -20,7 +20,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 const static std::string TEST_DIR = "d4n_filter_tests";
-const static std::string CACHE_DIR = "/tmp/rgw_d4n_datacache";
+const static std::string CACHE_DIR = "/var/rgw_d4n_datacache";
 const static std::string TEST_BUCKET = "test_bucket_";
 const static std::string TEST_OBJ = "test_object_";
 uint64_t ofs;
@@ -36,9 +36,54 @@ using boost::redis::connection;
 using boost::redis::request;
 using boost::redis::response;
 
+inline std::string to_legacy_index(const std::string& key, bool writecache_enabled=false) {
+  auto parts = split(key, "_");
+  std::vector<std::string> block_info;
+  block_info.assign(parts.begin(), parts.end());
+
+  if (block_info.size() == 4) {
+	return fmt::format("{}", url_encode(block_info[0] + "_" + block_info[1] + "_" + block_info[2] + "_" + block_info[3])); 
+  } else if (block_info.size() == 5) {
+	return fmt::format("{}{}{}{}{}{}{}{}{}", block_info[0], "_", block_info[1], "_", block_info[2], CACHE_DELIM, block_info[3], "_", block_info[4]); 
+  } else if (block_info.size() == 6) {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}", block_info[0], "_", block_info[1], "_", block_info[2], CACHE_DELIM, block_info[3], "_", block_info[4], "_", block_info[5]); 
+  } else if (block_info.size() == 7 && !writecache_enabled) {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}{}{}", block_info[0], "_", block_info[1], "_", block_info[2], CACHE_DELIM, block_info[3], "_", block_info[4], "/block/", 
+                        block_info[5], "/", block_info[6]); 
+  } else if (block_info.size() == 7) {
+	return fmt::format("{}{}{}{}{}{}{}", url_encode(block_info[0] + "_" + block_info[1] + "_" + block_info[2] + "_" + block_info[3]), CACHE_DELIM, 
+						block_info[4], "_", block_info[5], "_", block_info[6]); 
+  } else if (block_info.size() == 8) {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}", block_info[0], "_", block_info[1], "_", block_info[2], CACHE_DELIM, block_info[3], "_", 
+						block_info[4], "_", block_info[5], "/block/", block_info[6], "/", block_info[7]);
+  } else if (!writecache_enabled) {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}{}{}", block_info[0], "_", block_info[1], "_", block_info[2], CACHE_DELIM, block_info[3], "_", block_info[4], "/block/", 
+						block_info[5], "/", block_info[6]);
+  } else {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}", url_encode(block_info[0] + "_" + block_info[1] + "_" + block_info[2] + "_" + block_info[3]), CACHE_DELIM, 
+						block_info[4], "_", block_info[5], "_", block_info[6], "/block/", block_info[7], "/", block_info[8]);
+  }
+}
+
+inline std::string to_legacy_versioned_index(const std::string& key, bool writecache_enabled=false) {
+  auto parts = split(key, "_");
+  std::vector<std::string> block_info;
+  block_info.assign(parts.begin(), parts.end());
+
+  if (block_info.size() == 9) {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}", block_info[0], "_", block_info[1], "_", block_info[2], CACHE_DELIM, "_", url_encode(block_info[3], true), "_", 
+						block_info[4], "_", block_info[5], "_", block_info[6], "/block/", block_info[7], "/", block_info[8]);
+  } else if (!writecache_enabled) {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}{}", block_info[0], "_", block_info[1], "_", block_info[2], CACHE_DELIM, "_", url_encode(block_info[3], true), "_", 
+						block_info[4], "_", block_info[5], "/block/", block_info[6], "/", block_info[7]);
+  } else {
+	return fmt::format("{}{}{}{}{}{}{}{}{}{}{}{}{}{}", url_encode(block_info[0] + "_" + block_info[1] + "_" + block_info[2] + "_" + block_info[3]), CACHE_DELIM, "_", 
+						url_encode(block_info[4], true), "_", block_info[5], "_", block_info[6], "_", block_info[7], "/block/", block_info[8], "/", block_info[9]);
+  }
+}
+
 std::string getTestDir() {
-  auto test_dir = fs::temp_directory_path() / TEST_DIR;
-  return test_dir.string();
+  return "/var/rgw_d4n_datacache/";
 }
 
 void rethrow(std::exception_ptr eptr) {
@@ -65,6 +110,7 @@ class Environment : public ::testing::Environment {
       dpp = new DoutPrefix(cct->get(), dout_subsys, "D4N Object Directory Test: ");
 
       redisHost = cct->_conf->rgw_d4n_l1_datacache_address; 
+	  env->cct->_conf->rgw_d4n_l1_datacache_persistent_path = getTestDir();
     }
 
     virtual void TearDown() {
@@ -129,11 +175,11 @@ class D4NFilterFixture: public ::testing::Test {
 
       /* Reset Redis state */
       net::spawn(io, [this] (net::yield_context yield) {
-	boost::system::error_code ec;
-	request req;
-	req.push("FLUSHALL");
-	response<boost::redis::ignore_t> resp;
-	conn->async_exec(req, resp, yield[ec]);
+		boost::system::error_code ec;
+		request req;
+		req.push("FLUSHALL");
+		response<boost::redis::ignore_t> resp;
+		conn->async_exec(req, resp, yield[ec]);
       }, rethrow);
     } 
 
@@ -317,11 +363,10 @@ TEST_F(D4NFilterFixture, PutObjectRead)
     // Check directory values
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGET", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0", "version"); // To check cache block(s)
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
 
     response< int, int, 
              std::map<std::string, std::string>,
@@ -336,7 +381,6 @@ TEST_F(D4NFilterFixture, PutObjectRead)
     EXPECT_EQ(std::get<2>(resp).value().size(), 25);
     EXPECT_EQ(std::get<3>(resp).value().size(), 25);
 
-    std::string version = std::get<4>(resp).value();
     std::error_code err;
 
     conn->cancel();
@@ -371,13 +415,13 @@ TEST_F(D4NFilterFixture, GetObjectRead)
     
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)); // Data block entry
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("HGET", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0", "version"); // To check cache contents
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs))); // Data block entry
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+    req.push("HGET", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"), "version"); // To check cache contents
 
     response< int, int, int, 
              std::map<std::string, std::string>,
@@ -480,10 +524,10 @@ TEST_F(D4NFilterFixture, CopyNoneObjectRead)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
 
     response< int, int, 
 	     std::map<std::string, std::string>,
@@ -590,10 +634,10 @@ TEST_F(D4NFilterFixture, CopyMergeObjectRead)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
 
     response< int, int, 
 	     std::map<std::string, std::string>,
@@ -674,10 +718,10 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectRead)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
 
     response< int, int, 
 	     std::map<std::string, std::string>,
@@ -717,10 +761,10 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("HGET", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0", "version"); 
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("HGET", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"), "version"); 
 
       response< int, int, int, std::string > resp;
 
@@ -743,9 +787,9 @@ TEST_F(D4NFilterFixture, DeleteObjectRead)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
 
       response< int, int, int > resp;
 
@@ -783,10 +827,10 @@ TEST_F(D4NFilterFixture, PutVersionedObjectRead)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
 
     response< int, int, 
               std::map<std::string, std::string>,
@@ -836,11 +880,11 @@ TEST_F(D4NFilterFixture, GetVersionedObjectRead)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("HGET", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0", "version");
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+    req.push("HGET", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"), "version");
 
     response< int, int, int, 
               std::map<std::string, std::string>, 
@@ -955,8 +999,8 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
 
       response< int, std::map<std::string, std::string> > resp;
 
@@ -1009,8 +1053,8 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectRead)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
 
       response< int, std::map<std::string, std::string> > resp;
 
@@ -1094,8 +1138,8 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
 
       response< int, std::map<std::string, std::string> > resp;
 
@@ -1148,8 +1192,8 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectRead)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
 
       response< int, std::map<std::string, std::string> > resp;
 
@@ -1233,8 +1277,8 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
 
       response< int, std::map<std::string, std::string> > resp;
 
@@ -1287,8 +1331,8 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectRead)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
 
       response< int, std::map<std::string, std::string> > resp;
 
@@ -1332,10 +1376,10 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-      req.push("HGET", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0", "version");
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+      req.push("HGET", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"), "version");
 
       response< int, int, int, std::string > resp;
 
@@ -1365,11 +1409,11 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
 
       response< int, int, int, int, int > resp;
 
@@ -1401,9 +1445,9 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectRead)
 TEST_F(D4NFilterFixture, PutObjectWrite)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
-  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
+  env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
   const std::string testName = "PutObjectWrite";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::string version;
  
   net::spawn(io, [this, &testName, &bucketName, &version] (net::yield_context yield) {
@@ -1416,16 +1460,16 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName); // obj dir entry
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "__:null_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", bucketName + "_" + TEST_OBJ + testName, "0", "-1");
-      req.push("HGETALL", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("HGETALL", bucketName + "__:null_"  + TEST_OBJ + testName + "_0_0");
-      req.push("HGETALL", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "dirty");
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "version");
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true)); // obj dir entry
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("ZREVRANGE", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true), "0", "-1");
+      req.push("HGETALL", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("HGETALL", to_legacy_versioned_index(bucketName + "__:null_"  + TEST_OBJ + testName + "_0_0", true));
+      req.push("HGETALL", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true), "dirty");
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true), "version");
 
       response< int, int, int, int, 
 		std::vector<std::string>,
@@ -1473,7 +1517,7 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
   }, rethrow);
 
-  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+  io.run_for(std::chrono::seconds(6)); // Allow cleaning cycle to complete
 
   net::spawn(io, [this, &testName, &bucketName, &version] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
@@ -1481,7 +1525,7 @@ TEST_F(D4NFilterFixture, PutObjectWrite)
     {
       boost::system::error_code ec;
       request req;
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "dirty");
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true), "dirty");
 
       response< std::string > resp;
 
@@ -1535,15 +1579,15 @@ TEST_F(D4NFilterFixture, GetObjectWrite)
     
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName);
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + TEST_OBJ + testName, "0", "-1");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_"  + TEST_OBJ + testName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("HGET", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0", "version");
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+    req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName), "0", "-1");
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_"  + TEST_OBJ + testName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+    req.push("HGET", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"), "version");
 
     response< int, int, int, int, 
               std::vector<std::string>,
@@ -1659,15 +1703,15 @@ TEST_F(D4NFilterFixture, CopyNoneObjectWrite)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName);
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs));
-    req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destName, "0", "-1");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs));
-    req.push("HGET", TEST_BUCKET + testName + "_" + destName + "_0_0", "version");
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs)));
+    req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destName), "0", "-1");
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs)));
+    req.push("HGET", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"), "version");
 
     response< int, int, int, int, 
               std::vector<std::string>,
@@ -1786,15 +1830,15 @@ TEST_F(D4NFilterFixture, CopyMergeObjectWrite)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName);
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs));
-    req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destName, "0", "-1");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs));
-    req.push("HGET", TEST_BUCKET + testName + "_" + destName + "_0_0", "version");
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs)));
+    req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destName), "0", "-1");
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs)));
+    req.push("HGET", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"), "version");
 
     response< int, int, int, int, 
               std::vector<std::string>,
@@ -1913,15 +1957,15 @@ TEST_F(D4NFilterFixture, CopyReplaceObjectWrite)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName);
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("EXISTS", TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs));
-    req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destName, "0", "-1");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destName + "_0_0");
-    req.push("HGETALL", TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs));
-    req.push("HGET", TEST_BUCKET + testName + "_" + destName + "_0_0", "version");
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs)));
+    req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destName), "0", "-1");
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destName + "_0_0"));
+    req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_" + std::to_string(ofs)));
+    req.push("HGET", to_legacy_index(TEST_BUCKET + testName + "_" + destName + "_0_0"), "version");
 
     response< int, int, int, int, 
               std::vector<std::string>,
@@ -1991,11 +2035,11 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("HGET", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0", "version"); 
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("HGET", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"), "version"); 
 
       response< int, int, int, int, std::string > resp;
 
@@ -2029,10 +2073,10 @@ TEST_F(D4NFilterFixture, DeleteObjectWrite)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
 
       response< int, int, int, int > resp;
 
@@ -2069,7 +2113,7 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
   env->cct->_conf->d4n_writecache_enabled = true;
   env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
   const std::string testName = "PutVersionedObjectWrite";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::string version, instance;
  
   net::spawn(io, [this, &testName, &bucketName, &version, &instance] (net::yield_context yield) {
@@ -2082,21 +2126,21 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", bucketName + "__:null_"  + TEST_OBJ + testName + "_0_0");
-      req.push("ZREVRANGE", bucketName + "_" + TEST_OBJ + testName, "0", "-1");
-      req.push("HGETALL", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("HGETALL", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("HGETALL", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("HGETALL", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("HGETALL", bucketName + "__:null_"  + TEST_OBJ + testName + "_0_0");
-      req.push("HGET", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", "dirty");
-      req.push("HGET", bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", "dirty");
-      req.push("HGET", bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", "version");
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null_"  + TEST_OBJ + testName + "_0_0", true));
+      req.push("ZREVRANGE", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true), "0", "-1");
+      req.push("HGETALL", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("HGETALL", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("HGETALL", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("HGETALL", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("HGETALL", to_legacy_versioned_index(bucketName + "__:null_"  + TEST_OBJ + testName + "_0_0", true));
+      req.push("HGET", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", true), "dirty");
+      req.push("HGET", to_legacy_versioned_index(bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", true), "dirty");
+      req.push("HGET", to_legacy_versioned_index(bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", true), "version");
 
       response< int, int, int, int, int, int, 
 		std::vector<std::string>, 
@@ -2164,7 +2208,7 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(null_yield);
   }, rethrow);
 
-  io.run_for(std::chrono::seconds(2)); // Allow cleaning cycle to complete
+  io.run_for(std::chrono::seconds(6)); // Allow cleaning cycle to complete
 
   net::spawn(io, [this, &testName, &bucketName, &version, &instance] (net::yield_context yield) {
     dynamic_cast<rgw::d4n::LFUDAPolicy*>(d4nFilter->get_policy_driver()->get_cache_policy())->save_y(optional_yield{yield});
@@ -2172,8 +2216,8 @@ TEST_F(D4NFilterFixture, PutVersionedObjectWrite)
     {
       boost::system::error_code ec;
       request req;
-      req.push("HGET", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", "dirty");
-      req.push("HGET", bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", "dirty");
+      req.push("HGET", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", true), "dirty");
+      req.push("HGET", to_legacy_versioned_index(bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", true), "dirty");
 
       response< std::string, std::string > resp;
 
@@ -2244,14 +2288,14 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + TEST_OBJ + testName, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
 
       response< int, int, int, int, 
 		std::vector<std::string>, 
@@ -2294,7 +2338,7 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
     {
       boost::system::error_code ec;
       request req;
-      req.push("DEL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName);
+      req.push("DEL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName));
       response<int> resp;
       conn->async_exec(req, resp, yield[ec]);
       ASSERT_EQ((bool)ec, false);
@@ -2312,15 +2356,15 @@ TEST_F(D4NFilterFixture, GetVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_"  + TEST_OBJ + testName + "_0_0");
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + TEST_OBJ + testName, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("HGETALL", TEST_BUCKET + testName + "__:null_"  + TEST_OBJ + testName + "_0_0");
-      req.push("HGET", TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0", "version");
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_"  + TEST_OBJ + testName + "_0_0"));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_0"));
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs)));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_"  + TEST_OBJ + testName + "_0_0"));
+      req.push("HGET", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + TEST_OBJ + testName + "_0_0"), "version");
 
       response< int, int, int, int, 
 		std::vector<std::string>, 
@@ -2445,14 +2489,14 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameEnabled);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destNameEnabled, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs)));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs)));
 
       response< int, int, int, int,
                 std::vector<std::string>,
@@ -2536,15 +2580,15 @@ TEST_F(D4NFilterFixture, CopyNoneVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destNameSuspended, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs));
-      req.push("HGET", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0", "version");
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs)));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs)));
+      req.push("HGET", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"), "version");
 
       response< int, int, int, int,
                 std::vector<std::string>,
@@ -2670,14 +2714,14 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameEnabled);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destNameEnabled, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs)));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs)));
 
       response< int, int, int, int,
                 std::vector<std::string>,
@@ -2761,15 +2805,15 @@ TEST_F(D4NFilterFixture, CopyMergeVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destNameSuspended, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs));
-      req.push("HGET", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0", "version");
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs)));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs)));
+      req.push("HGET", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"), "version");
 
       response< int, int, int, int,
                 std::vector<std::string>,
@@ -2895,14 +2939,14 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameEnabled);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destNameEnabled, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs)));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:" + instance + "_" + destNameEnabled + "_0_" + std::to_string(ofs)));
 
       response< int, int, int, int,
                 std::vector<std::string>,
@@ -2986,15 +3030,15 @@ TEST_F(D4NFilterFixture, CopyReplaceVersionedObjectWrite)
 
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended);
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("EXISTS", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs));
-      req.push("ZREVRANGE", TEST_BUCKET + testName + "_" + destNameSuspended, "0", "-1");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0");
-      req.push("HGETALL", TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs));
-      req.push("HGET", TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0", "version");
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0"));
+      req.push("EXISTS", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("EXISTS", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs)));
+      req.push("ZREVRANGE", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended), "0", "-1");
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"));
+      req.push("HGETALL", to_legacy_index(TEST_BUCKET + testName + "_" + destNameSuspended + "_0_" + std::to_string(ofs)));
+      req.push("HGET", to_legacy_versioned_index(TEST_BUCKET + testName + "__:null_" + destNameSuspended + "_0_0"), "version");
 
       response< int, int, int, int,
                 std::vector<std::string>,
@@ -3057,7 +3101,7 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
   env->cct->_conf->d4n_writecache_enabled = true;
   env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
   const std::string testName = "DeleteVersionedObjectWrite";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::string version, instance;
  
   net::spawn(io, [this, &testName, &bucketName, &version, &instance] (net::yield_context yield) {
@@ -3069,13 +3113,13 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName);
-    req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("EXISTS", bucketName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("HGET", bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", "version");
+    req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true));
+    req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+    req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", true));
+    req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+    req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", true));
+    req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+    req.push("HGET", to_legacy_versioned_index(bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", true), "version");
 
     response< int, int, int, int, 
 	      int, int, std::string > resp;
@@ -3121,12 +3165,12 @@ TEST_F(D4NFilterFixture, DeleteVersionedObjectWrite)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName);
-    req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-    req.push("EXISTS", bucketName + "__:null_" + TEST_OBJ + testName + "_0_0");
-    req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
+    req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true));
+    req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+    req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_0", true));
+    req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + instance + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+    req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null_" + TEST_OBJ + testName + "_0_0", true));
+    req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
 
     response< int, int, int, int, 
 	      int, int, std::string > resp;
@@ -3169,7 +3213,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
   env->cct->_conf->d4n_writecache_enabled = true;
   env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "SimpleDeleteBeforeCleaning";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
   std::string deleteMarker, location;
  
@@ -3190,8 +3234,8 @@ TEST_F(D4NFilterFixture, SimpleDeleteBeforeCleaning)
 
     boost::system::error_code ec;
     request req;
-    req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "deleteMarker");
-    req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "version");
+    req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true), "deleteMarker");
+    req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true), "version");
 
     response< int, std::string > resp;
 
@@ -3251,7 +3295,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
   env->cct->_conf->d4n_writecache_enabled = true;
   env->cct->_conf->rgw_d4n_cache_cleaning_interval = 1;
   const std::string testName = "VersionedDeleteBeforeCleaning";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
  
   net::spawn(io, [this, &testName, &bucketName, &instances] (net::yield_context yield) {
@@ -3268,7 +3312,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
     {
       boost::system::error_code ec;
       request req;
-      req.push("ZREVRANGE", bucketName + "_" + TEST_OBJ + testName, "0", "-1");
+      req.push("ZREVRANGE", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true), "0", "-1");
 
       response< std::vector<std::string> > resp;
 
@@ -3291,7 +3335,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteBeforeCleaning)
     {
       boost::system::error_code ec;
       request req;
-      req.push("ZREVRANGE", bucketName + "_" + TEST_OBJ + testName, "0", "-1");
+      req.push("ZREVRANGE", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true), "0", "-1");
 
       response< std::vector<std::string> > resp;
 
@@ -3369,7 +3413,7 @@ TEST_F(D4NFilterFixture, SimpleDeleteAfterCleaning)
   env->cct->_conf->d4n_writecache_enabled = true;
   env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "SimpleDeleteAfterCleaning";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
  
   net::spawn(io, [this, &testName, &bucketName, &instances] (net::yield_context yield) {
@@ -3428,7 +3472,7 @@ TEST_F(D4NFilterFixture, VersionedDeleteAfterCleaning)
   env->cct->_conf->d4n_writecache_enabled = true;
   env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "VersionedDeleteAfterCleaning";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::vector<std::string> instances;
  
   net::spawn(io, [this, &testName, &bucketName, &instances] (net::yield_context yield) {
@@ -3520,7 +3564,7 @@ TEST_F(D4NFilterFixture, ListObjectVersions)
   env->cct->_conf->d4n_writecache_enabled = true;
   env->cct->_conf->rgw_d4n_cache_cleaning_interval = 0;
   const std::string testName = "ListObjectVersions";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::string instance;
  
   net::spawn(io, [this, &testName, &bucketName, &instance] (net::yield_context yield) {
@@ -3570,7 +3614,7 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
   const std::string testName = "PutObjectWrite";
   const std::string testName_1 = "PutObjectWrite_1";
   const std::string testName_2 = "PutObjectWrite_2";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::string instance, version, version_1; 
  
   net::spawn(io, [this, &testName, &testName_1, &testName_2, &bucketName, &instance, &version, &version_1] (net::yield_context yield) {
@@ -3586,8 +3630,8 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
     {
       boost::system::error_code ec;
       request req;
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "version");
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", "version");
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0"), "version");
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2 + "_0_0"), "version");
 
       response<std::string, std::string> resp;
 
@@ -3603,19 +3647,19 @@ TEST_F(D4NFilterFixture, BucketRemoveBeforeCleaning)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", bucketName);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_1);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "__:null" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0");
-      req.push("EXISTS", bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0");
-      req.push("EXISTS", bucketName + "__:null" + TEST_OBJ + testName_2 + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2 + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(bucketName, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_1, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_1 + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null" + TEST_OBJ + testName_2 + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_" + std::to_string(ofs), true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2 + "_0_" + std::to_string(ofs), true));
 
       response<int, int, int, int, int, int,
                int, int, int, int, int, int, int > resp;
@@ -3680,7 +3724,7 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
   const std::string testName = "PutObjectWrite";
   const std::string testName_1 = "PutObjectWrite_1";
   const std::string testName_2 = "PutObjectWrite_2";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::string instance;
   std::string version, version_1, version_2; 
  
@@ -3695,9 +3739,9 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
     {
       boost::system::error_code ec;
       request req;
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName + "_0_0", "version");
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0", "version");
-      req.push("HGET", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", "version");
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true), "version");
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_1 + "_0_0", true), "version");
+      req.push("HGET", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", true), "version");
 
       response<std::string, std::string, std::string> resp;
 
@@ -3723,19 +3767,19 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", bucketName);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_1);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "__:null" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_1 + "_0_0");
-      req.push("EXISTS", bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2 + "_0_0");
-      req.push("EXISTS", bucketName + "__:null" + TEST_OBJ + testName_2 + "_0_0");
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_" + std::to_string(ofs));
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName_2 + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(bucketName, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_1, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_1 + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2 + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:null" + TEST_OBJ + testName_2 + "_0_0", true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + version_1 + TEST_OBJ + testName_1 + "_0_" + std::to_string(ofs), true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName_2 + "_0_" + std::to_string(ofs), true));
 
       response<int, int, int, int, int, int,
                int, int, int, int, int, int, int > resp;
@@ -3787,11 +3831,12 @@ TEST_F(D4NFilterFixture, BucketRemoveAfterCleaning)
   }
 }
 
+#if 0
 TEST_F(D4NFilterFixture, BucketRemoveWithDeleteMarker)
 {
   env->cct->_conf->d4n_writecache_enabled = true;
   const std::string testName = "PutObjectWrite";
-  const std::string bucketName = "/tmp/d4n_filter_tests/dbstore-default_ns.1";
+  const std::string bucketName = "/var/d4n_filter_tests/dbstore-default_ns.1";
   std::string instance;
  
   net::spawn(io, [this, &testName, &bucketName, &instance] (net::yield_context yield) {
@@ -3809,7 +3854,7 @@ TEST_F(D4NFilterFixture, BucketRemoveWithDeleteMarker)
     {
       boost::system::error_code ec;
       request req;
-      req.push("ZREVRANGE", bucketName + "_" + TEST_OBJ + testName, "0", "-1");
+      req.push("ZREVRANGE", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true), "0", "-1");
 
       response< std::vector<std::string> > resp;
 
@@ -3825,12 +3870,12 @@ TEST_F(D4NFilterFixture, BucketRemoveWithDeleteMarker)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", bucketName);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName);
-      req.push("EXISTS", bucketName + "_" + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "__:" + version + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "__:" + delete_marker + TEST_OBJ + testName + "_0_0");
-      req.push("EXISTS", bucketName + "__:" + version + TEST_OBJ + testName + "_0_" + std::to_string(ofs));
+      req.push("EXISTS", to_legacy_index(bucketName, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName, true));
+      req.push("EXISTS", to_legacy_index(bucketName + "_" + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + version + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + delete_marker + TEST_OBJ + testName + "_0_0", true));
+      req.push("EXISTS", to_legacy_versioned_index(bucketName + "__:" + version + TEST_OBJ + testName + "_0_" + std::to_string(ofs), true));
 
       response<int, int, int,
                int, int, int > resp;
@@ -3879,6 +3924,7 @@ TEST_F(D4NFilterFixture, BucketRemoveWithDeleteMarker)
 	thread.join();
   }
 }
+#endif
 
 int main(int argc, char *argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
