@@ -2745,7 +2745,7 @@ int MotrMultipartUpload::complete(const DoutPrefixProvider *dpp,
         return rc;
       }
 
-      hex_to_buf(part->etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+      rgw_part_etag_to_digest(part->etag, petag);
       hash.Update((const unsigned char *)petag, sizeof(petag));
       ldpp_dout(dpp, 20) << "MotrMultipartUpload::complete(): calc etag " << dendl;
 
