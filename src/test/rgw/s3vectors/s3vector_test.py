@@ -65,7 +65,8 @@ def admin(args, cluster=None, **kwargs):
     """ radosgw-admin command """
     cluster = cluster or get_config_cluster()
     if installed_cluster_conf(cluster):
-        cmd = ['radosgw-admin', '--cluster', cluster, '-n', get_config_rgw_client()] + args
+        cmd = ['radosgw-admin', '--cluster', cluster,
+               '-n', get_config_rgw_client() or 'client.0'] + args
     else:
         cmd = [test_path + 'test-rgw-call.sh', 'call_rgw_admin', cluster] + args
     return bash(cmd, **kwargs)
@@ -84,9 +85,15 @@ def ceph_admin(args, cluster=None, **kwargs):
     return bash(cmd, **kwargs)
 
 
-def try_set_rgw_config_option(option, value, port=None, cluster=None):
+def rgw_client_name(port=None):
+    """ the name of the RGW client, as it is known to the cluster. it is set in the
+    configuration when the RGW is not started by "vstart" """
+    return get_config_rgw_client() or f'client.rgw.{port or get_config_port()}'
+
+
+def try_set_rgw_config_option(option, value, port=None, cluster=None, client=None):
     """ change a config option of an RGW. returns the result of the command """
-    client = f'client.rgw.{port or get_config_port()}'
+    client = client or rgw_client_name(port)
     out, ret = ceph_admin(['config', 'set', client, option, str(value)], cluster=cluster)
     if ret != 0:
         log.warning("could not set '%s' on '%s': %s", option, client, out)
@@ -122,12 +129,14 @@ def _configure_backend(host, port, cluster):
         options['rgw_s3vector_s3_region'] = get_s3vector_s3_region() or get_config_zonegroup()
         options['rgw_s3vector_s3_allow_http'] = allow_http
 
+    # the tests must run against the backend they were configured with: if it
+    # cannot be set, the run is failed, and not done against another backend
+    client = rgw_client_name(port)
     for option, value in options.items():
-        _, ret = try_set_rgw_config_option(option, value, port=port, cluster=cluster)
-        if ret != 0:
-            log.warning("using the backend configuration of client.rgw.%s as it was started", port)
-            return
-    log.info("configured the '%s' backend on client.rgw.%s of cluster '%s'", backend, port, cluster)
+        out, ret = try_set_rgw_config_option(option, value, port=port, cluster=cluster, client=client)
+        assert ret == 0, \
+            f"failed to set '{option}' of the '{backend}' backend on '{client}' of cluster '{cluster}': {out}"
+    log.info("configured the '%s' backend on '%s' of cluster '%s'", backend, client, cluster)
 
 
 @pytest.fixture(autouse=True, scope="module")
@@ -247,6 +256,13 @@ def _wait_for_user(uid, tenant=None, retries=12, delay=5):
 
 
 def another_user(tenant=None):
+    # users may be created only on the master zone, and are synced from there. so,
+    # when the tests are running against another zone, no user can be created
+    master_cluster = get_config_master_cluster()
+    if master_cluster and master_cluster != get_config_cluster():
+        pytest.skip(f"cannot create a user: the master zone is in cluster "
+                    f"'{master_cluster}', and the tested zone is in '{get_config_cluster()}'")
+
     access_key = str(time.time())
     secret_key = str(time.time())
     uid = 'superman' + str(time.time())
@@ -255,9 +271,8 @@ def another_user(tenant=None):
             '--display-name', '"Super Man"']
     if tenant:
         args += ['--tenant', tenant]
-    # users may be created only on the master zone, and are synced from there
-    _, result = admin(args, cluster=get_config_master_cluster())
-    assert result == 0
+    out, result = admin(args, cluster=master_cluster)
+    assert result == 0, f"failed to create user '{uid}': {out}"
     _wait_for_user(uid, tenant)
     hostname = get_config_host()
     port_no = get_config_port()

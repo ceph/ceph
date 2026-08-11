@@ -37,8 +37,10 @@ def setup():
 
     # name of the RGW client, needed by "radosgw-admin" to pick a keyring when
     # the cluster is an installed one, and not a development one
+    # when not set, the RGW is assumed to be started by "vstart", where its name
+    # is based on the port it is listening on
     global default_rgw_client
-    default_rgw_client = defaults.get("rgw_client", "client.0")
+    default_rgw_client = defaults.get("rgw_client")
 
     # the cluster holding the master zone. some "radosgw-admin" commands are
     # allowed only there. when not set, the tested cluster is used
