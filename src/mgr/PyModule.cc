@@ -108,7 +108,7 @@ std::string handle_pyerror(
   }
   formatted = str("").join(formatted_list);
 
-  if (!module.empty()) {
+  if (crash_dump && !module.empty()) {
     std::list<std::string> bt_strings;
     std::map<std::string, std::string> extra;
     

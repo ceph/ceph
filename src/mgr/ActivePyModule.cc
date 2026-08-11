@@ -189,8 +189,21 @@ std::optional<std::vector<std::byte>> ActivePyModule::dispatch_remote(
     // Because the caller is in a different context, we can't let this
     // exception bubble up, need to re-raise it from the caller's
     // context later.
+    //
+    // NotImplementedError is not a fault: it is how a module signals that
+    // it does not implement an optional method of an interface it inherits
+    // from. The orchestrator interface is built on exactly that - see
+    // Orchestrator.get_feature_set() in the orchestrator module, whose
+    // docstring tells callers to "ask for forgiveness" and catch
+    // NotImplementedError. Recording a crash dump for it turns a documented,
+    // expected signal into a health warning: on a Rook-managed cluster
+    // mgr/prometheus calls the cephadm-only node_proxy_fullreport() once per
+    // scrape, which pinned RECENT_MGR_MODULE_CRASH permanently and added
+    // ~5,760 crash records per day. The exception is still reported to the
+    // caller, it is just not treated as a crash.
+    const bool crash_dump = !PyErr_ExceptionMatches(PyExc_NotImplementedError);
     std::string caller = "ActivePyModule::dispatch_remote "s + method;
-    *err = handle_pyerror(true, get_name(), caller);
+    *err = handle_pyerror(crash_dump, get_name(), caller);
     return std::nullopt;
   }
   dout(20) << "Success calling '" << method << "'" << dendl;
