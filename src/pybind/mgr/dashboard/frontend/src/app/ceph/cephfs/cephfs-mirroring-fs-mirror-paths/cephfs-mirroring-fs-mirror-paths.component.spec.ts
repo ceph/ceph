@@ -64,7 +64,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
             last_synced_snap: {
               id: 1,
               name: 'snap-last',
-              sync_time_stamp: '1583.101609s',
+              sync_time_stamp: '1786358053.364396s',
               sync_bytes: '150 MiB',
               sync_files: 5000
             },
@@ -316,7 +316,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       expect(result[0].currentSyncEta).toBe('calculating...');
       expect(result[0].currentSyncMode).toBe('delta');
       expect(result[0].lastSyncedSnapshot).toBe('snap-last');
-      expect(result[0].lastSyncedTime).toBe('1583.101609s');
+      expect(result[0].lastSyncedTime).toBeTruthy();
       expect(result[0].snapshotCount).toBe(10);
       expect(result[0].pendingSnapshotCount).toBe(1);
       expect(result[0].syncStatusIcon).toBe('inProgress');

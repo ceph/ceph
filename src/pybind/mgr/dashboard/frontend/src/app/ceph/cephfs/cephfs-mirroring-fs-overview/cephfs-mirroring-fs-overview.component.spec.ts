@@ -64,7 +64,7 @@ describe('CephfsMirroringFsOverviewComponent', () => {
             last_synced_snap: {
               name: 'snap1',
               sync_bytes: '1.00 KiB',
-              sync_time_stamp: '9000.000000s'
+              sync_time_stamp: '1786358053.364396s'
             },
             metrics_updated_at: 1_700_000_000
           }
@@ -145,10 +145,10 @@ describe('CephfsMirroringFsOverviewComponent', () => {
     expect(fsData?.destination.fsid).toBe('abc-123');
     expect(fsData?.destination.monitorEndpoint).toBe('10.0.0.1:6789');
     expect(fsData?.stats.syncingPaths).toBe(1);
-    expect(fsData?.sync.bytesSynced).toBe('1.00 KiB');
+    expect(fsData?.sync.bytesSynced).toBe('1 KiB');
     expect(fsData?.sync.path).toBe('/dir1');
     expect(fsData?.sync.snapName).toBe('snap1');
-    expect(fsData?.sync.syncedAt).toBe(1_700_000_000);
+    expect(fsData?.sync.syncedAt).toBe(1786358053.364396);
   });
 
   it('should refresh overview data on interval tick', async () => {
@@ -225,6 +225,50 @@ describe('CephfsMirroringFsOverviewComponent helpers', () => {
 
     expect(info.mirrorPaths).toBe(3);
     expect(info.failures).toBe(1);
+    expect(info.peerUuid).toBe('peer-1');
+    expect(info.siteName).toBe('remote');
+  });
+
+  it('getDaemonOverviewInfo aggregates counters across mirror daemons', () => {
+    const info = call<DaemonOverviewInfo>(
+      'getDaemonOverviewInfo',
+      [
+        {
+          filesystems: [
+            {
+              name: 'myfs',
+              directory_count: 3,
+              peers: [
+                {
+                  uuid: 'peer-1',
+                  remote: { cluster_name: 'remote', fs_name: 'dest', fsid: 'id', mon_host: 'mon' },
+                  stats: { failure_count: 1 }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          filesystems: [
+            {
+              name: 'myfs',
+              directory_count: 2,
+              peers: [
+                {
+                  uuid: 'peer-1',
+                  remote: { cluster_name: 'remote', fs_name: 'dest', fsid: 'id', mon_host: 'mon' },
+                  stats: { failure_count: 2 }
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      'myfs'
+    );
+
+    expect(info.mirrorPaths).toBe(5);
+    expect(info.failures).toBe(3);
     expect(info.peerUuid).toBe('peer-1');
     expect(info.siteName).toBe('remote');
   });

@@ -76,7 +76,7 @@ export class CephfsMirroringFsOverviewComponent {
   }
 
   private getDaemonOverviewInfo(daemons: Daemon[], fsName: string): DaemonOverviewInfo {
-    const empty: DaemonOverviewInfo = {
+    const info: DaemonOverviewInfo = {
       mirrorPaths: 0,
       failures: 0,
       siteName: '-',
@@ -91,19 +91,24 @@ export class CephfsMirroringFsOverviewComponent {
         continue;
       }
 
-      const peer = fs.peers?.[0];
-      return {
-        mirrorPaths: fs.directory_count ?? 0,
-        failures: (fs.peers ?? []).reduce((sum, item) => sum + (item.stats?.failure_count ?? 0), 0),
-        siteName: peer?.remote?.cluster_name ?? '-',
-        destinationFsName: peer?.remote?.fs_name ?? '-',
-        fsid: peer?.remote?.fsid ?? '-',
-        monitorEndpoint: peer?.remote?.mon_host ?? '-',
-        peerUuid: peer?.uuid
-      };
+      // Each cephfs-mirror daemon reports its own path/failure counters.
+      info.mirrorPaths += fs.directory_count ?? 0;
+      info.failures += (fs.peers ?? []).reduce(
+        (sum, item) => sum + (item.stats?.failure_count ?? 0),
+        0
+      );
+
+      if (!info.peerUuid) {
+        const peer = fs.peers?.[0];
+        info.siteName = peer?.remote?.cluster_name ?? '-';
+        info.destinationFsName = peer?.remote?.fs_name ?? '-';
+        info.fsid = peer?.remote?.fsid ?? '-';
+        info.monitorEndpoint = peer?.remote?.mon_host ?? '-';
+        info.peerUuid = peer?.uuid;
+      }
     }
 
-    return empty;
+    return info;
   }
 
   private buildMirroringFsOverviewData(

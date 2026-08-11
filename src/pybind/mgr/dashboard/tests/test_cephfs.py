@@ -268,7 +268,7 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
         mock_output = json.dumps(expected_status)
         mgr.remote = Mock(return_value=(0, mock_output, ''))
 
-        self._get('/api/cephfs/mirror/daemon-status')
+        self._get('/api/cephfs/mirror/daemon/status')
         self.assertStatus(200)
         self.assertJsonBody(expected_status)
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_daemon_status')
@@ -277,7 +277,7 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
         error_message = 'Daemon not available'
         mgr.remote = Mock(return_value=(1, '', error_message))
 
-        self._get('/api/cephfs/mirror/daemon-status')
+        self._get('/api/cephfs/mirror/daemon/status')
         self.assertStatus(400)
         response = self.json_body()
         self.assertIn('Failed to get Cephfs mirror daemon status', response.get('detail', ''))

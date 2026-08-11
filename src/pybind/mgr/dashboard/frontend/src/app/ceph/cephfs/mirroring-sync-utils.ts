@@ -1,4 +1,5 @@
 import { MirroringFsSyncInfo, MirrorStatusResponse } from '~/app/shared/models/cephfs.model';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 export class MirroringSyncUtils {
   static emptySyncInfo(): MirroringFsSyncInfo {
@@ -15,11 +16,11 @@ export class MirroringSyncUtils {
     info: MirroringFsSyncInfo;
   } {
     let syncingPaths = 0;
-    let latestSyncTime = '';
-    let latestMetricsUpdatedAt: number | string | undefined;
+    let latestSyncTime = 0;
     let latestSnapName = '';
-    let latestBytes = '';
     let latestSyncPath = '';
+    let totalBytesSynced = 0;
+    let hasBytesSynced = false;
 
     for (const [dirPath, dirMetrics] of Object.entries(status.metrics ?? {})) {
       for (const dir of Object.values(dirMetrics.peer ?? {})) {
@@ -32,27 +33,18 @@ export class MirroringSyncUtils {
           continue;
         }
 
-        const syncTime = String(snap.sync_time_stamp ?? '');
-        const snapName = snap.name ?? '';
-        const metricsUpdatedAt = dir.metrics_updated_at;
-        if (
-          MirroringSyncUtils.isNewerMirrorSync(
-            syncTime,
-            metricsUpdatedAt,
-            latestSyncTime,
-            latestMetricsUpdatedAt
-          )
-        ) {
+        const parsedBytes = MirroringSyncUtils.parseSyncBytes(snap.sync_bytes);
+        if (parsedBytes !== null) {
+          totalBytesSynced += parsedBytes;
+          hasBytesSynced = true;
+        }
+
+        // sync_time_stamp is a wall-clock Unix epoch (number or "<epoch>s" string).
+        const syncTime = parseFloat(String(snap.sync_time_stamp ?? ''));
+        if (syncTime >= latestSyncTime) {
           latestSyncTime = syncTime;
-          latestMetricsUpdatedAt = metricsUpdatedAt;
-          latestSnapName = snapName;
-          latestBytes = String(snap.sync_bytes ?? '');
+          latestSnapName = snap.name ?? '';
           latestSyncPath = dirPath;
-        } else if (!latestSnapName && snapName) {
-          latestSnapName = snapName;
-          latestBytes = latestBytes || String(snap.sync_bytes ?? '');
-          latestSyncPath = dirPath;
-          latestMetricsUpdatedAt = latestMetricsUpdatedAt ?? metricsUpdatedAt;
         }
       }
     }
@@ -60,41 +52,25 @@ export class MirroringSyncUtils {
     return {
       syncingPaths,
       info: {
-        bytesSynced: latestBytes || '-',
+        bytesSynced: hasBytesSynced ? MirroringSyncUtils.formatSyncBytes(totalBytesSynced) : '-',
         path: latestSyncPath,
         snapName: latestSnapName,
-        syncedAt: MirroringSyncUtils.mirrorMetricsUpdatedAtToEpoch(latestMetricsUpdatedAt)
+        syncedAt: latestSyncTime || null
       }
     };
   }
 
-  static isNewerMirrorSync(
-    syncTime: string,
-    metricsUpdatedAt: number | string | undefined,
-    latestSyncTime: string,
-    latestMetricsUpdatedAt: number | string | undefined
-  ): boolean {
-    const newEpoch = MirroringSyncUtils.mirrorMetricsUpdatedAtToEpoch(metricsUpdatedAt);
-    const latestEpoch = MirroringSyncUtils.mirrorMetricsUpdatedAtToEpoch(latestMetricsUpdatedAt);
-    if (newEpoch !== null && latestEpoch !== null) {
-      return newEpoch >= latestEpoch;
+  static parseSyncBytes(value: number | string | undefined | null): number | null {
+    if (value === undefined || value === null || value === '') {
+      return null;
     }
-    return Boolean(syncTime && syncTime >= latestSyncTime);
+    if (typeof value === 'number') {
+      return Number.isFinite(value) ? value : null;
+    }
+    return new FormatterService().toBytes(String(value).replace(/\s+/g, ''), null);
   }
 
-  static mirrorMetricsUpdatedAtToEpoch(
-    metricsUpdatedAt: number | string | undefined
-  ): number | null {
-    if (metricsUpdatedAt === undefined || metricsUpdatedAt === null || metricsUpdatedAt === '') {
-      return null;
-    }
-    const epoch =
-      typeof metricsUpdatedAt === 'number'
-        ? metricsUpdatedAt
-        : parseFloat(String(metricsUpdatedAt));
-    if (!Number.isFinite(epoch) || epoch <= 0) {
-      return null;
-    }
-    return Math.floor(epoch);
+  static formatSyncBytes(bytes: number): string {
+    return new FormatterService().formatToBinary(bytes, false, 2);
   }
 }

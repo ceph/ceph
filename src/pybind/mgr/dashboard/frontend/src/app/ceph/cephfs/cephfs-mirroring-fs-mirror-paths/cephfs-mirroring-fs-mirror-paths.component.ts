@@ -33,6 +33,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
 
 type SnapshotReplicationStatus = 'in-progress' | 'replicated' | 'pending' | 'failed';
 type SyncStatus = 'syncing' | 'idle' | 'failed' | 'completed';
@@ -137,6 +138,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
   private cdsModalService = inject(ModalCdsService);
   private notificationService = inject(NotificationService);
   private taskWrapper = inject(TaskWrapperService);
+  private relativeDatePipe = inject(RelativeDatePipe);
 
   columns: CdTableColumn[] = [];
   mirrorPaths: MirrorPath[] = [];
@@ -452,7 +454,9 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       lastSyncedSnapshot: peerInfo.last_synced_snap?.name ?? '-',
       lastSyncedTime:
         peerInfo.last_synced_snap?.sync_time_stamp != null
-          ? String(peerInfo.last_synced_snap.sync_time_stamp)
+          ? this.relativeDatePipe.transform(
+              parseFloat(String(peerInfo.last_synced_snap.sync_time_stamp))
+            )
           : undefined,
       snapshotCount: peerInfo.snaps_synced ?? 0,
       pendingSnapshotCount: snapshots.filter(
