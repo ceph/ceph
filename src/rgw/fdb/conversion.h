@@ -25,6 +25,7 @@
 #include <vector>
 #include <cstdint>
 #include <concepts>
+#include <cstring>
 #include <functional>
 #include <string_view>
 #include <type_traits>
@@ -93,6 +94,26 @@ inline void convert(const std::span<const std::uint8_t>& in, OutputFunction& wri
 
 namespace ceph::libfdb::detail {
 
+inline std::string decode_zpp_string_value(const std::span<const std::uint8_t> from)
+{
+ constexpr auto size_prefix = sizeof(zpp::bits::default_size_type);
+
+ if (from.size() < size_prefix) {
+  throw ceph::libfdb::libfdb_exception("unable to decode string value");
+ }
+
+ zpp::bits::default_size_type size = 0;
+ std::memcpy(&size, from.data(), size_prefix);
+
+ if (from.size() - size_prefix != size) {
+  throw ceph::libfdb::libfdb_exception("unable to decode string value");
+ }
+
+ const auto data = reinterpret_cast<const char*>(from.data() + size_prefix);
+
+ return std::string(data, static_cast<std::string::size_type>(size));
+}
+
 template <typename ValueT>
 inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
 {
@@ -110,6 +131,15 @@ inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
   }
 
  return r;
+}
+
+template <>
+inline std::pair<std::string, std::string> to_decoded_kv_pair<std::string>(const FDBKeyValue& kv)
+{
+ return {
+  std::string((const char *)kv.key, static_cast<std::string::size_type>(kv.key_length)),
+  decode_zpp_string_value(std::span<const std::uint8_t>(kv.value, kv.value_length))
+ };
 }
 
 } // namespace ceph::libfdb::detail

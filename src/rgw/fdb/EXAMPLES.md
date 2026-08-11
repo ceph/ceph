@@ -596,15 +596,91 @@ Use `collect()` when a materialized container is exactly what the caller needs:
 auto people = lfdb::collect<person_record>(dbh, q::prefix("person/"));
 ```
 
-### Block Traversal
-
-`blocks()` is useful for reads that may become very large. Given a database
-handle, it internally manages transactions for each planned block/window. Use it
-for very large scans where a single transaction may get too old or block-at-a-time
-processing is preferable.
+Use `for_each()` when the operation is naturally callback-shaped and you do not
+need a composable generator. Passing a transaction handle keeps the transaction
+boundary explicit:
 
 ```cpp
-// Use blocks() when block-at-a-time processing is useful.
+auto txn = lfdb::make_transaction(dbh);
+
+lfdb::for_each(txn, q::prefix("person/"), [](auto&& row) {
+  const auto& [key, value] = row;
+  fmt::println("{}: {}", key, value);
+});
+```
+
+The database-handle overload is a convenience for bounded, retryable work that
+should run in one managed transaction. The callback may run again if the
+transaction is retried, so keep it replay-safe:
+
+```cpp
+lfdb::for_each<person_record>(dbh, q::prefix("person/"), [](auto&& row) {
+  if (row.second.name.empty()) {
+    throw std::runtime_error("stored person has no name");
+  }
+});
+```
+
+Use `transform()` when each input row produces one output value:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+std::vector<std::string> names;
+
+lfdb::transform<person_record>(
+  txn,
+  q::prefix("person/"),
+  [](auto&& row) {
+    return std::move(row.second.name);
+  },
+  std::back_inserter(names));
+```
+
+When the transformed values should be materialized directly, let `transform()`
+return the vector. The transform function is evaluated inside managed
+transaction work, so it should also be replay-safe:
+
+```cpp
+auto names = lfdb::transform<person_record>(
+  dbh,
+  q::prefix("person/"),
+  [](auto&& row) {
+    return std::move(row.second.name);
+  });
+```
+
+Use `erase_if()` when the delete decision depends on the decoded row. It returns
+the number of keys cleared; database-handle predicates are evaluated inside the
+managed transaction loop:
+
+```cpp
+const auto removed = lfdb::erase_if<person_record>(
+  dbh, q::prefix("person/"),
+  [](const auto& row) {
+    return row.second.disabled;
+  });
+```
+
+Selector-shaped scans can also ask for a bounded page. The returned page
+contains only rows the caller requested; the extra sentinel row used to detect
+continuation is not decoded or returned.
+
+```cpp
+auto people = lfdb::select { "person/" };
+const auto page = lfdb::scan<person_record>(dbh, people, lfdb::page{100});
+
+if (page.has_more) {
+  // Resume from the last returned row.
+}
+```
+
+### Block Traversal
+
+`blocks()` is for truly large scans. Given a database handle, it internally
+manages transactions for each planned block/window. Use it when a single
+transaction may get too old or block-at-a-time processing is preferable.
+
+```cpp
 for (const auto& block : lfdb::blocks(dbh, q::prefix("object/metadata/"))) {
   for (const auto& [key, value] : block) {
     fmt::println("{}: {}", key, value);
