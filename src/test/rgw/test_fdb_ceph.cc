@@ -40,6 +40,7 @@
 #include <ranges>
 #include <algorithm>
 #include <execution>
+#include <functional>
 
 using Catch::Matchers::AllMatch;
 
@@ -336,7 +337,7 @@ auto tier_generator(ceph::libfdb::database_handle dbh, ceph::libfdb::select sele
                         auto txn = ceph::libfdb::make_transaction(dbh);
 
                         // ...my libstdc++ lacks std::from_range overloads; the Hard Way(TM) it is:
-                        for(auto&& kvp : ceph::libfdb::pair_generator(txn, selector)) {
+                        for(auto&& kvp : ceph::libfdb::scan(txn, selector)) {
                           out.emplace(kvp);
                         }
 
@@ -628,19 +629,95 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
     require_expected(read_tally, expected_encoded_bytes);
   };
 
-  BENCHMARK_ADVANCED("pair generator read all")(Catch::Benchmark::Chronometer meter) {
+  BENCHMARK_ADVANCED("scan read all")(Catch::Benchmark::Chronometer meter) {
     meter.measure([&] {
       read_tally.reset();
 
       try {
         auto txn = lfdb::make_transaction(dbh);
-        std::ranges::for_each(lfdb::pair_generator(txn, selector), add_kv);
+        std::ranges::for_each(lfdb::scan(txn, selector), add_kv);
       } catch (const ceph::libfdb::libfdb_exception& e) {
         mark_failure(e);
       }
     });
 
     require_expected(read_tally, expected_decoded_bytes);
+  };
+
+  BENCHMARK_ADVANCED("for_each read all")(Catch::Benchmark::Chronometer meter) {
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+        lfdb::for_each(txn, selector, add_kv);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    require_expected(read_tally, expected_decoded_bytes);
+  };
+
+  auto should_erase = [](const auto&) {
+    return true;
+  };
+
+  auto erase_if_manual_loop = [](auto txn, const auto& selector, auto&& pred) {
+    std::size_t removed = 0;
+
+    for (const auto& row : lfdb::scan(txn, selector)) {
+      if (std::invoke(pred, row)) {
+        lfdb::erase(txn, row.first);
+        ++removed;
+      }
+    }
+
+    return removed;
+  };
+
+  BENCHMARK_ADVANCED("erase_if manual loop queues all")(Catch::Benchmark::Chronometer meter) {
+    std::size_t removed = 0;
+
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+        removed = erase_if_manual_loop(txn, selector, should_erase);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    if (not read_tally.ok) {
+      WARN(read_tally.error);
+    }
+
+    REQUIRE(read_tally.ok);
+    REQUIRE(nkeys == removed);
+  };
+
+  BENCHMARK_ADVANCED("erase_if helper queues all")(Catch::Benchmark::Chronometer meter) {
+    std::size_t removed = 0;
+
+    meter.measure([&] {
+      read_tally.reset();
+
+      try {
+        auto txn = lfdb::make_transaction(dbh);
+        removed = lfdb::erase_if(txn, selector, should_erase);
+      } catch (const ceph::libfdb::libfdb_exception& e) {
+        mark_failure(e);
+      }
+    });
+
+    if (not read_tally.ok) {
+      WARN(read_tally.error);
+    }
+
+    REQUIRE(read_tally.ok);
+    REQUIRE(nkeys == removed);
   };
 
   BENCHMARK_ADVANCED("block generator read all")(Catch::Benchmark::Chronometer meter) {

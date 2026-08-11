@@ -228,6 +228,10 @@ concept supported_invocation_result =
   std::constructible_from<std::remove_cvref_t<T>, T> and
   std::move_constructible<std::remove_cvref_t<T>>);
 
+template <typename T>
+concept storable_invocation_result =
+ not std::is_void_v<T> and supported_invocation_result<T>;
+
 } // namespace ceph::libfdb::concepts
 
 // libfdb_exception represents libfdb operation failures.

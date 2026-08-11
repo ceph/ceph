@@ -18,6 +18,7 @@
 #include "conversion.h"
 
 #include <tuple>
+#include <limits>
 
 namespace ceph::libfdb {
 
@@ -838,10 +839,7 @@ inline auto intervals(const QueryT& query)
 template <typename AssocT, typename RangeT>
 inline AssocT collect_range(RangeT&& range)
 {
- AssocT out;
- std::ranges::copy(std::forward<RangeT>(range),
-                   std::inserter(out, std::end(out)));
- return out;
+ return ceph::util::collect_as<AssocT>(std::forward<RangeT>(range));
 }
 
 template <typename ValueT = std::string>
@@ -881,7 +879,7 @@ inline auto scan(ceph::libfdb::transaction_handle txn, SelectionT selection)
  }
 }
 
-// Legacy name retained for compatibility:
+// Compatibility name retained for existing callers:
 template <typename ValueT = std::string,
           query::expression SelectionT>
 inline auto pair_generator(ceph::libfdb::transaction_handle txn,
@@ -891,22 +889,263 @@ inline auto pair_generator(ceph::libfdb::transaction_handle txn,
  return scan<ValueT>(txn, std::move(selection));
 }
 
-// Note: blocks() uses split planning to tackle large sets; use scan(txn, ...)
-// for direct scans in a caller-owned transaction.
-//
-// What blocks() gives you:
-// - avoids one huge transaction getting too old
-// - gives caller block-at-a-time processing
-// - can bound memory and transaction duration better than a monolithic scan
-//
-// Note: blocks() was originally parallel, and could be again, but preliminary
-// benchmarking showed it to be a significant performance impediment. The
-// database must be truly large to see benefits.
-//
-// Note: This is meant to be straightforward and easy-to-understand-- hence, there's not
-// a recovery strategy or other things (you can replay the entire query)-- as new needs arise, this
-// can be made more flexible via selector options, dynamic range-splitting, etc., but so far there
-// has been no need:
+struct page final
+{
+ static constexpr uint64_t max_size =
+  static_cast<uint64_t>(std::numeric_limits<int>::max()) - 1;
+
+ // FDB range limit convention: 0 means unlimited.
+ uint64_t size = 0;
+
+ constexpr page() noexcept = default;
+
+ explicit constexpr page(uint64_t size_)
+  : size(size_)
+ {
+  if (max_size < size) {
+   throw libfdb_exception("page size exceeds FoundationDB range limit");
+  }
+ }
+};
+
+template <typename RowT>
+struct page_result final
+{
+ std::vector<RowT> rows;
+ bool has_more = false;
+
+ auto begin() noexcept { return std::begin(rows); }
+ auto begin() const noexcept { return std::begin(rows); }
+ auto end() noexcept { return std::end(rows); }
+ auto end() const noexcept { return std::end(rows); }
+
+ bool empty() const noexcept
+ {
+  return std::empty(rows);
+ }
+
+ std::size_t size() const noexcept
+ {
+  return std::size(rows);
+ }
+};
+
+namespace detail {
+
+inline int range_limit_for(page p)
+{
+ if (0 == p.size) {
+  return 0;
+ }
+
+ return static_cast<int>(p.size + 1);
+}
+
+template <typename ValueT>
+using row_t = std::pair<std::string, ValueT>;
+
+template <typename ValueT, typename FnT>
+using row_transform_result_t =
+ std::invoke_result_t<FnT&, row_t<ValueT>&&>;
+
+template <typename FnT, typename ValueT>
+concept row_invocable = std::invocable<FnT&, row_t<ValueT>&&>;
+
+template <typename PredT, typename ValueT>
+concept row_predicate = std::predicate<PredT&, const row_t<ValueT>&>;
+
+} // namespace detail
+
+template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+requires detail::row_invocable<FnT, ValueT>
+inline void for_each(ceph::libfdb::transaction_handle txn,
+                     SelectionT selection,
+                     FnT&& fn)
+{
+ for (auto&& row : scan<ValueT>(std::move(txn), std::move(selection))) {
+  std::invoke(fn, std::move(row));
+ }
+}
+
+// Database-handle functional helpers run inside the managed transaction loop.
+// Keep callbacks replay-safe; use an explicit transaction for side effects that
+// must not be repeated.
+template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+requires detail::row_invocable<FnT, ValueT>
+inline void for_each(ceph::libfdb::database_handle dbh,
+                     SelectionT selection,
+                     FnT&& fn)
+{
+ detail::in_transaction(dbh,
+  [selection = std::move(selection), fn = std::forward<FnT>(fn)](auto& txn) mutable {
+   for_each<ValueT>(txn, selection, fn);
+  });
+}
+
+template <typename ValueT = std::string,
+          typename FnT,
+          typename OutIterT,
+          query::expression SelectionT>
+requires detail::row_invocable<FnT, ValueT> &&
+         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> &&
+         std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
+inline OutIterT transform(ceph::libfdb::transaction_handle txn,
+                          SelectionT selection,
+                          FnT&& fn,
+                          OutIterT out)
+{
+ for_each<ValueT>(std::move(txn), std::move(selection),
+                  [&fn, &out](auto&& row) mutable {
+                   *out++ = std::invoke(fn, std::move(row));
+                  });
+
+ return out;
+}
+
+template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+requires detail::row_invocable<FnT, ValueT> &&
+         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+[[nodiscard]] auto transform(ceph::libfdb::transaction_handle txn,
+                             SelectionT selection,
+                             FnT&& fn)
+{
+ using result_t =
+  std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>;
+
+ std::vector<result_t> out;
+ transform<ValueT>(std::move(txn), std::move(selection),
+                   std::forward<FnT>(fn), std::back_inserter(out));
+
+ return out;
+}
+
+template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
+requires detail::row_invocable<FnT, ValueT> &&
+         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
+[[nodiscard]] auto transform(ceph::libfdb::database_handle dbh,
+                             SelectionT selection,
+                             FnT&& fn)
+{
+ return detail::in_transaction(dbh,
+  [selection = std::move(selection), fn = std::forward<FnT>(fn)](auto& txn) mutable {
+   return transform<ValueT>(txn, selection, fn);
+  });
+}
+
+template <typename ValueT = std::string,
+          typename FnT,
+          typename OutIterT,
+          query::expression SelectionT>
+requires detail::row_invocable<FnT, ValueT> &&
+         concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>> &&
+         std::output_iterator<OutIterT, detail::row_transform_result_t<ValueT, FnT>>
+inline OutIterT transform(ceph::libfdb::database_handle dbh,
+                          SelectionT selection,
+                          FnT&& fn,
+                          OutIterT out)
+{
+ auto transformed = transform<ValueT>(dbh, std::move(selection),
+                                      std::forward<FnT>(fn));
+
+ for (auto& value : transformed) {
+  *out++ = std::move(value);
+ }
+
+ return out;
+}
+
+template <typename ValueT = std::string, typename PredT, query::expression SelectionT>
+requires detail::row_predicate<PredT, ValueT>
+inline std::size_t erase_if(ceph::libfdb::transaction_handle txn,
+                            SelectionT selection,
+                            PredT&& pred)
+{
+ std::size_t removed = 0;
+
+ for (const auto& row : scan<ValueT>(txn, std::move(selection))) {
+  if (std::invoke(pred, row)) {
+   erase(txn, row.first);
+   ++removed;
+  }
+ }
+
+ return removed;
+}
+
+template <typename ValueT = std::string, typename PredT, query::expression SelectionT>
+requires detail::row_predicate<PredT, ValueT>
+inline std::size_t erase_if(ceph::libfdb::database_handle dbh,
+                            SelectionT selection,
+                            PredT&& pred)
+{
+ return detail::in_transaction(dbh,
+  [selection = std::move(selection), pred = std::forward<PredT>(pred)](auto& txn) mutable {
+   return erase_if<ValueT>(txn, selection, pred);
+  });
+}
+
+template <std::ranges::input_range RangeT>
+[[nodiscard]] auto collect(RangeT&& rows, page p)
+{
+ using row_type = std::ranges::range_value_t<RangeT>;
+
+ page_result<row_type> out;
+ if (p.size) {
+  out.rows.reserve(p.size);
+ }
+
+ for (auto&& row : rows) {
+  if (p.size && std::size(out.rows) == p.size) {
+   out.has_more = true;
+   break;
+  }
+
+  out.rows.emplace_back(std::forward<decltype(row)>(row));
+ }
+
+ return out;
+}
+
+template <typename ValueT = std::string>
+[[nodiscard]] auto scan(ceph::libfdb::transaction_handle txn,
+                        ceph::libfdb::select selector,
+                        page p)
+{
+ using row_type = std::pair<std::string, ValueT>;
+
+ if (0 == p.size) {
+  return collect(scan<ValueT>(std::move(txn), std::move(selector)), p);
+ }
+
+ selector.options.result_limit = detail::range_limit_for(p);
+ auto window = detail::read_query_window(*txn, selector, 1);
+
+ page_result<row_type> out;
+ out.rows.reserve(p.size);
+ out.has_more = p.size < std::size(window.result_pairs) ||
+                window.more_available;
+
+ for (const auto& raw_pair : window.result_pairs | std::views::take(p.size)) {
+  out.rows.emplace_back(detail::to_decoded_kv_pair<ValueT>(raw_pair));
+ }
+
+ return out;
+}
+
+template <typename ValueT = std::string>
+[[nodiscard]] auto scan(ceph::libfdb::database_handle dbh,
+                        ceph::libfdb::select selector,
+                        page p)
+{
+ return make_transactor(dbh)([selector = std::move(selector), p](auto& txn) {
+  return scan<ValueT>(txn, selector, p);
+ });
+}
+
+// blocks() is for truly large scans that benefit from split planning:
+// it trades direct streaming for block-at-a-time processing, bounded
+// transaction windows, and lower risk of one transaction getting too old.
+// Prefer scan(txn, ...) for ordinary caller-owned transaction scans.
 namespace detail {
 
 template <typename ValueT = std::string,
@@ -968,7 +1207,7 @@ auto blocks(ceph::libfdb::database_handle dbh, SelectionT selection)
  }
 }
 
-// Legacy name retained for compatibility:
+// Compatibility name retained for existing callers:
 template <typename ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
