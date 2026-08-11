@@ -408,6 +408,19 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
     new_env.set("HTTP_X_AMZ_CONTENT_SHA256", maybe_payload_hash);
   }
 
+  // So `x-amz-` headers in the `x_meta_map` will be properly signed.
+  meta_map_t& meta_map = new_info.x_meta_map;
+  for (const auto& [k, v] : meta_map) {
+    if (boost::iequals(k, "x-amz-content-sha256")) {
+      continue;
+    }
+    std::string key{"HTTP_"};
+    key.reserve(key.size() + k.size());
+    uppercase_dash_transform(k, std::back_inserter(key), true);
+    new_env.set(std::move(key), v);
+  }
+
+
   int ret = sign_request(dpp, key, region, s, new_env, new_info, nullptr);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to sign request" << dendl;
@@ -419,11 +432,6 @@ int RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const R
   }
 
   for (const auto& kv: new_env.get_map()) {
-    headers.emplace_back(kv);
-  }
-
-  meta_map_t& meta_map = new_info.x_meta_map;
-  for (const auto& kv: meta_map) {
     headers.emplace_back(kv);
   }
 
