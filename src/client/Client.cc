@@ -13999,6 +13999,8 @@ void Client::_ll_register_callbacks(struct ceph_client_callback_args *args)
 		 << " invalidate_dentry_cb " << args->dentry_cb
 		 << " switch_interrupt_cb " << args->switch_intr_cb
 		 << " remount_cb " << args->remount_cb
+		 << " umask_cb " << args->umask_cb
+		 << " ino_release_cb " << args->ino_release_cb
 		 << dendl;
   callback_handle = args->handle;
   if (args->ino_cb) {
