@@ -39,6 +39,18 @@ std::shared_ptr<arrow::Schema> build_inventory_schema(const FieldSelection& sel)
     fields.push_back(arrow::field("replication_status", arrow::utf8()));
   if (sel.encryption_status)
     fields.push_back(arrow::field("encryption_status", arrow::utf8()));
+  if (sel.object_lock_retain_until_date)
+    fields.push_back(arrow::field(
+      "object_lock_retain_until_date",
+      arrow::timestamp(arrow::TimeUnit::MILLI, "UTC")));
+  if (sel.object_lock_mode)
+    fields.push_back(arrow::field("object_lock_mode", arrow::utf8()));
+  if (sel.object_lock_legal_hold_status)
+    fields.push_back(arrow::field("object_lock_legal_hold_status", arrow::utf8()));
+  if (sel.intelligent_tiering_access_tier)
+    fields.push_back(arrow::field("intelligent_tiering_access_tier", arrow::utf8()));
+  if (sel.bucket_key_status)
+    fields.push_back(arrow::field("bucket_key_status", arrow::utf8()));
 
   return arrow::schema(std::move(fields));
 }
@@ -50,10 +62,13 @@ struct ParquetInventoryWriter::Impl {
 
   // column builders (only the selected ones are used)
   arrow::StringBuilder bucket, key, version_id, etag, storage_class,
-                       replication_status, encryption_status;
+                       replication_status, encryption_status,
+                       object_lock_mode, object_lock_legal_hold_status,
+                       intelligent_tiering_access_tier, bucket_key_status;
   arrow::BooleanBuilder is_latest, is_delete_marker, is_multipart;
   arrow::Int64Builder size;
   std::unique_ptr<arrow::TimestampBuilder> last_modified;
+  std::unique_ptr<arrow::TimestampBuilder> object_lock_retain_until_date;
   int64_t pending = 0;
 };
 
@@ -82,6 +97,11 @@ ParquetInventoryWriter::ParquetInventoryWriter(
 
   if (sel_.last_modified) {
     impl_->last_modified = std::make_unique<arrow::TimestampBuilder>(
+        arrow::timestamp(arrow::TimeUnit::MILLI, "UTC"),
+        arrow::default_memory_pool());
+  }
+  if (sel_.object_lock_retain_until_date) {
+    impl_->object_lock_retain_until_date = std::make_unique<arrow::TimestampBuilder>(
         arrow::timestamp(arrow::TimeUnit::MILLI, "UTC"),
         arrow::default_memory_pool());
   }
@@ -124,6 +144,19 @@ void ParquetInventoryWriter::append(const InventoryEntry& e)
                               append_opt(im.replication_status, e.replication_status);
   if (sel_.encryption_status)
                               append_opt(im.encryption_status, e.encryption_status);
+  if (sel_.object_lock_retain_until_date)
+                              append_opt(*im.object_lock_retain_until_date,
+                                         e.object_lock_retain_until_date_ms);
+  if (sel_.object_lock_mode)
+                              append_opt(im.object_lock_mode, e.object_lock_mode);
+  if (sel_.object_lock_legal_hold_status)
+                              append_opt(im.object_lock_legal_hold_status,
+                                         e.object_lock_legal_hold_status);
+  if (sel_.intelligent_tiering_access_tier)
+                              append_opt(im.intelligent_tiering_access_tier,
+                                         e.intelligent_tiering_access_tier);
+  if (sel_.bucket_key_status)
+                              append_opt(im.bucket_key_status, e.bucket_key_status);
 
   ++im.pending;
   ++total_rows_;
@@ -157,6 +190,11 @@ void ParquetInventoryWriter::flush_row_group()
   if (sel_.is_multipart_uploaded) finish(im.is_multipart);
   if (sel_.replication_status)    finish(im.replication_status);
   if (sel_.encryption_status)     finish(im.encryption_status);
+  if (sel_.object_lock_retain_until_date) finish(*im.object_lock_retain_until_date);
+  if (sel_.object_lock_mode)              finish(im.object_lock_mode);
+  if (sel_.object_lock_legal_hold_status) finish(im.object_lock_legal_hold_status);
+  if (sel_.intelligent_tiering_access_tier) finish(im.intelligent_tiering_access_tier);
+  if (sel_.bucket_key_status)             finish(im.bucket_key_status);
 
   auto table = arrow::Table::Make(im.schema, cols, im.pending);
   auto s = im.writer->WriteTable(*table, im.pending);

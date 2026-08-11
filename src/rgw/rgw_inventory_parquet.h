@@ -27,6 +27,11 @@ struct InventoryEntry {
   std::optional<bool> is_multipart_uploaded;
   std::optional<std::string> replication_status;
   std::optional<std::string> encryption_status;
+  std::optional<int64_t> object_lock_retain_until_date_ms;  // epoch millis
+  std::optional<std::string> object_lock_mode;
+  std::optional<std::string> object_lock_legal_hold_status;
+  std::optional<std::string> intelligent_tiering_access_tier;
+  std::optional<std::string> bucket_key_status;
 };
 
 // Which optional fields the inventory configuration selected.
@@ -41,6 +46,11 @@ struct FieldSelection {
   bool is_multipart_uploaded = false;
   bool replication_status = false;
   bool encryption_status = false;
+  bool object_lock_retain_until_date = false;
+  bool object_lock_mode = false;
+  bool object_lock_legal_hold_status = false;
+  bool intelligent_tiering_access_tier = false;
+  bool bucket_key_status = false;
 };
 
 // Builds the Arrow schema matching AWS S3 Inventory parquet output.

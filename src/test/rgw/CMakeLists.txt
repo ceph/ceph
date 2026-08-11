@@ -494,11 +494,18 @@ add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
 
 # unittest_rgw_inventory_parquet
-# Tests for S3 Inventory parquet writer
-# Requires Arrow/Parquet support — gated on the same flags as s3select
 if(WITH_RADOSGW_SELECT_PARQUET OR WITH_RADOSGW_ARROW_FLIGHT)
-  add_catch2_test_rgw(rgw_inventory_parquet)
+  add_executable(unittest_rgw_inventory_parquet
+    test_rgw_inventory_parquet.cc)
+  target_include_directories(unittest_rgw_inventory_parquet
+    SYSTEM PRIVATE
+      "${CMAKE_SOURCE_DIR}/src/rgw"
+      "${CMAKE_BINARY_DIR}/src/arrow/include")
   target_link_libraries(unittest_rgw_inventory_parquet
-    PRIVATE
-      ${ARROW_LIBRARIES})
+    rgw_common
+    ${rgw_libs}
+    Catch2::Catch2WithMain)
+  add_test(NAME unittest_rgw_inventory_parquet
+           COMMAND unittest_rgw_inventory_parquet
+           WORKING_DIRECTORY ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
 endif()

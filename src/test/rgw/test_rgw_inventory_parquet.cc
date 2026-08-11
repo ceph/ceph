@@ -131,11 +131,13 @@ TEST_CASE("write and read back a small inventory", "[inventory][roundtrip]")
   CHECK(table->num_rows() == 100);
   CHECK(table->num_columns() == 6);
 
-  // spot-check key column
+  // spot-check key column — flatten chunks then cast
   int key_idx = table->schema()->GetFieldIndex("key");
   REQUIRE(key_idx >= 0);
-  auto key_col = std::static_pointer_cast<arrow::StringArray>(
-      table->column(key_idx)->chunk(0));
+  auto chunked = table->column(key_idx);
+  auto flat_res = arrow::Concatenate(chunked->chunks());
+  REQUIRE(flat_res.ok());
+  auto key_col = std::static_pointer_cast<arrow::StringArray>(*flat_res);
   CHECK(key_col->GetString(0)  == "prefix/object-0");
   CHECK(key_col->GetString(99) == "prefix/object-99");
 }
