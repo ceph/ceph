@@ -13,7 +13,7 @@ seastar::future<random_block_device::RBMDeviceRef>
 get_rb_device(
   const std::string &device, device_type_t dtype)
 {
-  if (dtype == device_type_t::RANDOM_BLOCK_HDD) {
+  if (dtype == device_type_t::HDD) {
     return seastar::make_ready_future<random_block_device::RBMDeviceRef>(
       std::make_unique<
         random_block_device::RotationalDevice

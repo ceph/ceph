@@ -84,7 +84,7 @@ The following options can be used with ``vstart.sh``.
     Optional.  Specify the type of secondary devices.  When the secondary
     device is slower than main device passed to ``--seastore-devs``, cold
     data on the faster device will be migrated to the slower devices over time.
-    Valid types include ``HDD``, ``SSD``(default), ``ZNS``, and ``RANDOM_BLOCK_SSD``
+    Valid types include ``HDD``, ``SSD``(default) and ``ZBD``.
     Note secondary devices should not be faster than the main device.
 
 To start a cluster with a single Crimson node, run::
@@ -101,7 +101,7 @@ run::
   $ MDS=0 MON=1 OSD=1 MGR=1 taskset -ac '0-95' /ceph/src/vstart.sh --new -x \
   --localhost --without-dashboard --redirect-output --seastore --osd-args \
   "--seastore_max_concurrent_transactions=128 --seastore_cachepin_type=LRU \
-  --seastore_hot_device_type=RANDOM_BLOCK_SSD" --seastore-devs  /dev/nvme0n1 \
+  --seastore_primary_backend_type=RANDOM_BLOCK" --seastore-devs  /dev/nvme0n1 \
   --crimson  --crimson-smp 1 --no-restart
 
 Another SeaStore example::

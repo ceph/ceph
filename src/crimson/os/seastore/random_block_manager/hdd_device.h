@@ -34,7 +34,7 @@ public:
   mount_ret mount() final;
 
   device_type_t get_device_type() const final {
-    return device_type_t::RANDOM_BLOCK_HDD;
+    return device_type_t::HDD;
   }
 
   close_ertr::future<> close() final {

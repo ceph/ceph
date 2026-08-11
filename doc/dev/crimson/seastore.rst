@@ -291,7 +291,8 @@ separated into **Segmented** and **RBM** backend types as follows:
 
   Used for:
 
-  * ``device_type_t::RANDOM_BLOCK_SSD``
+  * ``device_type_t::SSD``
+  * ``device_type_t::HDD``
 
   Preferred for fast NVMe devices where overwrites are efficient enough
   that log structured updates aren't worth the overhead.
@@ -302,25 +303,28 @@ separated into **Segmented** and **RBM** backend types as follows:
 Device Hardware
 ---------------
 
-The following table maps each device_type_t enum value to
-the physical hardware it represents and the backend implementation it uses.
+``backend_type_t`` and ``device_type_t`` are independent. The backend is
+configured directly and picks the interface; the device type describes the
+hardware and picks the driver within that backend.
 
 
 +------------------------------------------+---------------------------+------------------------+
-| Device Type                              | Physical Hardware         | Backend                |
+| Device Type                              | Physical Hardware         | Driver                 |
 +==========================================+===========================+========================+
-| ``HDD``                                  | Spinning disk             | **Segmented**          |
+| ``HDD``                                  | Spinning disk             | ``BlockSegmentManager``|
+|                                          |                           | / ``RotationalDevice`` |
 +------------------------------------------+---------------------------+------------------------+
-| ``SSD``                                  | Conventional SSD / NVMe   | **Segmented**          |
+| ``SSD``                                  | Conventional SSD / NVMe   | ``BlockSegmentManager``|
+|                                          |                           | / ``NVMeBlockDevice``  |
 +------------------------------------------+---------------------------+------------------------+
-| ``ZBD``                                  | ZNS SSD or SMR HDD        | **Segmented**          |
+| ``ZBD``                                  | ZNS SSD or SMR HDD        | ``ZBDSegmentManager``  |
 +------------------------------------------+---------------------------+------------------------+
-| ``RANDOM_BLOCK_SSD``                     | NVMe                      | **Random Block (RBM)** |
+| ``EPHEMERAL_COLD`` / ``EPHEMERAL_MAIN``  | In-memory (test)          | ephemeral              |
 +------------------------------------------+---------------------------+------------------------+
-| ``EPHEMERAL_COLD`` / ``EPHEMERAL_MAIN``  | In-memory (test)          | **Segmented**          |
-+------------------------------------------+---------------------------+------------------------+
-| ``RANDOM_BLOCK_EPHEMERAL``               | In-memory (test)          | **Random Block (RBM)** |
-+------------------------------------------+---------------------------+------------------------+
+
+Where two drivers are listed, the first is used under
+``backend_type_t::SEGMENTED`` and the second under
+``backend_type_t::RANDOM_BLOCK``.
 
 
 .. _journal:

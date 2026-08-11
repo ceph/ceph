@@ -112,7 +112,7 @@ public:
   }
 
   virtual device_type_t get_device_type() const {
-    return device_type_t::RANDOM_BLOCK_SSD;
+    return device_type_t::SSD;
   }
 
   backend_type_t get_backend_type() const final {

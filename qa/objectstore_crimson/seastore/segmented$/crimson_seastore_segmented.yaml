@@ -4,7 +4,7 @@ overrides:
       osd:
         # crimson's osd objectstore option
         osd objectstore: seastore
-        seastore cold device type: RANDOM_BLOCK_HDD
+        seastore cold device type: HDD
         seastore cold backend type: RANDOM_BLOCK
         debug seastore: 20
         debug seastore onode: 20

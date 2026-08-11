@@ -964,9 +964,6 @@ enum class device_type_t : uint8_t {
   ZBD,            // ZNS SSD or SMR HDD
   EPHEMERAL_COLD,
   EPHEMERAL_MAIN,
-  RANDOM_BLOCK_SSD,
-  RANDOM_BLOCK_EPHEMERAL,
-  RANDOM_BLOCK_HDD,
   NUM_TYPES
 };
 
@@ -977,8 +974,8 @@ device_type_t string_to_device_type(std::string type);
 
 enum class backend_type_t : uint8_t {
   NONE,
-  SEGMENTED,    // SegmentManager: SSD, ZBD, HDD
-  RANDOM_BLOCK  // RBMDevice:      RANDOM_BLOCK_SSD
+  SEGMENTED,    // SegmentManager: BlockSegmentManager, ZBDSegmentManager
+  RANDOM_BLOCK  // RBMDevice:      NVMeBlockDevice, RotationalDevice
 };
 
 std::ostream& operator<<(std::ostream& out, backend_type_t);
