@@ -13,6 +13,7 @@
 
 #include "rgw_op.h"
 #include "rgw_common.h"
+#include "rgw_hex.h"
 #include "rgw_acl.h"
 #include "rgw_string.h"
 #include "rgw_http_errors.h"
@@ -840,6 +841,35 @@ std::string calc_hash_sha256_restart_stream(SHA256 **phash)
   *phash = calc_hash_sha256_open_stream();
 
   return hash;
+}
+
+std::string rgw_make_opaque_etag(std::string_view req_id, uint64_t mtime_ns)
+{
+  return fmt::format("mtime-{}-req-{}", mtime_ns,
+                     req_id.empty() ? std::string_view{"0"} : req_id);
+}
+
+void rgw_part_etag_to_digest(std::string_view etag,
+                             char out[CEPH_CRYPTO_MD5_DIGESTSIZE])
+{
+  // Classic S3 part ETag is exactly 32 hex digits. Append and MPU *object*
+  // ETags are "32hex-N". hex_to_buf() returns -EINVAL on the suffix but
+  // still writes the first 16 bytes; callers historically ignored the
+  // error and hashed that prefix. Decode only the leading 32 hex digits
+  // so we keep that behavior.
+  constexpr size_t md5_hex_len = CEPH_CRYPTO_MD5_DIGESTSIZE * 2;
+  if (etag.size() >= md5_hex_len) {
+    const std::string prefix{etag.substr(0, md5_hex_len)};
+    if (hex_to_buf(prefix.c_str(), out, CEPH_CRYPTO_MD5_DIGESTSIZE) ==
+        CEPH_CRYPTO_MD5_DIGESTSIZE) {
+      return;
+    }
+  }
+  // Non-MD5 dashed ETag (e.g. rgw_non_md5_etag "mtime-...-req-..."): not hex.
+  MD5 hash;
+  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
+  hash.Update(reinterpret_cast<const unsigned char*>(etag.data()), etag.size());
+  hash.Final(reinterpret_cast<unsigned char*>(out));
 }
 
 int NameVal::parse()
