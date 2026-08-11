@@ -729,7 +729,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   }
 
   if (sds.empty() && crimson::common::get_conf<bool>(
-        "seastore_logical_bucket_cache_test_stress")) {
+        "seastore_lbc_test_stress")) {
     // lbc test workload enabled while no secondary devices indicated, create one
     std::string path = fmt::format("{}/block.1", root);
     co_await seastar::make_directory(path);

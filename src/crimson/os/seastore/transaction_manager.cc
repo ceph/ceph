@@ -1486,7 +1486,7 @@ TransactionManager::promote_extents_from_disk(
     co_await promote_extent(t, extent);
     size += length;
     if (size >= crimson::common::get_conf<
-        Option::size_t>("seastore_cache_promotion_size")) {
+        Option::size_t>("seastore_lbc_promote_size")) {
       co_return seastar::stop_iteration::yes;
     } else {
       co_return seastar::stop_iteration::no;
@@ -1838,7 +1838,7 @@ TransactionManagerRef make_transaction_manager(
       backend_type, roll_start, roll_size,
       !pure_rbm_backend
         || crimson::common::get_conf<bool>(
-            "seastore_logical_bucket_cache_test_stress")
+            "seastore_lbc_test_stress")
     );
 
   AsyncCleanerRef cleaner;

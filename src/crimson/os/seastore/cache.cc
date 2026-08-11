@@ -37,7 +37,7 @@ Cache::Cache(
       crimson::common::get_conf<Option::size_t>(
         "seastore_data_delta_based_overwrite") > 0),
     force_backref(crimson::common::get_conf<bool>(
-        "seastore_logical_bucket_cache_test_stress")),
+        "seastore_lbc_test_stress")),
     pinboard(create_extent_pinboard(
       crimson::common::get_conf<Option::size_t>(
        "seastore_cachepin_size_pershard"),
