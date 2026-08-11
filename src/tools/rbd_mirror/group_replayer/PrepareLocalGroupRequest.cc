@@ -35,43 +35,6 @@ template <typename I>
 void PrepareLocalGroupRequest<I>::send() {
   dout(10) << "global_group_id: " << m_global_group_id << dendl;
 
-  get_local_group_id();
-}
-
-template <typename I>
-void PrepareLocalGroupRequest<I>::get_local_group_id() {
-  dout(10) << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_group_get_group_id_start(&op, m_global_group_id);
-  m_out_bl.clear();
-  auto comp = create_rados_callback<
-      PrepareLocalGroupRequest<I>,
-      &PrepareLocalGroupRequest<I>::handle_get_local_group_id>(this);
-
-  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void PrepareLocalGroupRequest<I>::handle_get_local_group_id(int r) {
-  dout(10) << "r=" << r << ", global_group_id: " << m_global_group_id << dendl;
-
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_group_get_group_id_finish(
-        &iter, &m_local_group_id);
-  }
-
-  if (r < 0) {
-    if (r != -ENOENT) {
-      derr << "error getting local group id: " << cpp_strerror(r) << dendl;
-    }
-    finish(r);
-    return;
-  }
-
   get_local_group_name();
 }
 
@@ -138,7 +101,8 @@ void PrepareLocalGroupRequest<I>::handle_get_mirror_info(int r) {
   if (r < 0) {
     derr << "failed to retrieve local mirror group info: " << cpp_strerror(r)
          << dendl;
-    finish(r);
+    finish(m_promotion_state == librbd::mirror::PROMOTION_STATE_ERROR ?
+             -ESTALE : r);
     return;
   }
 
@@ -288,6 +252,8 @@ void PrepareLocalGroupRequest<I>::remove_local_group() {
     &PrepareLocalGroupRequest<I>::handle_remove_local_group>(this);
 
   auto req = RemoveLocalGroupRequest<I>::create(m_io_ctx, m_global_group_id,
+                                                m_local_group_id,
+                                                m_mirror_group,
                                                 false, m_work_queue, ctx);
   req->send();
 }
@@ -318,4 +284,3 @@ void PrepareLocalGroupRequest<I>::finish(int r) {
 } // namespace rbd
 
 template class rbd::mirror::group_replayer::PrepareLocalGroupRequest<librbd::ImageCtx>;
-

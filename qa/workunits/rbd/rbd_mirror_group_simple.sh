@@ -3420,6 +3420,57 @@ test_odf_failover_failback()
   check_daemon_running "${secondary_cluster}"
 }
 
+declare -a test_resync_with_missing_group_snap_order_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${group0}" "${image_prefix}" 2)
+
+test_resync_with_missing_group_snap_order_scenarios=1
+
+# This test does the following:
+#
+# 1. enable mirroring and wait for secondary to get ready
+# 2. remove its snap_order OMAP key on the secondary, and
+# 3. verify that group resync recovers successfully.
+test_resync_with_missing_group_snap_order()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local group=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  group_create "${primary_cluster}" "${pool}/${group}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  group_images_add "${primary_cluster}" "${pool}/${group}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}/${group}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group}" 'down+unknown' 0
+
+  # Remove the snapshot order key from the secondary group header.
+  local group_id_before
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group}" group_id_before
+  remove_group_snap_order_key "${secondary_cluster}" "${pool}" "${group_id_before}"
+
+  # Request resync and verify that the group recovers.
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group}"
+
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group}" "${group_id_before}"
+
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
+
+  # tidy up
+  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+}
+
 # test ODF failover/failback sequence
 declare -a test_resync_marker_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'no_change' 3)
 
@@ -4082,6 +4133,7 @@ run_all_tests()
   # TODO this next test is disabled as it fails with incorrect state/description in mirror group status - issue 50
   #run_test_all_scenarios test_enable_mirroring_when_duplicate_image_exists
   run_test_all_scenarios test_odf_failover_failback
+  run_test_all_scenarios test_resync_with_missing_group_snap_order
   run_test_all_scenarios test_resync_marker
   run_test_all_scenarios test_force_promote_before_initial_sync
   run_test_all_scenarios test_image_snapshots_with_group

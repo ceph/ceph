@@ -12,7 +12,6 @@
 #include "librbd/MirroringWatcher.h"
 #include "librbd/Utils.h"
 #include "librbd/group/RemoveImageRequest.h"
-#include "librbd/mirror/GroupGetInfoRequest.h"
 #include "tools/rbd_mirror/image_deleter/TrashMoveRequest.h"
 
 #define dout_context g_ceph_context
@@ -34,43 +33,6 @@ using librbd::util::create_rados_callback;
 
 template <typename I>
 void RemoveLocalGroupRequest<I>::send() {
-  get_local_group_id();
-}
-
-template <typename I>
-void RemoveLocalGroupRequest<I>::get_local_group_id() {
-  dout(10) << dendl;
-
-  librados::ObjectReadOperation op;
-  librbd::cls_client::mirror_group_get_group_id_start(&op, m_global_group_id);
-
-  m_out_bl.clear();
-  auto comp = create_rados_callback<
-      RemoveLocalGroupRequest<I>,
-      &RemoveLocalGroupRequest<I>::handle_get_local_group_id>(this);
-
-  int r = m_io_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void RemoveLocalGroupRequest<I>::handle_get_local_group_id(int r) {
-  dout(10) << "r=" << r << ", global_group_id: " << m_global_group_id << dendl;
-
-  if (r == 0) {
-    auto iter = m_out_bl.cbegin();
-    r = librbd::cls_client::mirror_group_get_group_id_finish(
-        &iter, &m_group_id);
-  }
-
-  if (r < 0) {
-    if (r != -ENOENT) {
-      derr << "error getting local group id: " << cpp_strerror(r) << dendl;
-    }
-    finish(r);
-    return;
-  }
 
   get_local_group_name();
 }
@@ -110,48 +72,6 @@ void RemoveLocalGroupRequest<I>::handle_get_local_group_name(int r) {
   } else if (r < 0) {
     derr << "error getting local group name: " << cpp_strerror(r) << dendl;
     finish(r);
-    return;
-  }
-
-  get_mirror_group();
-}
-
-template <typename I>
-void RemoveLocalGroupRequest<I>::get_mirror_group() {
-  dout(10) << dendl;
-
-  auto ctx = create_context_callback<
-    RemoveLocalGroupRequest<I>,
-    &RemoveLocalGroupRequest<I>::handle_get_mirror_group>(this);
-  auto req = librbd::mirror::GroupGetInfoRequest<I>::create(
-    m_io_ctx, "", m_group_id, &m_mirror_group, &m_promotion_state,
-    ctx);
-  req->send();
-}
-
-template <typename I>
-void RemoveLocalGroupRequest<I>::handle_get_mirror_group(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  if (r < 0) {
-    if (r == -ENOENT) {
-      dout(10) << "group " << m_global_group_id << " is not mirrored" << dendl;
-    } else {
-      derr << "error retrieving mirror info for group "
-           << m_global_group_id << ": " << cpp_strerror(r) << dendl;
-    }
-    finish(r);
-    return;
-  }
-
-  if (m_promotion_state == librbd::mirror::PROMOTION_STATE_PRIMARY) {
-    dout(10) << "group " << m_global_group_id << " is local primary" << dendl;
-    finish(-EPERM);
-    return;
-  } else if (m_promotion_state == librbd::mirror::PROMOTION_STATE_ORPHAN &&
-             !m_resync) {
-    dout(10) << "group " << m_global_group_id << " is orphaned" << dendl;
-    finish(-EPERM);
     return;
   }
 
@@ -330,6 +250,7 @@ void RemoveLocalGroupRequest<I>::handle_remove_image_from_group(int r) {
 
   if (r < 0 && r != -ENOENT) {
     finish(r);
+    return;
   }
 
   move_image_to_trash();
@@ -358,6 +279,7 @@ void RemoveLocalGroupRequest<I>::handle_move_image_to_trash(int r) {
 
   if (r < 0 && r != -ENOENT) {
     finish(r);
+    return;
   }
 
   m_trash_images.erase(m_trash_images.begin());
@@ -482,7 +404,6 @@ void RemoveLocalGroupRequest<I>::handle_notify_mirroring_watcher(int r) {
 
   finish(0);
 }
-
 
 template <typename I>
 void RemoveLocalGroupRequest<I>::finish(int r) {
