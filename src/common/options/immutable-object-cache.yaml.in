@@ -55,21 +55,21 @@ options:
 - name: immutable_object_cache_qos_iops_limit
   type: uint
   level: advanced
-  desc: the desired immutable object cache IO operations limit per second
+  desc: the desired immutable object cache I/O operations limit per second
   default: 0
   services:
   - immutable-object-cache
 - name: immutable_object_cache_qos_iops_burst
   type: uint
   level: advanced
-  desc: the desired burst limit of immutable object cache IO operations
+  desc: the desired burst limit of immutable object cache I/O operations
   default: 0
   services:
   - immutable-object-cache
 - name: immutable_object_cache_qos_iops_burst_seconds
   type: secs
   level: advanced
-  desc: the desired burst duration in seconds of immutable object cache IO operations
+  desc: the desired burst duration in seconds of immutable object cache I/O operations
   default: 1
   services:
   - immutable-object-cache
@@ -77,21 +77,21 @@ options:
 - name: immutable_object_cache_qos_bps_limit
   type: uint
   level: advanced
-  desc: the desired immutable object cache IO bytes limit per second
+  desc: the desired immutable object cache I/O bytes limit per second
   default: 0
   services:
   - immutable-object-cache
 - name: immutable_object_cache_qos_bps_burst
   type: uint
   level: advanced
-  desc: the desired burst limit of immutable object cache IO bytes
+  desc: the desired burst limit of immutable object cache I/O bytes
   default: 0
   services:
   - immutable-object-cache
 - name: immutable_object_cache_qos_bps_burst_seconds
   type: secs
   level: advanced
-  desc: the desired burst duration in seconds of immutable object cache IO bytes
+  desc: the desired burst duration in seconds of immutable object cache I/O bytes
   default: 1
   services:
   - immutable-object-cache

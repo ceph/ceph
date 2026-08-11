@@ -777,7 +777,7 @@ options:
 - name: mds_bal_fragment_interval
   type: int
   level: advanced
-  desc: delay in seconds before interrupting client IO to perform splits
+  desc: delay in seconds before interrupting client I/O to perform splits
   fmt_desc: The delay (in seconds) between a fragment being eligible for split
     or merge and executing the fragmentation change.
   default: 5

@@ -331,7 +331,7 @@ options:
 - name: client_force_lazyio
   type: bool
   level: advanced
-  desc: Should the client force lazy IO?
+  desc: Should the client force lazy I/O?
   default: false
   services:
   - mds_client

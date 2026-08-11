@@ -81,11 +81,11 @@ options:
   type: float
   level: advanced
   default: 0
-  desc: The maximum time (ms) Seastar's reactor IO operations must take.
+  desc: The maximum time (ms) Seastar's reactor I/O operations must take.
         If not set(0 mean not set), defaults to 1.5 * crimson_reactor_task_quota_ms
-  long_desc: The maximum time (ms) Seastar's reactor IO operations must take.
+  long_desc: The maximum time (ms) Seastar's reactor I/O operations must take.
              If not set, defaults to 1.5 * crimson_reactor_task_quota_ms.
-             Increasing this value will allow more IO requests to be dispatched concurrently.
+             Increasing this value will allow more I/O requests to be dispatched concurrently.
   flags:
   - startup
 
@@ -99,7 +99,7 @@ options:
 - name: crimson_osd_scheduler_concurrency
   type: uint
   level: advanced
-  desc: The maximum number concurrent IO operations, 0 for unlimited
+  desc: The maximum number concurrent I/O operations, 0 for unlimited
   default: 0
 
 - name: crimson_osd_stat_interval
@@ -194,7 +194,7 @@ options:
 - name: seastore_journal_iodepth_limit
   type: uint
   level: dev
-  desc: The io depth limit to submit journal records
+  desc: The I/O depth limit to submit journal records
   default: 5
 - name: seastore_journal_batch_preferred_fullness
   type: float
