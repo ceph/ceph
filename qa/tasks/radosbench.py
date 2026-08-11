@@ -113,13 +113,16 @@ def task(ctx, config):
             f'bench',
             f'--concurrent-ios={concurrency}',
         ]
-        osize = config.get('objectsize', 65536)
-        if osize > 0:
-            bench_args.append(f'--object-size={osize}')
 
-        size = ['-b', str(config.get('size', 65536))]
         # If doing a reading run then populate data
-        if runtype != "write":
+        if runtype == "write":
+            osize = config.get('objectsize', 65536)
+            if osize > 0:
+                bench_args.append(f'--object-size={osize}')
+            size = config.get('size', 65536)
+            if size > 0:
+                bench_args.append(f'--block-size={size}')
+        else:
             proc = remote.run(
                 args=[
                     "/bin/sh", "-c",
@@ -134,8 +137,6 @@ def task(ctx, config):
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             wait=True
             )
-            size = []
-            objectsize = []
 
         proc = remote.run(
             args=[
@@ -143,7 +144,6 @@ def task(ctx, config):
                 " ".join([*cmd,
                           *extra_args,
                           *bench_args,
-                          *size,
                           str(config.get('time', 360)),
                           runtype,
                           *write_to_omap,
