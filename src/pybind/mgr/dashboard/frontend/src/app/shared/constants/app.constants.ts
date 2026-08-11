@@ -172,6 +172,7 @@ export class ActionLabelsI18n {
   NFS_EXPORT: string;
   VIEW: string;
   EDIT_GATEWAYS_GROUP: string;
+  SAVE_CHANGES: string;
   constructor() {
     /* Create a new item */
     this.CREATE = $localize`Create`;
@@ -267,6 +268,7 @@ export class ActionLabelsI18n {
     this.NFS_EXPORT = $localize`Create NFS Share`;
     this.VIEW = $localize`View`;
     this.EDIT_GATEWAYS_GROUP = $localize`Edit gateways group`;
+    this.SAVE_CHANGES = $localize`Save changes`;
   }
 }
 

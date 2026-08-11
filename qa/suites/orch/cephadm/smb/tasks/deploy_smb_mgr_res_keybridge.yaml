@@ -1,0 +1,180 @@
+roles:
+# Test is for basic smb deployment & functionality. one node cluster is OK
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - client.0
+# Reserve a host for acting as a domain controller and kmip server
+- - host.b
+  - cephadm.exclude
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+- openssl_keys:
+    kbroot:
+      client: client.0
+      cn: kbroot
+      key-type: rsa:4096
+      install: [client.0, host.b]
+    kmip-server:
+      client: host.b
+      ca: kbroot
+      cn: keybridge
+      add-san: true
+      extended_key_usage: "serverAuth, clientAuth"
+      ca_false_ext: true
+    kmip-client:
+      client: client.0
+      ca: kbroot
+      cn: keybridge-client
+      add-san: true
+      extended_key_usage: "serverAuth, clientAuth"
+      ca_false_ext: true
+- smb.deploy_samba_ad_dc:
+    role: host.b
+- smb.deploy_kmip_container:
+    role: host.b
+    generate:
+      - {what: symmetric, policy: teuthology, bits: 256}
+      - {what: symmetric, policy: teuthology, bits: 256}
+- cephadm:
+    single_host_defaults: true
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create cephfs
+- cephadm.wait_for_service:
+    service: mds.cephfs
+
+- cephadm.shell:
+    host.a:
+      # add subvolgroup & subvolumes for test
+      - cmd: ceph fs subvolumegroup create cephfs smb
+      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs sv2 --group-name=smb --mode=0777
+      - cmd: ceph fs subvolume create cephfs spare1 --group-name=smb --mode=0777
+      # set up smb cluster and shares
+      - cmd: ceph mgr module enable smb
+      # TODO: replace sleep with poll of mgr state?
+      - cmd: sleep 30
+      - cmd: ceph smb apply -i -
+        stdin: |
+          # --- Begin Embedded YAML
+          - resource_type: ceph.smb.tls.credential
+            tls_credential_id: kb-cert-1
+            credential_type: cert
+            value: |
+              {{'cert@kmip-client'|openssl_content|indent(4)}}
+          - resource_type: ceph.smb.tls.credential
+            tls_credential_id: kb-key-1
+            credential_type: key
+            value: |
+              {{'key@kmip-client'|openssl_content|indent(4)}}
+          - resource_type: ceph.smb.tls.credential
+            tls_credential_id: kb-ca-cert-1
+            credential_type: cert
+            value: |
+              {{'cert@kbroot'|openssl_content|indent(4)}}
+          - resource_type: ceph.smb.cluster
+            cluster_id: crypted1
+            auth_mode: active-directory
+            domain_settings:
+              realm: DOMAIN1.SINK.TEST
+              join_sources:
+                - source_type: resource
+                  ref: join1-admin
+            custom_dns:
+              - "{{ctx.samba_ad_dc_ip}}"
+            remote_control:
+              locally_enabled: true
+            keybridge:
+              scopes:
+                - name: kmip
+                  kmip_hosts:
+                    - "{{ctx.kmip_server_ip}}"
+                  kmip_port: 5696
+                  kmip_cert: {ref: kb-cert-1}
+                  kmip_key: {ref: kb-key-1}
+                  kmip_ca_cert: {ref: kb-ca-cert-1}
+            placement:
+              count: 1
+          - resource_type: ceph.smb.join.auth
+            auth_id: join1-admin
+            auth:
+              username: Administrator
+              password: Passw0rd
+          - resource_type: ceph.smb.share
+            cluster_id: crypted1
+            share_id: share1
+            cephfs:
+              volume: cephfs
+              subvolumegroup: smb
+              subvolume: sv1
+              path: /
+              fscrypt_key:
+                scope: kmip
+                name: "1"
+          - resource_type: ceph.smb.share
+            cluster_id: crypted1
+            share_id: share2
+            cephfs:
+              volume: cephfs
+              subvolumegroup: smb
+              subvolume: sv2
+              path: /
+              fscrypt_key:
+                scope: kmip
+                name: "2"
+          # --- End Embedded YAML
+# Wait for the smb service to start
+- cephadm.wait_for_service:
+    service: smb.crypted1
+# Check if shares exist
+- template.exec:
+    host.b:
+      - sleep 30
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/share1 -c ls"
+      - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U DOMAIN1\\\\ckent%1115Rose. //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
+
+- smb.workunit:
+    admin_node: host.a
+    smb_nodes: [host.a]
+    smb_shares:
+      - share1
+      - share2
+    params:
+      kb_fscrypt:
+        cluster_id: crypted1
+        unused_subvolume: "smb/spare1"
+    timeout: 1h
+    clients:
+      client.0:
+        - [default, kb_fscrypt]
+
+- cephadm.shell:
+    host.a:
+      - cmd: ceph smb apply -i -
+        stdin: |
+          # --- Begin Embedded YAML
+          - resource_type: ceph.smb.cluster
+            cluster_id: crypted1
+            intent: removed
+          - resource_type: ceph.smb.join.auth
+            auth_id: join1-admin
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: crypted1
+            share_id: share1
+            intent: removed
+          - resource_type: ceph.smb.share
+            cluster_id: crypted1
+            share_id: share2
+            intent: removed
+          # --- End Embedded YAML
+# Wait for the smb service to be removed
+- cephadm.wait_for_service_not_present:
+    service: smb.crypted1

@@ -18,6 +18,9 @@ endif
 ifneq ($(filter pkg.ceph.crimson,$(DEB_BUILD_PROFILES)),)
   extraopts += -DWITH_CRIMSON=ON
 endif
+ifneq ($(filter pkg.ceph.system-rdkafka,$(DEB_BUILD_PROFILES)),)
+  extraopts += -DWITH_SYSTEM_RDKAFKA=ON
+endif
 
 extraopts += -DWITH_JAEGER=ON
 extraopts += -DWITH_SYSTEM_JERASURE=ON
@@ -54,6 +57,11 @@ endif
 
 ifeq ($(DWZ), false)
 override_dh_dwz:
+else
+override_dh_dwz:
+	# Exclude ceph-osd-crimson, librgw, and radosgw due to excessive debug info (too many DIEs)
+	dh_dwz -Xceph-osd-crimson -Xlibrgw -Xradosgw
+
 endif
 
 # for python3-${pkg} packages

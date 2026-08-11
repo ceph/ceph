@@ -53,6 +53,4 @@ Windows
 ~~~~~~~
 
 For Windows installations, consult this document:
-`Windows installation guide`_.
-
-.. _Windows installation guide: ./windows-install
+:ref:`install-windows`.

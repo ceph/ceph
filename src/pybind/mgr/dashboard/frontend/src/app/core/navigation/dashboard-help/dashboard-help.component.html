@@ -36,11 +36,13 @@
     i18n
     >About</cds-overflow-menu-option
   >
-  <cds-overflow-menu-option
-    (click)="openFeedbackModal()"
-    i18n
-    >Report an issue...</cds-overflow-menu-option
-  >
+  @if (configOptPermission.read) {
+    <cds-overflow-menu-option
+      (click)="openFeedbackModal()"
+      i18n
+      >Report an issue...</cds-overflow-menu-option
+    >
+  }
 </cds-overflow-menu>
 
 <ng-template #customTrigger>

@@ -1,0 +1,43 @@
+@if (selection) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Standalone details"
+        [columns]="4"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+
+      <section class="smb-usersgroups-resource-section cds-mt-5">
+        <h2
+          class="smb-usersgroups-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          Users
+        </h2>
+        <p
+          class="smb-usersgroups-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          Users associated with this standalone resource.
+        </p>
+
+        <cd-table
+          [data]="selection.values?.users"
+          columnMode="flex"
+          [columns]="columns"
+          selectionType="single"
+          [hasDetails]="false"
+        >
+        </cd-table>
+      </section>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No standalone resource found.</cd-alert-panel
+  >
+}

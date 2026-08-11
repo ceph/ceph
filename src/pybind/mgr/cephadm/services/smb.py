@@ -390,10 +390,12 @@ class SMBService(CephService):
         logger.debug(
             'found smb pool in uri [pool=%r, ns=%r]: %r', pool, ns, uri
         )
-        # enhanced caps for smb pools to be used for ctdb mgmt
+        # enhanced caps for smb pools to be used for ctdb mgmt.
+        # scoped to this cluster's own namespace given cluster id acts as
+        # a namespace so that a cluster's samba containers can't read
+        # other clusters' config/join/user objects sharing the same pool.
         return [
-            # TODO - restrict this read access to the namespace too?
-            f'allow r pool={pool}',
+            f'allow r pool={pool} namespace={ns}',
             # the x perm is needed to lock the cluster meta object
             f'allow rwx pool={pool} namespace={ns} object_prefix cluster.meta.',
         ]
@@ -607,20 +609,23 @@ def _to_conf(ext_cluster: SMBExternalCephCluster) -> str:
 
 
 def _to_keyring(ext_cluster: SMBExternalCephCluster) -> str:
-    return '\n'.join(
-        [
-            f'[{ext_cluster.user}]',
-            f'key = {ext_cluster.key}',
-            '',
-        ]
-    )
+    entries = []
+    if ext_cluster.user and ext_cluster.key:
+        entries += [f'[{ext_cluster.user}]', f'key = {ext_cluster.key}', '']
+    if ext_cluster.rgw_user and ext_cluster.rgw_key:
+        entries += [f'[{ext_cluster.rgw_user}]', f'key = {ext_cluster.rgw_key}', '']
+    return '\n'.join(entries)
 
 
 def _hash_ceph_cluster_config(spec: SMBExternalCephCluster) -> str:
-    _fields = ['alias', 'fsid', 'mon_host', 'user', 'key']
+    _fields = ['alias', 'fsid', 'mon_host', 'user', 'key', 'rgw_user', 'rgw_key']
     fdg = hashlib.sha256()
     for field_name in _fields:
-        fdg.update(getattr(spec, field_name, '').encode())
+        value = getattr(spec, field_name, '')
+        # Handle None values explicitly
+        if value is None:
+            value = ''
+        fdg.update(value.encode())
     return f'sha256:{fdg.hexdigest()}'
 
 

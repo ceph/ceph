@@ -2,8 +2,6 @@
 Cloud Sync Module
 =================
 
-.. versionadded:: Mimic
-
 This module syncs zone data to a remote cloud service. The sync is unidirectional; data is not synced back from the
 remote zone. The goal of this module is to enable syncing data to multiple cloud providers. The currently supported
 cloud providers are those that are compatible with AWS (S3).

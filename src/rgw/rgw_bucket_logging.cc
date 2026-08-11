@@ -501,8 +501,12 @@ int log_record(rgw::sal::Driver* driver,
   input.user_agent = s->info.env->get("HTTP_USER_AGENT", "-");
   input.ssl_cipher = s->info.env->get("SSL_CIPHER", "-");
   input.tls_version = s->info.env->get("TLS_VERSION", "-");
-  input.x_amz_id_2 = s->info.x_meta_map.contains("x-amz-id-2") ?
-                       s->info.x_meta_map.at("x-amz-id-2") : "-";
+  if (auto it = s->info.x_meta_map.find("x-amz-id-2");
+      it != s->info.x_meta_map.end()) {
+    input.x_amz_id_2 = it->second;
+  } else {
+    input.x_amz_id_2 = "-";
+  }
   input.http_ret = s->err.http_ret;
   input.err_code = s->err.err_code;
   input.content_length = s->content_length;
@@ -1098,7 +1102,7 @@ int verify_target_bucket_policy(const DoutPrefixProvider* dpp,
     rgw::IAM::Environment env;
     const auto arn_it = env.emplace("aws:SourceArn", std::move(source_bucket_arn));
     const auto acct_it = env.emplace("aws:SourceAccount", std::move(source_account));
-    if (policy.eval(env, ident, rgw::IAM::s3PutObject, target_resource_arn) != rgw::IAM::Effect::Allow) {
+    if (policy.eval(dpp, env, ident, rgw::IAM::s3PutObject, target_resource_arn) != rgw::IAM::Effect::Allow) {
       ldpp_dout(dpp, 1) << "ERROR: logging bucket: '" << target_bucket_id <<
         "' must have a bucket policy that allows logging service principal to put objects in the following resource ARN: '" <<
         target_resource_arn.to_string() << "' from source bucket ARN: '" << arn_it->second <<

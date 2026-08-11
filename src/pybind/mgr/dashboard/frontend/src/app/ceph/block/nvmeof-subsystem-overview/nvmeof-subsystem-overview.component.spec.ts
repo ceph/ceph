@@ -11,7 +11,11 @@ import { NvmeofSubsystemOverviewComponent } from './nvmeof-subsystem-overview.co
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
 import { URLVerbs } from '~/app/shared/constants/app.constants';
 import { SharedModule } from '~/app/shared/shared.module';
-import { NvmeofSubsystem, NvmeofSubsystemInitiator } from '~/app/shared/models/nvmeof';
+import {
+  ALLOW_ALL_HOST,
+  NvmeofSubsystem,
+  NvmeofSubsystemInitiator
+} from '~/app/shared/models/nvmeof';
 
 describe('NvmeofSubsystemOverviewComponent', () => {
   let component: NvmeofSubsystemOverviewComponent;
@@ -188,6 +192,39 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     // has_dhchap_key=true but no initiators with use_dhchap → No authentication
     expect(hostAccessText).toContain('No authentication');
     expect(hostAccessText).toContain('Edit');
+  }));
+
+  it('should show Restrict to specific hosts after allow-all initiator is removed', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    // allow_any_host may lag true after removing "*", but host list no longer includes it
+    const f = await createTestBed([{ nqn: 'nqn.host-1', use_dhchap: false }], {
+      ...mockSubsystem,
+      allow_any_host: true
+    });
+    expect(f.nativeElement.textContent).toContain('Restrict to specific hosts');
+    expect(f.nativeElement.textContent).not.toContain('Allow all hosts');
+  }));
+
+  it('should treat host access as config text, not a success/error health state', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    const f = await createTestBed([{ nqn: 'nqn.host-1', use_dhchap: false }], {
+      ...mockSubsystem,
+      allow_any_host: false
+    });
+    // Both modes are valid configuration — neither should map to a health status icon.
+    expect(f.componentInstance.getHostAccessLabel(false)).toBe('Restrict to specific hosts');
+    expect(f.componentInstance.getHostAccessLabel(true)).toBe('Allow all hosts');
+    expect((f.componentInstance as any).getStatusIcon).toBeUndefined();
+    expect(f.nativeElement.textContent).toContain('Restrict to specific hosts');
+  }));
+
+  it('should show Allow all hosts when synthetic Any initiator is present', fakeAsync(async () => {
+    TestBed.resetTestingModule();
+    const f = await createTestBed([{ nqn: ALLOW_ALL_HOST, use_dhchap: false }], {
+      ...mockSubsystem,
+      allow_any_host: true
+    });
+    expect(f.nativeElement.textContent).toContain('Allow all hosts');
   }));
 
   it('should display Bidirectional when subsystem and host both have keys', fakeAsync(async () => {

@@ -1145,6 +1145,7 @@ COMMAND("osd pool create "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
 	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
+	"name=force_pg_limit,type=CephBool,req=false"
 	"name=yes_i_really_mean_it,type=CephBool,req=false"
 	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
@@ -1342,7 +1343,7 @@ COMMAND("osd pool application rm "
         "removes application <app> metadata key <key> on pool <poolname>",
         "osd", "rw")
 COMMAND("osd pool application get "
-        "name=pool,type=CephPoolname,req=fasle "
+        "name=pool,type=CephPoolname,req=false "
         "name=app,type=CephString,req=false "
         "name=key,type=CephString,req=false",
         "get value of key <key> of application <app> on pool <poolname>",
@@ -1577,6 +1578,10 @@ COMMAND("nvme-gw show"
    " name=group,type=CephString",
    " show nvmeof gateways within (pool, group)",
    "mon", "r")
+
+COMMAND("nvme-gw show-all",
+  " Dump nvmeof gateways for all pools and groups",
+  "mon", "r")
 
 COMMAND("nvme-gw listeners"
 	" name=pool,type=CephString"

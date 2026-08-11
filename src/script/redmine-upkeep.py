@@ -1029,8 +1029,8 @@ class RedmineUpkeep:
     def _transform_set_status_on_merge(self, issue_update):
         """
         Transformation: Updates the status of an issue after its associated PR is merged.
-        If the 'Backports' field contains entries, sets status to 'Pending Backport'.
-        If 'Backports' is empty, sets status to 'Resolved'.
+        If the 'Backport' field contains entries, sets status to 'Pending Backport'.
+        If 'Backport' is empty, sets status to 'Resolved'.
         """
         issue_update.logger.debug("Running _transform_set_status_on_merge")
 
@@ -1054,7 +1054,7 @@ class RedmineUpkeep:
         backports_list = [bp.strip() for bp in (backports_field_value or "").split(',') if bp.strip()]
 
         if backports_list:
-            # If 'Backports' field has entries, move to PENDING_BACKPORT
+            # If 'Backport' field has entries, move to PENDING_BACKPORT
             if current_status_id != REDMINE_STATUS_ID_PENDING_BACKPORT:
                 issue_update.logger.info(f"Backports defined: {backports_list}. Setting status to 'Pending Backport'.")
                 return issue_update.change_field('status_id', REDMINE_STATUS_ID_PENDING_BACKPORT)
@@ -1062,7 +1062,7 @@ class RedmineUpkeep:
                 issue_update.logger.info("Status is already 'Pending Backport'. No change needed.")
                 return False
         else:
-            # If 'Backports' field is empty, move to RESOLVED
+            # If 'Backport' field is empty, move to RESOLVED
             if current_status_id != REDMINE_STATUS_ID_RESOLVED:
                 issue_update.logger.info("No backports defined. Setting status to 'Resolved'.")
 

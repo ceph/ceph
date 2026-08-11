@@ -21,10 +21,14 @@ if(WITH_RADOSGW_AMQP_ENDPOINT)
 endif()
 
 if(WITH_RADOSGW_KAFKA_ENDPOINT)
-  # kafka stub library
-  set(kafka_stub_src
-    kafka_stub.cc)
-  add_library(kafka_stub STATIC ${kafka_stub_src})
+  # kafka stub library — built whenever RGW links against a dynamic
+  # system librdkafka (WITH_SYSTEM_RDKAFKA=ON, or the fallback path
+  # when the bundled submodule is not checked out).
+  if(WITH_SYSTEM_RDKAFKA OR NOT EXISTS "${CMAKE_SOURCE_DIR}/src/librdkafka/CMakeLists.txt")
+    set(kafka_stub_src
+      kafka_stub.cc)
+    add_library(kafka_stub STATIC ${kafka_stub_src})
+  endif()
 endif()
 
 if(WITH_RADOSGW_LUA_PACKAGES)
@@ -141,6 +145,13 @@ add_executable(unittest_rgw_compression
   $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_compression)
 target_link_libraries(unittest_rgw_compression ${rgw_libs})
+
+# unittest_rgw_cache
+add_executable(unittest_rgw_cache
+  test_rgw_cache.cc
+  $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_cache)
+target_link_libraries(unittest_rgw_cache ${rgw_libs})
 
 # unittest_http_manager
 add_executable(unittest_http_manager test_http_manager.cc)
@@ -383,7 +394,7 @@ if(WITH_RADOSGW_RADOS)
 add_executable(ceph_test_rgw_gc_log test_rgw_gc_log.cc $<TARGET_OBJECTS:unit-main>)
 target_include_directories(ceph_test_rgw_gc_log
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
-target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} radostest-cxx)
+target_link_libraries(ceph_test_rgw_gc_log ${rgw_libs} rgw radostest-cxx)
 install(TARGETS ceph_test_rgw_gc_log DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -458,8 +469,10 @@ target_compile_definitions(unittest_rgw_posix_driver PUBLIC LMDB_SAFE_NO_CPP_UTI
 target_include_directories(unittest_rgw_posix_driver
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
-target_link_libraries(unittest_rgw_posix_driver  ${UNITTEST_LIBS}
-  ${rgw_libs} ${LMDB_LIBRARIES})
+target_link_libraries(unittest_rgw_posix_driver
+  ${UNITTEST_LIBS}
+  rgw_a_standalone
+  ${LMDB_LIBRARIES})
 endif(WITH_RADOSGW_POSIX)
 
 if(WITH_RADOSGW_RADOS)

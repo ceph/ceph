@@ -1249,7 +1249,18 @@ class ExternalCephClusterValues(_RBase):
 
     fsid: str
     mon_host: str
-    cephfs_user: CephUserKey
+    cephfs_user: Optional[CephUserKey] = None
+    rgw_user: Optional[CephUserKey] = None
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """Validate that at least one user (cephfs_user or rgw_user) is configured."""
+        if not self.cephfs_user and not self.rgw_user:
+            raise ValueError(
+                'At least one of cephfs_user or rgw_user must be configured'
+            )
 
 
 @resourcelib.resource('ceph.smb.ext.cluster')

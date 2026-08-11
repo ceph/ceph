@@ -1,4 +1,4 @@
-ARG FROM_IMAGE="quay.io/centos/centos:stream9"
+ARG FROM_IMAGE="docker.io/rockylinux/rockylinux:10"
 FROM $FROM_IMAGE
 
 # allow FROM_IMAGE to be visible inside this stage

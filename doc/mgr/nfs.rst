@@ -70,13 +70,12 @@ To deploy NFS with a high-availability front-end (virtual IP and load balancer),
 of keepalived and haproxy to provide an high-availability NFS frontend for the NFS
 service.
 
-.. note:: The ingress implementation is not yet complete.  Enabling
-	  ingress will deploy multiple ganesha instances and balance
-	  load across them, but a host failure will not immediately
-	  cause cephadm to deploy a replacement daemon before the NFS
-	  grace period expires.  This high-availability functionality
-	  is expected to be completed by the Quincy release (March
-	  2022).
+.. note:: Enabling ingress provides a stable virtual IP for the NFS
+	  service, failover between hosts if a host fails, and load
+	  distribution across the NFS gateways. Client recovery after a
+	  failover is still subject to the NFS grace period. See
+	  :ref:`cephadm-ha-nfs` for details and additional deployment
+	  options.
 
 For more details, refer :ref:`orchestrator-cli-placement-spec` but keep
 in mind that specifying the placement via a YAML file is not supported.
@@ -389,7 +388,7 @@ Example ``ceph nfs cluster create`` input file:
 
 
 Enable QoS bandwidth control for an NFS Ganesha cluster
-----------------------------------------------------
+-------------------------------------------------------
 
 .. code:: bash
 
@@ -467,7 +466,7 @@ For example::
     $ ceph nfs cluster qos disable bandwidth_control nfs_clust
 
 Enable QoS IOPS control for NFS Ganesha cluster
-----------------------------------------------
+-----------------------------------------------
 
 .. code:: bash
 
@@ -503,7 +502,7 @@ For example::
    with the required parameters as well.
 
 Disable QoS IOPS control for NFS Ganesha cluster
------------------------------------------------
+------------------------------------------------
 
 .. code:: bash
 

@@ -42,13 +42,13 @@ repository and execute the following::
     cd build
     ninja
 
-See `Installing a Build`_ to install a build in user space and `Ceph README.md`_
+See :ref:`install-storage-cluster-build` to install a build in user space and `Ceph README.md`_
 doc for more details on build.
 
 Build Ceph Packages
 ===================
 
-To build packages, you must clone the `Ceph`_ repository. You can create 
+To build packages, you must clone the :ref:`Ceph repository <install-clone-source>`. You can create
 installation packages from the latest code using ``dpkg-buildpackage`` for 
 Debian/Ubuntu or ``rpmbuild`` for the RPM Package Manager.
 
@@ -61,7 +61,7 @@ Advanced Package Tool (APT)
 ---------------------------
 
 To create ``.deb`` packages for Debian/Ubuntu, ensure that you have cloned the 
-`Ceph`_ repository, installed the `Build Prerequisites`_ and installed 
+:ref:`Ceph repository <install-clone-source>`, installed the `Build Prerequisites`_ and installed
 ``debhelper``::
 
 	sudo apt-get install debhelper
@@ -76,7 +76,7 @@ For multi-processor CPUs use the ``-j`` option to accelerate the build.
 RPM Package Manager
 -------------------
 
-To create ``.rpm`` packages, ensure that you have cloned the `Ceph`_ repository,
+To create ``.rpm`` packages, ensure that you have cloned the :ref:`Ceph repository <install-clone-source>`,
 installed the `Build Prerequisites`_ and installed ``rpm-build`` and 
 ``rpmdevtools``::
 
@@ -104,6 +104,4 @@ Build the RPM packages::
 
 For multi-processor CPUs use the ``-j`` option to accelerate the build.
 
-.. _Ceph: ../clone-source
-.. _Installing a Build: ../install-storage-cluster#installing-a-build
 .. _Ceph README.md: https://github.com/ceph/ceph#building-ceph

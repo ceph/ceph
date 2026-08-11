@@ -10,9 +10,9 @@ overrides:
     ceph:
       extra_system_packages:
         rpm:
-        - java
+        - java-21-openjdk-headless
         deb:
-        - default-jre
+        - openjdk-21-jre-headless
   ceph:
     conf:
       global:

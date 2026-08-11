@@ -1,3 +1,4 @@
+import datetime
 import fileinput
 import glob
 import logging
@@ -55,7 +56,7 @@ def is_release_eol(codename):
 
 # project information
 project = 'Ceph'
-copyright = ('2016, Ceph authors and contributors. '
+copyright = (f'2016-{datetime.date.today().year}, Ceph authors and contributors. '
              'Licensed under Creative Commons Attribution Share Alike 3.0 '
              '(CC-BY-SA-3.0)')
 version, codename, release = parse_ceph_release()

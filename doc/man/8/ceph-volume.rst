@@ -24,13 +24,12 @@ Description
 ===========
 
 :program:`ceph-volume` is a single-purpose command line tool to deploy logical
-volumes as OSDs, trying to maintain a similar API to ``ceph-disk`` when
-preparing, activating, and creating OSDs.
+volumes as OSDs. It maintains an API similar to that of the older ``ceph-disk``
+tool when preparing, activating, and creating OSDs.
 
-It deviates from ``ceph-disk`` by not interacting or relying on the udev rules
-that come installed for Ceph. These rules allow automatic detection of
-previously setup devices that are in turn fed into ``ceph-disk`` to activate
-them.
+Unlike ``ceph-disk``, it does not interact with or rely on udev rules. Those
+rules allowed automatic detection of previously set up devices, which were in
+turn fed into ``ceph-disk`` to activate them.
 
 
 Commands

@@ -1,7 +1,11 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <cmath>
+#include <cstdint>
+#include <limits>
 #include <stack>
+#include <vector>
 #include <fcntl.h>
 #include <algorithm>
 #include <sys/time.h>
@@ -109,26 +113,6 @@ std::map<std::string, std::string> decode_snap_metadata(snap_metadata *snap_meta
 
 std::string peer_config_key(const std::string &fs_name, const std::string &uuid) {
   return PEER_CONFIG_KEY_PREFIX + "/" + fs_name + "/" + uuid;
-}
-
-bool get_json_value(const json_spirit::mObject& obj,
-                    const std::string& key,
-                    json_spirit::mValue *val) {
-  auto it = obj.find(key);
-  if (it != obj.end()) {
-    *val = it->second;
-    return true;
-  }
-  return false;
-}
-
-double monotime_to_double(monotime t) {
-  return sec_duration(t.time_since_epoch()).count();
-}
-
-monotime monotime_from_double(double seconds) {
-  auto d = std::chrono::duration_cast<clock::duration>(sec_duration(seconds));
-  return monotime(d);
 }
 
 struct C_PersistSyncStatAio : Context {
@@ -544,13 +528,7 @@ void PeerReplayer::update_directory_last_sync_perf_counters(
             sync_stat.last_sync_duration ?
               static_cast<uint64_t>(*sync_stat.last_sync_duration) : 0);
 
-  utime_t t;
-  if (!clock::is_zero(sync_stat.last_synced)) {
-    t.set_from_double(monotime_to_double(sync_stat.last_synced));
-  } else {
-    t = utime_t();
-  }
-  perf->tset(l_cephfs_mirror_directory_last_sync_timestamp, t);
+  perf->tset(l_cephfs_mirror_directory_last_sync_timestamp, sync_stat.last_synced);
 
   perf->set(l_cephfs_mirror_directory_last_sync_bytes,
             sync_stat.last_sync_bytes ? *sync_stat.last_sync_bytes : 0);
@@ -800,52 +778,75 @@ void PeerReplayer::remove_directory(string_view dir_root, bool purging) {
   }
 }
 
+std::string PeerReplayer::sync_stat_omap_prefix(const Filesystem &filesystem) {
+  return CEPHFS_MIRROR_SYNC_STAT_OMAP_PREFIX + "/" + filesystem.fs_name + "/";
+}
+
+std::string PeerReplayer::sync_stat_omap_prefix(const Filesystem &filesystem,
+                                                const Peer &peer) {
+  return sync_stat_omap_prefix(filesystem) + peer.uuid + "/";
+}
+
 std::string PeerReplayer::peer_sync_stat_omap_key(std::string_view dir_root) const {
   // dir_root is usually absolute (e.g. "/d0"); avoid ".../uuid//d0" from an extra slash.
   std::string d(dir_root);
   while (!d.empty() && d.front() == '/') {
     d.erase(0, 1);
   }
-  return PEER_SYNC_STAT_KEY_PREFIX + "/" + m_filesystem.fs_name + "/" + m_peer.uuid
-         + "/" + d;
+  return sync_stat_omap_prefix(m_filesystem, m_peer) + d;
 }
 
 void PeerReplayer::apply_persisted_dir_sync_stat(SnapSyncStat &sync_stat,
                                                  const bufferlist &bl) {
-  json_spirit::mValue root;
-  if (!json_spirit::read(bl.to_str(), root) || root.type() != json_spirit::obj_type) {
-    return;
-  }
+  try {
+    json_spirit::mValue root;
+    if (!json_spirit::read(bl.to_str(), root) || root.type() != json_spirit::obj_type) {
+      return;
+    }
 
-  auto &obj = root.get_obj();
-  json_spirit::mValue v;
+    auto &obj = root.get_obj();
+    json_spirit::mValue v;
 
-  if (get_json_value(obj, "last_synced_snap", &v) && v.type() == json_spirit::obj_type) {
-    auto &last_synced_snap = v.get_obj();
-    if (get_json_value(last_synced_snap, "id", &v)) {
-      uint64_t snap_id = v.get_uint64();
-      if (get_json_value(last_synced_snap, "name", &v)) {
-        sync_stat.last_synced_snap = std::make_pair(snap_id, v.get_str());
+    // Copy the object out of v before reading nested fields. get_json_value()
+    // would otherwise overwrite v and leave a dangling reference into its Object.
+    if (get_json_value(obj, "last_synced_snap", &v) && v.type() == json_spirit::obj_type) {
+      const json_spirit::mObject last_synced_snap = v.get_obj();
+      uint64_t snap_id;
+      std::string snap_name;
+      if (get_json_uint64(last_synced_snap, "id", &snap_id) &&
+          get_json_string(last_synced_snap, "name", &snap_name)) {
+        sync_stat.last_synced_snap = std::make_pair(snap_id, snap_name);
+      }
+      double value;
+      if (get_json_real(last_synced_snap, "crawl_duration", &value)) {
+        sync_stat.last_sync_crawl_duration = value;
+      }
+      if (get_json_real(last_synced_snap, "datasync_queue_wait_duration", &value)) {
+        sync_stat.last_sync_datasync_queue_wait_duration = value;
+      }
+      if (get_json_real(last_synced_snap, "sync_duration", &value)) {
+        sync_stat.last_sync_duration = value;
+      }
+      if (get_json_real(last_synced_snap, "sync_time_stamp", &value)) {
+        // set_from_double() casts into __u32; reject non-finite / out-of-range.
+        if (std::isfinite(value) &&
+            value >= 0.0 &&
+            value <= static_cast<double>(std::numeric_limits<uint32_t>::max())) {
+          sync_stat.last_synced.set_from_double(value);
+        } else {
+          derr << ": persisted sync_time_stamp out of range; ignoring" << dendl;
+        }
+      }
+      uint64_t uval;
+      if (get_json_uint64(last_synced_snap, "sync_bytes", &uval)) {
+        sync_stat.last_sync_bytes = uval;
+      }
+      if (get_json_uint64(last_synced_snap, "sync_files", &uval)) {
+        sync_stat.last_sync_files = uval;
       }
     }
-    if (get_json_value(last_synced_snap, "crawl_duration", &v)) {
-      sync_stat.last_sync_crawl_duration = v.get_real();
-    }
-    if (get_json_value(last_synced_snap, "datasync_queue_wait_duration", &v)) {
-      sync_stat.last_sync_datasync_queue_wait_duration = v.get_real();
-    }
-    if (get_json_value(last_synced_snap, "sync_duration", &v)) {
-      sync_stat.last_sync_duration = v.get_real();
-    }
-    if (get_json_value(last_synced_snap, "sync_time_stamp", &v)) {
-      sync_stat.last_synced = monotime_from_double(v.get_real());
-    }
-    if (get_json_value(last_synced_snap, "sync_bytes", &v)) {
-      sync_stat.last_sync_bytes = v.get_uint64();
-    }
-    if (get_json_value(last_synced_snap, "sync_files", &v)) {
-      sync_stat.last_sync_files = v.get_uint64();
-    }
+  } catch (const std::exception &e) {
+    derr << ": failed to apply persisted sync stat: " << e.what() << dendl;
   }
 }
 
@@ -1088,9 +1089,9 @@ void PeerReplayer::add_last_sync_metrics_to_persist(json_spirit::mObject &obj,
     if (sync_stat.last_sync_duration) {
       snap["sync_duration"] = json_spirit::mValue(*sync_stat.last_sync_duration);
     }
-    if (!clock::is_zero(sync_stat.last_synced)) {
+    if (!sync_stat.last_synced.is_zero()) {
       snap["sync_time_stamp"] =
-        json_spirit::mValue(monotime_to_double(sync_stat.last_synced));
+        json_spirit::mValue(static_cast<double>(sync_stat.last_synced));
     }
     if (sync_stat.last_sync_bytes) {
       snap["sync_bytes"] =
@@ -2486,7 +2487,7 @@ int PeerReplayer::SnapDiffSync::init_sync() {
 
   ceph_snapdiff_info info;
   r = ceph_open_snapdiff(m_local, m_dir_root.c_str(), ".",
-                         stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), &info);
+                         stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), 0, &info);
   if (r != 0) {
     derr << ": failed to open snapdiff for " << m_dir_root << ": r=" << r << dendl;
     return r;
@@ -2518,7 +2519,7 @@ int PeerReplayer::SnapDiffSync::init_directory(const std::string &epath,
 
     ceph_snapdiff_info info;
     r = ceph_open_snapdiff(m_local, m_dir_root.c_str(), epath.c_str(),
-                           stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), &info);
+                           stringify((*m_prev).first).c_str(), stringify(m_current.first).c_str(), 0, &info);
     if (r != 0) {
       derr << ": failed to open snapdiff for " << m_dir_root << ", r=" << r << dendl;
       return r;
@@ -3839,7 +3840,10 @@ void PeerReplayer::dump_sync_stat(Formatter *f, const SnapSyncStat &sync_stat) {
     }
     if (sync_stat.last_sync_duration) {
       f->dump_string("sync_duration", format_time(*sync_stat.last_sync_duration));
-      f->dump_stream("sync_time_stamp") << sync_stat.last_synced;
+    }
+    if (!sync_stat.last_synced.is_zero()) {
+      // ISO-8601 local time with offset (matches utime_t::localtime / mgr format)
+      f->dump_string("sync_time_stamp", stringify(sync_stat.last_synced));
     }
     if (sync_stat.last_sync_bytes) {
       f->dump_string("sync_bytes", format_bytes(*sync_stat.last_sync_bytes));

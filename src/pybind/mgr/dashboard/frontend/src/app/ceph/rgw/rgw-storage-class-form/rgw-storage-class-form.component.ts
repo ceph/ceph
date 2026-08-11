@@ -64,7 +64,8 @@ import {
   AclType,
   ZoneRequest,
   AllZonesResponse,
-  POOL
+  POOL,
+  FROM_STORAGE_CLASS
 } from '../models/rgw-storage-class.model';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -120,6 +121,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   rgwPools: Pool[];
   zones: any[];
   POOL = POOL;
+  FROM_STORAGE_CLASS = FROM_STORAGE_CLASS;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -631,6 +633,12 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   }
   goToListView() {
     this.router.navigate([`rgw/storage-class`]);
+  }
+
+  navigateCreatePool(): void {
+    this.router.navigate([POOL.PATH], {
+      state: { from: FROM_STORAGE_CLASS, returnUrl: this.router.url }
+    });
   }
 
   getTierTargetByStorageClass(placementTargetInfo: PlacementTarget, storageClass: string) {

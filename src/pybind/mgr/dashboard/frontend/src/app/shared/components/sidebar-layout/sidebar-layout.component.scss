@@ -10,19 +10,24 @@
 }
 
 .sidebar-layout-container {
-  min-height: calc(100vh - (vv.$navbar-height + layout.rem(55px)));
   padding-right: var(--cds-spacing-07);
   background-color: var(--cds-background);
 }
 
 .sidebar-layout-shell {
-  transform: translate(0);
   position: relative;
-  height: 100vh;
+  min-height: 100vh;
 }
 
 .sidebar-layout-nav {
   background-color: var(--cds-layer-03);
+  position: sticky !important;
+  top: 0;
+  height: calc(100vh - vv.$navbar-height);
+  width: layout.rem(272px);
+  float: left;
+  z-index: 10;
+  overflow-y: auto;
 
   .cds--side-nav__icon:not(.cds--side-nav__submenu-chevron) {
     display: none;
@@ -43,15 +48,4 @@
   .cds--pagination {
     background-color: var(--cds-layer-03);
   }
-}
-
-.sidebar-header {
-  padding-left: var(--cds-spacing-05);
-}
-
-.sidebar-header-content {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--cds-spacing-03);
 }

@@ -506,3 +506,360 @@ def test_multi_share_stub_covers_all_rgw_shares(split_handler):
     assert b1opts['ceph_rgw:secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
     assert b2opts['ceph_rgw:access_key'] == 'AUTO_FETCHED_ACCESS_KEY'
     assert b2opts['ceph_rgw:secret_access_key'] == 'AUTO_FETCHED_SECRET_KEY'
+
+
+# ---- External Cluster RGW Share Tests ----
+
+
+def test_external_cluster_rgw_only(thandler):
+    """Test external cluster with RGW user only (no CephFS user)."""
+    ext_cluster = smb.resources.ExternalCephCluster(
+        external_ceph_cluster_id='exo-rgw',
+        cluster=smb.resources.ExternalCephClusterValues(
+            fsid='12345678-1234-1234-1234-123456789abc',
+            mon_host='10.0.1.10:6789',
+            rgw_user=smb.resources.CephUserKey(
+                name='client.rgw.exo',
+                key='AQExternalRGWKey==',
+            ),
+        ),
+    )
+    cluster = _cluster(
+        cluster_id='exo-rgw',
+        auth_mode=smb.enums.AuthMode.USER,
+        external_ceph_cluster=smb.resources.ExternalCephClusterSource(
+            ref='exo-rgw',
+        ),
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Add RGW credential (required for external clusters)
+    credential = smb.resources.RGWCredential(
+        rgw_credential_id='exo-user',
+        user_id='exo-user',
+        access_key_id='EXTERNAL_ACCESS_KEY',
+        secret_access_key='EXTERNAL_SECRET_KEY',
+    )
+    share = smb.resources.Share(
+        cluster_id='exo-rgw',
+        share_id='exo-bucket',
+        name='External Bucket',
+        rgw=smb.resources.RGWStorage(
+            bucket='external-bucket',
+            user_id='exo-user',
+            credential_ref='exo-user',
+        ),
+    )
+
+    rg = thandler.apply([ext_cluster, cluster, credential, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify external cluster was stored
+    assert ('ext_ceph_clusters', 'exo-rgw') in thandler.internal_store.data
+    ext_data = thandler.internal_store.data[('ext_ceph_clusters', 'exo-rgw')]
+    assert (
+        ext_data['cluster']['fsid'] == '12345678-1234-1234-1234-123456789abc'
+    )
+    assert ext_data['cluster']['rgw_user']['name'] == 'client.rgw.exo'
+    assert 'cephfs_user' not in ext_data['cluster']
+
+    # Verify share was created
+    assert ('shares', 'exo-rgw.exo-bucket') in thandler.internal_store.data
+
+    # Verify RGW credential was auto-created
+    assert ('rgw_creds', 'exo-user') in thandler.internal_store.data
+
+
+def test_external_cluster_mixed_users(thandler):
+    """Test external cluster with both CephFS and RGW users."""
+    ext_cluster = smb.resources.ExternalCephCluster(
+        external_ceph_cluster_id='exo-mixed',
+        cluster=smb.resources.ExternalCephClusterValues(
+            fsid='12345678-1234-1234-1234-123456789abc',
+            mon_host='10.0.1.10:6789',
+            cephfs_user=smb.resources.CephUserKey(
+                name='client.fs.exo',
+                key='AQExternalFSKey==',
+            ),
+            rgw_user=smb.resources.CephUserKey(
+                name='client.rgw.exo',
+                key='AQExternalRGWKey==',
+            ),
+        ),
+    )
+    cluster = _cluster(
+        cluster_id='exo-mixed',
+        auth_mode=smb.enums.AuthMode.USER,
+        external_ceph_cluster=smb.resources.ExternalCephClusterSource(
+            ref='exo-mixed',
+        ),
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    cephfs_share = smb.resources.Share(
+        cluster_id='exo-mixed',
+        share_id='fs-share',
+        name='FS Share',
+        cephfs=smb.resources.CephFSStorage(
+            volume='cephfs',
+            path='/data',
+        ),
+    )
+    # Add RGW credential (required for external clusters)
+    credential = smb.resources.RGWCredential(
+        rgw_credential_id='mixed-user',
+        user_id='mixed-user',
+        access_key_id='EXTERNAL_ACCESS_KEY',
+        secret_access_key='EXTERNAL_SECRET_KEY',
+    )
+    rgw_share = smb.resources.Share(
+        cluster_id='exo-mixed',
+        share_id='rgw-share',
+        name='RGW Share',
+        rgw=smb.resources.RGWStorage(
+            bucket='mixed-bucket',
+            user_id='mixed-user',
+            credential_ref='mixed-user',
+        ),
+    )
+
+    rg = thandler.apply(
+        [ext_cluster, cluster, cephfs_share, credential, rgw_share]
+    )
+    assert rg.success, rg.to_simplified()
+
+    # Verify external cluster has both users
+    ext_data = thandler.internal_store.data[
+        ('ext_ceph_clusters', 'exo-mixed')
+    ]
+    assert ext_data['cluster']['cephfs_user']['name'] == 'client.fs.exo'
+    assert ext_data['cluster']['rgw_user']['name'] == 'client.rgw.exo'
+
+    # Verify both shares were created
+    assert ('shares', 'exo-mixed.fs-share') in thandler.internal_store.data
+    assert ('shares', 'exo-mixed.rgw-share') in thandler.internal_store.data
+
+    # Verify RGW credential was auto-created
+    assert ('rgw_creds', 'mixed-user') in thandler.internal_store.data
+
+
+def test_external_cluster_multiple_rgw_shares(thandler):
+    """Test multiple RGW shares on external cluster."""
+    ext_cluster = smb.resources.ExternalCephCluster(
+        external_ceph_cluster_id='exo-multi',
+        cluster=smb.resources.ExternalCephClusterValues(
+            fsid='12345678-1234-1234-1234-123456789abc',
+            mon_host='10.0.1.10:6789',
+            rgw_user=smb.resources.CephUserKey(
+                name='client.rgw.exo',
+                key='AQExternalRGWKey==',
+            ),
+        ),
+    )
+    cluster = _cluster(
+        cluster_id='exo-multi',
+        auth_mode=smb.enums.AuthMode.USER,
+        external_ceph_cluster=smb.resources.ExternalCephClusterSource(
+            ref='exo-multi',
+        ),
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Add RGW credentials (required for external clusters)
+    credential1 = smb.resources.RGWCredential(
+        rgw_credential_id='exo-user-1',
+        user_id='exo-user-1',
+        access_key_id='EXTERNAL_ACCESS_KEY_1',
+        secret_access_key='EXTERNAL_SECRET_KEY_1',
+    )
+    credential2 = smb.resources.RGWCredential(
+        rgw_credential_id='exo-user-2',
+        user_id='exo-user-2',
+        access_key_id='EXTERNAL_ACCESS_KEY_2',
+        secret_access_key='EXTERNAL_SECRET_KEY_2',
+    )
+    share1 = smb.resources.Share(
+        cluster_id='exo-multi',
+        share_id='bucket1',
+        name='Bucket 1',
+        rgw=smb.resources.RGWStorage(
+            bucket='exo-bucket-1',
+            user_id='exo-user-1',
+            credential_ref='exo-user-1',
+        ),
+    )
+    share2 = smb.resources.Share(
+        cluster_id='exo-multi',
+        share_id='bucket2',
+        name='Bucket 2',
+        rgw=smb.resources.RGWStorage(
+            bucket='exo-bucket-2',
+            user_id='exo-user-2',
+            credential_ref='exo-user-2',
+        ),
+    )
+
+    rg = thandler.apply(
+        [ext_cluster, cluster, credential1, credential2, share1, share2]
+    )
+    assert rg.success, rg.to_simplified()
+
+    # Verify both shares were created
+    shares = thandler.share_ids()
+    assert len(shares) == 2
+    assert ('exo-multi', 'bucket1') in shares
+    assert ('exo-multi', 'bucket2') in shares
+
+    # Verify credentials were auto-created for both users
+    assert ('rgw_creds', 'exo-user-1') in thandler.internal_store.data
+    assert ('rgw_creds', 'exo-user-2') in thandler.internal_store.data
+
+
+def test_external_cluster_rgw_credential_isolation(split_handler):
+    """Test RGW credentials on external cluster are properly isolated."""
+    h, pub, priv = split_handler
+
+    ext_cluster = smb.resources.ExternalCephCluster(
+        external_ceph_cluster_id='exo-iso',
+        cluster=smb.resources.ExternalCephClusterValues(
+            fsid='12345678-1234-1234-1234-123456789abc',
+            mon_host='10.0.1.10:6789',
+            rgw_user=smb.resources.CephUserKey(
+                name='client.rgw.exo',
+                key='AQExternalRGWKey==',
+            ),
+        ),
+    )
+    cluster = _cluster(
+        cluster_id='exo-iso',
+        auth_mode=smb.enums.AuthMode.USER,
+        external_ceph_cluster=smb.resources.ExternalCephClusterSource(
+            ref='exo-iso',
+        ),
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Add RGW credential (required for external clusters)
+    credential = smb.resources.RGWCredential(
+        rgw_credential_id='iso-user',
+        user_id='iso-user',
+        access_key_id='EXTERNAL_ACCESS_KEY',
+        secret_access_key='EXTERNAL_SECRET_KEY',
+    )
+    share = smb.resources.Share(
+        cluster_id='exo-iso',
+        share_id='iso-bucket',
+        name='Isolated Bucket',
+        rgw=smb.resources.RGWStorage(
+            bucket='iso-bucket',
+            user_id='iso-user',
+            credential_ref='iso-user',
+        ),
+    )
+
+    rg = h.apply([ext_cluster, cluster, credential, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify credential was auto-created
+    assert ('rgw_creds', 'iso-user') in h.internal_store.data
+
+    # Verify public config has empty credential values
+    pub_cfg = pub['exo-iso', 'config.smb'].get()
+    opts = pub_cfg['shares']['Isolated Bucket']['options']
+    assert opts['ceph_rgw:access_key'] == ''
+    assert opts['ceph_rgw:secret_access_key'] == ''
+
+    # Verify private store has real credential values
+    stub = priv['exo-iso', 'config.smb.rgw'].get()
+    merge_opts = stub['config:merge']['shares']['Isolated Bucket']['options']
+    assert merge_opts['ceph_rgw:access_key'] == 'EXTERNAL_ACCESS_KEY'
+    assert merge_opts['ceph_rgw:secret_access_key'] == 'EXTERNAL_SECRET_KEY'
+
+
+def test_external_cluster_rgw_share_removal(thandler):
+    """Test removing RGW share from external cluster."""
+    ext_cluster = smb.resources.ExternalCephCluster(
+        external_ceph_cluster_id='exo-rm',
+        cluster=smb.resources.ExternalCephClusterValues(
+            fsid='12345678-1234-1234-1234-123456789abc',
+            mon_host='10.0.1.10:6789',
+            rgw_user=smb.resources.CephUserKey(
+                name='client.rgw.exo',
+                key='AQExternalRGWKey==',
+            ),
+        ),
+    )
+    cluster = _cluster(
+        cluster_id='exo-rm',
+        auth_mode=smb.enums.AuthMode.USER,
+        external_ceph_cluster=smb.resources.ExternalCephClusterSource(
+            ref='exo-rm',
+        ),
+        user_group_settings=[
+            smb.resources.UserGroupSource(
+                source_type=smb.resources.UserGroupSourceType.EMPTY,
+            ),
+        ],
+    )
+    # Add RGW credential (required for external clusters)
+    credential = smb.resources.RGWCredential(
+        rgw_credential_id='rm-user',
+        user_id='rm-user',
+        access_key_id='EXTERNAL_ACCESS_KEY',
+        secret_access_key='EXTERNAL_SECRET_KEY',
+    )
+    share = smb.resources.Share(
+        cluster_id='exo-rm',
+        share_id='rm-bucket',
+        name='Remove Bucket',
+        rgw=smb.resources.RGWStorage(
+            bucket='rm-bucket',
+            user_id='rm-user',
+            credential_ref='rm-user',
+        ),
+    )
+
+    # Create the share
+    rg = thandler.apply([ext_cluster, cluster, credential, share])
+    assert rg.success, rg.to_simplified()
+
+    # Verify external cluster and share were created
+    assert ('ext_ceph_clusters', 'exo-rm') in thandler.internal_store.data
+    assert ('shares', 'exo-rm.rm-bucket') in thandler.internal_store.data
+
+    # Remove the share
+    rmshare = smb.resources.RemovedShare(
+        cluster_id='exo-rm',
+        share_id='rm-bucket',
+    )
+    rg = thandler.apply([rmshare])
+    assert rg.success, rg.to_simplified()
+
+    # Verify share was removed
+    shares = thandler.share_ids()
+    assert ('exo-rm', 'rm-bucket') not in shares
+    assert ('shares', 'exo-rm.rm-bucket') not in thandler.internal_store.data
+
+
+def test_external_cluster_no_user_validation(thandler):
+    """Test that external cluster requires at least one user."""
+    # Try to create external cluster values without any users (should fail during validation)
+    with pytest.raises(
+        ValueError, match='At least one of cephfs_user or rgw_user'
+    ):
+        smb.resources.ExternalCephClusterValues(
+            fsid='12345678-1234-1234-1234-123456789abc',
+            mon_host='10.0.1.10:6789',
+        )

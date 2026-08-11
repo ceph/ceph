@@ -22,8 +22,9 @@ describe('RGW roles page', () => {
   beforeEach(() => {
     cy.login();
     accounts.navigateTo();
-    accounts.getExpandCollapseElement(accountName).click();
-    cy.contains('cds-tab-headers button[role="tab"]', 'Roles').click();
+    accounts.getResourcePage(accountName).click();
+    cy.contains('cds-sidenav-item a', /^Roles$/).click();
+    cy.location('hash').should('include', '/roles');
     // Wait for the roles list to render
     cy.get('cd-rgw-account-roles-list').should('exist');
   });

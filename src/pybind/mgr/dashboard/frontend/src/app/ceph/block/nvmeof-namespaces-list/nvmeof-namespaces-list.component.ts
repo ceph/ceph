@@ -82,6 +82,11 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
         prop: 'rbd_pool_name'
       },
       {
+        name: $localize`RADOS Namespace`,
+        prop: 'rados_namespace_name',
+        flexGrow: 1
+      },
+      {
         name: $localize`Image`,
         prop: 'rbd_image_name'
       },
@@ -160,7 +165,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     );
     this.nvmeofStateService.refresh$
       .pipe(takeUntil(this.destroy$))
-      .subscribe(() => this.fetchData());
+      .subscribe(() => this.listNamespaces());
   }
 
   private normalizeAndDedup(
@@ -244,10 +249,6 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
     this.namespaceSubject.next();
   }
 
-  fetchData() {
-    this.listNamespaces();
-  }
-
   private setTableLoading(loading: boolean): void {
     if (this.table) {
       this.table.loadingIndicator = loading;
@@ -263,9 +264,7 @@ export class NvmeofNamespacesListComponent implements OnInit, OnDestroy {
       bodyTemplate: this.deleteTpl,
       itemNames: [namespace.nsid],
       actionDescription: 'delete',
-      bodyContext: {
-        deletionMessage: $localize`Deleting the namespace <strong>${namespace.nsid}</strong> will permanently remove all resources, services, and configurations within it. This action cannot be undone.`
-      },
+      hasAssociatedResources: true,
       submitActionObservable: () =>
         this.taskWrapper
           .wrapTaskAroundCall({

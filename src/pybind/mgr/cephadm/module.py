@@ -34,6 +34,7 @@ from prettytable import PrettyTable
 from ceph.cephadm.images import DefaultImages
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec, OSDType
+from ceph.deployment.hostspec import normalize_hostname
 from ceph.deployment.service_spec import (
     ServiceSpec,
     PlacementSpec,
@@ -143,13 +144,15 @@ def host_exists(hostname_position: int = 1) -> Callable:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             this = args[0]  # self object
-            hostname = args[hostname_position]
+            hostname = normalize_hostname(args[hostname_position])
             if hostname not in this.cache.get_hosts():
                 candidates = ','.join([h for h in this.cache.get_hosts() if h.startswith(hostname)])
                 help_msg = f"Did you mean {candidates}?" if candidates else ""
                 raise OrchestratorError(
                     f"Cannot find host '{hostname}' in the inventory. {help_msg}")
 
+            args = list(args)  # type: ignore
+            args[hostname_position] = hostname
             return func(*args, **kwargs)
         return wrapper
     return inner
@@ -1178,6 +1181,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.offline_watcher.set_hosts(list(set([h for h in hosts_to_watch if h is not None])))
 
     def offline_hosts_remove(self, host: str) -> None:
+        host = normalize_hostname(host)
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
             self._invalidate_all_host_metadata_and_kick_serve(host)
@@ -2354,6 +2358,8 @@ Then run the following:
         :param force: bypass running daemons check
         :param offline: remove offline host
         """
+        original_host = host
+        host = normalize_hostname(host)
 
         # check if host is offline
         host_offline = host in self.offline_hosts
@@ -2422,7 +2428,7 @@ Then run the following:
 
             cmd_args = {
                 'prefix': 'osd crush rm',
-                'name': host
+                'name': original_host
             }
             run_cmd(cmd_args)
 
@@ -2430,7 +2436,7 @@ Then run the following:
             try:
                 self.check_mon_command({
                     'prefix': 'osd crush remove',
-                    'name': host,
+                    'name': original_host,
                 })
             except MonCommandFailed as e:
                 self.log.error(f'Couldn\'t remove host {host} from CRUSH map: {str(e)}')
@@ -2449,6 +2455,7 @@ Then run the following:
 
     @handle_orch_error
     def update_host_addr(self, host: str, addr: str) -> str:
+        host = normalize_hostname(host)
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
         self.ssh.reset_con(host)
@@ -2489,6 +2496,7 @@ Then run the following:
 
     @handle_orch_error
     def remove_host_label(self, host: str, label: str, force: bool = False) -> str:
+        host = normalize_hostname(host)
         # if we remove the _admin label from the only host that has it we could end up
         # removing the only instance of the config and keyring and cause issues
         if not force and label == SpecialHostLabels.ADMIN:
@@ -2548,6 +2556,7 @@ Then run the following:
 
     @handle_orch_error
     def host_ok_to_stop(self, hostname: str) -> str:
+        hostname = normalize_hostname(hostname)
         if hostname not in self.cache.get_hosts():
             raise OrchestratorError(f'Cannot find host "{hostname}"', errno=errno.EINVAL)
 
@@ -2557,6 +2566,49 @@ Then run the following:
 
         self.log.info(msg)
         return msg
+
+    def _set_nvmeof_gateways_admin_state(self, hostname: str, enabled: bool) -> Tuple[List[str], Optional[str]]:
+        """Enable or disable NVMe-oF gateways on a host via nvme-gw admin state commands.
+
+        Returns a tuple of (gateway ids updated, error message if any command failed).
+        """
+        prefix = 'nvme-gw enable' if enabled else 'nvme-gw disable'
+        nvmeof_daemons = self.cache.get_daemons_by_type('nvmeof', host=hostname)
+        if not nvmeof_daemons:
+            return [], None
+
+        updated: List[str] = []
+        errors: List[str] = []
+        for dd in nvmeof_daemons:
+            spec = cast(NvmeofServiceSpec, self.spec_store.all_specs.get(dd.service_name(), None))
+            if not spec:
+                self.log.warning(
+                    f'No nvmeof spec for {dd.name()}: skipping {prefix} during maintenance on {hostname}')
+                continue
+            if not spec.pool or spec.group is None:
+                self.log.warning(
+                    f'nvmeof spec for {dd.service_name()} missing pool/group: '
+                    f'skipping {prefix} during maintenance on {hostname}')
+                continue
+
+            gw_id = f'{utils.name_to_config_section("nvmeof")}.{dd.daemon_id}'
+            cmd = {
+                'prefix': prefix,
+                'id': gw_id,
+                'pool': spec.pool,
+                'group': spec.group,
+            }
+            self.log.info(
+                f'maintenance on {hostname}: {prefix} gateway {gw_id} ({spec.pool}/{spec.group})')
+            rc, _out, err = self.mon_command(cmd)
+            if rc:
+                errors.append(f'{gw_id}: rc={rc} {err}')
+            else:
+                updated.append(gw_id)
+
+        if errors:
+            return updated, '; '.join(errors)
+        return updated, None
 
     def update_maintenance_healthcheck(self) -> None:
         """Raise/update or clear the maintenance health check as needed"""
@@ -2575,9 +2627,10 @@ Then run the following:
         """ Attempt to place a cluster host in maintenance
 
         Placing a host into maintenance disables the cluster's ceph target in systemd
-        and stops all ceph daemons. If the host is an osd host we apply the noout flag
-        for the host subtree in crush to prevent data movement during a host maintenance
-        window.
+        and stops all ceph daemons. NVMe-oF gateways on the host are administratively
+        disabled before daemons are stopped. If the host is an osd host we apply the
+        noout flag for the host subtree in crush to prevent data movement during a
+        host maintenance window.
 
         :param hostname: (str) name of the host (must match an inventory hostname)
 
@@ -2607,6 +2660,19 @@ Then run the following:
             if rc and not yes_i_really_mean_it:
                 raise OrchestratorError(
                     msg + '\nNote: Warnings can be bypassed with the --force flag', errno=rc)
+
+            if 'nvmeof' in host_daemons:
+                _updated, nvmeof_err = self._set_nvmeof_gateways_admin_state(
+                    hostname, enabled=False)
+                if nvmeof_err:
+                    if yes_i_really_mean_it:
+                        self.log.warning(
+                            f"maintenance mode request for {hostname} failed to disable "
+                            f"some NVMe-oF gateways: {nvmeof_err}")
+                    else:
+                        raise OrchestratorError(
+                            f"Unable to disable NVMe-oF gateways on {hostname}: {nvmeof_err}",
+                            errno=errno.EIO)
 
             # call the host-maintenance function
             with self.async_timeout_handler(hostname, 'cephadm host-maintenance enter'):
@@ -2649,8 +2715,8 @@ Then run the following:
         """Exit maintenance mode and return a host to an operational state
 
         Returning from maintenance will enable the clusters systemd target and
-        start it, and remove any noout that has been added for the host if the
-        host has osd daemons
+        start it, re-enable any NVMe-oF gateways on the host, and remove any
+        noout that has been added for the host if the host has osd daemons
 
         :param hostname: (str) host name
         :param force: (bool) force removal of the host from maintenance mode
@@ -2724,6 +2790,18 @@ Then run the following:
                 else:
                     self.log.info(
                         f"exit maintenance request has UNSET for the noout group on host {hostname}")
+
+            if 'nvmeof' in self.cache.get_daemon_types(hostname):
+                _updated, nvmeof_err = self._set_nvmeof_gateways_admin_state(
+                    hostname, enabled=True)
+                if nvmeof_err:
+                    self.log.warning(
+                        f"exit maintenance request for {hostname} failed to enable "
+                        f"some NVMe-oF gateways: {nvmeof_err}")
+                    if not force:
+                        raise OrchestratorError(
+                            f"Unable to enable NVMe-oF gateways on {hostname}: {nvmeof_err}",
+                            errno=errno.EIO)
 
         # update the host record status
         tgt_host['status'] = ""
@@ -3339,9 +3417,10 @@ Then run the following:
             str: output from the zap command
         """
 
+        host = normalize_hostname(host)
         self.log.info('Zap device %s:%s' % (host, path))
 
-        if host not in self.inventory.keys():
+        if host not in self.inventory:
             raise OrchestratorError(
                 f"Host '{host}' is not a member of the cluster")
 
@@ -4805,6 +4884,7 @@ Then run the following:
                        clear: bool = False,
                        yes_i_really_mean_it: bool = False) -> Any:
         output: str = ''
+        hostname = normalize_hostname(hostname)
 
         self.ceph_volume.lvm_list.get_data(hostname=hostname)
 
@@ -4812,7 +4892,7 @@ Then run the following:
             output = self.ceph_volume.clear_replace_header(hostname, device)
         else:
             osds_to_zap: List[str] = []
-            if hostname not in list(self.inventory.keys()):
+            if hostname not in self.inventory:
                 raise OrchestratorError(f'{hostname} invalid host.')
 
             if device not in self.ceph_volume.lvm_list.all_devices():

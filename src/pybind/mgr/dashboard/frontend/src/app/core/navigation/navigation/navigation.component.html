@@ -57,12 +57,16 @@
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-dashboard-help></cd-dashboard-help>
       </div>
-      <div
-        class="cds--btn cds--btn--icon-only cds--header__action"
-        *ngIf="permissions.user.read"
-      >
-        <cd-administration></cd-administration>
-      </div>
+      @if (
+        permissions.user.create ||
+        permissions.user.update ||
+        permissions.user.delete ||
+        permissions.configOpt.read
+      ) {
+        <div class="cds--btn cds--btn--icon-only cds--header__action tc_administration">
+          <cd-administration></cd-administration>
+        </div>
+      }
       <div class="cds--btn cds--btn--icon-only cds--header__action">
         <cd-identity></cd-identity>
       </div>

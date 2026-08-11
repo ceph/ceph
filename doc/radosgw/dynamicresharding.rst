@@ -4,8 +4,6 @@
 RGW Dynamic Bucket Index Resharding
 ===================================
 
-.. versionadded:: Luminous
-
 A bucket index object with too many entries can lead to performance
 problems. This can be addressed by resharding bucket indexes.  Until
 Luminous, changing the number of bucket shards (resharding) could only

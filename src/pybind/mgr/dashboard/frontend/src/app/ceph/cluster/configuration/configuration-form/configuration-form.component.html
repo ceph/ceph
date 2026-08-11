@@ -143,118 +143,158 @@
           </div>
 
           @for (section of availSections; track section) {
-            @if (type === 'bool') {
-              <div
-                cdsRow
-                class="form-item"
-              >
-                <cds-select
-                  [formControlName]="section"
-                  [label]="section"
-                  [id]="section"
-                  [labelInputID]="section"
-                  cdValidate
-                  #sectionValidate="cdValidate"
-                  [invalid]="sectionValidate.isInvalid"
-                  [invalidText]="sectionErrors"
-                >
-                  <option
-                    [ngValue]="null"
-                    i18n
-                  >
-                    -- Default --
-                  </option>
-                  <option
-                    [ngValue]="true"
-                    i18n
-                  >
-                    true
-                  </option>
-                  <option
-                    [ngValue]="false"
-                    i18n
-                  >
-                    false
-                  </option>
-                </cds-select>
-                <ng-template #sectionErrors>
-                  <ng-container
-                    *ngTemplateOutlet="
-                      validationErrors;
-                      context: { control: configForm.get(section) }
-                    "
-                  ></ng-container>
-                </ng-template>
-              </div>
-            }
+            <div
+              cdsRow
+              class="form-item"
+            >
+              <ng-container
+                *ngTemplateOutlet="
+                  configFieldTemplate;
+                  context: {
+                    controlName: section,
+                    label: section,
+                    id: section,
+                    control: configForm.get('values')?.get(section)
+                  }
+                "
+              ></ng-container>
+            </div>
+          }
+        </div>
 
-            @if (type !== 'bool' && inputType === 'number') {
-              <div
-                cdsRow
-                class="form-item"
-              >
-                <cds-number
-                  [formControlName]="section"
-                  [label]="section"
-                  [id]="section"
-                  [step]="getStep(type, configForm.getValue(section))"
-                  [min]="minValue"
-                  [max]="maxValue"
-                  cdValidate
-                  #sectionValidate="cdValidate"
-                  [invalid]="sectionValidate.isInvalid"
-                  [invalidText]="sectionErrors"
-                >
-                </cds-number>
-                <ng-template #sectionErrors>
-                  <ng-container
-                    *ngTemplateOutlet="
-                      validationErrors;
-                      context: { control: configForm.get(section) }
-                    "
-                  ></ng-container>
-                </ng-template>
-              </div>
-            }
+        <!-- Client-specific configuration entries -->
+        <div
+          cdsRow
+          class="form-heading cds-mt-4"
+        >
+          <h3 i18n>Client Configuration</h3>
+        </div>
 
-            @if (type !== 'bool' && inputType !== 'number') {
+        <div
+          cdsRow
+          class="form-item"
+        >
+          <p class="cds--type-body-01">
+            <span i18n
+              >Configure this option for specific client entities. Select from the dropdown or enter
+              custom values like
+            </span>
+            <code>client.rgw.my-daemon</code>
+            <span i18n> or </span>
+            <code>client.admin</code>
+            <span i18n>.</span>
+          </p>
+        </div>
+
+        <div formArrayName="clientEntries">
+          @for (entry of clientEntries.controls; track entry; let i = $index) {
+            <div
+              [formGroupName]="i"
+              cdsRow
+              class="cds-mt-6"
+            >
               <div
-                cdsRow
-                class="form-item"
+                cdsCol
+                [columnNumbers]="{ lg: 4 }"
               >
                 <cds-text-label
-                  [labelInputID]="section"
-                  [invalid]="sectionValidate.isInvalid"
-                  [invalidText]="sectionErrors"
+                  [labelInputID]="'client-entity-' + i"
+                  [invalid]="entityValidate.isInvalid"
+                  [invalidText]="entityErrors"
                 >
-                  {{ section }}
+                  <span i18n>Client Entity</span>
                   <input
                     cdsText
                     cdValidate
-                    #sectionValidate="cdValidate"
-                    [type]="inputType"
-                    [id]="section"
-                    [formControlName]="section"
-                    [invalid]="sectionValidate.isInvalid"
+                    #entityValidate="cdValidate"
+                    type="text"
+                    [id]="'client-entity-' + i"
+                    formControlName="clientEntity"
+                    placeholder="e.g., client.rgw.my-daemon, client.admin"
+                    i18n-placeholder
+                    [invalid]="entityValidate.isInvalid"
+                    list="client-entity-datalist"
                   />
                 </cds-text-label>
-                <ng-template #sectionErrors>
+                <datalist id="client-entity-datalist">
+                  @for (option of clientEntityOptions; track option.content) {
+                    <option [value]="option.content">{{ option.content }}</option>
+                  }
+                </datalist>
+                <ng-template #entityErrors>
                   <ng-container
                     *ngTemplateOutlet="
                       validationErrors;
-                      context: { control: configForm.get(section) }
+                      context: { control: entry.get('clientEntity') }
                     "
                   ></ng-container>
                 </ng-template>
               </div>
-            }
+
+              <div
+                cdsCol
+                [columnNumbers]="{ lg: 4 }"
+              >
+                <ng-container
+                  *ngTemplateOutlet="
+                    configFieldTemplate;
+                    context: {
+                      controlName: 'value',
+                      label: 'Value',
+                      id: 'client-value-' + i,
+                      control: entry.get('value')
+                    }
+                  "
+                ></ng-container>
+              </div>
+
+              <div
+                cdsCol
+                class="item-action-btn"
+              >
+                <cds-icon-button
+                  kind="danger"
+                  size="sm"
+                  description="Remove client entry"
+                  i18n-description
+                  (click)="removeClientEntry(i)"
+                >
+                  <svg
+                    cdsIcon="trash-can"
+                    size="32"
+                    class="cds--btn__icon"
+                  ></svg>
+                </cds-icon-button>
+              </div>
+            </div>
           }
+
+          <div
+            cdsRow
+            class="cds-mt-6"
+          >
+            <button
+              cdsButton="tertiary"
+              [size]="'md'"
+              type="button"
+              (click)="addClientEntry()"
+              i18n
+            >
+              <svg
+                cdsIcon="add"
+                size="16"
+                class="cds--btn__icon"
+              ></svg>
+              Add Client Entry
+            </button>
+          </div>
         </div>
 
         <div cdsRow>
           <cd-form-button-panel
             (submitActionEvent)="forceUpdate ? openCriticalConfirmModal() : submit()"
             [form]="configForm"
+            [disabled]="configForm.invalid"
             [submitText]="actionLabels.UPDATE"
             wrappingClass="text-right form-button"
           ></cd-form-button-panel>
@@ -264,11 +304,131 @@
   </form>
 </ng-container>
 
+<!-- Reusable template for configuration fields -->
+<ng-template
+  #configFieldTemplate
+  let-controlName="controlName"
+  let-label="label"
+  let-id="id"
+  let-control="control"
+>
+  @if (control) {
+    @if (type === 'bool') {
+      <cds-select
+        [formControl]="control"
+        [label]="label"
+        i18n-label
+        [id]="id"
+        cdValidate
+        #fieldValidate="cdValidate"
+        [invalid]="fieldValidate.isInvalid"
+        [invalidText]="fieldErrors"
+      >
+        <option
+          [ngValue]="null"
+          i18n
+        >
+          -- Default --
+        </option>
+        <option
+          [ngValue]="true"
+          i18n
+        >
+          true
+        </option>
+        <option
+          [ngValue]="false"
+          i18n
+        >
+          false
+        </option>
+      </cds-select>
+      <ng-template #fieldErrors>
+        <ng-container
+          *ngTemplateOutlet="validationErrors; context: { control: control }"
+        ></ng-container>
+      </ng-template>
+    }
+
+    @if (type !== 'bool' && inputType === 'number') {
+      <cds-number
+        [formControl]="control"
+        [label]="label"
+        i18n-label
+        [id]="id"
+        [min]="minValue"
+        [max]="maxValue"
+        [step]="getStep(type, control?.value) ?? 1"
+        cdValidate
+        #fieldValidate="cdValidate"
+        [invalid]="fieldValidate.isInvalid"
+        [invalidText]="fieldErrors"
+      >
+      </cds-number>
+      <ng-template #fieldErrors>
+        <ng-container
+          *ngTemplateOutlet="validationErrors; context: { control: control }"
+        ></ng-container>
+      </ng-template>
+    }
+
+    @if (type !== 'bool' && inputType !== 'number') {
+      <cds-text-label
+        [labelInputID]="id"
+        [invalid]="fieldValidate.isInvalid"
+        [invalidText]="fieldErrors"
+      >
+        <span i18n>{{ label }}</span>
+        <input
+          cdsText
+          cdValidate
+          #fieldValidate="cdValidate"
+          [type]="inputType"
+          [id]="id"
+          [formControl]="control"
+          [invalid]="fieldValidate.isInvalid"
+        />
+      </cds-text-label>
+      <ng-template #fieldErrors>
+        <ng-container
+          *ngTemplateOutlet="validationErrors; context: { control: control }"
+        ></ng-container>
+      </ng-template>
+    }
+  }
+</ng-template>
+
 <ng-template
   #validationErrors
   let-control="control"
 >
   @if (control?.invalid && (control.dirty || control.touched)) {
+    @if (control.hasError('required')) {
+      <div
+        class="invalid-feedback"
+        i18n
+      >
+        This field is required.
+      </div>
+    }
+    @if (control.hasError('clientPrefix')) {
+      <div
+        class="invalid-feedback"
+        i18n
+      >
+        Client entity must start with 'client.' <br />
+        (e.g., client.admin, client.rgw.my-daemon)
+      </div>
+    }
+    @if (control.hasError('clientEntityDuplicate')) {
+      <div
+        class="invalid-feedback"
+        i18n
+      >
+        This client entity is already configured. <br />
+        Each client entity can only be configured once.
+      </div>
+    }
     @if (control.hasError('min')) {
       <span
         class="invalid-feedback"

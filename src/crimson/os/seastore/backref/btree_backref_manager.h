@@ -55,6 +55,11 @@ public:
     Transaction &t,
     scan_mapped_space_func_t &&f) final;
 
+  scan_device_ret scan_device(
+    Transaction &t,
+    paddr_t paddr,
+    scan_device_func_t &f) final;
+
   init_cached_extent_ret init_cached_extent(
     Transaction &t,
     CachedExtentRef e) final;

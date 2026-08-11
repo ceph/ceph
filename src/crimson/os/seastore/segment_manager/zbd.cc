@@ -49,8 +49,8 @@ seastar::future<> ZBDSegmentManager::start(uint32_t shard_nums)
 {
   LOG_PREFIX(ZBDSegmentManager::start);
   device_shard_nums = shard_nums;
-  auto num_shard_services = (device_shard_nums + seastar::smp::count - 1 ) / seastar::smp::count;
-  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::smp::count, num_shard_services);
+  auto num_shard_services = (device_shard_nums + seastar::this_smp_shard_count() - 1 ) / seastar::this_smp_shard_count();
+  INFO("device_shard_nums={} seastar::smp={}, num_shard_services={}", device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
   return shard_devices.start(num_shard_services, device_path);
 
 }
@@ -114,7 +114,7 @@ static device_superblock_t make_metadata(
   size_t segment_size = zone_size;
   size_t zones_per_segment = segment_size / zone_size;
   size_t segments = (num_zones - skipped_zones) / zones_per_segment;
-  size_t per_shard_segments = segments / seastar::smp::count;
+  size_t per_shard_segments = segments / seastar::this_smp_shard_count();
   size_t available_size = zone_capacity * segments;
   size_t per_shard_available_size = zone_capacity * per_shard_segments;
 
@@ -142,8 +142,8 @@ static device_superblock_t make_metadata(
     per_shard_segments,
     per_shard_available_size);
 
-  std::vector<device_shard_info_t> shard_infos(seastar::smp::count);
-  for (unsigned int i = 0; i < seastar::smp::count; i++) {
+  std::vector<device_shard_info_t> shard_infos(seastar::this_smp_shard_count());
+  for (unsigned int i = 0; i < seastar::this_smp_shard_count(); i++) {
     shard_infos[i].size = per_shard_available_size;
     shard_infos[i].segments = per_shard_segments;
     shard_infos[i].first_segment_offset = zone_size * skipped_zones
@@ -153,7 +153,7 @@ static device_superblock_t make_metadata(
   }
 
   auto ret = device_superblock_t::make_zbd(
-    seastar::smp::count,
+    seastar::this_smp_shard_count(),
     segment_size,
     data.block_size,
     std::move(config),
@@ -517,15 +517,15 @@ ZBDSegmentManager::mount_ret ZBDSegmentManager::shard_mount()
     return read_metadata(device, sd);
   }).safe_then([=, this](auto meta){
     LOG_PREFIX(ZBDSegmentManager::shard_mount);
-    if(seastar::this_shard_id() + seastar::smp::count * store_index >= meta.shard_num) {
+    if(seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index >= meta.shard_num) {
       INFO("{} shard_id {} out of range {}",
         device_id_printer_t{get_device_id()},
-        seastar::this_shard_id() + seastar::smp::count * store_index,
+        seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index,
         meta.shard_num);
       shard_status = false;
       return mount_ertr::now();
     }
-    shard_info = meta.shard_infos[seastar::this_shard_id() + seastar::smp::count * store_index];
+    shard_info = meta.shard_infos[seastar::this_shard_id() + seastar::this_smp_shard_count() * store_index];
     metadata = meta;
     return mount_ertr::now();
   });

@@ -3163,7 +3163,7 @@ namespace rgw::dedup {
     case URGENT_MSG_RESTART:
       if (!d_ctl.dedup_exec) {
         // Decode optional filter
-        {
+        try {
           bool has_filter = false;
           ceph::decode(has_filter, bl_iter);
           if (has_filter) {
@@ -3173,7 +3173,12 @@ namespace rgw::dedup {
           else {
             d_filter = dedup_filter_t{};
           }
+        } catch (buffer::error& err) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERROR: bad URGENT_MSG_RESTART" << dendl;
+          cluster::ack_notify(store, dpp, &d_ctl, notify_id, cookie, -EINVAL);
+          return;
         }
+
         d_ctl.remote_restart_req = true;
         d_cond.notify_all();
       }

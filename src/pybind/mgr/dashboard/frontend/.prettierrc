@@ -7,5 +7,6 @@
   "useTabs": false,
   "endOfLine": "lf",
   "singleAttributePerLine": true,
-  "htmlWhitespaceSensitivity": "css"
+  "htmlWhitespaceSensitivity": "css",
+  "plugins": ["prettier-plugin-gherkin"]
 }

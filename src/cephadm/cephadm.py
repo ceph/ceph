@@ -1201,6 +1201,14 @@ def deploy_daemon(
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
     else:
+        # Agent reconfig must apply the same required_files as HTTP config push
+        # (agent.json, keyring, certs). Without this, SSH reconfig only restarts
+        # the unit and leaves a stale target_ip after mgr failover.
+        if daemon_type == CephadmAgent.daemon_type:
+            config_js = fetch_configs(ctx)
+            assert isinstance(config_js, dict)
+            cephadm_agent = CephadmAgent(ctx, ident.fsid, ident.daemon_id)
+            cephadm_agent.write_required_files(config_js)
         # On reconfig, update unit.meta so that port metadata
         # stays current without requiring a full redeploy.
         meta_path = os.path.join(data_dir, 'unit.meta')
@@ -1521,12 +1529,7 @@ class MgrListener(Thread):
             self.agent.ack = int(data['counter'])
             if 'config' in data:
                 logger.info('Received new config from mgr')
-                config = data['config']
-                for filename in config:
-                    if filename in self.agent.required_files:
-                        file_path = os.path.join(self.agent.daemon_dir, filename)
-                        with write_new(file_path) as f:
-                            f.write(config[filename])
+                self.agent.write_required_files(data['config'])
                 self.agent.pull_conf_settings()
                 self.agent.wakeup()
         else:
@@ -1595,18 +1598,28 @@ class CephadmAgent(DaemonForm):
             if fname not in config:
                 raise Error('required file missing from config: %s' % fname)
 
-    def deploy_daemon_unit(self, config: Dict[str, str] = {}) -> None:
+    def write_required_files(self, config: Dict[str, str]) -> None:
+        """Write agent required config files. These are the same set that
+        HTTP config push applies to mgr.
+
+        Used by HTTP MgrListener updates, full deploy, and SSH reconfig so
+        target_ip, certs, and keyring are in sync across delivery paths.
+        """
         if not config:
             raise Error('Agent needs a config')
         assert isinstance(config, dict)
         self.validate(config)
-
-        # Create the required config files in the daemons dir, with restricted permissions
         for filename in config:
             if filename in self.required_files:
                 file_path = os.path.join(self.daemon_dir, filename)
                 with write_new(file_path) as f:
                     f.write(config[filename])
+
+    def deploy_daemon_unit(self, config: Dict[str, str] = {}) -> None:
+        if not config:
+            raise Error('Agent needs a config')
+        assert isinstance(config, dict)
+        self.write_required_files(config)
 
         unit_run_path = os.path.join(self.daemon_dir, 'unit.run')
         with write_new(unit_run_path) as f:

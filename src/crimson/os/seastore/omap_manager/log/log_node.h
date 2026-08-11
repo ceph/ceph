@@ -664,8 +664,10 @@ public:
   void _append(const std::string &key, const ceph::bufferlist &val) {
     iterator prev_iter(this, get_last_pos());
     auto last = prev_iter->get_node_key();
-    iterator next_iter(this, get_size() == 0 ? get_last_pos() :
-      get_last_pos() + get_entry_size(last.key_len, last.val_len));
+    uint32_t pos = get_size() == 0 ? get_last_pos() :
+      get_last_pos() + get_entry_size(last.key_len, last.val_len);
+    assert(pos + get_entry_size(key.size(), val.length()) <= capacity());
+    iterator next_iter(this, pos);
     next_iter.set_node_key(log_key_t(key.size(), val.length()));
     next_iter.set_node_val(key, val);
     if (get_size() >= 1) {
@@ -687,6 +689,8 @@ public:
   }
 
   void _overwrite(const std::string &key, const ceph::bufferlist &val) {
+    assert(get_last_pos() + get_entry_size(key.size(), val.length())
+      <= capacity());
     iterator iter(this, get_last_pos());
     iter.set_node_key(log_key_t(key.size(), val.length()));
     iter.set_node_val(key, val);

@@ -1,15 +1,17 @@
-<fieldset>
-  <legend
-    i18n
-    class="cd-header"
-  >
-    Notification Configuration
-    <cd-help-text>
-      Configure bucket notification to trigger alerts for specific events, such as object creation
-      or transitions, based on prefixes or tags.
-    </cd-help-text>
-  </legend>
-</fieldset>
+@if (showHeading) {
+  <fieldset>
+    <legend
+      i18n
+      class="cd-header"
+    >
+      Notification Configuration
+      <cd-help-text>
+        Configure bucket notification to trigger alerts for specific events, such as object creation
+        or transitions, based on prefixes or tags.
+      </cd-help-text>
+    </legend>
+  </fieldset>
+}
 <ng-container *ngIf="notification$ | async as notification">
   <cd-table
     #table

@@ -122,13 +122,15 @@ export enum Icons {
   vmdkDisk = 'vmdk-disk',
   checkMarkOutline = 'checkmark--outline',
   warningAlt = 'warning--alt',
+  arrowRight = 'arrow--right',
   arrowUpRight = 'arrow--up-right',
   inProgress = 'in-progress',
   arrowDown = 'arrow--down',
   locked = 'locked', // Access denied, locked state
   cloudMonitoring = 'cloud--monitoring',
   pendingFilled = 'pending--filled',
-  folder = 'folder'
+  folder = 'folder',
+  temperature = 'temperature'
 }
 
 export enum IconSize {
@@ -167,6 +169,7 @@ export const ICON_TYPE = {
   vmdkDisk: 'vmdk-disk',
   warningAlt: 'warning--alt',
   checkMarkOutline: 'checkmark--outline',
+  arrowRight: 'arrow--right',
   arrowUpRight: ' arrow--up-right',
   inProgress: 'in-progress',
   arrowDown: 'arrow--down',
@@ -185,7 +188,9 @@ export const ICON_TYPE = {
   pendingFilled: 'pending--filled',
   chevronDown: 'chevron--down',
   chevronUp: 'chevron--up',
-  folder: 'folder'
+  folder: 'folder',
+  temperature: 'temperature',
+  left: 'arrow--left'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {

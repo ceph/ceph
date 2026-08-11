@@ -226,7 +226,7 @@ OperationThrottler::OperationThrottler(ConfigProxy &conf)
 
 void OperationThrottler::initialize_scheduler(CephContext *cct, ConfigProxy &conf, bool is_rotational, int whoami)
 {
-  scheduler = crimson::osd::scheduler::make_scheduler(cct, conf, whoami, seastar::smp::count,
+  scheduler = crimson::osd::scheduler::make_scheduler(cct, conf, whoami, seastar::this_smp_shard_count(),
             seastar::this_shard_id(), is_rotational, true);
   update_from_config(conf);
 }
@@ -246,9 +246,12 @@ seastar::future<> OperationThrottler::background_task() {
       if (auto when_ready = std::get_if<double>(&work_item)) {
         ceph::real_clock::time_point future_time = ceph::real_clock::from_double(*when_ready);
         auto now = ceph::real_clock::now();
-        ceph_assert(future_time > now);
+        if (future_time <= now) {
+          DEBUG("future_time={} already passed now={}, retrying immediately", future_time, now);
+          continue;
+        }  
         auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(future_time - now);
-        INFO("No items ready. Retrying in {} ms", wait_duration.count());
+        DEBUG("No items ready. Retrying in {} ms", wait_duration.count());
         co_await seastar::sleep(wait_duration);
         continue;
       }

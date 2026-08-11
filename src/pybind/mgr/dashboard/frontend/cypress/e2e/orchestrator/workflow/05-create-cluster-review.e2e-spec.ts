@@ -17,7 +17,7 @@ describe('Create Cluster Review page', () => {
   describe('fields check', () => {
     it('should check cluster resources table is present', () => {
       // check for table header 'Cluster Resources'
-      onboarding.getLegends().its(0).should('have.text', 'Cluster Resources');
+      onboarding.getLegends().its(0).should('contain.text', 'Cluster Resources');
 
       // check for fields in table
       onboarding.getStatusTables().should('contain.text', 'Hosts');

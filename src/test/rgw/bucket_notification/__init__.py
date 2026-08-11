@@ -18,6 +18,8 @@ def setup():
         raise RuntimeError('Your config file is missing the DEFAULT section!')
     if not cfg.has_section("s3 main"):
         raise RuntimeError('Your config file is missing the "s3 main" section!')
+    if not cfg.has_section("kerberos"):
+        raise RuntimeError('Your config file is missing the "kerberos" section!')
 
     defaults = cfg.defaults()
 
@@ -50,6 +52,15 @@ def setup():
     global main_secret_key
     main_secret_key = cfg.get('s3 main',"secret_key")
 
+    global kerberos_service_name
+    kerberos_service_name = cfg.get('kerberos', 'service_name')
+
+    global kerberos_principal
+    kerberos_principal = cfg.get('kerberos', 'principal')
+
+    global kerberos_keytab
+    kerberos_keytab = cfg.get('kerberos', 'keytab')
+
 def get_config_host():
     global default_host
     return default_host
@@ -73,6 +84,12 @@ def get_access_key():
 def get_secret_key():
     global main_secret_key
     return main_secret_key
+
+def get_kerberos_config():
+    global kerberos_service_name
+    global kerberos_principal
+    global kerberos_keytab
+    return kerberos_service_name, kerberos_principal, kerberos_keytab
 
 @pytest.fixture(autouse=True, scope="package")
 def configfile():

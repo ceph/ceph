@@ -40,6 +40,7 @@ const BASE_URL = 'rgw/bucket';
 })
 export class RgwBucketNotificationListComponent extends ListWithDetails implements OnInit {
   @Input() bucket: Bucket;
+  @Input() showHeading = true;
   @Output() updateBucketDetails = new EventEmitter();
   @ViewChild(TableComponent, { static: true })
   table: TableComponent;

@@ -420,6 +420,8 @@ void usage()
   cout << "                                       mdlog list\n";
   cout << "                                       data sync status\n";
   cout << "                                       sync error trim\n";
+  cout << "                                       gc list\n";
+  cout << "                                       gc process\n";
   cout << "                                     required for:\n";
   cout << "                                       mdlog trim\n";
   cout << "   --gen=<gen-id>                    optional for:\n";
@@ -7490,15 +7492,21 @@ int main(int argc, const char **argv)
         constexpr int32_t max_chunk = 100;
         int32_t count = std::min(max_chunk, remaining);
 
+        // Copy the marker to a separate local variable to break the reference alias
+        std::string current_marker = listing.next_marker;
+        // Clear the roles list to prevent appending duplicates across loop iterations
+        listing.roles.clear();
+        listing.next_marker.clear();
+
         if (!account_id.empty()) {
           // list roles in the account
           ret = driver->list_account_roles(dpp(), null_yield, account_id,
-                                           path_prefix, listing.next_marker,
+                                           path_prefix, current_marker,
                                            count, listing);
         } else {
           // list roles in the tenant
           ret = driver->list_roles(dpp(), null_yield, tenant, path_prefix,
-                                   listing.next_marker, count, listing);
+                                   current_marker, count, listing);
         }
         if (ret < 0) {
           return -ret;
@@ -8627,6 +8635,11 @@ next:
     std::list<rgw_cls_bi_entry> entries;
     bool is_truncated;
     const auto& index = bucket->get_info().layout.current_index;
+    if (index.layout.type == rgw::BucketIndexType::Indexless) {
+      cerr << "Error: indexless bucket has no index to list" << std::endl;
+      return EINVAL;
+    }
+
     const int max_shards = rgw::num_shards(index);
     if (max_entries < 0) {
       max_entries = 1000;
@@ -9709,14 +9722,24 @@ next:
   }
 
   if (opt_cmd == OPT::GC_LIST) {
+    if (specified_shard_id) {
+      int max_gc_shards = min(static_cast<int>(g_ceph_context->_conf->rgw_gc_max_objs), rgw_shards_max());
+      if (shard_id < 0 || shard_id >= max_gc_shards) {
+        cerr << "ERROR: shard-id must be in the range [0, " << max_gc_shards - 1 << "]" << std::endl;
+        return EINVAL;
+      }
+    }
+
     int index = 0;
     bool truncated;
     bool processing_queue = false;
     formatter->open_array_section("entries");
 
+    std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
+
     do {
       list<cls_rgw_gc_obj_info> result;
-      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated, processing_queue);
+      int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->list_gc_objs(index, marker, 1000, !include_all, result, truncated, processing_queue, gc_shard_id);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
 	return 1;
@@ -9743,6 +9766,14 @@ next:
   }
 
   if (opt_cmd == OPT::GC_PROCESS) {
+    if (specified_shard_id) {
+      int max_gc_shards = min(static_cast<int>(g_ceph_context->_conf->rgw_gc_max_objs), rgw_shards_max());
+      if (shard_id < 0 || shard_id >= max_gc_shards) {
+        cerr << "ERROR: shard-id must be in the range [0, " << max_gc_shards - 1 << "]" << std::endl;
+        return EINVAL;
+      }
+    }
+
     rgw::sal::RadosStore* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
     if (!rados_store) {
       cerr <<
@@ -9752,7 +9783,8 @@ next:
     }
     RGWRados* store = rados_store->getRados();
 
-    int ret = store->process_gc(!include_all, null_yield);
+    std::optional<int> gc_shard_id = specified_shard_id ? std::optional<int>(shard_id) : std::nullopt;
+    int ret = store->process_gc(!include_all, null_yield, gc_shard_id);
     if (ret < 0) {
       cerr << "ERROR: gc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -10469,10 +10501,19 @@ next:
 
 #ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::SYNC_STATUS) {
+    if (opt_bucket || opt_bucket_name) {
+       cerr << "ERROR: 'sync status' command does not support --bucket option." << std::endl;
+       cerr << "Use 'radosgw-admin bucket sync status --bucket=<bucketname>' instead." << std::endl;
+       return EINVAL;
+    }
     sync_status(formatter.get());
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
+    if (opt_bucket || opt_bucket_name) {
+      cerr << "ERROR: 'metadata sync status' command does not support --bucket option." << std::endl;
+      return EINVAL;
+    }
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
@@ -11431,6 +11472,19 @@ next:
   }
 
   if (opt_cmd == OPT::BILOG_AUTOTRIM) {
+    // The background sync-log-trim thread only runs bucket trim on zones whose
+    // sync module exports data. Non-exporting zones (e.g. archive) deliberately
+    // forbid bucket-instance removal. Likewise, here, we add the same guard for
+    // user triggered auto-trim.
+    if (!static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->sync_module_exports_data() &&
+        !yes_i_really_mean_it) {
+      cerr << "This zone's sync module does not export data (e.g. an archive zone). "
+              "bilog autotrim can remove bucket instance metadata that this zone type "
+              "is meant to retain.\n"
+              "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EPERM;
+    }
+
     RGWCoroutinesManager crs(driver->ctx(), driver->get_cr_registry());
     RGWHTTPManager http(driver->ctx(), crs.get_completion_mgr());
     int ret = http.start();
@@ -12387,6 +12441,10 @@ next:
       } else {
         ret = b.remove_notification_by_id(dpp(), notification_id, null_yield);
       }
+    }
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not remove notification: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
     }
   }
 

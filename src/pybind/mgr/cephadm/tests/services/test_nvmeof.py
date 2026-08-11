@@ -176,11 +176,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = /server.key
-client_key = /client.key
-server_cert = /server.cert
-client_cert = /client.cert
-root_ca_cert = /root.ca.cert
+server_key = /certs/mtls/server.key
+client_key = /certs/mtls/client.key
+server_cert = /certs/mtls/server.cert
+client_cert = /certs/mtls/client.cert
+root_ca_cert = /certs/mtls/root.ca.cert
 
 [kmip]
 cert_dir = ./certs/kmip/{{server_name}}
@@ -200,6 +200,10 @@ rbd_with_crc32c = True
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60
+cnc_enable = True
+cnc_rate_limiter_bytes = 100000000
+cnc_chunk_blocks = 512
+cnc_parallel_chunks = 8
 
 [monitor]
 timeout = 1.0\n"""
@@ -427,11 +431,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = /server.key
-client_key = /client.key
-server_cert = /server.cert
-client_cert = /client.cert
-root_ca_cert = /root.ca.cert
+server_key = /certs/mtls/server.key
+client_key = /certs/mtls/client.key
+server_cert = /certs/mtls/server.cert
+client_cert = /certs/mtls/client.cert
+root_ca_cert = /certs/mtls/root.ca.cert
 
 [kmip]
 cert_dir = ./certs/kmip/{{server_name}}
@@ -451,6 +455,10 @@ rbd_with_crc32c = True
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60
+cnc_enable = True
+cnc_rate_limiter_bytes = 100000000
+cnc_chunk_blocks = 512
+cnc_parallel_chunks = 8
 
 [monitor]
 timeout = 1.0
@@ -620,11 +628,11 @@ config_file = /etc/ceph/ceph.conf
 id = nvmeof.{nvmeof_daemon_id}
 
 [mtls]
-server_key = /server.key
-client_key = /client.key
-server_cert = /server.cert
-client_cert = /client.cert
-root_ca_cert = /root.ca.cert
+server_key = /certs/mtls/server.key
+client_key = /certs/mtls/client.key
+server_cert = /certs/mtls/server.cert
+client_cert = /certs/mtls/client.cert
+root_ca_cert = /certs/mtls/root.ca.cert
 
 [kmip]
 cert_dir = ./certs/kmip/{{server_name}}
@@ -644,6 +652,10 @@ rbd_with_crc32c = True
 tgt_cmd_extra_args = {tgt_cmd_extra_args}
 qos_timeslice_in_usecs = 0
 notifications_interval = 60
+cnc_enable = True
+cnc_rate_limiter_bytes = 100000000
+cnc_chunk_blocks = 512
+cnc_parallel_chunks = 8
 
 [monitor]
 timeout = 1.0

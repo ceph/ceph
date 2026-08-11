@@ -606,21 +606,14 @@ void ECPeeringTestFixture::run_recovery_and_verify_callbacks(
     {expected_data});
 }
 
-void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
+// Helper function that performs the actual recovery logic
+// Must be called within event loop context on the primary OSD
+void ECPeeringTestFixture::do_run_parallel_recovery_and_verify_callbacks_impl(
   const std::vector<std::string>& obj_names,
   int target_osd,
-  const std::vector<std::string>& expected_data)
+  const std::vector<std::string>& expected_data,
+  int primary_shard)
 {
-  // Verify we have matching sizes
-  ASSERT_EQ(obj_names.size(), expected_data.size())
-    << "obj_names and expected_data must have the same size";
-
-  // Get the actual primary from the OSDMap
-  int primary_shard = get_primary_shard_from_osdmap();
-  if (primary_shard < 0 || primary_shard == CRUSH_ITEM_NONE) {
-    // No valid primary, cannot run recovery
-    return;
-  }
   auto primary_ps = get_peering_state(primary_shard);
   pg_shard_t target_shard(target_osd, shard_id_t(target_osd));
 
@@ -651,6 +644,7 @@ void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
         << "Object " << obj_names[i] << " should be in primary " << target_osd << "'s missing set";
 
       std::cout << "  OSD " << target_osd << " is the primary and has object " << obj_names[i] << " in its own missing set" << std::endl;
+      obcs.push_back(ObjectContextRef());
     } else {
 
       // The target OSD is a peer, check peer_missing
@@ -699,15 +693,18 @@ void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
       // Verify the missing item's need version matches what we read from the store
       ASSERT_EQ(missing_item.need, oi.version)
         << "Missing item need version should match OI version from primary store for " << obj_names[i];
+      
+      // Get OBC for this object - matches PrimaryLogPG::prep_object_replica_pushes behavior
+      // which calls get_object_context(soid, false) and handles null response
+      // Pass can_create=false to ensure we reload from disk with all attributes
+      ObjectContextRef obc = get_object_context(hoid, false);
+      ASSERT_TRUE(obc) << "Failed to load OBC from disk for " << obj_names[i];
+      ASSERT_FALSE(obc->attr_cache.empty())
+        << "OBC attr_cache must be populated for recovery of " << obj_names[i];
+      obcs.push_back(obc);
     }
 
     missing_items.push_back(missing_item);
-
-    // Create OBC for this object
-    ObjectContextRef obc = get_or_create_obc(hoid, true, expected_data[i].length());
-    ASSERT_FALSE(obc->attr_cache.empty())
-      << "OBC attr_cache must be populated for recovery of " << obj_names[i];
-    obcs.push_back(obc);
   }
 
   // Reset recovery callback tracker before starting recovery
@@ -774,14 +771,17 @@ void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
 
     // Verify the recovered data
     bufferlist read_bl;
-    int r = read_object(obj_names[i], 0, expected_data[i].length(),
-                       read_bl, expected_data[i].length());
-    EXPECT_EQ(r, (int)expected_data[i].length())
-      << "Should read full object " << obj_names[i];
+    if (expected_data[i].size() > 0)
+    {
+      int r = read_object(obj_names[i], 0, expected_data[i].length(),
+                         read_bl, expected_data[i].length());
+      EXPECT_EQ(r, (int)expected_data[i].length())
+        << "Should read full object " << obj_names[i];
 
-    std::string read_data(read_bl.c_str(), read_bl.length());
-    EXPECT_EQ(read_data, expected_data[i])
-      << "Recovered data should match for " << obj_names[i];
+      std::string read_data(read_bl.c_str(), read_bl.length());
+      EXPECT_EQ(read_data, expected_data[i])
+        << "Recovered data should match for " << obj_names[i];
+    }
 
     std::cout << "  ✓ Object " << obj_names[i] << " recovered successfully" << std::endl;
   }
@@ -791,4 +791,28 @@ void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
     << "on_global_recover should be called once for each object";
 
   std::cout << "\n  === All parallel recovery callbacks and data verified successfully ===" << std::endl;
+}
+
+// Public interface that schedules the recovery on the primary OSD
+void ECPeeringTestFixture::run_parallel_recovery_and_verify_callbacks(
+  const std::vector<std::string>& obj_names,
+  int target_osd,
+  const std::vector<std::string>& expected_data)
+{
+  // Verify we have matching sizes
+  ASSERT_EQ(obj_names.size(), expected_data.size())
+    << "obj_names and expected_data must have the same size";
+
+  // Get the actual primary from the OSDMap
+  int primary_shard = get_primary_shard_from_osdmap();
+  if (primary_shard < 0 || primary_shard == CRUSH_ITEM_NONE) {
+    // No valid primary, cannot run recovery
+    return;
+  }
+  
+  // Schedule the recovery operation on the primary OSD
+  event_loop->schedule_transaction(primary_shard, [this, obj_names, target_osd, expected_data, primary_shard]() {
+    do_run_parallel_recovery_and_verify_callbacks_impl(obj_names, target_osd, expected_data, primary_shard);
+  });
+  event_loop->run_until_idle();
 }

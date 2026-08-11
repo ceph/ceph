@@ -541,7 +541,7 @@ void DaemonServer::fetch_missing_metadata(const DaemonKey& key,
   if (!daemon_state.is_updating(key) &&
       (key.type == "osd" || key.type == "mds" || key.type == "mon")) {
     std::ostringstream oss;
-    auto c = new MetadataUpdate(daemon_state, key);
+    auto c = new MetadataUpdate(daemon_state, cluster_state, key);
     if (key.type == "osd") {
       oss << "{\"prefix\": \"osd metadata\", \"id\": "
 	  << key.name<< "}";
@@ -2389,8 +2389,7 @@ bool DaemonServer::_handle_command(
         cmdctx->reply(-EAGAIN, ss);
       }
       if (!pg_offline_report.ok_to_stop()) {
-        ss << "unsafe to upgrade OSD(s) at this time (at least "
-           << pg_offline_report.not_ok.size()
+        ss << "unsafe to upgrade OSD(s) at this time (one or more"
            << " PG(s) will become offline if any OSD out of the "
            << osds_in_crush_bucket.size() << " in CRUSH bucket '"
            << crush_bucket_name << "' is stopped)";
@@ -3668,7 +3667,7 @@ void DaemonServer::got_mgr_map()
   cluster_state.with_mgrmap([&](const MgrMap& mgrmap) {
       auto md_update = [&] (DaemonKey key) {
         std::ostringstream oss;
-        auto c = new MetadataUpdate(daemon_state, key);
+        auto c = new MetadataUpdate(daemon_state, cluster_state, key);
 	// FIXME remove post-nautilus: include 'id' for luminous mons
         oss << "{\"prefix\": \"mgr metadata\", \"who\": \""
 	    << key.name << "\", \"id\": \"" << key.name << "\"}";

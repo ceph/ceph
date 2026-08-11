@@ -33,6 +33,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
   pageHeaderSubtitle: string | null = null;
   pageHeaderDescription: string | null = null;
   pageHeaderHidden = false;
+  showBreadcrumbsLayout = true;
   enabledFeature$: Observable<FeatureTogglesMap>;
 
   @HostBinding('class') get class(): string {
@@ -93,6 +94,10 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
       route = route.firstChild;
     }
 
+    this.showBreadcrumbsLayout = !route?.pathFromRoot.some(
+      (snapshot) => snapshot.routeConfig?.data?.['showBreadcrumbsLayout'] === false
+    );
+
     const hiddenRoute = this.findRouteWithData(route, 'pageHeaderHidden');
     if (hiddenRoute?.routeConfig?.data?.['pageHeaderHidden']) {
       this.pageHeaderHidden = true;
@@ -106,7 +111,8 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
 
     const titleFromParamRoute = this.findRouteWithData(route, 'pageHeaderTitleFromParam');
     const titleFromParam = titleFromParamRoute?.routeConfig?.data?.['pageHeaderTitleFromParam'] as
-      string | undefined;
+      | string
+      | undefined;
 
     if (titleFromParam && titleFromParamRoute?.params[titleFromParam]) {
       try {
@@ -120,7 +126,8 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     }
 
     const pageHeader = route?.routeConfig?.data?.['pageHeader'] as
-      { title?: string; subtitle?: string; description?: string } | undefined;
+      | { title?: string; subtitle?: string; description?: string }
+      | undefined;
     this.pageHeaderTitle = pageHeader?.title ?? null;
     this.pageHeaderSubtitle = pageHeader?.subtitle ?? null;
     this.pageHeaderDescription = pageHeader?.description ?? null;

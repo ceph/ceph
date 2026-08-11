@@ -292,8 +292,8 @@
             [invalid]="
               serviceForm.controls.realm_name.invalid && serviceForm.controls.realm_name.dirty
             "
-            [invalidText]="authModeError"
-            helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
+            [invalidText]="realmNameError"
+            helperText="Select the realm to associate with this gateway. Leave this field blank for a single-site deployment."
             i18n-helperText
           >
             @if (realmList.length === 0) {
@@ -304,13 +304,13 @@
                 -- No realm available --
               </option>
             }
-            @for (realm of realmList; track realm) {
+            @for (realm of realmList; track realm.name) {
               <option [value]="realm.name">
                 {{ realm.name }}
               </option>
             }
           </cds-select>
-          <ng-template #authModeError>
+          <ng-template #realmNameError>
             @if (serviceForm.showError('realm_name', frm, 'required')) {
               <span
                 class="invalid-feedback"
@@ -327,7 +327,7 @@
             formControlName="zonegroup_name"
             label="Zonegroup"
           >
-            @for (zonegroup of zonegroupList; track zonegroup) {
+            @for (zonegroup of filteredZonegroupList; track zonegroup.name) {
               <option [value]="zonegroup.name">
                 {{ zonegroup.name }}
               </option>
@@ -341,13 +341,24 @@
             formControlName="zone_name"
             label="Zone"
           >
-            @for (zone of zoneList; track zone) {
+            @for (zone of filteredZoneList; track zone.name) {
               <option [value]="zone.name">
                 {{ zone.name }}
               </option>
             }
           </cds-select>
         </div>
+
+        @if (editing && showRgwRealmChangedInfo) {
+          <cd-alert-panel
+            type="info"
+            spacingClass="mb-3"
+            i18n
+          >
+            The RGW daemons for this service must be restarted to apply the updated realm,
+            zonegroup, or zone configuration.
+          </cd-alert-panel>
+        }
       }
 
       <!-- unmanaged -->
@@ -527,9 +538,16 @@
             formControlName="virtual_host_enabled"
           >
             Enable virtual-host style bucket access
-            <cd-help-text i18n>
-              Allows bucket access via hostnames such as mybucket.s3.example.com.
-            </cd-help-text>
+            @if (realmList.length === 0) {
+              <cd-help-text i18n>
+                Requires a multisite realm, zonegroup, and zone. Create a realm to enable
+                virtual-host style bucket access.
+              </cd-help-text>
+            } @else {
+              <cd-help-text i18n>
+                Allows bucket access via hostnames such as mybucket.s3.example.com.
+              </cd-help-text>
+            }
           </cds-checkbox>
         </div>
         @if (serviceForm.controls.virtual_host_enabled.value) {
@@ -979,7 +997,7 @@
             id="snmp_version"
             label="Version"
             cdRequiredField="Version"
-            helperText="Active-directory authentication for domain member servers and User authentication for Stand-alone servers configuration."
+            helperText="Select the SNMP protocol version for the monitoring gateway."
             i18n-helperText
             [invalid]="
               serviceForm.controls.snmp_version.invalid && serviceForm.controls.snmp_version.dirty
@@ -1655,6 +1673,10 @@
               id="ssl"
               i18n
               >SSL
+              <cd-help-text>
+                Secure client connections by using SSL. When enabled, provide a certificate and the
+                corresponding private key.
+              </cd-help-text>
             </cds-checkbox>
           </div>
         }
@@ -1685,9 +1707,11 @@
                 context: {
                   controlName: 'ssl_cert',
                   title: 'Certificate Input',
+                  placeholder: 'Paste the certificate in PEM format',
                   helperText:
-                    'Uploaded files will populate the certificate details automatically. Or paste the PEM content directly in the text area.',
-                  description: 'Upload a .crt file, or paste the certificate PEM content directly.',
+                    'Uploading a certificate file automatically populates this field. Alternatively, paste the certificate in PEM format.',
+                  description:
+                    'Upload a certificate (.crt) file or paste the certificate in PEM format.',
                   invalidTemplate: invalidSslCertError,
                   isRequired: false
                 }
@@ -1719,6 +1743,8 @@
                 context: {
                   controlName: 'ssl_key',
                   title: 'Private Key Input',
+                  placeholder:
+                    'Uploading a private key file automatically populates this field. Alternatively, paste the private key in PEM format.',
                   helperText:
                     'Uploaded files will populate the private key details automatically. Or paste the PEM content directly in the text area.',
                   description: 'Upload a .key file, or paste the private key PEM content directly.',
@@ -1757,6 +1783,7 @@
                   context: {
                     controlName: 'ssl_ca_cert',
                     title: 'CA Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -1923,6 +1950,7 @@
                   context: {
                     controlName: 'root_ca_cert',
                     title: 'Root CA Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the Root CA certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -1951,6 +1979,7 @@
                   context: {
                     controlName: 'client_cert',
                     title: 'Client Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the client certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -1979,6 +2008,8 @@
                   context: {
                     controlName: 'client_key',
                     title: 'Client Key Input',
+                    placeholder:
+                      'Uploading a private key file automatically populates this field. Alternatively, paste the private key in PEM format.',
                     helperText:
                       'Uploaded files will populate the client key details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -2007,6 +2038,7 @@
                   context: {
                     controlName: 'server_cert',
                     title: 'Gateway Server Certificate Input',
+                    placeholder: 'Paste the certificate in PEM format',
                     helperText:
                       'Uploaded files will populate the gateway server certificate details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -2035,6 +2067,8 @@
                   context: {
                     controlName: 'server_key',
                     title: 'Gateway Server Key Input',
+                    placeholder:
+                      'Uploading a private key file automatically populates this field. Alternatively, paste the private key in PEM format.',
                     helperText:
                       'Uploaded files will populate the gateway server key details automatically. Or paste the PEM content directly in the text area.',
                     description:
@@ -2062,7 +2096,7 @@
   <cd-form-button-panel
     (submitActionEvent)="onSubmit()"
     [form]="serviceForm"
-    [submitText]="(action | titlecase) + ' ' + resource"
+    [submitText]="submitAction"
     [modalForm]="true"
   ></cd-form-button-panel>
 </cds-modal>
@@ -2086,6 +2120,7 @@
   let-description="description"
   let-invalidTemplate="invalidTemplate"
   let-isRequired="isRequired"
+  let-placeholder="placeholder"
 >
   <cds-textarea-label
     [attr.cdRequiredField]="isRequired ? title : null"
@@ -2108,7 +2143,7 @@
       cdsTextArea
       [id]="controlName"
       [theme]="'dark'"
-      placeholder="Paste certificate or private key PEM content"
+      [placeholder]="placeholder"
       [formControl]="serviceForm.controls[controlName]"
       cols="50"
       rows="5"

@@ -2,8 +2,8 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
 import _ from 'lodash';
-import { BehaviorSubject, of as observableOf } from 'rxjs';
-import { catchError, map, mapTo } from 'rxjs/operators';
+import { BehaviorSubject, Observable, of as observableOf, throwError } from 'rxjs';
+import { catchError, distinctUntilChanged, map, mapTo, shareReplay, tap } from 'rxjs/operators';
 import { Bucket } from '~/app/ceph/rgw/models/rgw-bucket';
 import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 
@@ -18,6 +18,8 @@ import { KmipConfig, VaultConfig } from '../models/rgw-encryption-config-keys';
 })
 export class RgwBucketService extends ApiClient {
   private url = 'api/rgw/bucket';
+  private bucketDetailsCache = new Map<string, Observable<any>>();
+  private bucketRateLimitCache = new Map<string, Observable<any>>();
   private bucketsSubject = new BehaviorSubject<Bucket[]>([]);
   private totalNumObjectsSubject = new BehaviorSubject<number>(0);
   private totalUsedCapacitySubject = new BehaviorSubject<number>(0);
@@ -32,6 +34,23 @@ export class RgwBucketService extends ApiClient {
     private rgwDaemonService: RgwDaemonService
   ) {
     super();
+
+    this.rgwDaemonService.selectedDaemon$
+      .pipe(
+        map((daemon) => daemon?.id || ''),
+        distinctUntilChanged()
+      )
+      .subscribe(() => this.clearCaches());
+  }
+
+  private clearCaches() {
+    this.bucketDetailsCache.clear();
+    this.bucketRateLimitCache.clear();
+  }
+
+  private invalidateBucketCache(bucket: string) {
+    this.bucketDetailsCache.delete(bucket);
+    this.bucketRateLimitCache.delete(bucket);
   }
 
   fetchAndTransformBuckets() {
@@ -97,10 +116,30 @@ export class RgwBucketService extends ApiClient {
     });
   }
 
-  get(bucket: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.get(`${this.url}/${bucket}`, { params: params });
-    });
+  get(bucket: string, forceRefresh = false) {
+    if (forceRefresh) {
+      this.bucketDetailsCache.delete(bucket);
+    }
+
+    const cached = this.bucketDetailsCache.get(bucket);
+    if (cached) {
+      return cached;
+    }
+
+    const request$ = this.rgwDaemonService
+      .request((params: HttpParams) => {
+        return this.http.get(`${this.url}/${bucket}`, { params: params });
+      })
+      .pipe(
+        shareReplay(1),
+        catchError((error) => {
+          this.bucketDetailsCache.delete(bucket);
+          return throwError(() => error);
+        })
+      );
+
+    this.bucketDetailsCache.set(bucket, request$);
+    return request$;
   }
 
   getTotalBucketsAndUsersLength() {
@@ -125,32 +164,34 @@ export class RgwBucketService extends ApiClient {
     cannedAcl: string,
     replication: string
   ) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      const paramsObject = {
-        bucket,
-        uid,
-        zonegroup,
-        lock_enabled: String(lockEnabled),
-        lock_mode,
-        lock_retention_period_days,
-        encryption_state: String(encryption_state),
-        encryption_type,
-        key_id,
-        tags: tags,
-        bucket_policy: bucketPolicy,
-        canned_acl: cannedAcl,
-        replication: replication,
-        daemon_name: params.get('daemon_name')
-      };
+    return this.rgwDaemonService
+      .request((params: HttpParams) => {
+        const paramsObject = {
+          bucket,
+          uid,
+          zonegroup,
+          lock_enabled: String(lockEnabled),
+          lock_mode,
+          lock_retention_period_days,
+          encryption_state: String(encryption_state),
+          encryption_type,
+          key_id,
+          tags: tags,
+          bucket_policy: bucketPolicy,
+          canned_acl: cannedAcl,
+          replication: replication,
+          daemon_name: params.get('daemon_name')
+        };
 
-      if (placementTarget) {
-        paramsObject['placement_target'] = placementTarget;
-      }
+        if (placementTarget) {
+          paramsObject['placement_target'] = placementTarget;
+        }
 
-      return this.http.post(this.url, null, {
-        params: new HttpParams({ fromObject: paramsObject })
-      });
-    });
+        return this.http.post(this.url, null, {
+          params: new HttpParams({ fromObject: paramsObject })
+        });
+      })
+      .pipe(tap(() => this.invalidateBucketCache(bucket)));
   }
 
   update(
@@ -172,36 +213,40 @@ export class RgwBucketService extends ApiClient {
     replication: string,
     lifecycle: string
   ) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      const paramsObject: Record<string, string> = {
-        bucket_id: bucketId,
-        uid: uid,
-        encryption_state: String(encryptionState),
-        encryption_type: encryptionType,
-        key_id: keyId,
-        mfa_delete: mfaDelete,
-        mfa_token_serial: mfaTokenSerial,
-        mfa_token_pin: mfaTokenPin,
-        lock_mode: lockMode,
-        lock_retention_period_days: lockRetentionPeriodDays,
-        tags: tags,
-        bucket_policy: bucketPolicy,
-        canned_acl: cannedAcl,
-        replication: replication,
-        lifecycle: lifecycle
-      };
-      if (versioningState) {
-        paramsObject['versioning_state'] = versioningState;
-      }
-      params = params.appendAll(paramsObject);
-      return this.http.put(`${this.url}/${bucket}`, null, { params: params });
-    });
+    return this.rgwDaemonService
+      .request((params: HttpParams) => {
+        const paramsObject: Record<string, string> = {
+          bucket_id: bucketId,
+          uid: uid,
+          encryption_state: String(encryptionState),
+          encryption_type: encryptionType,
+          key_id: keyId,
+          mfa_delete: mfaDelete,
+          mfa_token_serial: mfaTokenSerial,
+          mfa_token_pin: mfaTokenPin,
+          lock_mode: lockMode,
+          lock_retention_period_days: lockRetentionPeriodDays,
+          tags: tags,
+          bucket_policy: bucketPolicy,
+          canned_acl: cannedAcl,
+          replication: replication,
+          lifecycle: lifecycle
+        };
+        if (versioningState) {
+          paramsObject['versioning_state'] = versioningState;
+        }
+        params = params.appendAll(paramsObject);
+        return this.http.put(`${this.url}/${bucket}`, null, { params: params });
+      })
+      .pipe(tap(() => this.invalidateBucketCache(bucket)));
   }
 
   delete(bucket: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      return this.http.delete(`${this.url}/${bucket}`, { params: params });
-    });
+    return this.rgwDaemonService
+      .request((params: HttpParams) => {
+        return this.http.delete(`${this.url}/${bucket}`, { params: params });
+      })
+      .pipe(tap(() => this.invalidateBucketCache(bucket)));
   }
 
   /**
@@ -257,15 +302,18 @@ export class RgwBucketService extends ApiClient {
   }
 
   setLifecycle(bucket_name: string, lifecycle: string, owner: string, tenant: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        bucket_name: bucket_name,
-        lifecycle: lifecycle,
-        owner: owner,
-        tenant: tenant
-      });
-      return this.http.put(`${this.url}/lifecycle`, null, { params: params });
-    });
+    const bid = tenant ? `${tenant}/${bucket_name}` : bucket_name;
+    return this.rgwDaemonService
+      .request((params: HttpParams) => {
+        params = params.appendAll({
+          bucket_name: bucket_name,
+          lifecycle: lifecycle,
+          owner: owner,
+          tenant: tenant
+        });
+        return this.http.put(`${this.url}/lifecycle`, null, { params: params });
+      })
+      .pipe(tap(() => this.invalidateBucketCache(bid)));
   }
 
   getLifecycle(bucket_name: string, owner: string, tenant: string) {
@@ -279,10 +327,31 @@ export class RgwBucketService extends ApiClient {
     });
   }
   updateBucketRateLimit(bid: string, bucketRateLimitArgs: RgwRateLimitConfig) {
-    return this.http.put(`${this.url}/${bid}/ratelimit`, bucketRateLimitArgs);
+    return this.http
+      .put(`${this.url}/${bid}/ratelimit`, bucketRateLimitArgs)
+      .pipe(tap(() => this.bucketRateLimitCache.delete(bid)));
   }
-  getBucketRateLimit(uid: string) {
-    return this.http.get(`${this.url}/${uid}/ratelimit`);
+
+  getBucketRateLimit(uid: string, forceRefresh = false) {
+    if (forceRefresh) {
+      this.bucketRateLimitCache.delete(uid);
+    }
+
+    const cached = this.bucketRateLimitCache.get(uid);
+    if (cached) {
+      return cached;
+    }
+
+    const request$ = this.http.get(`${this.url}/${uid}/ratelimit`).pipe(
+      shareReplay(1),
+      catchError((error) => {
+        this.bucketRateLimitCache.delete(uid);
+        return throwError(() => error);
+      })
+    );
+
+    this.bucketRateLimitCache.set(uid, request$);
+    return request$;
   }
   getGlobalBucketRateLimit() {
     return this.http.get(`${this.url}/ratelimit`);
@@ -298,23 +367,27 @@ export class RgwBucketService extends ApiClient {
   }
 
   setNotification(bucket_name: string, notification: string, owner: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        bucket_name: bucket_name,
-        notification: notification,
-        owner: owner
-      });
-      return this.http.put(`${this.url}/notification`, null, { params: params });
-    });
+    return this.rgwDaemonService
+      .request((params: HttpParams) => {
+        params = params.appendAll({
+          bucket_name: bucket_name,
+          notification: notification,
+          owner: owner
+        });
+        return this.http.put(`${this.url}/notification`, null, { params: params });
+      })
+      .pipe(tap(() => this.invalidateBucketCache(bucket_name)));
   }
 
   deleteNotification(bucket_name: string, notification_id: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        bucket_name: bucket_name,
-        notification_id: notification_id
-      });
-      return this.http.delete(`${this.url}/notification`, { params });
-    });
+    return this.rgwDaemonService
+      .request((params: HttpParams) => {
+        params = params.appendAll({
+          bucket_name: bucket_name,
+          notification_id: notification_id
+        });
+        return this.http.delete(`${this.url}/notification`, { params });
+      })
+      .pipe(tap(() => this.invalidateBucketCache(bucket_name)));
   }
 }

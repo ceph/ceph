@@ -361,34 +361,34 @@
       >
         <div cdsCol>
           <cds-number
-            formControlName="read_delay_max"
+            formControlName="read_burst_mult"
             cdValidate
-            #readDelayRef="cdValidate"
-            label="Read delay max (s)"
+            #readBurstRef="cdValidate"
+            label="Read burst mult"
             i18n-label
-            [min]="0"
-            [max]="300"
-            helperText="Max allowed delay for read operations in seconds"
+            [min]="10"
+            [max]="100"
+            helperText="Burst multiplier for read operations, allowing temporary bursts above the configured limit."
             i18n-helperText
-            [invalid]="readDelayRef.isInvalid"
-            invalidText="Value must be between 0 and 300"
+            [invalid]="readBurstRef.isInvalid"
+            invalidText="Value must be between 10 and 100"
             i18n-invalidText
           >
           </cds-number>
         </div>
         <div cdsCol>
           <cds-number
-            formControlName="write_delay_max"
+            formControlName="write_burst_mult"
             cdValidate
-            #writeDelayRef="cdValidate"
-            label="Write delay max (s)"
+            #writeBurstRef="cdValidate"
+            label="Write burst mult"
             i18n-label
-            [min]="0"
-            [max]="300"
-            helperText="Max allowed delay for write operations in seconds"
+            [min]="10"
+            [max]="100"
+            helperText="Burst multiplier for write operations, allowing temporary bursts above the configured limit."
             i18n-helperText
-            [invalid]="writeDelayRef.isInvalid"
-            invalidText="Value must be between 0 and 300"
+            [invalid]="writeBurstRef.isInvalid"
+            invalidText="Value must be between 10 and 100"
             i18n-invalidText
           >
           </cds-number>

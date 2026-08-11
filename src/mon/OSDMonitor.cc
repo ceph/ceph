@@ -7628,12 +7628,14 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   stringstream ss;
   string rule_name;
   bool bulk = false;
+  bool force_create = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
 			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
 			 cct->_conf.get_val<bool>("osd_pool_default_crimson"),
+       force_create,
 			 &ss);
 
   if (ret < 0) {
@@ -8233,7 +8235,16 @@ int OSDMonitor::check_pg_num(int64_t pool,
   // assume min cluster size 3
   osd_num_by_crush = std::max(osd_num_by_crush, 3u);
   auto projected_pgs_per_osd = projected / osd_num_by_crush;
-
+  uint64_t pg_limit = max_pgs_per_osd * osd_num_by_crush;
+  if (projected > pg_limit) {
+      *ss << " pg_num " << pg_num
+      << " size " << size
+      << " for this pool would result in "
+      << projected
+      << " cumulative PGs which exceeds the limit of "
+      << "value of " << max_pgs_per_osd;
+    return -ERANGE;
+  }
   if (projected_pgs_per_osd > max_pgs_per_osd) {
     if (pool >= 0) {
       *ss << "pool id " << pool;
@@ -8288,6 +8299,7 @@ int OSDMonitor::prepare_new_pool(string& name,
 				 string pg_autoscale_mode,
 				 bool bulk,
 				 bool crimson,
+         bool force_create,
 				 ostream *ss)
 {
   if (crimson && pg_autoscale_mode.empty()) {
@@ -8301,15 +8313,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     return -EINVAL;
 
   if (pg_num == 0) {
-    auto pg_num_from_mode =
-      [pg_num=g_conf().get_val<uint64_t>("osd_pool_default_pg_num")]
-      (const string& mode) {
-      return mode == "on" ? 1 : pg_num;
-    };
-    pg_num = pg_num_from_mode(
-      pg_autoscale_mode.empty() ?
-      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode") :
-      pg_autoscale_mode);
+    pg_num = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
   }
   if (pgp_num == 0)
     pgp_num = g_conf().get_val<uint64_t>("osd_pool_default_pgp_num");
@@ -8382,7 +8386,7 @@ int OSDMonitor::prepare_new_pool(string& name,
              << duration << dendl;
   }
   r = check_pg_num(-1, pg_num, size, crush_rule, ss);
-  if (r) {
+  if (r && !force_create) {
     dout(10) << "check_pg_num returns " << r << dendl;
     return r;
   }
@@ -8398,7 +8402,6 @@ int OSDMonitor::prepare_new_pool(string& name,
     dout(10) << "prepare_pool_stripe_width returns " << r << dendl;
     return r;
   }
-  
   bool fread = false;
   if (pool_type == pg_pool_t::TYPE_ERASURE) {
     switch (fast_read) {
@@ -8515,9 +8518,7 @@ int OSDMonitor::prepare_new_pool(string& name,
         pi->ec_data_shard_count = erasure_code->get_data_chunk_count();
         pi->ec_coding_shard_count = erasure_code->get_coding_chunk_count();
       } else {
-        if (ss) {
-          *ss << "get_erasure_code failed: " << tmp.str();
-        }
+        *ss << "get_erasure_code failed: " << tmp.str();
         return -EINVAL;
       }
       pi->erasure_code_profile = erasure_code_profile;
@@ -8547,9 +8548,21 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->cache_min_flush_age = g_conf()->osd_pool_default_cache_min_flush_age;
   pi->cache_min_evict_age = g_conf()->osd_pool_default_cache_min_evict_age;
 
-  if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
-    // This will fail if the pool cannot support ec optimizations.
-    enable_pool_ec_optimizations(*pi, nullptr, true);
+  // for 'Classic' - we support both EC-optimized and non-optimized EC pools.
+  // For Crimson - only EC-optimized pools are supported.
+  if (pi->is_erasure()) {
+    if (crimson) {
+      if (auto r = enable_pool_ec_optimizations(*pi, true); !r) {
+        // for Crimson - failure is not an option
+        *ss << r.error().message;
+        return r.error().error;
+      }
+    } else {
+      if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
+        // Silently fail if the pool cannot support ec optimizations.
+        std::ignore = enable_pool_ec_optimizations(*pi, true);
+      }
+    }
   }
 
   maybe_enable_pool_split_ops(*pi);
@@ -8592,20 +8605,19 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
   return true;
 }
 
-int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
-    stringstream *ss, bool enable) {
+tl::expected<void, ErrorNMessage>
+OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable)
+{
   if (!p.is_erasure()) {
-    if (ss) {
-      *ss << "allow_ec_optimizations can only be enabled for an erasure coded pool";
-    }
-    return -EINVAL;
+    return tl::unexpected(ErrorNMessage{
+	-EINVAL,
+	"allow_ec_optimizations can only be enabled for an erasure coded pool"});
   }
   if (osdmap.require_osd_release < ceph_release_t::tentacle) {
-    if (ss) {
-      *ss << "All OSDs must be upgraded to tentacle or "
-           << "later before setting allow_ec_optimizations";
-    }
-    return -EINVAL;
+    return tl::unexpected(ErrorNMessage{
+	-EINVAL,
+	"All OSDs must be upgraded to tentacle or "
+	"later before setting allow_ec_optimizations"});
   }
   if (enable) {
     ErasureCodeInterfaceRef erasure_code;
@@ -8617,27 +8629,23 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
       m = erasure_code->get_coding_chunk_count();
       chunk_size = erasure_code->get_chunk_size(p.get_stripe_width());
     } else {
-      if (ss) {
-        *ss << "get_erasure_code failed: " << tmp.str();
-      }
-      return -EINVAL;
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL, "get_erasure_code failed: " + tmp.str()});
     }
     if ((erasure_code->get_supported_optimizations() &
-        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
-      if (ss) {
-        *ss << "ec optimizations not currently supported for pool profile.";
-      }
-      return -EINVAL;
+	ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_SUPPORTED) == 0) {
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "ec optimizations not currently supported for pool profile."});
     }
 
     if ((chunk_size % 4096) != 0) {
-      if (ss) {
-        *ss << "stripe_unit must be divisible by 4096 to enable ec optimizations";
-      }
-      return -EINVAL;
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "stripe_unit must be divisible by 4096 to enable ec optimizations"});
     }
     // Restrict the set of shards that can be a primary to the 1st data
-    // raw_shard (raw_shard 0) and the coding parity raw_shards because§
+    // raw_shard (raw_shard 0) and the coding parity raw_shards because
     // the other shards (including local parity for LRC) may not have
     // up to date copies of xattrs including OI
     p.nonprimary_shards.clear();
@@ -8649,7 +8657,7 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
 	} else {
 	  shard = shard_id_t(int(raw_shard));
 	}
-        p.nonprimary_shards.insert(shard);
+	p.nonprimary_shards.insert(shard);
       }
     }
     p.flags |= pg_pool_t::FLAG_EC_OPTIMIZATIONS;
@@ -8661,13 +8669,12 @@ int OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p,
     }
   } else {
     if ((p.flags & pg_pool_t::FLAG_EC_OPTIMIZATIONS) != 0) {
-      if (ss) {
-        *ss << "allow_ec_optimizations cannot be disabled once enabled";
-      }
-      return -EINVAL;
+      return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "allow_ec_optimizations cannot be disabled once enabled"});
     }
   }
-  return 0;
+  return {};
 }
 
 void OSDMonitor::maybe_enable_pool_split_ops(pg_pool_t &p) {
@@ -9239,9 +9246,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    int r = enable_pool_ec_optimizations(p, &ss, enable);
-    if (r != 0) {
-      return r;
+    if (auto r = enable_pool_ec_optimizations(p, enable); !r) {
+      ss << r.error().message;
+      return r.error().error;
     }
     maybe_enable_pool_split_ops(p);
     if (!was_enabled && p.allows_ecoptimizations()) {
@@ -14124,7 +14131,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     bool crimson = cmd_getval_or<bool>(cmdmap, "crimson", false) ||
       cct->_conf.get_val<bool>("osd_pool_default_crimson");
-
+    bool force_create = false;
+    cmd_getval(cmdmap, "force_pg_limit", force_create);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
@@ -14136,6 +14144,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 			   pg_autoscale_mode,
 			   bulk,
 			   crimson,
+         force_create,
 			   &ss);
     if (err < 0) {
       switch(err) {

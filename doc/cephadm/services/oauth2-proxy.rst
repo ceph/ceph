@@ -43,7 +43,7 @@ a secure and flexible authentication mechanism.
 High availability
 =================
 In general, `oauth2-proxy` is used in conjunction with the `mgmt-gateway`. The `oauth2-proxy` service can be deployed as multiple
-stateless instances, with the `mgmt-gateway` (nginx reverse-proxy) handling load balancing across these instances using a round-robin strategy.
+stateless instances, with the `mgmt-gateway` (NGINX reverse-proxy) handling load balancing across these instances using a round-robin strategy.
 Since oauth2-proxy integrates with an external identity provider (IDP), ensuring high availability for login is managed externally
 and not the responsibility of this service.
 

@@ -25,8 +25,10 @@ import { OverviewComponent as RbdMirroringComponent } from './mirroring/overview
 import { PoolEditModeModalComponent } from './mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component';
 import { RbdConfigurationFormComponent } from './rbd-configuration-form/rbd-configuration-form.component';
 import { RbdConfigurationListComponent } from './rbd-configuration-list/rbd-configuration-list.component';
-import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
+import { RbdImageResourceBreadcrumbResolver } from './rbd-image-resource-page/rbd-image-resource-breadcrumb.resolver';
+import { RbdImageResourcePageComponent } from './rbd-image-resource-page/rbd-image-resource-page.component';
+import { RbdImageResourceSidebarComponent } from './rbd-image-resource-sidebar/rbd-image-resource-sidebar.component';
 import { RbdListComponent } from './rbd-list/rbd-list.component';
 import { RbdNamespaceFormModalComponent } from './rbd-namespace-form/rbd-namespace-form-modal.component';
 import { RbdNamespaceListComponent } from './rbd-namespace-list/rbd-namespace-list.component';
@@ -107,7 +109,7 @@ import { NvmeSubsystemViewBreadcrumbResolver } from './nvme-subsystem-view/nvme-
 import { NvmeSubsystemViewComponent } from './nvme-subsystem-view/nvme-subsystem-view.component';
 import { NvmeofSubsystemPerformanceComponent } from './nvmeof-subsystem-performance/nvmeof-subsystem-performance.component';
 import { NvmeofTabsComponent } from './nvmeof-tabs/nvmeof-tabs.component';
-import { NvmeofGatewayGroupDeleteGuardModalComponent } from './nvmeof-gateway-group/nvmeof-gateway-group-delete-guard-modal.component';
+
 import { NvmeofSetupCardsComponent } from './nvmeof-setup-cards/nvmeof-setup-cards.component';
 import { NvmeofGatewayGroupFilterComponent } from './nvmeof-gateway-group-filter/nvmeof-gateway-group-filter.component';
 import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/nvmeof-edit-authentication.component';
@@ -158,8 +160,9 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     IscsiSettingComponent,
     IscsiTabsComponent,
     IscsiTargetListComponent,
-    RbdDetailsComponent,
     RbdFormComponent,
+    RbdImageResourceSidebarComponent,
+    RbdImageResourcePageComponent,
     RbdNamespaceFormModalComponent,
     RbdNamespaceListComponent,
     RbdSnapshotListComponent,
@@ -204,7 +207,6 @@ import { NvmeofEditAuthenticationComponent } from './nvmeof-edit-authentication/
     NvmeofSubsystemOverviewComponent,
     NvmeofSubsystemPerformanceComponent,
     NvmeofTabsComponent,
-    NvmeofGatewayGroupDeleteGuardModalComponent,
     NvmeofEditAuthenticationComponent
   ],
 
@@ -288,6 +290,37 @@ const routes: Routes = [
         path: `${URLVerbs.COPY}/:image_spec/:snap`,
         component: RbdFormComponent,
         data: { breadcrumbs: ActionLabels.COPY }
+      },
+      {
+        path: ':image_spec',
+        component: RbdImageResourceSidebarComponent,
+        data: {
+          breadcrumbs: RbdImageResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'snapshots',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Snapshots', section: 'snapshots' }
+          },
+          {
+            path: 'configuration',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Configuration', section: 'configuration' }
+          },
+          {
+            path: 'performance',
+            component: RbdImageResourcePageComponent,
+            data: { breadcrumbs: 'Performance', section: 'performance' }
+          }
+        ]
       }
     ]
   },
@@ -396,7 +429,10 @@ const routes: Routes = [
           {
             path: `${URLVerbs.VIEW}/:group`,
             component: NvmeGatewayViewComponent,
-            data: { breadcrumbs: NvmeGatewayViewBreadcrumbResolver },
+            data: {
+              breadcrumbs: NvmeGatewayViewBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
             children: [
               { path: '', redirectTo: 'nodes', pathMatch: 'full' },
               {
@@ -446,7 +482,10 @@ const routes: Routes = [
           {
             path: ':subsystem_nqn',
             component: NvmeSubsystemViewComponent,
-            data: { breadcrumbs: NvmeSubsystemViewBreadcrumbResolver },
+            data: {
+              breadcrumbs: NvmeSubsystemViewBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
             children: [
               { path: '', redirectTo: 'overview', pathMatch: 'full' },
               {

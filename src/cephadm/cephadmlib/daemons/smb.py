@@ -43,7 +43,6 @@ from ..exceptions import Error
 from ..host_facts import list_networks
 from ..net_utils import EndPoint
 
-
 logger = logging.getLogger()
 
 # sambacc provided commands we will need (when clustered)
@@ -328,6 +327,12 @@ class SambaContainerCommon(ContainerCommon):
         # variable. This can be dropped once sambacc no longer needs it,
         # possibly after the next sambacc release.
         environ['SAMBACC_CTDB'] = 'ctdb-is-experimental'
+        environ[
+            'SAMBACC_PASSWD_LOCATION'
+        ] = '/etc/passwd:/var/lib/samba/passwd:/lib/passwd'
+        environ[
+            'SAMBACC_GROUP_LOCATION'
+        ] = '/etc/group:/var/lib/samba/group:/lib/group'
         if self.cfg.ceph_config_entity:
             environ['SAMBACC_CEPH_ID'] = f'name={self.cfg.ceph_config_entity}'
         if self.cfg.rank >= 0:
@@ -369,8 +374,11 @@ class SMBDContainer(SambaContainerCommon):
         args = super().args()
         args.append('run')
         if self.cfg.clustered:
-            auth_kind = 'nsswitch' if self.cfg.domain_member else 'users'
-            args.append(f'--setup={auth_kind}')
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+                args.append('--setup=users')
             args.append('--setup=smb_ctdb')
             args.append('--wait-for=ctdb')
         args.append('smbd')
@@ -446,11 +454,17 @@ class ConfigWatchContainer(SambaContainerCommon):
         return 'configwatch'
 
     def args(self) -> List[str]:
-        return super().args() + [
-            'update-config',
-            '--watch',
-            f'--signal-pids-dir={_WANT_SIGNAL_DIR}',
-        ]
+        args = super().args()
+        args.append('run')
+        if self.cfg.clustered:
+            if self.cfg.domain_member:
+                args.append('--setup=nsswitch')
+            else:
+                args.append('--setup=nsswitch_auto')
+            args.append('--wait-for=ctdb')
+        args.append(f'--config-watch-signal-pids-dir={_WANT_SIGNAL_DIR}')
+        args.append('configwatch')
+        return args
 
 
 class SMBMetricsContainer(ContainerCommon):
@@ -973,6 +987,7 @@ class SMB(ContainerDaemonForm):
     def customize_container_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
         args.extend(self._layout().primary.container_args())
 
     def customize_container_mounts(
@@ -1004,7 +1019,7 @@ class SMB(ContainerDaemonForm):
             ctdb_volatile = str(data_dir / 'ctdb/volatile')
             ctdb_etc = str(data_dir / 'ctdb/etc')
             mounts[ctdb_persistent] = '/var/lib/ctdb/persistent:z'
-            mounts[ctdb_run] = '/var/run/ctdb:z'
+            mounts[ctdb_run] = '/run/samba/ctdb:z'
             mounts[ctdb_volatile] = '/var/lib/ctdb/volatile:z'
             mounts[ctdb_etc] = '/etc/ctdb:z'
             # create a shared smb.conf file for our clustered instances.
@@ -1071,6 +1086,8 @@ class SMB(ContainerDaemonForm):
             file_utils.makedirs(ddir / 'ctdb/run', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/volatile', uid, gid, 0o770)
             file_utils.makedirs(ddir / 'ctdb/etc', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'run/ctdb', uid, gid, 0o770)
+            file_utils.makedirs(ddir / 'lib-samba/lock/ctdb', uid, gid, 0o770)
             self._write_ctdb_stub_config(etc_samba_ctr / 'ctdb.json')
             self._write_smb_conf_stub(ddir / 'ctdb/smb.conf')
             if self._cfg.bind_to:

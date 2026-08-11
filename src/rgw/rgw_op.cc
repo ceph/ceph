@@ -59,9 +59,6 @@
 #include "rgw_process_env.h"
 #include "rgw_notify_event_type.h"
 #include "rgw_sal.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 #include "rgw_torrent.h"
 #include "rgw_cksum_pipe.h"
 #include "rgw_lua_data_filter.h"
@@ -87,10 +84,6 @@
 #ifdef WITH_ARROW_FLIGHT
 #include "rgw_flight.h"
 #include "rgw_flight_frontend.h"
-#endif
-
-#ifdef WITH_RADOSGW_D4N
-#include "driver/d4n/rgw_sal_d4n.h"
 #endif
 
 #ifdef WITH_LTTNG
@@ -2703,11 +2696,8 @@ void RGWGetObj::execute(optional_yield y)
   if (multipart_part_num) {
     read_op->params.part_num = &*multipart_part_num;
   }
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->object->set_cache_request();
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
@@ -3605,11 +3595,8 @@ void RGWListBucket::execute(optional_yield y)
   params.list_versions = list_versions;
   params.allow_unordered = allow_unordered;
   params.shard_id = shard_id;
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterBucket*>(s->bucket.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->bucket->set_cache_request();
 
   rgw::sal::Bucket::ListResults results;
 
@@ -4860,11 +4847,8 @@ void RGWPutObj::execute(optional_yield y)
 					 s->owner,
 					 pdest_placement, olh_epoch, s->req_id);
   }
-#ifdef WITH_RADOSGW_D4N
-  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-    dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_cache_request();
-  }
-#endif
+  if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+    s->object->set_cache_request();
 
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -6010,11 +5994,9 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.null_verid = null_verid;
       del_op->params.size_match = size_match;
       del_op->params.if_match = if_match;
-#ifdef WITH_RADOSGW_D4N
-      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST") && (g_conf().get_val<std::string>("rgw_filter") == "d4n")) {
-		dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get())->set_cache_request();
-      }
-#endif
+
+      if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
+        s->object->set_cache_request();
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
@@ -6064,203 +6046,123 @@ void RGWDeleteObj::execute(optional_yield y)
   }
 }
 
-class RGWCopyObjDPF : public rgw::sal::DataProcessorFactory {
-  rgw::sal::Driver* driver;
-  req_state* s;
-  uint64_t &obj_size;
-  std::map<std::string, std::string>& crypt_http_responses;
-  DataProcessorFilter cb;
-  RGWGetObj_Filter* filter{&cb};
-  bool need_decompress{false};
-  RGWCompressionInfo decompress_info;
-  boost::optional<RGWGetObj_Decompress> decompress;
-  std::unique_ptr<RGWGetObj_Filter> decrypt;
-  std::unique_ptr<rgw::sal::DataProcessor> encrypt;
-  std::optional<RGWPutObj_Compress> compressor;
-  CompressorRef compressor_plugin;
-  off_t ofs_x{0};
-  off_t end_x = obj_size;
-
-public:
-  RGWCopyObjDPF(rgw::sal::Driver* _driver,
-                req_state* _s,
-                uint64_t& _obj_size,
-                std::map<std::string, std::string>& _crypt_http_responses)
-    : driver(_driver),
-      s(_s),
-      obj_size(_obj_size),
-      crypt_http_responses(_crypt_http_responses)
-  {}
-  ~RGWCopyObjDPF() override {}
-
-  int get_encrypt_filter(std::unique_ptr<rgw::sal::DataProcessor> *filter,
-                         rgw::sal::DataProcessor *cb,
-                         rgw::sal::Attrs& attrs)
-  {
-    std::unique_ptr<BlockCrypt> block_crypt;
-    int res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
-                                     crypt_http_responses);
-    if (res == 0 && block_crypt != nullptr) {
-      filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
+static bool copy_dest_requests_encryption(req_state* s)
+{
+  for (const auto& attr : {"x-amz-server-side-encryption-customer-algorithm",
+                            "x-amz-server-side-encryption"}) {
+    if (s->info.crypt_attribute_map.count(attr)) {
+      return true;
     }
-    return res;
+  }
+  /*
+   * rgw_crypt_default_encryption_key produces an RGW-AUTO encrypt
+   * filter without any explicit SSE header (bucket-level encryption
+   * already synthesizes the header upstream and is covered above).
+   */
+  if (!s->cct->_conf->rgw_crypt_default_encryption_key.empty()) {
+    return true;
+  }
+  return false;
+}
+
+class RGWCopyObjDPF : public RGWRecompressDPF {
+  req_state* s;
+  std::string normalized_dest_compression;
+  std::map<std::string, std::string>& crypt_http_responses;
+
+protected:
+  int get_decrypt_crypt(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        const rgw::sal::Attrs& src_attrs,
+                        std::unique_ptr<BlockCrypt>* crypt) override
+  {
+    // copy: rgw_s3_prepare_decrypt takes non-const attrs
+    auto mutable_attrs = src_attrs;
+    return rgw_s3_prepare_decrypt(s, y, mutable_attrs, crypt,
+                                  nullptr, true /* copy_source */);
   }
 
-  int set_writer(rgw::sal::DataProcessor* writer,
-                 rgw::sal::Attrs& attrs,
-                 const DoutPrefixProvider *dpp,
-                 optional_yield y) override
+  int get_encrypt_crypt(const DoutPrefixProvider* dpp,
+                        optional_yield y,
+                        rgw::sal::Attrs& dest_attrs,
+                        std::unique_ptr<BlockCrypt>* crypt) override
   {
-    /* RGWGetObj_Filter */
-    // decompress
-    int ret = rgw_compression_info_from_attrset(s->src_object->get_attrs(), need_decompress, decompress_info);
-    if (ret < 0) {
-      return ret;
+    // strip all old crypt attrs — CopyObj may change key/mode
+    auto it = dest_attrs.lower_bound(RGW_ATTR_CRYPT_PREFIX);
+    while (it != dest_attrs.end() &&
+           it->first.compare(0, sizeof(RGW_ATTR_CRYPT_PREFIX) - 1,
+                             RGW_ATTR_CRYPT_PREFIX) == 0) {
+      it = dest_attrs.erase(it);
     }
-
-    bool src_encrypted = s->src_object->get_attrs().count(RGW_ATTR_CRYPT_MODE);
-    // Preserve encrypted size for decrypt range clamping before any plaintext conversion.
-    off_t encrypted_total_size = obj_size;
-
-    // Create decompress filter if source is compressed.
-    // Must be created BEFORE decrypt so the chain is: decrypt → decompress → cb
-    if (need_decompress) {
-      static constexpr bool partial_content = false;
-      decompress.emplace(s->cct, &decompress_info, partial_content, filter);
-      filter = &*decompress;
-    }
-
-    // decrypt
-    if (src_encrypted) {
-      auto attr_iter = s->src_object->get_attrs().find(RGW_ATTR_MANIFEST);
-      static constexpr bool copy_source = true;
-
-      // part_num=0 for copy source (full object read)
-      ret = get_decrypt_filter(&decrypt, filter, s, s->src_object->get_attrs(),
-                               attr_iter != s->src_object->get_attrs().end() ? &attr_iter->second : nullptr,
-                               nullptr, copy_source, 0, encrypted_total_size);
-      if (ret < 0) {
-        return ret;
-      }
-      if (decrypt != nullptr) {
-        filter = decrypt.get();
-      }
-    }
-
-    // Set obj_size to the final output size (plaintext) for range handling.
-    if (need_decompress) {
-      obj_size = decompress_info.orig_size;
-      s->src_object->set_obj_size(obj_size);
-      end_x = obj_size;
-    } else if (src_encrypted) {
-      uint64_t decrypted_size = 0;
-      const auto& src_attrs = s->src_object->get_attrs();
-      if (rgw_calc_aead_obj_size(dpp, src_attrs, encrypted_total_size,
-                                src_attrs.count(RGW_ATTR_COMPRESSION), &decrypted_size)) {
-        obj_size = decrypted_size;
-        s->src_object->set_obj_size(obj_size);
-        end_x = obj_size;
-      }
-    }
-
-    filter->fixup_range(ofs_x, end_x);
-
-    /* rgw::sal::DataProcessor */
-    // encrypt
-    rgw::sal::DataProcessor* processor = writer;
-
-    ret = get_encrypt_filter(&encrypt, processor, attrs);
-    if (ret < 0) {
-      return ret;
-    }
-    if (encrypt != nullptr) {
-      processor = &*encrypt;
-    }
-
-    // compression
-    attrs.erase(RGW_ATTR_COMPRESSION); // remove any existing compression info from source object
-    // a zonegroup feature is required to combine compression and encryption
-    const RGWZoneGroup& zonegroup = s->penv.site->get_zonegroup();
-    const bool compress_encrypted = zonegroup.supports(rgw::zone_features::compress_encrypted);
-    const auto& compression_type = driver->get_compression_type(s->dest_placement);
-    if (compression_type != "none" &&
-        (encrypt == nullptr || compress_encrypted)) {
-      compressor_plugin = get_compressor_plugin(s, compression_type);
-      if (!compressor_plugin) {
-        ldpp_dout(s, 1) << "Cannot load plugin for compression type "
-            << compression_type << dendl;
-      } else {
-        compressor.emplace(s->cct, compressor_plugin, processor);
-        processor = &*compressor;
-        // always send incompressible hint when rgw is itself doing compression
-        s->object->set_compressed();
-      }
-    }
-
-    cb.set_processor(processor);
-
+    std::unique_ptr<BlockCrypt> block_crypt;
+    int ret = rgw_s3_prepare_encrypt(s, y, dest_attrs, &block_crypt,
+                                     crypt_http_responses);
+    if (ret < 0) return ret;
+    *crypt = std::move(block_crypt);
     return 0;
   }
 
+  const std::string& get_dest_compression() override {
+    return normalized_dest_compression;
+  }
+
+  bool supports_compress_encrypted() override {
+    return s->penv.site->get_zonegroup().supports(
+        rgw::zone_features::compress_encrypted);
+  }
+
+  // stable codec for multipart copies
+  CompressorRef create_compressor(const std::string& type) override {
+    return get_compressor_plugin(s, type);
+  }
+
+  void mark_compressed() override {
+    s->object->set_compressed();
+  }
+
+  void on_obj_size_changed(uint64_t new_size) override {
+    // The src_object's in-memory state is what downstream consumers
+    // in RGWCopyObj::execute (bucket logging, publish_commit, op
+    // counters) read via the obj_size reference held by the base.
+    s->src_object->set_obj_size(new_size);
+  }
+
+  bool dest_requests_encryption() const {
+    return copy_dest_requests_encryption(s);
+  }
+
+public:
+  RGWCopyObjDPF(req_state* s_,
+                uint64_t& obj_size,
+                const rgw::sal::Attrs& src_attrs,
+                const std::string& dest_compression,
+                std::map<std::string, std::string>& crypt_http_responses_)
+    : RGWRecompressDPF(s_->cct, obj_size, src_attrs),
+      s(s_),
+      normalized_dest_compression(dest_compression),
+      crypt_http_responses(crypt_http_responses_)
+  {}
+
   bool need_copy_data() override {
-    // if source object is encrypted, we need to copy data
-    if (s->src_object->get_attrs().count(RGW_ATTR_CRYPT_MODE)) {
+    // source is encrypted
+    if (src_attrs.count(RGW_ATTR_CRYPT_MODE)) return true;
+
+    // destination encryption requires slow path
+    if (dest_requests_encryption()) return true;
+
+    // compression change: preserve fast path for same-codec copies
+    bool src_compressed = false;
+    RGWCompressionInfo cs_info;
+    if (rgw_compression_info_from_attrset(src_attrs, src_compressed,
+                                          cs_info) < 0) {
       return true;
     }
-
-    // check if it's requested to be encrypted
-    static const string crypt_attrs[] = {
-      "x-amz-server-side-encryption-customer-algorithm", // SSE-C
-      "x-amz-server-side-encryption", // SSE-S3, SSE-KMS
-    };
-    for (const auto& attr : crypt_attrs) {
-      if (s->info.crypt_attribute_map.find(attr) !=
-          s->info.crypt_attribute_map.end()) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
-  RGWGetObj_Filter* get_filter() override {
-    return filter;
-  }
-
-  void finalize_attrs(rgw::sal::Attrs& attrs) override {
-    if (compressor && compressor->is_compressed()) {
-      bufferlist tmp;
-      RGWCompressionInfo cs_info;
-      assert(compressor_plugin != nullptr);
-      // plugin exists when the compressor does
-      // coverity[dereference:SUPPRESS]
-      cs_info.compression_type = compressor_plugin->get_type_name();
-      cs_info.orig_size = obj_size;
-      cs_info.compressor_message = compressor->get_compressor_message();
-      cs_info.blocks = std::move(compressor->get_compression_blocks());
-
-      encode(cs_info, tmp);
-      attrs[RGW_ATTR_COMPRESSION] = tmp;
-
-      ldpp_dout(s, 20) << "storing " << RGW_ATTR_COMPRESSION
-          << " with type=" << cs_info.compression_type
-          << ", orig_size=" << cs_info.orig_size
-          << ", compressor_message=" << cs_info.compressor_message
-          << ", blocks=" << cs_info.blocks.size() << dendl;
-    }
-
-    // Copy path: ensure AEAD ORIGINAL_SIZE matches copied payload size.
-    // If it doesn't, stale CRYPT_PARTS and CRYPT_PART_NUMS must be dropped.
-    const auto mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
-    if (is_aead_mode(mode)) {
-      uint64_t existing = 0;
-      if (!rgw_get_aead_original_size(s, attrs, &existing) ||
-          existing != obj_size) {
-        set_attr(attrs, RGW_ATTR_CRYPT_ORIGINAL_SIZE, std::to_string(obj_size));
-        attrs.erase(RGW_ATTR_CRYPT_PARTS);
-        attrs.erase(RGW_ATTR_CRYPT_PART_NUMS);
-      }
-    }
+    bool compression_matches =
+        normalized_dest_compression != "random" &&
+        ((!src_compressed && normalized_dest_compression == "none") ||
+         (src_compressed &&
+          cs_info.compression_type == normalized_dest_compression));
+    return !compression_matches;
   }
 };
 
@@ -6422,8 +6324,49 @@ int RGWCopyObj::verify_permission(optional_yield y)
     rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
                                *md_directive);
 
+  /*
+   * The destination object is tagged whether the tag-set is replaced (from the
+   * request) or copied (from the source), so both paths must authorize object
+   * tagging and expose the tags to policy conditions. For a copied tag-set the
+   * source is read here to learn whether the destination will carry tags.
+   */
+  std::optional<RGWObjTags> dest_obj_tags = obj_tags;
+  if (!dest_obj_tags && copy_source_tags &&
+      s->local_source && source_zone.empty()) {
+    op_ret = s->src_object->get_obj_attrs(y, this);
+    if (op_ret < 0) {
+      return op_ret;
+    }
+    const auto& src_attrs = s->src_object->get_attrs();
+    auto titer = src_attrs.find(RGW_ATTR_TAGS);
+    if (titer != src_attrs.end()) {
+      RGWObjTags tagset;
+      try {
+        auto bliter = titer->second.cbegin();
+        tagset.decode(bliter);
+      } catch (buffer::error& err) {
+        ldpp_dout(s, 0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+        return -EIO;
+      }
+      dest_obj_tags = std::move(tagset);
+    }
+  }
+
+  if (dest_obj_tags) {
+    for (const auto& kv : dest_obj_tags->get_tags()) {
+      rgw_add_to_iam_environment(s->env, "s3:RequestObjectTag/" + kv.first, kv.second);
+    }
+  }
+
   if (!verify_bucket_permission(this, s, ARN(s->object->get_obj()),
                                 rgw::IAM::s3PutObject)) {
+    return -EACCES;
+  }
+
+  // writing or clearing object tags requires the tagging permission too
+  if (dest_obj_tags &&
+      !verify_bucket_permission(this, s, ARN(s->object->get_obj()),
+                                rgw::IAM::s3PutObjectTagging)) {
     return -EACCES;
   }
 
@@ -6463,6 +6406,10 @@ int RGWCopyObj::init_common()
     return op_ret;
   }
   populate_with_generic_attrs(s, attrs);
+
+  if (obj_tags) {
+    obj_tags->encode(attrs[RGW_ATTR_TAGS]);
+  }
 
   return 0;
 }
@@ -6518,12 +6465,19 @@ void RGWCopyObj::execute(optional_yield y)
   if (init_common() < 0)
     return;
 
+  // expose replacement tags to the notification event payload
+  if (obj_tags) {
+    s->tagset = *obj_tags;
+  }
+
   // make reservation for notification if needed
   std::unique_ptr<rgw::sal::Notification> res
 				   = driver->get_notification(
 				     s->object.get(), s->src_object.get(),
 				     s, rgw::notify::ObjectCreatedCopy, y);
-  op_ret = res->publish_reserve(this);
+
+  // expose replacement tags to notification filtering
+  op_ret = res->publish_reserve(this, obj_tags ? &*obj_tags : nullptr);
   if (op_ret < 0) {
     return;
   }
@@ -6611,7 +6565,31 @@ void RGWCopyObj::execute(optional_yield y)
     return;
   }
 
-  RGWCopyObjDPF copy_obj_dpf(driver, s, obj_size, crypt_http_responses);
+  if (copy_source_tags && attrs_mod == rgw::sal::ATTRSMOD_REPLACE) {
+    bufferlist tags_bl;
+    if (s->src_object->get_attr(RGW_ATTR_TAGS, tags_bl)) {
+      attrs[RGW_ATTR_TAGS] = std::move(tags_bl);
+    }
+  }
+
+  /*
+   * Compute the normalized destination compression for CopyObject.
+   * When the effective destination will be encrypted and the zonegroup
+   * doesn't support compress_encrypted, force "none" to prevent
+   * writing an incompatible compressed+encrypted layout.
+   */
+  const auto& raw_dest_compression =
+      driver->get_compression_type(s->dest_placement);
+  std::string dest_compression = raw_dest_compression;
+
+  if (copy_dest_requests_encryption(s) &&
+      !s->penv.site->get_zonegroup().supports(
+          rgw::zone_features::compress_encrypted)) {
+    dest_compression = "none";
+  }
+
+  RGWCopyObjDPF copy_obj_dpf(s, obj_size, s->src_object->get_attrs(),
+                              dest_compression, crypt_http_responses);
 
   op_ret = s->src_object->copy_object(s->owner,
 	   s->user->get_id(),
@@ -8184,6 +8162,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   } prefix{*this, o};
   const DoutPrefixProvider* dpp = &prefix;
 
+  using Clock = ceph::coarse_real_clock;
+  const auto started_at = Clock::now();
+
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
     send_partial_response(o, false, "", -EINVAL);
@@ -8280,6 +8261,11 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   }
   
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, r);
+
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_del_obj, 1);
+  rgw::op_counters::inc(counters, l_rgw_op_del_obj_b, obj_size);
+  rgw::op_counters::tinc(counters, l_rgw_op_del_obj_lat, Clock::now() - started_at);
 }
 
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
@@ -8363,7 +8349,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
     bool has_versioned = false;
     for (auto object : multi_delete->objects) {
       const string& instance = object.get_version_id();
-      if (instance.empty()) {
+      if (!instance.empty()) {
         has_versioned = true;
         break;
       }
@@ -8965,7 +8951,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 
   auto status = rgw::tar::StatusIndicator::create();
   do {
-    op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
+    op_ret = stream->get_exactly(rgw::tar::TAR_BLOCK_SIZE, buffer);
     if (op_ret < 0) {
       ldpp_dout(this, 2) << "cannot read header" << dendl;
       return;
@@ -8993,7 +8979,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 	  else
 	    filename = file_prefix + std::string(header->get_filename());
 	  auto body = AlignedStreamGetter(0, header->get_filesize(),
-                                          rgw::tar::BLOCK_SIZE, *stream);
+                                          rgw::tar::TAR_BLOCK_SIZE, *stream);
           op_ret = handle_file(filename,
                                header->get_filesize(),
                                body, y);
@@ -9422,7 +9408,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
     if (s->public_access_block.BlockPublicPolicy &&
-        rgw::IAM::is_public(p)) {
+        rgw::IAM::is_public(this, p)) {
       op_ret = -EACCES;
       return;
     }
@@ -9969,7 +9955,8 @@ int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
 
 void RGWGetBucketPolicyStatus::execute(optional_yield y)
 {
-  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl.is_public(this);
+  isPublic = (s->iam_policy && rgw::IAM::is_public(this, *s->iam_policy)) ||
+             s->bucket_acl.is_public(this);
 }
 
 int RGWPutBucketPublicAccessBlock::verify_permission(optional_yield y)

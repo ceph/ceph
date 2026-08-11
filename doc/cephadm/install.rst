@@ -149,6 +149,7 @@ packages that provide the ``cephadm`` command, run the following commands:
 #. Add the repository:
 
    .. prompt:: bash #
+      :substitutions:
 
       ./cephadm add-repo --release |stable-release|
 

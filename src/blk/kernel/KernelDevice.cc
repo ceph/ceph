@@ -304,7 +304,7 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
-  if (size > 0) {
+  if (size >= block_size) {
     r = _aio_start();
     if (r < 0) {
       goto out_fail;

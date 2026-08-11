@@ -24,17 +24,19 @@
       ></a
     >
   </ng-container>
-  <ng-container ngbNavItem>
-    <a
-      class="nav-link"
-      routerLink="/monitoring/silences"
-      routerLinkActive="active"
-      ariaCurrentWhenActive="page"
-      [routerLinkActiveOptions]="{ exact: true }"
-      i18n
-      >Silences</a
-    >
-  </ng-container>
+  @if (prometheusPermissions.read) {
+    <ng-container ngbNavItem>
+      <a
+        class="nav-link"
+        routerLink="/monitoring/silences"
+        routerLinkActive="active"
+        ariaCurrentWhenActive="page"
+        [routerLinkActiveOptions]="{ exact: true }"
+        i18n
+        >Silences</a
+      >
+    </ng-container>
+  }
   <ng-container ngbNavItem>
     <a
       class="nav-link"

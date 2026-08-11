@@ -14,9 +14,7 @@
     [columns]="columns"
     columnMode="flex"
     selectionType="single"
-    [hasDetails]="true"
     id="key"
-    (setExpandedRow)="setExpandedRow($event)"
     (updateSelection)="updateSelection($event)"
     (fetchData)="fetchData()"
   >
@@ -27,9 +25,5 @@
       [tableActions]="tableActions"
     >
     </cd-table-actions>
-    <cd-rgw-topic-details
-      *cdTableDetail
-      [selection]="expandedRow"
-    ></cd-rgw-topic-details>
   </cd-table>
 </ng-container>

@@ -74,9 +74,6 @@
 #include "rgw_rest_iam.h"
 #include "rgw_rest_bucket_logging.h"
 #include "rgw_sts.h"
-#ifdef WITH_RADOSGW_RADOS
-#include "rgw_sal_rados.h"
-#endif
 #include "rgw_cksum_pipe.h"
 #include "rgw_s3select.h"
 
@@ -122,8 +119,14 @@ static inline std::string get_s3_expiration_header(
   req_state* s,
   const ceph::real_time& mtime)
 {
+  /* Use the client-supplied request key (s->object_key), not the
+   * OLH-resolved key. OLH resolution fills in the current version's instance
+   * id even when the client did not request a specific version, which would
+   * otherwise make every versioned-bucket response look like a versionId
+   * request. s3_expiration_header() keys its current-version decision off an
+   * empty instance. */
   return rgw::lc::s3_expiration_header(
-    s, s->object->get_key(), s->tagset, mtime, s->bucket_attrs);
+    s, s->object_key, s->tagset, mtime, s->bucket_attrs);
 }
 
 static inline bool get_s3_multipart_abort_header(
@@ -3969,6 +3972,32 @@ int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
       return -EINVAL;
     }
     md_directive = tmp_md_d;
+  }
+
+  copy_source_tags = true;
+
+  auto tagging_directive = s->info.env->get("HTTP_X_AMZ_TAGGING_DIRECTIVE");
+  if (tagging_directive) {
+    if (strcasecmp(tagging_directive, "REPLACE") == 0) {
+      RGWObjTags new_tags;
+      auto tag_str = s->info.env->get("HTTP_X_AMZ_TAGGING");
+      if (tag_str) {
+        int r = new_tags.set_from_string(tag_str);
+        if (r < 0) {
+          ldpp_dout(this, 0) << "setting obj tags failed with " << r << dendl;
+          if (r == -ERR_INVALID_TAG) {
+            r = -EINVAL;
+          }
+          return r;
+        }
+      }
+      obj_tags = std::move(new_tags);
+      copy_source_tags = false;
+    } else if (strcasecmp(tagging_directive, "COPY") != 0) {
+      s->err.message = "Unknown tagging directive.";
+      ldpp_dout(this, 0) << s->err.message << dendl;
+      return -EINVAL;
+    }
   }
 
   if (source_zone.empty() &&

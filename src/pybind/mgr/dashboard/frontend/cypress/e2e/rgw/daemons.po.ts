@@ -5,33 +5,22 @@ export class DaemonsPageHelper extends PageHelper {
     index: { url: '#/rgw/daemon', id: 'cd-rgw-daemon-list' }
   };
 
-  getTableCell() {
+  getOverviewField(label: string) {
     return cy
-      .get('.tab-content')
-      .its(1)
-      .find('cd-table')
-      .should('have.length', 1) // Only 1 table should be renderer
-      .find('[cdstabledata]');
+      .get('.cd-overview-label')
+      .filter((_index, el) => el.textContent?.includes(label))
+      .closest('.cd-overview-item');
   }
 
-  checkTables() {
-    // click on a daemon so details table appears
-    this.getExpandCollapseElement().click();
+  checkResourcePage() {
+    // Click a daemon row link so the resource page is opened.
+    this.getResourcePage().click();
 
-    // check details table is visible
-    // check at least one field is present
-    this.getTableCell().should('be.visible').should('contain.text', 'ceph_version');
+    cy.get('cd-resource-overview-card').should('be.visible');
+    this.getOverviewField('Ceph Version').should('be.visible');
 
-    // click on performance counters tab and check table is loaded
-    cy.contains('.nav-link', 'Performance Counters').click();
-
-    // check at least one field is present (objecter counter may have memory address suffix)
-    this.getTableCell()
-      .should('be.visible')
-      .invoke('text')
-      .should('match', /objecter.*\.op_r/);
-
-    // click on performance details tab
-    cy.contains('.nav-link', 'Performance Details').click();
+    // Check the Performance tab is accessible and the URL hash changes accordingly.
+    cy.contains('cds-sidenav-item a', /^Performance$/).click();
+    cy.location('hash').should('include', '/performance');
   }
 }

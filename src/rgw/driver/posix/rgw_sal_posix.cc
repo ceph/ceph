@@ -3392,7 +3392,13 @@ int POSIXObject::copy_object(const ACLOwner& owner,
     }
     break;
   case ATTRSMOD_NONE:
-    attrs = src_attrs;
+    {
+      auto tags = attrs.extract(RGW_ATTR_TAGS);
+      attrs = src_attrs;
+      if (!tags.empty()) {
+        attrs[RGW_ATTR_TAGS] = std::move(tags.mapped());
+      }
+    }
     ret = 0;
     break;
   }
@@ -4713,7 +4719,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   if (if_nomatch) {
     if (strcmp(if_nomatch, "*") == 0) {
       // test the object is not existing
-      if (!exists) {
+      if (exists) {
 	return -ERR_PRECONDITION_FAILED;
       }
     } else {
