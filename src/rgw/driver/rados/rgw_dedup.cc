@@ -2692,13 +2692,13 @@ namespace rgw::dedup {
             goto err;
           }
         }
-        driver->meta_list_keys_complete(handle);
       }
       else {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: failed driver->meta_list_keys_next()" << dendl;
         goto err;
       }
     }
+    driver->meta_list_keys_complete(handle);
     ldpp_dout(dpp, 10) <<__func__
                        << "::all_buckets_obj_count=" << d_all_buckets_obj_count
                        << "::all_buckets_obj_size=" << d_all_buckets_obj_size
@@ -2773,7 +2773,6 @@ namespace rgw::dedup {
             continue;
           }
         }
-        driver->meta_list_keys_complete(handle);
       }
       else {
         ldpp_dout(dpp, 1) << __func__ << "::failed driver->meta_list_keys_next()" << dendl;
@@ -2782,6 +2781,7 @@ namespace rgw::dedup {
         break;
       }
     }
+    driver->meta_list_keys_complete(handle);
     ldpp_dout(dpp, 20) <<__func__ << "::flush_output_buffers() worker_id="
                        << worker_id << dendl;
     disk_arr.flush_output_buffers(dpp, d_dedup_cluster_ioctx);
