@@ -1136,6 +1136,16 @@ void RADOS::delete_selfmanaged_snap_(std::int64_t pool,
       }));
 }
 
+bool RADOS::pool_has_flag(std::int64_t pool_id, uint64_t flag) const {
+  return impl->objecter->with_osdmap([pool_id, flag](const OSDMap& osdmap) {
+    const auto pgpool = osdmap.get_pg_pool(pool_id);
+    if (!pgpool) {
+      return false;
+    }
+    return pgpool->has_flag(flag);
+  });
+}
+
 bool RADOS::get_self_managed_snaps_mode(std::int64_t pool) const {
   return impl->objecter->with_osdmap([pool](const OSDMap& osdmap) {
     const auto pgpool = osdmap.get_pg_pool(pool);

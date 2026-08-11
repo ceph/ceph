@@ -53,6 +53,7 @@
 #include "common/event_socket.h"
 #include "include/interval_set.h"
 #include "include/stringify.h"
+#include "osd/osd_types.h"
 
 #include <boost/assign/list_of.hpp>
 #include <boost/scope_exit.hpp>
@@ -2385,6 +2386,78 @@ TEST_F(TestLibRBD, TestEncryptionLUKS1)
 
   ASSERT_EQ(0, rbd_close(image));
   rados_ioctx_destroy(ioctx);
+}
+
+TEST_F(TestLibRBD, TestEncryptionLUKS2ECPool)
+{
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+  REQUIRE(!is_librados_test_stub(_rados));
+
+  // Create a FastEC data pool
+  std::string ec_pool_name = get_temp_pool_name("test-librbd-ec-encrypt-");
+  std::string ec_profile = "testprofile-" + ec_pool_name;
+  destroy_ec_pool_pp(ec_pool_name, _rados);
+  ASSERT_EQ(0, _rados.mon_command(
+    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"" + ec_profile +
+    "\", \"profile\": [\"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
+    {}, nullptr, nullptr));
+  ASSERT_EQ(0, _rados.mon_command(
+    "{\"prefix\": \"osd pool create\", \"pool\": \"" + ec_pool_name +
+    "\", \"pool_type\": \"erasure\", \"pg_num\": 8, \"pgp_num\": 8"
+    ", \"erasure_code_profile\": \"" + ec_profile + "\"}",
+    {}, nullptr, nullptr));
+  ASSERT_EQ("", set_allow_ec_overwrites_pp(ec_pool_name, _rados, true));
+  ASSERT_EQ(0, _rados.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + ec_pool_name +
+    "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
+    {}, nullptr, nullptr));
+  _rados.wait_for_latest_osdmap();
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
+  _unique_pool_names.push_back(ec_pool_name);
+
+  rados_ioctx_t meta_ioctx;
+  rados_ioctx_create(_cluster, m_pool_name.c_str(), &meta_ioctx);
+
+  // Create an image using the EC data pool
+  std::string name = get_temp_image_name();
+  uint64_t size = 32 << 20;
+  rbd_image_options_t opts;
+  rbd_image_options_create(&opts);
+  BOOST_SCOPE_EXIT(opts) { rbd_image_options_destroy(opts); } BOOST_SCOPE_EXIT_END;
+  ASSERT_EQ(0, rbd_image_options_set_string(
+      opts, RBD_IMAGE_OPTION_DATA_POOL, ec_pool_name.c_str()));
+  ASSERT_EQ(0, rbd_create4(meta_ioctx, name.c_str(), size, opts));
+
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(meta_ioctx, name.c_str(), &image, NULL));
+
+  rbd_encryption_luks2_format_options_t luks2_opts = {
+          .alg = RBD_ENCRYPTION_ALGORITHM_AES256,
+          .passphrase = "password",
+          .passphrase_size = 8,
+  };
+
+#ifndef HAVE_LIBCRYPTSETUP
+  ASSERT_EQ(-ENOTSUP, rbd_encryption_format(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &luks2_opts, sizeof(luks2_opts)));
+#else
+  // Without preserve_allocation the format must fail with -EINVAL.
+  ASSERT_EQ(-EINVAL, rbd_encryption_format(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &luks2_opts, sizeof(luks2_opts)));
+
+  // Enable preserve_allocation on the EC data pool.
+  ASSERT_EQ("", set_pool_flags_pp(
+      ec_pool_name, _rados, pg_pool_t::FLAG_PRESERVE_ALLOCATION, true));
+  _rados.wait_for_latest_osdmap();
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
+
+  // Now the format must succeed.
+  ASSERT_EQ(0, rbd_encryption_format(
+          image, RBD_ENCRYPTION_FORMAT_LUKS2, &luks2_opts, sizeof(luks2_opts)));
+#endif
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(meta_ioctx);
 }
 
 TEST_F(TestLibRBD, TestEncryptionLUKS2)
