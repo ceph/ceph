@@ -816,9 +816,9 @@ int AppendObjectProcessor::complete(
     hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
     char petag[CEPH_CRYPTO_MD5_DIGESTSIZE];
     char final_etag[CEPH_CRYPTO_MD5_DIGESTSIZE];
-    hex_to_buf(cur_etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+    rgw_part_etag_to_digest(cur_etag, petag);
     hash.Update((const unsigned char *)petag, sizeof(petag));
-    hex_to_buf(etag.c_str(), petag, CEPH_CRYPTO_MD5_DIGESTSIZE);
+    rgw_part_etag_to_digest(etag, petag);
     hash.Update((const unsigned char *)petag, sizeof(petag));
     hash.Final((unsigned char *)final_etag);
 

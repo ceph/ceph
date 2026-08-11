@@ -124,6 +124,15 @@ int main(int argc, char *argv[])
   mutex.unlock();
 
   common_init_finish(g_ceph_context);
+
+  if (g_ceph_context->_conf->rgw_non_md5_etag) {
+    derr << "rgw_non_md5_etag is enabled -- PutObject/UploadPart will not "
+            "compute content MD5. ETags are dashed non-MD5 (nsfs: mtime-ino "
+            "from inode; others: mtime-req from request id); "
+            "AWS SDKs will not validate them as MD5, and Content-MD5 is ignored."
+         << dendl;
+  }
+
   init_async_signal_handler();
 
   /* XXXX check locations thru sighandler_alrm */

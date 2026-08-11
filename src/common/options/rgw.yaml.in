@@ -59,6 +59,28 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_non_md5_etag
+  type: bool
+  level: advanced
+  desc: Do not compute content MD5 for PutObject/UploadPart ETags; return a
+    dashed non-MD5 ETag instead.
+  long_desc: When enabled, RGW skips MD5 hashing of the object/part body and
+    returns a unique dashed non-MD5 ETag so AWS SDKs skip client-side MD5
+    validation. Content-MD5 is not verified.
+    The nsfs backend alone uses a real filesystem inode, in the form of
+    mtime-<ns>-ino-<inode> from the object file's stat
+    (the same string as nsfs version ids, so on a versioned nsfs bucket
+    ETag matches versionId).
+    Other backends, including posix, do not use an inode; they use
+    mtime-<ns>-req-<req-id>, where req is the RGW request id (or transaction id).
+    This reduces PUT CPU usage.
+    Default false keeps classic S3 MD5 ETags.
+  default: false
+  services:
+  - rgw
+  flags:
+  - runtime
+  with_legacy: true
 - name: rgw_parquet_buffer_size
   type: size
   level: advanced

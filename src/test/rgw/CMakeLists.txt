@@ -565,7 +565,6 @@ add_ceph_unittest(unittest_rgw_http_client)
 target_link_libraries(unittest_rgw_http_client
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
-
 # unittest_rgw_rest_conn
 add_executable(unittest_rgw_rest_conn test_rgw_rest_conn.cc)
 add_ceph_unittest(unittest_rgw_rest_conn)
@@ -576,6 +575,13 @@ target_link_libraries(unittest_rgw_rest_conn
 add_executable(unittest_yield_completion test_yield_completion.cc)
 add_ceph_unittest(unittest_yield_completion)
 target_link_libraries(unittest_yield_completion
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
+add_executable(unittest_rgw_opaque_etag test_rgw_opaque_etag.cc)
+add_ceph_unittest(unittest_rgw_opaque_etag)
+target_include_directories(unittest_rgw_opaque_etag
+  SYSTEM PRIVATE ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src/rgw)
+target_link_libraries(unittest_rgw_opaque_etag
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
 if(WITH_RADOSGW_FDB)
