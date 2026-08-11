@@ -570,6 +570,25 @@ void Objecter::shutdown()
     op->put();
   }
 
+  // Only bounded latest-map waits opt in to cancellation on shutdown.
+  for (auto p = waiting_for_map.begin(); p != waiting_for_map.end();) {
+    std::erase_if(p->second, [this](MapWaiter& waiter) {
+      if (!waiter.timeout_event) {
+	return false;
+      }
+      timer.cancel_event(waiter.timeout_event);
+      asio::post(service.get_executor(),
+		 asio::append(std::move(waiter.onfinish),
+			      make_error_code(bs::errc::operation_canceled)));
+      return true;
+    });
+    if (p->second.empty()) {
+      p = waiting_for_map.erase(p);
+    } else {
+      ++p;
+    }
+  }
+
   if (tick_event) {
     if (timer.cancel_event(tick_event)) {
       ldout(cct, 10) <<  " successfully canceled tick" << dendl;
@@ -583,7 +602,6 @@ void Objecter::shutdown()
     logger = NULL;
   }
 
-  // Let go of Objecter write lock so timer thread can shutdown
   wl.unlock();
 
   // Outside of lock to avoid cycle WRT calls to RequestStateHook
@@ -1466,21 +1484,30 @@ void Objecter::handle_osd_map(MOSDMap *m)
 
   _dump_active();
 
-  // finish any Contexts that were waiting on a map update
-  auto p = waiting_for_map.begin();
-  while (p != waiting_for_map.end() &&
-	 p->first <= osdmap->get_epoch()) {
-    //go through the list and call the onfinish methods
-    for (auto& [c, ec] : p->second) {
-      asio::post(service.get_executor(), asio::append(std::move(c), ec));
-    }
-    p = waiting_for_map.erase(p);
-  }
+  // finish any Contexts that were waiting on this map update
+  _finish_map_waiters(osdmap->get_epoch());
 
   monc->sub_got("osdmap", osdmap->get_epoch());
 
   if (!waiting_for_map.empty()) {
     _maybe_request_map();
+  }
+}
+
+void Objecter::_finish_map_waiters(epoch_t epoch)
+{
+  // rwlock is locked unique
+  auto p = waiting_for_map.begin();
+  while (p != waiting_for_map.end() && p->first <= epoch) {
+    for (auto& waiter : p->second) {
+      if (waiter.timeout_event) {
+	timer.cancel_event(waiter.timeout_event);
+      }
+      asio::post(
+	service.get_executor(),
+	asio::append(std::move(waiter.onfinish), waiter.result));
+    }
+    p = waiting_for_map.erase(p);
   }
 }
 
@@ -2089,19 +2116,27 @@ void Objecter::wait_for_osd_map(epoch_t e)
   auto ex = boost::asio::prefer(
     service.get_executor(),
     boost::asio::execution::outstanding_work.tracked);
-  waiting_for_map[e].emplace_back(asio::bind_executor(
-				    service.get_executor(),
-				    w.ref()),
-				  bs::error_code{});
+  waiting_for_map[e].push_back(MapWaiter{
+    0,
+    asio::bind_executor(service.get_executor(), w.ref()),
+    bs::error_code{}});
   l.unlock();
   w.wait();
 }
 
-void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest,
-				   OpCompletion fin,
-				   std::unique_lock<ceph::shared_mutex>&& l)
+void Objecter::_get_latest_version(
+  epoch_t oldest, epoch_t newest, OpCompletion fin,
+  std::optional<ceph::mono_time> deadline,
+  std::unique_lock<ceph::shared_mutex>&& l)
 {
   ceph_assert(fin);
+  if (deadline && !initialized) {
+    l.unlock();
+    asio::post(service.get_executor(),
+	       asio::append(std::move(fin),
+			    make_error_code(bs::errc::operation_canceled)));
+    return;
+  }
   if (osdmap->get_epoch() >= newest) {
     ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
     l.unlock();
@@ -2109,7 +2144,8 @@ void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest,
 		asio::append(std::move(fin), bs::error_code{}));
   } else {
     ldout(cct, 10) << __func__ << " latest " << newest << ", waiting" << dendl;
-    _wait_for_new_map(std::move(fin), newest, bs::error_code{});
+    _wait_for_new_map(
+      std::move(fin), newest, bs::error_code{}, deadline);
     l.unlock();
   }
 }
@@ -2141,12 +2177,58 @@ void Objecter::_maybe_request_map()
   }
 }
 
-void Objecter::_wait_for_new_map(OpCompletion c, epoch_t epoch,
-				 bs::error_code ec)
+void Objecter::_wait_for_new_map(
+  OpCompletion c, epoch_t epoch, bs::error_code ec,
+  std::optional<ceph::mono_time> deadline)
 {
   // rwlock is locked unique
-  waiting_for_map[epoch].emplace_back(std::move(c), ec);
+  if (deadline && *deadline <= ceph::mono_clock::now()) {
+    asio::post(
+      service.get_executor(),
+      asio::append(std::move(c), make_error_code(bs::errc::timed_out)));
+    return;
+  }
+
+  auto waiter_id = deadline ? ++last_map_waiter_id : 0;
+  auto& waiter = waiting_for_map[epoch].emplace_back(
+    MapWaiter{waiter_id, std::move(c), ec});
+  if (deadline) {
+    waiter.timeout_event = timer.add_event(
+      *deadline - ceph::mono_clock::now(),
+      [this, epoch, waiter_id]() {
+	_timeout_map_waiter(epoch, waiter_id);
+      });
+  }
   _maybe_request_map();
+}
+
+void Objecter::_timeout_map_waiter(epoch_t epoch, uint64_t waiter_id)
+{
+  std::unique_lock l(rwlock);
+  auto p = waiting_for_map.find(epoch);
+  if (p == waiting_for_map.end()) {
+    return;
+  }
+
+  auto waiter = std::find_if(
+    p->second.begin(), p->second.end(),
+    [waiter_id](const MapWaiter& item) {
+      return item.id == waiter_id;
+    });
+  if (waiter == p->second.end()) {
+    return;
+  }
+
+  auto onfinish = std::move(waiter->onfinish);
+  p->second.erase(waiter);
+  if (p->second.empty()) {
+    waiting_for_map.erase(p);
+  }
+  l.unlock();
+  asio::post(
+    service.get_executor(),
+    asio::append(
+      std::move(onfinish), make_error_code(bs::errc::timed_out)));
 }
 
 
@@ -5533,6 +5615,11 @@ Objecter::Objecter(CephContext *cct,
 
 Objecter::~Objecter()
 {
+  // A cancelled map timeout may already be running and waiting for rwlock.
+  // Join it before destroying the waiter containers it accesses.
+  if (last_map_waiter_id) {
+    timer.suspend();
+  }
   ceph_assert(homeless_session->get_nref() == 1);
   ceph_assert(splitop_session->get_nref() == 1);
   ceph_assert(num_homeless_ops == 0);

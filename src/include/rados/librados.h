@@ -665,10 +665,14 @@ CEPH_RADOS_API int rados_cluster_stat(rados_t cluster,
 CEPH_RADOS_API int rados_cluster_fsid(rados_t cluster, char *buf, size_t len);
 
 /**
- * Get/wait for the most recent osdmap
- * 
- * @param cluster the cluster to shutdown
- * @returns 0 on success, negative error code on failure
+ * Get/wait for the most recent OSDMap.
+ *
+ * A nonzero rados_mon_op_timeout bounds the total wait for both the monitor's
+ * latest epoch and the local OSDMap, including monitor session retries.
+ * A value of zero preserves the unlimited wait.
+ *
+ * @param cluster the cluster whose OSDMap to update
+ * @returns 0 on success, -ETIMEDOUT on timeout, or another negative error code
  */
 CEPH_RADOS_API int rados_wait_for_latest_osdmap(rados_t cluster);
 

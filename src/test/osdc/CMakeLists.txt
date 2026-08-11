@@ -33,3 +33,7 @@ add_executable(unittest_split_ops_ut
   )
 add_ceph_unittest(unittest_split_ops_ut)
 target_link_libraries(unittest_split_ops_ut global ${BLKID_LIBRARIES})
+add_executable(unittest_latest_osdmap_timeout
+  test_latest_osdmap_timeout.cc)
+add_ceph_unittest(unittest_latest_osdmap_timeout)
+target_link_libraries(unittest_latest_osdmap_timeout osdc global)

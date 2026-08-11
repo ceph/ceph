@@ -1668,7 +1668,9 @@ inline namespace v14_2_0 {
                                   std::vector<inconsistent_snapset_t>* snapset,
                                   uint32_t* interval);
 
-    /// get/wait for the most recent osdmap
+    /// Wait for the most recent OSDMap. rados_mon_op_timeout bounds the total
+    /// MON query and local map catch-up, including retries; zero means unlimited.
+    /// Returns 0 on success, -ETIMEDOUT on timeout, or another negative error code.
     int wait_for_latest_osdmap();
 
     int blocklist_add(const std::string& client_address,
