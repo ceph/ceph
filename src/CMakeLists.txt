@@ -23,6 +23,9 @@ set(pkgdatadir ${CMAKE_INSTALL_FULL_DATADIR})
 set(datadir ${CEPH_INSTALL_DATADIR})
 set(prefix ${CMAKE_INSTALL_PREFIX})
 
+set(CEPH_INSTALL_PKGCONFIGDIR "${CMAKE_INSTALL_LIBDIR}/pkgconfig" CACHE PATH
+  "directory to install pkg-config .pc files into")
+
 configure_file(${CMAKE_SOURCE_DIR}/src/init-ceph.in
   ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/init-ceph @ONLY)
 
@@ -976,7 +979,7 @@ if(WITH_LIBCEPHFS)
     DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
   install(FILES
     ${CMAKE_BINARY_DIR}/src/cephfs.pc
-    DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
+    DESTINATION ${CEPH_INSTALL_PKGCONFIGDIR})
   set(ceph_syn_srcs
     ceph_syn.cc
     client/SyntheticClient.cc)
