@@ -915,11 +915,11 @@ private:
         using crimson::common::get_conf;
         eviction_state.init(
           crimson::common::get_conf<double>(
-            "seastore_multiple_tiers_stop_evict_ratio"),
+            "seastore_cold_evict_stop_ratio"),
           crimson::common::get_conf<double>(
-            "seastore_multiple_tiers_default_evict_ratio"),
+            "seastore_cold_evict_start_ratio"),
           crimson::common::get_conf<double>(
-            "seastore_multiple_tiers_fast_evict_ratio"),
+            "seastore_cold_evict_fast_ratio"),
           hot_tier_generations);
 
         pinboard = _pinboard;

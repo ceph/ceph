@@ -293,20 +293,20 @@ options:
   level: dev
   desc: Total size to use for CircularBoundedJournal if created, it is valid only if seastore_primary_backend_type is RANDOM_BLOCK
   default: 5_G
-- name: seastore_multiple_tiers_stop_evict_ratio
+- name: seastore_cold_evict_stop_ratio
   type: float
   level: advanced
-  desc: When the used ratio of main tier is less than this value, then stop evict cold data to the cold tier.
+  desc: Stop evicting to the cold tier when the used ratio of the hot tier drops below this value.
   default: 0.5
-- name: seastore_multiple_tiers_default_evict_ratio
+- name: seastore_cold_evict_start_ratio
   type: float
   level: advanced
-  desc: Begin evicting cold data to the cold tier when the used ratio of the main tier reaches this value.
+  desc: Start evicting to the cold tier when the used ratio of the hot tier reaches this value.
   default: 0.6
-- name: seastore_multiple_tiers_fast_evict_ratio
+- name: seastore_cold_evict_fast_ratio
   type: float
   level: advanced
-  desc: Begin fast eviction when the used ratio of the main tier reaches this value.
+  desc: Start fast eviction when the used ratio of the hot tier reaches this value.
   default: 0.7
 - name: seastore_hot_tier_generations
   type: uint
