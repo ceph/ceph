@@ -57,16 +57,19 @@ void GroupDisableRequest<I>::handle_get_mirror_group_info(int r) {
     finish(0);
     return;
   } else if (r < 0) {
-    lderr(m_cct) << "failed to get mirror group info: "
-                 << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
+    if (m_promotion_state != mirror::PROMOTION_STATE_ERROR) {
+      lderr(m_cct) << "failed to get mirror group info: "
+                   << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
   }
 
   m_is_group_primary = (m_promotion_state == mirror::PROMOTION_STATE_PRIMARY ||
                         m_promotion_state == mirror::PROMOTION_STATE_UNKNOWN);
 
-  if (!m_is_group_primary && !m_force) {
+  if (!m_is_group_primary && !m_force &&
+      m_promotion_state != mirror::PROMOTION_STATE_ERROR) {
     lderr(m_cct) << "mirrored group " << m_group_name
                  << " is not primary, add force option to disable mirroring"
                  << dendl;
@@ -191,7 +194,8 @@ void GroupDisableRequest<I>::remove_snapshot_keys() {
 
 template <typename I>
 void GroupDisableRequest<I>::force_promote_group() {
-  if (m_is_group_primary) {
+  if (m_is_group_primary ||
+      m_promotion_state == mirror::PROMOTION_STATE_ERROR) {
     set_mirror_group_disabling();
     return;
   }
@@ -340,11 +344,13 @@ void GroupDisableRequest<I>::handle_list_group_snapshots(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "failed to list snapshots for group: "
-                 << m_group_name << dendl;
-    m_ret_val = r;
-    close_images();
-    return;
+    if (m_promotion_state != mirror::PROMOTION_STATE_ERROR) {
+      lderr(m_cct) << "failed to list snapshots for group: "
+                   << m_group_name << dendl;
+      m_ret_val = r;
+      close_images();
+      return;
+    }
   }
   // removes group mirror snapshots and
   // their corresponding images snapshots
