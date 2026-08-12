@@ -794,6 +794,30 @@ def test_bucket_remove():
                 log.error("Zone %s still has buckets", zone.name)
             assert result
 
+def test_bucket_remove_via_admin():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    # bucket removal via radosgw-admin from a secondary zone
+    empty_bucket = gen_bucket_name()
+    primary.create_bucket(empty_bucket)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        assert check_all_buckets_exist(zone, [empty_bucket])
+
+    secondary.zone.cluster.admin(
+        ['bucket', 'rm', '--bucket', empty_bucket] + secondary.zone.zone_args())
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        assert check_all_buckets_dont_exist(zone, [empty_bucket])
+
+
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
     if zone_conn2.zone.has_buckets():
         zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
