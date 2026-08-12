@@ -978,6 +978,20 @@ void Cache::commit_retire_extent(
         ref->get_type(), notebook.committer_keys, other_edit.keys,
         other_edit.src);
     }
+
+    // pure traversal/lookup conflicts: readers of this leaf that never made
+    // their own edit to it (not already handled above via other_keys). B's
+    // lookup-addr set lives on B's own transaction, untouched by A's split,
+    // so it's looked up live here rather than captured into the notebook.
+    if (measure_lba_conflict_mergeability) {
+      for (auto &&r : ref->read_transactions) {
+        if (r.t == &t || notebook.other_keys.contains(r.t->get_trans_id())) {
+          continue;
+        }
+        count_lba_traversal_conflict_mergeability(
+          *ref, notebook.committer_keys, *r.t);
+      }
+    }
   }
 
   invalidate_extent(t, *ref);
@@ -1073,10 +1087,11 @@ std::optional<std::set<laddr_t>> get_touched_lba_keys(
 }
 
 void Cache::capture_retired_leaf_keys(Transaction &t, CachedExtent &ref) {
-  if (ref.get_type() != extent_types_t::LADDR_LEAF ||
-      !ref.is_mutation_pending()) {
+  if (!ref.is_mutation_pending()) {
     return;
   }
+  // get_touched_lba_keys returns nullopt for anything that isn't an LBA
+  // leaf/internal node, so that's what actually filters the type here.
   auto keys = get_touched_lba_keys(ref);
   if (!keys) {
     return;
@@ -1191,14 +1206,9 @@ bool Cache::count_lba_conflict_mergeability(
 //    check against the committer's edited keys.
 bool Cache::count_lba_traversal_conflict_mergeability(
     CachedExtent &original_node,
-    CachedExtent &committer_node_own_copy,
+    const std::set<laddr_t> &committer_keys,
     Transaction &conflicting_txn)
 {
-  auto committer_keys = get_touched_lba_keys(committer_node_own_copy);
-  if (!committer_keys) {
-    return false;
-  }
-
   bool overlapping = false;
   if (original_node.get_type() == extent_types_t::LADDR_INTERNAL) {
     auto routing_it = conflicting_txn.lba_internal_routing_addrs.find(&original_node);
@@ -1212,8 +1222,8 @@ bool Cache::count_lba_traversal_conflict_mergeability(
       --iter;
       auto original_lower_range = iter.get_key();
       //range check for commiter key in (lower_bound_of_addr,addr)
-      auto ckey = committer_keys->lower_bound(original_lower_range);
-      if (ckey != committer_keys->end() && *ckey <= addr) {
+      auto ckey = committer_keys.lower_bound(original_lower_range);
+      if (ckey != committer_keys.end() && *ckey <= addr) {
         overlapping = true;
         break;
       }
@@ -1224,7 +1234,7 @@ bool Cache::count_lba_traversal_conflict_mergeability(
       return false;
     }
     for (auto addr : lookup_it->second) {
-      if (committer_keys->contains(addr)) {
+      if (committer_keys.contains(addr)) {
         overlapping = true;
         break;
       }
@@ -1289,8 +1299,11 @@ void Cache::invalidate_extent(
         bool classified = count_lba_conflict_mergeability(
           *committer_node_own_copy, *i.t);
         if (!classified) {
-          classified = count_lba_traversal_conflict_mergeability(
-            extent, *committer_node_own_copy, *i.t);
+          auto committer_keys = get_touched_lba_keys(*committer_node_own_copy);
+          if (committer_keys) {
+            classified = count_lba_traversal_conflict_mergeability(
+              extent, *committer_keys, *i.t);
+          }
         }
         if (!classified) {
           SUBDEBUGT(

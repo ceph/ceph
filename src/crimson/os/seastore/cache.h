@@ -2075,10 +2075,13 @@ void stage_visibility_handoff(Transaction& t,
   /// never edited it. Handles both LADDR_INTERNAL (routing decision) and
   /// LADDR_LEAF (exact-key lookup). Returns false if we have no
   /// routing/lookup data for conflicting_txn on this node either (still
-  /// unclassified).
+  /// unclassified). Takes committer_keys directly (rather than the
+  /// committer's node object) so this also works on the retire path, where
+  /// the committer's edited copy no longer exists by the time this runs --
+  /// only its already-extracted keys survive, in keys_touched_in_retired_leaf.
   bool count_lba_traversal_conflict_mergeability(
     CachedExtent &original_node,
-    CachedExtent &committer_node_own_copy,
+    const std::set<laddr_t> &committer_keys,
     Transaction &conflicting_txn);
 
   /// we already have both sets of keys from capture_retired_leaf_keys.
