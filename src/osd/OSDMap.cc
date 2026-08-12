@@ -5797,7 +5797,7 @@ int OSDMap::calc_pg_upmaps(
   ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
   ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
 
-  float bal_score = 0; // how balanced the pgs are. 0 is perfect.
+  double bal_score = 0; // how balanced the pgs are. 0 is perfect.
   map<int,float> osd_deviation;       // osd, deviation(pgs)
   multimap<float,int> deviation_osd;  // deviation(pgs), osd
   float cur_max_deviation = calc_deviations(cct, pgs_by_osd, osd_weight, pgs_per_weight,
@@ -6032,14 +6032,17 @@ int OSDMap::calc_pg_upmaps(
 
     // test change, apply if change is good
     ceph_assert(to_unmap.size() || to_upmap.size());
-    float new_bal_score = 0;
+    double new_bal_score = 0;
     map<int,float> temp_osd_deviation;
     multimap<float,int> temp_deviation_osd;
     float cur_max_deviation = calc_deviations(cct, temp_pgs_by_osd, osd_weight,
     					      pgs_per_weight, temp_osd_deviation,
 					      temp_deviation_osd, new_bal_score);
-    ldout(cct, 10) << " bal_score " << bal_score << " -> " << new_bal_score << dendl;
-    // accept change if it doesn't make things worse
+    // log the delta too: the totals are printed with the stream's default
+    // precision, so a small but real improvement is invisible in them
+    ldout(cct, 10) << " bal_score " << bal_score << " -> " << new_bal_score
+                   << " (delta " << new_bal_score - bal_score << ")" << dendl;
+    // reject the change if it makes things worse
     if (new_bal_score > bal_score) {
       if (!aggressive) {
         ldout(cct, 10) << " break because bal_score is not decreasing"
@@ -6221,13 +6224,19 @@ float OSDMap::calc_deviations (
   float pgs_per_weight,
   map<int,float>& osd_deviation,
   multimap<float,int>& deviation_osd,
-  float& bal_score)  // return current max deviation
+  double& bal_score)  // return current max deviation
 {
   //
   // This function calculates the map's osd_deviation and deviation_osd, which
-  // hold the deviation between the current number of PGs which map to an OSD 
+  // hold the deviation between the current number of PGs which map to an OSD
   // and the optimal number. It also calculates a bal_score of the deviations and
-  // returns the current max deviation. 
+  // returns the current max deviation.
+  //
+  // NOTE - bal_score is accumulated in double. A single PG moving between two
+  //        OSDs changes one term of a sum taken over every OSD in the crush
+  //        tree; in float that delta can fall below the ULP of the total, so
+  //        two genuinely different mappings compare equal and the balancer
+  //        stalls.
   //
   float cur_max_deviation = 0.0;
   bal_score = 0.0;
@@ -6238,6 +6247,7 @@ float OSDMap::calc_deviations (
     float pgs = (float)opgs.size();
     float target = weight * pgs_per_weight;
     float deviation = pgs - target;
+    ceph_assert(target > 0);
     ldout(cct, 20) << " osd." << oid
                    << "\tweight " << weight
                    << "\tpgs " << pgs
@@ -6246,8 +6256,10 @@ float OSDMap::calc_deviations (
                    << dendl;
     osd_deviation[oid] = deviation;
     deviation_osd.insert(make_pair(deviation, oid));
-    bal_score += (pgs / target - 1.0) *
-                 (pgs / target - 1.0) * weight;
+    // (pgs / target - 1) is the relative deviation, computed from the already
+    // known absolute deviation to avoid cancellation when pgs is close to target
+    double rel_deviation = (double)deviation / target;
+    bal_score += rel_deviation * rel_deviation * weight;
     if (fabsf(deviation) > cur_max_deviation)
       cur_max_deviation = fabsf(deviation);
   }
