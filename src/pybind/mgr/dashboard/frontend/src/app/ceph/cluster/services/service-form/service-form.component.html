@@ -1250,217 +1250,138 @@
 
       <!-- oauth2-proxy -->
       @if (serviceForm.controls.service_type.value === 'oauth2-proxy') {
-        <!-- provider_display_name -->
-        <div class="form-item">
-          <cds-text-label
-            cdRequiredField="Provider display name"
-            placeholder="My OIDC Provider"
-            i18n-placeholder
-            [invalid]="
-              serviceForm.controls.provider_display_name.invalid &&
-              serviceForm.controls.provider_display_name.dirty
-            "
-            [invalidText]="invalidProviderDisplayNameError"
-          >
-            <input
-              cdsText
-              type="text"
-              id="provider_display_name"
-              formControlName="provider_display_name"
-              [invalid]="
-                serviceForm.controls.provider_display_name.invalid &&
-                serviceForm.controls.provider_display_name.dirty
-              "
-            />
-          </cds-text-label>
-          <ng-template #invalidProviderDisplayNameError>
-            @if (serviceForm.showError('provider_display_name', frm, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-              >
-            }
-          </ng-template>
-        </div>
-        <!-- client_id -->
-        <div class="form-item">
-          <cds-text-label
-            cdRequiredField="Client ID"
-            placeholder="oauth2-client"
-            [invalid]="
-              serviceForm.controls.client_id.invalid && serviceForm.controls.client_id.dirty
-            "
-            [invalidText]="invalidClientIdError"
-          >
-            <input
-              cdsText
-              type="text"
-              id="client_id"
-              formControlName="client_id"
-              [invalid]="
-                serviceForm.controls.client_id.invalid && serviceForm.controls.client_id.dirty
-              "
-            />
-          </cds-text-label>
-          <ng-template #invalidClientIdError>
-            @if (serviceForm.showError('client_id', frm, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-              >
-            }
-          </ng-template>
-        </div>
-        <!-- client_secret -->
-        <div class="form-item form-item-append">
-          <cds-password-label
-            cdRequiredField="Client secret"
-            [invalid]="
-              serviceForm.controls.client_secret.invalid && serviceForm.controls.client_secret.dirty
-            "
-            [invalidText]="invalidClientSecretError"
-          >
-            <input
-              cdsPassword
-              type="text"
-              id="client_secret"
-              formControlName="client_secret"
-              [invalid]="
-                serviceForm.controls.client_secret.invalid &&
-                serviceForm.controls.client_secret.dirty
-              "
-            />
-          </cds-password-label>
-          <cd-copy-2-clipboard-button
-            source="client_secret"
-            class="mt-4"
-          >
-          </cd-copy-2-clipboard-button>
-          <ng-template #invalidClientSecretError>
-            @if (serviceForm.showError('client_secret', frm, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-              >
-            }
-          </ng-template>
-        </div>
-        <!-- oidc_issuer_url -->
-        <div class="form-item">
-          <cds-text-label
-            cdRequiredField="OIDC issuer URL"
-            [invalid]="
-              serviceForm.controls.oidc_issuer_url.invalid &&
-              serviceForm.controls.oidc_issuer_url.dirty
-            "
-            [invalidText]="invalidOidcIssuerUrlError"
-          >
-            <input
-              cdsText
-              type="text"
-              id="oidc_issuer_url"
-              formControlName="oidc_issuer_url"
-              [invalid]="
-                serviceForm.controls.oidc_issuer_url.invalid &&
-                serviceForm.controls.oidc_issuer_url.dirty
-              "
-            />
-          </cds-text-label>
-          <ng-template #invalidOidcIssuerUrlError>
-            @if (serviceForm.showError('oidc_issuer_url', frm, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-              >
-            }
-            @if (serviceForm.showError('oidc_issuer_url', frm, 'validUrl')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >Invalid url.</span
-              >
-            }
-          </ng-template>
-        </div>
-        <!-- https_address -->
-        <div class="form-item">
-          <cds-text-label
-            cdRequiredField="Https address"
-            helperText="The address for HTTPS connections as [IP|Hostname]:port."
-            i18n-helperText
-            placeholder="0.0.0.0:4180"
-            [invalid]="
-              serviceForm.controls.https_address.invalid && serviceForm.controls.https_address.dirty
-            "
-            [invalidText]="invalidHttpsAddressError"
-          >
-            <input
-              cdsText
-              type="text"
-              id="https_address"
-              formControlName="https_address"
-              [invalid]="
-                serviceForm.controls.https_address.invalid &&
-                serviceForm.controls.https_address.dirty
-              "
-            />
-          </cds-text-label>
-          <ng-template #invalidHttpsAddressError>
-            @if (serviceForm.showError('https_address', frm, 'invalidAddress')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >Format must be [IP|Hostname]:port and the port between 0 and 65535</span
-              >
-            }
-          </ng-template>
-        </div>
-        <!-- redirect_url -->
-        <div class="form-item">
-          <cds-text-label
-            cdRequiredField="Redirect URL"
-            placeholder="https://<IP|Hostname>:4180/oauth2/callback"
-            helperText="The URL the oauth2-proxy service will redirect to after a successful login."
-            i18n-helperText
-            [invalid]="
-              serviceForm.controls.redirect_url.invalid && serviceForm.controls.redirect_url.dirty
-            "
-            [invalidText]="invalidRedirectUrlError"
-          >
-            <input
-              cdsText
-              type="text"
-              id="redirect_url"
-              formControlName="redirect_url"
-              [invalid]="
-                serviceForm.controls.redirect_url.invalid && serviceForm.controls.redirect_url.dirty
-              "
-            />
-          </cds-text-label>
-          <ng-template #invalidRedirectUrlError>
-            @if (serviceForm.showError('redirect_url', frm, 'required')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >This field is required.</span
-              >
-            }
-          </ng-template>
-        </div>
-        <!-- Allowlist_domains -->
-        <div class="form-item">
-          <cd-text-label-list
-            formControlName="allowlist_domains"
-            label="Allowlist domains"
-            helperText="Domains to be allowed to redirect to, used for login or logout."
-            placeholder="192.168.100.1:8080"
-          >
-          </cd-text-label-list>
-        </div>
+      <!-- provider_display_name -->
+      <div class="form-item">
+        <cds-text-label cdRequiredField="Provider display name"
+                        placeholder="My OIDC Provider"
+                        i18n-placeholder
+                        [invalid]="serviceForm.controls.provider_display_name.invalid && serviceForm.controls.provider_display_name.dirty"
+                        [invalidText]="invalidProviderDisplayNameError">
+          <input cdsText
+                 type="text"
+                 id="provider_display_name"
+                 formControlName="provider_display_name"
+                 [invalid]="serviceForm.controls.provider_display_name.invalid && serviceForm.controls.provider_display_name.dirty" />
+        </cds-text-label>
+        <ng-template #invalidProviderDisplayNameError>
+          @if (serviceForm.showError('provider_display_name', frm, 'required')) {
+          <span class="invalid-feedback"
+                i18n>This field is required.</span>
+          }
+        </ng-template>
+      </div>
+      <!-- client_id -->
+      <div class="form-item">
+        <cds-text-label cdRequiredField="Client ID"
+                        placeholder="oauth2-client"
+                        [invalid]="serviceForm.controls.client_id.invalid && serviceForm.controls.client_id.dirty"
+                        [invalidText]="invalidClientIdError">
+          <input cdsText
+                 type="text"
+                 id="client_id"
+                 formControlName="client_id"
+                 [invalid]="serviceForm.controls.client_id.invalid && serviceForm.controls.client_id.dirty" />
+        </cds-text-label>
+        <ng-template #invalidClientIdError>
+          @if (serviceForm.showError('client_id', frm, 'required')) {
+          <span class="invalid-feedback"
+                i18n>This field is required.</span>
+          }
+        </ng-template>
+      </div>
+      <!-- client_secret -->
+      <div class="form-item form-item-append">
+        <cds-password-label cdRequiredField="Client secret"
+                            [invalid]="serviceForm.controls.client_secret.invalid && serviceForm.controls.client_secret.dirty"
+                            [invalidText]="invalidClientSecretError">
+          <input cdsPassword
+                 type="text"
+                 id="client_secret"
+                 formControlName="client_secret"
+                 [invalid]="serviceForm.controls.client_secret.invalid && serviceForm.controls.client_secret.dirty" />
+        </cds-password-label>
+        <cd-copy-2-clipboard-button source="client_secret"
+                                    class="mt-4">
+        </cd-copy-2-clipboard-button>
+        <ng-template #invalidClientSecretError>
+          @if (serviceForm.showError('client_secret', frm, 'required')) {
+          <span class="invalid-feedback"
+                i18n>This field is required.</span>
+          }
+        </ng-template>
+      </div>
+      <!-- oidc_issuer_url -->
+      <div class="form-item">
+        <cds-text-label cdRequiredField="OIDC issuer URL"
+                        [invalid]="serviceForm.controls.oidc_issuer_url.invalid && serviceForm.controls.oidc_issuer_url.dirty"
+                        [invalidText]="invalidOidcIssuerUrlError">
+          <input cdsText
+                 type="text"
+                 id="oidc_issuer_url"
+                 formControlName="oidc_issuer_url"
+                 [invalid]="serviceForm.controls.oidc_issuer_url.invalid && serviceForm.controls.oidc_issuer_url.dirty" />
+        </cds-text-label>
+        <ng-template #invalidOidcIssuerUrlError>
+          @if (serviceForm.showError('oidc_issuer_url', frm, 'required')) {
+          <span class="invalid-feedback"
+                i18n>This field is required.</span>
+          }
+          @if (serviceForm.showError('oidc_issuer_url', frm, 'validUrl')) {
+          <span class="invalid-feedback"
+                i18n>Invalid url.</span>
+          }
+        </ng-template>
+      </div>
+      <!-- https_address -->
+      <div class="form-item">
+        <cds-text-label cdRequiredField="Https address"
+                        helperText="The address for HTTPS connections as [IP|Hostname]:port."
+                        i18n-helperText
+                        placeholder="0.0.0.0:4180"
+                        [invalid]="serviceForm.controls.https_address.invalid && serviceForm.controls.https_address.dirty"
+                        [invalidText]="invalidHttpsAddressError">
+          <input cdsText
+                 type="text"
+                 id="https_address"
+                 formControlName="https_address"
+                 [invalid]="serviceForm.controls.https_address.invalid && serviceForm.controls.https_address.dirty" />
+        </cds-text-label>
+        <ng-template #invalidHttpsAddressError>
+          @if (serviceForm.showError('https_address', frm, 'invalidAddress')) {
+          <span class="invalid-feedback"
+                i18n>Format must be [IP|Hostname]:port and the port between 0 and 65535</span>
+          }
+        </ng-template>
+      </div>
+      <!-- redirect_url -->
+      <div class="form-item">
+        <cds-text-label cdRequiredField="Redirect URL"
+                        placeholder="https://<IP|Hostname>:4180/oauth2/callback"
+                        helperText="The URL the oauth2-proxy service will redirect to after a successful login."
+                        i18n-helperText
+                        [invalid]="serviceForm.controls.redirect_url.invalid && serviceForm.controls.redirect_url.dirty"
+                        [invalidText]="invalidRedirectUrlError">
+          <input cdsText
+                 type="text"
+                 id="redirect_url"
+                 formControlName="redirect_url"
+                 [invalid]="serviceForm.controls.redirect_url.invalid && serviceForm.controls.redirect_url.dirty" />
+        </cds-text-label>
+        <ng-template #invalidRedirectUrlError>
+          @if (serviceForm.showError('redirect_url', frm, 'required')) {
+          <span class="invalid-feedback"
+                i18n>This field is required.</span>
+          }
+        </ng-template>
+      </div>
+      <!-- Allowlist_domains -->
+      <div class="form-item">
+        <cd-text-label-list formControlName="allowlist_domains"
+                            label="Allowlist domains"
+                            helperText="Domains to be allowed to redirect to, used for login or logout."
+                            placeholder="192.168.100.1:8080">
+        </cd-text-label-list>
+      </div>
       }
 
       @if (
@@ -1583,9 +1504,9 @@
           </div>
         }
 
-        <!-- Certificate Management UI -->
+        <!-- Certificate Management UI: shown when SSL is enabled, or always for mgmt-gateway -->
         @if (
-          serviceForm.controls.ssl.value &&
+          (serviceForm.controls.ssl.value || serviceForm.controls.service_type.value === 'mgmt-gateway') &&
           ['rgw', 'ingress', 'iscsi', 'grafana', 'oauth2-proxy', 'mgmt-gateway', 'nfs'].includes(
             serviceForm.controls.service_type.value
           )
@@ -1595,6 +1516,7 @@
             [editing]="editing"
             [currentCertificate]="currentCertificate"
             [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+            [certMode]="CertMode.externalOnly"
             (certificateTypeChange)="onCertificateTypeChange($event)"
           >
           </cd-certificate-authority-form>
@@ -1689,51 +1611,34 @@
                   invalidTemplate: invalidSslCaCertError,
                   isRequired: false
                 }
-              "
-            ></ng-container>
-            <ng-template #invalidSslCaCertError>
-              @if (serviceForm.showError('ssl_ca_cert', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
-                >
-              }
-              @if (serviceForm.showError('ssl_ca_cert', frm, 'pattern')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >Invalid CA certificate.</span
-                >
-              }
-            </ng-template>
-          </div>
+                @if (serviceForm.showError('ssl_ca_cert', frm, 'pattern')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                    >Invalid CA certificate.</span
+                  >
+                }
+              </ng-template>
+            </div>
+          }
         }
+      }
 
-        <!-- RGW QAT Compression -->
-        @if (serviceForm.controls.service_type.value === 'rgw') {
-          <div
-            class="form-item"
-            formGroupName="qat"
-          >
-            <cds-select
-              formControlName="compression"
-              name="compression"
-              label="QAT compression mode"
-              id="compression"
-              helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
-              i18n-helperText
-            >
-              <option
-                *ngFor="let option of qatCompressionOptions"
-                [value]="option.value"
-                i18n
-              >
-                {{ option.label }}
-              </option>
-            </cds-select>
-          </div>
-        }
+      <!-- RGW QAT Compression -->
+      @if (!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'rgw') {
+        <div class="form-item"
+             formGroupName="qat">
+          <cds-select formControlName="compression"
+                      name="compression"
+                      label="QAT compression mode"
+                      id="compression"
+                      helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
+                      i18n-helperText>
+            <option *ngFor="let option of qatCompressionOptions"
+                    [value]="option.value"
+                    i18n>{{ option.label }}</option>
+          </cds-select>
+        </div>
       }
       <!-- Grafana -->
       @if (serviceForm.controls.service_type.value === 'grafana') {
@@ -1833,6 +1738,7 @@
             [formGroup]="serviceForm"
             [editing]="editing"
             [currentCertificate]="currentCertificate"
+            [certMode]="CertMode.externalOnly"
             [showCertSourceChangeWarning]="showCertSourceChangeWarning"
             (certificateTypeChange)="onCertificateTypeChange($event)"
           >

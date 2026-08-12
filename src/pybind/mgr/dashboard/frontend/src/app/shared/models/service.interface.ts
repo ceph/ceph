@@ -50,6 +50,7 @@ export interface CephServiceAdditionalSpec {
   server_cert: string;
   server_key: string;
   rgw_frontend_ssl_certificate: string;
+  certificate_source: string;
   ssl: boolean;
   ssl_cert: string;
   ssl_certificate: string;
@@ -107,17 +108,6 @@ export enum QatOptions {
   hw = 'hw',
   sw = 'sw',
   none = 'none'
-}
-
-export enum CertificateType {
-  internal = 'internal',
-  external = 'external'
-}
-
-export enum CertMode {
-  externalOnly = 'externalOnly',
-  both = 'both',
-  internalOnly = 'internalOnly'
 }
 
 export interface CephServiceCertificate {
