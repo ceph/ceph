@@ -237,9 +237,6 @@ export class HostService extends ApiClient {
    * Returns whether host facts are available from the orchestrator.
    */
   checkHostsFactsAvailable(orchStatus: OrchestratorStatus) {
-    if (orchStatus?.available) {
-      return true;
-    }
-    return false;
+    return !!orchStatus?.features?.get_facts?.available;
   }
 }
