@@ -149,7 +149,7 @@ int execute(const po::variables_map &vm,
   librados::IoCtx io_ctx;
   librbd::Image image;
   r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
-                                 snap_name, true, &rados, &io_ctx, &image);
+                                 snap_name, true, &rados, &io_ctx, &image, snap_id);
   if (r < 0) {
     return r;
   }
