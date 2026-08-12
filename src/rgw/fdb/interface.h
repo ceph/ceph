@@ -86,6 +86,11 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
  return commit(txn);
 }
 
+[[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key)
+{
+ return txn->make_watch(detail::as_fdb_span(key));
+}
+
 } // namespace ceph::libfdb
 
 namespace ceph::libfdb::detail {
@@ -128,6 +133,40 @@ auto in_transaction(database_handle dbh, FnT&& fn)
  -> operation_result_t<FnT>;
 
 } // namespace ceph::libfdb::detail
+
+namespace ceph::libfdb {
+
+[[nodiscard]] inline watch_handle make_watch(database_handle dbh, std::string_view key)
+{
+ return detail::in_transaction(dbh,
+          [key](transaction_handle& txn) {
+            return make_watch(txn, key);
+          });
+}
+
+template <typename FnT>
+requires std::invocable<FnT&, std::string_view>
+void watched_loop(database_handle dbh, std::string_view key, std::stop_token stop_token, FnT&& fn)
+{
+ std::string watched_key(key);
+
+ while (not stop_token.stop_requested() &&
+        watch_event::changed == make_watch(dbh, watched_key).wait_for_event(stop_token)) {
+  std::invoke(fn, std::string_view(watched_key));
+ }
+}
+
+/* watched_loop() runs until the watch is cancelled or an exception escapes.
+ * For more complex stop behavior, see make_watch(), ready(), cancel(), and
+ * wait_for_event(): */
+template <typename FnT>
+requires std::invocable<FnT&, std::string_view>
+void watched_loop(database_handle dbh, std::string_view key, FnT&& fn)
+{
+ return watched_loop(dbh, key, std::stop_token{}, std::forward<FnT>(fn));
+}
+
+} // namespace ceph::libfdb
 
 namespace ceph::libfdb {
 

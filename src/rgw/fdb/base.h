@@ -48,6 +48,7 @@
 #include <exception>
 #include <stdexcept>
 #include <functional>
+#include <stop_token>
 #include <filesystem>
 #include <type_traits>
 #include <initializer_list>
@@ -75,6 +76,7 @@ struct interval;
 
 using select = query::interval;
 struct versionstamp;
+struct watch_handle;
 
 class database;
 class transaction;
@@ -83,6 +85,7 @@ using database_handle = std::shared_ptr<database>;
 using transaction_handle = std::shared_ptr<transaction>;
 
 extern transaction_handle make_transaction(database_handle dbh);
+[[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key);
 
 } // namespace ceph::libfdb
 
@@ -231,6 +234,7 @@ namespace ceph::libfdb {
 
 // Should we commit after the (possibly) mutating operation?
 enum struct commit_after_op { commit, no_commit };
+enum struct watch_event { changed, cancelled };
 
 struct libfdb_exception final : std::runtime_error
 {
@@ -273,6 +277,11 @@ inline bool retryable(const libfdb_exception& e) noexcept
 
 namespace detail {
 
+/* Note: this magic constant is from FoundationDB's public error-code table,
+(flow/include/flow/error_definitions.h). It's distinct from watch_cancelled,
+which is a storage-server watch-limit error: */
+inline constexpr fdb_error_t operation_cancelled_error = 1101;
+
 struct future_value final
 {
  std::unique_ptr<FDBFuture, decltype(&fdb_future_destroy)> future_ptr;
@@ -285,6 +294,15 @@ struct future_value final
  public:
  FDBFuture *raw_handle() const noexcept { return future_ptr.get(); }
 
+ FDBFuture *raw_ptr_or_throw() const
+ {
+  if (auto *future = raw_handle(); nullptr != future) {
+   return future;
+  }
+
+  throw std::invalid_argument("invalid FDB pointer");
+ }
+
  private:
  void destroy() noexcept { future_ptr.reset(nullptr); }
  
@@ -296,6 +314,95 @@ inline auto as_fdb_span(concepts::libfdb_key_view auto key)
 {
  return std::span<const std::uint8_t>((const std::uint8_t *)key.data(), key.size());
 }
+
+} // namespace detail
+
+// watch_handle can only be constructed by calling make_watch():
+struct watch_handle final
+{
+ public:
+ watch_handle(watch_handle&&) noexcept = default;
+ watch_handle& operator=(watch_handle&&) noexcept = default;
+
+ [[nodiscard]] bool ready() const noexcept
+ {
+  auto *future = watch_future.raw_handle();
+  return nullptr != future && fdb_future_is_ready(future);
+ }
+
+ void cancel() noexcept
+ {
+  if (auto *future = watch_future.raw_handle(); nullptr != future) {
+   fdb_future_cancel(future);
+  }
+ }
+
+ // Block until the watch reports an event:
+ [[nodiscard]] watch_event wait_for_event()
+ {
+  auto *future = watch_future.raw_ptr_or_throw();
+
+  if (auto block_error = fdb_future_block_until_ready(future);
+      0 != block_error) {
+   throw libfdb_exception(block_error);
+  }
+
+  switch (const auto error = fdb_future_get_error(future))
+   {
+    default: throw libfdb_exception(error);
+    case 0: return watch_event::changed;
+    case detail::operation_cancelled_error: return watch_event::cancelled;
+   }
+ }
+
+ [[nodiscard]] watch_event wait_for_event(std::stop_token stop_token)
+ {
+  if (stop_token.stop_requested()) {
+   cancel();
+
+   return wait_for_event();
+  }
+
+  std::stop_callback cancel_watch_on_stop(stop_token, [this] {
+   cancel();
+  });
+
+  return wait_for_event();
+ }
+
+ // Block until the watched key changes:
+ void wait()
+ {
+  if (watch_event::cancelled == wait_for_event()) {
+   throw libfdb_exception(detail::operation_cancelled_error);
+  }
+ }
+
+ void wait(std::stop_token stop_token)
+ {
+  if (watch_event::cancelled == wait_for_event(stop_token)) {
+   throw libfdb_exception(detail::operation_cancelled_error);
+  }
+ }
+
+ private:
+ detail::future_value watch_future;
+
+ private:
+ explicit watch_handle(detail::future_value watch_future_)
+  : watch_future(std::move(watch_future_))
+ {}
+
+ watch_handle() = delete;
+ watch_handle(const watch_handle&) = delete;
+ watch_handle& operator=(const watch_handle&) = delete;
+
+ private:
+ friend watch_handle make_watch(transaction_handle txn, std::string_view key);
+ friend class transaction;
+};
+
+namespace detail {
 
 inline auto as_fdb_span(const concepts::libfdb_key auto& key)
 requires (!concepts::libfdb_key_view<decltype(key)>)
@@ -766,6 +873,15 @@ class transaction final
         (const uint8_t *)half_open_range.end_key.data(), half_open_range.end_key.size());
  }
 
+ [[nodiscard]] watch_handle make_watch(std::span<const std::uint8_t> key)
+ {
+  return watch_handle {
+   detail::future_value {
+    fdb_transaction_watch(raw_handle(), key.data(), key.size())
+   }
+  };
+ }
+
  bool key_exists(std::string_view k) {
     return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {});
  }
@@ -810,6 +926,7 @@ class transaction final
 
  friend inline bool commit(transaction_handle& txn);
  friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
+ friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
                                                                    std::span<const std::uint8_t>,
@@ -853,12 +970,13 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
                                     raw_handle(),
                                     (const uint8_t *)key.data(), key.size(),
                                     is_snapshot)));
+ auto *future = fv.raw_ptr_or_throw();
  
   fdb_bool_t key_was_found = false;
   const uint8_t *out_buffer = nullptr;
   int out_len = 0;
 
-  if (fdb_error_t r = fdb_future_get_value(fv.raw_handle(), &key_was_found, &out_buffer, &out_len); 0 != r) {
+  if (fdb_error_t r = fdb_future_get_value(future, &key_was_found, &out_buffer, &out_len); 0 != r) {
     throw libfdb_exception(r);
   }
 
@@ -895,12 +1013,13 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
  }
 
  detail::future_value fv(fdb_transaction_commit(raw_handle()));
+ auto *commit_future = fv.raw_ptr_or_throw();
 
- if (fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
+ if (fdb_error_t r = fdb_future_block_until_ready(commit_future); 0 != r) {
   throw libfdb_exception(r);
  }
 
- if (fdb_error_t r = fdb_future_get_error(fv.raw_handle()); 0 != r) {
+ if (fdb_error_t r = fdb_future_get_error(commit_future); 0 != r) {
   detail::future_value ferror_result = detail::wait_for_on_error(raw_handle(), r);
 
   if (0 != detail::get_future_error(ferror_result)) {
@@ -961,13 +1080,15 @@ namespace ceph::libfdb::detail {
 
 inline future_value block_until_ready(future_value&& fv)
 {
- if (fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
+ auto *future = fv.raw_ptr_or_throw();
+
+ if (fdb_error_t r = fdb_future_block_until_ready(future); 0 != r) {
   throw libfdb_exception(r);
  }
 
  // Note that fdb_future_block_until_ready() does not by itself check for errors
  // with the value; so, we need to do this separately:
- fdb_error_t r = fdb_future_get_error(fv.raw_handle());
+ fdb_error_t r = fdb_future_get_error(future);
 
  if (0 != r) {
   throw libfdb_exception(r);
@@ -978,7 +1099,7 @@ inline future_value block_until_ready(future_value&& fv)
 
 inline future_value wait_until_ready(future_value&& fv)
 {
- if (fdb_error_t r = fdb_future_block_until_ready(fv.raw_handle()); 0 != r) {
+ if (fdb_error_t r = fdb_future_block_until_ready(fv.raw_ptr_or_throw()); 0 != r) {
   throw libfdb_exception(r);
  }
 
@@ -987,14 +1108,14 @@ inline future_value wait_until_ready(future_value&& fv)
 
 inline fdb_error_t get_future_error(const future_value& fv)
 {
- return fdb_future_get_error(fv.raw_handle());
+ return fdb_future_get_error(fv.raw_ptr_or_throw());
 }
 
 inline future_value wait_for_on_error(FDBTransaction* txn, const fdb_error_t original_error)
 {
  future_value on_error_future(fdb_transaction_on_error(txn, original_error));
 
- if (0 != fdb_future_block_until_ready(on_error_future.raw_handle())) {
+ if (0 != fdb_future_block_until_ready(on_error_future.raw_ptr_or_throw())) {
   throw libfdb_exception(original_error);
  }
 
@@ -1030,7 +1151,7 @@ inline query_window extract_result_pairs(future_value result_owner)
  int out_count = 0;
  const FDBKeyValue *out_kvs = nullptr;
 
- if (fdb_error_t r = fdb_future_get_keyvalue_array(result_owner.raw_handle(),
+ if (fdb_error_t r = fdb_future_get_keyvalue_array(result_owner.raw_ptr_or_throw(),
                                                    &out_kvs,
                                                    &out_count,
                                                    &more_available); 0 != r) {
@@ -1049,7 +1170,7 @@ inline split_point_result extract_split_points(future_value result_owner)
  const FDBKey *result_keys = nullptr;
  int result_count = 0;
 
- const auto error = fdb_future_get_key_array(result_owner.raw_handle(), &result_keys, &result_count);
+ const auto error = fdb_future_get_key_array(result_owner.raw_ptr_or_throw(), &result_keys, &result_count);
 
  return split_point_result {
   .result_owner = std::move(result_owner),
