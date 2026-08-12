@@ -42,13 +42,6 @@ IFS=',' read -ra gateway_ips <<< "$NVMEOF_GATEWAY_IP_ADDRESSES"
 IFS=',' read -ra gateway_names <<< "$NVMEOF_GATEWAY_NAMES"
 gateways_count=$(( $(echo "$NVMEOF_GATEWAY_IP_ADDRESSES" | tr -cd ',' | wc -c) + 1 ))
 
-list_namespaces () { 
-    for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
-        subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
-        nvmeof_cli $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --format plain namespace list $SUBSYSTEM_FLAG $subsystem_nqn
-    done
-}
-
 echo "[nvmeof] Starting subsystem setup..."
 
 # add all subsystems
@@ -70,7 +63,7 @@ if [ "$NVMEOF_AUTO_LISTENER" = "false" ]; then
         name="${gateway_names[i]}"
         for j in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
             subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${j}"
-            echo "Adding gateway listener $index with IP ${ip} and name ${name}"
+            echo "Adding gateway listener $i with IP ${ip} and name ${name}"
             nvmeof_cli $ip listener add $SUBSYSTEM_FLAG $subsystem_nqn --host-name $name --traddr $ip --trsvcid $NVMEOF_PORT
         done
     done
@@ -107,26 +100,28 @@ for i in "${!gateway_ips[@]}"; do
     fi
 done
 
-# verify namespace count and listeners for each subsystem
+# verify namespace count and listeners for each subsystem, on each gateway
 for i in $(seq 1 $NVMEOF_SUBSYSTEMS_COUNT); do
     subsystem_nqn="${NVMEOF_SUBSYSTEMS_PREFIX}${i}"
 
-    ns_output=$(nvmeof_cli $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --format json namespace list $SUBSYSTEM_FLAG $subsystem_nqn)
-    actual_ns_count=$(echo "$ns_output" | jq '.namespaces | length')
-    if [ "$actual_ns_count" -ne "$NVMEOF_NAMESPACES_COUNT" ]; then
-        echo "[nvmeof] ERROR: subsystem $subsystem_nqn has $actual_ns_count namespaces, expected $NVMEOF_NAMESPACES_COUNT"
-        echo "$ns_output"
-        exit 1
-    fi
-
-    listener_output=$(nvmeof_cli $NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS --format json listener list $SUBSYSTEM_FLAG $subsystem_nqn)
-    echo "$listener_output"
-    for ip in "${gateway_ips[@]}"; do
-        has_listener=$(echo "$listener_output" | jq --arg ip "$ip" '[.listeners[] | select(.traddr == $ip)] | length')
-        if [ "$has_listener" -eq 0 ]; then
-            echo "[nvmeof] ERROR: subsystem $subsystem_nqn has no listener for gateway $ip"
+    for gw_ip in "${gateway_ips[@]}"; do
+        ns_output=$(nvmeof_cli $gw_ip --format json namespace list $SUBSYSTEM_FLAG $subsystem_nqn)
+        actual_ns_count=$(echo "$ns_output" | jq '.namespaces | length')
+        if [ "$actual_ns_count" -ne "$NVMEOF_NAMESPACES_COUNT" ]; then
+            echo "[nvmeof] ERROR: subsystem $subsystem_nqn has $actual_ns_count namespaces via gateway $gw_ip, expected $NVMEOF_NAMESPACES_COUNT"
+            echo "$ns_output"
             exit 1
         fi
+
+        listener_output=$(nvmeof_cli $gw_ip --format json listener list $SUBSYSTEM_FLAG $subsystem_nqn)
+        for ip in "${gateway_ips[@]}"; do
+            has_listener=$(echo "$listener_output" | jq --arg ip "$ip" '[.listeners[] | select(.traddr == $ip)] | length')
+            if [ "$has_listener" -eq 0 ]; then
+                echo "[nvmeof] ERROR: subsystem $subsystem_nqn has no listener for gateway $ip (queried via $gw_ip)"
+                echo "$listener_output"
+                exit 1
+            fi
+        done
     done
 done
 
