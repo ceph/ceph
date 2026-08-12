@@ -9617,6 +9617,10 @@ next:
       if (ret == 0) {
 	formatter->flush(cout);
       }
+      else if (ret == -ENOENT) {
+        // Dedup Epoch object doesn't exist -> Asking for stats before running dedup
+        cerr << "No dedup estimate/exec found. Please run 'radosgw-admin dedup estimate/exec' first." << std::endl;
+      }
       else {
 	cerr << "ERROR: Failed reading stat counters" << std::endl;
       }

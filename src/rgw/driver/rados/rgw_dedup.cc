@@ -946,6 +946,15 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static struct timespec record_to_timespec(const disk_record_t& rec)
+  {
+    return {
+      .tv_sec  = static_cast<time_t>(rec.s.mtime_sec),
+      .tv_nsec = static_cast<long>(rec.s.mtime_nsec),
+    };
+  }
+
+  //---------------------------------------------------------------------------
   int Background::dedup_object(disk_record_t                *p_src_rec,
                                disk_record_t                *p_tgt_rec,
                                const RGWObjManifest         &src_manifest,
@@ -1030,6 +1039,11 @@ namespace rgw::dedup {
         src_op.truncate(0);
         p_stats->split_head_src++;
       }
+
+      // preserve object timestamp
+      struct timespec src_ts = record_to_timespec(*p_src_rec);
+      src_op.mtime2(&src_ts);
+
       d_ctl.metadata_access_throttle.acquire();
       ldpp_dout(dpp, 20) << __func__ <<"::send SRC CLS"<< dendl;
       ret = src_ioctx.operate(src_oid, &src_op);
@@ -1066,6 +1080,11 @@ namespace rgw::dedup {
       tgt_op.truncate(0);
       p_stats->split_head_tgt++;
     }
+
+    // preserve object timestamp
+    struct timespec tgt_ts = record_to_timespec(*p_tgt_rec);
+    tgt_op.mtime2(&tgt_ts);
+
     d_ctl.metadata_access_throttle.acquire();
     ldpp_dout(dpp, 20) << __func__ << "::send TGT CLS" << dendl;
     ret = tgt_ioctx.operate(tgt_oid, &tgt_op);
@@ -1184,8 +1203,13 @@ namespace rgw::dedup {
   //---------------------------------------------------------------------------
   int Background::add_obj_attrs_to_record(disk_record_t         *p_rec,
                                           const rgw::sal::Attrs &attrs,
-                                          md5_stats_t           *p_stats) /*IN-OUT*/
+                                          md5_stats_t           *p_stats,
+                                          const ceph::real_time& mtime) /*IN-OUT*/
   {
+    struct timespec ts = ceph::real_clock::to_timespec(mtime);
+    p_rec->s.mtime_sec  = ts.tv_sec;
+    p_rec->s.mtime_nsec = ts.tv_nsec;
+
     // if TAIL_TAG exists -> use it as ref-tag, eitherwise take ID_TAG
     auto itr = attrs.find(RGW_ATTR_TAIL_TAG);
     if (itr != attrs.end()) {
@@ -1505,7 +1529,8 @@ namespace rgw::dedup {
 
     // reset flags
     p_rec->s.flags.clear();
-    ret = add_obj_attrs_to_record(p_rec, attrs, p_stats);
+    // safe to use p_obj->get_mtime() after p_obj->get_obj_attrs() was called
+    ret = add_obj_attrs_to_record(p_rec, attrs, p_stats, p_obj->get_mtime());
     if (unlikely(ret != 0)) {
       // don't trace errors for unsupported manifest
       if (ret == -ENOTSUP) {
