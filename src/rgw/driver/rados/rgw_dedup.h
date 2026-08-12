@@ -90,14 +90,6 @@ namespace rgw::dedup {
     void resume(rgw::sal::Driver* _driver) override;
 
   private:
-    enum dedup_step_t {
-      STEP_NONE,
-      STEP_BUCKET_INDEX_INGRESS,
-      STEP_BUILD_TABLE,
-      STEP_READ_ATTRIBUTES,
-      STEP_REMOVE_DUPLICATES
-    };
-
     inline uint64_t __calc_deduped_bytes(uint16_t num_parts, uint64_t size_bytes);
     inline bool should_split_head(const RGWObjManifest &manifest);
     void remove_created_tail_object(const disk_record_t *p_rec,
@@ -108,15 +100,16 @@ namespace rgw::dedup {
     void work_shards_barrier(work_shard_t num_work_shards);
     void md5_shards_barrier(md5_shard_t num_md5_shards);
     void handle_pause_req(const char* caller);
-    const char* dedup_step_name(dedup_step_t step);
     int  read_buckets();
-    void check_and_update_heartbeat(unsigned shard_id, uint64_t count_a, uint64_t count_b,
-                                    const char *prefix);
+    void check_and_update_heartbeat(unsigned shard_id, uint64_t obj_count,
+                                    dedup_step_t step, const char *prefix);
 
-    inline void check_and_update_worker_heartbeat(work_shard_t worker_id, int64_t obj_count);
+    inline void check_and_update_worker_heartbeat(work_shard_t worker_id,
+                                                  uint64_t obj_count,
+                                                  dedup_step_t step);
     inline void check_and_update_md5_heartbeat(md5_shard_t md5_id,
-                                               uint64_t load_count,
-                                               uint64_t dedup_count);
+                                               uint64_t obj_count,
+                                               dedup_step_t step);
     int  ingress_bucket_idx_single_object(disk_block_array_t         &disk_arr,
                                           const rgw::sal::Bucket     *bucket,
                                           const rgw_bucket_dir_entry &entry,
@@ -133,12 +126,19 @@ namespace rgw::dedup {
                                              work_shard_t        worker_id,
                                              work_shard_t        num_work_shards,
                                              worker_stats_t     *p_worker_stats /*IN-OUT*/);
-    int  objects_ingress_single_work_shard(work_shard_t worker_id,
+    int  objects_ingress_single_work_shard(disk_block_array_t &disk_arr,
+                                           work_shard_t worker_id,
                                            work_shard_t num_work_shards,
                                            md5_shard_t num_md5_shards,
                                            worker_stats_t *p_worker_stats,
                                            uint8_t *raw_mem,
                                            uint64_t raw_mem_size);
+
+    int  phase2_fine_fanout(work_shard_t worker_id,
+                            md5_shard_t num_md5_shards,
+                            worker_stats_t *p_worker_stats,
+                            uint8_t *raw_mem,
+                            uint64_t raw_mem_size);
     int  f_ingress_work_shard(unsigned shard_id,
                               uint8_t *raw_mem,
                               uint64_t raw_mem_size,
@@ -173,8 +173,7 @@ namespace rgw::dedup {
 
     int add_record_to_dedup_table(dedup_table_t *p_table,
                                   const struct disk_record_t *p_rec,
-                                  disk_block_id_t block_id,
-                                  record_id_t rec_id,
+                                  disk_rec_id_t rec_addr,
                                   md5_stats_t *p_stats,
                                   remapper_t *remapper);
 
@@ -203,8 +202,7 @@ namespace rgw::dedup {
 
     int read_object_attribute(dedup_table_t    *p_table,
                               disk_record_t    *p_rec,
-                              disk_block_id_t   block_id,
-                              record_id_t       rec_id,
+                              disk_rec_id_t     rec_addr,
                               md5_shard_t       md5_shard,
                               md5_stats_t      *p_stats /* IN-OUT */,
                               disk_block_seq_t *p_disk,
@@ -217,8 +215,7 @@ namespace rgw::dedup {
                                    md5_stats_t *p_stats /* IN-OUT */);
     int try_deduping_record(dedup_table_t   *p_table,
                             disk_record_t   *p_rec,
-                            disk_block_id_t  block_id,
-                            record_id_t      rec_id,
+                            disk_rec_id_t    rec_addr,
                             md5_shard_t      md5_shard,
                             md5_stats_t     *p_stats, /* IN-OUT */
                             remapper_t      *remapper);
@@ -256,6 +253,12 @@ namespace rgw::dedup {
     uint64_t d_all_buckets_obj_count   = 0;
     uint64_t d_all_buckets_obj_size    = 0;
 
+    // Fan-out parameters: computed in setup(), used in run()
+    uint32_t d_num_groups       = 0;  // G = ceil(sqrt(N)), 0 = single-pass
+    uint32_t d_shards_per_group = 0;  // ceil(N / G), shards handled per group
+    uint64_t d_raw_mem_size     = 0;  // actual allocation in bytes (B * PER_SHARD_BUFFER_SIZE)
+
+    uint64_t d_min_mem_allocation_mb = 64; // from yaml: rgw_dedup_min_mem_allocation_mb
     uint32_t d_min_obj_size_for_dedup = (64ULL * 1024);
     bool     d_split_head             = true;
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);

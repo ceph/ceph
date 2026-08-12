@@ -25,12 +25,15 @@
 #include "common/dout.h"
 
 #define FULL_DEDUP_SUPPORT
+#ifndef DIV_ROUND_UP
+#define DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
+#endif
 
 namespace rgw::dedup {
   using namespace std::chrono;
   using work_shard_t   = uint16_t;
-  using md5_shard_t    = uint16_t;
-
+  using md5_shard_t    = uint32_t;
+  using shard_t        = uint32_t;
   const uint64_t MICROSECONDS_PER_SECOND = 1000000;
   // settings to help debug small systems
   const work_shard_t MIN_WORK_SHARD = 2;
@@ -38,21 +41,22 @@ namespace rgw::dedup {
 
   // Those are the correct values for production system
   const work_shard_t MAX_WORK_SHARD = 255;
-  const md5_shard_t  MAX_MD5_SHARD  = 2048;
+  const md5_shard_t  MAX_MD5_SHARD  = 8192;
 
   const work_shard_t NULL_WORK_SHARD = 0xFFFF;
-  const md5_shard_t  NULL_MD5_SHARD  = 0xFFFF;
-  const unsigned     NULL_SHARD      = 0xFFFF;
+  const md5_shard_t  NULL_MD5_SHARD  = 0xFFFFFFFF;
+  const unsigned     NULL_SHARD      = 0xFFFFFFFF;
 
-  // work_shard  is an 8 bits int with 255 legal values for the first iteration
-  // and one value (0xFF) reserved for second iteration
+  // work_shard is an 8 bits int with 255 legal values
   const unsigned     WORK_SHARD_HARD_LIMIT = 0x0FF;
-  // md5_shard_t is a 12 bits int with 4096 possible values
-  const unsigned     MD5_SHARD_HARD_LIMIT  = 0xFFF;
+  // md5_shard_t is a 20 bits int with up to ~1M possible values (%05X OID format)
+  const unsigned     MD5_SHARD_HARD_LIMIT  = 0xFFFFF;
 
   static_assert(MAX_WORK_SHARD < NULL_WORK_SHARD);
   static_assert(MAX_WORK_SHARD < NULL_SHARD);
   static_assert(MAX_WORK_SHARD <= WORK_SHARD_HARD_LIMIT);
+
+  static_assert(MIN_MD5_SHARD  <= MAX_MD5_SHARD);
   static_assert(MAX_MD5_SHARD  < NULL_MD5_SHARD);
   static_assert(MAX_MD5_SHARD  < NULL_SHARD);
   static_assert(MAX_MD5_SHARD  <= MD5_SHARD_HARD_LIMIT);
@@ -61,6 +65,7 @@ namespace rgw::dedup {
   // the number of ref_count entries in the SRC-OBJ
   const uint8_t MAX_COPIES_PER_OBJ = 128;
 
+  static constexpr uint64_t HASH_ENTRY_SIZE = 32;
   //---------------------------------------------------------------------------
   enum dedup_req_type_t {
     DEDUP_TYPE_NONE     = 0,
@@ -177,8 +182,11 @@ namespace rgw::dedup {
     uint64_t ingress_obj = 0;
     uint64_t ingress_obj_bytes = 0;
     uint64_t egress_records = 0;
+    uint64_t egress_records_fanout = 0;
     uint64_t egress_blocks = 0;
+    uint64_t egress_coarse_blocks = 0;
     uint64_t egress_slabs = 0;
+    uint64_t egress_coarse_slabs = 0;
     uint64_t write_slab_failure = 0;
     uint64_t bidx_throttle_sleep_events = 0;
     uint64_t bidx_throttle_sleep_time_usec = 0;
@@ -210,7 +218,7 @@ namespace rgw::dedup {
 
   struct md5_stats_t {
     md5_stats_t& operator +=(const md5_stats_t& other);
-    void dump(Formatter *f) const;
+    void dump(Formatter *f, unsigned num_shards = 0) const;
 
     dedup_stats_t big_objs_stat;
     uint64_t ingress_slabs = 0;
@@ -388,4 +396,14 @@ namespace rgw::dedup {
     }
   }
 
+  enum dedup_step_t {
+    STEP_NONE,
+    STEP_BUCKET_INDEX_INGRESS,
+    STEP_BUCKET_INDEX_INGRESS_FANOUT,
+    STEP_BUILD_TABLE,
+    STEP_READ_ATTRIBUTES,
+    STEP_REMOVE_DUPLICATES,
+    STEP_DONE
+  };
+  const char* dedup_step_name(dedup_step_t step);
 } //namespace rgw::dedup

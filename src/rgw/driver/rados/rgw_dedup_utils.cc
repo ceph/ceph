@@ -367,8 +367,11 @@ namespace rgw::dedup {
     this->ingress_obj += other.ingress_obj;
     this->ingress_obj_bytes += other.ingress_obj_bytes;
     this->egress_records += other.egress_records;
+    this->egress_records_fanout += other.egress_records_fanout;
     this->egress_blocks += other.egress_blocks;
+    this->egress_coarse_blocks += other.egress_coarse_blocks;
     this->egress_slabs += other.egress_slabs;
+    this->egress_coarse_slabs += other.egress_coarse_slabs;
     this->write_slab_failure += other.write_slab_failure;
     this->bidx_throttle_sleep_events += other.bidx_throttle_sleep_events;
     this->bidx_throttle_sleep_time_usec += other.bidx_throttle_sleep_time_usec;
@@ -399,8 +402,17 @@ namespace rgw::dedup {
       f->dump_unsigned("Ingress Objs count", this->ingress_obj);
       f->dump_unsigned("Accum byte size Ingress Objs", this->ingress_obj_bytes);
       f->dump_unsigned("Egress Records count", this->egress_records);
+      if (this->egress_records_fanout) {
+        f->dump_unsigned("Egress Records fanout count", this->egress_records_fanout);
+      }
       f->dump_unsigned("Egress Blocks count", this->egress_blocks);
+      if (this->egress_coarse_blocks) {
+        f->dump_unsigned("Egress Coarse Blocks count", this->egress_coarse_blocks);
+      }
       f->dump_unsigned("Egress Slabs count", this->egress_slabs);
+      if (this->egress_coarse_slabs) {
+        f->dump_unsigned("Egress Coarse Slabs count", this->egress_coarse_slabs);
+      }
       f->dump_unsigned("Single part obj count", this->single_part_objs);
       f->dump_unsigned("Multipart obj count", this->multipart_objs);
       if (this->small_multipart_obj) {
@@ -487,7 +499,9 @@ namespace rgw::dedup {
     encode(w.ingress_obj, bl);
     encode(w.ingress_obj_bytes, bl);
     encode(w.egress_records, bl);
+    encode(w.egress_records_fanout, bl);
     encode(w.egress_blocks, bl);
+    encode(w.egress_coarse_blocks, bl);
     encode(w.egress_slabs, bl);
     encode(w.write_slab_failure, bl);
     encode(w.bidx_throttle_sleep_events, bl);
@@ -510,6 +524,7 @@ namespace rgw::dedup {
     encode(w.ingress_skip_filtered_storage_class, bl);
 
     encode(w.duration, bl);
+    encode(w.egress_coarse_slabs, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -520,7 +535,9 @@ namespace rgw::dedup {
     decode(w.ingress_obj, bl);
     decode(w.ingress_obj_bytes, bl);
     decode(w.egress_records, bl);
+    decode(w.egress_records_fanout, bl);
     decode(w.egress_blocks, bl);
+    decode(w.egress_coarse_blocks, bl);
     decode(w.egress_slabs, bl);
     decode(w.write_slab_failure, bl);
     decode(w.bidx_throttle_sleep_events, bl);
@@ -539,6 +556,7 @@ namespace rgw::dedup {
     decode(w.ingress_skip_filtered_storage_class, bl);
 
     decode(w.duration, bl);
+    decode(w.egress_coarse_slabs, bl);
     DECODE_FINISH(bl);
   }
 
@@ -622,11 +640,14 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  void md5_stats_t::dump(Formatter *f) const
+  void md5_stats_t::dump(Formatter *f, unsigned num_shards) const
   {
     // main section
     {
       Formatter::ObjectSection main(*f, "main");
+      if (num_shards) {
+        f->dump_unsigned("Num MD5-Shards", num_shards);
+      }
 
       f->dump_unsigned("Total processed objects", this->processed_objects);
       f->dump_unsigned("Loaded objects", this->loaded_objects);

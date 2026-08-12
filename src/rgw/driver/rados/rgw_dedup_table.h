@@ -88,16 +88,13 @@ namespace rgw::dedup {
     struct value_t {
       friend class dedup_table_t;
       value_t() {
-        this->block_idx = 0xFFFFFFFF;
         this->count  = 0;
-        this->rec_id = 0xFF;
         this->flags.clear();
       }
 
-      value_t(disk_block_id_t block_id, record_id_t rec_id, bool shared_manifest) {
-        this->block_idx = block_id;
+      value_t(disk_rec_id_t rec_addr_in, bool shared_manifest) {
+        this->rec_addr = rec_addr_in;
         this->count  = 1;
-        this->rec_id = rec_id;
         this->flags.clear();
         this->flags.set_occupied();
         if (shared_manifest) {
@@ -105,9 +102,9 @@ namespace rgw::dedup {
         }
       }
       inline bool has_shared_manifest() const {return flags.has_shared_manifest(); }
-      inline uint16_t        get_count() { return this->count; }
-      inline disk_block_id_t get_src_block_id() { return this->block_idx; }
-      inline record_id_t     get_src_rec_id() { return this->rec_id; }
+      inline uint8_t         get_count() { return this->count; }
+      inline disk_rec_id_t   get_src_rec_addr() { return this->rec_addr; }
+      inline record_id_t     get_src_rec_id() { return this->rec_addr.rec_id; }
       inline bool has_valid_hash() const {return flags.has_valid_hash(); }
     private:
       inline void set_shared_manifest_src() { this->flags.set_shared_manifest(); }
@@ -120,10 +117,8 @@ namespace rgw::dedup {
       inline void set_occupied() { this->flags.set_occupied();  }
       inline void clear_occupied() { this->flags.clear_occupied(); }
 
-
-      disk_block_id_t block_idx; // 32 bits
-      uint16_t        count;     // 16 bits
-      record_id_t     rec_id;    //  8 bits
+      disk_rec_id_t   rec_addr;  // 48 bits (6 bytes)
+      uint8_t         count;     //  8 bits (was uint16_t, MAX_COPIES_PER_OBJ=128 fits)
       table_flags_t   flags;     //  8 bits
     } __attribute__((__packed__));
     static_assert(sizeof(value_t) == 8);
@@ -135,25 +130,22 @@ namespace rgw::dedup {
                   uint8_t *p_slab,
                   uint64_t slab_size);
     int add_entry(key_t *p_key,
-                  disk_block_id_t block_id,
-                  record_id_t rec_id,
+                  disk_rec_id_t rec_addr,
                   bool shared_manifest,
                   dedup_stats_t *p_dedup_stats);
 
-    void update_entry(key_t *p_key, disk_block_id_t block_id, record_id_t rec_id,
+    void update_entry(key_t *p_key, disk_rec_id_t rec_addr,
                       bool shared_manifest);
 
     int  get_val(const key_t *p_key, struct value_t *p_val /*OUT*/);
 
-    int inc_count(const key_t *p_key, disk_block_id_t block_id, record_id_t rec_id);
+    int inc_count(const key_t *p_key, disk_rec_id_t rec_addr);
 
     int set_shared_manifest_src_mode(const key_t *p_key,
-                                     disk_block_id_t block_id,
-                                     record_id_t rec_id);
+                                     disk_rec_id_t rec_addr);
 
     int set_src_mode(const key_t *p_key,
-                     disk_block_id_t block_id,
-                     record_id_t rec_id,
+                     disk_rec_id_t rec_addr,
                      bool set_shared_manifest_src,
                      bool set_has_valid_hash_src);
 
@@ -166,6 +158,7 @@ namespace rgw::dedup {
       value_t val;
     } __attribute__((__packed__));
     static_assert(sizeof(table_entry_t) == 32);
+    static_assert(sizeof(table_entry_t) == HASH_ENTRY_SIZE);
 
     uint32_t find_entry(const key_t *p_key) const;
     void     inc_counters(const key_t *p_key,
