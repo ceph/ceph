@@ -86,7 +86,6 @@
       <!-- Path -->
       <div class="form-item">
         <cds-text-label
-          label="Role path"
           for="role_path"
           [invalid]="rolePath.isInvalid"
           [invalidText]="pathError"
@@ -133,6 +132,7 @@
             cols="200"
             [invalid]="policyDoc.isInvalid"
             [invalidText]="policyError"
+            cdRequiredField="Trust Policy"
           ></textarea>
         </cds-textarea-label>
         <ng-template #policyError>
