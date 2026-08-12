@@ -47,27 +47,26 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
 {
   using namespace rgw;
 
-  int rc = -EINVAL;
-
   g_rgwlib = &rgwlib;
 
-  if (! g_ceph_context) {
-    std::lock_guard<std::mutex> lg(librgw_mtx);
-    if (! g_ceph_context) {
-      std::vector<std::string> spl_args;
-      // last non-0 argument will be split and consumed
-      if (argc > 1) {
-	const std::string spl_arg{argv[(--argc)]};
-	get_str_vec(spl_arg, " \t", spl_args);
-      }
-      auto args = argv_to_vec(argc, argv);
-      // append split args, if any
-      for (const auto& elt : spl_args) {
-	args.push_back(elt.c_str());
-      }
-      rc = rgwlib.init(args);
-    }
+  std::lock_guard<std::mutex> lg(librgw_mtx);
+  if (g_ceph_context) {
+    *rgw = nullptr;
+    return -EINVAL;
   }
+
+  std::vector<std::string> spl_args;
+  // last non-0 argument will be split and consumed
+  if (argc > 1) {
+    const std::string spl_arg{argv[(--argc)]};
+    get_str_vec(spl_arg, " \t", spl_args);
+  }
+  auto args = argv_to_vec(argc, argv);
+  // append split args, if any
+  for (const auto& elt : spl_args) {
+    args.push_back(elt.c_str());
+  }
+  int rc = rgwlib.init(args);
 
   *rgw = g_ceph_context->get();
 
