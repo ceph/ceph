@@ -1465,6 +1465,14 @@ COMMAND_WITH_FLAG("config-key del "
 COMMAND("config-key rm "
 	"name=key,type=CephString",
 	"rm <key>", "config-key", "rw")
+COMMAND("config-key rm-range "
+	"name=key,type=CephString "
+	"name=start,type=CephString,req=false "
+	"name=end,type=CephString,req=false",
+	"remove keys in the range [<key>/<start>, <key>/<end>); omit <end> to "
+	"remove through the last key under <key>, omit both to remove every "
+	"key prefixed by <key>",
+	"config-key", "rw")
 COMMAND("config-key exists "
 	"name=key,type=CephString",
 	"check for <key>'s existence", "config-key", "r")
