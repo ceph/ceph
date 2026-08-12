@@ -632,15 +632,17 @@ Request parameters:
   ``euclidean``.
 - ``metadataConfiguration.nonFilterableMetadataKeys``: Up to 10 metadata keys
   that may not be used in a query filter. A filter that references one of them
-  is rejected. Key names must not contain a ``.``.
+  is rejected. Key names must not contain a ``.``, and must not be repeated in
+  the list.
 - ``metadataConfiguration.filterableMetadataKeys``: Up to 10 metadata keys that
   are stored as fields of the index, so that filters over them are evaluated
   before the vector search. (This is an extension to the S3 Vectors API. See:
   `Metadata Filtering`_.) Each entry has:
 
   - ``name``: The metadata key. Must not start with ``_`` and must not contain
-    a ``.``. A key may not appear both in ``filterableMetadataKeys`` and in
-    ``nonFilterableMetadataKeys``.
+    a ``.``. A key must not be repeated in the list, even with a different
+    ``type`` or ``mustExist``, and may not appear both in
+    ``filterableMetadataKeys`` and in ``nonFilterableMetadataKeys``.
   - ``type``: The type of the value. (This is ``String`` by default.) The list
     types may be stored and returned but cannot be used in a filter.
   - ``mustExist``: If "true", every vector written to the index must have this
@@ -786,12 +788,12 @@ Request parameters:
     of the index.
   - ``metadata``: An optional JSON object attached to the vector. It may hold up
     to 50 top-level fields, and must not exceed 40KB. Field names must not
-    contain a ``.``, and ``null`` values are not supported. The field names and
-    the ``null`` values are validated for the top-level fields of the document
-    only: a nested document may hold names with a ``.`` and ``null`` values, but
-    its fields cannot be used in a filter. (See: `Filter Syntax`_.) Any field
-    that was declared in ``filterableMetadataKeys`` must hold a value of the
-    declared type, and must be present if the key was declared with
+    contain a ``.``, must not be duplicated, and ``null`` values are not
+    supported. These are validated for the top-level fields of the document only:
+    a nested document may hold duplicate names, names with a ``.``, and ``null``
+    values, but its fields cannot be used in a filter. (See: `Filter Syntax`_.)
+    Any field that was declared in ``filterableMetadataKeys`` must hold a value
+    of the declared type, and must be present if the key was declared with
     ``mustExist``.
 
 An empty response body is returned on success.
