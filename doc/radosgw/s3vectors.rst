@@ -22,8 +22,8 @@ are provided, and are marked as such throughout this document.
 Requests are sent as ``POST`` requests with a JSON body, and are signed using
 AWS Signature Version 4 with the ``s3vectors`` service name.
 
-.. note:: To enable the S3 Vectors API, the ``rgw_enable_apis`` configuration
-   parameter should contain: "s3vectors".
+.. note:: To enable the S3 Vectors API, the :confval:`rgw_enable_apis`
+   configuration parameter should contain: "s3vectors".
 
 Storage Backends
 ----------------
@@ -46,12 +46,12 @@ Three backends are supported:
   access to it with its credentials. Using this option may give better visibility
   to the data being stored, allow for quota management, rate-limiting etc.
 
-  .. tip:: using ``http://localhost:<port>`` (where ``<port>`` is the port
-  configured for the RGW's frontend) lets the RGW send the S3 requests to itself.
-  make sure to set: ``rgw_s3vector_s3_allow_http = true`` in this case.
+  .. tip:: Using ``http://localhost:<port>`` (where ``<port>`` is the port
+     configured for the RGW's frontend) lets the RGW send the S3 requests to
+     itself. Make sure to set: ``rgw_s3vector_s3_allow_http = true`` in this case.
 
-  .. tip:: setting the endpoint to be the RGW's load balancer (if one exists),
-  may achieve better load distribution.
+  .. tip:: Setting the endpoint to be the RGW's load balancer (if one exists)
+     may achieve better load distribution.
 
 - ``local``: LanceDB files are stored on the local filesystem of the RGW
   process. This backend is intended for testing and single RGW setups only:
@@ -140,7 +140,8 @@ The backing bucket of a vector bucket is a regular S3 bucket, and its own sync
 configuration applies to it. It should not be synced. See:
 `Recommended Bucket Configuration`_.
 
- .. note:: When an ``s3`` backend is used, all endnpoits must belong to the same zone/site.
+.. note:: When an ``s3`` backend is used, all endpoints must belong to the same
+   zone/site.
 
 Metadata Filtering
 ------------------
