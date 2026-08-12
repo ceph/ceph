@@ -184,9 +184,8 @@ describe('CephfsMirroringListComponent', () => {
                 last_synced_snap: {
                   name: 'snap1',
                   sync_bytes: '1.00 MiB',
-                  sync_time_stamp: '1s'
-                },
-                metrics_updated_at: 1_700_000_000
+                  sync_time_stamp: '2026-08-12T13:32:21.383628+0000'
+                }
               }
             }
           }
