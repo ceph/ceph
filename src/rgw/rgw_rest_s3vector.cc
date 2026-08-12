@@ -1013,6 +1013,7 @@ private:
 
 class RGWS3VectorGetVectorBucketPolicy : public RGWS3VectorBase {
   rgw::s3vector::get_vector_bucket_policy_t configuration;
+  bufferlist policy;
 public:
   explicit RGWS3VectorGetVectorBucketPolicy(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
 private:
@@ -1029,7 +1030,6 @@ private:
   std::string canonical_name() const override { return fmt::format("REST.{}.S3VECTOR.GetVectorBucketPolicy", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_S3VECTOR_GET_VECTOR_BUCKET_POLICY; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-
   int init_processing(optional_yield y) override {
     return do_init_processing(configuration, y);
   }
@@ -1046,6 +1046,24 @@ private:
       return;
     }
     // policy TODO: implement
+    rgw::sal::Attrs attrs(s->bucket_attrs);
+    auto attr = attrs.find(RGW_ATTR_IAM_POLICY);
+    if(attr == attrs.end()) {
+      ldpp_dout(this, 20) << "can't find vector bucket IAM POLICY attr bucket_name = "
+        << configuration.vector_bucket_name << dendl;
+      op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
+      s->err.message = "The vector bucket policy does not exist";
+      return;
+    } else {
+      policy = attrs[RGW_ATTR_IAM_POLICY];
+      
+      if(policy.length() == 0) { 
+        ldpp_dout(this, 10) << "The vector bucket policy doesnot exist, bucket_policy = "
+          << configuration.vector_bucket_name << dendl;
+          op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
+          return;
+      }
+    }
   }
 };
 
