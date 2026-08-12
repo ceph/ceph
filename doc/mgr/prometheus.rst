@@ -43,6 +43,10 @@ Configuration
 .. confval:: standby_error_status_code
 .. confval:: exclude_perf_counters
 .. confval:: healthcheck_history_max_entries
+.. confval:: ssl
+.. confval:: ssl_server_port
+.. confval:: crt_file
+.. confval:: key_file
 
 By default the module will accept HTTP requests on port ``9283`` on all IPv4
 and IPv6 addresses on the host.  The port and listen address are
@@ -52,9 +56,75 @@ is registered with Prometheus's `registry
 <https://github.com/prometheus/prometheus/wiki/Default-port-allocations>`_.
 
 .. prompt:: bash #
-   
+
    ceph config set mgr mgr/prometheus/server_addr 0.0.0.0
    ceph config set mgr mgr/prometheus/server_port 9283
+
+SSL/TLS Support
+^^^^^^^^^^^^^^^
+
+.. note::
+
+   For cephadm deployments, TLS for the monitoring stack is managed by
+   cephadm itself. Use the ``secure_monitoring_stack`` option instead of
+   the manual configuration described below. See
+   :ref:`cephadm-monitoring-stack-security` for details.
+
+The Prometheus module can be configured to serve metrics over HTTPS
+(HTTP secured with TLS). This is intended for non-cephadm deployments
+(e.g., Rook or standalone). TLS is disabled by default. To enable it,
+provide a certificate and key, then set the ``ssl`` option to ``true``:
+
+.. prompt:: bash #
+
+   ceph prometheus set-ssl-certificate -i /path/to/cert.pem
+   ceph prometheus set-ssl-certificate-key -i /path/to/key.pem
+   ceph config set mgr mgr/prometheus/ssl true
+
+When TLS is enabled, the module will listen on port ``9284`` by default instead
+of ``9283``. The TLS port is configurable:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/prometheus/ssl_server_port 9284
+
+Alternatively, instead of injecting certificates via the CLI, you can point
+to certificate files on disk:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/prometheus/crt_file /path/to/cert.pem
+   ceph config set mgr mgr/prometheus/key_file /path/to/key.pem
+   ceph config set mgr mgr/prometheus/ssl true
+
+To set a certificate for a specific manager daemon (e.g., ``mgr.a``),
+pass the manager ID:
+
+.. prompt:: bash #
+
+   ceph prometheus set-ssl-certificate mgr.a -i /path/to/cert.pem
+   ceph prometheus set-ssl-certificate-key mgr.a -i /path/to/key.pem
+
+To disable TLS and revert to HTTP:
+
+.. prompt:: bash #
+
+   ceph config set mgr mgr/prometheus/ssl false
+
+.. note::
+
+   The module must be restarted after changing TLS settings:
+
+   .. prompt:: bash #
+
+      ceph mgr module disable prometheus
+      ceph mgr module enable prometheus
+
+.. note::
+
+   When TLS is enabled, the module listens on a different port (``9284``
+   by default). Update your Prometheus scrape configuration to use
+   ``https`` and the new port.
 
 .. warning::
 
