@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import errno
 import json
 import urllib.parse
 from collections import defaultdict
@@ -9,8 +10,18 @@ except ImportError:
     from unittest.mock import Mock, patch
 
 from .. import mgr
-from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus
+from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus, \
+    CephFSSubvolume, CephFSSubvolumeGroups, CephFSSubvolumeSnapshots
+from ..services.cephfs import unmanaged_volume_info
 from ..tests import ControllerTestCase
+
+UNMANAGED_VOLUME_ERROR = (-errno.EINVAL, '', 'failed to getxattr on subvolume metadata')
+VOL_NAME = 'test_fs'
+SUBVOL_NAME = 'sv1'
+GROUP_NAME = 'g1'
+SNAP_NAME = 'snap1'
+SUBVOL_PATH = '/volumes/_nogroup/sv1'
+GROUP_PATH = '/volumes/g1'
 
 
 class MetaDataMock(object):
@@ -521,21 +532,14 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
     def test_mirror_status_success(self):
         fs_name = 'test_fs'
         peer_uuid = 'peer-uuid-123'
+        last_synced_snap = {
+            'name': 'snap1',
+            'sync_bytes': '1.00 KiB',
+            'sync_time_stamp': '1704189600.000000s'
+        }
+        peer_status = {'state': 'idle', 'last_synced_snap': last_synced_snap}
         expected_status = {
-            'metrics': {
-                '/dir1': {
-                    'peer': {
-                        peer_uuid: {
-                            'state': 'idle',
-                            'last_synced_snap': {
-                                'name': 'snap1',
-                                'sync_bytes': '1.00 KiB',
-                                'sync_time_stamp': '1704189600.000000s'
-                            }
-                        }
-                    }
-                }
-            }
+            'metrics': {'/dir1': {'peer': {peer_uuid: peer_status}}}
         }
         mock_output = json.dumps(expected_status)
         mgr.remote = Mock(return_value=(0, mock_output, ''))
@@ -558,6 +562,139 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with(
             'mirroring', 'snapshot_mirror_status', fs_name, None, None)
+
+
+class CephFSUnmanagedVolumeFallbackTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([
+            CephFSSubvolume,
+            CephFSSubvolumeGroups,
+            CephFSSubvolumeSnapshots,
+        ])
+
+    def test_subvolume_list_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_ls':
+                return (0, json.dumps([{'name': SUBVOL_NAME}]), '')
+            if cmd == '_cmd_fs_subvolume_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolume_getpath':
+                return (0, SUBVOL_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/{VOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': SUBVOL_NAME,
+            'info': {
+                **unmanaged_volume_info(),
+                'path': SUBVOL_PATH,
+            },
+        }])
+
+    def test_subvolume_info_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolume_getpath':
+                return (0, SUBVOL_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(
+            f'/api/cephfs/subvolume/{VOL_NAME}/info'
+            f'?subvol_name={SUBVOL_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody({
+            **unmanaged_volume_info(),
+            'path': SUBVOL_PATH,
+        })
+
+    def test_subvolume_group_list_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolumegroup_ls':
+                return (0, json.dumps([{'name': GROUP_NAME}]), '')
+            if cmd == '_cmd_fs_subvolumegroup_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolumegroup_getpath':
+                return (0, GROUP_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/group/{VOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': GROUP_NAME,
+            'info': {
+                **unmanaged_volume_info(),
+                'path': GROUP_PATH,
+            },
+        }])
+
+    def test_subvolume_group_info_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolumegroup_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolumegroup_getpath':
+                return (0, GROUP_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(
+            f'/api/cephfs/subvolume/group/{VOL_NAME}/info'
+            f'?group_name={GROUP_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody({
+            **unmanaged_volume_info(),
+            'path': GROUP_PATH,
+        })
+
+    def test_subvolume_snapshot_list_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_snapshot_ls':
+                return (0, json.dumps([{'name': SNAP_NAME}]), '')
+            if cmd == '_cmd_fs_subvolume_snapshot_info':
+                return UNMANAGED_VOLUME_ERROR
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/snapshot/{VOL_NAME}/{SUBVOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': SNAP_NAME,
+            'info': unmanaged_volume_info(),
+        }])
+
+    def test_subvolume_snapshot_info_unmanaged_fallback(self):
+        mgr.remote = Mock(return_value=UNMANAGED_VOLUME_ERROR)
+
+        self._get(
+            f'/api/cephfs/subvolume/snapshot/{VOL_NAME}/{SUBVOL_NAME}/info'
+            f'?snap_name={SNAP_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(unmanaged_volume_info())
+        mgr.remote.assert_called_once_with(
+            'volumes', '_cmd_fs_subvolume_snapshot_info', None, {
+                'vol_name': VOL_NAME,
+                'sub_name': SUBVOL_NAME,
+                'snap_name': SNAP_NAME,
+            })
 
 
 class CephFSMirrorStatusTest(ControllerTestCase):
