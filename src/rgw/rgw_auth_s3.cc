@@ -712,7 +712,8 @@ std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op)
 }
 
 boost::optional<std::string>
-get_v4_canonical_headers(const req_info& info,
+get_v4_canonical_headers(CephContext* cct,
+                         const req_info& info,
                          const std::string_view& signedheaders,
                          const bool using_qs,
                          const bool force_boto2_compat)
@@ -764,35 +765,37 @@ get_v4_canonical_headers(const req_info& info,
     canonical_hdrs_map[token] = rgw_trim_whitespace(token_value);
   }
 
-  // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
-  // gives us a list of headers that must be signed if they are present.
+  if (!cct->_conf->rgw_sigv4_insecure) {
+    // https://docs.aws.amazon.com/IAM/latest/UserGuide/reference_sigv-create-signed-request.html
+    // gives us a list of headers that must be signed if they are present.
 
-  // `host` is always required.
-  if (!canonical_hdrs_map.contains("host")) {
-    dout(5) << "Signature rejected: CanonicalHeaders must contain `host`." << dendl;
-    return boost::none;
-  }
-  // If `content-type` is present, it must be in CanonicalHeaders
-  if (info.env->exists("CONTENT_TYPE") &&
-      !canonical_hdrs_map.contains("content-type")) {
-    dout(5) << "Signature rejected: 'content-type' supplied but not in CanonicalHeaders." << dendl;
-    return boost::none;
-  }
-  // Any header starting with `x-amz-` must be in CanonicalHeaders
-  const auto& emap = info.env->get_map();
-  static const std::string xamz{"HTTP_X_AMZ_"};
-  for (auto i = emap.lower_bound(xamz);
-       i != emap.end() && boost::istarts_with(i->first, xamz);
-       ++i) {
-    const std::string_view env_key =
-      std::string_view(i->first).substr(sarrlen("HTTP_"));
-    boost::container::small_vector<char, 64> buf(env_key.size());
-    lowercase_dash_transform(env_key, buf.begin(), true);
-    std::string_view lower_key{buf.data(), buf.size()};
-    if (!canonical_hdrs_map.contains(lower_key)) {
-      dout(5) << "Signature rejected: '" << lower_key
-      << "' supplied, but not in CanonicalHeaders." << dendl;
-      return boost::none;
+    // `host` is always required.
+    if (!canonical_hdrs_map.contains("host")) {
+        dout(5) << "Signature rejected: CanonicalHeaders must contain `host`." << dendl;
+        return boost::none;
+    }
+    // If `content-type` is present, it must be in CanonicalHeaders
+    if (info.env->exists("CONTENT_TYPE") &&
+        !canonical_hdrs_map.contains("content-type")) {
+        dout(5) << "Signature rejected: 'content-type' supplied but not in CanonicalHeaders." << dendl;
+        return boost::none;
+    }
+    // Any header starting with `x-amz-` must be in CanonicalHeaders
+    const auto& emap = info.env->get_map();
+    static const std::string xamz{"HTTP_X_AMZ_"};
+    for (auto i = emap.lower_bound(xamz);
+        i != emap.end() && boost::istarts_with(i->first, xamz);
+        ++i) {
+        const std::string_view env_key =
+        std::string_view(i->first).substr(sarrlen("HTTP_"));
+        boost::container::small_vector<char, 64> buf(env_key.size());
+        lowercase_dash_transform(env_key, buf.begin(), true);
+        std::string_view lower_key{buf.data(), buf.size()};
+        if (!canonical_hdrs_map.contains(lower_key)) {
+        dout(5) << "Signature rejected: '" << lower_key
+        << "' supplied, but not in CanonicalHeaders." << dendl;
+        return boost::none;
+        }
     }
   }
 

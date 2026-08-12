@@ -74,7 +74,15 @@
   Benchmarks showed that the lower thread count improves throughput and reduces latency
   on NVMe and HDD based environments. Users with specific workload requirements can
   tune this value; see also ``rgw_max_concurrent_requests``.
+* RGW: This release contains a fix for CVE-2026-54330. We now reject
+  Sigv4 requests with `host` and `x-amz-` headers not included in the
+  signed subset. Unfortunately, the REST client used in multisite was
+  generating such improperly signed requests.
 
+  If you are running multisite, you must set the
+  ``rgw_sigv4_insecure`` option to true before you begin to
+  upgrade. After all clusters are upgraded, set the option to
+  ``false`` again.
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
   with health status, capacity, performance metrics, and quick-access links. All the
