@@ -391,11 +391,11 @@ private:
   void create_mirror_snapshot(
     cls::rbd::GroupSnapshot *snap, Context *on_finish);
   void handle_create_mirror_snapshot(
-    int r, cls::rbd::GroupSnapshot *snap, Context *on_finish);
+    int r, const std::string &group_snap_id, Context *on_finish);
 
-  void update_local_group_state(cls::rbd::GroupSnapshot snap,
+  void update_local_group_state(const std::string &group_snap_id,
                                 Context *on_finish);
-  void handle_update_local_group_state(int r, cls::rbd::GroupSnapshot snap,
+  void handle_update_local_group_state(int r, const std::string &group_snap_id,
                                        Context *on_finish);
 
   void mirror_snapshot_complete(
@@ -490,7 +490,7 @@ private:
       std::unique_lock<ceph::mutex>& locker);
   void set_image_replayer_end_limits(ImageReplayer<ImageCtxT>* image_replayer,
       uint64_t snap_id, std::unique_lock<ceph::mutex>& locker);
-  void set_image_replayer_limits(const std::string &image_id,
+  void set_image_replayer_limits(const std::vector<std::string>& image_ids,
                                  const cls::rbd::GroupSnapshot *remote_snap,
                                  std::unique_lock<ceph::mutex>* locker);
   void wait_for_in_flight_ops();
