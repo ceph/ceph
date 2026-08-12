@@ -113,6 +113,7 @@ TEST(IoSequence, NoReadWhileWholeObjectWriteInFlight) {
           case OpType::Zero:
           case OpType::Zero2:
           case OpType::WriteAndZero:
+          case OpType::WriteZeroData:
           case OpType::FailedWrite:
           case OpType::FailedWrite2:
           case OpType::FailedWrite3:
