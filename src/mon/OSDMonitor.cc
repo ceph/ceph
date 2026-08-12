@@ -7887,6 +7887,56 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
   return true;
 }
 
+int OSDMonitor::prepare_crush_weight_headroom(CrushWrapper *newcrush,
+					      double additional,
+					      ostream &ss)
+{
+  if (additional <= 0) {
+    // nothing is growing, so nothing can overflow that was not already over
+    return 0;
+  }
+  unsigned before = newcrush->get_weight_shift();
+  ostringstream err;
+  int r = newcrush->make_weight_headroom(cct, additional, &err);
+  if (r < 0) {
+    ss << err.str();
+    return r;
+  }
+  if (r == 0) {
+    return 0;
+  }
+  if (!HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_VAMPIRE)) {
+    // A mon that predates weight_shift drops the field when it re-encodes the
+    // crush map, which would leave the rescaled weights behind while resetting
+    // what they mean.  Only the mons matter here: an osd or a client that does
+    // not know about weight_shift still computes exactly the same mappings.
+    ss << "this crush map needs its weights rescaled to fit any more capacity,"
+       << " which is not possible until every monitor supports it";
+    return -EPERM;
+  }
+  unsigned after = newcrush->get_weight_shift();
+  dout(0) << __func__ << " raised crush weight_shift " << before << " -> "
+	  << after << " to fit an additional weight of " << additional << dendl;
+  mon.clog->info() << "crush weight_shift raised from " << before << " to "
+		   << after << "; all crush weights were scaled down by "
+		   << (1 << (after - before))
+		   << " so that a stored weight of 1.0 now stands for "
+		   << (newcrush->raw_weight_unit_bytes() >> 40)
+		   << " TiB.  Placement is unaffected; weights reported by "
+		   << "the CLI are unchanged.";
+  return 0;
+}
+
+/// nominal weight an item contributes to the map today, 0 if it is not in it
+static double crush_current_weight(const CrushWrapper& crush, int item)
+{
+  if (!crush.check_item_present(item)) {
+    return 0;
+  }
+  return item >= 0 ? crush.get_item_weightf(item)
+		   : crush.get_bucket_weightf(item);
+}
+
 bool OSDMonitor::erasure_code_profile_in_use(
   const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
   const string &profile,
@@ -10823,6 +10873,30 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    // Every weight in a crush map is relative to its weight_shift, so a map
+    // that carries a different one silently reinterprets all of them.
+    // crushtool preserves the shift across a decompile/compile round trip (as
+    // "tunable weight_shift"), so this normally only happens when the map was
+    // built by an older crushtool or the line was edited out.
+    if (crush.get_weight_shift() != osdmap.crush->get_weight_shift()) {
+      bool sure = false;
+      cmd_getval(cmdmap, "yes_i_really_mean_it", sure);
+      if (!sure) {
+	err = -EPERM;
+	ss << "the given crush map has weight_shift "
+	   << crush.get_weight_shift() << " but the current one has "
+	   << osdmap.crush->get_weight_shift()
+	   << ", so every weight in it would stand for "
+	   << (crush.get_weight_shift() > osdmap.crush->get_weight_shift() ?
+	       "more" : "less")
+	   << " capacity than intended.  Add \"tunable weight_shift "
+	   << osdmap.crush->get_weight_shift()
+	   << "\" to the map, or pass --yes-i-really-mean-it if the change is "
+	   << "deliberate.";
+	goto reply_no_propose;
+      }
+    }
+
     err = osdmap.validate_crush_rules(&crush, &ss);
     if (err < 0) {
       goto reply_no_propose;
@@ -10854,6 +10928,51 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.crush = data;
     ss << osdmap.get_crush_version() + 1;
     goto update;
+
+  } else if (prefix == "osd crush set-weight-shift") {
+    int64_t shift;
+    if (!cmd_getval(cmdmap, "shift", shift)) {
+      ss << "unable to parse shift value '"
+	 << cmd_vartype_stringify(cmdmap.at("shift")) << "'";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    CrushWrapper newcrush = _get_pending_crush();
+    unsigned before = newcrush.get_weight_shift();
+    if ((unsigned)shift == before) {
+      ss << "crush weight_shift is already " << shift;
+      err = 0;
+      goto reply_no_propose;
+    }
+    if (!HAVE_FEATURE(mon.get_quorum_con_features(), SERVER_VAMPIRE)) {
+      // see prepare_crush_weight_headroom()
+      err = -EPERM;
+      ss << "setting weight_shift is not possible until every monitor "
+	 << "supports it";
+      goto reply_no_propose;
+    }
+    {
+      ostringstream err_ss;
+      err = newcrush.rescale_weights(cct, shift, &err_ss);
+      if (err < 0) {
+	ss << err_ss.str();
+	goto reply_no_propose;
+      }
+    }
+    if (!validate_crush_against_features(&newcrush, ss)) {
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    pending_inc.crush.clear();
+    newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
+    ss << "set crush weight_shift to " << shift << ": a stored weight of 1.0 "
+       << "now stands for " << (newcrush.raw_weight_unit_bytes() >> 40)
+       << " TiB.  All weights were rescaled, so the weights reported by the "
+       << "CLI and the resulting placement are unchanged.";
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
 
   } else if (prefix == "osd crush set-all-straw-buckets-to-straw2") {
     CrushWrapper newcrush = _get_pending_crush();
@@ -11415,6 +11534,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       << loc << dendl;
     CrushWrapper newcrush = _get_pending_crush();
 
+    err = newcrush.validate_weightf(weight);
+    if (err < 0) {
+      ss << "invalid weight " << weight;
+      goto reply_no_propose;
+    }
+    err = prepare_crush_weight_headroom(
+      &newcrush, weight - crush_current_weight(newcrush, osdid), ss);
+    if (err < 0)
+      goto reply_no_propose;
+
     string action;
     if (prefix == "osd crush set" ||
         newcrush.check_item_loc(cct, osdid, loc, (int *)NULL)) {
@@ -11475,6 +11604,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       CrushWrapper newcrush = _get_pending_crush();
 
+      err = newcrush.validate_weightf(weight);
+      if (err < 0) {
+	ss << "invalid weight " << weight;
+	goto reply_no_propose;
+      }
+      err = prepare_crush_weight_headroom(
+	&newcrush, weight - crush_current_weight(newcrush, osdid), ss);
+      if (err < 0)
+	goto reply_no_propose;
+
       err = newcrush.create_or_move_item(cct, osdid, weight, osd_name, loc,
 					 g_conf()->osd_crush_update_weight_set);
       if (err == 0) {
@@ -11517,6 +11656,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       int id = newcrush.get_item_id(name);
 
       if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL)) {
+	// the moved subtree lands under a new parent, whose weight has to be
+	// able to hold it
+	err = prepare_crush_weight_headroom(
+	  &newcrush, crush_current_weight(newcrush, id), ss);
+	if (err < 0) {
+	  break;
+	}
 	if (id >= 0) {
 	  err = newcrush.create_or_move_item(
 	    cct, id, 0, name, loc,
@@ -11622,6 +11768,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } else {
       int id = newcrush.get_item_id(name);
       if (!newcrush.check_item_loc(cct, id, loc, (int *)NULL)) {
+	// linking adds this subtree's weight under another parent as well
+	err = prepare_crush_weight_headroom(
+	  &newcrush, crush_current_weight(newcrush, id), ss);
+	if (err < 0) {
+	  goto reply_no_propose;
+	}
 	err = newcrush.link_bucket(cct, id, loc);
 	if (err >= 0) {
 	  ss << "linked item id " << id << " name '" << name
@@ -11738,6 +11890,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    err = newcrush.validate_weightf(w);
+    if (err < 0) {
+      ss << "invalid weight " << w;
+      goto reply_no_propose;
+    }
+    err = prepare_crush_weight_headroom(
+      &newcrush, w - crush_current_weight(newcrush, id), ss);
+    if (err < 0)
+      goto reply_no_propose;
+
     err = newcrush.adjust_item_weightf(cct, id, w,
 				       g_conf()->osd_crush_update_weight_set);
     if (err < 0)
@@ -11774,6 +11936,22 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	 << cmd_vartype_stringify(cmdmap.at("weight")) << "'";
       err = -EINVAL;
       goto reply_no_propose;
+    }
+
+    err = newcrush.validate_weightf(w);
+    if (err < 0) {
+      ss << "invalid weight " << w;
+      goto reply_no_propose;
+    }
+    {
+      // every leaf under the subtree ends up at w
+      set<int> leaves;
+      newcrush.get_leaves(name, &leaves);
+      err = prepare_crush_weight_headroom(
+	&newcrush, w * (double)leaves.size() - newcrush.get_bucket_weightf(id),
+	ss);
+      if (err < 0)
+	goto reply_no_propose;
     }
 
     err = newcrush.adjust_subtree_weightf(cct, id, w,
