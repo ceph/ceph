@@ -262,7 +262,7 @@ class TestNvmeofCLICommandSuccessMessage:
 
         result_plain = NvmeofCLICommand.COMMANDS[test_cmd].call(
             MagicMock(),
-            {"format": "plain"}
+            {"format": "plain", "a": "somevalue"}
         )
         assert isinstance(result_plain, HandleCommandResult)
         assert result_plain.retval == 0
@@ -292,7 +292,9 @@ class TestNvmeofCLICommandSuccessMessage:
         def set_log_level(self, a: str):
             return {"a": "b"}
 
-        result_default = NvmeofCLICommand.COMMANDS[test_cmd].call(MagicMock(), {})
+        result_default = NvmeofCLICommand.COMMANDS[test_cmd].call(
+            MagicMock(), {"a": "somevalue"}
+        )
         assert isinstance(result_default, HandleCommandResult)
         assert result_default.retval == 0
         assert result_default.stdout == (
@@ -681,6 +683,38 @@ class TestNvmeofCLICommandSuccessMessage:
         assert result.stdout == (
             "Adding nqn.none.test listener at 127.0.0.1:4420 gw=None: Successful"
         )
+
+    def test_listener_del_without_trsvcid_returns_clear_error(self):
+        class Model(NamedTuple):
+            status: str
+
+        def delete(mgr, nqn: str, host_name: str, traddr: str,
+                   trsvcid: int, adrfam: int = 0,
+                   force: bool = False, gw_group: Optional[str] = None):
+            return dict(status=1)
+
+        cmd = NvmeofCLICommand(
+            "nvmeof listener del test",
+            model=Model,
+            success_message_template=(
+                "Deleting listener {traddr}:{trsvcid} from {nqn}: Successful"
+            ),
+        )
+        cmd(delete)
+
+        try:
+            cmd_dict = {
+                "nqn": "nqn.2001-07.com.ceph:test",
+                "host_name": "ceph-node6",
+                "traddr": "10.0.65.113",
+                # trsvcid intentionally omitted
+            }
+            result = cmd.call(mgr=None, cmd_dict=cmd_dict, inbuf=None)
+            assert result.retval == -errno.EINVAL
+            assert "trsvcid" in result.stderr
+            assert result.stdout == ""
+        finally:
+            del NvmeofCLICommand.COMMANDS["nvmeof listener del test"]
 
     def test_template_can_use_response_fields(self):
         test_cmd = "nvmeof show op status"

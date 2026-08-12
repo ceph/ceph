@@ -127,7 +127,7 @@ const routes: Routes = [
   {
     path: 'view/:name',
     component: PoolResourceSidebarComponent,
-    data: { breadcrumbs: PoolResourceBreadcrumbResolver },
+    data: { breadcrumbs: PoolResourceBreadcrumbResolver, showBreadcrumbsLayout: false },
     children: [
       { path: '', redirectTo: 'overview', pathMatch: 'full' },
       {

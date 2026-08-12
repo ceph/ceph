@@ -3636,6 +3636,19 @@ def persistent_topic_configs(persistency_time, config_dict):
     # topic stats
     get_stats_persistent_topic(topic_name, 0)
 
+    # wait for the persistent topic's queue to be discovered and owned by the
+    # notification manager before generating events. the manager refreshes its
+    # list of queues once per fixed queues_update_period (a 30s constant in
+    # src/rgw/driver/rados/rgw_notify.cc, not a tunable), and a queue created
+    # just after a refresh isn't picked up until the next cycle; it then still
+    # has to lock the queue and start processing before entries begin
+    # retrying/expiring. sleep for more than one full period so discovery is
+    # guaranteed to have happened (sleeping exactly one period can still race).
+    # without this wait, create-phase events can remain in the queue (not yet
+    # retried/expired) when the delete phase runs, inflating the entry count.
+    queue_discovery_period = 30
+    time.sleep(queue_discovery_period + 5)
+
     # create objects in the bucket (async)
     number_of_objects = 10
     client_threads = []
@@ -3703,7 +3716,13 @@ def create_persistency_config_string(config_dict):
 @pytest.mark.basic_test
 def test_persistent_topic_configs_ttl():
     """ test persistent topic configurations with time_to_live """
-    config_dict = {"time_to_live": 30, "max_retries": "None", "retry_sleep_duration": "None"}
+    # set retry_sleep_duration explicitly instead of leaving it "None" (which
+    # defaults to rgw_topic_persistency_sleep_duration=0). the push endpoint in
+    # this test is intentionally unreachable, so a 0s sleep makes the manager
+    # retry the same events hundreds of times per second, which is both wasteful
+    # and has been observed to wedge the queue's processing. a 1s sleep paces the
+    # retries without affecting what the test asserts (expiry is driven by ttl).
+    config_dict = {"time_to_live": 30, "max_retries": "None", "retry_sleep_duration": 1}
     persistency_time = config_dict["time_to_live"]
 
     persistent_topic_configs(persistency_time, config_dict)

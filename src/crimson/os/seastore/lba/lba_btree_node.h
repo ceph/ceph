@@ -101,14 +101,14 @@ using LBAInternalNodeRef = LBAInternalNode::Ref;
  *   checksum   : ceph_le32[1]                4B
  *   size       : ceph_le32[1]                4B
  *   meta       : lba_node_meta_le_t[1]       36B
- *   keys       : laddr_le_t[CAPACITY]        (106*16)B
- *   values     : lba_map_val_le_t[CAPACITY]  (106*21)B
- *                                            = 4077B
+ *   keys       : laddr_le_t[CAPACITY]        (88*16)B
+ *   values     : lba_map_val_le_t[CAPACITY]  (88*30)B
+ *                                            = 4092B
  *
  * TODO: update FixedKVNodeLayout to handle the above calculation
  * TODO: the above alignment probably isn't portable without further work
  */
-constexpr size_t LEAF_NODE_CAPACITY = 106;
+constexpr size_t LEAF_NODE_CAPACITY = 88;
 
 struct LBALeafNode
   : FixedKVLeafNode<
@@ -165,8 +165,9 @@ struct LBALeafNode
     laddr_t pivot,
     lba_map_val_t val) {
     LOG_PREFIX(FixedKVInternalNode::replace);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, old key {}, key {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       iter.get_key(),
       pivot);
@@ -180,8 +181,9 @@ struct LBALeafNode
 
   void remove(internal_const_iterator_t iter) final {
     LOG_PREFIX(LBALeafNode::remove);
+    assert(this->t != nullptr);
     SUBTRACE(seastore_fixedkv_tree, "trans.{}, pos {}, key {}",
-      this->pending_for_transaction,
+      this->t->get_trans_id(),
       iter.get_offset(),
       iter.get_key());
     assert(iter != this->end());
@@ -318,13 +320,14 @@ struct LBALeafNode
 
   std::ostream &print_detail(std::ostream &out) const final;
 
-  std::map<laddr_t, pladdr_t> merge_content_to(
+  std::map<laddr_t, lba_map_val_t> merge_content_to(
     Transaction &t,
     LBALeafNode &pending_version,
     iterator &iter)
   {
     LOG_PREFIX(LBALeafNode::merge_content_to);
-    std::map<laddr_t, pladdr_t> modified;
+    SUBTRACET(seastore_lba, "merging with {}", t, pending_version);
+    std::map<laddr_t, lba_map_val_t> modified;
     auto it = pending_version.begin();
     while (it != pending_version.end() && iter != this->end()) {
       const auto &v1 = iter->get_val();
@@ -345,14 +348,24 @@ struct LBALeafNode
         ceph_abort();
       }
       if (is_valid_child_ptr(child)) {
-        if ((child->_is_mutable() || child->_is_pending_io())) {
-          // skip the ones that the pending version is also modifying
+        if (// skip the ones that the pending version is also modifying
+           (child->_is_mutable() || child->_is_pending_io()) ||
+           // EXIST_CLEAN extents created by DEMOTE transactions also
+           // updates their paddrs, so they should also be skpped.
+           (pending_version.t->get_src() == transaction_type_t::DEMOTE)) {
+          SUBTRACET(seastore_lba, "skipping {}~{}", t, it->get_key(), it->get_val());
           it++;
           continue;
         } else {
-          assert(child->_is_exist_clean() || child->_is_exist_mutation_pending());
+          assert(child->_is_exist_clean() ||
+                 child->_is_exist_mutation_pending() ||
+                 // a pending child might have been invalidated and
+                 // its corresponding mapping has not been removed
+                 !child->_is_valid());
         }
       }
+      SUBTRACET(seastore_lba, "examing v2: {}~{}, v1: {}~{}",
+        t, it->get_key(), it->get_val(), iter->get_key(), iter->get_val());
       auto pending_key = it->get_key();
       auto stable_key = iter->get_key();
       auto stable_end = stable_key + v1.len;
@@ -362,13 +375,21 @@ struct LBALeafNode
         if (pending_key != stable_key) {
           assert(v2.pladdr != v1.pladdr);
           assert(is_valid_child_ptr(child));
+          assert(child->_is_exist_clean());
         }
         if (v2.pladdr != v1.pladdr) {
           auto m_v2 = v2;
           auto off = pending_key.get_byte_distance<extent_len_t>(stable_key);
           auto paddr = v1.pladdr.get_paddr();
           paddr = paddr + off;
+          SUBTRACET(seastore_lba, "merging to {}, paddr: {} -> {}",
+            t, pending_version, m_v2.pladdr, paddr);
           m_v2.pladdr = paddr;
+          if (v1.shadow_paddr == P_ADDR_NULL) {
+            m_v2.shadow_paddr = P_ADDR_NULL;
+          } else {
+            m_v2.shadow_paddr = (v1.shadow_paddr + off);
+          }
           SUBTRACET(seastore_lba, "merging to {}, paddr: {} -> {}",
             t, pending_version, m_v2.pladdr, paddr);
           if (!is_valid_child_ptr(child)) {
@@ -378,7 +399,7 @@ struct LBALeafNode
             m_v2.checksum = v1.checksum;
           }
           it->set_val(m_v2);
-          auto [_it, inserted] = modified.emplace(it->get_key(), paddr);
+          auto [_it, inserted] = modified.emplace(it->get_key(), m_v2);
           ceph_assert(inserted);
         }
         it++;
@@ -480,10 +501,20 @@ struct LBACursor : BtreeCursor<laddr_t, lba::lba_map_val_t, LBALeafNode> {
   }
 
   extent_types_t get_extent_type() const {
+    assert(iter.get_val().type != extent_types_t::NONE);
     assert(is_viewable());
     assert(!is_end());
     assert(iter.get_val().type != extent_types_t::NONE);
     return iter.get_val().type;
+  }
+
+  bool has_shadow_paddr() const {
+    return iter.get_val().shadow_paddr != P_ADDR_NULL;
+  }
+
+  paddr_t get_shadow_paddr() const {
+    assert(has_shadow_paddr());
+    return iter.get_val().shadow_paddr;
   }
 
   base_iertr::future<> refresh();
@@ -500,7 +531,6 @@ using LBACursorRef = boost::intrusive_ptr<LBACursor>;
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::lba::lba_node_meta_t> : fmt::ostream_formatter {};
-template <> struct fmt::formatter<crimson::os::seastore::lba::lba_map_val_t> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBAInternalNode> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<crimson::os::seastore::lba::LBACursor> : fmt::ostream_formatter {};
 #endif

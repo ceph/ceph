@@ -14,15 +14,8 @@
         [data]="daemons"
         [columns]="columns"
         columnMode="flex"
-        [hasDetails]="true"
-        (setExpandedRow)="setExpandedRow($event)"
         (fetchData)="getDaemonList($event)"
       >
-        <cd-rgw-daemon-details
-          *cdTableDetail
-          [selection]="expandedRow"
-        >
-        </cd-rgw-daemon-details>
       </cd-table>
     </ng-template>
   </ng-container>

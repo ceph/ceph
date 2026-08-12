@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <map>
 #include <ranges>
 #include <stdexcept>
@@ -19,7 +20,7 @@
 
 namespace lfdb = ceph::libfdb;
 
-constexpr const char* const msg = "Hello, World!";
+constexpr char msg[] = "Hello, World!";
 
 constexpr const char msg_with_null[] = { '\0', 'H', 'i', '\0', ' ', 't', 'h', 'e', 'r', 'e', '!', '\0'};
 
@@ -29,6 +30,20 @@ To clanly clos in golde so clere;
 Oute of oryent, I hardyly saye.
 Ne proved I never her precios pere.
 )";
+
+inline lfdb::transaction_options janitor_cleanup_transaction_options()
+{
+ return {
+  { FDB_TR_OPTION_RETRY_LIMIT, std::int64_t { 0 } }
+ };
+}
+
+inline lfdb::database_options test_database_options()
+{
+ return {
+  { FDB_DB_OPTION_TRANSACTION_TIMEOUT, std::int64_t { 5000 } }
+ };
+}
 
 // Tests use a unique process-local namespace so different test binaries can share an FDB
 // backing store without deleting or reading each other's keys.
@@ -86,7 +101,7 @@ struct janitor final
  }
 
  janitor()
-  : janitor(ceph::libfdb::create_database())
+  : janitor(ceph::libfdb::create_database(test_database_options()))
  {}
 
  ~janitor()
@@ -106,7 +121,7 @@ struct janitor final
  public:
  void drop(const lfdb::select& range)
  {
-  lfdb::erase(ceph::libfdb::make_transaction(dbh()),
+  lfdb::erase(ceph::libfdb::make_transaction(dbh(), janitor_cleanup_transaction_options()),
               range,
               lfdb::commit_after_op::commit);
  }

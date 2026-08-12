@@ -13,8 +13,7 @@
     "sourceMap": false,
     "types": [
       "cypress",
-      "cypress-axe",
-      "@applitools/eyes-cypress"
+      "cypress-axe"
     ],
     "target": "es6",
     "skipLibCheck": true

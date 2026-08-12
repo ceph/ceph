@@ -122,7 +122,6 @@ enum {
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
   l_mdss_cap_revoke_eviction,
-  l_mdss_cache_trim_throttle,
   l_mdss_session_recall_throttle,
   l_mdss_session_recall_throttle2o,
   l_mdss_global_recall_throttle,
@@ -574,6 +573,7 @@ private:
     const std::string& offset_str,
     uint32_t offset_hash,
     unsigned req_flags,
+    unsigned diff_mask,
     bufferlist& dirbl);
   bool build_snap_diff(
     const MDRequestRef& mdr,
@@ -582,6 +582,7 @@ private:
     dentry_key_t* skip_key,
     snapid_t snapid_before,
     snapid_t snapid,
+    unsigned diff_mask,
     const bufferlist& dnbl,
     std::function<bool(CDentry*, CInode*, bool)> add_result_cb);
 

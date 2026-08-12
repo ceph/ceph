@@ -378,14 +378,14 @@ exceed the FoundationDB five-second transaction limit: */
 
     auto collect_blocks = [&j](lfdb::select selector) {
       collected_blocks out;
-      const auto requested_stride = selector.options.stride;
+      const auto requested_result_limit = selector.options.result_limit;
 
       std::ranges::for_each(lfdb::block_generator<std::string, ordered_block>(j, selector), [&](const auto& block) {
         ++out.nblocks;
         out.total += block.size();
 
-        if (0 < requested_stride) {
-          CHECK(block.size() <= static_cast<size_t>(requested_stride));
+        if (0 < requested_result_limit) {
+          CHECK(block.size() <= static_cast<size_t>(requested_result_limit));
         }
 
         std::ranges::copy(block, std::back_inserter(out.entries));
@@ -395,7 +395,7 @@ exceed the FoundationDB five-second transaction limit: */
     };
 
     auto check_paged = [nkeys](const collected_blocks& blocks, const lfdb::select& selector) {
-      if (selector.options.stride < static_cast<int>(nkeys)) {
+      if (selector.options.result_limit < static_cast<int>(nkeys)) {
         CHECK(1 < blocks.nblocks);
       }
     };
@@ -426,7 +426,7 @@ exceed the FoundationDB five-second transaction limit: */
 
     SECTION("forward, paged") {
       auto selector = lfdb::select { make_key_prefix() };
-      selector.options.stride = 5;
+      selector.options.result_limit = 5;
       auto blocks = collect_blocks(selector);
 
       CAPTURE(nkeys);
@@ -447,7 +447,7 @@ exceed the FoundationDB five-second transaction limit: */
     SECTION("reverse, paged") {
       auto selector = lfdb::select { make_key_prefix() };
       selector.options.reverse_order = true;
-      selector.options.stride = 5;
+      selector.options.result_limit = 5;
       auto blocks = collect_blocks(selector);
 
       CAPTURE(blocks.nblocks);
@@ -661,7 +661,7 @@ TEST_CASE("read path benchmarks", "[.benchmark][benchmark]") {
 }
 
 // Note that these are disabled for regular test runs. Use
-//      unittest_fdb_ceph "simple benchmarks"
+//      unittest_fdb_ceph "[benchmark]"
 // ...to run:
 TEST_CASE("simple benchmarks", "[.benchmark][benchmark]") {
 
@@ -755,11 +755,11 @@ BENCHMARK_ADVANCED("write simple records-- parallel, one transaction per block")
 
 }
 
-#include <catch2/catch_session.hpp>
+#include "test/catch2_compat.h"
 
 int main(int argc, char **argv) 
 {
-  int result = Catch::Session().run(argc, argv);
+  const auto result = ceph::test::run_catch2(argc, argv);
 
   // Make sure that FoundationDB is shut down once and only once:
   ceph::libfdb::shutdown_libfdb(); 

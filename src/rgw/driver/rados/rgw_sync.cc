@@ -1518,7 +1518,7 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   bool can_adjust_marker = false;
   bool done_with_period = false;
 
-  int total_entries = 0;
+  uint64_t total_entries = 0;
   string old_mdlog_marker;
 
   RGWSyncTraceNodeRef tn;

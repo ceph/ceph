@@ -376,7 +376,7 @@ values until the new owning daemon writes an updated entry.
    * - ``metrics_updated_at``
      - Yes
      - No
-     - Wall-clock time of the last omap write; exposed only by
+     - Wall-clock time of the last omap write (ISO-8601 in mgr CLI); exposed only by
        ``ceph fs snapshot mirror status`` (not ``fs mirror peer status``)
 
 **Omap cleanup**
@@ -660,7 +660,7 @@ command parameter is of format ``filesystem-name@filesystem-id peer-uuid``::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -750,11 +750,14 @@ Plain unsigned integers with no unit suffix.
 Timestamp
 ---------
 
-Field: ``sync_time_stamp``.
+Field: ``sync_time_stamp`` (and ``metrics_updated_at`` in mgr status).
 
-Monotonic clock time in seconds (since daemon startup) when the snapshot sync finished,
-printed with sub-second precision and an ``s`` suffix (for example, ``274900.558797s``). This
-is not a wall-clock or epoch timestamp.
+Wall-clock time printed as an ISO-8601 local timestamp with sub-second precision
+and timezone offset (for example, ``2026-07-15T12:00:00.558797+0530``).
+``sync_time_stamp`` is when the snapshot sync finished;
+``metrics_updated_at`` is when omap was last written for that directory and peer.
+Omap persistence and ``counter dump`` (``last_sync_timestamp``) still store Unix
+epoch seconds.
 
 ``snaps_synced``, ``snaps_deleted``, and ``snaps_renamed`` are
 :ref:`per-session counters<cephfs_mirroring_sync_metric_fields>`: they count
@@ -923,7 +926,7 @@ E.g., adding a regular file for synchronization would result in failed status::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "44s",
-                        "sync_time_stamp": "500900.600797s",
+                        "sync_time_stamp": "2026-07-15T12:05:33.600797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -972,7 +975,7 @@ In the remote filesystem::
                         "crawl_duration": "2s",
                         "datasync_queue_wait_duration": "1s",
                         "sync_duration": "33s",
-                        "sync_time_stamp": "274900.558797s",
+                        "sync_time_stamp": "2026-07-15T12:00:00.558797+0530",
                         "sync_bytes": "149.94 MiB",
                         "sync_files": 5000
                     },
@@ -1227,7 +1230,7 @@ Counters are not updated on every file read or write. Behavior differs by field 
      - Durations in seconds; bytes are raw counts
    * - ``last_sync_timestamp``
      - ``last_synced_snap.sync_time_stamp``
-     - ``utime_t`` (seconds since epoch), not the monotonic string shown in admin JSON
+     - Perf counter is Unix epoch seconds; admin/mgr JSON show ISO-8601 local time
    * - ``snaps_synced`` / ``snaps_deleted`` / ``snaps_renamed``
      - Same field names at directory level
      - Reset on daemon restart or directory reassignment (same as admin socket)

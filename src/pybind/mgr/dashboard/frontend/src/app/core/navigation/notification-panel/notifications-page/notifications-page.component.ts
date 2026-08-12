@@ -20,6 +20,7 @@ import { IconSize } from '~/app/shared/enum/icons.enum';
 interface DisplayNotification extends CdNotification {
   displayTitle: string;
   displayPreview: string;
+  displayDetail: string;
 }
 
 @Component({
@@ -74,12 +75,14 @@ export class NotificationsPageComponent implements OnInit, OnDestroy {
 
     this.sub = this.notificationService.data$.subscribe((notifications) => {
       this.notifications.set(
-        notifications.map((n) =>
-          Object.assign(n, {
+        notifications.map((n) => {
+          const rawMessage = n.prometheusAlert?.description || n.message || '';
+          return Object.assign(n, {
             displayTitle: n.prometheusAlert?.alertName || n.title || '',
-            displayPreview: n.prometheusAlert?.description || n.message || ''
-          })
-        )
+            displayPreview: rawMessage.replace(/<[^>]*>/g, ''),
+            displayDetail: rawMessage
+          });
+        })
       );
 
       this._tryPreselect(notifications);

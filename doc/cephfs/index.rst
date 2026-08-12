@@ -52,6 +52,8 @@ as needed`_. You can also `create other CephFS volumes`_.
 Finally, to mount CephFS on your client nodes, see `Mount CephFS:
 Prerequisites`_ page. Additionally, a command-line shell utility is available
 for interactive access or scripting via the :ref:`cephfs-shell <cephfs-shell>`.
+To provision CephFS volumes for Kubernetes and other container platforms,
+see :ref:`csi-cephfs`.
 
 .. _Orchestrator: ../mgr/orchestrator
 .. _deploy MDS manually as needed: add-remove-mds
@@ -170,6 +172,7 @@ Troubleshooting and Disaster Recovery
 
     Client eviction <eviction>
     Scrubbing the File System <scrub>
+    Damaged ranks <damaged-rank>
     Handling full file systems <full>
     Metadata repair <disaster-recovery-experts>
     Troubleshooting <troubleshooting>

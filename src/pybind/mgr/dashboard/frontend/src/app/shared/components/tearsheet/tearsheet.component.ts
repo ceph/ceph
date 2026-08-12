@@ -24,8 +24,8 @@ import { ActivatedRoute } from '@angular/router';
 import { Location } from '@angular/common';
 import { ConfirmationModalComponent } from '../confirmation-modal/confirmation-modal.component';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
-import { Subject } from 'rxjs';
-import { takeUntil } from 'rxjs/operators';
+import { forkJoin, Subject } from 'rxjs';
+import { filter, finalize, startWith, take, takeUntil } from 'rxjs/operators';
 
 export type TearsheetOverflowScroll = 'auto' | 'hidden' | 'visible' | 'scroll';
 
@@ -79,13 +79,19 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
   @Input() successIcon: boolean = false;
   @Input() headerTestId?: string;
 
-  @Output() submitRequested = new EventEmitter<void>();
+  /** Merged step form values for consumers that bind `(submitRequested)="onSubmit($event)"`. */
+  @Output() submitRequested = new EventEmitter<Record<string, unknown>>();
   @Output() closeRequested = new EventEmitter<void>();
   @Output() stepChanged = new EventEmitter<{ current: number }>();
   @Output() validateStep = new EventEmitter<{ step: number }>();
 
   @ContentChildren(TearsheetStepComponent)
   stepContents!: QueryList<TearsheetStepComponent>;
+
+  private advancingDueToAsync = false;
+  private submittingDueToAsync = false;
+  /** Snapshot of each step's form value taken when leaving the step. */
+  private stepValueCache = new WeakMap<TearsheetStepComponent, Record<string, unknown>>();
 
   get activeStepTemplate() {
     return this.stepContents?.toArray()[this.currentStep]?.template;
@@ -154,6 +160,9 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
 
   private _updateStepInvalid(index: number, invalid: boolean) {
     this.steps = this.steps.map((step, i) => (i === index ? { ...step, invalid } : step));
+    // statusChanges / async validators run outside the OnPush event path;
+    // mark dirty so Next button disabled state re-renders.
+    this.cdr.markForCheck();
   }
 
   onStepSelect(event: { step: Step; index: number }) {
@@ -213,58 +222,170 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
     this.validateStep.emit({ step: this.currentStep });
     const wrapper = this.stepContents?.toArray()?.[this.currentStep];
     const currentForm = wrapper?.resolvedFormGroup;
+    // Touch for error display, then refresh each control so cdValidate /
+    // Carbon invalid bindings update. Do NOT markAsDirty — that re-triggers
+    // pristine-skipping async validators (e.g. NQN unique).
     currentForm?.markAllAsTouched();
-    this.markControlsDirtyAndValidate(currentForm);
-    if (currentForm) {
-      this._updateStepInvalid(this.currentStep, currentForm.invalid);
+    this.refreshControlValidity(currentForm);
+
+    // If an async validator is already in-flight (user edited NQN), wait for it.
+    if (currentForm?.pending) {
+      if (this.advancingDueToAsync) {
+        return;
+      }
+      this.advancingDueToAsync = true;
+      // Snapshot the step index now; the user may navigate away before the
+      // validator settles, so we must re-check both the index and the active
+      // wrapper on arrival and skip the advance if either has changed.
+      const stepBeingValidated = this.currentStep;
+      currentForm.statusChanges
+        .pipe(
+          startWith(currentForm.status),
+          filter((status) => status !== 'PENDING'),
+          take(1),
+          takeUntil(this.setupTeardown$),
+          finalize(() => {
+            this.advancingDueToAsync = false;
+          })
+        )
+        .subscribe(() => {
+          const activeWrapper = this.stepContents?.toArray()?.[stepBeingValidated];
+          if (this.currentStep === stepBeingValidated && activeWrapper === wrapper) {
+            this.advanceFromCurrentStep(wrapper);
+          }
+        });
+      return;
     }
 
+    this.advanceFromCurrentStep(wrapper);
+  }
+
+  /**
+   * Re-run validators and emit statusChanges on every control without marking
+   * them dirty. Needed so cdValidate picks up touched+invalid after Next.
+   */
+  private refreshControlValidity(control: AbstractControl | null) {
+    if (!control) {
+      return;
+    }
+    if (control instanceof FormGroup || control instanceof FormArray) {
+      Object.values(control.controls).forEach((child) => this.refreshControlValidity(child));
+    }
+    control.updateValueAndValidity({ onlySelf: true, emitEvent: true });
+  }
+
+  private advanceFromCurrentStep(wrapper: TearsheetStepComponent | undefined) {
+    // canProceed uses form.valid, so PENDING/INVALID both block advance.
+    // Next stays enabled; we only show field errors and refuse to leave the step.
     const canAdvance = wrapper ? wrapper.canProceed : true;
-    this._updateStepInvalid(this.currentStep, !canAdvance);
     if (this.currentStep !== this.lastStep && canAdvance) {
+      this._updateStepInvalid(this.currentStep, false);
+      if (wrapper) {
+        this.cacheStepValue(wrapper);
+      }
       this.currentStep = this.currentStep + 1;
       this.stepChanged.emit({ current: this.currentStep });
-      this.cdr.markForCheck();
-    } else if (!canAdvance) {
-      this.cdr.markForCheck();
+    }
+  }
+
+  private cacheStepValue(wrapper: TearsheetStepComponent) {
+    const value = wrapper.stepComponent?.formGroup?.value as Record<string, unknown> | null;
+    if (value) {
+      this.stepValueCache.set(wrapper, { ...value });
     }
   }
 
   getMergedPayload(): any {
     return this.stepContents.toArray().reduce((acc, wrapper) => {
-      const stepFormValue = wrapper.stepComponent?.formGroup?.value;
-      return { ...acc, ...stepFormValue };
+      const liveValue = wrapper.stepComponent?.formGroup?.value;
+      const cachedValue = this.stepValueCache.get(wrapper);
+      return { ...acc, ...(liveValue ?? cachedValue ?? {}) };
     }, {});
   }
 
   onSubmit() {
-    this.stepContents?.forEach((wrapper, index) => {
+    if (this.submittingDueToAsync) {
+      return;
+    }
+
+    // Cache whatever is still mounted before validating/submitting.
+    this.stepContents?.forEach((wrapper) => this.cacheStepValue(wrapper));
+
+    const wrappers = this.stepContents?.toArray() ?? [];
+    wrappers.forEach((wrapper) => {
       const form = wrapper.resolvedFormGroup;
       if (!form) return;
       form.markAllAsTouched();
-      this.markControlsDirtyAndValidate(form);
-      this._updateStepInvalid(index, form.invalid);
+      this.refreshControlValidity(form);
     });
 
-    const wrappers = this.stepContents?.toArray() ?? [];
-    const anyStepInvalid = this.steps.some(
-      (step, index) => step?.invalid || (wrappers[index] ? !wrappers[index].canProceed : false)
-    );
-    if (anyStepInvalid) return;
-
-    const mergedPayloads = this.getMergedPayload();
-    this.submitRequested.emit(mergedPayloads);
+    this.finishSubmit();
   }
 
-  private markControlsDirtyAndValidate(control: AbstractControl | null) {
-    if (!control) {
+  private waitForFormsToSettle(forms: FormGroup[], onSettled: () => void) {
+    if (!forms.length) {
+      onSettled();
       return;
     }
-    if (control instanceof FormGroup || control instanceof FormArray) {
-      Object.values(control.controls).forEach((child) => this.markControlsDirtyAndValidate(child));
+    this.submittingDueToAsync = true;
+    forkJoin(
+      forms.map((form) =>
+        form.statusChanges.pipe(
+          startWith(form.status),
+          filter((status) => status !== 'PENDING'),
+          take(1)
+        )
+      )
+    )
+      .pipe(
+        takeUntil(this.setupTeardown$),
+        finalize(() => {
+          this.submittingDueToAsync = false;
+        })
+      )
+      .subscribe(() => onSettled());
+  }
+
+  private finishSubmit() {
+    const wrappers = this.stepContents?.toArray() ?? [];
+    const forms = wrappers
+      .map((wrapper) => wrapper.resolvedFormGroup)
+      .filter((form): form is FormGroup => !!form);
+
+    const pendingForms = forms.filter((form) => form.pending);
+    if (pendingForms.length) {
+      this.waitForFormsToSettle(pendingForms, () => this.finishSubmit());
+      return;
     }
-    control.markAsDirty({ onlySelf: true });
-    control.updateValueAndValidity({ onlySelf: true, emitEvent: true });
+
+    let firstInvalid = -1;
+    wrappers.forEach((wrapper, index) => {
+      const form = wrapper.resolvedFormGroup;
+      if (form) {
+        this._updateStepInvalid(index, form.invalid);
+        if (form.invalid && firstInvalid < 0) {
+          firstInvalid = index;
+        }
+      } else if (wrapper.stepValid !== null && !wrapper.canProceed) {
+        this._updateStepInvalid(index, true);
+        if (firstInvalid < 0) {
+          firstInvalid = index;
+        }
+      } else {
+        // Form not currently resolvable (step content unmounted). Trust cache /
+        // earlier navigation — do not block Create on a stale steps[].invalid flag.
+        this._updateStepInvalid(index, false);
+      }
+    });
+
+    if (firstInvalid >= 0) {
+      this.currentStep = firstInvalid;
+      this.stepChanged.emit({ current: this.currentStep });
+      this.cdr.markForCheck();
+      return;
+    }
+
+    this.submitRequested.emit(this.getMergedPayload());
   }
 
   closeFullTearsheet() {
@@ -302,9 +423,19 @@ export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy, OnC
         // with Next enabled so the user can navigate freely before touching fields.
         const form = wrapper.resolvedFormGroup;
         if (form) {
-          form.statusChanges
-            .pipe(takeUntil(this.setupTeardown$))
-            .subscribe(() => this._updateStepInvalid(index, form.invalid));
+          // Do not seed or sync form.invalid onto the Next button — Next stays
+          // enabled so users can click it, see field errors (e.g. subnet-mask),
+          // fix them, and click Next again. Advance is still gated in onNext().
+          form.statusChanges.pipe(takeUntil(this.setupTeardown$)).subscribe(() => {
+            if (form.pending) {
+              return;
+            }
+            // Clear step invalid once the form becomes valid again after a
+            // failed Next attempt (field-level errors are handled by cdValidate).
+            if (form.valid) {
+              this._updateStepInvalid(index, false);
+            }
+          });
         }
 
         // Path 2: step uses [stepValid] input binding (no formGroup reference).

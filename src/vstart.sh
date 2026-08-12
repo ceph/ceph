@@ -37,6 +37,29 @@ prun() {
     PATH=$CEPH_BIN:$PATH "$@"
 }
 
+# retry <max_attempts> <delay_secs> <description> <command> [args...]
+# Run the command until it succeeds or <max_attempts> attempts have been made
+# (use 0 for unlimited). Returns the command's last exit status.
+retry() {
+    local max=$1 delay=$2 what=$3
+    shift 3
+    local n=0 rc=0
+    while true; do
+        rc=0
+        "$@" || rc=$?
+        if [ "$rc" -eq 0 ]; then
+            return 0
+        fi
+        n=$((n + 1))
+        if [ "$max" -ne 0 ] && [ "$n" -ge "$max" ]; then
+            echo "$what failed after $n attempt(s) (rc=$rc)" >&2
+            return "$rc"
+        fi
+        echo "$what failed (rc=$rc), retry $n in ${delay}s" >&2
+        sleep "$delay"
+    done
+}
+
 
 if [ -n "$VSTART_DEST" ]; then
     SRC_PATH=`dirname $0`
@@ -206,7 +229,10 @@ declare -a bluestore_db_devs
 declare -a bluestore_wal_devs
 declare -a secondary_block_devs
 declare -a cpu_table
-secondary_block_devs_type="SSD"
+seastore_hot_device_type="SSD"
+seastore_hot_backend_type="SEGMENTED"
+seastore_cold_device_type="SSD"
+seastore_cold_backend_type="SEGMENTED"
 
 VSTART_SEC="client.vstart.sh"
 
@@ -276,7 +302,10 @@ options:
 	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
-	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-main-device-type: device type of main blockdevs. (SSD or RANDOM_BLOCK_SSD)
+	--seastore-main-backend-type: the driver used by main blockdevs (SEGMENTED or RANDOM_BLOCK)
+	--seastore-secondary-device-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
+	--seastore-secondary-backend-type: the driver used by secondary blockdevs (SEGMENTED or RANDOM_BLOCK)
 	--crimson-smp: number of cores to use for crimson
 	--crimson-alien-num-threads: number of alien-tp threads
 	--crimson-reactor-physical-only: use only one cpu per physical core for seastar reactors
@@ -611,12 +640,24 @@ case $1 in
         parse_block_devs --seastore-devs "$2"
         shift
         ;;
+    --seastore-main-device-type)
+        seastore_hot_device_type="$2"
+        shift
+        ;;
+    --seastore-main-backend-type)
+        seastore_hot_backend_type="$2"
+        shift
+        ;;
     --seastore-secondary-devs)
         parse_secondary_devs --seastore-devs "$2"
         shift
         ;;
-    --seastore-secondary-devs-type)
-        secondary_block_devs_type="$2"
+    --seastore-secondary-device-type)
+        seastore_cold_device_type="$2"
+        shift
+        ;;
+    --seastore-secondary-backend-type)
+        seastore_cold_backend_type="$2"
         shift
         ;;
     --crimson-smp)
@@ -936,6 +977,11 @@ EOF
         SEASTORE_OPTS="
         seastore device size = $seastore_size"
       fi
+      SEASTORE_OPTS+="
+        seastore_hot_device_type=$seastore_hot_device_type
+        seastore_hot_backend_type=$seastore_hot_backend_type
+        seastore_cold_device_type=$seastore_cold_device_type
+        seastore_cold_backend_type=$seastore_cold_backend_type"
     fi
 
     wconf <<EOF
@@ -1303,8 +1349,8 @@ EOF
             fi
             if [ -n "${secondary_block_devs[$osd]}" ]; then
                 dd if=/dev/zero of=${secondary_block_devs[$osd]} bs=1M count=1
-                mkdir -p $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1
-                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.${secondary_block_devs_type}.1/block
+                mkdir -p $CEPH_DEV_DIR/osd$osd/block.1
+                ln -s ${secondary_block_devs[$osd]} $CEPH_DEV_DIR/osd$osd/block.1/block
             fi
             if [ "$objectstore" == "bluestore" ]; then
                 wconf <<EOF
@@ -1318,8 +1364,14 @@ EOF
             echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
             rm $CEPH_DEV_DIR/osd$osd/new.json
-            prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
-                2>&1 | tee $CEPH_OUT_DIR/osd-mkfs.$osd.log
+            # ceph-osd --mkfs authenticates to the monitor as the just-created
+            # osd.$osd entity, which the monitor can briefly reject with EACCES
+            # right after "osd new" (handle_auth_bad_method / failed to fetch
+            # mon config). Transient; retry past it.
+            retry 10 2 "ceph-osd --mkfs for osd.$osd" \
+                prun $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS \
+                --mkfs --key $OSD_SECRET --osd-uuid $uuid $extra_seastar_args \
+                > $CEPH_OUT_DIR/osd-mkfs.$osd.log 2>&1 || exit $?
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
             cat > $key_fn<<EOF

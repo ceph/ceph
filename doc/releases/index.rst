@@ -68,6 +68,7 @@ Release timeline
 .. _20.2.0: tentacle#v20-2-0-tentacle
 .. _20.2.1: tentacle#v20-2-1-tentacle
 .. _20.2.2: tentacle#v20-2-2-tentacle
+.. _20.2.3: tentacle#v20-2-3-tentacle
 
 .. _Squid: squid
 .. _19.2.0: squid#v19-2-0-squid

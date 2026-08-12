@@ -6,18 +6,18 @@ Installing Ceph
 
 There are multiple ways to install Ceph.
 
-Recommended methods
+Recommended Methods
 ~~~~~~~~~~~~~~~~~~~
 
 :ref:`Cephadm <cephadm_deploying_new_cluster>` is a tool that can be used to
 install and manage a Ceph cluster.
 
-* cephadm supports only Octopus and newer releases.
-* cephadm is fully integrated with the orchestration API and fully supports the
+* Cephadm supports only Octopus and newer releases.
+* Cephadm is fully integrated with the orchestration API and fully supports the
   CLI and dashboard features that are used to manage cluster deployment.
-* cephadm requires container support (in the form of Podman or Docker) and
+* Cephadm requires container support (in the form of Podman or Docker) and
   Python 3.
-* cephadm requires systemd.
+* Cephadm requires systemd.
 
 `Rook <https://rook.io/>`_ deploys and manages Ceph clusters running
 in Kubernetes, while also enabling management of storage resources and
@@ -30,7 +30,7 @@ Kubernetes or to connect an existing Ceph storage cluster to Kubernetes.
 * Rook supports the orchestrator API. Management features in the CLI and
   dashboard are fully supported.
 
-Other methods
+Other Methods
 ~~~~~~~~~~~~~
 
 `ceph-salt <https://github.com/ceph/ceph-salt>`_ installs Ceph using Salt and cephadm.
@@ -39,7 +39,8 @@ Other methods
 
 `github.com/openstack/puppet-ceph <https://github.com/openstack/puppet-ceph>`_  installs Ceph via Puppet.
 
-`OpenNebula HCI clusters <https://docs.opennebula.io/stable/provision_clusters/hci_clusters/overview.html>`_ deploys Ceph on various cloud platforms.
+`OpenNebula HCI clusters <https://docs.opennebula.io/stable/provision_clusters/hci_clusters/overview.html>`_
+deploys Ceph on various cloud platforms.
 
 Ceph can also be :ref:`installed manually <install-manual>`.
 

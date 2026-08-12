@@ -506,7 +506,7 @@ class CephadmServe:
             self.mgr.remove_health_warning(k)
         # clear recently altered daemons that were created/removed more than 60 seconds ago
         self.mgr.recently_altered_daemons = {
-            d: t for (d, t) in self.mgr.recently_altered_daemons.items()
+            d: t for (d, t) in list(self.mgr.recently_altered_daemons.items())
             if ((datetime_now() - t).total_seconds() < 60)
         }
         if self.mgr.warn_on_stray_hosts or self.mgr.warn_on_stray_daemons:
@@ -1204,11 +1204,10 @@ class CephadmServe:
                 continue
 
             if dd.daemon_type == 'agent':
-                try:
-                    self.mgr.agent_helpers._check_agent(dd.hostname)
-                except Exception as e:
-                    self.log.debug(
-                        f'Agent {dd.name()} could not be checked in _check_daemons: {e}')
+                # Agent config/deps checks and HTTP/SSH reconfig run once per
+                # serve cycle from _refresh_hosts_and_daemons -> _check_agent.
+                # Skipping a second call here avoids duplicate SSH reconfigs
+                # while an agent is down after mgr failover.
                 continue
 
             # These daemon types require additional configs after creation
@@ -1423,7 +1422,7 @@ class CephadmServe:
                     f'unable to calc conf hosts: {self.mgr.manage_etc_ceph_ceph_conf_hosts}: {e}')
 
         # client keyrings
-        for ks in self.mgr.keys.keys.values():
+        for ks in list(self.mgr.keys.keys.values()):
             try:
                 ret, keyring, err = self.mgr.mon_command({
                     'prefix': 'auth get',
@@ -1625,10 +1624,6 @@ class CephadmServe:
                     raise OrchestratorError(
                         f'cephadm exited with an error code: {code}, stderr: {err}')
 
-                if daemon_spec.daemon_type == 'agent':
-                    self.mgr.agent_cache.agent_timestamp[daemon_spec.host] = datetime_now()
-                    self.mgr.agent_cache.agent_counter[daemon_spec.host] = 1
-
                 # refresh daemon state?  (ceph daemon reconfig does not need it)
                 if not reconfig or daemon_spec.daemon_type not in CEPH_TYPES:
                     if not code and daemon_spec.host in self.mgr.cache.daemons:
@@ -1654,10 +1649,22 @@ class CephadmServe:
                     self.mgr.cache.update_daemon_config_deps(
                         daemon_spec.host, daemon_spec.name(), daemon_spec.deps, start_time)
                     self.mgr.cache.save_host(daemon_spec.host)
+                elif not code:
+                    # Only mark agent config current after a confirmed successful
+                    # deploy/reconfig. Agent reconfig/deploy writes required_files
+                    # (including agent.json) before restart, so code == 0 means the
+                    # new MGR endpoint was applied. On failure, leave deps unchanged
+                    # so _check_agent keeps retrying (last_deps != deps) until the
+                    # new MGR endpoint is actually delivered.
+                    self.mgr.agent_cache.agent_config_successfully_delivered(daemon_spec)
+                    self.log.info(
+                        f"Agent config deps updated on {daemon_spec.host} after successful "
+                        f"{'reconfig' if reconfig else 'deploy'} (deps={daemon_spec.deps})")
                 else:
-                    self.mgr.agent_cache.update_agent_config_deps(
-                        daemon_spec.host, daemon_spec.deps, start_time)
-                    self.mgr.agent_cache.save_agent(daemon_spec.host)
+                    self.log.warning(
+                        f"Agent {'reconfig' if reconfig else 'deploy'} on {daemon_spec.host} "
+                        f"exited with code {code}; leaving agent config deps unchanged so "
+                        f"delivery of updated MGR endpoint can be retried")
                 msg = "{} {} on host '{}'".format(
                     'Reconfigured' if reconfig else 'Deployed', daemon_spec.name(), daemon_spec.host)
                 if not code:

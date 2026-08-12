@@ -50,6 +50,7 @@ import { ChangePasswordGuardService } from './shared/services/change-password-gu
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
+import { PermissionGuardService } from './shared/services/permission-guard.service';
 import { UpgradeComponent } from './ceph/cluster/upgrade/upgrade.component';
 import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form.component';
 import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progress/upgrade-progress.component';
@@ -64,6 +65,9 @@ import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster
 import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
+import { SmbUsersgroupsResourceSidebarComponent } from './ceph/smb/smb-usersgroups-resource-sidebar/smb-usersgroups-resource-sidebar.component';
+import { SmbUsersgroupsResourcePageComponent } from './ceph/smb/smb-usersgroups-resource-page/smb-usersgroups-resource-page.component';
+import { SmbUsergroupsResourceBreadcrumbResolver } from './ceph/smb/smb-usersgroups-resource-page/smb-usersgroups-resource-breadcrumb.resolver';
 import { MultiClusterFormComponent } from './ceph/cluster/multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { CephfsMirroringListComponent } from './ceph/cephfs/cephfs-mirroring-list/cephfs-mirroring-list.component';
 import { NotificationsPageComponent } from './core/navigation/notification-panel/notifications-page/notifications-page.component';
@@ -135,12 +139,17 @@ const routes: Routes = [
       {
         path: 'add-storage',
         component: CreateClusterComponent,
-        canActivate: [ModuleStatusGuardService],
+        canActivate: [ModuleStatusGuardService, PermissionGuardService],
         data: {
           moduleStatusGuardConfig: {
             uiApiPath: 'orchestrator',
             redirectTo: 'overview',
             backend: 'cephadm'
+          },
+          permissionGuardConfig: {
+            scope: 'configOpt',
+            action: 'update',
+            redirectTo: '/overview'
           }
         }
       },
@@ -159,7 +168,10 @@ const routes: Routes = [
       {
         path: 'hosts/:hostname',
         component: HostSidebarComponent,
-        data: { breadcrumbs: HostResourceBreadcrumbResolver },
+        data: {
+          breadcrumbs: HostResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
         children: [
           { path: '', redirectTo: 'overview', pathMatch: 'full' },
           {
@@ -583,6 +595,19 @@ const routes: Routes = [
                   {
                     path: `${URLVerbs.EDIT}/:usersGroupsId`,
                     component: SmbUsersgroupsFormComponent
+                  },
+                  {
+                    path: ':users_groups_id',
+                    component: SmbUsersgroupsResourceSidebarComponent,
+                    data: { breadcrumbs: SmbUsergroupsResourceBreadcrumbResolver },
+                    children: [
+                      { path: '', redirectTo: 'overview', pathMatch: 'full' },
+                      {
+                        path: 'overview',
+                        component: SmbUsersgroupsResourcePageComponent,
+                        data: { breadcrumbs: 'Overview', section: 'overview' }
+                      }
+                    ]
                   }
                 ]
               },

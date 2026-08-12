@@ -1,0 +1,77 @@
+name: Check PR Author Permissions
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  check-permissions:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      pull-requests: write
+    steps:
+      - name: Check permissions, label, and comment
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const author = pr.user.login;
+            const issueNumber = pr.number;
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+
+            let permission = 'none';
+            try {
+              const response = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: author,
+              });
+              permission = response.data.permission;
+            } catch (error) {
+              if (pr.user.type === 'Bot' && error.status === 404) {
+                console.log(`Bot account ${author} not found as a direct collaborator, defaulting to 'none' permission.`);
+              } else {
+                console.log(`Failed to fetch permissions for ${author}: ${error.message}`);
+              }
+            }
+            if (permission === 'none') {
+              const currentLabels = pr.labels.map(label => label.name);
+
+              // 1. Revoke approval on new pushes/updates by removing 'ci-approved'
+              if (currentLabels.includes('ci-approved')) {
+                try {
+                  await github.rest.issues.removeLabel({
+                    owner,
+                    repo,
+                    issue_number: issueNumber,
+                    name: 'ci-approved',
+                  });
+                } catch (error) {
+                  console.log('Failed to remove ci-approved label:', error);
+                }
+              }
+
+              // 2. Attach 'needs-ci-approval' label if not already present
+              if (!currentLabels.includes('needs-ci-approval')) {
+                await github.rest.issues.addLabels({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  labels: ['needs-ci-approval'],
+                });
+              }
+
+              // 3. Post notification comment on initial PR creation
+              if (context.payload.action === 'opened') {
+                const commentBody = `Thank you for your contribution. Since you are not yet a member of the [Ceph organization](https://github.com/ceph) with write permissions on ceph/ceph.git, our CI will not automatically run. Any member of the Ceph organization may label this PR \`ci-approved\` to allow Jenkins CI jobs to run.`;
+
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: issueNumber,
+                  body: commentBody,
+                });
+              }
+            }

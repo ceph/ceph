@@ -63,9 +63,9 @@ The chart below shows the platforms for which Ceph provides packages, and
 the platforms on which Ceph has been tested.
 
 Ceph does not require a specific Linux distribution. Ceph can run on any
-distribution that includes a supported kernel and supported system startup
-framework, for example ``sysvinit`` or ``systemd``. Ceph is sometimes ported to
-non-Linux systems but these are not supported by the core Ceph effort.
+distribution that includes a supported kernel and ``systemd``. Ceph is
+sometimes ported to non-Linux systems but these are not supported by the
+core Ceph effort.
 
 +----------------+-------------------------+----------------+-------------------+-----------------+----------------+----------------+----------------+
 | Distribution   | Distribution EOL        | Squid (19.2.z) | Tentacle (20.2.z) | Umbrella (21.x) | Vampire (22.x) | W (23.x)       | X (24.x)       |

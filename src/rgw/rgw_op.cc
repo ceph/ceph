@@ -8162,6 +8162,9 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   } prefix{*this, o};
   const DoutPrefixProvider* dpp = &prefix;
 
+  using Clock = ceph::coarse_real_clock;
+  const auto started_at = Clock::now();
+
   std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o);
   if (o.empty()) {
     send_partial_response(o, false, "", -EINVAL);
@@ -8258,6 +8261,11 @@ void RGWDeleteMultiObj::handle_individual_object(const RGWMultiDelObject& object
   }
   
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, r);
+
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_del_obj, 1);
+  rgw::op_counters::inc(counters, l_rgw_op_del_obj_b, obj_size);
+  rgw::op_counters::tinc(counters, l_rgw_op_del_obj_lat, Clock::now() - started_at);
 }
 
 void RGWDeleteMultiObj::handle_objects(const std::vector<RGWMultiDelObject>& objects,
@@ -8943,7 +8951,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 
   auto status = rgw::tar::StatusIndicator::create();
   do {
-    op_ret = stream->get_exactly(rgw::tar::BLOCK_SIZE, buffer);
+    op_ret = stream->get_exactly(rgw::tar::TAR_BLOCK_SIZE, buffer);
     if (op_ret < 0) {
       ldpp_dout(this, 2) << "cannot read header" << dendl;
       return;
@@ -8971,7 +8979,7 @@ void RGWBulkUploadOp::execute(optional_yield y)
 	  else
 	    filename = file_prefix + std::string(header->get_filename());
 	  auto body = AlignedStreamGetter(0, header->get_filesize(),
-                                          rgw::tar::BLOCK_SIZE, *stream);
+                                          rgw::tar::TAR_BLOCK_SIZE, *stream);
           op_ret = handle_file(filename,
                                header->get_filesize(),
                                body, y);

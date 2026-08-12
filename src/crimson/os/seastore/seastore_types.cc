@@ -816,6 +816,10 @@ std::ostream &operator<<(std::ostream &os, transaction_type_t type)
     return os << "CLEANER_MAIN";
   case transaction_type_t::CLEANER_COLD:
     return os << "CLEANER_COLD";
+  case transaction_type_t::PROMOTE:
+    return os << "PROMOTE";
+  case transaction_type_t::DEMOTE:
+    return os << "DEMOTE";
   case transaction_type_t::MAX:
     return os << "TRANS_TYPE_NULL";
   default:
@@ -1220,6 +1224,16 @@ std::ostream& operator<<(std::ostream& out, placement_hint_t h)
   }
 }
 
+std::ostream& operator<<(std::ostream& out, write_policy_t w)
+{
+  switch(w) {
+  case write_policy_t::WRITE_BACK:
+    return out << "WRITE_BACK";
+  case write_policy_t::WRITE_THROUGH:
+    return out << "WRITE_THROUGH";
+  }
+}
+
 bool can_delay_allocation(device_type_t type) {
   // Some types of device may not support delayed allocation, for example PMEM.
   // All types of device currently support delayed allocation.
@@ -1238,6 +1252,9 @@ device_type_t string_to_device_type(std::string type) {
   }
   if (type == "RANDOM_BLOCK_SSD") {
     return device_type_t::RANDOM_BLOCK_SSD;
+  }
+  if (type == "RANDOM_BLOCK_HDD") {
+    return device_type_t::RANDOM_BLOCK_HDD;
   }
   return device_type_t::NONE;
 }
@@ -1261,15 +1278,31 @@ std::ostream& operator<<(std::ostream& out, device_type_t t)
     return out << "RANDOM_BLOCK_SSD";
   case device_type_t::RANDOM_BLOCK_EPHEMERAL:
     return out << "RANDOM_BLOCK_EPHEMERAL";
+  case device_type_t::RANDOM_BLOCK_HDD:
+    return out << "RANDOM_BLOCK_HDD";
   default:
     return out << "INVALID_DEVICE_TYPE!";
   }
 }
 
-std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
-  if (btype == backend_type_t::SEGMENTED) {
-    return out << "SEGMENTED";
+backend_type_t string_to_backend_type(const std::string &str) {
+  if (str == "SEGMENTED") {
+    return backend_type_t::SEGMENTED;
+  } else if (str == "RANDOM_BLOCK") {
+    return backend_type_t::RANDOM_BLOCK;
   } else {
+    ceph_abort("backend str not valid");
+    return backend_type_t::SEGMENTED;
+  }
+}
+
+std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
+  switch (btype) {
+  case backend_type_t::NONE:
+    return out << "NONE";
+  case backend_type_t::SEGMENTED:
+    return out << "SEGMENTED";
+  case backend_type_t::RANDOM_BLOCK:
     return out << "RANDOM_BLOCK";
   }
 }

@@ -11,6 +11,8 @@
 #include "crimson/os/seastore/journal/segment_allocator.h"
 #include "crimson/os/seastore/journal/record_submitter.h"
 #include "crimson/os/seastore/transaction.h"
+#include "crimson/os/seastore/extent_pinboard.h"
+#include "crimson/os/seastore/logical_bucket.h"
 #include "crimson/os/seastore/random_block_manager.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
 #include "crimson/os/seastore/randomblock_manager_group.h"
@@ -20,6 +22,89 @@ class transaction_manager_test_t;
 namespace crimson::os::seastore {
 
 class Cache;
+
+class TokenBucket {
+  struct Blocker {
+    uint64_t size = 0;
+    seastar::promise<> pr;
+  };
+public:
+  TokenBucket(uint64_t mt) :
+    tokens(mt), max_tokens(mt), timer() {}
+
+  void start() {
+    if (max_tokens != 0) {
+      tokens = max_tokens;
+      timer.set_callback([this] {
+        if (tokens == max_tokens) {
+          return;
+        }
+        assert(tokens < max_tokens);
+        tokens += std::min(
+          max_tokens / 10 + 1,
+          max_tokens - tokens);
+        do_wake();
+      });
+      if (!timer.armed()) {
+        timer.arm_periodic(std::chrono::milliseconds(100));
+      }
+    }
+  }
+
+  void stop() {
+    if (max_tokens != 0) {
+      timer.cancel();
+      tokens = std::numeric_limits<uint64_t>::max();
+      do_wake();
+    }
+  }
+
+  seastar::future<> get(uint64_t size) {
+    if (max_tokens == 0) {
+      return seastar::now();
+    }
+    if (tokens < size) {
+      size -= tokens;
+      tokens = 0;
+      blockers.emplace_back(size);
+      return blockers.back().pr.get_future();
+    } else {
+      tokens -= size;
+      return seastar::now();
+    }
+  }
+
+  void release(uint64_t size) {
+    if (tokens == max_tokens) {
+      return;
+    }
+    assert(tokens < max_tokens);
+    tokens += std::min(size, max_tokens - tokens);
+    do_wake();
+  }
+
+private:
+  void do_wake() {
+    while (!blockers.empty()) {
+      auto &next = blockers.front();
+      if (tokens < next.size) {
+        next.size -= tokens;
+        tokens = 0;
+        break;
+      } else {
+        tokens -= next.size;
+        next.pr.set_value();
+        blockers.pop_front();
+      }
+    }
+  }
+  uint64_t tokens;
+  const uint64_t max_tokens;
+  seastar::timer<seastar::steady_clock_type> timer;
+  std::list<Blocker> blockers;
+};
+
+using TokenBucketRef = std::unique_ptr<TokenBucket>;
 
 /**
  * ExtentOolWriter
@@ -41,7 +126,9 @@ public:
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
 
-  virtual std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) = 0;
+  virtual std::list<alloc_paddr_result> alloc_paddrs(
+    extent_len_t length,
+    paddr_t hint) = 0;
 
   using alloc_write_ertr = base_ertr;
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
@@ -73,7 +160,8 @@ public:
                      data_category_t category,
                      rewrite_gen_t gen,
                      SegmentProvider &sp,
-                     SegmentSeqAllocator &ssa);
+                     SegmentSeqAllocator &ssa,
+                     TokenBucket &buckets);
 
   backend_type_t get_type() const final {
     return backend_type_t::SEGMENTED;
@@ -103,7 +191,7 @@ public:
     return make_delayed_temp_paddr(0);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length, paddr_t) final {
     return {alloc_paddr_result{make_delayed_temp_paddr(0), length}};
   }
 
@@ -127,13 +215,14 @@ private:
   journal::SegmentAllocator segment_allocator;
   journal::RecordSubmitter record_submitter;
   seastar::gate write_guard;
+  TokenBucket &token_bucket;
 };
 
 
 class RandomBlockOolWriter : public ExtentOolWriter {
 public:
-  RandomBlockOolWriter(RBMCleaner* rb_cleaner) :
-    rb_cleaner(rb_cleaner) {}
+  RandomBlockOolWriter(RBMCleaner* rb_cleaner, TokenBucket &bucket) :
+    rb_cleaner(rb_cleaner), token_bucket(bucket) {}
 
   backend_type_t get_type() const final {
     return backend_type_t::RANDOM_BLOCK;
@@ -169,9 +258,10 @@ public:
     return rb_cleaner->alloc_paddr(length);
   }
 
-  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+  std::list<alloc_paddr_result> alloc_paddrs(
+    extent_len_t length, paddr_t hint) final {
     assert(rb_cleaner);
-    return rb_cleaner->alloc_paddrs(length);
+    return rb_cleaner->alloc_paddrs(length, hint);
   }
 
   bool can_inplace_rewrite(Transaction& t,
@@ -179,7 +269,9 @@ public:
     if (!extent->is_stable_dirty()) {
       return false;
     }
-    assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
+    assert((t.get_src() == transaction_type_t::TRIM_DIRTY) ||
+           (t.get_src() == transaction_type_t::DEMOTE) ||
+           (t.get_src() == transaction_type_t::PROMOTE));
     ceph_assert_always(is_root_type(extent->get_type()) ||
 	extent->get_paddr().is_absolute());
     return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
@@ -218,6 +310,7 @@ private:
   seastar::gate write_guard;
   writer_stats_t w_stats;
   mutable writer_stats_t last_w_stats;
+  TokenBucket &token_bucket;
 };
 
 struct cleaner_usage_t {
@@ -280,7 +373,13 @@ public:
       ool_segment_seq_allocator(
           std::make_unique<SegmentSeqAllocator>(segment_type_t::OOL)),
       max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
-	  "seastore_max_data_allocation_size"))
+	  "seastore_max_data_allocation_size")),
+      write_through_size(crimson::common::get_conf<Option::size_t>(
+	  "seastore_write_through_size")),
+      test_workload(crimson::common::get_conf<bool>(
+          "seastore_logical_bucket_cache_test_stress")),
+      write_through_probability(crimson::common::get_conf<double>(
+          "seastore_test_workload_write_through_probability"))
   {
     LOG_PREFIX(ExtentPlacementManager::ExtentPlacementManager);
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
@@ -288,13 +387,26 @@ public:
       cold_tier_generations, hot_tier_generations);
   }
 
-  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&);
+  void init(JournalTrimmerImplRef &&, AsyncCleanerRef &&, AsyncCleanerRef &&,
+            ExtentPinboard *pinboard);
 
   SegmentSeqAllocator &get_ool_segment_seq_allocator() const {
     return *ool_segment_seq_allocator;
   }
 
   void set_primary_device(Device *device);
+
+  bool is_full() const {
+    return background_process.is_full();
+  }
+
+  void maybe_wake_background() {
+    background_process.maybe_wake_background();
+  }
+
+  seastar::future<> wait_background() {
+    return background_process.wait_background();
+  }
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
     background_process.set_extent_callback(cb);
@@ -331,6 +443,10 @@ public:
     bool report_detail,
     double seconds) const;
 
+  LogicalBucket *get_logical_bucket() {
+    return background_process.get_logical_bucket();
+  }
+
   using mount_ertr = crimson::errorator<
       crimson::ct_error::input_output_error>;
   using mount_ret = mount_ertr::future<>;
@@ -349,6 +465,16 @@ public:
     return background_process.start_background();
   }
 
+  struct alloc_option_t {
+    placement_hint_t hint;
+    rewrite_gen_t gen;
+    bool is_tracked;
+    paddr_t paddr_hint = P_ADDR_NULL;
+    write_policy_t write_policy = write_policy_t::WRITE_BACK;
+#ifdef UNIT_TESTS_BUILT
+    std::optional<paddr_t> external_paddr = std::nullopt;
+#endif
+  };
   struct alloc_result_t {
     paddr_t paddr;
     bufferptr bp;
@@ -358,34 +484,30 @@ public:
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
-    placement_hint_t hint,
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,
-    std::optional<paddr_t> external_paddr = std::nullopt
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt
   ) {
-    assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen, dynamic_max_rewrite_generation));
-    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+    assert(opt.hint < placement_hint_t::NUM_HINTS);
+    assert(is_target_rewrite_generation(opt.gen, dynamic_max_rewrite_generation));
+    assert(opt.gen == INIT_GENERATION ||
+           opt.hint == placement_hint_t::REWRITE ||
+           opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
+    opt.gen = adjust_generation(
+      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
 
     paddr_t addr;
 #ifdef UNIT_TESTS_BUILT
-    if (unlikely(external_paddr.has_value())) {
-      assert(external_paddr->is_fake());
-      addr = *external_paddr;
-    } else if (gen == INLINE_GENERATION) {
-#else
-    if (gen == INLINE_GENERATION) {
+    if (unlikely(opt.external_paddr.has_value())) {
+      assert(opt.external_paddr->is_fake());
+      addr = *opt.external_paddr;
+    } else
 #endif
+      if (opt.gen == INLINE_GENERATION) {
       addr = make_record_relative_paddr(0);
     } else {
       assert(category == data_category_t::METADATA);
-      addr = get_writer(hint, category, gen)->alloc_paddr(length);
+      addr = get_writer(opt.hint, category, opt.gen)->alloc_paddr(length);
     }
     assert(!(category == data_category_t::DATA));
 
@@ -397,44 +519,41 @@ public:
     // according to the allocator.
     auto bp = create_extent_ptr_zero(length);
 
-    return alloc_result_t{addr, std::move(bp), gen};
+    return alloc_result_t{addr, std::move(bp), opt.gen};
   }
 
   std::list<alloc_result_t> alloc_new_data_extents(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
-    placement_hint_t hint,
-#ifdef UNIT_TESTS_BUILT
-    rewrite_gen_t gen,
-    std::optional<paddr_t> external_paddr = std::nullopt
-#else
-    rewrite_gen_t gen
-#endif
+    alloc_option_t opt
   ) {
     LOG_PREFIX(ExtentPlacementManager::alloc_new_data_extents);
-    assert(hint < placement_hint_t::NUM_HINTS);
-    assert(is_target_rewrite_generation(gen, dynamic_max_rewrite_generation));
-    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+    assert(opt.hint < placement_hint_t::NUM_HINTS);
+    assert(is_target_rewrite_generation(opt.gen, dynamic_max_rewrite_generation));
+    assert(opt.gen == INIT_GENERATION ||
+           opt.hint == placement_hint_t::REWRITE ||
+           opt.hint == placement_hint_t::COLD);
 
     data_category_t category = get_extent_category(type);
-    gen = adjust_generation(category, type, hint, gen);
-    assert(gen != INLINE_GENERATION);
+    opt.gen = adjust_generation(
+      category, type, opt.hint, opt.gen, opt.write_policy, opt.is_tracked);
+    assert(opt.gen != INLINE_GENERATION);
 
     // XXX: bp might be extended to point to different memory (e.g. PMem)
     // according to the allocator.
     std::list<alloc_result_t> allocs;
 #ifdef UNIT_TESTS_BUILT
-    if (unlikely(external_paddr.has_value())) {
-      assert(external_paddr->is_fake());
+    if (unlikely(opt.external_paddr.has_value())) {
+      assert(opt.external_paddr->is_fake());
       auto bp = create_extent_ptr_zero(length);
-      allocs.emplace_back(alloc_result_t{*external_paddr, std::move(bp), gen});
-    } else {
-#else
-    {
+      allocs.emplace_back(alloc_result_t{*opt.external_paddr, std::move(bp), opt.gen});
+    } else
 #endif
+    {
       assert(category == data_category_t::DATA);
-      auto addrs = get_writer(hint, category, gen)->alloc_paddrs(length);
+      auto addrs = get_writer(opt.hint, category, opt.gen)->alloc_paddrs(
+        length, opt.paddr_hint);
       for (auto &ext : addrs) {
         auto left = ext.len;
         while (left > 0) {
@@ -446,15 +565,28 @@ public:
           auto start = ext.start.is_delayed()
                         ? ext.start
                         : ext.start + (ext.len - left);
-          allocs.emplace_back(alloc_result_t{start, std::move(bp), gen});
+          allocs.emplace_back(alloc_result_t{start, std::move(bp), opt.gen});
           SUBDEBUGT(seastore_epm,
-                    "allocated {} 0x{:x}B extent at {}, hint={}, gen={}",
-                    t, type, len, start, hint, gen);
+                    "allocated {} 0x{:x}B extent at {}, opt.hint={}, opt.gen={}",
+                    t, type, len, start, opt.hint, opt.gen);
           left -= len;
         }
       }
     }
     return allocs;
+  }
+
+  write_policy_t get_write_policy(extent_types_t type, extent_len_t length) const {
+    if (has_cold_tier() &&  is_data_type(type)) {
+      if (length >= write_through_size
+          || (test_workload
+              && (double(std::rand() % 100) / 100.0) <=
+                  write_through_probability))
+      {
+        return write_policy_t::WRITE_THROUGH;
+      }
+    }
+    return write_policy_t::WRITE_BACK;
   }
 
 #ifdef UNIT_TESTS_BUILT
@@ -571,11 +703,19 @@ public:
     return primary_device->get_backend_type();
   }
 
-
   bool is_pure_rbm() const {
     return get_main_backend_type() == backend_type_t::RANDOM_BLOCK &&
-      // as of now, cold tier can only be segmented.
-      !background_process.has_cold_tier();
+      (!background_process.has_cold_tier() ||
+       (background_process.get_cold_tier_backend_type() ==
+        backend_type_t::RANDOM_BLOCK));
+  }
+
+  bool has_cold_tier() const {
+    return background_process.has_cold_tier();
+  }
+
+  bool is_cold_device(device_id_t id) const {
+    return background_process.is_cold_device(id);
   }
 
   // Testing interfaces
@@ -609,12 +749,22 @@ public:
     return !devices_by_id[addr.get_device_id()]->is_end_to_end_data_protection();
   }
 
+  rewrite_gen_t get_max_hot_gen() const {
+    return hot_tier_generations - 1;
+  }
+
+  device_id_t get_cold_device_id() const {
+    return background_process.get_cold_device_id();
+  }
+
 private:
   rewrite_gen_t adjust_generation(
       data_category_t category,
       extent_types_t type,
       placement_hint_t hint,
-      rewrite_gen_t gen) {
+      rewrite_gen_t gen,
+      write_policy_t policy,
+      bool is_tracked) {
     assert(is_real_type(type));
     if (is_root_type(type)) {
       gen = INLINE_GENERATION;
@@ -622,7 +772,6 @@ private:
                is_lba_backref_node(type)) {
       gen = INLINE_GENERATION;
     } else if (hint == placement_hint_t::COLD) {
-      assert(gen == INIT_GENERATION);
       if (background_process.has_cold_tier()) {
         gen = hot_tier_generations;
       } else {
@@ -643,10 +792,26 @@ private:
         }
       } else {
         assert(category == data_category_t::DATA);
-        gen = OOL_GENERATION;
+        if (background_process.has_cold_tier() &&
+            policy == write_policy_t::WRITE_THROUGH) {
+          gen = hot_tier_generations;
+        } else {
+          assert(policy != write_policy_t::WRITE_THROUGH);
+          gen = OOL_GENERATION;
+        }
       }
     } else if (background_process.has_cold_tier()) {
       gen = background_process.adjust_generation(gen);
+      if (gen <= hot_tier_generations &&
+          policy == write_policy_t::WRITE_THROUGH) {
+        gen = hot_tier_generations;
+      }
+    }
+
+    if (is_tracked && gen >= hot_tier_generations &&
+        hint != placement_hint_t::REWRITE &&
+        hint != placement_hint_t::COLD) {
+      gen = hot_tier_generations - 1;
     }
 
     if (gen > dynamic_max_rewrite_generation) {
@@ -729,7 +894,8 @@ private:
     void init(JournalTrimmerImplRef &&_trimmer,
               AsyncCleanerRef &&_cleaner,
               AsyncCleanerRef &&_cold_cleaner,
-              rewrite_gen_t hot_tier_generations) {
+              rewrite_gen_t hot_tier_generations,
+              ExtentPinboard *_pinboard) {
       trimmer = std::move(_trimmer);
       trimmer->set_background_callback(this);
       main_cleaner = std::move(_cleaner);
@@ -746,6 +912,7 @@ private:
           cleaners_by_device_id[id] = cold_cleaner.get();
         }
 
+        using crimson::common::get_conf;
         eviction_state.init(
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_stop_evict_ratio"),
@@ -754,7 +921,34 @@ private:
           crimson::common::get_conf<double>(
             "seastore_multiple_tiers_fast_evict_ratio"),
           hot_tier_generations);
+
+        pinboard = _pinboard;
+        ceph_assert(pinboard != nullptr);
+        pinboard->set_background_callback(this);
+
+        logical_bucket_demote_size_per_cycle =
+          get_conf<Option::size_t>("seastore_logical_bucket_proceed_size_per_cycle");
+        logical_bucket = create_logical_bucket(
+          get_conf<Option::size_t>("seastore_logical_bucket_capacity"),
+          logical_bucket_demote_size_per_cycle);
+        logical_bucket->set_background_callback(this);
       }
+      LOG_PREFIX(BackgroundProcess::init);
+      test_workload = crimson::common::get_conf<bool>(
+        "seastore_logical_bucket_cache_test_stress");
+      force_process_half_life = crimson::common::get_conf<uint64_t>(
+        "seastore_test_workload_force_process_background_tasks_period");
+      force_background_timer.set_callback([this] { wake_half_life(); });
+      write_through_probability = crimson::common::get_conf<double>(
+        "seastore_test_workload_write_through_probability");
+      SUBINFO(seastore_epm, "crimson test workload supported, enabled: {}", test_workload);
+      if (test_workload) {
+        set_next_force_process();
+      }
+    }
+
+    LogicalBucket *get_logical_bucket() {
+      return logical_bucket.get();
     }
 
     backend_type_t get_backend_type() const {
@@ -770,11 +964,26 @@ private:
       return cold_cleaner.get() != nullptr;
     }
 
+    backend_type_t get_cold_tier_backend_type() const {
+      assert(cold_cleaner);
+      return cold_cleaner->get_backend_type();
+    }
+
+    bool is_cold_device(device_id_t id) const {
+      if (!has_cold_tier()) {
+        return false;
+      }
+      assert(cleaners_by_device_id[id]);
+      return cleaners_by_device_id[id] != main_cleaner.get();
+    }
+
     void set_extent_callback(ExtentCallbackInterface *cb) {
       trimmer->set_extent_callback(cb);
       main_cleaner->set_extent_callback(cb);
       if (has_cold_tier()) {
         cold_cleaner->set_extent_callback(cb);
+        pinboard->set_extent_callback(cb);
+        logical_bucket->set_extent_callback(cb);
       }
     }
 
@@ -850,11 +1059,18 @@ private:
     }
 
     rewrite_gen_t adjust_generation(rewrite_gen_t gen) {
-      if (has_cold_tier()) {
+      if (has_cold_tier() &&
+          get_main_backend_type() == backend_type_t::SEGMENTED) {
         return eviction_state.adjust_generation_with_eviction(gen);
       } else {
         return gen;
       }
+    }
+
+
+    device_id_t get_cold_device_id() const {
+      assert(has_cold_tier());
+      return *cold_cleaner->get_device_ids().begin();
     }
 
     seastar::future<> reserve_projected_usage(io_usage_t usage);
@@ -889,9 +1105,11 @@ private:
       return !trimmer || !main_cleaner;
     }
 
-  protected:
-    state_t get_state() const final {
-      return state;
+    bool is_full() const {
+      if (has_cold_tier()) {
+        return cold_cleaner->get_alive_ratio() >= 0.99;
+      }
+      return main_cleaner->get_alive_ratio() >= 0.99;
     }
 
     void maybe_wake_background() final {
@@ -903,12 +1121,35 @@ private:
       }
     }
 
+    seastar::future<> wait_background() {
+      if (!blocking_io) {
+        blocking_io = seastar::shared_promise<>();
+      }
+      return blocking_io->get_shared_future();
+    }
+
+  protected:
+    state_t get_state() const final {
+      return state;
+    }
+
     void maybe_wake_blocked_io() final;
+
+    void maybe_wake_promote() final {
+      if (!is_ready()) {
+        return;
+      }
+      if (pinboard && pinboard->should_promote()) {
+        do_wake_promote();
+      }
+    }
 
   private:
     // reserve helpers
     bool try_reserve_cold(std::size_t usage);
+    bool try_reserve_main(std::size_t usage);
     void abort_cold_usage(std::size_t usage, bool success);
+    void abort_main_usage(std::size_t usage, bool success);
 
     reserve_cleaner_result_t try_reserve_cleaner(const cleaner_usage_t &usage);
     void abort_cleaner_usage(const cleaner_usage_t &usage,
@@ -939,6 +1180,13 @@ private:
       }
     }
 
+    void do_wake_promote() {
+      if (blocking_promote) {
+        blocking_promote->set_value();
+        blocking_promote = std::nullopt;
+      }
+    }
+
     // background_should_run() should be atomic with do_background_cycle()
     // to make sure the condition is consistent.
     bool background_should_run() {
@@ -946,12 +1194,14 @@ private:
       maybe_update_eviction_mode();
       return main_cleaner_should_run()
         || cold_cleaner_should_run()
-        || trimmer->should_trim();
+        || trimmer->should_trim()
+        || demote_should_run();
     }
 
     bool main_cleaner_should_fast_evict() const {
       return has_cold_tier() &&
-         main_cleaner->can_clean_space() &&
+          (main_cleaner->can_clean_space() ||
+           (logical_bucket && logical_bucket->could_demote())) &&
          eviction_state.is_fast_mode();
     }
 
@@ -965,6 +1215,13 @@ private:
       assert(is_ready());
       return has_cold_tier() &&
         cold_cleaner->should_clean_space();
+    }
+
+    bool demote_should_run() const {
+      return has_cold_tier() &&
+        logical_bucket->could_demote() &&
+        (eviction_state.is_fast_mode() ||
+         logical_bucket->should_demote());
     }
 
     bool should_block_io() const {
@@ -1096,6 +1353,7 @@ private:
     };
 
     seastar::future<> do_background_cycle();
+    seastar::future<> run_promote();
 
     void register_metrics(store_index_t store_index);
 
@@ -1114,6 +1372,9 @@ private:
 
     JournalTrimmerImplRef trimmer;
     AsyncCleanerRef main_cleaner;
+    ExtentPinboard *pinboard = nullptr;
+    LogicalBucketRef logical_bucket;
+    std::size_t logical_bucket_demote_size_per_cycle = 0;
 
     /*
      * cold tier (optional, see has_cold_tier())
@@ -1123,16 +1384,69 @@ private:
 
     std::optional<seastar::future<>> process_join;
     std::optional<seastar::promise<>> blocking_background;
-    std::optional<seastar::promise<>> blocking_io;
+    std::optional<seastar::shared_promise<>> blocking_io;
     // Set by maybe_wake_blocked_io() whenever it actually unblocks a
     // user IO; consumed by run() to yield exactly once on that edge,
     // giving the woken continuation a chance to retry the reservation
     // before the next background cycle.
     bool pending_user_io_wake = false;
+    std::optional<seastar::future<>> promote_process_join;
+    std::optional<seastar::promise<>> blocking_promote;
     bool is_running_until_halt = false;
     state_t state = state_t::STOP;
     eviction_state_t eviction_state;
 
+    enum class ForceProcessState : uint8_t{
+      STOP,
+      TRIM,
+      CLEAN,
+    };
+    bool test_workload = false;
+    double write_through_probability = 0;
+    ForceProcessState force_process_state = ForceProcessState::STOP;
+    ForceProcessState last_process_state = ForceProcessState::STOP;
+    seastar::timer<seastar::steady_clock_type> force_background_timer;
+    int force_process_half_life;
+
+    void set_next_force_process() {
+      assert(test_workload);
+      force_background_timer.rearm(
+        seastar::steady_clock_type::now() +
+        std::chrono::seconds(force_process_half_life));
+    }
+
+    void wake_half_life() {
+      assert(test_workload);
+      if (last_process_state == ForceProcessState::TRIM) {
+        force_process_state = ForceProcessState::CLEAN;
+      } else {
+        force_process_state = ForceProcessState::TRIM;
+      }
+
+      do_wake_background();
+    }
+
+    void maybe_reschedule_force_process() {
+      if (unlikely(test_workload &&
+                   force_process_state != ForceProcessState::STOP)) {
+        last_process_state = force_process_state;
+        force_process_state = ForceProcessState::STOP;
+        set_next_force_process();
+      }
+    }
+
+    bool should_force_trim() const {
+      return test_workload && force_process_state == ForceProcessState::TRIM;
+    }
+
+    bool should_force_clean() const {
+      return test_workload && force_process_state == ForceProcessState::CLEAN;
+    }
+
+    bool force_run_background() const {
+      return test_workload && force_process_state != ForceProcessState::STOP
+        && (logical_bucket && logical_bucket->could_demote());
+    }
     friend class ::transaction_manager_test_t;
   };
 
@@ -1140,6 +1454,7 @@ private:
   std::vector<ExtentOolWriter*> data_writers_by_gen;
   // gen 0 METADATA writer is the journal writer
   std::vector<ExtentOolWriter*> md_writers_by_gen;
+  std::vector<TokenBucketRef> token_buckets;
 
   std::vector<Device*> devices_by_id;
   Device* primary_device = nullptr;
@@ -1154,6 +1469,9 @@ private:
   // TODO: drop once paddr->journal_seq_t is introduced
   SegmentSeqAllocatorRef ool_segment_seq_allocator;
   extent_len_t max_data_allocation_size = 0;
+  std::size_t write_through_size = 0;
+  bool test_workload = false;
+  double write_through_probability = 0;
 
   friend class ::transaction_manager_test_t;
   friend class Cache;

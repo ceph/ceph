@@ -39,6 +39,119 @@ def _check_file(path, content):
         assert fcontent == content
 
 
+def test_agent_write_required_files(cephadm_fs):
+    with with_cephadm_ctx([]) as ctx:
+        agent = _cephadm.CephadmAgent(ctx, FSID, AGENT_ID)
+        cephadm_fs.create_dir(AGENT_DIR)
+
+        with pytest.raises(_cephadm.Error, match='Agent needs a config'):
+            agent.write_required_files({})
+
+        incomplete = {
+            s: 'text' for s in agent.required_files if s != 'agent.json'
+        }
+        with pytest.raises(
+                _cephadm.Error,
+                match='required file missing from config: agent.json'):
+            agent.write_required_files(incomplete)
+
+        config = {s: f'content-{s}' for s in agent.required_files}
+        config['extra.txt'] = 'do-not-write'
+        agent.write_required_files(config)
+
+        for fname in agent.required_files:
+            _check_file(f'{AGENT_DIR}/{fname}', f'content-{fname}')
+        assert not os.path.exists(f'{AGENT_DIR}/extra.txt')
+
+        # overwrite agent.json with a new target_ip (mgr failover style update)
+        new_agent_json = json.dumps({
+            'target_ip': '192.168.100.101',
+            'target_port': 7150,
+            'host': AGENT_ID,
+        })
+        config['agent.json'] = new_agent_json
+        agent.write_required_files(config)
+        _check_file(f'{AGENT_DIR}/agent.json', new_agent_json)
+
+
+@mock.patch('cephadm.call_throws')
+@mock.patch('cephadm.update_firewalld')
+def test_agent_reconfig_writes_required_files(_update_firewalld, _call_throws, cephadm_fs):
+    """SSH agent reconfig must rewrite required_files (e.g. target_ip), not only restart."""
+    _call_throws.return_value = ('', '', 0)
+
+    old_agent_json = json.dumps({
+        'target_ip': '192.168.100.100',
+        'target_port': 7150,
+        'refresh_period': 20,
+        'listener_port': 4721,
+        'host': AGENT_ID,
+        'device_enhanced_scan': 'False',
+    })
+    new_agent_json = json.dumps({
+        'target_ip': '192.168.100.101',
+        'target_port': 7150,
+        'refresh_period': 20,
+        'listener_port': 4721,
+        'host': AGENT_ID,
+        'device_enhanced_scan': 'False',
+    })
+    old_unit_run = 'OLD UNIT RUN - should not be rewritten on reconfig\n'
+
+    with with_cephadm_ctx([]) as ctx:
+        ctx.fsid = FSID
+        ctx.name = f'agent.{AGENT_ID}'
+        ctx.skip_firewalld = True
+        ctx.skip_restart_for_reconfig = False
+        ctx.config_blobs = {
+            'agent.json': new_agent_json,
+            'keyring': 'new-keyring',
+            'root_cert.pem': 'new-ca',
+            'listener.crt': 'new-crt',
+            'listener.key': 'new-key',
+            'not-required-file.txt': 'should-not-be-written',
+        }
+
+        cephadm_fs.create_dir(AGENT_DIR)
+        with open(f'{AGENT_DIR}/agent.json', 'w') as f:
+            f.write(old_agent_json)
+        with open(f'{AGENT_DIR}/keyring', 'w') as f:
+            f.write('old-keyring')
+        with open(f'{AGENT_DIR}/root_cert.pem', 'w') as f:
+            f.write('old-ca')
+        with open(f'{AGENT_DIR}/listener.crt', 'w') as f:
+            f.write('old-crt')
+        with open(f'{AGENT_DIR}/listener.key', 'w') as f:
+            f.write('old-key')
+        with open(f'{AGENT_DIR}/unit.run', 'w') as f:
+            f.write(old_unit_run)
+
+        ident = _cephadm.DaemonIdentity.from_name(FSID, f'agent.{AGENT_ID}')
+        _cephadm.deploy_daemon(
+            ctx,
+            ident,
+            None,
+            os.getuid(),
+            os.getgid(),
+            deployment_type=_cephadm.DeploymentType.RECONFIG,
+            endpoints=[],
+        )
+
+        _check_file(f'{AGENT_DIR}/agent.json', new_agent_json)
+        _check_file(f'{AGENT_DIR}/keyring', 'new-keyring')
+        _check_file(f'{AGENT_DIR}/root_cert.pem', 'new-ca')
+        _check_file(f'{AGENT_DIR}/listener.crt', 'new-crt')
+        _check_file(f'{AGENT_DIR}/listener.key', 'new-key')
+        # reconfig must not rewrite unit.run (unlike full deploy_daemon_unit)
+        _check_file(f'{AGENT_DIR}/unit.run', old_unit_run)
+        assert not os.path.exists(f'{AGENT_DIR}/not-required-file.txt')
+
+        _call_throws.assert_has_calls([
+            mock.call(ctx, ['systemctl', 'reset-failed', ident.unit_name]),
+            mock.call(ctx, ['systemctl', 'restart', ident.unit_name]),
+        ])
+
+
 # FIXME(refactor): call is handled by with_cephadm_ctx but not call_throws
 # this leaves the test somewhat inconsistent and slightly confusing but we
 # are not going to change this while we break cephadm up into multiple files.
@@ -573,18 +686,22 @@ def test_mgr_listener_handle_json_payload(_agent_wakeup, _pull_conf_settings, ce
         _pull_conf_settings.assert_not_called()
         assert not any(os.path.exists(os.path.join(AGENT_DIR, s)) for s in agent.required_files)
 
+        # Production HTTP config push always includes the full required_files set
+        # (from prepare_create / generate_config). Also include an unrequired key
+        # to verify it is ignored.
         data_with_config = {
             'counter': 7,
             'config': {
-                'unrequired-file': 'unrequired-text'
+                'unrequired-file': 'unrequired-text',
             }
         }
-        data_with_config['config'].update({s: f'{s} text' for s in agent.required_files if s != agent.required_files[2]})
+        data_with_config['config'].update({s: f'{s} text' for s in agent.required_files})
         agent.mgr_listener.handle_json_payload(data_with_config)
         _agent_wakeup.assert_called()
         _pull_conf_settings.assert_called()
-        assert all(os.path.exists(os.path.join(AGENT_DIR, s)) for s in agent.required_files if s != agent.required_files[2])
-        assert not os.path.exists(os.path.join(AGENT_DIR, agent.required_files[2]))
+        assert all(os.path.exists(os.path.join(AGENT_DIR, s)) for s in agent.required_files)
+        for fname in agent.required_files:
+            _check_file(os.path.join(AGENT_DIR, fname), f'{fname} text')
         assert not os.path.exists(os.path.join(AGENT_DIR, 'unrequired-file'))
 
 

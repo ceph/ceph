@@ -316,6 +316,28 @@ describe('NotificationsPageComponent', () => {
       fixture.detectChanges();
       expect(component.notifications()[0].displayPreview).toBe('');
     });
+
+    it('should strip HTML tags from displayPreview', () => {
+      const htmlNotification = createMockNotification({
+        id: '6',
+        message: 'Disk full. <a href="http://example.com">View details</a>'
+      });
+      dataSourceSubject.next([htmlNotification]);
+      fixture.detectChanges();
+      expect(component.notifications()[0].displayPreview).toBe('Disk full. View details');
+    });
+
+    it('should preserve HTML in displayDetail', () => {
+      const htmlNotification = createMockNotification({
+        id: '6',
+        message: 'Disk full. <a href="http://example.com">View details</a>'
+      });
+      dataSourceSubject.next([htmlNotification]);
+      fixture.detectChanges();
+      expect(component.notifications()[0].displayDetail).toBe(
+        'Disk full. <a href="http://example.com">View details</a>'
+      );
+    });
   });
 
   describe('query param pre-selection', () => {

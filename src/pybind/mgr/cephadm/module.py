@@ -34,6 +34,7 @@ from prettytable import PrettyTable
 from ceph.cephadm.images import DefaultImages
 from ceph.deployment import inventory
 from ceph.deployment.drive_group import DriveGroupSpec, OSDType
+from ceph.deployment.hostspec import normalize_hostname
 from ceph.deployment.service_spec import (
     ServiceSpec,
     PlacementSpec,
@@ -143,13 +144,15 @@ def host_exists(hostname_position: int = 1) -> Callable:
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
             this = args[0]  # self object
-            hostname = args[hostname_position]
+            hostname = normalize_hostname(args[hostname_position])
             if hostname not in this.cache.get_hosts():
                 candidates = ','.join([h for h in this.cache.get_hosts() if h.startswith(hostname)])
                 help_msg = f"Did you mean {candidates}?" if candidates else ""
                 raise OrchestratorError(
                     f"Cannot find host '{hostname}' in the inventory. {help_msg}")
 
+            args = list(args)  # type: ignore
+            args[hostname_position] = hostname
             return func(*args, **kwargs)
         return wrapper
     return inner
@@ -1188,6 +1191,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.offline_watcher.set_hosts(list(set([h for h in hosts_to_watch if h is not None])))
 
     def offline_hosts_remove(self, host: str) -> None:
+        host = normalize_hostname(host)
         if host in self.offline_hosts:
             self.offline_hosts.remove(host)
             self._invalidate_all_host_metadata_and_kick_serve(host)
@@ -2364,6 +2368,8 @@ Then run the following:
         :param force: bypass running daemons check
         :param offline: remove offline host
         """
+        original_host = host
+        host = normalize_hostname(host)
 
         # check if host is offline
         host_offline = host in self.offline_hosts
@@ -2432,7 +2438,7 @@ Then run the following:
 
             cmd_args = {
                 'prefix': 'osd crush rm',
-                'name': host
+                'name': original_host
             }
             run_cmd(cmd_args)
 
@@ -2440,7 +2446,7 @@ Then run the following:
             try:
                 self.check_mon_command({
                     'prefix': 'osd crush remove',
-                    'name': host,
+                    'name': original_host,
                 })
             except MonCommandFailed as e:
                 self.log.error(f'Couldn\'t remove host {host} from CRUSH map: {str(e)}')
@@ -2459,6 +2465,7 @@ Then run the following:
 
     @handle_orch_error
     def update_host_addr(self, host: str, addr: str) -> str:
+        host = normalize_hostname(host)
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
         self.ssh.reset_con(host)
@@ -2499,6 +2506,7 @@ Then run the following:
 
     @handle_orch_error
     def remove_host_label(self, host: str, label: str, force: bool = False) -> str:
+        host = normalize_hostname(host)
         # if we remove the _admin label from the only host that has it we could end up
         # removing the only instance of the config and keyring and cause issues
         if not force and label == SpecialHostLabels.ADMIN:
@@ -2558,6 +2566,7 @@ Then run the following:
 
     @handle_orch_error
     def host_ok_to_stop(self, hostname: str) -> str:
+        hostname = normalize_hostname(hostname)
         if hostname not in self.cache.get_hosts():
             raise OrchestratorError(f'Cannot find host "{hostname}"', errno=errno.EINVAL)
 
@@ -3286,7 +3295,7 @@ Then run the following:
                                   <fsid>/removed/.
         """
         args = []
-        for host, dm in self.cache.daemons.items():
+        for host, dm in list(self.cache.daemons.items()):
             for name in names:
                 if name in dm:
                     args.append((name, host, force_delete_data))
@@ -3418,9 +3427,10 @@ Then run the following:
             str: output from the zap command
         """
 
+        host = normalize_hostname(host)
         self.log.info('Zap device %s:%s' % (host, path))
 
-        if host not in self.inventory.keys():
+        if host not in self.inventory:
             raise OrchestratorError(
                 f"Host '{host}' is not a member of the cluster")
 
@@ -4778,8 +4788,8 @@ Then run the following:
             'up_to_date': list(),
             'non_ceph_image_daemons': list()
         }
-        for host, dm in self.cache.daemons.items():
-            for name, dd in dm.items():
+        for host, dm in list(self.cache.daemons.items()):
+            for name, dd in list(dm.items()):
                 # check if the container digest for the digest we're checking upgrades for matches
                 # the container digests for the daemon if "use_repo_digest" setting is true
                 # or that the image name matches the daemon's image name if "use_repo_digest"
@@ -4884,6 +4894,7 @@ Then run the following:
                        clear: bool = False,
                        yes_i_really_mean_it: bool = False) -> Any:
         output: str = ''
+        hostname = normalize_hostname(hostname)
 
         self.ceph_volume.lvm_list.get_data(hostname=hostname)
 
@@ -4891,7 +4902,7 @@ Then run the following:
             output = self.ceph_volume.clear_replace_header(hostname, device)
         else:
             osds_to_zap: List[str] = []
-            if hostname not in list(self.inventory.keys()):
+            if hostname not in self.inventory:
                 raise OrchestratorError(f'{hostname} invalid host.')
 
             if device not in self.ceph_volume.lvm_list.all_devices():

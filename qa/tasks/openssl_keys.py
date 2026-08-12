@@ -146,10 +146,13 @@ class OpenSSLKeys(Task):
 
             if san_ext:
                 remove_files.append(ext)
-                ca_cert.remote.write_file(path=ext,
-                        data='subjectAltName = DNS:{},DNS:*.{},IP:{}'.format(
-                        cn, cn,
-                        config.get('ip', cert.remote.ip_address)))
+                ip = config.get('ip', cert.remote.ip_address)
+                lines = [f'subjectAltName = DNS:{cn},DNS:*.{cn},IP:{ip}']
+                if eku := config.get('extended_key_usage'):
+                    lines.append(f'extendedKeyUsage = {eku}')
+                if config.get('ca_false_ext'):
+                    lines.append('basicConstraints = CA:FALSE')
+                ca_cert.remote.write_file(path=ext, data='\n'.join(lines))
 
             # create the signed certificate
             ca_cert.remote.run(args=['openssl', 'x509', '-req', '-in', csr,

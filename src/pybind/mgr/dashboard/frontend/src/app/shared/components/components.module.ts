@@ -43,7 +43,10 @@ import {
   TagModule,
   LinkModule,
   LayerModule,
-  ThemeModule
+  ThemeModule,
+  MenuButtonModule,
+  ContextMenuModule,
+  BreadcrumbModule
 } from 'carbon-components-angular';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import EditIcon from '@carbon/icons/es/edit/16';
@@ -59,6 +62,7 @@ import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
 import { DeleteConfirmationModalComponent } from './delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeleteGuardModalComponent } from './delete-guard-modal/delete-guard-modal.component';
 import { CustomLoginBannerComponent } from './custom-login-banner/custom-login-banner.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
@@ -138,6 +142,7 @@ import Temperature16 from '@carbon/icons/es/temperature/16';
 
 import { TearsheetStepComponent } from './tearsheet-step/tearsheet-step.component';
 import { PageHeaderComponent } from './page-header/page-header.component';
+import { PageHeaderResourceComponent } from './page-header-resource/page-header-resource.component';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
 import { NumberWithUnitComponent } from './number-with-unit/number-with-unit.component';
 import { OverviewComponent } from './resource-overview-card/resource-overview-card.component';
@@ -189,7 +194,10 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     LinkModule,
     LayerModule,
     ThemeModule,
-    ProductiveCardComponent
+    ProductiveCardComponent,
+    MenuButtonModule,
+    ContextMenuModule,
+    BreadcrumbModule
   ],
   declarations: [
     SparklineComponent,
@@ -200,6 +208,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     LoadingPanelComponent,
     ModalComponent,
     DeleteConfirmationModalComponent,
+    DeleteGuardModalComponent,
     ConfirmationModalComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
@@ -237,6 +246,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     TearsheetComponent,
     TearsheetStepComponent,
     PageHeaderComponent,
+    PageHeaderResourceComponent,
     SidebarLayoutComponent,
     NumberWithUnitComponent,
     OverviewComponent
@@ -284,6 +294,7 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     TearsheetComponent,
     TearsheetStepComponent,
     PageHeaderComponent,
+    PageHeaderResourceComponent,
     SidebarLayoutComponent,
     NumberWithUnitComponent,
     OverviewComponent,

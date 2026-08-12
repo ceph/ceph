@@ -101,7 +101,7 @@ run::
   $ MDS=0 MON=1 OSD=1 MGR=1 taskset -ac '0-95' /ceph/src/vstart.sh --new -x \
   --localhost --without-dashboard --redirect-output --seastore --osd-args \
   "--seastore_max_concurrent_transactions=128 --seastore_cachepin_type=LRU \
-  --seastore_main_device_type=RANDOM_BLOCK_SSD" --seastore-devs  /dev/nvme0n1 \
+  --seastore_hot_device_type=RANDOM_BLOCK_SSD" --seastore-devs  /dev/nvme0n1 \
   --crimson  --crimson-smp 1 --no-restart
 
 Another SeaStore example::

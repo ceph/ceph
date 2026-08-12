@@ -162,7 +162,7 @@ public:
       ref->set_invalid(*this);
       write_set.erase(*ref);
       assert(ref->prior_instance);
-      retired_set.emplace(ref->prior_instance, trans_id);
+      retired_set.emplace(ref->prior_instance, *this);
       assert(read_set.count(ref->prior_instance->get_paddr(), extent_cmp_t{}));
       ref->reset_prior_instance();
     } else {
@@ -171,7 +171,7 @@ public:
       // XXX: prevent double retire -- retired_set.count(ref->get_paddr()) == 0
       // If it's already in the set, insert here will be a noop,
       // which is what we want.
-      retired_set.emplace(ref, trans_id);
+      retired_set.emplace(ref, *this);
     }
   }
 
@@ -364,6 +364,21 @@ public:
     }
   }
 
+  bool remove_from_retired_set(CachedExtent &ext) {
+    auto it = retired_set.find(ext.get_paddr());
+    if (it == retired_set.end()) {
+      return false;
+    }
+    auto &extent = it->extent;
+    if (extent->get_paddr() != ext.get_paddr()) {
+      return false;
+    } else {
+      assert(ext.get_length() == extent->get_length());
+      retired_set.erase(it);
+      return true;
+    }
+  }
+
   std::pair<bool, bool> pre_stable_extent_paddr_mod(
     read_set_item_t<Transaction> &item)
   {
@@ -393,7 +408,7 @@ public:
     bool retired) {
     read_set.insert(item);
     if (retired) {
-      retired_set.emplace(item.ref, trans_id);
+      retired_set.emplace(item.ref, *this);
     }
   }
   void maybe_update_pending_paddr(
@@ -416,20 +431,41 @@ public:
       auto &mextent = *i;
       write_set.erase(mextent);
       extent_len_t off = 0;
-      if (new_paddr.is_absolute_segmented()) {
-        assert(mextent.get_paddr().as_seg_paddr().get_segment_id()
-          == old_paddr.as_seg_paddr().get_segment_id());
+      if (old_paddr.is_absolute_segmented()) {
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_id() ==
+          old_paddr.as_seg_paddr().get_segment_id());
+        assert(mextent.get_paddr().as_seg_paddr().get_segment_off() >=
+          old_paddr.as_seg_paddr().get_segment_off());
         assert(mextent.get_paddr().as_seg_paddr().get_segment_off()
-          >= old_paddr.as_seg_paddr().get_segment_off());
-        off = mextent.get_paddr().as_seg_paddr().get_segment_off()
-          - old_paddr.as_seg_paddr().get_segment_off();
+                + mextent.get_length() <=
+          old_paddr.as_seg_paddr().get_segment_off() + len);
+        off = mextent.get_paddr().as_seg_paddr().get_segment_off() -
+          old_paddr.as_seg_paddr().get_segment_off();
       } else {
-        assert(new_paddr.is_absolute_random_block());
+        assert(mextent.get_paddr().is_absolute_random_block());
         off = mextent.get_paddr().as_blk_paddr().get_device_off() -
           old_paddr.as_blk_paddr().get_device_off();
       }
       mextent.set_paddr(new_paddr + off);
       write_set.insert(mextent);
+    }
+  }
+  void remove_shadow_from_write_set(
+    const paddr_t &shadow_paddr, extent_len_t len) {
+    std::vector<CachedExtent*> exts;
+    for (auto [bottom, top] = write_set.get_overlap(shadow_paddr, len);
+         bottom != top;
+         bottom++) {
+      auto &mextent = *bottom;
+      if (mextent.is_initial_pending()) {
+        assert(!mextent.is_shadow_extent());
+        continue;
+      }
+      assert(mextent.is_shadow_extent() && mextent.is_exist_clean());
+      exts.emplace_back(&mextent);
+    }
+    for (auto i :exts) {
+      write_set.erase(*i);
     }
   }
 
@@ -540,7 +576,16 @@ public:
   friend class crimson::os::seastore::SeaStore;
   friend class TransactionConflictCondition;
 
+  uint64_t write_hit_hot = 0;
+  uint64_t write_hit_cold = 0;
+  uint64_t read_hit_hot = 0;
+  uint64_t read_hit_cold = 0;
+
   void reset_preserve_handle() {
+    write_hit_hot = 0;
+    write_hit_cold = 0;
+    read_hit_hot = 0;
+    read_hit_cold = 0;
     root.reset();
     offset = 0;
     delayed_temp_offset = 0;
@@ -576,6 +621,7 @@ public:
     views.clear();
     copied_lba_keys.clear();
     update_copied_lba_key = nullptr;
+    touched_prefix.clear();
   }
 
   bool did_reset() const {
@@ -692,22 +738,37 @@ public:
     return cache_hint;
   }
 
+  void touch_laddr_prefix(laddr_t laddr) {
+    touched_prefix.insert(laddr.get_object_prefix());
+  }
+
+  std::unordered_set<laddr_t> &get_touched_laddr_prefix() {
+    return touched_prefix;
+  }
+
   btree_cursor_stats_t cursor_stats;
 
   bool force_rewrite_conflict = false;
 
+  struct lmapping_t {
+    laddr_t dest = L_ADDR_NULL;
+    extent_len_t len = 0;
+  };
   using update_copied_lba_key_func_t =
-    std::function<void (laddr_t, paddr_t)>;
+    std::function<void (laddr_t, paddr_t,
+                  extent_len_t, std::optional<paddr_t>)>;
   void new_lba_key_copied(
     laddr_t src,
     laddr_t dest,
+    extent_len_t len,
     update_copied_lba_key_func_t &&func) {
-    copied_lba_keys.emplace(src, dest);
+    copied_lba_keys.emplace(src, lmapping_t{dest, len});
     if (!update_copied_lba_key) {
       update_copied_lba_key = std::move(func);
     }
   }
-  void maybe_sync_copied_lba_key(laddr_t laddr, paddr_t paddr) {
+  void maybe_sync_copied_lba_key(
+    laddr_t laddr, paddr_t paddr, std::optional<paddr_t> shadow) {
     if (likely(copied_lba_keys.empty())) {
       return;
     }
@@ -716,8 +777,9 @@ public:
     if (it == copied_lba_keys.end()) {
       return;
     }
-    laddr_t key = it->second;
-    update_copied_lba_key(key, paddr);
+    laddr_t key = it->second.dest;
+    extent_len_t len = it->second.len;
+    update_copied_lba_key(key, paddr, len, shadow);
   }
   RootBlockRef peek_root() {
     return root;
@@ -918,6 +980,8 @@ private:
    */
   retired_extent_set_t retired_set;
 
+  std::unordered_set<laddr_t> touched_prefix;
+
   /// stats to collect when commit or invalidate
   tree_stats_t onode_tree_stats;
   tree_stats_t omap_tree_stats; // exclude omap tree depth
@@ -948,7 +1012,7 @@ private:
 
   cache_hint_t cache_hint = CACHE_HINT_TOUCH;
 
-  std::map<laddr_t, laddr_t> copied_lba_keys;
+  std::map<laddr_t, lmapping_t> copied_lba_keys;
   update_copied_lba_key_func_t update_copied_lba_key;
 };
 using TransactionRef = Transaction::Ref;

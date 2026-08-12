@@ -69,8 +69,8 @@ if(WITH_DPDK)
   add_library(common_async_dpdk STATIC
     ${async_dpdk_srcs})
   target_link_libraries(common_async_dpdk PRIVATE
-    dpdk::dpdk)
+    DPDK::dpdk)
   # Stack.cc includes DPDKStack.h, which includes rte_config.h indirectly
   target_include_directories(common-msg-objs PRIVATE
-    $<TARGET_PROPERTY:dpdk::dpdk,INTERFACE_INCLUDE_DIRECTORIES>)
+    $<TARGET_PROPERTY:DPDK::dpdk,INTERFACE_INCLUDE_DIRECTORIES>)
 endif(WITH_DPDK)
