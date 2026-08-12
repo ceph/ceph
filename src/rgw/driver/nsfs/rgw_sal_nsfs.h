@@ -156,6 +156,7 @@ public:
 
 class File : public FSEnt {
 protected:
+  bool direct_io{false};
 
 public:
   File(std::string _name, Directory* _parent, CephContext* _ctx) : FSEnt(_name, _parent, _ctx)
