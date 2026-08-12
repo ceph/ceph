@@ -151,26 +151,18 @@ public:
 
   class Role {
   public:
-    Role() : is_admin(false), is_system_reader(false), is_project_reader(false),
-             is_implicit_deny(false), is_accepted(false) { }
+    Role() : is_admin(false), is_system_reader(false) { }
     Role(const Role &r) {
       id = r.id;
       name = r.name;
       is_admin = r.is_admin;
       is_system_reader = r.is_system_reader;
-      is_project_reader = r.is_project_reader;
-      is_implicit_deny = r.is_implicit_deny;
-      is_accepted = r.is_accepted;
     }
     std::string id;
     std::string name;
     bool is_admin;
     bool is_system_reader;
-    bool is_project_reader;
-    bool is_implicit_deny;
-    bool is_accepted;
     void decode_json(JSONObj *obj);
-    uint32_t perm_mask() const;
   };
 
   class User {
@@ -194,6 +186,15 @@ public:
   Project project;
   User user;
   std::list<Role> roles;
+  /* Permission tier for the token, computed once
+  * in update_roles(): the most permissive accepted
+  * role wins.
+  * - nullopt: token holds no accepted role.
+  * - RGW_PERM_NONE: implicit-deny
+  * - READ|READ-ACP: project-reader
+  * - FULL_CONTROL: plain or admin
+  */
+  std::optional<uint32_t> perm_tier;
   std::optional<ApplicationCredential> app_cred;
 
   void decode(JSONObj* obj);
@@ -212,6 +213,7 @@ public:
   const std::string& get_user_name() const {return user.name;};
   bool has_role(const std::string& r) const;
   uint32_t effective_perm_mask() const;
+  bool admitted() const { return perm_tier.has_value(); }
   bool expired() const {
     const uint64_t now = ceph_clock_now().sec();
     return std::cmp_greater_equal(now, get_expires());
