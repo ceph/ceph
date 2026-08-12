@@ -38,12 +38,14 @@ using rgw::auth::Principal;
 // Part 1: from roles to permission mask.
 //
 // These tests check how the roles on a Keystone token become a
-// permission mask. update_roles() puts a flag on each role that is in
-// one of the config lists. effective_perm_mask() then looks at the
-// flags: a normal user gets full control; a user whose only accepted
-// role is the reader role gets read-only; a user whose only accepted
-// role is an implicit-deny role gets no permissions at all
-// (mask 0). A role that is in no list must have no effect.
+// permission mask. update_roles() resolves the token's roles to a single
+// permission tier (TokenEnvelope::perm_tier): a normal user gets full
+// control; a user whose only accepted role is the reader role gets
+// read-only; a user whose only accepted role is an implicit-deny role gets
+// no permissions at all (mask 0); a user with no accepted role is not
+// admitted at all. effective_perm_mask() returns that tier (or
+// RGW_PERM_NONE), and admitted() reports whether any accepted role was
+// present. A role that is in no list must have no effect.
 // ---------------------------------------------------------------------
 
 // Make a test token with the given role names, then flag the roles
@@ -72,36 +74,15 @@ TEST(KeystoneProjectReader, UpdateRolesFlags)
 {
   auto t = make_keystone_token({"objectstore_viewer", "member", "admin",
                                 "objectstore_authed", "unlisted_role"});
+  // Only the admin/system-reader personas survive as per-role flags; the
+  // permission tier is now a single token-level result.
   for (const auto& r : t.roles) {
-    if (r.name == "objectstore_viewer") {
-      EXPECT_TRUE(r.is_project_reader);
-      EXPECT_TRUE(r.is_accepted);
-      EXPECT_FALSE(r.is_admin);
-      EXPECT_FALSE(r.is_implicit_deny);
-    } else if (r.name == "member") {
-      EXPECT_TRUE(r.is_accepted);
-      EXPECT_FALSE(r.is_project_reader);
-      EXPECT_FALSE(r.is_admin);
-      EXPECT_FALSE(r.is_implicit_deny);
-    } else if (r.name == "admin") {
-      EXPECT_TRUE(r.is_admin);
-      EXPECT_TRUE(r.is_accepted);
-      EXPECT_FALSE(r.is_project_reader);
-      EXPECT_FALSE(r.is_implicit_deny);
-    } else if (r.name == "objectstore_authed") {
-      EXPECT_TRUE(r.is_implicit_deny);
-      EXPECT_TRUE(r.is_accepted);
-      EXPECT_FALSE(r.is_project_reader);
-      EXPECT_FALSE(r.is_admin);
-    } else if (r.name == "unlisted_role") {
-      // this role is in no list, so all flags must stay off
-      EXPECT_FALSE(r.is_accepted);
-      EXPECT_FALSE(r.is_admin);
-      EXPECT_FALSE(r.is_project_reader);
-      EXPECT_FALSE(r.is_system_reader);
-      EXPECT_FALSE(r.is_implicit_deny);
-    }
+    EXPECT_EQ(r.name == "admin", r.is_admin);
+    EXPECT_FALSE(r.is_system_reader);   // no system_reader role in the lists
   }
+  // the token carries accepted roles (member, admin) -> admitted, full control
+  EXPECT_TRUE(t.admitted());
+  EXPECT_EQ(RGW_PERM_FULL_CONTROL, t.effective_perm_mask());
 }
 
 TEST(KeystoneProjectReader, ReaderOnly)
@@ -138,23 +119,28 @@ TEST(KeystoneProjectReader, AdminWins)
 TEST(KeystoneProjectReader, NoReaderRole)
 {
   // a plain accepted role (member) grants full control
-  EXPECT_EQ(RGW_PERM_FULL_CONTROL,
-            make_keystone_token({"member"}).effective_perm_mask());
-  // No accepted role (or no roles at all) -> zero permissions. We fail
-  // closed: deny by default, never full control. In a real request a user
-  // with no accepted role is already rejected at login before this runs, so
-  // this is just a safety net.
-  EXPECT_EQ(RGW_PERM_NONE,
-            make_keystone_token({"unlisted_role"}).effective_perm_mask());
-  EXPECT_EQ(RGW_PERM_NONE,
-            make_keystone_token({}).effective_perm_mask());
+  auto member = make_keystone_token({"member"});
+  EXPECT_TRUE(member.admitted());
+  EXPECT_EQ(RGW_PERM_FULL_CONTROL, member.effective_perm_mask());
+  // No accepted role (or no roles at all) -> not admitted, zero permissions.
+  // We fail closed: deny by default, never full control. In a real request a
+  // user with no accepted role is already rejected at login before this runs,
+  // so this is just a safety net.
+  auto unlisted = make_keystone_token({"unlisted_role"});
+  EXPECT_FALSE(unlisted.admitted());
+  EXPECT_EQ(RGW_PERM_NONE, unlisted.effective_perm_mask());
+  auto none = make_keystone_token({});
+  EXPECT_FALSE(none.admitted());
+  EXPECT_EQ(RGW_PERM_NONE, none.effective_perm_mask());
 }
 
 TEST(KeystoneImplicitDeny, AuthedOnly)
 {
-  // only the implicit-deny role: no permissions at all
-  EXPECT_EQ(RGW_PERM_NONE,
-            make_keystone_token({"objectstore_authed"}).effective_perm_mask());
+  // only the implicit-deny role: admitted (it is an accepted role) but with
+  // no permissions at all -- distinct from an unadmitted token.
+  auto t = make_keystone_token({"objectstore_authed"});
+  EXPECT_TRUE(t.admitted());
+  EXPECT_EQ(RGW_PERM_NONE, t.effective_perm_mask());
 }
 
 TEST(KeystoneImplicitDeny, UnrelatedRoleIgnored)

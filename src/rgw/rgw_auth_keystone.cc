@@ -388,35 +388,36 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     }
   }
 
-  /* Check for necessary roles. */
-  for (const auto& role : roles.plain) {
-    if (t->has_role(role) == true) {
-      /* If this token was an allowed expired token because we got a
-       * service token we need to update the expiration before we cache it. */
-      if (allow_expired) {
-        time_t now = ceph_clock_now().sec();
-        time_t new_expires = now + g_conf()->rgw_keystone_expired_token_cache_expiration;
-        ldpp_dout(dpp, 20) << "updating expiration of allowed expired token"
-                           << " from old " << t->get_expires() << " to now " << now << " + "
-                           << g_conf()->rgw_keystone_expired_token_cache_expiration
-                           << " secs = "
-                           << new_expires << dendl;
-        t->set_expires(new_expires);
-      }
-      ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
-                    << ":" << t->get_user_name()
-                    << " expires: " << t->get_expires() << dendl;
-      token_cache.add(token_id, *t);
-      auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                                get_creds_info(*t));
-      return result_t::grant(std::move(apl));
-    }
+
+  /**
+   * Reject a token that holds no accepted role. Admission was computed in
+   * update_roles().
+   */
+  if(!t->admitted()) {
+    ldpp_dout(dpp, 0) << "user does not hold a matching role; required roles: "
+                 << g_conf()->rgw_keystone_accepted_roles << dendl;
+    return result_t::deny(-EPERM);
   }
 
-  ldpp_dout(dpp, 0) << "user does not hold a matching role; required roles: "
-                << g_conf()->rgw_keystone_accepted_roles << dendl;
-
-  return result_t::deny(-EPERM);
+  /* If this token was an allowed expired token because we got a
+    * service token we need to update the expiration before we cache it. */
+  if (allow_expired) {
+    time_t now = ceph_clock_now().sec();
+    time_t new_expires = now + g_conf()->rgw_keystone_expired_token_cache_expiration;
+    ldpp_dout(dpp, 20) << "updating expiration of allowed expired token"
+                        << " from old " << t->get_expires() << " to now " << now << " + "
+                        << g_conf()->rgw_keystone_expired_token_cache_expiration
+                        << " secs = "
+                        << new_expires << dendl;
+    t->set_expires(new_expires);
+  }
+  ldpp_dout(dpp, 0) << "validated token: " << t->get_project_name()
+            << ":" << t->get_user_name()
+            << " expires: " << t->get_expires() << dendl;
+  token_cache.add(token_id, *t);
+  auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
+                                                get_creds_info(*t));
+  return result_t::grant(std::move(apl));
 }
 
 
@@ -663,17 +664,17 @@ EC2Engine::get_acl_strategy(const EC2Engine::token_envelope_t&) const
 
 EC2Engine::auth_info_t
 EC2Engine::get_creds_info(const EC2Engine::token_envelope_t& token,
-                          const std::vector<std::string>& admin_roles,
                           const std::string& access_key_id
                          ) const noexcept
 {
   using acct_privilege_t = \
     rgw::auth::RemoteApplier::AuthInfo::acct_privilege_t;
 
-  /* Check whether the user has an admin status. */
+  /* Check whether the user has an admin status. is_admin is set by
+   * update_roles() from the accepted-admin-roles list. */
   acct_privilege_t level = acct_privilege_t::IS_PLAIN_ACCT;
-  for (const auto& admin_role : admin_roles) {
-    if (token.has_role(admin_role)) {
+  for (const auto& role : token.roles) {
+    if (role.is_admin) {
       level = acct_privilege_t::IS_ADMIN_ACCT;
       break;
     }
@@ -773,36 +774,29 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
     return result_t::deny();
   }
 
-  /* check if we have a valid role */
-  bool found = false;
-  for (const auto& role : accepted_roles.plain) {
-    if (t->has_role(role) == true) {
-      found = true;
-      break;
-    }
-  }
+  /* Classify roles first, then admit on the result rather than rescanning
+   * the config lists. */
+  t->update_roles(accepted_roles.plain,
+                  accepted_roles.admin,
+                  accepted_roles.system_reader,
+                  accepted_roles.project_reader,
+                  accepted_roles.implicit_deny);
 
-  if (! found) {
+  if (! t->admitted()) {
     ldpp_dout(dpp, 5) << "s3 keystone: user does not hold a matching role;"
                      " required roles: "
                   << cct->_conf->rgw_keystone_accepted_roles << dendl;
     return result_t::deny();
-  } else {
-    /* everything seems fine, continue with this user */
-    ldpp_dout(dpp, 5) << "s3 keystone: validated token: " << t->get_project_name()
-                  << ":" << t->get_user_name()
-                  << " expires: " << t->get_expires() << dendl;
-
-    t->update_roles(accepted_roles.plain,
-                    accepted_roles.admin,
-                    accepted_roles.system_reader,
-                    accepted_roles.project_reader,
-                    accepted_roles.implicit_deny);
-
-    auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
-                                              get_creds_info(*t, accepted_roles.admin, std::string(access_key_id)));
-    return result_t::grant(std::move(apl), completer_factory(secret_key));
   }
+
+  /* everything seems fine, continue with this user */
+  ldpp_dout(dpp, 5) << "s3 keystone: validated token: " << t->get_project_name()
+                << ":" << t->get_user_name()
+                << " expires: " << t->get_expires() << dendl;
+
+  auto apl = apl_factory->create_apl_remote(cct, s, get_acl_strategy(*t),
+                                            get_creds_info(*t, std::string(access_key_id)));
+  return result_t::grant(std::move(apl), completer_factory(secret_key));
 }
 
 bool SecretCache::find(const std::string& token_id,
