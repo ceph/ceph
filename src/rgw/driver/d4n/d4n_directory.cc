@@ -13,7 +13,7 @@ std::string ObjectDirectory::build_index(const std::string& bucket_id, const std
   return url_encode(bucket_id, true) + "#" + url_encode(obj_name, true);
 }
 
-std::string BlockDirectory::build_index(CacheBlock* block) 
+std::string BlockDirectory::build_index(const CacheBlock* block) 
 {
   return url_encode(block->cacheObj.bucketName, true) + "#" + url_encode(block->cacheObj.objName, true) + "/block/" + std::to_string(block->blockID) + "/" + std::to_string(block->size);
 }

@@ -15,6 +15,7 @@
 
 namespace rgw::sal {
   class CoroutinePool;
+  class D4NFilterDriver;
 }
 
 namespace rgw::d4n {
@@ -107,7 +108,7 @@ class CachePolicy {
     CachePolicy(rgw::cache::CacheDriver* cacheDriver) : cacheDriver(cacheDriver) {}
     virtual ~CachePolicy() = default; 
 
-    virtual int init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver* _driver) {
+    virtual int init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::D4NFilterDriver* _driver) {
       return 0; 
     }
 
@@ -205,7 +206,7 @@ class LFUDAPolicy : public CachePolicy {
 
     optional_yield y = null_yield;
 
-    rgw::sal::Driver* driver;
+    rgw::sal::D4NFilterDriver* driver;
 	
     std::optional<asio::steady_timer> rthread_timer;
     std::thread tc;
@@ -280,7 +281,7 @@ class LFUDAPolicy : public CachePolicy {
 
     ~LFUDAPolicy() override;
 
-    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver *_driver) override;
+    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::D4NFilterDriver *_driver) override;
     virtual int exist_key(const std::string& key) override;
     int getMinAvgWeight(const DoutPrefixProvider* dpp, int* minAvgWeight, std::string* cache_address, optional_yield y);
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
@@ -320,7 +321,7 @@ class LRUPolicy : public CachePolicy {
   public:
     LRUPolicy(rgw::cache::CacheDriver* cacheDriver) : CachePolicy(cacheDriver) {}
 
-    virtual int init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::Driver* _driver) { return 0; }
+    virtual int init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_context& io_context, rgw::sal::D4NFilterDriver* _driver) { return 0; }
     virtual int exist_key(const std::string& key) override;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual bool update_refcount_if_key_exists(const DoutPrefixProvider* dpp, const std::string& key, uint8_t op, optional_yield y) override { return false; }
