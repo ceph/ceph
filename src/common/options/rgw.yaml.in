@@ -4482,6 +4482,74 @@ options:
   default: false
   services:
   - rgw
+- name: rgw_posix_read_fadvise
+  type: int
+  level: advanced
+  desc: posix_fadvise() flag applied when opening an object file for reading
+  long_desc: Raw posix_fadvise(2) advice value applied once, right after
+    open, to the fd used for GET/HEAD data reads (including multipart part
+    files). 0 disables the hint (POSIX_FADV_NORMAL). Useful values -
+    POSIX_FADV_SEQUENTIAL=2 widens the kernel's default readahead window;
+    POSIX_FADV_WILLNEED=3 eagerly triggers readahead into the page cache
+    at open time (only worth it if the object is actually read afterward,
+    e.g. not a HEAD-only open).
+  default: 0
+  services:
+  - rgw
+- name: rgw_posix_write_fadvise
+  type: int
+  level: advanced
+  desc: posix_fadvise() flag applied when closing an object file after writing
+  long_desc: Raw posix_fadvise(2) advice value applied once, after any
+    fdatasync from rgw_posix_sync_policy and before close, to fds that had
+    data written to them (PUT/multipart part uploads). 0 disables the hint
+    (POSIX_FADV_NORMAL). POSIX_FADV_DONTNEED=4 drops the just-written pages
+    from the page cache, which avoids cache pollution from large streaming
+    uploads but also defeats read-after-write page cache hits - leave
+    disabled unless profiling shows write traffic is evicting hot read data.
+  default: 0
+  services:
+  - rgw
+- name: rgw_posix_read_chunk_size
+  type: size
+  level: advanced
+  desc: Per-syscall read buffer size for object data reads
+  long_desc: Size of the buffer used for each ::read() call in the GET/HEAD
+    data path (including multipart part reads). Larger values reduce
+    syscall count per object at the cost of a bigger per-request read
+    buffer. Must be greater than 0; invalid values fall back to the
+    128KiB default.
+  default: 128_K
+  services:
+  - rgw
+- name: rgw_posix_write_chunk_size
+  type: size
+  level: advanced
+  desc: Per-syscall write buffer size for object data writes
+  long_desc: Caps the size of each ::write() call in the PUT/multipart
+    part-upload data path; writes larger than this are split across
+    multiple write() calls. 0 (default) leaves writes unsplit, i.e. one
+    write() call per buffer handed down from the op layer (bounded
+    upstream by rgw_max_chunk_size).
+  default: 0
+  services:
+  - rgw
+- name: rgw_posix_direct_io
+  type: bool
+  level: advanced
+  desc: Open object data files O_DIRECT, bypassing the page cache
+  long_desc: Experimental. When enabled, object data files (including
+    multipart part files) are opened with O_DIRECT. Reads always work -
+    arbitrary byte ranges are internally rounded out to a 4096-byte
+    aligned window and sliced back to the requested range. Writes only go
+    direct when both the write offset and the buffer length are already
+    4096-byte aligned; any write call that isn't (typically the final,
+    odd-sized chunk of an object) transparently falls back to buffered
+    I/O for that call only. Assumes a 4096-byte device/filesystem block
+    size - verify on GPFS or other non-local filesystems before enabling.
+  default: false
+  services:
+  - rgw
 - name: rgw_posix_multipart_cache_max
   type: uint
   level: advanced
@@ -4601,6 +4669,74 @@ options:
     or removed outside radosgw (sideloading).  Disable when no external filesystem
     changes are expected; this avoids redundant inotify processing of radosgw's own
     operations.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_read_fadvise
+  type: int
+  level: advanced
+  desc: posix_fadvise() flag applied when opening an object file for reading
+  long_desc: Raw posix_fadvise(2) advice value applied once, right after
+    open, to the fd used for GET/HEAD data reads (including multipart part
+    files). 0 disables the hint (POSIX_FADV_NORMAL). Useful values -
+    POSIX_FADV_SEQUENTIAL=2 widens the kernel's default readahead window;
+    POSIX_FADV_WILLNEED=3 eagerly triggers readahead into the page cache
+    at open time (only worth it if the object is actually read afterward,
+    e.g. not a HEAD-only open).
+  default: 0
+  services:
+  - rgw
+- name: rgw_nsfs_write_fadvise
+  type: int
+  level: advanced
+  desc: posix_fadvise() flag applied when closing an object file after writing
+  long_desc: Raw posix_fadvise(2) advice value applied once, after any
+    fdatasync from rgw_posix_sync_policy and before close, to fds that had
+    data written to them (PUT/multipart part uploads). 0 disables the hint
+    (POSIX_FADV_NORMAL). POSIX_FADV_DONTNEED=4 drops the just-written pages
+    from the page cache, which avoids cache pollution from large streaming
+    uploads but also defeats read-after-write page cache hits - leave
+    disabled unless profiling shows write traffic is evicting hot read data.
+  default: 0
+  services:
+  - rgw
+- name: rgw_nsfs_read_chunk_size
+  type: size
+  level: advanced
+  desc: Per-syscall read buffer size for object data reads
+  long_desc: Size of the buffer used for each ::read() call in the GET/HEAD
+    data path (including multipart part reads). Larger values reduce
+    syscall count per object at the cost of a bigger per-request read
+    buffer. Must be greater than 0; invalid values fall back to the
+    128KiB default.
+  default: 128_K
+  services:
+  - rgw
+- name: rgw_nsfs_write_chunk_size
+  type: size
+  level: advanced
+  desc: Per-syscall write buffer size for object data writes
+  long_desc: Caps the size of each ::write() call in the PUT/multipart
+    part-upload data path; writes larger than this are split across
+    multiple write() calls. 0 (default) leaves writes unsplit, i.e. one
+    write() call per buffer handed down from the op layer (bounded
+    upstream by rgw_max_chunk_size).
+  default: 0
+  services:
+  - rgw
+- name: rgw_nsfs_direct_io
+  type: bool
+  level: advanced
+  desc: Open object data files O_DIRECT, bypassing the page cache
+  long_desc: Experimental. When enabled, object data files (including
+    multipart part files) are opened with O_DIRECT. Reads always work -
+    arbitrary byte ranges are internally rounded out to a 4096-byte
+    aligned window and sliced back to the requested range. Writes only go
+    direct when both the write offset and the buffer length are already
+    4096-byte aligned; any write call that isn't (typically the final,
+    odd-sized chunk of an object) transparently falls back to buffered
+    I/O for that call only. Assumes a 4096-byte device/filesystem block
+    size - verify on GPFS or other non-local filesystems before enabling.
   default: false
   services:
   - rgw
