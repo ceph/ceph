@@ -29,6 +29,37 @@
 #define CRUSH_MAX_DEVICE_WEIGHT (1000u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
+/*
+ * The weight of a single item within a bucket is handed to the straw and
+ * straw2 draws as a *signed* int, so any item weight with the high bit set is
+ * interpreted as negative and produces a nonsense draw.  Because the weight
+ * of a bucket becomes the item weight of that bucket in its parent, no bucket
+ * that is referenced by another bucket may exceed this limit.  The same code
+ * is used by the Linux kernel CRUSH implementation, so this limit cannot be
+ * relaxed without breaking existing clients.
+ *
+ * A root bucket is never referenced by another bucket, so its weight is only
+ * bounded by the width of crush_bucket.weight, i.e. CRUSH_MAX_BUCKET_WEIGHT.
+ */
+#define CRUSH_MAX_ITEM_WEIGHT 0x7fffffffu
+
+/*
+ * CRUSH weights are unitless and only their ratios within a bucket matter.
+ * By convention Ceph derives them from device capacity, with a weight of 1.0
+ * meaning one "weight unit" of raw capacity.  crush_map.weight_shift records
+ * the size of that unit: it is 2^(40 + weight_shift) bytes, so the historical
+ * (and default) unit of 1 TiB is weight_shift == 0.
+ *
+ * Raising weight_shift by one and halving every weight in the map leaves the
+ * capacity that each weight represents unchanged while halving the numbers
+ * stored in the map, which is how a cluster grows past the ~65 PiB that a
+ * single root bucket can otherwise describe.  Since CRUSH only ever compares
+ * weights within a bucket, rescaling every weight by the same factor does not
+ * change placement, and clients that know nothing about weight_shift keep
+ * computing exactly the same mappings.
+ */
+#define CRUSH_MAX_WEIGHT_SHIFT 16u
+
 #define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
 /** @ingroup API
  * The equivalent of NULL for an item, i.e. the absence of an item.
@@ -461,6 +492,20 @@ struct crush_map {
 	 * minimize confusion (bucket type values start at 1).
 	 */
 	__u32 allowed_bucket_algs;
+
+	/*! The base-2 log of the raw capacity that a weight of 1.0
+         *  represents, relative to 1 TiB: a weight of 1.0 stands for
+         *  2^(40 + weight_shift) bytes.  Zero (1 TiB per unit weight) for
+         *  every map written before this field existed.
+         *
+         *  This is bookkeeping only -- it is never consulted by
+         *  crush_do_rule(), because placement depends on the ratios between
+         *  weights and not on their absolute values.  It exists so that all
+         *  weights in the map can be scaled down together, keeping the sums
+         *  in crush_bucket.weight inside 32 bits for clusters whose capacity
+         *  a 16.16 fixed point weight cannot otherwise express.
+         */
+	__u32 weight_shift;
 
 	__u32 *choose_tries;
 #endif
