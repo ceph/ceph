@@ -27,6 +27,7 @@
 #include "mon/MonCommand.h"
 #include "mon/mon_types.h"
 #include "mon/ConfigMap.h"
+#include "messages/MKVData.h"
 #include "mgr/MDSPerfMetricTypes.h"
 #include "mgr/MgrMapCache.h"
 
@@ -214,7 +215,8 @@ public:
   void update_kv_data(
     const std::string prefix,
     bool incremental,
-    const std::map<std::string, std::optional<bufferlist>, std::less<>>& data);
+    const std::map<std::string, std::optional<bufferlist>, std::less<>>& data,
+    const std::vector<MKVData::range_delete_t>& range_deletes = {});
   void _refresh_config_map();
 
   // Public so that MonCommandCompletion can use it
