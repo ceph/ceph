@@ -109,6 +109,7 @@ void ObjectModel::applyIoOp(IoOp& op) {
   };
 
   const uint64_t ec_alloc_unit = std::max<uint64_t>(1, 4096 / block_size);
+  const AllocationMode allocation_mode_local = allocation_mode;
 
   auto mark_allocated = [&primary_allocated = primary_allocated,
                          allocation_mode = allocation_mode,
@@ -175,7 +176,9 @@ void ObjectModel::applyIoOp(IoOp& op) {
        &reads = reads,
        &writes = writes,
        &ensure_size,
-       &mark_allocated]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
+       &mark_allocated,
+       allocation_mode_local,
+       ec_alloc_unit]<OpType opType, int N>(ReadWriteOp<opType, N> writeOp) {
          // Auto-create the object on first write, mirroring librados semantics.
          if (!primary_created) {
            primary_created = true;
@@ -184,7 +187,12 @@ void ObjectModel::applyIoOp(IoOp& op) {
            ceph_assert(!reads.intersects(writeOp.offset[i], writeOp.length[i]));
            ceph_assert(!writes.intersects(writeOp.offset[i], writeOp.length[i]));
            writes.union_insert(writeOp.offset[i], writeOp.length[i]);
-           ensure_size(writeOp.offset[i] + writeOp.length[i]);
+           uint64_t alloc_end =
+               (allocation_mode_local == AllocationMode::ErasureCoded)
+                   ? p2roundup(writeOp.offset[i] + writeOp.length[i],
+                               ec_alloc_unit)
+                   : writeOp.offset[i] + writeOp.length[i];
+           ensure_size(alloc_end);
            std::generate(std::execution::seq,
                          std::next(primary_contents.begin(), writeOp.offset[i]),
                          std::next(primary_contents.begin(),
@@ -282,8 +290,29 @@ void ObjectModel::applyIoOp(IoOp& op) {
       ceph_assert(reads.empty());
       ceph_assert(writes.empty());
       auto new_size = static_cast<TruncateOp&>(op).size;
-      primary_contents.resize(new_size);
-      primary_allocated.resize(new_size, false);
+      if (allocation_mode == AllocationMode::ErasureCoded && new_size < primary_allocated.size()) {
+        const uint64_t alloc_end = std::min(
+            p2roundup(new_size, ec_alloc_unit),
+            primary_allocated.size());
+        std::vector<bool> tail_alloc;
+        if (new_size < alloc_end) {
+          tail_alloc.assign(
+              primary_allocated.begin() + new_size,
+              primary_allocated.begin() + alloc_end);
+        }
+        primary_contents.resize(new_size);
+        primary_allocated.resize(new_size, false);
+        if (!tail_alloc.empty()) {
+          primary_contents.resize(alloc_end, 0);
+          primary_allocated.resize(alloc_end, false);
+          for (size_t i = 0; i < tail_alloc.size(); ++i) {
+            primary_allocated[new_size + i] = tail_alloc[i];
+          }
+        }
+      } else {
+        primary_contents.resize(new_size);
+        primary_allocated.resize(new_size, false);
+      }
     } break;
 
     case OpType::Remove: {
@@ -434,6 +463,28 @@ void ObjectModel::applyIoOp(IoOp& op) {
       TripleWriteOp& writeOp = static_cast<TripleWriteOp&>(op);
       verify_failed_write_and_record(writeOp);
     } break;
+    case OpType::WriteZeroData: {
+      WriteZeroDataOp& wzdOp = static_cast<WriteZeroDataOp&>(op);
+      if (!primary_created) {
+        primary_created = true;
+      }
+      ceph_assert(!reads.intersects(wzdOp.offset[0], wzdOp.length[0]));
+      ceph_assert(!writes.intersects(wzdOp.offset[0], wzdOp.length[0]));
+      writes.union_insert(wzdOp.offset[0], wzdOp.length[0]);
+      {
+        uint64_t alloc_end =
+            (allocation_mode == AllocationMode::ErasureCoded)
+                ? p2roundup(wzdOp.offset[0] + wzdOp.length[0], ec_alloc_unit)
+                : wzdOp.offset[0] + wzdOp.length[0];
+        ensure_size(alloc_end);
+      }
+      std::fill(std::next(primary_contents.begin(), wzdOp.offset[0]),
+                std::next(primary_contents.begin(),
+                          wzdOp.offset[0] + wzdOp.length[0]),
+                0);
+      mark_allocated(wzdOp.offset[0], wzdOp.length[0]);
+      num_io++;
+    } break;
     case OpType::Zero: {
       ZeroOp& zeroOp = static_cast<ZeroOp&>(op);
       verify_zero_and_record(zeroOp);
@@ -454,7 +505,13 @@ void ObjectModel::applyIoOp(IoOp& op) {
       writes.union_insert(wzOp.write_offset, wzOp.write_length);
       writes.union_insert(wzOp.zero_offset, wzOp.zero_length);
       uint64_t write_end = wzOp.write_offset + wzOp.write_length;
-      ensure_size(write_end);
+      {
+        uint64_t alloc_end =
+            (allocation_mode == AllocationMode::ErasureCoded)
+                ? p2roundup(write_end, ec_alloc_unit)
+                : write_end;
+        ensure_size(alloc_end);
+      }
       std::generate(std::execution::seq,
                     std::next(primary_contents.begin(), wzOp.write_offset),
                     std::next(primary_contents.begin(), write_end),

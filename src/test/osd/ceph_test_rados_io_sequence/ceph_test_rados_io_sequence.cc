@@ -1499,6 +1499,10 @@ bool ceph::io_sequence::tester::TestRunner::run_interactive_test() {
       uint64_t length3 = get_numeric_token();
       ioop = TripleTruncateWriteOp::generate(size, offset1, length1, offset2, length2,
                                              offset3, length3);
+    } else if (op == "writezerodata") {
+      uint64_t offset = get_numeric_token();
+      uint64_t length = get_numeric_token();
+      ioop = ceph::io_exerciser::WriteZeroDataOp::generate(offset, length);
     } else if (op == "zero") {
       uint64_t offset = get_numeric_token();
       uint64_t length = get_numeric_token();
