@@ -833,7 +833,8 @@ std::map<std::string, std::string> ActivePyModules::get_services() const
 void ActivePyModules::update_kv_data(
   const std::string prefix,
   bool incremental,
-  const std::map<std::string, std::optional<bufferlist>, std::less<>>& data)
+  const std::map<std::string, std::optional<bufferlist>, std::less<>>& data,
+  const std::vector<MKVData::range_delete_t>& range_deletes)
 {
   std::lock_guard l(lock);
   bool do_config = false;
@@ -846,6 +847,22 @@ void ActivePyModules::update_kv_data(
     }
   } else {
     dout(10) << "incremental update on " << prefix << dendl;
+  }
+  // Ranges first: a key set in this same update must survive a range that
+  // covered it, matching the order the monitor applied them in.
+  for (auto& rd : range_deletes) {
+    dout(20) << " rm range [" << rd.begin << ", "
+             << (rd.end.empty() ? "<end>" : rd.end) << ")" << dendl;
+    auto from = store_cache.lower_bound(rd.begin);
+    auto to = rd.end.empty() ? store_cache.end()
+                             : store_cache.lower_bound(rd.end);
+    for (auto p = from; p != to; ++p) {
+      dout(20) << "  rm " << p->first << dendl;
+      if (p->first.compare(0, 7, "config/") == 0) {
+        do_config = true;
+      }
+    }
+    store_cache.erase(from, to);
   }
   for (auto& i : data) {
     if (i.second) {
