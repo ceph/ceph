@@ -79,9 +79,12 @@ void get_arguments(po::options_description *positional,
                    po::options_description *options) {
   at::add_image_or_snap_spec_options(positional, options,
                                      at::ARGUMENT_MODIFIER_NONE);
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_DEST);
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
+    (at::FROM_SNAPSHOT_ID.c_str(), po::value<uint64_t>(),
+     "snapshot starting id")
     (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object");
   at::add_format_options(options);
 }
@@ -104,6 +107,34 @@ int execute(const po::variables_map &vm,
   std::string from_snap_name;
   if (vm.count(at::FROM_SNAPSHOT_NAME)) {
     from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
+  }
+
+  uint64_t from_snap_id = CEPH_NOSNAP;
+  if (vm.count(at::FROM_SNAPSHOT_ID)) {
+    if (!from_snap_name.empty()) {
+      std::cerr << "--from-snap and --from-snap-id can't be set at the same time"
+        << std::endl;
+      return -EINVAL;
+    }
+    from_snap_id = vm[at::FROM_SNAPSHOT_ID].as<uint64_t>();
+    if (from_snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --from-snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  uint64_t snap_id = CEPH_NOSNAP;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    if (!snap_name.empty()) {
+      std::cerr << "--snap and --snap-id can't be set at the same time"
+        << std::endl;
+      return -EINVAL;
+    }
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    if (snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --snap-id" << std::endl;
+      return -EINVAL;
+    }
   }
 
   bool diff_whole_object = vm[at::WHOLE_OBJECT].as<bool>();
