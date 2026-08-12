@@ -252,6 +252,66 @@ public:
     crush->allowed_bucket_algs = n;
   }
 
+  // -- weight scale --
+  //
+  // Raw weights are the 16.16 values stored in the map; nominal weights are
+  // what the CLI shows, always 1.0 per TiB.  raw = nominal >> weight_shift.
+  // The integer accessors and the crushtool text format use raw weights, the
+  // float accessors nominal ones.
+  unsigned get_weight_shift() const {
+    return crush->weight_shift;
+  }
+  /// set the shift without rescaling; see rescale_weights()
+  void set_weight_shift(unsigned s) {
+    crush->weight_shift = s;
+  }
+  /// bytes of raw capacity that a nominal weight of 1.0 stands for (1 TiB)
+  static constexpr uint64_t nominal_weight_unit_bytes() {
+    return 1ull << 40;
+  }
+  /// bytes of raw capacity that a raw weight of 1.0 stands for
+  uint64_t raw_weight_unit_bytes() const {
+    return nominal_weight_unit_bytes() << get_weight_shift();
+  }
+
+  double raw_to_nominal_weightf(int64_t raw) const {
+    return ((double)raw / (double)0x10000) * (double)(1ull << get_weight_shift());
+  }
+  int64_t nominal_weightf_to_raw(double nominal) const {
+    unsigned shift = get_weight_shift();
+    int64_t scaled = (int64_t)(nominal * (double)0x10000);
+    // round to nearest, so that a read-modify-write does not drift down
+    return (scaled + (int64_t)(1ull << shift) / 2) >> shift;
+  }
+  /// largest raw weight bucket @p id may hold: CRUSH_MAX_ITEM_WEIGHT if
+  /// another bucket references it, else CRUSH_MAX_BUCKET_WEIGHT
+  uint32_t max_raw_weight_for_bucket(int id) const;
+
+  /// max_raw_weight_for_bucket() for every bucket, indexed by -1-id
+  void get_max_raw_weights(std::vector<uint32_t> *max_by_index) const;
+
+  /// highest raw weight in the map as a fraction of what that position allows
+  double get_weight_utilization() const;
+
+  /**
+   * change the weight shift, scaling every weight (items, buckets, weight
+   * sets) so that it describes the same capacity.  Placement is unchanged
+   * apart from rounding.
+   *
+   * @return 0 on success, negative error code otherwise
+   */
+  int rescale_weights(CephContext *cct, unsigned new_shift, std::ostream *err);
+
+  /**
+   * raise the weight shift, if needed, so that @p additional_nominal_weight
+   * more can be added anywhere in the map.  Raw weights computed before the
+   * call may be stale after it.
+   *
+   * @return 1 if the shift changed, 0 if not, negative if it cannot fit
+   */
+  int make_weight_headroom(CephContext *cct, double additional_nominal_weight,
+			   std::ostream *err);
+
   bool has_argonaut_tunables() const {
     return
       crush->choose_local_tries == 2 &&
@@ -702,7 +762,7 @@ public:
     int iweight;
     bool ret = check_item_loc(cct, item, loc, &iweight);
     if (weight)
-      *weight = (float)iweight / (float)0x10000;
+      *weight = (float)raw_to_nominal_weightf(iweight);
     return ret;
   }
 
@@ -988,18 +1048,25 @@ public:
    */
   int get_item_weight(int id) const;
   float get_item_weightf(int id) const {
-    return (float)get_item_weight(id) / (float)0x10000;
+    return (float)raw_to_nominal_weightf(get_item_weight(id));
   }
   int get_item_weight_in_loc(int id,
 			     const std::map<std::string, std::string> &loc);
   float get_item_weightf_in_loc(int id,
 				const std::map<std::string, std::string> &loc) {
-    return (float)get_item_weight_in_loc(id, loc) / (float)0x10000;
+    return (float)raw_to_nominal_weightf(get_item_weight_in_loc(id, loc));
   }
 
+  /// check a single item's nominal weight: its raw weight must fit in an
+  /// int, so the limit grows with the shift
   int validate_weightf(float weight) {
-    uint64_t iweight = weight * 0x10000;
-    if (iweight > static_cast<uint64_t>(std::numeric_limits<int>::max())) {
+    if (!(weight >= 0)) {   // negative, or NaN
+      return -EOVERFLOW;
+    }
+    // compare in double, so a huge float cannot overflow the conversion
+    if ((double)weight * (double)0x10000 >
+	(double)std::numeric_limits<int>::max() *
+	(double)(1ull << get_weight_shift())) {
       return -EOVERFLOW;
     }
     return 0;
@@ -1012,7 +1079,7 @@ public:
     if (r < 0) {
       return r;
     }
-    return adjust_item_weight(cct, id, (int)(weight * (float)0x10000),
+    return adjust_item_weight(cct, id, (int)nominal_weightf_to_raw(weight),
 			      update_weight_sets);
   }
   int adjust_item_weight_in_bucket(CephContext *cct, int id, int weight,
@@ -1028,7 +1095,7 @@ public:
     if (r < 0) {
       return r;
     }
-    return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000),
+    return adjust_item_weight_in_loc(cct, id, (int)nominal_weightf_to_raw(weight),
 				     loc, update_weight_sets);
   }
   void reweight(CephContext *cct);
@@ -1044,7 +1111,7 @@ public:
     if (r < 0) {
       return r;
     }
-    return adjust_subtree_weight(cct, id, (int)(weight * (float)0x10000),
+    return adjust_subtree_weight(cct, id, (int)nominal_weightf_to_raw(weight),
 				 update_weight_sets);
   }
 
@@ -1331,7 +1398,7 @@ public:
   float get_bucket_weightf(int id) const {
     const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return 0;
-    return b->weight / (float)0x10000;
+    return (float)raw_to_nominal_weightf(b->weight);
   }
   int get_bucket_type(int id) const {
     const crush_bucket *b = get_bucket(id);
@@ -1368,7 +1435,7 @@ public:
   float get_bucket_item_weightf(int id, int pos) const {
     const crush_bucket *b = get_bucket(id);
     if (IS_ERR(b)) return 0;
-    return (float)crush_get_bucket_item_weight(b, pos) / (float)0x10000;
+    return (float)raw_to_nominal_weightf(crush_get_bucket_item_weight(b, pos));
   }
 
   /* modifiers */
@@ -1583,7 +1650,7 @@ public:
     std::ostream *ss) {
     std::vector<int> weight(weightf.size());
     for (unsigned i = 0; i < weightf.size(); ++i) {
-      weight[i] = (int)(weightf[i] * (double)0x10000);
+      weight[i] = (int)nominal_weightf_to_raw(weightf[i]);
     }
     return choose_args_adjust_item_weight(cct, cmap, id, weight, ss);
   }
