@@ -246,7 +246,8 @@ int execute_demote(const po::variables_map &vm,
   }
 
   r = validate_mirroring_enabled(io_ctx, group_name);
-  if (r < 0) {
+  // continue even if snap listing lead to error in GroupGetInfoRequest
+  if (r < 0 && r != -ESTALE) {
     return r;
   }
 
