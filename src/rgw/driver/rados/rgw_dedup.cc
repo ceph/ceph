@@ -76,6 +76,7 @@ using namespace rgw::dedup;
 #include "rgw_dedup_epoch.h"
 #include "rgw_perf_counters.h"
 #include "include/ceph_assert.h"
+#include "include/scope_guard.h"
 
 static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
 
@@ -2649,6 +2650,15 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
+  static inline void reset_bucket_counters(uint64_t *p_all_buckets_obj_count,
+                                           uint64_t *p_all_buckets_obj_size)
+  {
+    // reset counters to mark that we don't have the info
+    *p_all_buckets_obj_count = 0;
+    *p_all_buckets_obj_size  = 0;
+  }
+
+  //---------------------------------------------------------------------------
   int Background::collect_all_buckets_stats()
   {
     int ret = 0;
@@ -2661,6 +2671,9 @@ namespace rgw::dedup {
                         << cpp_strerror(-ret) << dendl;
       return ret;
     }
+
+    auto keys_guard = make_scope_guard(
+      [this, handle] { driver->meta_list_keys_complete(handle); });
 
     d_all_buckets_obj_count = 0;
     d_all_buckets_obj_size  = 0;
@@ -2678,7 +2691,8 @@ namespace rgw::dedup {
           if (unlikely(ret < 0)) {
             ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed rgw_bucket_parse_bucket_key: "
                               << cpp_strerror(-ret) << dendl;
-            goto err;
+            reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
+            return ret;
           }
           ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
           if (!d_filter.allow_bucket(bucket.name)) {
@@ -2689,31 +2703,23 @@ namespace rgw::dedup {
           ret = read_bucket_stats(bucket, &d_all_buckets_obj_count,
                                   &d_all_buckets_obj_size);
           if (unlikely(ret != 0)) {
-            goto err;
+            reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
+            return ret;
           }
         }
-        driver->meta_list_keys_complete(handle);
       }
       else {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: failed driver->meta_list_keys_next()" << dendl;
-        goto err;
+        reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
+        return ret;
       }
     }
+
     ldpp_dout(dpp, 10) <<__func__
                        << "::all_buckets_obj_count=" << d_all_buckets_obj_count
                        << "::all_buckets_obj_size=" << d_all_buckets_obj_size
                        << dendl;
     return 0;
-
-  err:
-    ldpp_dout(dpp, 1) << __func__ << "::error handler" << dendl;
-    // reset counters to mark that we don't have the info
-    d_all_buckets_obj_count = 0;
-    d_all_buckets_obj_size  = 0;
-    if (handle) {
-      driver->meta_list_keys_complete(handle);
-    }
-    return ret;
   }
 
   //---------------------------------------------------------------------------
@@ -2734,6 +2740,9 @@ namespace rgw::dedup {
                         << cpp_strerror(-ret) << dendl;
       return ret;
     }
+    auto keys_guard = make_scope_guard(
+      [this, handle] { driver->meta_list_keys_complete(handle); });
+
     disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
                                 p_worker_stats, num_md5_shards);
     bool has_more = true;
@@ -2765,7 +2774,6 @@ namespace rgw::dedup {
                                                     num_work_shards, p_worker_stats);
           if (unlikely(ret != 0)) {
             if (d_ctl.should_stop()) {
-              driver->meta_list_keys_complete(handle);
               return -ECANCELED;
             }
             ldpp_dout(dpp, 1) << __func__ << "::Failed ingress_bucket_objects_single_shard()" << dendl;
@@ -2773,11 +2781,9 @@ namespace rgw::dedup {
             continue;
           }
         }
-        driver->meta_list_keys_complete(handle);
       }
       else {
         ldpp_dout(dpp, 1) << __func__ << "::failed driver->meta_list_keys_next()" << dendl;
-        driver->meta_list_keys_complete(handle);
         // TBD: what can we do here?
         break;
       }

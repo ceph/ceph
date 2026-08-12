@@ -4289,3 +4289,87 @@ def test_dedup_filter_bucket_exec():
 
     log.info("dedup_filter_bucket_exec: filter_mode_allow")
     dedup_filter_allow_deny_bucket_common(dry_run, filter_mode_allow=True)
+
+#-------------------------------------------------------------------------------
+@pytest.mark.basic_test
+def test_dedup_many_buckets():
+    """Regression: dedup must not crash on multi-page listing of buckets.
+    The default page size for meta_list_keys_next() is 1000.
+    Make sure dedup can handle more than a single page
+    """
+
+    num_test_buckets = 1500
+    bucket_names = []
+
+    # raise per-user bucket limit (default is 1000) to allow 1500 buckets
+    access_key = get_access_key()
+    result = admin(['user', 'info', '--access-key', access_key])
+    assert result[1] == 0
+    info = json.loads(result[0])
+    uid = info['user_id']
+    tenant = info.get('tenant', '')
+    if tenant:
+        uid = tenant + '$' + uid
+
+    orig_max_buckets = info['max_buckets']
+    log.info("orig_max_buckets=%d, setting unlimited max-buckets", orig_max_buckets)
+    result = admin(['user', 'modify', '--uid', uid, '--max-buckets', '0'])
+    assert result[1] == 0, "failed to set unlimited max-buckets"
+    try:
+        conn = get_single_connection()
+        log.info("creating %d empty buckets to trigger multi-page listing",
+                 num_test_buckets)
+        start_time = time.perf_counter()
+        for i in range(num_test_buckets):
+            name = gen_bucket_name()
+            log.debug("conn.create_bucket(%s)", name)
+            conn.create_bucket(Bucket=name)
+            bucket_names.append(name)
+
+        log.info("mb total time=%d(sec) for %d buckets",
+                 time.perf_counter() - start_time, len(bucket_names))
+        result = dedup_admin('estimate')
+        assert result[1] == 0
+
+        max_time = 5 * 60
+        elapsed = 0
+        while elapsed < max_time:
+            time.sleep(3)
+            elapsed += 3
+            result = dedup_admin('stats')
+            assert result[1] == 0, "RGW crashed or became unresponsive (segfault in collect_all_buckets_stats?)"
+            jstats = json.loads(result[0])
+            if jstats['completed']:
+                log.info("dedup estimate completed in %d seconds", elapsed)
+                break
+        else:
+            assert False, "dedup estimate did not complete within %d seconds" % max_time
+
+        # verify RGW is still alive after estimate (would fail if process segfaulted)
+        response = conn.list_buckets()
+        assert 'Buckets' in response, "RGW not responding after estimate — possible crash"
+        log.info("RGW is alive after multi-page bucket estimate, listed %d buckets",
+                 len(response['Buckets']))
+
+        # verify dedup_bg thread is still running (segfault kills the thread)
+        pgrep_out, rc = bash(['pgrep', '-x', 'radosgw'])
+        assert rc == 0, "radosgw process not found — likely crashed"
+        for pid in pgrep_out.strip().split('\n'):
+            ps_out, _ = bash(['ps', '-T', '-p', pid])
+            assert 'dedup_bg' in ps_out, \
+                "dedup_bg thread not found in radosgw pid %s — thread died (segfault?)" % pid
+
+        log.info("dedup_bg thread is alive in all radosgw processes")
+    finally:
+        log.info("calling conn.delete_bucket() for %d buckets (can be slow)",
+                 len(bucket_names))
+        start_time = time.perf_counter()
+        for name in bucket_names:
+            conn.delete_bucket(Bucket=name)
+
+        log.info("delete_bucket() total time=%d(sec) for %d buckets",
+                 time.perf_counter() - start_time, len(bucket_names))
+
+        log.info("restore orig_max_buckets=%d", orig_max_buckets)
+        admin(['user', 'modify', '--uid', uid,
+               '--max-buckets', str(orig_max_buckets)])
