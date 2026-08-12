@@ -918,6 +918,7 @@ namespace rgw::s3vector {
     }
 
     // validate metadata key names
+    std::set<std::string> filterable_names;
     for (unsigned int i = 0; i < configuration.filterable_metadata_keys.size(); ++i) {
       const auto& name = configuration.filterable_metadata_keys[i].name;
       if (name.starts_with('_')) {
@@ -930,17 +931,29 @@ namespace rgw::s3vector {
             fmt::format("'{}' must not contain '.'", name)});
         break;
       }
+      // each key is a column of the table, and a column may be declared only once
+      if (!filterable_names.insert(name).second) {
+        errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
+            fmt::format("'{}' must not be duplicated", name)});
+        break;
+      }
     }
     if (!errors.empty()) {
       lancedb_connection_free(conn);
       ctx->result = -EINVAL;
       return;
     }
+    std::set<std::string> nonfilterable_names;
     for (unsigned int i = 0; i < configuration.non_filterable_metadata_keys.size(); ++i) {
       const auto& name = configuration.non_filterable_metadata_keys[i];
       if (name.find('.') != std::string::npos) {
         errors.push_back({fmt::format("metadataConfiguration.nonFilterableMetadataKeys[{}]", i),
             fmt::format("'{}' must not contain '.'", name)});
+        break;
+      }
+      if (!nonfilterable_names.insert(name).second) {
+        errors.push_back({fmt::format("metadataConfiguration.nonFilterableMetadataKeys[{}]", i),
+            fmt::format("'{}' must not be duplicated", name)});
         break;
       }
     }
@@ -950,23 +963,20 @@ namespace rgw::s3vector {
       return;
     }
 
-    // verify no overlap between filterable and non-filterable metadata keys
-    if (!configuration.non_filterable_metadata_keys.empty() && !configuration.filterable_metadata_keys.empty()) {
-      std::set<std::string> nonfilterable_names(
-          configuration.non_filterable_metadata_keys.begin(),
-          configuration.non_filterable_metadata_keys.end());
-      for (unsigned int i = 0; i < configuration.filterable_metadata_keys.size(); ++i) {
-        const auto& name = configuration.filterable_metadata_keys[i].name;
-        if (nonfilterable_names.count(name)) {
-          errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
-              fmt::format("'{}' appears in both filterable and non-filterable metadata keys", name)});
-        }
+    // verify no overlap between filterable and non-filterable metadata keys.
+    // the keys are looked up one by one, and not intersected, so that the error
+    // could point at the offending entry of the request
+    for (unsigned int i = 0; i < configuration.filterable_metadata_keys.size(); ++i) {
+      const auto& name = configuration.filterable_metadata_keys[i].name;
+      if (nonfilterable_names.contains(name)) {
+        errors.push_back({fmt::format("metadataConfiguration.filterableMetadataKeys[{}].name", i),
+            fmt::format("'{}' appears in both filterable and non-filterable metadata keys", name)});
       }
-      if (!errors.empty()) {
-        lancedb_connection_free(conn);
-        ctx->result = -EINVAL;
-        return;
-      }
+    }
+    if (!errors.empty()) {
+      lancedb_connection_free(conn);
+      ctx->result = -EINVAL;
+      return;
     }
 
     struct ArrowSchema c_schema;
@@ -1728,9 +1738,16 @@ namespace rgw::s3vector {
       if (has_metadata) {
         bool invalid_field = false;
         size_t num_fields = 0;
+        std::set<std::string> field_names;
         for (auto it = parser.find_first(); !it.end(); ++it) {
           auto* field = *it;
           const auto& name = field->get_name();
+          if (!field_names.insert(name).second) {
+            ldpp_dout(dpp, 1) << "ERROR: s3vector duplicate metadata field '" << name << "' in key: " << vector.key << dendl;
+            errors.push_back({fmt::format("vectors[{}].metadata.{}", vi, name), "field name must not be duplicated"});
+            invalid_field = true;
+            break;
+          }
           if (++num_fields > max_metadata_keys) {
             ldpp_dout(dpp, 1) << "ERROR: s3vector too many metadata fields for key: " << vector.key << dendl;
             errors.push_back({fmt::format("vectors[{}].metadata", vi),
