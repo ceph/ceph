@@ -42,8 +42,128 @@ static bool is_binary_string(const string& s)
 }
 
 
+/*
+ * Marks a delta as carrying range removals. The original delta format
+ * begins with the __u32 entry count of a map, so a count of 0xffffffff
+ * cannot occur and is safe to use as a discriminator.
+ */
+static constexpr __u32 DELTA_RANGE_MARKER = 0xffffffff;
+
+std::string KVMonitor::prefix_upper_bound(const string& p)
+{
+  string b = p;
+  while (!b.empty()) {
+    // keys are arbitrary byte strings, so compare unsigned
+    auto c = static_cast<unsigned char>(b.back());
+    if (c != 0xff) {
+      b.back() = static_cast<char>(c + 1);
+      return b;
+    }
+    b.pop_back();
+  }
+  return string();               // unbounded above
+}
+
+void KVMonitor::RangeDeleteOp::get_bounds(string *begin, string *end_bound) const
+{
+  if (start.empty() && end.empty()) {
+    *begin = prefix;
+    *end_bound = KVMonitor::prefix_upper_bound(prefix);
+    return;
+  }
+  *begin = start.empty() ? prefix : prefix + "/" + start;
+  *end_bound = end.empty() ? KVMonitor::prefix_upper_bound(prefix)
+                           : prefix + "/" + end;
+}
+
+bool KVMonitor::RangeDeleteOp::overlaps_prefix(const string& p) const
+{
+  string begin, end_bound;
+  get_bounds(&begin, &end_bound);
+  string p_end = KVMonitor::prefix_upper_bound(p);
+  // [begin, end_bound) vs [p, p_end), where an empty upper bound is +inf
+  if (!end_bound.empty() && end_bound <= p) {
+    return false;
+  }
+  if (!p_end.empty() && p_end <= begin) {
+    return false;
+  }
+  return true;
+}
+
+void KVMonitor::encode_delta(
+  const std::map<std::string,std::optional<ceph::buffer::list>>& key_ops,
+  const std::vector<RangeDeleteOp>& range_ops,
+  bufferlist *bl)
+{
+  if (range_ops.empty()) {
+    // original format, readable by a monitor without range support
+    encode(key_ops, *bl);
+    return;
+  }
+  encode(DELTA_RANGE_MARKER, *bl);
+  ENCODE_START(1, 1, *bl);
+  encode(key_ops, *bl);
+  encode(range_ops, *bl);
+  ENCODE_FINISH(*bl);
+}
+
+void KVMonitor::decode_delta(
+  const bufferlist& bl,
+  std::map<std::string,std::optional<ceph::buffer::list>> *key_ops,
+  std::vector<RangeDeleteOp> *range_ops)
+{
+  auto p = bl.cbegin();
+  if (bl.length() >= sizeof(__u32)) {
+    auto peek = p;
+    __u32 marker;
+    decode(marker, peek);
+    if (marker == DELTA_RANGE_MARKER) {
+      p = peek;
+      DECODE_START(1, p);
+      decode(*key_ops, p);
+      decode(*range_ops, p);
+      DECODE_FINISH(p);
+      return;
+    }
+  }
+  decode(*key_ops, p);
+}
+
+int KVMonitor::validate_range_params(const string& prefix,
+                                     const string& start,
+                                     const string& end,
+                                     std::ostream& ss)
+{
+  if (prefix.empty()) {
+    ss << "prefix cannot be empty";
+    return -EINVAL;
+  }
+  // Arguments come from the CLI; restricting them to printable ASCII also
+  // keeps the derived bounds well defined.
+  for (auto arg : {&prefix, &start, &end}) {
+    for (unsigned char c : *arg) {
+      if (c < 0x20 || c > 0x7e) {
+        ss << "arguments must be printable ASCII";
+        return -EINVAL;
+      }
+    }
+  }
+  if (!start.empty() && !end.empty() && start >= end) {
+    ss << "invalid range: start '" << start << "' >= end '" << end << "'";
+    return -EINVAL;
+  }
+  return 0;
+}
+
 KVMonitor::KVMonitor(Monitor &m, Paxos &p, const string& service_name)
   : PaxosService(m, p, service_name) {
+}
+
+bool KVMonitor::_range_ops_supported() const
+{
+  return mon.get_quorum_mon_features().contains_all(
+    ceph::features::mon::FEATURE_KV_RANGE_OPS);
 }
 
 void KVMonitor::init()
@@ -56,6 +176,7 @@ void KVMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   pending.clear();
+  pending_range_deletes.clear();
 }
 
 void KVMonitor::update_from_paxos(bool *need_bootstrap)
@@ -72,6 +193,7 @@ void KVMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
   pending.clear();
+  pending_range_deletes.clear();
 }
 
 void KVMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -81,9 +203,9 @@ void KVMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
   // record the delta for this commit point
   bufferlist bl;
-  encode(pending, bl);
+  encode_delta(pending, pending_range_deletes, &bl);
   put_version(t, version+1, bl);
-  
+
   // make actual changes
   for (auto& p : pending) {
     string key = p.first;
@@ -94,6 +216,29 @@ void KVMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       dout(20) << __func__ << " rm " << key << dendl;
       t->erase(KV_PREFIX, key);
     }
+  }
+
+  // Range removals go in as a single erase_range, which lets the store use
+  // its own range delete rather than one operation per key. Applying these
+  // after the puts above means a removal covering a key set in this same
+  // proposal wins, which matches the order the delta is interpreted in.
+  for (auto& rd : pending_range_deletes) {
+    string begin, end_bound;
+    rd.get_bounds(&begin, &end_bound);
+    if (end_bound.empty()) {
+      // Unbounded above: there is no key that sorts beyond an all-0xff
+      // prefix, so fall back to iterating what is actually there.
+      KeyValueDB::Iterator iter = mon.store->get_iterator(KV_PREFIX);
+      for (iter->lower_bound(begin); iter->valid(); iter->next()) {
+        dout(20) << __func__ << " rm " << iter->key() << dendl;
+        t->erase(KV_PREFIX, iter->key());
+      }
+      continue;
+    }
+    dout(10) << __func__ << " rm_range [" << begin << ", " << end_bound
+             << ") prefix=" << rd.prefix << " start=" << rd.start
+             << " end=" << rd.end << dendl;
+    t->erase_range(KV_PREFIX, begin, end_bound);
   }
 }
 
@@ -307,6 +452,33 @@ bool KVMonitor::prepare_command(MonOpRequestRef op)
     pending[key].reset();
     goto update;
   }
+  else if (prefix == "config-key rm-range") {
+    // A delta recording a range removal cannot be read by a monitor without
+    // range support, so require the whole quorum to have it first.
+    if (!_range_ops_supported()) {
+      err = -EOPNOTSUPP;
+      ss << "range removal requires all monitors to support the "
+         << "kv_range_ops feature";
+      goto reply;
+    }
+
+    // for rm-range the "key" argument is a prefix, not a single key
+    string start, end;
+    cmd_getval(cmdmap, "start", start);
+    cmd_getval(cmdmap, "end", end);
+
+    err = validate_range_params(key, start, end, ss);
+    if (err < 0) {
+      goto reply;
+    }
+
+    dout(10) << __func__ << " rm-range prefix=" << key
+             << " start=" << start << " end=" << end << dendl;
+
+    ss << "keys deleted";
+    pending_range_deletes.emplace_back(key, start, end);
+    goto update;
+  }
   else {
     ss << "unknown command " << prefix;
     err = -EINVAL;
@@ -318,7 +490,7 @@ reply:
 
 update:
   // see if there is an actual change
-  if (pending.empty()) {
+  if (pending.empty() && pending_range_deletes.empty()) {
     err = 0;
     goto reply;
   }
@@ -491,7 +663,38 @@ bool KVMonitor::maybe_send_update(Subscription *sub)
   m->prefix = sub->type.substr(3);
   m->version = version;
 
-  if (sub->next && sub->next > get_first_committed()) {
+  // A range removal cannot be expressed as an incremental update without
+  // naming every key it covered, which is the cost the range removal exists
+  // to avoid. Send a full dump instead: that is bounded by what remains
+  // under the prefix, not by how much was deleted.
+  // A range removal is forwarded as a range: keys are ordered, so a
+  // subscriber holding them in an ordered container can apply the interval
+  // itself. That keeps the update independent of how many keys were removed.
+  // A subscriber too old to decode a range has to be resynced instead.
+  bool sub_takes_ranges = HAVE_FEATURE(
+    sub->session->con->get_features(), SERVER_UMBRELLA);
+  bool needs_resync = false;
+
+  if (sub->next && sub->next > get_first_committed() && !sub_takes_ranges) {
+    for (version_t cur = sub->next; cur <= version && !needs_resync; ++cur) {
+      bufferlist bl;
+      int err = get_version(cur, bl);
+      ceph_assert(err == 0);
+
+      std::map<std::string,std::optional<ceph::buffer::list>> key_ops;
+      std::vector<RangeDeleteOp> range_ops;
+      decode_delta(bl, &key_ops, &range_ops);
+
+      for (auto& rd : range_ops) {
+        if (rd.overlaps_prefix(m->prefix)) {
+          needs_resync = true;
+          break;
+        }
+      }
+    }
+  }
+
+  if (sub->next && sub->next > get_first_committed() && !needs_resync) {
     // incremental
     m->incremental = true;
 
@@ -501,21 +704,45 @@ bool KVMonitor::maybe_send_update(Subscription *sub)
       ceph_assert(err == 0);
 
       std::map<std::string,std::optional<ceph::buffer::list>> pending;
-      auto p = bl.cbegin();
-      ceph::decode(pending, p);
+      std::vector<RangeDeleteOp> range_ops;
+      decode_delta(bl, &pending, &range_ops);
 
       for (auto& i : pending) {
 	if (i.first.find(m->prefix) == 0) {
 	  m->data[i.first] = i.second;
 	}
       }
+
+      for (auto& rd : range_ops) {
+        if (!rd.overlaps_prefix(m->prefix)) {
+          continue;
+        }
+        std::string begin, end_bound;
+        rd.get_bounds(&begin, &end_bound);
+        // Clamp to what the subscriber actually watches, so it never has to
+        // reason about keys outside its own prefix.
+        std::string sub_end = prefix_upper_bound(m->prefix);
+        if (begin < m->prefix) {
+          begin = m->prefix;
+        }
+        if (!sub_end.empty() &&
+            (end_bound.empty() || end_bound > sub_end)) {
+          end_bound = sub_end;
+        }
+        m->range_deletes.emplace_back(begin, end_bound);
+      }
     }
 
     dout(10) << __func__ << " incremental keys for " << m->prefix
 	     << ", v " << sub->next << ".." << version
 	     << ", " << m->data.size() << " keys"
+	     << ", " << m->range_deletes.size() << " ranges"
 	     << dendl;
   } else {
+    if (needs_resync) {
+      dout(10) << __func__ << " subscriber for " << m->prefix
+               << " cannot decode range removals, sending full dump" << dendl;
+    }
     m->incremental = false;
 
     KeyValueDB::Iterator iter = mon.store->get_iterator(KV_PREFIX);
