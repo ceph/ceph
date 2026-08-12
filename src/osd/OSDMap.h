@@ -580,7 +580,13 @@ private:
     CEPH_FEATUREMASK_SERVER_OCTOPUS |
     CEPH_FEATUREMASK_SERVER_REEF |
     CEPH_FEATUREMASK_SERVER_TENTACLE |
-    CEPH_FEATUREMASK_SERVER_UMBRELLA;
+    CEPH_FEATUREMASK_SERVER_UMBRELLA |
+    // gates crush_map.weight_shift.  unlike the other SERVER_* bits here this
+    // one is not masked out by get_encoding_features() below a matching
+    // require_osd_release: weight_shift is a trailing field that an older
+    // decoder simply skips, and it has no effect on placement, so it needs no
+    // cluster-wide commitment before it can be written.
+    CEPH_FEATUREMASK_SERVER_VAMPIRE;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
