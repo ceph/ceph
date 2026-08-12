@@ -643,10 +643,12 @@ COMMAND("osd crush rule dump "
 COMMAND("osd crush dump",
 	"dump crush map",
 	"osd", "r")
-COMMAND("osd setcrushmap name=prior_version,type=CephInt,req=false",
+COMMAND("osd setcrushmap name=prior_version,type=CephInt,req=false "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set crush map from input file",
 	"osd", "rw")
-COMMAND("osd crush set name=prior_version,type=CephInt,req=false",
+COMMAND("osd crush set name=prior_version,type=CephInt,req=false "
+	"name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set crush map from input file",
 	"osd", "rw")
 COMMAND("osd crush add-bucket "
@@ -675,6 +677,11 @@ COMMAND("osd crush add "
 	"osd", "rw")
 COMMAND("osd crush set-all-straw-buckets-to-straw2",
         "convert all CRUSH current straw buckets to use the straw2 algorithm",
+	"osd", "rw")
+COMMAND("osd crush set-weight-shift "
+	"name=shift,type=CephInt,range=0|16",
+	"scale every CRUSH weight so that a weight of 1.0 stands for 2^<shift> "
+	"TiB of raw capacity; raises the total capacity the map can describe",
 	"osd", "rw")
 COMMAND("osd crush class create "
         "name=class,type=CephString,goodchars=" CLASS_GOODCHARS,
