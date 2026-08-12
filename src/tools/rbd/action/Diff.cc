@@ -42,7 +42,7 @@ static int diff_cb(uint64_t ofs, size_t len, int exists, void *arg)
 }
 
 static int do_diff(librbd::Image& image, const char *fromsnapname,
-                   bool whole_object, Formatter *f)
+                   uint64_t from_snap_id, bool whole_object, Formatter *f)
 {
   int r;
   librbd::image_info_t info;
@@ -62,8 +62,16 @@ static int do_diff(librbd::Image& image, const char *fromsnapname,
     om.t->define_column("Type", TextTable::LEFT, TextTable::LEFT);
   }
 
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
-                          diff_cb, &om);
+  if (from_snap_id > CEPH_MAXSNAP) {
+    from_snap_id = 0;
+  }
+
+  uint32_t flags = RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT;
+  if (whole_object) {
+    flags |= RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT;
+  }
+
+  r = image.diff_iterate3(from_snap_id, 0, info.size, flags, diff_cb, &om);
   if (f) {
     f->close_section();
     f->flush(std::cout);
@@ -171,7 +179,7 @@ int execute(const po::variables_map &vm,
   }
 
   r = do_diff(image, from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
-              diff_whole_object, formatter.get());
+              from_snap_id, diff_whole_object, formatter.get());
   if (r < 0) {
     std::cerr << "rbd: diff error: " << cpp_strerror(r) << std::endl;
     return -r;
