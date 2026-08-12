@@ -75,7 +75,8 @@
             [invalidText]="roleNameError"
             helperText="Unique name used to identify this role within the account."
             i18n-helperText
-            >Role name
+          >
+            Role name
             <input
               cdsText
               cdValidate
@@ -143,7 +144,8 @@
             [invalidText]="pathError"
             helperText='Specifies the hierarchy or namespace for the role. Use "/" for the root path.'
             i18n-helperText
-            >Role path
+          >
+            Role path
             <input
               cdsText
               cdValidate
@@ -155,17 +157,6 @@
               placeholder="Enter path (/applications/)"
               [invalid]="rolePath.isInvalid"
               [invalidText]="pathError"
-            />Path
-            <input
-              cdsText
-              cdValidate
-              #rolePath="cdValidate"
-              type="text"
-              id="role_path"
-              name="role_path"
-              formControlName="role_path"
-              placeholder="Placeholder text"
-              [invalid]="rolePath.isInvalid"
             />
           </cds-text-label>
           <ng-template #pathError>
@@ -187,7 +178,8 @@
             [invalidText]="policyError"
             helperText="Defines which principals can assume this role. Enter a valid JSON policy document."
             i18n-helperText
-            >Trust policy
+          >
+            Trust policy
             <textarea
               cdsTextArea
               cdValidate
@@ -201,20 +193,6 @@
               [invalid]="policyDoc.isInvalid"
               [invalidText]="policyError"
               cdRequiredField="Trust Policy"
-            >
-Trust policy
-            <textarea
-              cdsTextArea
-              cdValidate
-              #policyDoc="cdValidate"
-              id="role_assume_policy_doc"
-              name="role_assume_policy_doc"
-              formControlName="role_assume_policy_doc"
-              placeholder="Placeholder text"
-              rows="8"
-              cols="200"
-              [invalid]="policyDoc.isInvalid"
-              [invalidText]="policyError"
             ></textarea>
           </cds-textarea-label>
           <ng-template #policyError>
