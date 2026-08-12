@@ -3177,7 +3177,7 @@ paths:
       summary: Create bootstrap peer
       tags:
       - CephfsMirror
-  /api/cephfs/mirror/daemon-status:
+  /api/cephfs/mirror/daemon/status:
     get:
       parameters: []
       responses:
@@ -4125,7 +4125,8 @@ paths:
                                           snapshot
                                         type: integer
                                       sync_time_stamp:
-                                        description: Time of the last sync
+                                        description: Wall-clock time when the snapshot
+                                          sync finished
                                         type: string
                                     required: &id031
                                     - id
@@ -4301,7 +4302,8 @@ paths:
                                           snapshot
                                         type: integer
                                       sync_time_stamp:
-                                        description: Time of the last sync
+                                        description: Wall-clock time when the snapshot
+                                          sync finished
                                         type: string
                                     required: *id031
                                     type: object

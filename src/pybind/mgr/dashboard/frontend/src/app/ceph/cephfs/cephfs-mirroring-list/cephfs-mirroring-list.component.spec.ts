@@ -215,9 +215,82 @@ describe('CephfsMirroringListComponent', () => {
         recovery_count: 1,
         sync_status: MirroringSyncStatus.SYNCING,
         sync_status_label: 'Syncing',
-        id: '1-10',
-        bytes_replicated: '1.00 MiB',
+        id: '10-peer-uuid',
+        bytes_replicated: '1 MiB',
         last_sync: expect.any(String)
+      })
+    );
+  });
+
+  it('should aggregate per-daemon stats into one peer summary row', () => {
+    const mockData: Daemon[] = [
+      {
+        daemon_id: 14318,
+        filesystems: [
+          {
+            filesystem_id: 10,
+            name: 'fs1',
+            directory_count: 3,
+            peers: [
+              {
+                remote: {
+                  cluster_name: 'clusterA',
+                  fs_name: 'fsA',
+                  client_name: 'clientA'
+                },
+                uuid: 'peer-uuid',
+                stats: { failure_count: 1, recovery_count: 0 }
+              }
+            ],
+            id: ''
+          }
+        ]
+      },
+      {
+        daemon_id: 24149,
+        filesystems: [
+          {
+            filesystem_id: 10,
+            name: 'fs1',
+            directory_count: 2,
+            peers: [
+              {
+                remote: {
+                  cluster_name: 'clusterA',
+                  fs_name: 'fsA',
+                  client_name: 'clientA'
+                },
+                uuid: 'peer-uuid',
+                stats: { failure_count: 2, recovery_count: 1 }
+              }
+            ],
+            id: ''
+          }
+        ]
+      }
+    ];
+
+    cephfsServiceMock.listDaemonStatus.mockReturnValue(of(mockData));
+    cephfsServiceMock.getMirrorStatus.mockReturnValue(of({} as any));
+
+    let emitted: MirroringRow[] = [];
+
+    component.daemonStatus$.subscribe((v) => (emitted = v || []));
+    component.ngOnInit();
+
+    expect(emitted.length).toBe(1);
+    expect(cephfsServiceMock.getMirrorStatus).toHaveBeenCalledTimes(1);
+    expect(emitted[0]).toEqual(
+      expect.objectContaining({
+        local_fs_name: 'fs1',
+        peer_uuid: 'peer-uuid',
+        filesystem_id: 10,
+        directory_count: 5,
+        failure_count: 3,
+        recovery_count: 1,
+        sync_status: MirroringSyncStatus.ERROR,
+        sync_status_label: 'Error',
+        id: '10-peer-uuid'
       })
     );
   });
