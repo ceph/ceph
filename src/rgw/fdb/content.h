@@ -18,7 +18,9 @@
 
 #include "base.h"
 
+#include <algorithm>
 #include <compare>
+#include <cstddef>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -27,15 +29,20 @@ namespace ceph::libfdb::layer::content {
 
 namespace detail {
 
-constexpr std::size_t minimum_encoded_string_segment_size(const std::string_view segment)
+// Includes the segment terminator and embedded-NUL escape bytes.
+constexpr std::size_t encoded_string_segment_size(const std::string_view segment)
 {
- // Embedded NULs add escape bytes; reserve the common no-NUL lower bound.
- return segment.size() + 1;
+ const auto embedded_nuls =
+  static_cast<std::size_t>(std::ranges::count(segment, '\0'));
+
+ return std::size(segment) + embedded_nuls + 1;
 }
 
-constexpr void append_string_segment(std::string& out, const std::string_view segment)
+constexpr void append_encoded_string_segment(std::string& out,
+                                             const std::string_view segment)
 {
- if (std::string_view::npos == segment.find('\0')) {
+ // User-readable key segments take the common bulk-append path.
+ if (!segment.contains('\0')) {
   out.append(segment);
   out.push_back('\0');
   return;
@@ -85,6 +92,20 @@ constexpr std::string_view first_segment_view(const auto& first, const auto&...)
  return segment_view(first);
 }
 
+constexpr void reserve_encoded_string_segments(std::string& out,
+                                               const auto& ...segments)
+{
+ out.reserve(out.size() +
+             (encoded_string_segment_size(segment_view(segments)) +
+              ... + std::size_t{0}));
+}
+
+constexpr void append_encoded_string_segments(std::string& out,
+                                              const auto& ...segments)
+{
+ (append_encoded_string_segment(out, segment_view(segments)), ...);
+}
+
 } // namespace detail
 
 template <typename ...Segments>
@@ -127,7 +148,11 @@ class compiled_key final
  requires concepts::stringview_convertible<Segment>
  friend constexpr compiled_key operator/(compiled_key lhs, const Segment& segment)
  {
-  detail::append_string_segment(lhs.bytes_, detail::segment_view(segment));
+  const auto segment_bytes = detail::segment_view(segment);
+
+  detail::reserve_encoded_string_segments(lhs.bytes_, segment_bytes);
+  detail::append_encoded_string_segment(lhs.bytes_, segment_bytes);
+
   return lhs;
  }
 
@@ -150,11 +175,8 @@ constexpr compiled_key assemble(const Segments& ...segments)
  detail::require_valid_keyspace_root(detail::first_segment_view(segments...));
 
  std::string out;
- out.reserve(
-   (detail::minimum_encoded_string_segment_size(detail::segment_view(segments)) +
-    ... + std::size_t{0}));
-
- (detail::append_string_segment(out, detail::segment_view(segments)), ...);
+ detail::reserve_encoded_string_segments(out, segments...);
+ detail::append_encoded_string_segments(out, segments...);
 
  return compiled_key(std::move(out));
 }
