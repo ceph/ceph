@@ -1137,6 +1137,7 @@ private:
 
 // Release-independent features
 #define CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF CompatSet::Feature(32, "nvmeof beacon diff")
+#define CEPH_MON_FEATURE_INCOMPAT_KV_RANGE_OPS CompatSet::Feature(33, "kv range ops")
 // make sure you add your feature to Monitor::get_supported_features
 
 
