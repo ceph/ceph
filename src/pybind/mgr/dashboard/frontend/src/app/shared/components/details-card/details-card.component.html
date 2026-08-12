@@ -12,21 +12,22 @@
       <div class="cds--row">
         @for (detail of getVisibleDetails(); track detail.label) {
         <div class="cds--col">
-          <div [cdsStack]="'vertical'" [gap]="2">
+          <div [cdsStack]="'vertical'"
+               [gap]="2">
             <label class="cds--type-label-01">{{ detail.label }}</label>
             <div class="cds--type-body-01">
-              @switch (detail.type) {
-                @case ('status') {
-                  <div [cdsStack]="'horizontal'" [gap]="3">
-                    <cd-icon [type]="getStatusIcon(detail)"></cd-icon>
-                    <span>{{ getDisplayValue(detail.value) }}</span>
-                  </div>
-                }
-                
-                @default {
-                  <span>{{ getDisplayValue(detail.value) }}</span>
-                }
-              }
+            @switch (detail.type) {
+            @case ('status') {
+              <div [cdsStack]="'horizontal'"
+                   [gap]="3">
+                <cd-icon [type]="getStatusIcon(detail)"></cd-icon>
+                <span>{{ getDisplayValue(detail.value) }}</span>
+              </div>
+            }
+            @default {
+              <span>{{ getDisplayValue(detail.value) }}</span>
+            }
+            }
             </div>
           </div>
         </div>

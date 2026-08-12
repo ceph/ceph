@@ -1015,20 +1015,20 @@
           >
           </cds-number>
           <ng-template #invalidPortError>
-            @if (serviceForm.showError('port', frm, 'min')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >The value must be at least 1.</span
-              >
-            }
-            @if (serviceForm.showError('port', frm, 'max')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >The value cannot exceed 65535.</span
-              >
-            }
+          @if (serviceForm.showError('port', frm, 'min')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >The value must be at least 1.</span
+            >
+          }
+          @if (serviceForm.showError('port', frm, 'max')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >The value cannot exceed 65535.</span
+            >
+          }
           </ng-template>
         </div>
         <!-- enable_auth -->
@@ -1087,14 +1087,14 @@
               id="ssl_ciphers"
               formControlName="ssl_ciphers"
             />
-            @if (serviceForm.showError('ssl_ciphers', frm, 'invalidPattern')) {
-              <span
-                class="invalid-feedback"
-                i18n
-                >Invalid cipher suite. Each cipher must be separated by '-' and each cipher suite
-                must be separated by ':'</span
-              >
-            }
+          @if (serviceForm.showError('ssl_ciphers', frm, 'invalidPattern')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Invalid cipher suite. Each cipher must be separated by '-' and each cipher suite
+              must be separated by ':'</span
+            >
+          }
           </cds-text-label>
         </div>
       }
@@ -1154,114 +1154,114 @@
               "
             ></ng-container>
             <ng-template #invalidSslCertError>
-              @if (serviceForm.showError('ssl_cert', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
-                >
-              }
-              @if (serviceForm.showError('ssl_cert', frm, 'pattern')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >Invalid SSL certificate.</span
-                >
-              }
+            @if (serviceForm.showError('ssl_cert', frm, 'required')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >This field is required.</span
+              >
+            }
+            @if (serviceForm.showError('ssl_cert', frm, 'pattern')) {
+              <span
+                class="invalid-feedback"
+                i18n
+                >Invalid SSL certificate.</span
+              >
+            }
             </ng-template>
           </div>
         }
         @if (showExternalSslKey) {
-          <div class="form-item">
-            <ng-container
-              *ngTemplateOutlet="
-                fileUploaderTextarea;
-                context: {
-                  controlName: 'ssl_key',
-                  title: 'Private Key Input',
-                  helperText:
-                    'Uploaded files will populate the private key details automatically. Or paste the PEM content directly in the text area.',
-                  description: 'Upload a .key file, or paste the private key PEM content directly.',
-                  invalidTemplate: invalidSslKeyError,
-                  isRequired: false
-                }
-              "
-            ></ng-container>
-            <ng-template #invalidSslKeyError>
-              @if (serviceForm.showError('ssl_key', frm, 'required')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >This field is required.</span
-                >
+        <div class="form-item">
+          <ng-container
+            *ngTemplateOutlet="
+              fileUploaderTextarea;
+              context: {
+                controlName: 'ssl_key',
+                title: 'Private Key Input',
+                helperText:
+                  'Uploaded files will populate the private key details automatically. Or paste the PEM content directly in the text area.',
+                description: 'Upload a .key file, or paste the private key PEM content directly.',
+                invalidTemplate: invalidSslKeyError,
+                isRequired: false
               }
-              @if (serviceForm.showError('ssl_key', frm, 'pattern')) {
-                <span
-                  class="invalid-feedback"
-                  i18n
-                  >Invalid SSL private key.</span
-                >
-              }
-            </ng-template>
-          </div>
-          <!-- ssl_ca_cert - Only show for NFS when SSL is enabled AND certificate type is external -->
-          @if (
-            serviceForm.controls.ssl.value &&
-            serviceForm.controls.certificateType.value === CertificateType.external &&
-            serviceForm.controls.service_type.value === 'nfs'
-          ) {
-            <div class="form-item">
-              <ng-container
-                *ngTemplateOutlet="
-                  fileUploaderTextarea;
-                  context: {
-                    controlName: 'ssl_ca_cert',
-                    title: 'CA Certificate Input',
-                    helperText:
-                      'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.',
-                    description:
-                      'Upload a CA certificate file, or paste the CA certificate PEM content directly.',
-                    invalidTemplate: invalidSslCaCertError,
-                    isRequired: false
-                  }
-                "
-              ></ng-container>
-              <ng-template #invalidSslCaCertError>
-                @if (serviceForm.showError('ssl_ca_cert', frm, 'required')) {
-                  <span
-                    class="invalid-feedback"
-                    i18n
-                    >This field is required.</span
-                  >
-                }
-                @if (serviceForm.showError('ssl_ca_cert', frm, 'pattern')) {
-                  <span
-                    class="invalid-feedback"
-                    i18n
-                    >Invalid CA certificate.</span
-                  >
-                }
-              </ng-template>
-            </div>
+            "
+          ></ng-container>
+          <ng-template #invalidSslKeyError>
+          @if (serviceForm.showError('ssl_key', frm, 'required')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >This field is required.</span
+          >
           }
+          @if (serviceForm.showError('ssl_key', frm, 'pattern')) {
+          <span
+            class="invalid-feedback"
+            i18n
+            >Invalid SSL private key.</span
+          >
+          }
+          </ng-template>
+        </div>
+        <!-- ssl_ca_cert - Only show for NFS when SSL is enabled AND certificate type is external -->
+        @if (
+          serviceForm.controls.ssl.value &&
+          serviceForm.controls.certificateType.value === CertificateType.external &&
+          serviceForm.controls.service_type.value === 'nfs'
+        ) {
+        <div class="form-item">
+          <ng-container
+            *ngTemplateOutlet="
+              fileUploaderTextarea;
+              context: {
+                controlName: 'ssl_ca_cert',
+                title: 'CA Certificate Input',
+                helperText:
+                  'Uploaded files will populate the CA certificate details automatically. Or paste the PEM content directly in the text area.',
+                description:
+                  'Upload a CA certificate file, or paste the CA certificate PEM content directly.',
+                invalidTemplate: invalidSslCaCertError,
+                isRequired: false
+              }
+            "
+          ></ng-container>
+          <ng-template #invalidSslCaCertError>
+            @if (serviceForm.showError('ssl_ca_cert', frm, 'required')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >This field is required.</span
+            >
+            }
+            @if (serviceForm.showError('ssl_ca_cert', frm, 'pattern')) {
+            <span
+              class="invalid-feedback"
+              i18n
+              >Invalid CA certificate.</span
+            >
+            }
+          </ng-template>
+        </div>
+        }
         }
       }
 
       <!-- RGW QAT Compression -->
       @if (!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'rgw') {
-        <div class="form-item"
-             formGroupName="qat">
-          <cds-select formControlName="compression"
-                      name="compression"
-                      label="QAT compression mode"
-                      id="compression"
-                      helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
-                      i18n-helperText>
-            <option *ngFor="let option of qatCompressionOptions"
-                    [value]="option.value"
-                    i18n>{{ option.label }}</option>
-          </cds-select>
-        </div>
+      <div class="form-item"
+           formGroupName="qat">
+        <cds-select formControlName="compression"
+                    name="compression"
+                    label="QAT compression mode"
+                    id="compression"
+                    helperText="QAT compression is optional. Choose Hardware or Software to enable compression, or select None to disable it."
+                    i18n-helperText>
+          <option *ngFor="let option of qatCompressionOptions"
+                  [value]="option.value"
+                  i18n>{{ option.label }}</option>
+        </cds-select>
+      </div>
       }
       <!-- Grafana -->
       @if (serviceForm.controls.service_type.value === 'grafana') {
@@ -1338,15 +1338,15 @@
           </fieldset>
         </div>
         @if (serviceForm.controls.enable_mtls.value) {
-          <cd-certificate-authority-form
-            [formGroup]="serviceForm"
-            [editing]="editing"
-            [currentCertificate]="currentCertificate"
-            [certMode]="CertMode.externalOnly"
-            [showCertSourceChangeWarning]="showCertSourceChangeWarning"
-            (certificateTypeChange)="onCertificateTypeChange($event)"
-          >
-          </cd-certificate-authority-form>
+        <cd-certificate-authority-form
+          [formGroup]="serviceForm"
+          [editing]="editing"
+          [currentCertificate]="currentCertificate"
+          [certMode]="CertMode.externalOnly"
+          [showCertSourceChangeWarning]="showCertSourceChangeWarning"
+          (certificateTypeChange)="onCertificateTypeChange($event)"
+        >
+        </cd-certificate-authority-form>
 
       @if (serviceForm.controls.certificateType.value === CertificateType.external) {
       <!-- root_ca_cert -->
