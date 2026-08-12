@@ -25,6 +25,7 @@ using ConsistencyChecker = ceph::consistency::ConsistencyChecker;
 
 using GenerationType = ceph::io_exerciser::data_generation::GenerationType;
 using MapextOp = ceph::io_exerciser::MapextOp;
+using WriteZeroDataOp = ceph::io_exerciser::WriteZeroDataOp;
 
 namespace {
 template <typename S>
@@ -246,6 +247,8 @@ void RadosIo::applyIoOp(IoOp& op) {
     case OpType::Zero:
       [[fallthrough]];
     case OpType::Zero2:
+      [[fallthrough]];
+    case OpType::WriteZeroData:
       [[fallthrough]];
     case OpType::Mapext:
       applyReadWriteOp(op);
@@ -585,6 +588,22 @@ void RadosIo::applyReadWriteOp(IoOp& op) {
       start_io();
       DoubleZeroOp& zeroOp = static_cast<DoubleZeroOp&>(op);
       applyZeroOp(zeroOp);
+      break;
+    }
+    case OpType::WriteZeroData: {
+      start_io();
+      WriteZeroDataOp& wzdOp = static_cast<WriteZeroDataOp&>(op);
+      auto op_info = std::make_shared<AsyncOpInfo<1>>(wzdOp.offset, wzdOp.length);
+      op_info->bufferlist[0].append_zero(wzdOp.length[0] * block_size);
+      librados::ObjectWriteOperation wop;
+      wop.write(wzdOp.offset[0] * block_size, op_info->bufferlist[0]);
+      auto writezerodata_cb = [this](boost::system::error_code ec, version_t ver) {
+        ceph_assert(ec == boost::system::errc::success);
+        finish_io();
+      };
+      librados::async_operate(asio.get_executor(), io, primary_oid,
+                              std::move(wop), 0, nullptr, writezerodata_cb);
+      num_io++;
       break;
     }
     case OpType::Mapext: {

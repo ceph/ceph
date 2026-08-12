@@ -28,6 +28,7 @@ using SingleTruncateWriteOp = ceph::io_exerciser::SingleTruncateWriteOp;
 using DoubleTruncateWriteOp = ceph::io_exerciser::DoubleTruncateWriteOp;
 using TripleTruncateWriteOp = ceph::io_exerciser::TripleTruncateWriteOp;
 using ZeroOp = ceph::io_exerciser::ZeroOp;
+using WriteZeroDataOp = ceph::io_exerciser::WriteZeroDataOp;
 using DoubleZeroOp = ceph::io_exerciser::DoubleZeroOp;
 using MapextOp = ceph::io_exerciser::MapextOp;
 using WriteAndZeroOp = ceph::io_exerciser::WriteAndZeroOp;
@@ -190,6 +191,8 @@ std::string ceph::io_exerciser::ReadWriteOp<opType, numIOs>::to_string(
       [[fallthrough]];
     case OpType::Zero2:
       return fmt::format("Zero{} ({})", numIOs, offset_length_desc);
+    case OpType::WriteZeroData:
+      return fmt::format("WriteZeroData ({})", offset_length_desc);
     case OpType::Mapext:
       return fmt::format("Mapext ({})", offset_length_desc);
     default:
@@ -368,6 +371,14 @@ ZeroOp::ZeroOp(uint64_t offset, uint64_t length)
 
 std::unique_ptr<ZeroOp> ZeroOp::generate(uint64_t offset, uint64_t length) {
   return std::make_unique<ZeroOp>(offset, length);
+}
+
+WriteZeroDataOp::WriteZeroDataOp(uint64_t offset, uint64_t length)
+    : ReadWriteOp<OpType::WriteZeroData, 1>({offset}, {length}) {}
+
+std::unique_ptr<WriteZeroDataOp> WriteZeroDataOp::generate(uint64_t offset,
+                                                            uint64_t length) {
+  return std::make_unique<WriteZeroDataOp>(offset, length);
 }
 
 MapextOp::MapextOp(uint64_t offset, uint64_t length)

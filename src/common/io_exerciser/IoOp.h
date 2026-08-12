@@ -224,6 +224,13 @@ class ZeroOp : public ReadWriteOp<OpType::Zero, 1> {
   static std::unique_ptr<ZeroOp> generate(uint64_t offset, uint64_t length);
 };
 
+class WriteZeroDataOp : public ReadWriteOp<OpType::WriteZeroData, 1> {
+ public:
+  WriteZeroDataOp(uint64_t offset, uint64_t length);
+  static std::unique_ptr<WriteZeroDataOp> generate(uint64_t offset,
+                                                    uint64_t length);
+};
+
 class MapextOp : public ReadWriteOp<OpType::Mapext, 1> {
  public:
   MapextOp(uint64_t offset, uint64_t length);
