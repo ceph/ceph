@@ -215,8 +215,30 @@ void SimpleSchedulerObjectDispatch<I>::shut_down(Context* on_finish) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 5) << dendl;
 
+  {
+    std::lock_guard locker{m_lock};
+
+    // dispatch anything still being delayed -- otherwise the associated
+    // completion contexts would be leaked
+    dispatch_all_delayed_requests();
+
+    // ensure a scheduled task cannot fire (and post a dispatch to the asio
+    // engine) after the dispatcher has deleted us
+    std::lock_guard timer_locker{*m_timer_lock};
+    if (m_timer_task != nullptr) {
+      ldout(cct, 20) << "canceling task " << m_timer_task << dendl;
+
+      bool canceled = m_timer->cancel_event(m_timer_task);
+      ceph_assert(canceled);
+      m_timer_task = nullptr;
+    }
+  }
+
   m_flush_tracker->shut_down();
-  on_finish->complete(0);
+
+  // a task that already expired may have posted a dispatch to the asio engine
+  // -- wait for it to complete before we are deleted
+  m_async_op_tracker.wait_for_ops(on_finish);
 }
 
 template <typename I>
@@ -547,10 +569,18 @@ void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
       ldout(cct, 20) << "running timer task " << m_timer_task << dendl;
 
       m_timer_task = nullptr;
+
+      // the dispatch is deferred to the asio engine -- track it so that
+      // shut_down cannot complete (and the dispatcher delete us) while it
+      // is still pending
+      m_async_op_tracker.start_op();
       m_image_ctx->asio_engine->post(
         [this, object_no]() {
-          std::lock_guard locker{m_lock};
-          dispatch_delayed_requests(object_no);
+          {
+            std::lock_guard locker{m_lock};
+            dispatch_delayed_requests(object_no);
+          }
+          m_async_op_tracker.finish_op();
         });
     });
 

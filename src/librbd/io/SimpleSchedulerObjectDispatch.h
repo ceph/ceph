@@ -4,6 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_SIMPLE_SCHEDULER_OBJECT_DISPATCH_H
 #define CEPH_LIBRBD_IO_SIMPLE_SCHEDULER_OBJECT_DISPATCH_H
 
+#include "common/AsyncOpTracker.h"
 #include "common/ceph_mutex.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
@@ -203,6 +204,10 @@ private:
   std::list<ObjectRequestsRef> m_dispatch_queue;
   Context *m_timer_task = nullptr;
   std::unique_ptr<LatencyStats> m_latency_stats;
+
+  // tracks dispatches posted to the asio engine by an expired timer task so
+  // that shut_down can wait for them before we are deleted
+  AsyncOpTracker m_async_op_tracker;
 
   bool try_delay_write(uint64_t object_no, uint64_t object_off,
                        ceph::bufferlist&& data, IOContext io_context,
