@@ -177,6 +177,8 @@
           "has_v5_rules": 0,
           "has_msr_rules": 0
       },
+      "weight_shift": 0,
+      "weight_unit_bytes": 1099511627776,
       "choose_args": {
           "1": [],
           "2": [
