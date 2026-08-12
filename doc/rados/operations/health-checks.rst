@@ -587,6 +587,17 @@ weight values for ``straw`` buckets.
 The CRUSH map should be updated to use the newer method (that is:
 ``straw_calc_version=1``). For more information, see :ref:`crush-map-tunables`.
 
+CRUSH_WEIGHT_LIMIT
+__________________
+
+A bucket weight in the CRUSH map is close to the largest value the fixed point
+weight format can hold, and the weight shift is already at its maximum, so the
+monitors cannot make more room by scaling the weights down.
+
+No further capacity can be added under the affected bucket. Splitting the
+subtree so that its weight is spread over more than one bucket will help. For
+more information, see :ref:`weight-shift`.
+
 CACHE_POOL_NO_HIT_SET
 _____________________
 

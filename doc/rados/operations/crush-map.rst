@@ -193,7 +193,9 @@ relative proportion of the total data that should be stored by that device or
 hierarchy subtree. Weights are set at the leaves, indicating the size of the
 device. These weights automatically sum in an 'up the tree' direction: that is,
 the weight of the ``root`` node will be the sum of the weights of all devices
-contained under it. Weights are typically measured in tebibytes (TiB).
+contained under it. Weights are typically measured in tebibytes (TiB). Very
+large clusters scale the stored weights down so that the sums keep fitting in
+the fixed point format CRUSH uses; see :ref:`weight-shift`.
 
 To get a simple view of the cluster's CRUSH hierarchy, including weights, run
 the following command:
@@ -781,6 +783,80 @@ form:
 .. prompt:: bash $
 
    ceph osd crush rule rm {rule-name}
+
+.. _weight-shift:
+
+Weight shift
+============
+
+CRUSH stores every weight as a 16.16 fixed point number, and the weight of a
+bucket is the sum of the weights of everything below it. That sum has to fit in
+32 bits, so no bucket weight can exceed 65535.0, and no bucket that another
+bucket refers to can exceed 32767.0 (above that, the item weight would be read
+as a negative number and the bucket would win every draw).
+
+Because a weight of 1.0 conventionally stands for 1 TiB, those limits used to
+put a ceiling of roughly 65 PiB on the raw capacity a single ``root`` could
+describe. The ``weight_shift`` property of the CRUSH map lifts it: a weight of
+1.0 stands for ``2^weight_shift`` TiB, so raising the shift by one doubles the
+capacity the map can describe.
+
+Raising the shift by one also halves every weight stored in the map, which
+leaves the capacity each weight stands for unchanged. This does not move data:
+CRUSH only ever compares the weights of items within a single bucket, so
+scaling every weight by the same factor leaves every one of those comparisons
+alone. It also needs nothing from clients -- ``weight_shift`` never enters the
+placement calculation, so a client that has never heard of it computes exactly
+the same mappings.
+
+The weights that the CLI accepts and reports do not change either. ``ceph osd
+tree``, ``ceph osd df`` and ``ceph osd crush reweight`` all stay on the
+original scale of 1.0 per TiB, whatever the shift is; only the raw numbers in
+``crushtool`` output and in ``ceph osd crush dump`` are scaled.
+
+Clusters created before ``weight_shift`` existed have a shift of 0, which is
+the historical behavior, and they keep it until they actually need more room.
+The monitors raise the shift on their own when capacity is added that would
+otherwise overflow a bucket weight, logging a message to the cluster log when
+they do. Every monitor has to support ``weight_shift`` before they will,
+because a monitor that does not would drop the property when it re-encoded the
+map. OSDs and clients need no such support.
+
+To see the current value, run:
+
+.. prompt:: bash $
+
+   ceph osd crush dump | jq '.weight_shift, .weight_unit_bytes'
+
+To set it by hand -- for example to give a cluster headroom ahead of a large
+expansion -- run a command of the following form:
+
+.. prompt:: bash $
+
+   ceph osd crush set-weight-shift {shift}
+
+The shift may be between 0 and 16. Lowering it fails with ``ERANGE`` if the
+resulting weights would no longer fit.
+
+Because rescaling has to round each weight to the nearest raw unit, it can
+perturb a very small number of mappings -- each weight moves by at most half a
+raw unit, which is the same granularity that ordinary reweighting already works
+at. In practice measurements show no movement at all for shift increases of up
+to four (a sixteenfold capacity increase).
+
+The limit on the weight of any single device is not affected by the shift.
+``crushtool`` refuses to compile a map in which one device is worth more than
+1000 TiB, and that is a limit on the capacity the weight stands for rather than
+on the number written in the map: at a shift of 4 the same limit is a raw
+weight of 62.5. The shift exists to make room for the *sums* of many device
+weights, not to make an implausible individual weight acceptable.
+
+.. note:: If you edit a CRUSH map by hand, keep the ``tunable weight_shift``
+   line that ``crushtool -d`` emits. Without it the map declares a shift of 0,
+   which would silently change how much capacity every weight in it stands
+   for. ``ceph osd setcrushmap`` refuses such a map unless you pass
+   ``--yes-i-really-mean-it``.
+
 
 .. _crush-map-tunables:
 
