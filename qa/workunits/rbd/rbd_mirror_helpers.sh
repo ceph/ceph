@@ -2867,6 +2867,23 @@ wait_for_group_id_changed()
     return 1
 }
 
+wait_for_group_id_not_changed()
+{
+  local cluster=$1
+  local group_spec=$2
+  local orig_group_id=$3
+  local s
+
+  for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+    sleep "${s}"
+    if test_group_id_changed "${cluster}" "${group_spec}" "${orig_group_id}"; then
+      fail "group with name ${group_spec} changed id unexpectedly"
+      return 1
+    fi
+  done
+  return 0
+}
+
 test_group_snap_present()
 {
     local cluster=$1
