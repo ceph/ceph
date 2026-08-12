@@ -186,11 +186,10 @@ Field names always refer to top-level keys of the metadata document. Nested
 documents cannot be addressed, and a name that contains a ``.`` is rejected with
 a validation error, since a metadata key may not contain a ``.`` either.
 
-A field that was declared in ``nonFilterableMetadataKeys`` may not appear in a filter at all,
-and a field that was declared in ``filterableMetadataKeys`` is matched against its column
-rather than against the metadata document. A field which appeared in neither of these lists
-is matched against the metadata document (post-filtering). (See: `Pre-Filtering and
-Post-Filtering`_.)
+A field that was declared in ``nonFilterableMetadataKeys`` must not appear in a filter at all.
+A field that was declared in ``filterableMetadataKeys`` would be used in pre-filtering.
+A field which appeared in neither of these list would be used in post-filtering.
+See: `Pre-Filtering and Post-Filtering`_.
 
 Comparison Operators
 ````````````````````
@@ -227,7 +226,7 @@ scalar values::
    {"genre": {"$in": ["rock"]}}          // a single-element list is fine
 
 The array must hold scalars only, and it must not be empty. For a field that is
-not a filterable column, all the elements must also be of the same JSON type,
+not filterable, all the elements must also be of the same JSON type,
 since the type of the elements determines how the metadata field is read. These
 are rejected::
 
@@ -238,9 +237,9 @@ are rejected::
    {"genre": {"$in": [null, "rock"]}}    // null element
    {"genre": {"$in": [{"a": "b"}]}}      // object element
 
-For a filterable column, each element is converted to the declared type of the
-column instead, so a list such as ``["rock", 42]`` is accepted on a ``String``
-column and read as ``["rock", "42"]``.
+For a filterable field, each element is converted to the declared type of the
+field instead, so a list such as ``["rock", 42]`` is accepted on a ``String``
+field and read as ``["rock", "42"]``.
 
 Note that ``$in`` tests the *value of the field*, not membership in a stored
 list. See `Lists in the Metadata`_ below.
@@ -262,10 +261,9 @@ Anything else is rejected, including a quoted boolean::
 For a field stored in the metadata document, ``$exists`` only checks that the
 key is there; its value may be of any type, including an array or a nested
 object. A vector that was stored without any metadata has no keys at all, so
-``$exists: false`` matches it. For a filterable column, ``$exists`` checks that
-the column is not null for that vector. A column that was declared with ``mustExist`` is never null, so
-``$exists: true`` matches every vector of the index and ``$exists: false``
-matches none.
+``$exists: false`` matches it. For a filterable field, that was declared with
+``mustExist`` the key is always there, so ``$exists: true`` matches every
+vector of the index and ``$exists: false`` matches none.
 
 Logical Operators
 `````````````````
@@ -293,8 +291,8 @@ The array must be non-empty, and each of its elements must be a filter object::
 There is no ``$not`` operator. A negation is expressed with ``$ne``, ``$nin``
 or ``$exists: false``.
 
-``$or`` has an additional restriction when some of the fields are filterable
-columns. See: `Post-Filtering Limitations`_.
+``$or`` has an additional restriction when some of the fields are filterable.
+See: `Post-Filtering Limitations`_.
 
 Value Types
 ```````````
@@ -309,15 +307,15 @@ A condition therefore only matches when the types agree::
    {"genre": {"$eq": 42}}       // does not match it: "genre" is read as a number
    {"active": {"$eq": "true"}}  // does not match it: "active" is read as a string
 
-For a field that is declared as a filterable column, the declared type of the
-column wins, and the value from the filter is converted to it. Quoting does not
+For a field that is declared as a filterable field, the declared type of the
+field wins, and the value from the filter is converted to it. Quoting does not
 matter, and a value that cannot be converted is rejected::
 
-   {"year": {"$eq": "2021"}}    // Number column: accepted, converted to 2021
-   {"genre": {"$eq": 42}}       // String column: accepted, converted to "42"
-   {"active": {"$eq": "true"}}  // Boolean column: accepted, converted to true
-   {"year": {"$eq": "recent"}}  // Number column: rejected
-   {"active": {"$eq": "yes"}}   // Boolean column: rejected
+   {"year": {"$eq": "2021"}}    // Number field: accepted, converted to 2021
+   {"genre": {"$eq": 42}}       // String field: accepted, converted to "42"
+   {"active": {"$eq": "true"}}  // Boolean field: accepted, converted to true
+   {"year": {"$eq": "recent"}}  // Number field: rejected
+   {"active": {"$eq": "yes"}}   // Boolean field: rejected
 
 Lists in the Metadata
 `````````````````````
@@ -332,7 +330,7 @@ compares equal to a scalar. So with the metadata above::
    {"tags": "live"}                 // does not match
    {"tags": {"$in": ["live"]}}      // does not match
 
-This holds for filterable columns as well, and there it is an error rather than
+This holds for filterable fields as well, and there it is an error rather than
 a non-match: a key declared with one of the list types (``StringList``,
 ``NumberList``, ``BooleanList``) supports ``$exists`` only, and any other
 operator on it is rejected with a validation error.
@@ -352,8 +350,8 @@ condition with ``$exists``::
 
    {"$or": [{"genre": {"$ne": "rock"}}, {"genre": {"$exists": false}}]}
 
-The same applies to a filterable column that was not declared with
-``mustExist``, and is null for vectors whose metadata did not have that key.
+The same applies to a filterable field that was not declared with
+``mustExist``.
 
 Pre-Filtering and Post-Filtering
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -367,7 +365,7 @@ dropped, so the query may return fewer than ``topK`` results even when enough
 matching vectors exist in the index.
 
 To avoid that, an index may declare some metadata fields as *filterable*. A
-filterable field is stored as a real column of the index, and a filter over it
+filterable field is stored as a real field of the index, and a filter over it
 is pushed down into the vector search itself. This is called *pre-filtering*:
 only matching vectors are considered by the search, so a query returns ``topK``
 results whenever the index holds at least ``topK`` matching vectors.
@@ -401,13 +399,13 @@ is never guaranteed, since the matching vectors may all be far away from the
 query vector.
 
 The ``$or`` operator has an additional limitation: its branches must be either
-all filterable columns or all JSON metadata fields. A ``$or`` that mixes the
+all filterable fields or all JSON metadata fields. A ``$or`` that mixes the
 two cannot be evaluated correctly, because one half of the expression would be
 applied before the search and the other half after it, and the request is
 rejected with a validation error. To run such a query, set ``postFiltering`` to
 ``true`` in the ``QueryVectors`` request. This is an extension to the AWS S3
 Vectors API, which forces the whole filter to be evaluated as post-filtering:
-declared filterable columns are ignored, and every condition is evaluated
+declared filterable fields are ignored, and every condition is evaluated
 against the JSON metadata document.
 
 S3 Vectors REST API
@@ -636,7 +634,7 @@ Request parameters:
   that may not be used in a query filter. A filter that references one of them
   is rejected. Key names must not contain a ``.``.
 - ``metadataConfiguration.filterableMetadataKeys``: Up to 10 metadata keys that
-  are stored as columns of the index, so that filters over them are evaluated
+  are stored as fields of the index, so that filters over them are evaluated
   before the vector search. (This is an extension to the S3 Vectors API. See:
   `Metadata Filtering`_.) Each entry has:
 
@@ -928,7 +926,7 @@ Request parameters:
 - ``returnMetadata``: If "true", the vector metadata is returned. (This is
   "false" by default.)
 - ``postFiltering``: If "true", the whole filter is evaluated against the JSON
-  metadata after the search, and filterable columns are ignored. (This is
+  metadata after the search, and filterable fields are ignored. (This is
   "false" by default, and is an extension to the S3 Vectors API. See:
   `Post-Filtering Limitations`_.)
 
