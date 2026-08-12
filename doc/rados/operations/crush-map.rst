@@ -193,7 +193,8 @@ relative proportion of the total data that should be stored by that device or
 hierarchy subtree. Weights are set at the leaves, indicating the size of the
 device. These weights automatically sum in an 'up the tree' direction: that is,
 the weight of the ``root`` node will be the sum of the weights of all devices
-contained under it. Weights are typically measured in tebibytes (TiB).
+contained under it. Weights are typically measured in tebibytes (TiB). Very
+large clusters scale the stored weights down to fit; see :ref:`weight-shift`.
 
 To get a simple view of the cluster's CRUSH hierarchy, including weights, run
 the following command:
@@ -781,6 +782,57 @@ form:
 .. prompt:: bash $
 
    ceph osd crush rule rm {rule-name}
+
+.. _weight-shift:
+
+Weight shift
+============
+
+CRUSH stores weights as 16.16 fixed point numbers, and a bucket's weight is the
+sum of everything below it. A bucket's weight can be at most 65535.0, or
+32767.0 if another bucket contains it. At 1.0 per TiB, that limits a single
+``root`` to about 65 PiB.
+
+The CRUSH map's ``weight_shift`` raises that limit: a stored weight of 1.0
+stands for ``2^weight_shift`` TiB, and raising the shift by one halves every
+stored weight. Placement depends only on the ratios between weights, so this
+moves no data (apart from rounding each weight to the nearest raw unit), and
+clients need no support for it.
+
+The CLI is unaffected: ``ceph osd tree``, ``ceph osd df`` and ``ceph osd crush
+reweight`` always use 1.0 per TiB. Only the raw weights shown by ``crushtool``
+and ``ceph osd crush dump`` are scaled.
+
+The shift is 0 by default. The monitors raise it when added capacity would
+overflow a bucket, and log a message when they do. This requires
+``require_osd_release`` to be set to a release that supports ``weight_shift``,
+because every monitor and OSD must be able to store it.
+
+To see the current value:
+
+.. prompt:: bash $
+
+   ceph osd crush dump | jq '.weight_shift, .weight_unit_bytes'
+
+To set it by hand, for example ahead of a large expansion:
+
+.. prompt:: bash $
+
+   ceph osd crush set-weight-shift {shift}
+
+The shift can be 0 to 16. Setting it fails with ``EPERM`` until
+``require_osd_release`` supports it, and lowering it fails with ``ERANGE`` if
+the weights would no longer fit.
+
+The limit on a single device's weight applies to the stored weight, so the
+largest device grows with the shift: ``crushtool`` accepts devices up to 1000
+TiB at a shift of 0, and up to 16000 TiB at a shift of 4.
+
+.. note:: When editing a CRUSH map by hand, keep the ``tunable weight_shift``
+   line that ``crushtool -d`` emits. Without it, every weight in the map would
+   stand for a different capacity. ``ceph osd setcrushmap`` refuses such a map
+   unless ``--yes-i-really-mean-it`` is passed.
+
 
 .. _crush-map-tunables:
 
