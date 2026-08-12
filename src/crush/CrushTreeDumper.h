@@ -240,8 +240,8 @@ namespace CrushTreeDumper {
 	  for (unsigned opos = 0;
 	       opos < cmap.args[bidx].weight_set_positions;
 	       ++opos) {
-	    float w = (float)cmap.args[bidx].weight_set[opos].weights[bpos] /
-	      (float)0x10000;
+	    float w = (float)crush->raw_to_nominal_weightf(
+	      cmap.args[bidx].weight_set[opos].weights[bpos]);
 	    f->dump_float("weight", w);
 	  }
 	  f->close_section();
