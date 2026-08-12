@@ -868,22 +868,42 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         snapshotScheduleService.delete.mockReturnValue(of({}));
         snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of([]));
         component.fsName = 'test-fs';
+        component.selectedPath = { path: '/mirror/path1' } as any;
+        component.schedulePolicies = [
+          {
+            path: '/volumes/group/subvol/uuid/..',
+            schedule: '1h',
+            removeId: '/volumes/group/subvol/uuid/..@1h'
+          } as any
+        ];
 
         const policy = {
-          path: '/path1',
+          path: '/volumes/group/subvol/uuid/..',
           schedule: '1h',
           start: '2024-01-01T00:00:00Z',
-          fs: 'test-fs'
+          fs: 'test-fs',
+          subvol: 'subvol',
+          group: 'group',
+          removeId: '/volumes/group/subvol/uuid/..@1h'
         };
 
         component.removeSchedulePolicy(policy as any);
 
         expect(snapshotScheduleService.delete).toHaveBeenCalledWith({
-          path: '/path1',
+          path: '/volumes/group/subvol/uuid/..',
           schedule: '1h',
           start: '2024-01-01T00:00:00Z',
-          fs: 'test-fs'
+          fs: 'test-fs',
+          retentionPolicy: undefined,
+          subvol: 'subvol',
+          group: 'group'
         });
+        expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
+          '/mirror/path1',
+          'test-fs',
+          false
+        );
+        expect(component.schedulePolicies).toEqual([]);
         expect(component.removingSchedule).toBe('');
       });
 
@@ -1164,6 +1184,23 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
       });
     });
 
+    describe('buildRetentionPolicyString', () => {
+      it('should build retention policy string for API delete calls', () => {
+        const result = component['buildRetentionPolicyString']({ h: 24, d: 7 });
+
+        expect(result).toBe('24-h|7-d');
+      });
+
+      it('should return undefined for string retention values', () => {
+        expect(component['buildRetentionPolicyString']('-')).toBeUndefined();
+      });
+
+      it('should return undefined for empty retention', () => {
+        expect(component['buildRetentionPolicyString'](undefined)).toBeUndefined();
+        expect(component['buildRetentionPolicyString']({})).toBeUndefined();
+      });
+    });
+
     describe('buildRetentionCopy', () => {
       it('should build retention copy for hourly retention', () => {
         const retention = { h: 24 };
@@ -1286,6 +1323,42 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
           actionDescription: 'remove'
         })
       );
+    });
+
+    it('should delete snapshot schedules before removing the mirror path', () => {
+      const modalService = TestBed.inject(ModalCdsService) as any;
+      const snapshotScheduleService = TestBed.inject(CephfsSnapshotScheduleService) as any;
+      snapshotScheduleService.getSnapshotSchedule.mockReturnValue(
+        of([
+          {
+            path: '/volumes/group/subvol/uuid/..',
+            rel_path: '/path1',
+            schedule: '1h',
+            start: '2024-01-01T00:00:00Z',
+            fs: 'test-fs',
+            subvol: 'subvol',
+            group: 'group'
+          }
+        ])
+      );
+      snapshotScheduleService.delete.mockReturnValue(of({}));
+      cephfsService.removeMirrorDirectory.mockReturnValue(of({}));
+      component.selection = new CdTableSelection([{ path: '/path1' }]);
+      component.fsName = 'test-fs';
+
+      component.removePathModal();
+      modalService.show.mock.calls[0][1].submitActionObservable().subscribe();
+
+      expect(snapshotScheduleService.delete).toHaveBeenCalledWith({
+        path: '/volumes/group/subvol/uuid/..',
+        schedule: '1h',
+        start: '2024-01-01T00:00:00Z',
+        fs: 'test-fs',
+        retentionPolicy: undefined,
+        subvol: 'subvol',
+        group: 'group'
+      });
+      expect(cephfsService.removeMirrorDirectory).toHaveBeenCalledWith('test-fs', '/path1');
     });
   });
 });
