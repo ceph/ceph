@@ -22,8 +22,8 @@ are provided, and are marked as such throughout this document.
 Requests are sent as ``POST`` requests with a JSON body, and are signed using
 AWS Signature Version 4 with the ``s3vectors`` service name.
 
-.. note:: To enable the S3 Vectors API, the ``rgw_enable_apis`` configuration
-   parameter should contain: "s3vectors".
+.. note:: To enable the S3 Vectors API, the :confval:`rgw_enable_apis`
+   configuration parameter should contain: "s3vectors".
 
 Storage Backends
 ----------------
@@ -46,12 +46,12 @@ Three backends are supported:
   access to it with its credentials. Using this option may give better visibility
   to the data being stored, allow for quota management, rate-limiting etc.
 
-  .. tip:: using ``http://localhost:<port>`` (where ``<port>`` is the port
-  configured for the RGW's frontend) lets the RGW send the S3 requests to itself.
-  make sure to set: ``rgw_s3vector_s3_allow_http = true`` in this case.
+  .. tip:: Using ``http://localhost:<port>`` (where ``<port>`` is the port
+     configured for the RGW's frontend) lets the RGW send the S3 requests to
+     itself. Make sure to set: ``rgw_s3vector_s3_allow_http = true`` in this case.
 
-  .. tip:: setting the endpoint to be the RGW's load balancer (if one exists),
-  may achieve better load distribution.
+  .. tip:: Setting the endpoint to be the RGW's load balancer (if one exists)
+     may achieve better load distribution.
 
 - ``local``: LanceDB files are stored on the local filesystem of the RGW
   process. This backend is intended for testing and single RGW setups only:
@@ -140,7 +140,8 @@ The backing bucket of a vector bucket is a regular S3 bucket, and its own sync
 configuration applies to it. It should not be synced. See:
 `Recommended Bucket Configuration`_.
 
- .. note:: When an ``s3`` backend is used, all endnpoits must belong to the same zone/site.
+.. note:: When an ``s3`` backend is used, all endpoints must belong to the same
+   zone/site.
 
 Metadata Filtering
 ------------------
@@ -632,15 +633,17 @@ Request parameters:
   ``euclidean``.
 - ``metadataConfiguration.nonFilterableMetadataKeys``: Up to 10 metadata keys
   that may not be used in a query filter. A filter that references one of them
-  is rejected. Key names must not contain a ``.``.
+  is rejected. Key names must not contain a ``.``, and must not be repeated in
+  the list.
 - ``metadataConfiguration.filterableMetadataKeys``: Up to 10 metadata keys that
   are stored as fields of the index, so that filters over them are evaluated
   before the vector search. (This is an extension to the S3 Vectors API. See:
   `Metadata Filtering`_.) Each entry has:
 
   - ``name``: The metadata key. Must not start with ``_`` and must not contain
-    a ``.``. A key may not appear both in ``filterableMetadataKeys`` and in
-    ``nonFilterableMetadataKeys``.
+    a ``.``. A key must not be repeated in the list, even with a different
+    ``type`` or ``mustExist``, and may not appear both in
+    ``filterableMetadataKeys`` and in ``nonFilterableMetadataKeys``.
   - ``type``: The type of the value. (This is ``String`` by default.) The list
     types may be stored and returned but cannot be used in a filter.
   - ``mustExist``: If "true", every vector written to the index must have this
@@ -786,12 +789,12 @@ Request parameters:
     of the index.
   - ``metadata``: An optional JSON object attached to the vector. It may hold up
     to 50 top-level fields, and must not exceed 40KB. Field names must not
-    contain a ``.``, and ``null`` values are not supported. The field names and
-    the ``null`` values are validated for the top-level fields of the document
-    only: a nested document may hold names with a ``.`` and ``null`` values, but
-    its fields cannot be used in a filter. (See: `Filter Syntax`_.) Any field
-    that was declared in ``filterableMetadataKeys`` must hold a value of the
-    declared type, and must be present if the key was declared with
+    contain a ``.``, must not be duplicated, and ``null`` values are not
+    supported. These are validated for the top-level fields of the document only:
+    a nested document may hold duplicate names, names with a ``.``, and ``null``
+    values, but its fields cannot be used in a filter. (See: `Filter Syntax`_.)
+    Any field that was declared in ``filterableMetadataKeys`` must hold a value
+    of the declared type, and must be present if the key was declared with
     ``mustExist``.
 
 An empty response body is returned on success.
