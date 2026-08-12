@@ -32,8 +32,8 @@ tasks:
       client.0:
         - nvmeof/fio_test.sh --rbd_iostat
       client.1:
-        - nvmeof/basic_tests.sh 
-        - nvmeof/cross_namespace_copy_test.sh
+        - nvmeof/basic_tests.sh
+        - nvmeof/add_delete_test.sh
     env:
       RBD_POOL: mypool
       IOSTAT_INTERVAL: '10'
