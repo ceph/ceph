@@ -47,9 +47,9 @@ public:
     _set_locked_by();
 #ifdef CEPH_LOCKSTAT
     if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
-      record_wait_time(
-          lockstat_detail::lockstat_clock::now() - wait_start_clock,
-          lockstat_detail::LockMode::WRITE);
+      m_hold_start = lockstat_detail::lockstat_clock::now();
+      m_hold_mode = lockstat_detail::LockMode::WRITE;
+      record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
     }
 #endif
   }
@@ -69,9 +69,9 @@ public:
     ++next_id;
 #ifdef CEPH_LOCKSTAT
     if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
-      record_wait_time(
-          lockstat_detail::lockstat_clock::now() - wait_start_clock,
-          lockstat_detail::LockMode::TRY_WRITE);
+      m_hold_start = lockstat_detail::lockstat_clock::now();
+      m_hold_mode = lockstat_detail::LockMode::TRY_WRITE;
+      record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
     }
 #endif
     _set_locked_by();
@@ -80,6 +80,16 @@ public:
 
   void unlock()
   {
+#ifdef CEPH_LOCKSTAT
+    const auto hold_start = m_hold_start;
+    if (unlikely(hold_start != lockstat_detail::lockstat_clock::zero())) {
+      const auto hold_time =
+          lockstat_detail::lockstat_clock::now() - hold_start;
+      const auto hold_mode = m_hold_mode;
+      m_hold_start = lockstat_detail::lockstat_clock::zero();
+      record_hold_time(hold_time, hold_mode);
+    }
+#endif
     std::lock_guard lock(mutex);
     ++unblock_id;
     _reset_locked_by();
@@ -114,6 +124,12 @@ private:
   ceph::mutex mutex;
 #ifdef CEPH_DEBUG_MUTEX
   std::thread::id locked_by = {};
+#endif
+#ifdef CEPH_LOCKSTAT
+  lockstat_detail::lockstat_clock::time_point m_hold_start{
+      lockstat_detail::lockstat_clock::zero()};
+  lockstat_detail::LockMode m_hold_mode{
+      lockstat_detail::LockMode::WRITE};
 #endif
 };
 } // namespace ceph
