@@ -95,3 +95,10 @@ add_executable(unittest_monmap_monitor
   )
 add_ceph_unittest(unittest_monmap_monitor)
 target_link_libraries(unittest_monmap_monitor mon global)
+
+# unittest_kvmonitor
+add_executable(unittest_kvmonitor
+  test_kvmonitor.cc
+  )
+add_ceph_unittest(unittest_kvmonitor)
+target_link_libraries(unittest_kvmonitor mon global)
