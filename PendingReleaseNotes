@@ -1,3 +1,14 @@
+>=19.2.6
+
+* RGW: This release contains a fix for CVE-2026-54330. We now reject
+  Sigv4 requests with `host` and `x-amz-` headers not included in the
+  signed subset. Unfortunately, the REST client used in multisite was
+  generating such improperly signed requests.
+
+  If you are running multisite, you must set the
+  ``rgw_sigv4_insecure`` option to true before you begin to
+  upgrade. After all clusters are upgraded, set the option to
+  ``false`` again.
 
 >=20.0.0
 

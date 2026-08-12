@@ -4106,3 +4106,19 @@ options:
   services:
   - rgw
   with_legacy: true
+
+- name: rgw_sigv4_insecure
+  type: bool
+  level: advanced
+  desc: Allow potential privilege escalation with added `x-amz-` headers on Sigv4.
+  long_desc: A fix for CVE-2026-54330 rejects Sigv4 requests with `host` and
+    `x-amz-` headers not signed. Unfortunately, the
+    REST client used in multisite was generating such improper signatures.
+    If you are running multisite, you must set this option until all clusters
+    are upgraded, then turn it back off.
+  default: false
+  services:
+  - rgw
+  flags:
+  - runtime
+  with_legacy: true
