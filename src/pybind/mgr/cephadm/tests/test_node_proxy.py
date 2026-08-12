@@ -358,3 +358,44 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
     def test_firmwares_legacy_endpoint(self):
         self.getPage("/host02/firmwares", method="GET")
         self.assertStatus('200 OK')
+
+
+class TestNodeProxyCacheSave:
+    def _make_cache(self) -> NodeProxyCache:
+        mgr = MagicMock()
+        mgr.get_store = MagicMock(return_value='{}')
+        mgr.set_store = MagicMock()
+        mgr.inventory = {}
+        cache = NodeProxyCache(mgr)
+        return cache
+
+    def test_save_updates_in_memory_data(self):
+        cache = self._make_cache()
+        data = {'status': {'storage': {}, 'fans': {}}, 'sn': 'ABC123'}
+        cache.save(host='host01', data=data)
+        assert cache.data['host01'] == data
+
+    def test_save_in_memory_data_includes_new_keys_after_upgrade(self):
+        cache = self._make_cache()
+        # Simulate what load() would have populated from the old KV store
+        cache.data['host01'] = {'status': {'storage': {}, 'fans': {}}, 'sn': 'ABC123'}
+        # Node-proxy POSTs new data with fcm after upgrade
+        new_data = {'status': {'storage': {}, 'fans': {}, 'fcm': {'local': {'nvme0n1': {}}}}, 'sn': 'ABC123'}
+        cache.save(host='host01', data=new_data)
+        assert 'fcm' in cache.data['host01']['status']
+
+    def test_save_normalizes_hostname(self):
+        cache = self._make_cache()
+        data = {'status': {}, 'sn': 'XYZ'}
+        cache.save(host='HOST01', data=data)
+        assert 'host01' in cache.data
+        assert 'HOST01' not in cache.data
+
+    def test_save_writes_to_kv_store(self):
+        cache = self._make_cache()
+        data = {'status': {}, 'sn': 'XYZ'}
+        cache.save(host='host01', data=data)
+        cache.mgr.set_store.assert_called_once()
+        key, value = cache.mgr.set_store.call_args[0]
+        assert 'host01' in key
+        assert json.loads(value) == data
