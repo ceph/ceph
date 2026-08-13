@@ -1303,6 +1303,9 @@ public:
   }
 };
 
+/* test-only: guard so the injection holds at most one entry at a time */
+static std::atomic_flag meta_sync_bucket_instance_hold_taken;
+
 RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
 		           const string& _raw_key, const string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
@@ -1391,6 +1394,27 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
             tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket entrypoint metadata store"));
             wait(dur);
           }
+        }
+        /* test-only: hold a fetched bucket.instance entry before its apply, so
+         * a later update is applied first and the stale one lands on top.
+         * released by clearing rgw_inject_delay_pattern */
+        if (std::string_view(cct->_conf->rgw_inject_delay_pattern) !=
+            "delay_meta_sync_bucket_instance_hold") {
+          meta_sync_bucket_instance_hold_taken.clear();
+        } else if (cct->_conf->rgw_inject_delay_sec > 0 &&
+                   section == "bucket.instance" &&
+                   !meta_sync_bucket_instance_hold_taken.test_and_set()) {
+          tn->log(0, SSTR("holding metadata update " << section << ":" << key
+                          << " until rgw_inject_delay_pattern is cleared"));
+          while (std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+                 "delay_meta_sync_bucket_instance_hold") {
+            yield {
+              utime_t tick;
+              tick.set_from_double(1.0);
+              wait(tick);
+            }
+          }
+          tn->log(0, SSTR("releasing held metadata update"));
         }
         tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
         yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl, sync_type));
