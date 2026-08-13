@@ -552,10 +552,41 @@ class CephadmServe:
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
             self.mgr.last_stray_daemon_check = datetime_now()
 
+    def _resolve_rgw_smb_daemon_name(self, daemon_id: str) -> str:
+        """
+        Resolve rgw-smb daemon to its corresponding smb service name.
+        """
+        # Metadata ID format: "smb.rgw.cluster.<cluster_name>"
+        # Prefix constant from _cephx_rgw_entity in smb/handler.py
+        smb_metadata_prefix = 'smb.rgw.cluster.'
+
+        metadata = self.mgr.get_metadata('rgw-smb', daemon_id, {})
+        assert metadata is not None
+
+        metadata_id = metadata.get('id', '')
+        if not metadata_id.startswith(smb_metadata_prefix):
+            return f'rgw-smb.{daemon_id}'
+        # Extract cluster name from metadata ID
+        cluster_name = metadata_id[len(smb_metadata_prefix):]
+        # Find matching SMB daemon in cache by cluster name
+        for smb_daemon in self.mgr.cache.get_daemons_by_type('smb'):
+            service_name = smb_daemon.service_name()
+            # Match service name pattern: "smb.<cluster_name>"
+            if service_name == f'smb.{cluster_name}':
+                return f'smb.{smb_daemon.daemon_id}'
+
+        # Fallback if no match found
+        self.log.debug("Failed to extract cluster name from rgw-smb metadata: %s", metadata_id)
+        return f'rgw-smb.{daemon_id}'
+
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
-        if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
+        if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs', 'rgw-smb']:
             name = f'{service_type}.{daemon_id}'
             return name
+
+        # Handle rgw-smb: RGW frontend daemons for SMB protocol
+        if service_type == 'rgw-smb':
+            return self._resolve_rgw_smb_daemon_name(daemon_id)
 
         metadata = self.mgr.get_metadata(service_type, daemon_id, {})
         assert metadata is not None
