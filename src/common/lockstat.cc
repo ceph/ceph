@@ -26,14 +26,9 @@
 #ifdef CEPH_LOCKSTAT
 
 namespace ceph::lockstat_detail {
-#ifdef NDEBUG
 const bool LockStatTraits::g_global_enable =
     getenv("ENABLE_LOCKSTAT") != nullptr &&
     strcmp(getenv("ENABLE_LOCKSTAT"), "true") == 0;
-#else
-const bool LockStatTraits::g_global_enable = true;
-#endif
-
 
 // lock_stats definitions
 std::atomic<size_t> LockStatTraits::g_lock_collisions;
