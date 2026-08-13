@@ -7,10 +7,12 @@ This document describes how S3 versioning operations map to the KV schema define
 ---
 ## Version ID Scheme
 
-- First version: `version_id = max_uint32` (0xFFFFFFFF).
-- Each subsequent version (PUT or DELETE): `version_id = current_version - 1`.
-- The `:O:` entries don't include version_id in the Key, it is stored in the **Value** instead.\
-The next operation reads it and decrements.
+- First version: `version_id = max_uint32` (0xFFFFFFFF). `next_vid = max_uint32 - 1`.
+- Each subsequent version (PUT or DELETE): `version_id = O:.next_vid`. Then `O:.next_vid = vid - 1`.
+- The `:O:` value stores both fields:
+  - `version_id` — this version's ID. What GET returns, what goes into the V: key when moved to history.
+  - `next_vid` — the next available ID. Monotonically decreasing counter, consumed on each new version. Never resets upward.
+- On promotion (DELETE Case 2): `next_vid` is inherited from the OUTGOING O: entry, not from the promoted V: entry. This prevents version ID reuse after deletion — deleted IDs are permanently consumed.
 - In `:V:`, entries include the version_id in the **Key**\
 keys sort by `<object_name><version_id>`.\
 Since version_id decreases over time and is stored big-endian, later versions have smaller byte values and sort first — latest version first.
@@ -151,10 +153,10 @@ With sharding: fan out to all shards, merge-sort across shards by object_name.
 
 ## The Uniform Rule
 
-Both PUT and DELETE on a versioned bucket:
+All operations that write a new value to `:O:` on a versioned bucket — including PUT, DELETE-without-version-id (creates delete marker), and CompleteMultipartUpload (writes assembled manifest):
 
 1. Move the current `:O:` entry to `:V:` (keyed by its version_id).
-2. Write a new entry to `:O:` with `version_id = current_version - 1`.
+2. Write a new entry to `:O:` with `version_id = O:.next_vid`. Set `O:.next_vid = vid - 1`.
 3. All in a single transaction.
 
 PUT writes a live value. DELETE writes a **fenced delete marker**.
@@ -179,9 +181,9 @@ PUT follows the standard 3-phase protocol. See [S3 Operations — PUT](S3-Operat
    - If a KV exists in `:O:`
        - Move the current `:O:` entry to `:V:`\
        (key = `...V<object_name><current_version_id>`).
-       - Write new live value to `:O:` with version_id = current - 1.
+       - Write new live value to `:O:` with `version_id = O:.next_vid`, `next_vid = vid - 1`.
    - If no KV exists in `:O:`
-       - Write to `:O:` with version_id = max_uint32.
+       - Write to `:O:` with `version_id = max_uint32`, `next_vid = max_uint32 - 1`.
    - Delete the `P:O` coordination entry.
 
 No GC entry — the old version is preserved in `:V:`, not orphaned.
@@ -197,9 +199,9 @@ No `P:O` coordination entry is needed — since no storage-tier data is written.
    - If a KV exists in `:O:`
        - Move the current `:O:` entry to `:V:`\
        (key = `...V<object_name><current_version_id>`).
-       - Write fenced delete marker to `:O:` with version_id = current - 1.
+       - Write fenced delete marker to `:O:` with `version_id = O:.next_vid`, `next_vid = vid - 1`.
    - If no KV exists in `:O:`
-       - Write fenced delete marker to `:O:` with version_id = max_uint32.
+       - Write fenced delete marker to `:O:` with `version_id = max_uint32`, `next_vid = max_uint32 - 1`.
        - Nothing to move to `:V:`.
 2. Return the delete marker's version_id to the client.
 
@@ -230,10 +232,12 @@ In a single transaction:
     - If it is a delete marker:
         - Simply delete the `:V:` entry.
 - If target version_id matches (Case 2):
+    - Save `old_next_vid = O:.next_vid` (preserve the version counter).
     - Find the latest entry in `:V:` for this object_name
         - range scan on `...V<object_name>` with limit=1
     - If a `:V:` entry exists:
         - Move it from `:V:` to `:O:` (promoting it to current).
+        - Set `O:.next_vid = old_next_vid` (inherit counter from outgoing O:, NOT from promoted V:).
     - If no `:V:` entry exists:
         - Remove `:O:` entirely — the object ceases to exist.
     - If the removed `:O:` entry had data (not a delete marker):
@@ -242,19 +246,60 @@ In a single transaction:
         - Simply delete it.
 
 The `:O:` read is always inside the transaction —
-- It serves as the serialization point.
-- Every operation that mutates the version chain writes to `:O:`
-- Write-Write conflict on `:O:` protects against concurrent modifications.
-- See [The Uniform Rule](#the-uniform-rule) for the shared `:O:` write invariant.
+- For operations that write O: (PUT, DELETE-without-vid, Case 2): the `:O:` write serves as the serialization point. Write-write conflict on `:O:` protects against concurrent modifications.
+- For Case 1 (delete non-current version): `:O:` is only read (to confirm target ≠ current). Serialization is via write-write conflict on the V:<target> key. On FDB, the O: read also creates a conflict range. On TiKV, this is safe because V: entries are immutable — no concurrent operation can invalidate a non-current version deletion. See [transaction-safety.md](transaction-safety.md).
+- See [The Uniform Rule](#the-uniform-rule) for the shared `:O:` write invariant (applies to all operations except Case 1).
 
 This is the only operation that moves a KV from `:V:` to `:O:`.\
 All other versioned operations only move from `:O:` to `:V:`.
+
+**Child operations on old versions (tags, annotations):** S3 allows PutObjectTagging and PutObjectAnnotation with a `versionId` parameter targeting a non-current version. These operations read and write V:<vid> (updating `tag_count` or `annotation_count` in the version entry) instead of O:. The write to V:<vid> provides write-write conflict with DELETE Case 1 targeting the same version. See [child-kv-operations.md](child-kv-operations.md).
+
+**DeleteBucket and version entries:** DeleteBucket scans both `:O:` and `:V:` for committed data. If any `:V:` entries exist, DeleteBucket returns `BucketNotEmpty` — the client must delete all versions before the bucket can be removed. This covers the case where a bucket was versioned, then suspended, and objects deleted non-versioned (leaving orphaned V: entries without corresponding O: entries). V: entries are treated identically to O: entries: committed client data that cannot be force-aborted. See [bucket_delete.md](bucket_delete.md).
 
 **Undelete:**
 - Removing a delete marker (DELETE with version-id targeting a delete marker in `:O:`) triggers Case 2.
 - The latest entry from `:V:` is promoted to `:O:`.
 - If the promoted entry is a live version, the object is restored.
 - If it is another delete marker, the object remains deleted.
+
+---
+
+## Open Issue: Versioning State Change During In-Flight PUT
+
+### The Problem
+
+PUT Phase 3 must decide whether old O: goes to V: (versioned) or G:O (non-versioned). This decision uses the bucket's versioning state. If versioning is enabled or suspended between Phase 1 and Phase 3:
+
+- Phase 3 uses cached bucket metadata from request start (stale).
+- Wrong decision: old O: moved to G:O instead of V: → **previous version lost** (versioned was just enabled).
+- Or: old O: moved to V: instead of G:O → unnecessary version preserved (versioned was just suspended — storage leak, benign).
+
+The window is narrow (only during the exact transition moment while a PUT Phase 2 is in-flight). But the first case is data loss.
+
+### Option A — Conditional B read on long Phase 2
+
+If elapsed time between Phase 1 and Phase 3 exceeds a threshold (e.g., 1 second):
+
+- Phase 3 re-reads B to get fresh versioning state before deciding V: vs G:O.
+- Only impacts large Tier 3 PUTs with slow uploads (> 1 second Phase 2).
+- Tier 1/2 (single-transaction): no issue (no Phase 1/3 split).
+- Fast Tier 3 (< 1 second): no extra read.
+- Very small subset of PUTs impacted.
+
+### Option B — Cluster state transfer (broadcast invalidation)
+
+Versioning enable/disable triggers a cluster-wide cache invalidation:
+
+- All RGW processes refresh their bucket metadata cache for the affected bucket.
+- Next operation on that bucket uses fresh versioning state.
+- More robust — covers all in-flight operations, not just slow ones.
+- Higher complexity (needs coordination channel between RGW instances).
+- Same infrastructure could serve other bucket-level state changes (policies, quotas, lifecycle).
+
+### Note
+
+The same issue exists in the current RADOS model — `RGWSetBucketVersioning::execute` writes `bucket_info` with no broadcast, no cache invalidation, no wait for in-flight operations. Other RGW processes pick up the change on TTL-based cache refresh. In-flight operations use whatever state they cached at request start. No mitigation exists today. **Need to verify with Casey.**
 
 ---
 

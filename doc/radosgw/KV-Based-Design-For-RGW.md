@@ -223,7 +223,9 @@ The `G` namespace supports both per-instance entries (`G:O`, `G:V`, `G:U`, `G:A`
 
 **Storage-tier idempotency.** KV and storage-tier operations cannot be atomic. Every storage-tier chunk embeds its `ref_tag`, enabling GC workers to verify ownership before freeing data. This makes all GC deletions idempotent — safe to retry after a crash at any point. For packed small objects, "freeing data" means a Logical-Punch-Hole rather than a physical delete. See [Storage-Tier-Requirements.md](Storage-Tier-Requirements.md).
 
-**Transaction model.** Every operation that writes storage-tier data (PutObject, UploadPart, PutObjectAnnotation, CompleteMultipartUpload) uses a coordination entry in the `P` (pending operations) namespace to prevent orphaned data on crash. The `P` entry is written before data, deleted in the commit transaction. A background sweeper cleans up stale entries. DELETE operations use an optimistic pattern: read outside the transaction, then verify ref_tag inside a small transaction before committing the move to `G`. See [S3 Operations — Transaction Patterns](S3-Operations-Over-KV.md#transaction-patterns) and [Pending Operations Namespace](S3-Operations-Over-KV.md#pending-operations-namespace).
+**Three-tier data storage.** Object data is stored at one of three tiers based on size: (1) inline in the O: value (< 256B — single KV write, single KV read), (2) D: namespace entry (256B–8KB — single transaction, no storage-tier involvement), (3) storage tier (> 8KB — three-phase protocol with P:O coordination). The chunk descriptor in O: encapsulates the data location: `{type: INLINE, data}`, `{type: CHILD_D, size_tier, mtime}`, or `{type: STORAGE, storage_id, blob_id, offset, length}`. Multipart uploads always use Tier 3. Tier 2 objects can be migrated to Tier 3 via background packing (P:D coordination) when KV capacity is under pressure or objects become cold. The D: key includes a hash_prefix for write scatter and mtime for LRU ordering. Pre-reshard protocol drains all D: entries before resharding to keep shard migration lightweight. See [data-tiering.md](data-tiering.md) for the full protocol.
+
+**Transaction model.** Operations that write storage-tier data use coordination entries to prevent orphaned data on crash. PutObject (Tier 3) and PutObjectAnnotation (large annotations) use entries in the `P` (pending) namespace — written before data, verified and deleted in the commit transaction. CompleteMultipartUpload creates a `P:M` entry at completion Phase 1 as a crash-recovery anchor. UploadPart uses `:M:` part entries directly as coordination records (no per-part `P` entries). Tiers 1 and 2 need no coordination entries — data and metadata commit atomically in a single KV transaction. A background sweeper moves stale `P` entries to `G` for asynchronous data cleanup. See [bucket_delete.md](bucket_delete.md) for the full transaction protocol and race-condition analysis.
 
 **Vendor-unique delete-all-versions.** AWS S3 does not provide a single API to delete an object along with all its versions. The `G:F` directive enables an optional vendor-specific extension: a single call deletes the `:O:` entry and writes one `G:F` directive; background workers asynchronously clean up all versions, parts, and children. This extension may never be implemented. See [S3 Operations — Delete All Versions](S3-Operations-Over-KV.md#delete-all-versions-optional-vendor-extension) for the detailed design.
 
@@ -516,12 +518,13 @@ This is mitigated by the KV store's distributed cache serving hot entries from m
 
 ### PUT
 
-1. Write data to the storage tier.
-2. Write the KV entry:
-   - New object: write the new value.
-   - Overwriting a live object: move old entry to the `G` (GC) namespace with a stripped value, then write the new value. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup).
+Three-phase protocol coordinated through the `P` (pending) namespace:
 
-This is cheaper than the current model since no bucket-index update is needed.
+1. **Phase 1 — record intent:** In a single transaction: `get(B)` (verify bucket exists) + `put(P:O)` (coordination entry with ref_tag). If bucket has `delete-pending` flag → `NoSuchBucket`.
+2. **Phase 2 — write data:** Write blob to storage tier addressed by ref_tag. No KV operations.
+3. **Phase 3 — commit metadata:** In a single transaction: `get(P:O)` (verify not cleaned by sweeper) + write `:O:` + `delete(P:O)`. On overwrite: also move old `:O:` to `G` namespace.
+
+Crash recovery: if the process dies between Phase 1 and Phase 3, the `P:O` entry remains. The sweeper moves it to `G:O`, and the GC worker frees orphaned storage-tier data. See [bucket_delete.md](bucket_delete.md) for the full transaction protocol, sweeper interaction, and FDB/TiKV race-condition analysis.
 
 ### DELETE
 
@@ -565,6 +568,47 @@ The KV store's own distributed cache serves frequently accessed entries from mem
 
 Keeping values small maximizes cache efficiency — more entries fit in the same amount of memory.
 
+### Small-Object Data in KV — Cache Bypass
+
+When small objects (≤ 64 KB) are stored as KV entries in the `D` namespace (pending aggregation into packed blobs on the storage tier), their data values are large and transient. Reading them must not pollute the KV store's block/page cache — these are write-once entries that will be deleted after aggregation.
+
+**Rule:** All reads of small-object data from the `D` namespace — whether by the aggregator's bulk scan or by a GET serving a not-yet-aggregated object — must use the KV store's cache-bypass flag.
+
+**FDB — `READ_SERVER_SIDE_CACHE_DISABLE` (transaction option 508).**
+
+Set on the transaction before issuing reads:
+
+```
+fdb_transaction_set_option(tr, 508, NULL, 0);  // READ_SERVER_SIDE_CACHE_DISABLE
+```
+
+> "Storage server should not cache disk blocks needed for subsequent read requests in this transaction. This can be used to avoid cache pollution for reads not expected to be repeated."
+
+This is a transaction-level option — all reads in that transaction bypass the storage server's block cache. Use a dedicated transaction for D-namespace reads, separate from any metadata reads that benefit from caching.
+
+**TiKV — `ReadOptions::fill_cache(false)`.**
+
+RocksDB's native per-request option, exposed through TiKV's engine interface:
+
+```
+let mut opts = ReadOptions::new();
+opts.fill_cache(false);
+```
+
+> "Specify whether the data block / index block / filter block read for this iteration should be cached in memory. Callers may wish to set this field to false for bulk scans."
+
+Per-request granularity — can be set independently for each Get or iterator without affecting other reads in the same transaction.
+
+**Write-path cache behavior.**
+
+There is no "no-cache write" flag in either system. The impact of writes on the read cache depends on the storage engine:
+
+| Engine | Write populates read cache? | Notes |
+|---|---|---|
+| RocksDB (TiKV, FDB ssd-rocksdb-v1) | No — writes go to memtable, a separate memory pool from the block cache | Non-issue. Block cache is only populated by reads. |
+| Redwood (FDB ssd-redwood-1, default) | Yes — B-tree page modifications remain in the page cache | Mitigated by key-range separation: D-namespace keys occupy different B-tree pages from S-namespace metadata. Pages evicted by LRU as D entries are short-lived. |
+
+For deployments where write-path cache pollution is a concern, the RocksDB-based engine provides natural isolation.
 
 ---
 
@@ -920,4 +964,20 @@ For RGW deployments backed by Ceph RADOS:
 For RGW deployments without Ceph, or where the KV store is managed independently:
 - KV store runs on RGW nodes with local NVMe, or on dedicated metadata nodes.
 - The data store can be any backend that supports write, read-range, and punch-hole — RADOS, a distributed filesystem, cloud storage, or other.
+
+---
+
+## Small-Object Packing
+
+Small objects (≤ 64 KB) land their data directly in the KV store in a dedicated `D` namespace, bypassing the storage tier entirely at PUT time. A background aggregator collects ~4 MB of accumulated data per bucket and writes it as a single packed blob to the storage tier. After the blob is committed, the `:O:` values are updated with final `(blob_id, offset, length)` and the D entries are deleted.
+
+This eliminates per-object storage-tier overhead for small objects and turns the storage tier into a bulk-write target — large sequential writes that amortize EC parity computation and member coordination across dozens of objects.
+
+**Key properties:**
+
+- PUT for small objects is a single atomic KV transaction (`:O:` + D entry). No `P:O` coordination, no storage-tier write.
+- DELETE before aggregation is a single transaction deleting both entries. No GC needed.
+- Per-bucket packing. P:Pack coordination entry for crash recovery. SingleDelete for D entry cleanup.
+
+For the full design — including the aggregation protocol, crash recovery, storage-tier integration, cache-bypass mechanisms, and RocksDB/TiKV-specific LSM considerations — see [Small-Object-Packing.md](Small-Object-Packing.md).
 
