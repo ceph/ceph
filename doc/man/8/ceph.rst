@@ -305,6 +305,7 @@ Usage::
 
 	ceph config-key set <key> {<val>}
 
+.. _man-ceph-daemon:
 
 daemon
 ------
