@@ -7395,14 +7395,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
 	maybe_create_new_object(ctx);
 	t->truncate(soid, op.extent.offset);
-	if (pool.info.is_erasure() && pool.info.allows_ecoptimizations() &&
-	    op.extent.offset < oi.size &&
-	    op.extent.offset % FAE_BLOCK_SIZE != 0) {
-	  const uint64_t head_end =
-	    std::min(round_up_to(op.extent.offset, FAE_BLOCK_SIZE), oi.size);
-	  const uint64_t head_len = head_end - op.extent.offset;
-	  t->zero(soid, op.extent.offset, head_len);
-	}
 	if (oi.size > op.extent.offset) {
 	  interval_set<uint64_t> trim;
 	  trim.insert(op.extent.offset, oi.size-op.extent.offset);
