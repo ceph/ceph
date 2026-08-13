@@ -273,10 +273,9 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   bool is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
   {
     if (!is_health_request) {
-      std::string script;
-      auto rc = rgw::lua::read_script(s, s->penv.lua.manager.get(),
-                                      s->bucket_tenant, s->yield,
-                                      rgw::lua::context::postAuth, script);
+      auto [script, rc] = rgw::lua::read_script_or_bytecode(
+          s, s->penv.lua.manager.get(), s->bucket_tenant, s->yield,
+          rgw::lua::context::postAuth);
       if (rc == -ENOENT) {
         // no script, nothing to do
       } else if (rc < 0) {
