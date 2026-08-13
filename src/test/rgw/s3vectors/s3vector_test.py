@@ -346,6 +346,22 @@ def _delete_s3_bucket_for_vector_bucket(bucket_name):
             log.warning("Failed to delete S3 bucket '%s': %s", bucket_name, str(err))
 
 
+def _purge_all_versions(s3conn, bucket_name):
+    """
+    Remove every version and delete marker from a versioned S3 bucket, so that
+    it is actually empty and can be deleted.
+    """
+    paginator = s3conn.get_paginator('list_object_versions')
+    for page in paginator.paginate(Bucket=bucket_name):
+        objects = []
+        for v in page.get('Versions', []):
+            objects.append({'Key': v['Key'], 'VersionId': v['VersionId']})
+        for dm in page.get('DeleteMarkers', []):
+            objects.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
+        if objects:
+            s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+
+
 def _delete_all_indexes(conn, bucket_name):
     """
     Delete all indexes of a vector bucket. must be done before the vector bucket
@@ -3359,16 +3375,12 @@ def test_versioned_s3_bucket():
     # so the vector bucket would still look like it holds indexes if the versions
     # are not purged before it is deleted
     _delete_all_indexes(conn, bucket_name)
-    paginator = s3conn.get_paginator('list_object_versions')
-    for page in paginator.paginate(Bucket=bucket_name):
-        objects = []
-        for v in page.get('Versions', []):
-            objects.append({'Key': v['Key'], 'VersionId': v['VersionId']})
-        for dm in page.get('DeleteMarkers', []):
-            objects.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
-        if objects:
-            s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
+    _purge_all_versions(s3conn, bucket_name)
     result = conn.delete_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # deleting the vector bucket removes the LanceDB files again, which leaves
+    # a new set of delete markers behind, so purge once more before the bucket
+    # itself can be deleted
+    _purge_all_versions(s3conn, bucket_name)
     s3conn.delete_bucket(Bucket=bucket_name)
 
