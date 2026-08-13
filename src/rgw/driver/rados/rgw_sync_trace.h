@@ -129,9 +129,9 @@ public:
 
   int hook_to_admin_command();
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   const bufferlist&,
-	   Formatter *f,
+	   const ceph::bufferlist&,
+	   ceph::Formatter *f,
 	   std::ostream& ss,
-	   bufferlist& out) override;
+	   ceph::bufferlist& out) override;
   std::string get_active_names();
 };
