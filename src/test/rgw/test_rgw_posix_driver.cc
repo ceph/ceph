@@ -564,6 +564,201 @@ TEST(FSEnt, SymlinkBase)
   EXPECT_FALSE(sf::exists(tp));
 }
 
+TEST(FSEnt, ObjDirCreateReal)
+{
+  std::string fname = get_test_name();
+  sf::path tp{base_path / fname};
+  sf::path op{tp / fname};
+  std::unique_ptr<posix::ObjectDirectory> testfile = std::make_unique<posix::ObjectDirectory>(fname, root.get(), env->cct.get());
+
+  EXPECT_FALSE(sf::exists(tp));
+
+  bool existed{false};
+  int ret = testfile->create(env->dpp, &existed);
+
+  EXPECT_EQ(ret, 0);
+  EXPECT_FALSE(existed);
+  EXPECT_TRUE(sf::exists(tp));
+  EXPECT_TRUE(sf::is_directory(tp));
+  EXPECT_TRUE(sf::exists(op));
+  EXPECT_TRUE(sf::is_regular_file(op));
+}
+
+TEST(FSEnt, ObjDirCreateTemp)
+{
+  std::string fname = get_test_name();
+  sf::path tp{base_path / fname};
+  sf::path op{tp / fname};
+  std::unique_ptr<posix::ObjectDirectory> testfile = std::make_unique<posix::ObjectDirectory>(fname, root.get(), env->cct.get());
+
+  EXPECT_FALSE(sf::exists(tp));
+
+  bool existed{false};
+  int ret = testfile->create(env->dpp, &existed, true);
+  EXPECT_EQ(ret, 0);
+  EXPECT_FALSE(existed);
+  EXPECT_TRUE(sf::exists(tp));
+  EXPECT_TRUE(sf::is_directory(tp));
+  EXPECT_FALSE(sf::exists(op));
+
+  std::string temp_fname{fname + "-blargh"};
+  ret = testfile->link_temp_file(env->dpp, null_yield, temp_fname);
+  EXPECT_EQ(ret, 0);
+  EXPECT_TRUE(sf::exists(op));
+  EXPECT_TRUE(sf::is_regular_file(op));
+}
+
+TEST(FSEnt, ObjDirBase)
+{
+  std::string dirname = get_test_name();
+  sf::path tp{base_path / dirname};
+  sf::path op{tp / dirname};
+  std::unique_ptr<posix::ObjectDirectory> testdir = std::make_unique<posix::ObjectDirectory>(dirname, root.get(), env->cct.get());
+
+  EXPECT_FALSE(sf::exists(tp));
+
+  bool existed{false};
+  int ret = testdir->create(env->dpp, &existed);
+
+  EXPECT_EQ(ret, 0);
+  EXPECT_FALSE(existed);
+  EXPECT_TRUE(sf::exists(tp));
+  EXPECT_TRUE(sf::is_directory(tp));
+  EXPECT_TRUE(sf::exists(op));
+  EXPECT_TRUE(sf::is_regular_file(op));
+
+  /* Create opens */
+  EXPECT_NE(testdir->get_fd(), -1);
+  EXPECT_EQ(testdir->get_name(), dirname);
+  EXPECT_EQ(testdir->get_parent(), root.get());
+  EXPECT_FALSE(testdir->exists());
+  EXPECT_EQ(testdir->get_type(), posix::ObjectType::OBJECT);
+
+  ret = testdir->open(env->dpp);
+  EXPECT_EQ(ret, 0);
+  EXPECT_GT(testdir->get_fd(), 0);
+
+  ret = testdir->stat(env->dpp, false);
+  EXPECT_EQ(ret, 0);
+  EXPECT_TRUE(S_ISREG(testdir->get_stx().stx_mode));
+
+  Attrs attrs;
+  add_attr(attrs, ATTR1, ATTR1);
+  add_attr(attrs, ATTR2, ATTR2);
+  Attrs extra_attrs;
+  add_attr(extra_attrs, ATTR3, ATTR3);
+
+  ret = testdir->write_attrs(env->dpp, null_yield, attrs, &extra_attrs);
+  EXPECT_EQ(ret, 0);
+
+  attrs.clear();
+  ret = testdir->read_attrs(env->dpp, null_yield, attrs);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(attrs.size(), 4);
+  std::string val;
+  bool success = test_decode_attr(attrs, ATTR1.c_str(), val);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(val, ATTR1);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(val, ATTR2);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(val, ATTR3);
+  posix::ObjectType type;
+  success = test_decode_attr(attrs, ATTR_OBJECT_TYPE.c_str(), type);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(type.type, posix::ObjectType::OBJECT);
+
+  ret = testdir->close();
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(testdir->get_fd(), -1);
+
+  std::string copyname{dirname + "-copy"};
+  sf::path cp{base_path / copyname};
+  sf::path cop{cp / copyname};
+  sf::remove_all(cp);
+  EXPECT_FALSE(sf::exists(cp));
+  ret = testdir->copy(env->dpp, null_yield, root.get(), copyname);
+  EXPECT_EQ(ret, 0);
+  EXPECT_TRUE(sf::exists(cp));
+  EXPECT_TRUE(sf::is_directory(tp));
+  EXPECT_TRUE(sf::exists(cop));
+  EXPECT_TRUE(sf::is_regular_file(cop));
+
+  std::unique_ptr<posix::ObjectDirectory> copydir = std::make_unique<posix::ObjectDirectory>(copyname, root.get(), env->cct.get());
+  ret = copydir->open(env->dpp);
+  EXPECT_EQ(ret, 0);
+  EXPECT_GT(copydir->get_fd(), 0);
+
+  ret = copydir->stat(env->dpp, false);
+  EXPECT_EQ(ret, 0);
+  EXPECT_TRUE(S_ISREG(copydir->get_stx().stx_mode));
+
+  attrs.clear();
+  ret = copydir->read_attrs(env->dpp, null_yield, attrs);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(attrs.size(), 4);
+  success = test_decode_attr(attrs, ATTR1.c_str(), val);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(val, ATTR1);
+  success = test_decode_attr(attrs, ATTR2.c_str(), val);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(val, ATTR2);
+  success = test_decode_attr(attrs, ATTR3.c_str(), val);
+  EXPECT_TRUE(success);
+  EXPECT_EQ(val, ATTR3);
+
+  ret = copydir->close();
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(copydir->get_fd(), -1);
+
+  std::unique_ptr<posix::FSEnt> ent;
+  ret = root->get_ent(env->dpp, null_yield, dirname, std::string(), ent);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(ent->get_type(), posix::ObjectType::OBJECT);
+
+  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_FALSE(sf::exists(tp));
+}
+
+TEST(FSEnt, ObjDirReadWrite)
+{
+  std::string objname = get_test_name();
+  sf::path tp{base_path / objname};
+  sf::path op{tp / objname};
+  std::unique_ptr<posix::ObjectDirectory> testobj = std::make_unique<posix::ObjectDirectory>(objname, root.get(), env->cct.get());
+  int ret = testobj->create(env->dpp, nullptr);
+  EXPECT_EQ(ret, 0);
+  EXPECT_TRUE(sf::exists(tp));
+  EXPECT_TRUE(sf::is_directory(tp));
+  EXPECT_TRUE(sf::exists(op));
+  EXPECT_TRUE(sf::is_regular_file(op));
+
+  ret = testobj->open(env->dpp);
+  EXPECT_EQ(ret, 0);
+
+  bufferlist bl;
+  encode(objname, bl);
+  int len = bl.length();
+  ret = testobj->write(0, bl, env->dpp, null_yield);
+  EXPECT_EQ(ret, 0);
+  EXPECT_EQ(sf::file_size(op), len);
+
+  bl.clear();
+  ret = testobj->read(0, 50, bl, env->dpp, null_yield);
+  EXPECT_EQ(ret, len);
+
+  std::string result;
+  EXPECT_NO_THROW({
+    auto bufit = bl.cbegin();
+    decode(result, bufit);
+  });
+
+  EXPECT_EQ(result, objname);
+}
+
 TEST(FSEnt, MPDirBase)
 {
   std::string dirname = get_test_name();
