@@ -139,10 +139,12 @@ ECCommon::ReadPipeline::get_readable_writable_shard_id_sets() {
   shard_id_set writable;
 
   for (auto &&pg_shard: get_parent()->get_acting_shards()) {
-    readable.insert(pg_shard.shard);
+    readable.insert(sinfo.get_rel_shard(pg_shard.shard));
   }
 
-  writable = get_parent()->get_acting_recovery_backfill_shard_id_set();
+  for (auto shard: get_parent()->get_acting_recovery_backfill_shard_id_set()) {
+    writable.insert(sinfo.get_rel_shard(shard));
+  }
   return std::make_pair(std::move(readable), std::move(writable));
 }
 
