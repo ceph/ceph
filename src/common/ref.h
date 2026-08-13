@@ -21,6 +21,14 @@ template<class T, class U>
 cref_t<T> ref_cast(const cref_t<U>& r) noexcept {
   return static_cast<const T*>(r.get());
 }
+template<class T, class U>
+cref_t<T> cref_cast(const ref_t<U>& r) noexcept {
+  return static_cast<const T*>(r.get());
+}
+template<class T, class U>
+cref_t<T> cref_cast(const cref_t<U>& r) noexcept {
+  return static_cast<const T*>(r.get());
+}
 template<class T, typename... Args>
 ceph::ref_t<T> make_ref(Args&&... args) {
   return {new T(std::forward<Args>(args)...), false};
