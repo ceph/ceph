@@ -44,11 +44,12 @@ def admin(args, **kwargs):
 
 def delete_all_objects(conn, bucket_name):
     objects = []
-    for key in conn.list_objects(Bucket=bucket_name)['Contents']:
+    for key in conn.list_objects(Bucket=bucket_name).get('Contents', []):
         objects.append({'Key': key['Key']})
-    # delete objects from the bucket
-    response = conn.delete_objects(Bucket=bucket_name,
-            Delete={'Objects': objects})
+    if not objects:
+        return
+
+    conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
 
 
 def gen_bucket_name():
@@ -127,6 +128,7 @@ def put_script(script, context, tenant=None):
 
     fp.close()
     return result
+
 
 class UnixSocket:
     def __init__(self, socket_path):
