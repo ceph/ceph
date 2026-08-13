@@ -87,10 +87,8 @@ RGW (RADOS Gateway)
   restore state, per-bucket target options; lifecycle, cloud-restore, and
   cloud-transition processing converted to coroutines for a significant
   performance improvement.
-- Encryption: added AES-256-GCM SSE support; fixed a GCM key/IV-reuse bug
-  on multipart re-upload and a timing side-channel regression in the
-  ISA-L GCM tag-comparison path (both security-relevant); CopyObject now
-  supported for encrypted objects.
+- Encryption: added AES-256-GCM SSE support; CopyObject now supported for
+  encrypted objects.
 - IAM/Account: ``GetAccountSummary``, account-wide ``PublicAccessBlock``,
   Admin REST APIs for account quota, S3 Object Ownership (disable ACLs),
   legacy Keystone admin-token requirement removed, Keystone roles
