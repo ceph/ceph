@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 
 import { RgwDaemon, RgwDaemonDetailsResponse } from '~/app/ceph/rgw/models/rgw-daemon';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
@@ -18,6 +19,7 @@ export class RgwDaemonResourcePageComponent implements OnInit, OnDestroy {
   section = '';
   selection?: RgwDaemon;
   notFound = false;
+  loadingMetadata = false;
   metadata: Record<string, unknown> = {};
   daemonDetailsFields: OverviewField[] = [];
   softwareVersionFields: OverviewField[] = [];
@@ -48,6 +50,7 @@ export class RgwDaemonResourcePageComponent implements OnInit, OnDestroy {
   private applyDaemon(daemon: RgwDaemon | null): void {
     this.notFound = !daemon;
     if (!daemon) {
+      this.loadingMetadata = false;
       this.selection = undefined;
       this.metadata = {};
       this.updateOverviewCards();
@@ -62,19 +65,26 @@ export class RgwDaemonResourcePageComponent implements OnInit, OnDestroy {
 
   private loadMetadata(serviceId: string): void {
     if (!serviceId) {
+      this.loadingMetadata = false;
       return;
     }
 
-    this.rgwDaemonService.get(serviceId).subscribe({
-      next: (resp: RgwDaemonDetailsResponse) => {
-        this.metadata = resp?.rgw_metadata ?? {};
-        this.updateOverviewCards();
-      },
-      error: () => {
-        this.metadata = {};
-        this.updateOverviewCards();
-      }
-    });
+    this.loadingMetadata = true;
+    this.sub.add(
+      this.rgwDaemonService
+        .get(serviceId)
+        .pipe(finalize(() => (this.loadingMetadata = false)))
+        .subscribe({
+          next: (resp: RgwDaemonDetailsResponse) => {
+            this.metadata = resp?.rgw_metadata ?? {};
+            this.updateOverviewCards();
+          },
+          error: () => {
+            this.metadata = {};
+            this.updateOverviewCards();
+          }
+        })
+    );
   }
 
   get totalMemoryKb(): number {
