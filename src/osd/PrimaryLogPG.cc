@@ -1726,6 +1726,10 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           break;
         }
 
+        // Delete any leftover objects from previous failed migrations
+        pg_t source_pg = get_source_pg_from_hash(start_obj);
+        pool_migration_target_delete(source_pg, start_obj);
+
         if (pool_migration_reservations_granted_target) {
           dout(20) << __func__ << " reservations already granted, returning success to source PG" << dendl;
           result = 0;
@@ -1740,10 +1744,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
         // Store the op until local reservations are complete and we can reply to the source PG
         pending_pool_migration_reservation_ops.push_back(op);
-
-        // Delete any leftover objects from previous failed migrations
-        pg_t source_pg = get_source_pg_from_hash(start_obj);
-        pool_migration_target_delete(source_pg, start_obj);
 
         start_target_pool_migration(source_num_bytes, source_num_objects);
 
