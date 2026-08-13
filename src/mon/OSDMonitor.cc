@@ -2131,6 +2131,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   // health
   health_check_map_t next;
   tmp.check_health(cct, &next);
+  check_mixed_min_alloc_size(tmp, &next);
   encode_health(next, t);
 }
 
@@ -2177,6 +2178,65 @@ void OSDMonitor::count_metadata(const string& field, Formatter *f)
     f->dump_int(p.first.c_str(), p.second);
   }
   f->close_section();
+}
+
+void OSDMonitor::check_mixed_min_alloc_size(const OSDMap& next_map,
+					    health_check_map_t *checks)
+{
+  if (!cct->_conf.get_val<bool>("mon_warn_on_mixed_min_alloc_size")) {
+    return;
+  }
+  // device class -> min_alloc_size -> OSDs
+  map<string, map<string, list<int>>> by_class;
+  for (int osd = 0; osd < next_map.get_max_osd(); ++osd) {
+    if (!next_map.is_up(osd)) {
+      continue;
+    }
+    map<string, string> meta;
+    if (load_metadata(osd, meta, nullptr) < 0) {
+      continue;
+    }
+    auto p = meta.find("bluestore_min_alloc_size");
+    if (p == meta.end()) {
+      // not a BlueStore OSD, or metadata not reported (yet)
+      continue;
+    }
+    auto device_class = next_map.crush->get_item_class(osd);
+    by_class[device_class ? device_class : ""][p->second].push_back(osd);
+  }
+  list<string> details;
+  int64_t mixed_classes = 0;
+  for (auto& [device_class, by_val] : by_class) {
+    if (by_val.size() <= 1) {
+      continue;
+    }
+    ++mixed_classes;
+    for (auto& [val, osds] : by_val) {
+      ostringstream ss;
+      ss << osds.size() << " OSD(s)";
+      if (!device_class.empty()) {
+	ss << " of device class '" << device_class << "'";
+      }
+      ss << " use min_alloc_size " << val << ":";
+      int n = 0;
+      for (auto osd : osds) {
+	if (++n > 10) {
+	  ss << " ...";
+	  break;
+	}
+	ss << " osd." << osd;
+      }
+      details.push_back(ss.str());
+    }
+  }
+  if (mixed_classes > 0) {
+    ostringstream ss;
+    ss << mixed_classes << " CRUSH device class(es) have OSDs with mixed"
+       << " BlueStore min_alloc_size values";
+    auto& d = checks->add("BLUESTORE_MIXED_MIN_ALLOC_SIZE", HEALTH_WARN,
+			  ss.str(), mixed_classes);
+    d.detail.swap(details);
+  }
 }
 
 void OSDMonitor::get_versions(std::map<string, list<string>> &versions)
