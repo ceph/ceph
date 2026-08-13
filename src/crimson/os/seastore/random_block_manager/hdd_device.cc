@@ -28,7 +28,12 @@ RotationalDevice::mkfs_ret RotationalDevice::mkfs(device_config_t config) {
   LOG_PREFIX(RotationalDevice::mkfs);
   INFO("{}", config);
   return shard_devices.local().mshard_devices[0]->do_primary_mkfs(
-    config, seastar::this_smp_shard_count(), 0);
+    config,
+    seastar::this_smp_shard_count(),
+    // If there's no cache devices, the rotational
+    // device is supposed to hold the journal
+    config.cache_devices.empty()
+      ? crimson::common::get_conf<Option::size_t>("seastore_cbjournal_size") : 0);
 }
 
 RotationalDevice::mount_ret RotationalDevice::mount() {
