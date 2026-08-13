@@ -1325,6 +1325,35 @@ public:
   }
 };
 
+/* test-only: hold points for bucket.instance entries, released by
+ * clearing rgw_inject_delay_pattern */
+static constexpr std::string_view META_SYNC_HOLD =
+    "delay_meta_sync_bucket_instance_hold";
+static constexpr std::string_view META_SYNC_FETCH_HOLD =
+    "delay_meta_sync_bucket_instance_fetch_hold";
+
+static bool meta_sync_hold_active(CephContext *cct, std::string_view pattern)
+{
+  return std::string_view(cct->_conf->rgw_inject_delay_pattern) == pattern;
+}
+
+/* test-only: returns true if this entry should be held; at most one entry per hold
+ * point is held at a time */
+static bool meta_sync_should_hold(CephContext *cct, std::string_view pattern,
+                                  bool is_bucket_instance)
+{
+  static std::atomic_flag hold_taken;
+  static std::atomic_flag fetch_hold_taken;
+  auto& taken = (pattern == META_SYNC_HOLD) ? hold_taken : fetch_hold_taken;
+
+  if (!meta_sync_hold_active(cct, pattern)) {
+    taken.clear();
+    return false;
+  }
+  return cct->_conf->rgw_inject_delay_sec > 0 && is_bucket_instance &&
+         !taken.test_and_set();
+}
+
 RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
 		           const string& _raw_key, const string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
@@ -1360,6 +1389,21 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
       // data sync fetches bucket.instance entries with no marker tracker
       if (marker_tracker) {
         marker_tracker->reset_need_retry(raw_key);
+      }
+      /* test-only: delay the fetch so it sees the latest state and a
+       * queued retry can skip a redundant store */
+      if (meta_sync_should_hold(cct, META_SYNC_FETCH_HOLD,
+                                raw_key.starts_with("bucket.instance:"))) {
+        tn->log(0, SSTR("holding metadata fetch " << raw_key
+                        << " until rgw_inject_delay_pattern is cleared"));
+        while (meta_sync_hold_active(cct, META_SYNC_FETCH_HOLD)) {
+          yield {
+            utime_t tick;
+            tick.set_from_double(1.0);
+            wait(tick);
+          }
+        }
+        tn->log(0, SSTR("releasing held metadata fetch"));
       }
       for (tries = 0; tries < NUM_TRANSIENT_ERROR_RETRIES; tries++) {
         yield {
@@ -1438,6 +1482,21 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
               tn->log(0, SSTR("injecting a delay of " << dur << "s for bucket entrypoint metadata store"));
               wait(dur);
             }
+          }
+          /* test-only: hold a fetched entry before its apply, so a later
+           * update is applied first and the stale one lands on top */
+          if (meta_sync_should_hold(cct, META_SYNC_HOLD,
+                                    section == "bucket.instance")) {
+            tn->log(0, SSTR("holding metadata update " << section << ":" << key
+                            << " until rgw_inject_delay_pattern is cleared"));
+            while (meta_sync_hold_active(cct, META_SYNC_HOLD)) {
+              yield {
+                utime_t tick;
+                tick.set_from_double(1.0);
+                wait(tick);
+              }
+            }
+            tn->log(0, SSTR("releasing held metadata update"));
           }
           tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
           yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
