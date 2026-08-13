@@ -4,6 +4,7 @@ import tempfile
 import random
 import socket
 import time
+import timeit
 import threading
 import subprocess
 import os
@@ -44,11 +45,12 @@ def admin(args, **kwargs):
 
 def delete_all_objects(conn, bucket_name):
     objects = []
-    for key in conn.list_objects(Bucket=bucket_name)['Contents']:
+    for key in conn.list_objects(Bucket=bucket_name).get('Contents', []):
         objects.append({'Key': key['Key']})
-    # delete objects from the bucket
-    response = conn.delete_objects(Bucket=bucket_name,
-            Delete={'Objects': objects})
+    if not objects:
+        return
+
+    conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
 
 
 def gen_bucket_name():
@@ -127,6 +129,13 @@ def put_script(script, context, tenant=None):
 
     fp.close()
     return result
+
+
+def remove_script(context, tenant=None):
+    if tenant:
+        return admin(['script', 'rm', '--context', context, '--tenant', tenant])
+    return admin(['script', 'rm', '--context', context])
+
 
 class UnixSocket:
     def __init__(self, socket_path):
@@ -546,3 +555,70 @@ def test_interrupt_request_postauth():
         log.info("Successfully confirmed that the request was interrupted.")
 
     conn.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.request_test
+def test_request_script_removal_stops_interrupting_requests():
+    script = '''
+        return RGW_ABORT_REQUEST
+    '''
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+
+    try:
+        for context in ['prerequest', 'postauth']:
+            result = put_script(script, context)
+            assert result[1] == 0
+
+            blocked_key = context + '-blocked'
+            with pytest.raises(Exception):
+                conn.put_object(Body=b'blocked', Bucket=bucket_name, Key=blocked_key)
+
+            _, err = remove_script(context)
+            assert err == 0
+
+            allowed_key = context + '-allowed'
+            conn.put_object(Body=b'allowed', Bucket=bucket_name, Key=allowed_key)
+            result = conn.get_object(Bucket=bucket_name, Key=allowed_key)
+            assert result['Body'].read() == b'allowed'
+    finally:
+        contexts = ['prerequest', 'postauth', 'postrequest',
+                    'background', 'getdata', 'putdata']
+        for context in contexts:
+            remove_script(context)
+        delete_all_objects(conn, bucket_name)
+        conn.delete_bucket(Bucket=bucket_name)
+
+
+@pytest.mark.lua_benchmark
+def test_postauth_bytecode_baseline_benchmark():
+    script = 'local value = 0\n'
+    script += '\n'.join('value = value + {}'.format(i) for i in range(500))
+    script += '\nreturn 0\n'
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    conn.create_bucket(Bucket=bucket_name)
+
+    try:
+        result = put_script(script, 'postauth')
+        assert result[1] == 0
+
+        conn.put_object(Body=b'warmup', Bucket=bucket_name, Key='warmup')
+        time.sleep(6)
+
+        iterations = 100
+        start = timeit.default_timer()
+        for i in range(iterations):
+            key = 'postauth-benchmark-{}'.format(i)
+            conn.put_object(Body=b'benchmark', Bucket=bucket_name, Key=key)
+        elapsed = timeit.default_timer() - start
+
+        log.info('postauth Lua benchmark: iterations=%d elapsed=%.6fs per_op=%.3fms',
+                 iterations, elapsed, elapsed * 1000.0 / iterations)
+    finally:
+        remove_script('postauth')
+        delete_all_objects(conn, bucket_name)
+        conn.delete_bucket(Bucket=bucket_name)
