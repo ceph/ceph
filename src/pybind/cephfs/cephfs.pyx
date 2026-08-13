@@ -415,9 +415,9 @@ cdef class SnapDiffHandle(object):
         self.lib.require_state("mounted")
         with nogil:
             ret = ceph_close_snapdiff(&self.handle)
+        self.opened = 0
         if ret < 0:
             raise make_ex(ret, "closesnapdiff failed")
-        self.opened = 0
 
 cdef class SnapDiffHandle2(object):
     cdef LibCephFS lib
@@ -458,11 +458,11 @@ cdef class SnapDiffHandle2(object):
         self.lib.require_state("mounted")
         with nogil:
             ret = ceph_close_snapdiff2(self.handle)
+        self.opened = 0
+        self.handle = NULL
         if ret < 0:
             raise make_ex(ret, "closesnapdiff2 failed")
 
-        self.opened = 0
-        self.handle = NULL
 
 
 def cstr(val, name, encoding="utf-8", opt=False) -> bytes:
