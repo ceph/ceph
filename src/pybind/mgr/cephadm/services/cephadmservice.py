@@ -1597,7 +1597,11 @@ class RgwService(CephService):
             assert daemon_spec.host is not None
             ip_to_bind_to = self.mgr.get_first_matching_network_ip(daemon_spec.host, spec) or ''
             if ip_to_bind_to:
-                daemon_spec.port_ips = {str(port): ip_to_bind_to}
+                # Tell the host-side port-in-use precheck (fetch_endpoints /
+                # port_in_use) to probe this IP. Without port_ips it falls
+                # back to 0.0.0.0 and can false-conflict with listeners on
+                # other addresses.
+                daemon_spec.port_ips.update({str(port): ip_to_bind_to})
             else:
                 logger.warning(
                     f'Failed to find ip in {spec.networks} for host {daemon_spec.host}. '
@@ -1605,6 +1609,9 @@ class RgwService(CephService):
                 )
         elif daemon_spec.ip:
             ip_to_bind_to = daemon_spec.ip
+            # Same as only_bind_port_on_networks: keep precheck in sync with
+            # the narrow endpoint=<ip>:<port> / port=<ip>:<port> bind below.
+            daemon_spec.port_ips.update({str(port): ip_to_bind_to})
 
         if ftype == 'beast':
             if spec.ssl:
