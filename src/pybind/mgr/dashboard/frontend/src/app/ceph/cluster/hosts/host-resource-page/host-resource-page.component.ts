@@ -2,8 +2,9 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { HttpParams } from '@angular/common/http';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
-
+import { mergeMap } from 'rxjs/operators';
 import { HostService } from '~/app/shared/api/host.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { HostOverviewDetails, STATUS_MAP, getStatus } from '~/app/shared/models/host.interface';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -25,6 +26,7 @@ export class HostResourcePageComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private hostService: HostService,
+    private orchService: OrchestratorService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService
   ) {
@@ -58,16 +60,24 @@ export class HostResourcePageComponent implements OnInit, OnDestroy {
     params = params.set('sort', '+hostname');
 
     this.sub.add(
-      this.hostService.list(params, 'true').subscribe({
-        next: (hosts: object[]) => {
-          const hostList = (Array.isArray(hosts) ? hosts : []) as HostOverviewDetails[];
-          const host = hostList.find((item) => item.hostname === this.hostname);
-          this.hostOverviewFields = this.buildOverviewFields(host);
-        },
-        error: () => {
-          this.hostOverviewFields = this.buildOverviewFields();
-        }
-      })
+      this.orchService
+        .status()
+        .pipe(
+          mergeMap((orchStatus) => {
+            const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
+            return this.hostService.list(params, factsAvailable.toString());
+          })
+        )
+        .subscribe({
+          next: (hosts: object[]) => {
+            const hostList = (Array.isArray(hosts) ? hosts : []) as HostOverviewDetails[];
+            const host = hostList.find((item) => item.hostname === this.hostname);
+            this.hostOverviewFields = this.buildOverviewFields(host);
+          },
+          error: () => {
+            this.hostOverviewFields = this.buildOverviewFields();
+          }
+        })
     );
   }
 

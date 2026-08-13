@@ -12,6 +12,7 @@ import { ICON_TYPE } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { FormatterService } from '~/app/shared/services/formatter.service';
+import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HostResourcePageComponent } from './host-resource-page.component';
@@ -22,6 +23,7 @@ describe('HostResourcePageComponent', () => {
 
   const hostServiceSpy = {
     list: jest.fn(),
+    checkHostsFactsAvailable: jest.fn(() => true),
     getTotalMemoryBytes: jest.fn((host?: { memory_total_kb?: number | string }) => {
       const memoryKb = Number(host?.memory_total_kb);
       return Number.isFinite(memoryKb) ? memoryKb * 1024 : undefined;
@@ -41,6 +43,10 @@ describe('HostResourcePageComponent', () => {
     imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
     providers: [
       FormatterService,
+      {
+        provide: OrchestratorService,
+        useValue: { status: jest.fn(() => of({})) }
+      },
       {
         provide: ActivatedRoute,
         useValue: {
