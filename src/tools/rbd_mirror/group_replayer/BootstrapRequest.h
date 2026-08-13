@@ -84,26 +84,59 @@ private:
   /**
    * @verbatim
    *
-   * <start>
-   *    |
-   *    v                           (error)
-   * PREPARE_LOCAL_GROUP  * * * * * * * * * * *
-   *    |                                     *
-   *    v                            (error)  *
-   * PREPARE_REMOTE_GROUP_NAME  * * * * * * * *
-   *    |                                     *
-   *    | (remote dne)                        *
-   *    \------------> REMOVE_LOCAL_GROUP * * *
-   *    |             (if local non-primary)  *
-   *    |                                     *
-   *    | (local dne)                         *
-   *    \------------> CREATE_LOCAL_GROUP * * *
-   *    |              (if remote primary)    *
-   *    v                       |             *
-   * CREATE_IMAGE_REPLAYERS <---/             *
-   *    |                                     *
-   *    v                                     *
-   * <finish> < * * * * * * * * * * * * * * * *
+   *                                                                 <start>
+   *                                                                    |
+   *                                                                    v
+   *                                                            GET_LOCAL_GROUP_ID
+   *                                                                    | local group does not exist (dne) ?
+   *                                                      yes           v             no
+   *                                     + <--------------------------- + --------------------------> +
+   *                                     |                                                           |
+   *                                     v                                                           v
+   *                              GROUP_GET_INFO                          + ----------------> PREPARE_REMOTE_GROUP
+   *                                     |                                ^                          |  m_remote_group_prepare_result = r
+   *                                     v                                |                          |
+   *                            CHECK_RESYNC_REQUESTED                    |      remote not primary  v  remote primary
+   *                                     |  m_resync_requested ?          |      + <---------------- + ----------------> +
+   *                   false             v           true                 |      |                                       |
+   *            + <--------------------- + -----------------------------> +      |                                       v
+   *            |                                                         ^      |   + -----------------------> CONTINUE_BOOTSTRAP(r)
+   *            |                                                         |      |   ^                                   |  local primary ?
+   *            v                                                        ╭─╮     v   |                   false           v
+   *  PREPARE_LOCAL_GROUP <----------------------------------------------╯|╰-<-- +   |         + <---------------------- +
+   *            |                               Normal bootstrap path     |          |         |                         |
+   *            |                            + -------------------------> +          |         |                         | true
+   *            v   m_resync_requested  ?    |         false                         |         |                         |
+   *            + -------------------------> +                                       |         |                         |
+   *                                         |         true                          |         |                         |
+   *                                         + ------------------------------------> +         |                         |
+   *  if m_remote_group_prepare_result != 0), then r = m_remote_group_prepare_result           |                         |
+   *                                                                                           v logic to decide path    v
+   *                                                                       + <---------------- + ----------------------> +
+   *                                                                       | remote dne        | local dne               |
+   *                                                                       v                   v                         |
+   *                                                              REMOVE_LOCAL_GROUP      CREATE_LOCAL_GROUP             |
+   *                                         m_local_group_removed = true  |                   |                         |
+   *                                                                       v                   v                         v
+   *                                                                       + ----------------> + <---------------------- +
+   *                                                                                           |
+   *                                                                                           v
+   *                                                                                        finish(0)
+   *                                                                                           | m_local_group_removed ?
+   *                                                                                   false   v   true
+   *                                                                             + <---------- + ----------> +
+   *                                                                             |                           |
+   *                                                                             v                           |
+   *                                                                     CREATE_REPLAYERS                    | r = -ENOENT
+   *                                                                             |                           |
+   *                                                                             v                           v
+   *                                                                             + ---------> + <----------- +
+   *                                                                                          |
+   *                                                                                          v
+   *                                                                                      COMPLETE(r)
+   *                                                                                          |
+   *                                                                                          v
+   *                                                                                       <finish>
    *
    * @endverbatim
    */
@@ -127,12 +160,23 @@ private:
   mutable ceph::mutex m_lock;
   std::atomic<bool> m_canceled = false;
 
-  std::string m_local_group_name;
+  std::string m_local_group_id;
+  cls::rbd::MirrorGroup m_mirror_group;
   std::string m_prepare_local_group_name;
   std::string m_prepare_remote_group_name;
   bool m_local_group_removed = false;
+  int m_remote_group_prepare_result = 0;
 
   bufferlist m_out_bl;
+
+  void get_local_group_id();
+  void handle_get_local_group_id(int r);
+
+  void group_get_info();
+  void handle_group_get_info(int r);
+
+  void check_resync_requested();
+  void handle_check_resync_requested(int r);
 
   void prepare_local_group();
   void handle_prepare_local_group(int r);
@@ -140,8 +184,7 @@ private:
   void prepare_remote_group();
   void handle_prepare_remote_group(int r);
 
-  void get_local_group_meta();
-  void handle_get_local_group_meta(int r);
+  void continue_bootstrap(int r);
 
   void create_local_group();
   void handle_create_local_group(int r);

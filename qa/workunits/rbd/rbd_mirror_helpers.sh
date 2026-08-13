@@ -2740,6 +2740,46 @@ group_resync_marker_removed()
     fi
 }
 
+get_group_snap_order_key()
+{
+    local cluster=$1
+    local pool=$2
+    local group_header_oid=$3
+    local -n _snap_order_key=$4
+
+    try_cmd "rados --cluster ${cluster} -p ${pool} listomapkeys ${group_header_oid}" || return 1
+
+    _snap_order_key=$(grep '^snap_order_' "${CMD_STDOUT}" | tail -n 1)
+    [ -z "${_snap_order_key}" ] && return 1
+
+    return 0
+}
+
+remove_group_snap_order_key()
+{
+    local cluster=$1
+    local pool=$2
+    local group_id=$3
+    local snap_order_key
+    local group_header_oid="rbd_group_header.${group_id}"
+
+    if ! get_group_snap_order_key "${cluster}" "${pool}" "${group_header_oid}" snap_order_key; then
+        fail "group snapshot order key not found in ${group_header_oid}"
+        return 1
+    fi
+
+    run_cmd "rados --cluster ${cluster} -p ${pool} rmomapkey ${group_header_oid} ${snap_order_key}"
+
+    try_cmd "rados --cluster ${cluster} -p ${pool} listomapkeys ${group_header_oid}" || return 1
+
+    if grep -q "^${snap_order_key}$" "${CMD_STDOUT}"; then
+        fail "group snapshot order key ${snap_order_key} is not removed"
+        return 1
+    fi
+
+    return 0
+}
+
 test_group_present()
 {
     local cluster=$1
@@ -2825,6 +2865,23 @@ wait_for_group_id_changed()
     done
     fail "wait for group with name ${group} to change id from ${orig_group_id} failed on ${cluster}"
     return 1
+}
+
+wait_for_group_id_not_changed()
+{
+  local cluster=$1
+  local group_spec=$2
+  local orig_group_id=$3
+  local s
+
+  for s in 0.1 1 2 4 8 8 8 8 8 8 8 8 16 16 32 32; do
+    sleep "${s}"
+    if test_group_id_changed "${cluster}" "${group_spec}" "${orig_group_id}"; then
+      fail "group with name ${group_spec} changed id unexpectedly"
+      return 1
+    fi
+  done
+  return 0
 }
 
 test_group_snap_present()

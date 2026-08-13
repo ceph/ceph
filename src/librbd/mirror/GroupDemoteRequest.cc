@@ -53,10 +53,12 @@ void GroupDemoteRequest<I>::handle_get_mirror_group_info(int r) {
     finish(-EINVAL);
     return;
   } else if (r < 0) {
-    lderr(m_cct) << "failed to get mirror group info: "
-                 << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
+    if (m_promotion_state != mirror::PROMOTION_STATE_ERROR) {
+      lderr(m_cct) << "failed to get mirror group info: "
+                   << cpp_strerror(r) << dendl;
+      finish(r);
+      return;
+    }
   } else if (m_mirror_group.state != cls::rbd::MIRROR_GROUP_STATE_ENABLED) {
     lderr(m_cct) << "mirror group " << m_group_name << " not in enabled state"
                  << dendl;

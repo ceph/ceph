@@ -159,6 +159,7 @@ void GroupGetInfoRequest<I>::handle_get_last_mirror_snapshot_state(int r) {
 
   // This could return -ENOENT if the group creation was interrupted
   if (r < 0 && r != -ENOENT) {
+    *m_promotion_state = PROMOTION_STATE_ERROR;
     lderr(cct) << "failed to list group snapshots of group '" << m_group_id
                << "': " << cpp_strerror(r) << dendl;
     finish(r);
