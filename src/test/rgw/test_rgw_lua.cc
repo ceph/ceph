@@ -1314,7 +1314,7 @@ TEST(TestRGWLuaBackground, TableIncrement)
     RGW["key2"] = 42.2
     RGW.increment("key1")
     assert(RGW["key1"] == 43)
-    RGW.increment("key2")
+    RGW.Increment("key2")
     assert(RGW["key2"] == 43.2)
   )";
 
@@ -1441,7 +1441,7 @@ TEST(TestRGWLuaBackground, TableIncrementError)
   
   request_script = R"(
     -- used as settable field
-    RGW.increment = 11
+    RGW.Increment = 11
   )";
 
   rc = lua::request::execute(nullptr, nullptr, &s, nullptr, request_script);
