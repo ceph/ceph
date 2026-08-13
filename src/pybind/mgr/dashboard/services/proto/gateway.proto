@@ -317,6 +317,7 @@ message create_subsystem_req {
 	repeated string network_mask = 8;
 	optional bool secure_listeners = 9;
 	optional uint32 port = 10;
+	optional string model_name = 11;
 }
 
 message delete_subsystem_req {
@@ -373,6 +374,7 @@ message del_kmip_server_endpoints_req {
 	string subsystem_nqn = 1;
 	string server_name = 2;
 	repeated kmip_server_endpoint endpoints = 3;
+	optional bool force = 4;
 }
 
 message list_kmip_server_endpoints_req {
@@ -819,6 +821,7 @@ message namespace_cli {
 	optional EncryptionAlgorithm encryption_algorithm = 25;
 	repeated encryption_entry encryption_entries = 26;
 	optional bool degraded = 27;
+	optional bool pinned = 28;
 }
 
 message namespaces_info {
