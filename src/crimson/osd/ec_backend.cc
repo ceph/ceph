@@ -108,6 +108,11 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
   PGTransactionUPtr t;
   const PGLog &pg_log;
 
+  std::optional<hobject_t> consider_updating_migration_watermark(ECListener *parent) override {
+    // TODO: Implement migration watermark logic
+    return std::nullopt;  // For now, return empty (no migration)
+  }
+
   static PGTransactionUPtr translate_transaction(
     ceph::os::Transaction&& t,
     crimson::osd::ObjectContextRef &&obc)

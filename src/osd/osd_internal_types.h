@@ -120,11 +120,17 @@ public:
   bool get_write_greedy(OpRequestRef& op) {
     return get_write(op, true);
   }
+  void snaptrimmer_set_write_marker() {
+    rwstate.snaptrimmer_set_write_marker();
+  }
   bool get_snaptrimmer_write(bool mark_if_unsuccessful) {
     return rwstate.get_snaptrimmer_write(mark_if_unsuccessful);
   }
   bool get_recovery_read() {
     return rwstate.get_recovery_read();
+  }
+  bool get_pool_migration_write() {
+    return rwstate.get_pool_migration_write();
   }
   bool try_get_read_lock() {
     return rwstate.get_read_lock();
@@ -159,6 +165,10 @@ public:
     if (rwstate.empty() && rwstate.snaptrimmer_write_marker) {
       rwstate.snaptrimmer_write_marker = false;
       *requeue_snaptrimmer = true;
+    }
+    if (rwstate.empty() && rwstate.pool_migration_write_marker) {
+      rwstate.pool_migration_write_marker = false;
+      *requeue_recovery = true;
     }
   }
   bool is_request_pending() {
@@ -251,6 +261,12 @@ public:
       return false;
     }
   }
+  /// Flag that trimmer needs kicking when write lock is released
+  void snaptrimmer_set_write_marker(ObjectContextRef obc, bool mark_if_unsuccessful) {
+    if (mark_if_unsuccessful) {
+      obc->snaptrimmer_set_write_marker();
+    }
+  }
   /// Get write lock for snap trim
   bool get_snaptrimmer_write(
     const hobject_t &hoid,
@@ -258,6 +274,20 @@ public:
     bool mark_if_unsuccessful) {
     ceph_assert(locks.find(hoid) == locks.end());
     if (obc->get_snaptrimmer_write(mark_if_unsuccessful)) {
+      locks.insert(
+	std::make_pair(
+	  hoid, ObjectLockState(obc, RWState::RWWRITE)));
+      return true;
+    } else {
+      return false;
+    }
+  }
+  /// Get write lock for pool migration
+  bool get_pool_migration_write(
+    const hobject_t &hoid,
+    ObjectContextRef obc) {
+    ceph_assert(locks.find(hoid) == locks.end());
+    if (obc->get_pool_migration_write()) {
       locks.insert(
 	std::make_pair(
 	  hoid, ObjectLockState(obc, RWState::RWWRITE)));

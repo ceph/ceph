@@ -25,6 +25,7 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 
+#include <cls/sem_set/ops.h>
 #include <iomanip> // for std::setw()
 #include <sstream>
 #include <algorithm>
@@ -330,13 +331,15 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
 
   ostringstream ss_rec_io;
   overall_recovery_rate_summary(f, &ss_rec_io);
+  ostringstream ss_mig_io;
+  overall_migration_rate_summary(f, &ss_mig_io);
   ostringstream ss_client_io;
   overall_client_io_rate_summary(f, &ss_client_io);
   ostringstream ss_cache_io;
   overall_cache_io_rate_summary(f, &ss_cache_io);
 
   if (!f && (ss_client_io.str().length() || ss_rec_io.str().length()
-             || ss_cache_io.str().length())) {
+             || ss_mig_io.str().length() || ss_cache_io.str().length())) {
     *out << "\n \n";
     *out << "  io:\n";
   }
@@ -345,6 +348,8 @@ void PGMapDigest::print_summary(ceph::Formatter *f, ostream *out) const
     *out << "    client:   " << ss_client_io.str() << "\n";
   if (!f && ss_rec_io.str().length())
     *out << "    recovery: " << ss_rec_io.str() << "\n";
+  if (!f && ss_mig_io.str().length())
+    *out << "    migration: " << ss_mig_io.str() << "\n";
   if (!f && ss_cache_io.str().length())
     *out << "    cache:    " << ss_cache_io.str() << "\n";
 }
@@ -427,6 +432,11 @@ void PGMapDigest::print_oneline_summary(ceph::Formatter *f, ostream *out) const
   overall_recovery_rate_summary(f, &ssr);
   if (out && ssr.str().length())
     *out << "; " << ssr.str() << " recovering";
+
+  std::stringstream ssm;
+  overall_migration_rate_summary(f, &ssm);
+  if (out && ssm.str().length())
+    *out << "; " << ssm.str() << " migrating";
 }
 
 void PGMapDigest::get_recovery_stats(
@@ -573,6 +583,49 @@ void PGMapDigest::pool_recovery_summary(ceph::Formatter *f, list<string> *psl,
     return;
 
   recovery_summary(f, psl, p->second);
+}
+
+void PGMapDigest::migration_rate_summary(ceph::Formatter *f,
+                                         ostream *out,
+                                         const pool_stat_t& delta_sum,
+                                         utime_t delta_stamp) const
+{
+  // make non-negative; we can get negative values if osds send
+  // uncommitted stats and then "go backward" or if they are just
+  // buggy/wrong.
+  pool_stat_t pos_delta = delta_sum;
+  pos_delta.floor(0);
+  if (pos_delta.stats.sum.num_objects_migrated ||
+      pos_delta.stats.sum.num_bytes_migrated) {
+    int64_t objps = pos_delta.stats.sum.num_objects_migrated / (double)delta_stamp;
+    int64_t bps = pos_delta.stats.sum.num_bytes_migrated / (double)delta_stamp;
+    if (f) {
+      f->dump_int("migrating_objects_per_sec", objps);
+      f->dump_int("migrating_bytes_per_sec", bps);
+      f->dump_int("num_objects_migrated", pos_delta.stats.sum.num_objects_migrated);
+      f->dump_int("num_bytes_migrated", pos_delta.stats.sum.num_bytes_migrated);
+    } else {
+      *out << byte_u_t(bps) << "/s";
+      *out << ", " << si_u_t(objps) << " objects/s";
+    }
+  }
+}
+
+void PGMapDigest::overall_migration_rate_summary(ceph::Formatter *f, ostream *out) const
+{
+  migration_rate_summary(f, out, pg_sum_delta, stamp_delta);
+}
+
+void PGMapDigest::pool_migration_rate_summary(ceph::Formatter *f, ostream *out,
+                                       uint64_t poolid) const
+{
+  auto p = per_pool_sum_delta.find(poolid);
+  if (p == per_pool_sum_delta.end())
+    return;
+
+  auto ts = per_pool_sum_deltas_stamps.find(p->first);
+  ceph_assert(ts != per_pool_sum_deltas_stamps.end());
+  migration_rate_summary(f, out, p->second.first, ts->second);
 }
 
 void PGMapDigest::client_io_rate_summary(ceph::Formatter *f, ostream *out,
@@ -2735,6 +2788,56 @@ void PGMap::get_health_checks(
       check->detail.push_back(j.second);
     }
   }
+
+  //Output the status of a pool migration
+  int64_t total_migrated_objects = 0;
+  int64_t total_migrating_objects = 0;
+  int64_t total_migrating_pools = 0;
+  int64_t total_migrating_pgs = 0;
+
+  //For each pg check if its pool is a migration src or targets and then increment the totals above.
+  for (auto &&[pg_id, pg] : pg_stat) {
+    if (osdmap.get_pg_pool(pg_id.pool())->is_migration_src()) {
+      total_migrating_objects += pg.stats.sum.num_objects;
+    }else if (osdmap.get_pg_pool(pg_id.pool())->is_migration_target()) {
+      total_migrated_objects += pg.stats.sum.num_objects;
+      total_migrating_objects += pg.stats.sum.num_objects;
+    }
+  }
+  //for each of the pools if its in a migration then increment the pools and pgs defined above counter above.
+  for (auto &&[pool_id, pool] : pools) {
+    if (pool.is_migration_target()) {
+      total_migrating_pools ++;
+      total_migrating_pgs += pool.get_pg_num();
+    }
+  }
+
+  if (total_migrating_objects != 0 && total_migrating_pools != 0) {
+    double percent_migrated = (double)total_migrated_objects /
+      (double)total_migrating_objects * (double)100.0;
+    char pm[20];
+    snprintf(pm, sizeof(pm), "%.3lf", percent_migrated);
+    ostringstream ss;
+    ss << "Pool migration: " << total_migrated_objects << "/"
+    << total_migrating_objects << " objects migrated (" << pm << "%), "
+    << total_migrating_pools << (total_migrating_pools > 1 ? " pools " : " pool ")
+    << "migrating, "
+    << total_migrating_pgs << (total_migrating_pgs > 1 ? " pgs " : " pg ")
+    << "migrating";
+
+    checks->add(
+        "POOL MIGRATION",
+        HEALTH_WARN,
+        ss.str(),
+        total_migrating_pools);
+  } else {
+    //If there are no migrating pgs then output the totals to help with debugging
+    dout(20) << "number of migrated objects: " << total_migrated_objects << dendl;
+    dout(20) << "number of object in the migration " << total_migrating_objects << dendl;
+    dout(20) << "number of migrating pools: " << total_migrating_pools << dendl;
+    dout(20) << "number of migrating pgs: " << total_migrating_pgs << dendl;
+  }
+
 
   // OSD_SCRUB_ERRORS
   if (pg_sum.stats.sum.num_scrub_errors) {

@@ -354,6 +354,10 @@ public:
       unsigned priority) = 0;
     /// Cancel pending local background reservation request
     virtual void cancel_local_background_io_reservation() = 0;
+    /// Send a reservation request from source PG to target PG for pool migration
+    virtual void pool_migration_request_target_reservation() = 0;
+    /// Send a reservation release from source PG to target PG for pool migration
+    virtual void pool_migration_release_target_reservation() = 0;
 
     /**
      * request_remote_background_io_reservation
@@ -387,6 +391,9 @@ public:
     /// Clear queue for a pg_temp of wanted
     virtual void clear_want_pg_temp() = 0;
 
+    /// Send notification that PG has completed a pool migration
+    virtual void send_pg_migrated_pool() = 0;
+
     /// Arrange for stats to be shipped to mon to be updated for this pg
     virtual void publish_stats_to_osd() = 0;
     /// Clear stats to be shipped to mon for this pg
@@ -405,10 +412,10 @@ public:
     virtual void on_change(ObjectStore::Transaction &t) = 0;
     virtual void on_activate(interval_set<snapid_t> to_trim) = 0;
     virtual void on_replica_activate() {}
-    virtual void on_activate_complete() = 0;
+    virtual void on_activate_complete(HBHandle *handle) = 0;
     virtual void on_new_interval() = 0;
     virtual Context *on_clean() = 0;
-    virtual void on_activate_committed() = 0;
+    virtual void on_activate_committed(HBHandle *handle) = 0;
     virtual void on_active_exit() = 0;
 
     // ====================== PG deletion =======================
@@ -435,10 +442,17 @@ public:
     virtual void on_backfill_suspended() = 0;
     virtual void on_recovery_reserved() = 0;
     virtual void on_recovery_cancelled() = 0;
+    virtual void on_pool_migration_source_starting() = 0;
+    virtual void on_pool_migration_source_reserved() = 0;
+    virtual void on_pool_migration_source_suspended() = 0;
+    virtual void on_pool_migration_target_reserved() = 0;
+    virtual void on_pool_migration_target_suspended(bool toofull) = 0;
 
     // ================recovery space accounting ================
     virtual bool try_reserve_recovery_space(
-      int64_t primary_num_bytes, int64_t local_num_bytes) = 0;
+      int64_t primary_num_bytes,
+      int64_t local_num_bytes,
+      int64_t num_objects = 0) = 0;
     virtual void unreserve_recovery_space() = 0;
 
     // ================== Peering log events ====================
@@ -576,6 +590,24 @@ public:
   TrivialEvent(AllBackfillsReserved)
   TrivialEvent(GoClean)
 
+  TrivialEvent(PoolMigrationDone)
+  TrivialEvent(AllPoolMigrationsReserved)
+  TrivialEvent(DoPoolMigration)
+  TrivialEvent(LocalPoolMigrationReserved)
+  TrivialEvent(PoolMigrationStoppedUnfound)
+  TrivialEvent(PoolMigrationStoppedTooFull)
+  TrivialEvent(PoolMigrationStoppedRevoked)
+
+  struct PoolMigrationStoppedError : boost::statechart::event< PoolMigrationStoppedError > {
+    int error_code;
+    explicit PoolMigrationStoppedError(int err) : error_code(err) {}
+    void print(std::ostream *out) const {
+      *out << "PoolMigrationStoppedError(" << error_code << ")";
+    }
+  };
+
+  TrivialEvent(StopTargetPoolMigration)
+
   TrivialEvent(AllReplicasActivated)
 
   TrivialEvent(IntervalFlush)
@@ -683,11 +715,17 @@ public:
   //       Recovering
   //       WaitRemoteRecoveryReserved
   //       WaitLocalRecoveryReserved
+  //       WaitRemotePoolMigrationReserved
+  //       WaitLocalPoolMigrationReserved
+  //       MigratingSource
+  //       MigratingTarget
+  //       NotMigrating
   //   ReplicaActive
   //     RepNotRecovering
   //     RepRecovering
   //     RepWaitBackfillReserved
   //     RepWaitRecoveryReserved
+  //     RepWaitPoolMigrationReserved
   //   Stray
   //   ToDelete
   //     WaitDeleteReserved
@@ -857,6 +895,7 @@ public:
   };
 
   struct WaitLocalRecoveryReserved;
+  struct WaitRemotePoolMigrationReserved;
   struct Activating;
   struct Active : boost::statechart::state< Active, Primary, Activating >, NamedState {
     explicit Active(my_context ctx);
@@ -864,7 +903,11 @@ public:
 
     const std::set<pg_shard_t> remote_shards_to_reserve_recovery;
     const std::set<pg_shard_t> remote_shards_to_reserve_backfill;
+    const std::set<pg_shard_t> remote_shards_to_reserve_migration;
     bool all_replicas_activated;
+    bool pool_migration_target_reservation_requested;
+    int64_t pool_migration_target_reservation_num_bytes;
+    int64_t pool_migration_target_reservation_num_objects;
 
     typedef boost::mpl::list <
       boost::statechart::custom_reaction< QueryState >,
@@ -888,7 +931,14 @@ public:
       boost::statechart::custom_reaction< RenewLease>,
       boost::statechart::custom_reaction< MLeaseAck>,
       boost::statechart::custom_reaction< CheckReadable>,
-      boost::statechart::custom_reaction< PgCreateEvt >
+      boost::statechart::custom_reaction< PgCreateEvt >,
+      boost::statechart::custom_reaction< DeferPoolMigration >,
+      boost::statechart::custom_reaction< PoolMigrationDone >,
+      boost::statechart::custom_reaction< StartTargetPoolMigration >,
+      boost::statechart::custom_reaction< StopTargetPoolMigration >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull>,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked>,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull>
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const QueryUnfound& q);
@@ -928,17 +978,46 @@ public:
     }
     boost::statechart::result react(const CheckReadable&);
     boost::statechart::result react(const PgCreateEvt&);
+    boost::statechart::result react(const DeferPoolMigration& evt) {
+      return discard_event();
+    }
+    boost::statechart::result react(const PoolMigrationDone& evt) {
+      return discard_event();
+    }
+    boost::statechart::result react(const StartTargetPoolMigration& evt) {
+      pool_migration_target_reservation_requested = true;
+      pool_migration_target_reservation_num_bytes = evt.source_num_bytes;
+      pool_migration_target_reservation_num_objects = evt.source_num_objects;
+      return discard_event();
+    }
+    boost::statechart::result react(const StopTargetPoolMigration& evt) {
+      pool_migration_target_reservation_requested = false;
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRevokedTooFull& evt) {
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRevoked& evt) {
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull& evt) {
+      return discard_event();
+    }
     void all_activated_and_committed();
   };
 
   struct Clean : boost::statechart::state< Clean, Active >, NamedState {
     typedef boost::mpl::list<
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
+      boost::statechart::custom_reaction<StartTargetPoolMigration>,
+      boost::statechart::custom_reaction<RemotePoolMigrationReserved>,
       boost::statechart::custom_reaction<SetForceRecovery>,
       boost::statechart::custom_reaction<SetForceBackfill>
     > reactions;
     explicit Clean(my_context ctx);
     void exit();
+    boost::statechart::result react(const StartTargetPoolMigration &evt);
+    boost::statechart::result react(const RemotePoolMigrationReserved &evt);
     boost::statechart::result react(const boost::statechart::event_base&) {
       return discard_event();
     }
@@ -947,13 +1026,20 @@ public:
   struct Recovered : boost::statechart::state< Recovered, Active >, NamedState {
     typedef boost::mpl::list<
       boost::statechart::transition< GoClean, Clean >,
+      boost::statechart::transition< StartTargetPoolMigration, WaitRemotePoolMigrationReserved >,
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
       boost::statechart::custom_reaction< AllReplicasActivated >
     > reactions;
     explicit Recovered(my_context ctx);
     void exit();
     boost::statechart::result react(const AllReplicasActivated&) {
-      post_event(GoClean());
+      if (context< Active >().pool_migration_target_reservation_requested) {
+	post_event(StartTargetPoolMigration(
+          context< Active >().pool_migration_target_reservation_num_bytes,
+          context< Active >().pool_migration_target_reservation_num_objects));
+      } else {
+        post_event(GoClean());
+      }
       return forward_event();
     }
   };
@@ -965,7 +1051,8 @@ public:
       boost::statechart::custom_reaction< UnfoundBackfill >,
       boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
       boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
-      boost::statechart::custom_reaction< RemoteReservationRevoked>
+      boost::statechart::custom_reaction< RemoteReservationRevoked>,
+      boost::statechart::custom_reaction< DoPoolMigration >
       > reactions;
     explicit Backfilling(my_context ctx);
     boost::statechart::result react(const RemoteReservationRejectedTooFull& evt) {
@@ -979,6 +1066,7 @@ public:
     boost::statechart::result react(const RemoteReservationRevoked& evt);
     boost::statechart::result react(const DeferBackfill& evt);
     boost::statechart::result react(const UnfoundBackfill& evt);
+    boost::statechart::result react(const DoPoolMigration& evt);
     void suspend_backfill();
     void exit();
   };
@@ -1001,14 +1089,90 @@ public:
 
   struct WaitLocalBackfillReserved : boost::statechart::state< WaitLocalBackfillReserved, Active >, NamedState {
     typedef boost::mpl::list<
-      boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >,
-      boost::statechart::custom_reaction< RemoteBackfillReserved >
+      boost::statechart::transition< LocalBackfillReserved, WaitRemoteBackfillReserved >
       > reactions;
     explicit WaitLocalBackfillReserved(my_context ctx);
     boost::statechart::result react(const RemoteBackfillReserved& evt) {
       /* no-op */
       return discard_event();
     }
+    void exit();
+  };
+
+  struct MigratingSource : boost::statechart::state< MigratingSource, Active >, NamedState {
+    typedef boost::mpl::list<
+      boost::statechart::custom_reaction< PoolMigrationDone >,
+      boost::statechart::custom_reaction< DeferPoolMigration >,
+      boost::statechart::custom_reaction< PoolMigrationStoppedUnfound >,
+      boost::statechart::custom_reaction< PoolMigrationStoppedTooFull>,
+      boost::statechart::custom_reaction< PoolMigrationStoppedRevoked >,
+      boost::statechart::custom_reaction< PoolMigrationStoppedError >
+      > reactions;
+    explicit MigratingSource(my_context ctx);
+    void migration_release_reservations();
+    void suspend_migration();
+    boost::statechart::result react(const PoolMigrationDone& evt);
+    boost::statechart::result react(const DeferPoolMigration& evt);
+    boost::statechart::result react(const PoolMigrationStoppedUnfound& evt);
+    boost::statechart::result react(const PoolMigrationStoppedTooFull& evt);
+    boost::statechart::result react(const PoolMigrationStoppedRevoked& evt);
+    boost::statechart::result react(const PoolMigrationStoppedError& evt);
+    void exit();
+  };
+
+  struct MigratingTarget : boost::statechart::state< MigratingTarget, Active >, NamedState {
+    typedef boost::mpl::list<
+      boost::statechart::custom_reaction< StopTargetPoolMigration >,
+      boost::statechart::custom_reaction< DoRecovery >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull >
+      > reactions;
+    explicit MigratingTarget(my_context ctx);
+    void migration_release_reservations();
+    void suspend_migration();
+    boost::statechart::result react(const StopTargetPoolMigration& evt);
+    boost::statechart::result react(const DoRecovery& evt);
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull& evt);
+    boost::statechart::result react(const RemotePoolMigrationRevoked& evt);
+    boost::statechart::result react(const RemotePoolMigrationRevokedTooFull& evt);
+    void exit();
+  };
+
+  struct WaitLocalPoolMigrationReserved : boost::statechart::state< WaitLocalPoolMigrationReserved, Active >, NamedState {
+    typedef boost::mpl::list<
+      boost::statechart::transition< LocalPoolMigrationReserved, MigratingSource >
+      > reactions;
+    explicit WaitLocalPoolMigrationReserved(my_context ctx);
+    void exit();
+  };
+
+  struct WaitRemotePoolMigrationReserved : boost::statechart::state< WaitRemotePoolMigrationReserved, Active >, NamedState {
+    typedef boost::mpl::list<
+      boost::statechart::custom_reaction< RemotePoolMigrationReserved >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull >,
+      boost::statechart::custom_reaction< StopTargetPoolMigration >,
+      boost::statechart::transition< AllPoolMigrationsReserved, MigratingTarget >
+      > reactions;
+    std::set<pg_shard_t>::const_iterator migration_osd_it;
+    explicit WaitRemotePoolMigrationReserved(my_context ctx);
+    void migration_release_reservations();
+    void retry();
+    boost::statechart::result react(const RemotePoolMigrationReserved& evt);
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull& evt);
+    boost::statechart::result react(const RemotePoolMigrationRevoked& evt);
+    boost::statechart::result react(const RemotePoolMigrationRevokedTooFull& evt);
+    boost::statechart::result react(const StopTargetPoolMigration& evt);
+    void exit();
+  };
+
+  struct NotMigrating : boost::statechart::state< NotMigrating, Active>, NamedState {
+    typedef boost::mpl::list<
+      boost::statechart::transition< DoPoolMigration, WaitLocalPoolMigrationReserved>
+      > reactions;
+    explicit NotMigrating(my_context ctx);
     void exit();
   };
 
@@ -1113,12 +1277,17 @@ public:
       boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
       boost::statechart::custom_reaction< BackfillTooFull >,
       boost::statechart::custom_reaction< RemoteRecoveryPreempted >,
-      boost::statechart::custom_reaction< RemoteBackfillPreempted >
+      boost::statechart::custom_reaction< RemoteBackfillPreempted >,
+      boost::statechart::transition< RemotePoolMigrationReservationCanceled, RepNotRecovering >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked >
       > reactions;
     explicit RepRecovering(my_context ctx);
     boost::statechart::result react(const RemoteRecoveryPreempted &evt);
     boost::statechart::result react(const BackfillTooFull &evt);
     boost::statechart::result react(const RemoteBackfillPreempted &evt);
+    boost::statechart::result react(const RemotePoolMigrationRevokedTooFull &evt);
+    boost::statechart::result react(const RemotePoolMigrationRevoked &evt);
     void exit();
   };
 
@@ -1155,20 +1324,47 @@ public:
     boost::statechart::result react(const RemoteReservationCanceled &evt);
   };
 
+  struct RepWaitPoolMigrationReserved : boost::statechart::state< RepWaitPoolMigrationReserved, ReplicaActive >, NamedState {
+    typedef boost::mpl::list<
+      boost::statechart::custom_reaction< RemotePoolMigrationReserved >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationReservationCanceled >
+      > reactions;
+    explicit RepWaitPoolMigrationReserved(my_context ctx);
+    void exit();
+    boost::statechart::result react(const RemotePoolMigrationReserved &evt);
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull &evt);
+    boost::statechart::result react(const RemotePoolMigrationReservationCanceled &evt);
+  };
+
   struct RepNotRecovering : boost::statechart::state< RepNotRecovering, ReplicaActive>, NamedState {
     typedef boost::mpl::list<
       boost::statechart::custom_reaction< RequestRecoveryPrio >,
       boost::statechart::custom_reaction< RequestBackfillPrio >,
       boost::statechart::custom_reaction< RejectTooFullRemoteReservation >,
-      boost::statechart::transition< RemoteReservationRejectedTooFull, RepNotRecovering >,
-      boost::statechart::transition< RemoteReservationCanceled, RepNotRecovering >,
+      boost::statechart::custom_reaction< RemoteReservationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemoteReservationCanceled >,
       boost::statechart::custom_reaction< RemoteRecoveryReserved >,
       boost::statechart::custom_reaction< RemoteBackfillReserved >,
-      boost::statechart::transition< RecoveryDone, RepNotRecovering >  // for compat with pre-reservation peers
+      boost::statechart::transition< RecoveryDone, RepNotRecovering >,  // for compat with pre-reservation peers
+      boost::statechart::custom_reaction< RemotePoolMigrationRequest >,
+      boost::statechart::custom_reaction< RemotePoolMigrationReservationCanceled >,
+      boost::statechart::custom_reaction< RemotePoolMigrationReserved >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRejectedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevokedTooFull >,
+      boost::statechart::custom_reaction< RemotePoolMigrationRevoked >
       > reactions;
     explicit RepNotRecovering(my_context ctx);
     boost::statechart::result react(const RequestRecoveryPrio &evt);
     boost::statechart::result react(const RequestBackfillPrio &evt);
+    boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
+    boost::statechart::result react(const RemotePoolMigrationRequest &evt);
+    // Backfill/recovery/pool migration can be stopped either because of a
+    // local event or a message from the primary. If both sides simultaneously
+    // try to stop the process then the second 'stop' event happens from
+    // this state and is simply discarded. These could have been implemented
+    // as simply transitions to the same state but this causes clutter on the
+    // state diagram in the peering documentation
     boost::statechart::result react(const RemoteBackfillReserved &evt) {
       // my reservation completion raced with a RELEASE from primary
       return discard_event();
@@ -1177,7 +1373,34 @@ public:
       // my reservation completion raced with a RELEASE from primary
       return discard_event();
     }
-    boost::statechart::result react(const RejectTooFullRemoteReservation &evt);
+    boost::statechart::result react(const RemoteReservationRejectedTooFull &evt) {
+      // my too full completion raced with a RELEASE from primnary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemoteReservationCanceled &evt) {
+      // RELEASE from primary raced with my too full/revoke
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationReservationCanceled &evt) {
+      // RELEASE from primary raced with local revoke or revoke_toofull message.
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationReserved &evt) {
+      // my reserved completion raced with a RELEASE from primary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRejectedTooFull &evt) {
+      // my reject too full raced with a RELEASE from primary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRevokedTooFull &evt) {
+      // my revoke too full raced with a RELEASE from primary
+      return discard_event();
+    }
+    boost::statechart::result react(const RemotePoolMigrationRevoked &evt) {
+      // my revoke raced with a RELEASE from primary
+      return discard_event();
+    }
     void exit();
   };
 
@@ -1186,7 +1409,8 @@ public:
       boost::statechart::custom_reaction< AllReplicasRecovered >,
       boost::statechart::custom_reaction< DeferRecovery >,
       boost::statechart::custom_reaction< UnfoundRecovery >,
-      boost::statechart::custom_reaction< RequestBackfill >
+      boost::statechart::custom_reaction< RequestBackfill >,
+      boost::statechart::custom_reaction< DoPoolMigration >
       > reactions;
     explicit Recovering(my_context ctx);
     void exit();
@@ -1195,6 +1419,7 @@ public:
     boost::statechart::result react(const DeferRecovery& evt);
     boost::statechart::result react(const UnfoundRecovery& evt);
     boost::statechart::result react(const RequestBackfill &evt);
+    boost::statechart::result react(const DoPoolMigration &evt);
   };
 
   struct WaitRemoteRecoveryReserved : boost::statechart::state< WaitRemoteRecoveryReserved, Active >, NamedState {
@@ -1224,7 +1449,8 @@ public:
     typedef boost::mpl::list <
       boost::statechart::transition< AllReplicasRecovered, Recovered >,
       boost::statechart::transition< DoRecovery, WaitLocalRecoveryReserved >,
-      boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved >
+      boost::statechart::transition< RequestBackfill, WaitLocalBackfillReserved >,
+      boost::statechart::transition< DoPoolMigration, WaitLocalPoolMigrationReserved >
       > reactions;
     explicit Activating(my_context ctx);
     void exit();
@@ -1660,6 +1886,8 @@ public:
   unsigned get_recovery_priority();
   /// get backfill reservation priority
   unsigned get_backfill_priority();
+  /// get pool migration reservation priority
+  unsigned get_pool_migration_priority();
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
@@ -2038,7 +2266,6 @@ public:
    * retrieve the min last_backfill among backfill targets
    */
   hobject_t earliest_backfill() const;
-
 
   /**
    * Updates local log/missing to reflect new oob log update from primary
@@ -2421,6 +2648,10 @@ public:
   bool is_recovering() const { return state_test(PG_STATE_RECOVERING); }
   bool is_premerge() const { return state_test(PG_STATE_PREMERGE); }
   bool is_repair() const { return state_test(PG_STATE_REPAIR); }
+  bool is_migrating() const { return state_test(PG_STATE_MIGRATING); }
+  bool is_migration_unfound() const {
+    return state_test(PG_STATE_MIGRATION_UNFOUND);
+  }
   bool is_empty() const { return info.last_update == eversion_t(0,0); }
 
   bool get_need_up_thru() const {
@@ -2473,6 +2704,7 @@ public:
 
   bool needs_recovery() const;
   bool needs_backfill() const;
+  bool needs_pool_migration() const;
 
   bool can_serve_read(const hobject_t &hoid);
 

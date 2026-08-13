@@ -191,6 +191,23 @@ void OSDECPoolCreateRequest::decode_json(JSONObj* obj) {
   JSONDecoder::decode_json("erasure_code_profile", erasure_code_profile, obj);
 }
 
+void OSDPoolMigrateRequest::dump(Formatter* f) const {
+  encode_json("prefix", "osd pool create", f);
+  encode_json("pool", pool, f);
+  encode_json("migrate_from_pool", migrate_from_pool, f);
+  encode_json("pg_num", pg_num, f);
+  encode_json("enable_ec_optimizations", enable_ec_optimizations, f);
+  encode_json("yes_i_really_mean_it", yes_i_really_mean_it, f);
+}
+
+void OSDPoolMigrateRequest::decode_json(JSONObj* obj) {
+  JSONDecoder::decode_json("pool", pool, obj);
+  JSONDecoder::decode_json("migrate_from_pool", migrate_from_pool, obj);
+  JSONDecoder::decode_json("pg_num", pg_num, obj);
+  JSONDecoder::decode_json("enable_ec_optimizations", enable_ec_optimizations, obj);
+  JSONDecoder::decode_json("yes_i_really_mean_it", yes_i_really_mean_it, obj);
+}
+
 void OSDSetRequest::dump(Formatter* f) const {
   encode_json("prefix", "osd set", f);
   encode_json("key", key, f);

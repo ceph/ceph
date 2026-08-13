@@ -209,6 +209,32 @@ following:
   :Required: No.
   :Default: The default behavior is determined by the :confval:`osd_pool_default_pg_autoscale_mode` option.
 
+.. describe:: --enable-ec-optimizations
+
+   For ``erasure`` pools only. Enables erasure code optimizations at pool
+   creation time. When enabled, this flag automatically sets the
+   ``allow_ec_optimizations`` pool flag, which enables performance optimizations
+   for erasure-coded pools. This flag can only be enabled for erasure-coded
+   pools and requires all OSDs to be running Tentacle or later. If the pool
+   does not support EC optimizations (e.g., non-EC pool, unsupported erasure
+   code profile, or insufficient OSD version), the flag is silently ignored.
+
+  :Type: Boolean
+  :Required: No.
+  :Default: false
+
+.. describe:: --migrate_from_pool=<source-pool-name>
+
+  Perform a non-disruptive migration of all data from ``source-pool-name`` to
+  a new pool. PGs in the source pool will be migrated to the new pool in reverse order
+  until the source pool is empty. The new pool will inherit any configuration values
+  from the source pool that are not explicitly specified in the command. Can be used to
+  perform non-disruptive configuration changes that would not otherwise be possible
+  such as moving all objects from a replicated pool to an erasure coded pool.
+
+  :Type: String
+  :Required: No.
+
 .. describe:: [expected-num-objects]
 
    The expected number of RADOS objects for this pool. By setting this value,

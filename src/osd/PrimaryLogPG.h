@@ -106,6 +106,9 @@ public:
     std::map<std::string, ceph::buffer::list, std::less<>> attrs; // xattrs
     uint64_t truncate_seq;
     uint64_t truncate_size;
+    bool whiteout; ///< Source object is whiteout
+    std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> watchers;
+
     bool is_data_digest() {
       return flags & object_copy_data_t::FLAG_DATA_DIGEST;
     }
@@ -120,7 +123,8 @@ public:
 	flags(0),
 	source_data_digest(-1), source_omap_digest(-1),
 	data_digest(-1), omap_digest(-1),
-	truncate_seq(0), truncate_size(0)
+	truncate_seq(0), truncate_size(0),
+        whiteout(false), watchers()
     {}
   };
 
@@ -698,6 +702,7 @@ public:
     bool ignore_log_op_stats;  // don't log op stats
     bool update_log_only; ///< this is a write that returned an error - just record in pg log for dup detection
     bool use_replace_op = false;  ///< use REPLACE op type instead of MODIFY/DELETE (set by finish_copyfrom)
+    bool pool_migration;  ///< true if this is a pool migration copy — suppresses clone_overlap update in make_writeable
     ObjectCleanRegions clean_regions;
 
     // side effects
@@ -750,8 +755,6 @@ public:
     mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > extra_reqids;
     mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
 
-    hobject_t new_temp_oid, discard_temp_oid;  ///< temp objects we should start/stop tracking
-
     std::list<std::function<void()>> on_applied;
     std::list<std::function<void()>> on_committed;
     std::list<std::function<void()>> on_finish;
@@ -803,6 +806,7 @@ public:
       new_obs(obs->oi, obs->exists),
       modify(false), user_modify(false), undirty(false), cache_operation(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
+      pool_migration(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       obc(obc),
@@ -822,6 +826,7 @@ public:
       op(_op), reqid(_reqid), ops(_ops), obs(NULL), snapset(0),
       modify(false), user_modify(false), undirty(false), cache_operation(false),
       ignore_cache(false), ignore_log_op_stats(false), update_log_only(false),
+      pool_migration(false),
       bytes_written(0), bytes_read(0), user_at_version(0),
       current_osd_subop_num(0),
       reply(NULL), pg(_pg),
@@ -1196,6 +1201,59 @@ protected:
   hobject_t last_backfill_started;
   bool new_backfill;
 
+  /// current watermark tracking pool migration progress
+  hobject_t pool_migration_watermark;
+  /// currently migrating objects
+  std::set<hobject_t> pool_migrations_in_flight;
+  /// new writes blocked by pool migration
+  std::set<hobject_t> pool_migration_blocked_writes;
+  /// count of snaps being migrated per head object
+  std::map<hobject_t,int> pool_migration_clones_in_flight;
+  /// last pool migration operation started
+  hobject_t last_pool_migration_started;
+  /// set for 1st object migration after activate
+  bool new_pool_migration_interval;
+  /// set while migrating 1st object after activate
+  bool new_pool_migration_interval_in_flight;
+
+  /// Reason for quiescing pool migration operations
+  enum class PoolMigrationQuiesceReason {
+    NONE,           // Not quiescing
+    FATAL_ERROR,    // Fatal error (ENOENT, EIO, etc.) - stop migration
+    RETRY_NEEDED,   // Retryable error (EBUSY) - retry after drain
+    SUSPEND_NEEDED  // Suspension requested - drain any in-flight migrations first
+  };
+  /// Current quiesce state for pool migration
+  PoolMigrationQuiesceReason pool_migration_quiesce_reason = PoolMigrationQuiesceReason::NONE;
+  /// Error code that triggered quiesce (for logging and decision making)
+  int pool_migration_quiesce_error_code = 0;
+  /// Flag to track if last_pool_migration_started has been reset during quiesce
+  bool pool_migration_quiesce_last_started_reset = false;
+
+  /// objects waiting for lock retry to delete source after successful copy_from
+  std::set<hobject_t> pool_migration_source_delete_pending_lock;
+  /// current source PG reservation TID. Not 0 means source PG is waiting for a response
+  ceph_tid_t pool_migration_reservation_tid = 0;
+  /// source PG has received reservation granted response from target PG
+  bool pool_migration_reservations_granted_source = false;
+  /// target PG has taken reservations and replied to the source PG
+  bool pool_migration_reservations_granted_target = false;
+  /// current migration target pg
+  std::optional<pg_t> pool_migration_target_pg;
+  /// pending reservation requests for target to reply to
+  std::vector<OpRequestRef> pending_pool_migration_reservation_ops;
+
+  hobject_t next_pool_migration(std::optional<hobject_t> start);
+  hobject_t earliest_pool_migration()
+  {
+    return next_pool_migration(std::nullopt);
+  }
+  void update_migration_watermark(const hobject_t &watermark) override
+  {
+    pool_migration_watermark = watermark;
+  }
+  std::optional<hobject_t> consider_updating_migration_watermark(std::set<hobject_t> &deleted) override;
+
   int prep_object_replica_pushes(const hobject_t& soid, eversion_t v,
 				 PGBackend::RecoveryHandle *h,
 				 bool *work_started);
@@ -1357,10 +1415,21 @@ protected:
     const std::set<pg_shard_t> &backfill_targets
     );
 
+  void scan_range_migration(
+    int min, int max, PoolMigrationInterval *pmi,
+    HBHandle *handle,
+    hobject_t start
+    );
+
   /// Update a hash range to reflect changes since the last scan
   void update_range(
     PrimaryBackfillInterval *bi, ///< [in,out] interval to update
     ThreadPool::TPHandle &handle ///< [in] tp handle
+    );
+
+  void update_range(
+    PoolMigrationInterval *pmi,
+    HBHandle *handle
     );
 
   int prep_backfill_object_push(
@@ -1378,6 +1447,30 @@ protected:
   void _applied_recovered_object_replica();
   void _committed_pushed_object(epoch_t epoch, eversion_t lc);
   void recover_got(hobject_t oid, eversion_t v);
+
+  /**
+   * Schedule pool migration work
+   * @param work_started will be std::set to true if recover_migration got anywhere
+   * @returns the number of operations started
+   */
+  uint64_t recover_pool_migration(uint64_t max, ThreadPool::TPHandle &handle,
+			          bool *work_started);
+  pg_t get_source_pg_from_hash(const hobject_t &hobj);
+  pg_t get_target_pg_from_hash(const hobject_t &hobj);
+  uint16_t count_remaining_target_pgs(const hobject_t &hobj);
+  void pool_migration_request_target_reservation() override;
+  void pool_migration_release_target_reservation() override;
+
+  void start_target_pool_migration(int64_t num_bytes, int64_t num_objects);
+  void stop_target_pool_migration();
+  void stop_pool_migration_unfound();
+  void stop_pool_migration_toofull();
+  void stop_pool_migration_revoked();
+  void stop_pool_migration_error(int error_code);
+  void on_pool_migration_source_starting() override;
+  void on_pool_migration_source_suspended() override;
+  void on_pool_migration_target_reserved() override;
+  void on_pool_migration_target_suspended(bool toofull) override;
 
   // -- copyfrom --
   std::map<hobject_t, CopyOpRef> copy_ops;
@@ -1402,6 +1495,7 @@ protected:
 		  object_locator_t oloc, version_t version, unsigned flags,
 		  bool mirror_snapset, unsigned src_obj_fadvise_flags,
 		  unsigned dest_obj_fadvise_flags);
+  void migration_copy_from_check(hobject_t soid);
   void process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r);
   void _write_copy_chunk(CopyOpRef cop, PGTransaction *t);
   uint64_t get_copy_chunk_size() const {
@@ -1545,6 +1639,8 @@ protected:
   friend struct C_SetDedupChunks;
   friend struct C_SetManifestRefCountDone;
   friend struct SetManifestFinisher;
+  friend struct C_Migrate;
+  friend struct C_PoolMigrationReservationCallback;
 
 public:
   PrimaryLogPG(OSDService *o, OSDMapRef curmap,
@@ -1586,8 +1682,11 @@ public:
 
   void handle_backoff(OpRequestRef& op);
 
+  int add_trim_to_ctx(OpContext *ctx, const hobject_t &coid, snapid_t snap_to_trim,
+                      ObjectContextRef obc, ObjectContextRef head_obc,
+                      int64_t src_pool = -1);
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
-		  OpContextUPtr *ctxp);
+                  OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
@@ -1601,6 +1700,14 @@ public:
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
   int start_cls_gather(OpContext *ctx, std::map<std::string, bufferlist> *src_objs, const std::string& pool,
 		       const char *cls, const char *method, bufferlist& inbl);
+
+  bool handle_pool_migration_copy_failure(hobject_t oid, int r);
+  void handle_pool_migration_quiesce_complete();
+
+  void pool_migration_source_start_delete_head(hobject_t oid);
+  void pool_migration_source_start_delete(hobject_t oid);
+  bool pool_migration_source_delete(hobject_t oid);
+  void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
@@ -1900,7 +2007,7 @@ private:
   // return true if we're creating a local object, false for a
   // whiteout or no change.
   void maybe_create_new_object(OpContext *ctx, bool ignore_transaction=false);
-  int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout);
+  int _delete_oid(OpContext *ctx, bool no_whiteout, bool try_no_whiteout, bool pool_migration=false);
   int _rollback_to(OpContext *ctx, OSDOp& op);
   void _do_rollback_to(OpContext *ctx, ObjectContextRef rollback_to,
 				    OSDOp& op);
@@ -1971,7 +2078,9 @@ public:
   void plpg_on_pool_change() override;
   void clear_async_reads();
   void on_change(ObjectStore::Transaction &t) override;
-  void on_activate_complete() override;
+  void _on_activate_committed(HBHandle *handle);
+  void on_activate_committed(HBHandle *handle) override;
+  void on_activate_complete(HBHandle *handle) override;
   void on_flushed() override;
   void on_removal(ObjectStore::Transaction &t) override;
   void on_shutdown() override;
