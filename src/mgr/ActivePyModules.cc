@@ -167,7 +167,7 @@ PyObject *ActivePyModules::get_metadata_python(
     Py_RETURN_NONE;
   }
   auto l = without_gil([&] {
-    return std::lock_guard(lock);
+    return std::lock_guard(metadata->lock);
   });
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
@@ -188,7 +188,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
     Py_RETURN_NONE;
   }
   auto l = without_gil([&] {
-    return std::lock_guard(lock);
+    return std::lock_guard(metadata->lock);
   });
   PyFormatter f;
   for (const auto &[daemon, status] : metadata->service_status) {
@@ -1792,7 +1792,11 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
       for (const auto &[hostname, daemon_state] : all) {
         for (const auto &[key, state] : daemon_state) {
           f.open_array_section(ceph::to_string(key));
-          for (const auto &metric : state->daemon_health_metrics) {
+          auto metrics = without_gil([state=state] {
+            std::lock_guard l(state->lock);
+            return state->daemon_health_metrics;
+          });
+          for (const auto &metric : metrics) {
             f.open_object_section(metric.get_type_name());
             f.dump_int("value", metric.get_n1());
             f.dump_string("type", metric.get_type_name());

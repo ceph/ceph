@@ -2593,7 +2593,11 @@ bool DaemonServer::_handle_command(
       auto rgw_daemons = daemon_state.get_by_service("rgw");
       for (auto& rgw_daemon : rgw_daemons) {
 	DaemonStatePtr daemon = rgw_daemon.second;
-	string name = daemon->metadata.find("id")->second;
+	string name;
+	{
+	  std::lock_guard l(daemon->lock);
+	  name = daemon->metadata.find("id")->second;
+	}
 	/*
 	 * The id stored in the metadata is the port number
 	 * for the RGW daemon.
