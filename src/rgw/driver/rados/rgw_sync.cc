@@ -1128,13 +1128,18 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   rgw::sal::RadosStore* store;
   string raw_key;
   bufferlist bl;
+  RGWMDLogSyncType sync_type;
   const DoutPrefixProvider *dpp;
 protected:
   int _send_request(const DoutPrefixProvider *dpp) override {
-    int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, dpp, RGWMDLogSyncType::APPLY_ALWAYS, true);
+    int ret = store->ctl()->meta.mgr->put(raw_key, bl, null_yield, dpp, sync_type, true);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
+    }
+    /* STATUS_NO_APPLY is not an error: the marker must still advance */
+    if (ret == STATUS_NO_APPLY) {
+      ldpp_dout(dpp, 10) << "skipped stale metadata entry: " << raw_key << dendl;
     }
     return 0;
   }
@@ -1142,8 +1147,9 @@ public:
   RGWAsyncMetaStoreEntry(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
                        const string& _raw_key,
                        bufferlist& _bl,
+                       RGWMDLogSyncType _sync_type,
                        const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn), store(_store),
-                                          raw_key(_raw_key), bl(_bl), dpp(dpp) {}
+                                          raw_key(_raw_key), bl(_bl), sync_type(_sync_type), dpp(dpp) {}
 };
 
 
@@ -1151,14 +1157,16 @@ class RGWMetaStoreEntryCR : public RGWSimpleCoroutine {
   RGWMetaSyncEnv *sync_env;
   string raw_key;
   bufferlist bl;
+  RGWMDLogSyncType sync_type;
 
   RGWAsyncMetaStoreEntry *req;
 
 public:
   RGWMetaStoreEntryCR(RGWMetaSyncEnv *_sync_env,
                        const string& _raw_key,
-                       bufferlist& _bl) : RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env),
-                                          raw_key(_raw_key), bl(_bl), req(NULL) {
+                       bufferlist& _bl,
+                       RGWMDLogSyncType _sync_type) : RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env),
+                                          raw_key(_raw_key), bl(_bl), sync_type(_sync_type), req(NULL) {
   }
 
   ~RGWMetaStoreEntryCR() override {
@@ -1169,7 +1177,7 @@ public:
 
   int send_request(const DoutPrefixProvider *dpp) override {
     req = new RGWAsyncMetaStoreEntry(this, stack->create_completion_notifier(),
-			           sync_env->store, raw_key, bl, dpp);
+			           sync_env->store, raw_key, bl, sync_type, dpp);
     sync_env->async_rados->queue(req);
     return 0;
   }
@@ -1298,12 +1306,14 @@ public:
 RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
 		           const string& _raw_key, const string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
-                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct),
+                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent,
+                           RGWMDLogSyncType _sync_type) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
 						      raw_key(_raw_key), entry_marker(_entry_marker),
                                                       op_status(_op_status),
                                                       pos(0), sync_status(0),
-                                                      marker_tracker(_marker_tracker), tries(0) {
+                                                      marker_tracker(_marker_tracker), tries(0),
+                                                      sync_type(_sync_type) {
   error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
   tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", raw_key);
 }
@@ -1383,7 +1393,7 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
           }
         }
         tn->log(10, SSTR("storing local metadata entry: " << section << ":" << key));
-        yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl));
+        yield call(new RGWMetaStoreEntryCR(sync_env, raw_key, md_bl, sync_type));
       } else {
         tn->log(10, SSTR("removing local metadata entry:" << section << ":" << key));
         yield call(new RGWMetaRemoveEntryCR(sync_env, raw_key));
@@ -1706,7 +1716,9 @@ public:
           } else {
             // fetch remote and write locally
             yield {
-              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, marker, marker, MDLOG_STATUS_COMPLETE, marker_tracker, tn), false);
+              // full sync must not skip anything: it forces a diverged zone back into line
+              RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, marker, marker, MDLOG_STATUS_COMPLETE, marker_tracker, tn,
+                                                                             RGWMDLogSyncType::APPLY_ALWAYS), false);
               // stack_to_pos holds a reference to the stack
               stack_to_pos[stack] = marker;
               pos_to_prev[marker] = marker;
@@ -1920,7 +1932,8 @@ public:
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
               yield {
-                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn), false);
+                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn,
+                                                                               RGWMDLogSyncType::APPLY_UPDATES), false);
                 ceph_assert(stack);
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
