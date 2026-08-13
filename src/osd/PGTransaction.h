@@ -597,13 +597,13 @@ public:
         for (const auto &[type, bl] : op.omap_updates) {
           f->open_object_section("omap_update");
           switch (type) {
-            case ObjectOperation::OmapUpdateType::Remove:
+            case OmapUpdateType::Remove:
               f->dump_string("type", "remove");
               break;
-            case ObjectOperation::OmapUpdateType::Insert:
+            case OmapUpdateType::Insert:
               f->dump_string("type", "insert");
               break;
-            case ObjectOperation::OmapUpdateType::RemoveRange:
+            case OmapUpdateType::RemoveRange:
               f->dump_string("type", "remove_range");
               break;
           }
