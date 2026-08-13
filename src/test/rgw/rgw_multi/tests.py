@@ -6742,21 +6742,6 @@ def test_copy_obj_perm_check_between_zonegroups(zonegroup):
 
 
 def test_object_lock_sync():
-    zonegroup = realm.master_zonegroup()
-    zonegroup_conns = ZonegroupConns(zonegroup)
-    primary = zonegroup_conns.rw_zones[0]
-    secondary = zonegroup_conns.rw_zones[1]
-
-    bucket = primary.create_bucket(gen_bucket_name())
-    log.debug('created bucket=%s', bucket.name)
-
-    # enable versioning
-    primary.s3_client.put_bucket_versioning(
-        Bucket=bucket.name,
-        VersioningConfiguration={'Status': 'Enabled'}
-    )
-    zonegroup_meta_checkpoint(zonegroup)
-
     lock_config = {
         'ObjectLockEnabled': 'Enabled',
         'Rule': {
@@ -6767,17 +6752,26 @@ def test_object_lock_sync():
         }
     }
 
-    primary.s3_client.put_object_lock_configuration(
-        Bucket=bucket.name,
-        ObjectLockConfiguration=lock_config
-    )
+    buckets, zone_bucket = create_bucket_per_zone_in_realm()
+    for zone, bucket in zone_bucket:
+        # enable versioning
+        zone.s3_client.put_bucket_versioning(
+            Bucket=bucket.name,
+            VersioningConfiguration={'Status': 'Enabled'}
+        )
+        zone.s3_client.put_object_lock_configuration(
+            Bucket=bucket.name,
+            ObjectLockConfiguration=lock_config
+        )
 
-    zonegroup_meta_checkpoint(zonegroup)
-    zone_data_checkpoint(secondary.zone, primary.zone)
+    realm_meta_checkpoint(realm)
 
-    response = secondary.s3_client.get_object_lock_configuration(Bucket=bucket.name)
-    assert response['ObjectLockConfiguration'] == lock_config
-
+    for zone, bucket in zone_bucket:
+        # cross-zonegroup redirects don't work, so we only test zones in the bucket's zonegroup
+        for z in zone.zone.zonegroup.zones:
+            conn = z.get_conn(user.credentials)
+            response = conn.s3_client.get_object_lock_configuration(Bucket=bucket.name)
+            assert response['ObjectLockConfiguration'] == lock_config
 
 def test_period_update_commit():
     wkld_concurrency = 10
