@@ -1,3 +1,8 @@
+* RADOS: ``pg-upmap-items`` entries and the upmap balancer now work on pools whose
+  CRUSH rule has more than one ``take`` step, such as hybrid rules that place some
+  replicas on one device class and the rest on another. Previously every upmap on
+  such a pool was rejected by the mon and the balancer could not optimize them.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
