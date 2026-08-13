@@ -86,12 +86,13 @@ void DispatchQueue::enqueue(ref_t<Message>&& m, int priority, uint64_t id)
     return;
   }
   ldout(cct,20) << "queue " << m << " prio " << priority << dendl;
+  auto&& cost = m->get_cost();
   QueueItem item{std::move(m)};
   add_arrival(item);
   if (priority >= CEPH_MSG_PRIO_LOW) {
     mqueue.enqueue_strict(id, priority, std::move(item));
   } else {
-    mqueue.enqueue(id, priority, m->get_cost(), std::move(item));
+    mqueue.enqueue(id, priority, cost, std::move(item));
   }
   cond.notify_one();
 }
