@@ -880,7 +880,8 @@ if(WITH_RADOSGW_STANDALONE)
     PUBLIC "-UWITH_RADOSGW_D4N"
     PUBLIC "-UWITH_RADOSGW_RADOS"
     PUBLIC "-UWITH_RADOSGW_MOTR"
-    PUBLIC "-UWITH_RADOSGW_DAOS")
+    PUBLIC "-UWITH_RADOSGW_DAOS"
+    PUBLIC "-fno-devirtualize-speculatively")
 
   install(TARGETS rgw-standalone-admin DESTINATION bin)
 endif()
