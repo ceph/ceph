@@ -3,6 +3,7 @@
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/JSONFormatter.h"
+#include "common/errno.h"
 #include "include/function2.hpp"
 #include "rgw_acl_s3.h"
 #include "rgw_tag_s3.h"
@@ -28,7 +29,9 @@
 
 #include "cls/user/cls_user_types.h"
 
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
