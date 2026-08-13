@@ -1131,6 +1131,15 @@ private:
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
 
+  // -- garbage collection for orphaned fragments --
+  struct delayed_fragment_t {
+    CDir *dir;
+    bool replay;
+  };
+  std::list<delayed_fragment_t> delayed_fragment_deletes;
+  void queue_delayed_fragment_delete(CDir *dir, bool replay);
+  void process_delayed_fragment_deletes();
+
   // == crap fns ==
   void show_cache();
   void show_subtrees(int dbl=10, bool force_print=false);

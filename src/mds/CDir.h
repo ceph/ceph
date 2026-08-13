@@ -121,6 +121,7 @@ public:
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
   static const int PIN_SUBTREETEMP = 12;  // used by MDCache::trim_non_auth()
+  static const int PIN_DELAYEDDROP = 13;  // used by delayed fragment garbage collection
 
   // -- state --
   static const unsigned STATE_COMPLETE =      (1<< 0);  // the complete contents are in cache
@@ -221,6 +222,7 @@ public:
     case PIN_EXPORTBOUND: return "exportbound";
     case PIN_STICKY: return "sticky";
     case PIN_SUBTREETEMP: return "subtreetemp";
+    case PIN_DELAYEDDROP: return "delayeddrop";
     default: return generic_pin_name(p);
     }
   }
