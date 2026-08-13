@@ -746,8 +746,7 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_NF(uint64_t start_seq,
-                                     bluefs_transaction_t *t,
+  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
 				     int flags,
 				     uint64_t capture_before_seq);
 
