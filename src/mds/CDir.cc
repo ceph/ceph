@@ -2294,6 +2294,22 @@ void CDir::go_bad(bool complete)
   state_clear(STATE_FETCHING);
   auth_unpin(this);
   finish_waiting(WAIT_COMPLETE, -EIO);
+  /*
+   * fetch_keys() parks its completion contexts in waiting_on_dentry
+   * rather than in the IO callback chain.  If the dirfrag object is
+   * missing/corrupt, complete them with -EIO, otherwise callers such
+   * as MDCache::open_ino_traverse_dir() wait forever and (during
+   * rejoin) OpenFileTable::_prefetch_inodes() never finishes,
+   * wedging the MDS in up:rejoin.
+   */
+  if (!waiting_on_dentry.empty()) {
+    MDSContext::vec ls;
+    for (const auto &p : waiting_on_dentry)
+      std::copy(p.second.begin(), p.second.end(), std::back_inserter(ls));
+    waiting_on_dentry.clear();
+    put(PIN_DNWAITER);
+    finish_contexts(g_ceph_context, ls, -EIO);
+  }
 }
 
 // -----------------------
