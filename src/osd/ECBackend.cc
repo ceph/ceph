@@ -1633,6 +1633,47 @@ struct SparseReadCompleter final : ECCommon::ReadCompleter {
       result = res.r;
       return;
     }
+    *out_map = ECUtil::merge_shard_extent_maps(res.sparse_extents_read, sinfo);
+    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
+      << " merged RO extent map (pre-clip)=" << *out_map << dendl;
+    // Clip the full-object extent map to the requested [offset, length] window,
+    // also clip the extent map to the logical object size.
+    {
+      const uint64_t req_offset = req.to_read.front().offset;
+      const uint64_t req_end    = std::min(req_offset + req.to_read.front().size,
+                                           req.object_size);
+      auto it = out_map->begin();
+      while (it != out_map->end()) {
+        const uint64_t ext_end = it->first + it->second;
+        if (ext_end <= req_offset || it->first >= req_end) {
+          // Entirely outside the requested range — drop it.
+          it = out_map->erase(it);
+        } else {
+          // Clip start if needed.
+          if (it->first < req_offset) {
+            const uint64_t new_len = it->second - (req_offset - it->first);
+            it = out_map->emplace_hint(out_map->erase(it),
+                                       req_offset, new_len);
+          }
+          // Clip end if needed.
+          if (it->first + it->second > req_end) {
+            it->second = req_end - it->first;
+          }
+          ++it;
+        }
+      }
+    }
+    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
+      << " merged+clipped RO extent map=" << *out_map
+      << " for ro_read=[" << req.to_read.front().offset
+      << "~" << req.to_read.front().size << "]" << dendl;
+    if (out_map->empty()) {
+      return;
+    }
+    // Zero-fill intra-object holes in the shard data (sparse objects have
+    // unallocated extents within the requested range that are not returned
+    // by fiemap; the EC decode requires a dense stripe, so we must pad them
+    // to zeros before decoding).
     res.buffers_read.zero_pad(req.shard_want_to_read);
     res.buffers_read.add_zero_padding_for_decode(req.zeros_for_decode);
     int r = res.buffers_read.decode(read_pipeline.ec_impl,
@@ -1669,12 +1710,12 @@ struct SparseReadCompleter final : ECCommon::ReadCompleter {
     *out_map = ECUtil::merge_shard_extent_maps(res.sparse_extents_read, sinfo);
     ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
       << " merged RO extent map (pre-clip)=" << *out_map << dendl;
-    // Clip the full-object extent map to the requested [offset, length] window.
-    // The fiemap was issued over the full shard extent so merge_shard_extent_maps
-    // may return extents outside [offset, offset+length]; strip those out.
+    // Clip the full-object extent map to the requested [offset, length] window,
+    // also clip the extent map to the logical object size.
     {
       const uint64_t req_offset = req.to_read.front().offset;
-      const uint64_t req_end    = req_offset + req.to_read.front().size;
+      const uint64_t req_end    = std::min(req_offset + req.to_read.front().size,
+                                           req.object_size);
       auto it = out_map->begin();
       while (it != out_map->end()) {
         const uint64_t ext_end = it->first + it->second;
@@ -1787,10 +1828,9 @@ struct ECMapextCompleter final : ECCommon::ReadCompleter {
     auto merged = ECUtil::merge_shard_extent_maps(res.sparse_extents_read, sinfo);
     ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
       << " merged RO extent map=" << merged << dendl;
-    // Clamp results to the requested [offset, offset+length) range.
-    // EC pools round extents to stripe boundaries, so the merged map may
-    // extend before offset or past offset+length.
-    const uint64_t q_end = offset + length;
+    // Clip the full-object extent map to the requested [offset, length] window,
+    // also clip the extent map to the logical object size.
+    const uint64_t q_end = std::min(offset + length, req.object_size);
     for (auto &[ext_off, ext_len] : merged) {
       const uint64_t ext_end = ext_off + ext_len;
       if (ext_off >= q_end || ext_end <= offset)
