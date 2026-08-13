@@ -1,3 +1,12 @@
+* CephFS: The `fs subvolume snapshot clone` command now accepts two new optional
+  flags: `--namespace-isolated`, which places the cloned subvolume in its own
+  separate RADOS namespace (derived from the clone's group and name), and
+  `--preserve-namespace`, which retains the source snapshot's pool namespace
+  when `--pool_layout` is also specified (by default `--pool_layout` clears
+  the namespace). The two flags are mutually exclusive. Default behavior is
+  unchanged. In addition, `fs subvolume snapshot info` now reports the
+  snapshot's `pool_namespace`.
+
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
