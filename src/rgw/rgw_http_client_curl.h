@@ -16,8 +16,10 @@
 #pragma once
 
 #include <map>
+#include <string>
 #include <boost/optional.hpp>
-#include "rgw_frontend.h"
+
+class RGWFrontendConfig;
 
 namespace rgw {
 namespace curl {

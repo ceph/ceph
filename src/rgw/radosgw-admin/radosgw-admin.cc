@@ -68,11 +68,15 @@ extern "C" {
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
+#ifdef WITH_RADOSGW_RADOS
+// these pull in driver/rados/rgw_sal_rados.h, whose vtables only exist in
+// rgw_sal_rados.cc -- a TU that is not part of the standalone build
 #include "rgw_sync.h"
+#include "rgw_data_sync.h"
+#endif
 #include "rgw_trim_bilog.h"
 #include "rgw_trim_datalog.h"
 #include "rgw_trim_mdlog.h"
-#include "rgw_data_sync.h"
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
