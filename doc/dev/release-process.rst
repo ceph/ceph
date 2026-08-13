@@ -80,6 +80,10 @@ A security/CVE release is similar to a hotfix release with two differences:
     git push origin v19.2.3
     # Now create a Pull Request of squid-release targeting squid to merge the version commit and security fixes back into the squid branch
 
+For the pre-merge phase of an embargoed CVE fix — developing, building, and
+testing against a private fork via the ``cve-pipeline`` Jenkins job, before
+it ever reaches the process above — see :ref:`build and test cve`.
+
 1. Preparing the release branch
 ===============================
 
