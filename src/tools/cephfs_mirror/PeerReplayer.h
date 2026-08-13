@@ -787,7 +787,7 @@ private:
 
 
   int build_snap_map(const std::string &dir_root, std::map<uint64_t, std::string> *snap_map,
-                     bool is_remote=false);
+                     bool is_remote=false, SnapMetadataMap *snap_metadata_map = nullptr);
 
   void initialize_checkpoints(const std::string &dir_root);
   void checkpoint_sync_complete(const std::string &dir_root, uint64_t synced_snap_id,
