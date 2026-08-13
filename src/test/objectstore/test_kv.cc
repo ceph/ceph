@@ -1255,6 +1255,9 @@ TEST_F(RocksDBResharding, resume_interrupted_at_batch) {
   ctrl.unittest_fail_after_first_batch = true;
   ASSERT_EQ(db->reshard("Evade(4)", &ctrl), -1000);
   ASSERT_NE(db->open(cout), 0);
+  // but a read-only open of the interrupted db is possible
+  ASSERT_EQ(db->open_read_only(cout), 0);
+  db->close();
   ASSERT_EQ(db->reshard("Evade(4)"), 0);
   ASSERT_EQ(db->open(cout), 0);
   check_db();
@@ -1271,6 +1274,9 @@ TEST_F(RocksDBResharding, resume_interrupted_at_column) {
   ctrl.unittest_fail_after_processing_column = true;
   ASSERT_EQ(db->reshard("Evade(4)", &ctrl), -1001);
   ASSERT_NE(db->open(cout), 0);
+  // but a read-only open of the interrupted db is possible
+  ASSERT_EQ(db->open_read_only(cout), 0);
+  db->close();
   ASSERT_EQ(db->reshard("Evade(4)"), 0);
   ASSERT_EQ(db->open(cout), 0);
   check_db();
@@ -1287,6 +1293,46 @@ TEST_F(RocksDBResharding, resume_interrupted_before_commit) {
   ctrl.unittest_fail_after_successful_processing = true;
   ASSERT_EQ(db->reshard("Evade(4)", &ctrl), -1002);
   ASSERT_NE(db->open(cout), 0);
+  // but a read-only open of the interrupted db is possible
+  ASSERT_EQ(db->open_read_only(cout), 0);
+  db->close();
+  ASSERT_EQ(db->reshard("Evade(4)"), 0);
+  ASSERT_EQ(db->open(cout), 0);
+  check_db();
+  db->close();
+}
+
+TEST_F(RocksDBResharding, repair_with_extra_columns) {
+  ASSERT_EQ(0, db->create_and_open(cout, "Ad(1) Betelgeuse(1)"));
+  db->close();
+  // simulate rocksdb::RepairDB() resurrecting a dropped column family:
+  // remove Betelgeuse from the stored sharding definition
+  ASSERT_EQ(::system("echo -n 'Ad(1)' > sharding/def"), 0);
+  // extra columns must still refuse to open outside of repair
+  ASSERT_NE(db->open(cout), 0);
+  // in repair (recreate) mode, extra columns are opened and dropped
+  ASSERT_EQ(::system("echo -n 1 > sharding/recreate_columns"), 0);
+  ASSERT_EQ(db->open(cout), 0);
+  db->close();
+  // the repair is durable: marker consumed, extra columns dropped
+  ASSERT_EQ(db->open(cout), 0);
+  db->close();
+}
+
+TEST_F(RocksDBResharding, no_repair_during_resharding) {
+  ASSERT_EQ(0, db->create_and_open(cout, ""));
+  generate_data();
+  data_to_db();
+  check_db();
+  db->close();
+  RocksDBStore::resharding_ctrl ctrl;
+  ctrl.unittest_fail_after_first_batch = true;
+  ASSERT_EQ(db->reshard("Evade(4)", &ctrl), -1000);
+  // repair must refuse to touch a db with an interrupted resharding
+  ASSERT_EQ(::system("echo -n 1 > sharding/recreate_columns"), 0);
+  ASSERT_NE(db->open(cout), 0);
+  ASSERT_EQ(::system("rm sharding/recreate_columns"), 0);
+  // resuming the resharding is still possible
   ASSERT_EQ(db->reshard("Evade(4)"), 0);
   ASSERT_EQ(db->open(cout), 0);
   check_db();
