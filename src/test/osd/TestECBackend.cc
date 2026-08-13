@@ -40,7 +40,6 @@ private:
   pg_missing_set<false> shard_not_missing_const;
   pg_pool_t pg_pool;
   set<pg_shard_t> acting_recovery_backfill_shards;
-  shard_id_set acting_recovery_backfill_shard_id_set;
   map<pg_shard_t, pg_info_t> shard_info;
   PGLog pg_log;
   pg_info_t shard_pg_info;
@@ -48,6 +47,7 @@ private:
 
 public:
   set<pg_shard_t> acting_shards;
+  shard_id_set acting_recovery_backfill_shard_id_set;
 
   ECListenerStub()
     : pg_log(NULL) {}
@@ -1692,4 +1692,53 @@ TEST(ECCommon, get_min_avail_to_read_shards_zones_mixed_availability) {
   
   // Should have used some remote shards since local doesn't have enough
   ASSERT_GT(remote_count, 0) << "Should use remote shards when local insufficient";
+}
+
+// Test for the fix in 9a9c55e: get_readable_writable_shard_id_sets() must return
+// relative shard IDs (zone-local), not absolute IDs, so that downstream consumers
+// such as WritePlanObj::intersect with get_parity_shards() produce correct results
+// for zone-1 PGs in stretch mode.
+TEST(ECCommon, get_readable_writable_shard_id_sets_returns_relative_shards) {
+  // Use k=2, m=1 so k+m=3.  Zone-0 absolute shards: {0,1,2}.
+  // Zone-1 absolute shards: {3,4,5}.  Relative shards are always {0,1,2}.
+  const unsigned int k = 2;
+  const unsigned int m = 1;
+  const uint64_t swidth = 4096 * k;
+
+  pg_pool_t pool;
+  pool.size = 6; // 2 zones * (k+m)
+  pool.opts.set(pool_opts_t::NUM_ZONES, 2);
+
+  ECUtil::stripe_info_t s(k, m, swidth, &pool);
+  ECListenerStub listenerStub;
+  ErasureCodeInterfaceRef ec_impl(new MockErasureCode);
+  ECCommon::ReadPipeline pipeline(g_ceph_context, ec_impl, s, &listenerStub);
+
+  // Simulate a zone-1 PG: acting shards carry absolute IDs 3, 4, 5
+  listenerStub.acting_shards.insert(pg_shard_t(0, shard_id_t(3)));
+  listenerStub.acting_shards.insert(pg_shard_t(1, shard_id_t(4)));
+  listenerStub.acting_shards.insert(pg_shard_t(2, shard_id_t(5)));
+
+  // acting_recovery_backfill also uses absolute shard IDs for zone-1
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(3));
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(4));
+  listenerStub.acting_recovery_backfill_shard_id_set.insert(shard_id_t(5));
+
+  auto [readable, writable] = pipeline.get_readable_writable_shard_id_sets();
+
+  // Both sets must contain only relative shard IDs {0, 1, 2}, not {3, 4, 5}.
+  shard_id_set expected;
+  expected.insert(shard_id_t(0));
+  expected.insert(shard_id_t(1));
+  expected.insert(shard_id_t(2));
+
+  EXPECT_EQ(readable, expected)
+    << "readable set must use relative shard IDs, not absolute zone-1 IDs";
+  EXPECT_EQ(writable, expected)
+    << "writable set must use relative shard IDs, not absolute zone-1 IDs";
+
+  // Sanity check: the relative set does not contain the absolute zone-1 IDs
+  EXPECT_FALSE(readable.contains(shard_id_t(3)));
+  EXPECT_FALSE(readable.contains(shard_id_t(4)));
+  EXPECT_FALSE(readable.contains(shard_id_t(5)));
 }
