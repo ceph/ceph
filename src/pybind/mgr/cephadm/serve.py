@@ -1494,6 +1494,20 @@ class CephadmServe:
         else:
             client_files = {}
 
+        # Deploy NFS gRPC client cert bundles to admin hosts so that admins can
+        # use grpcurl from cephadm shell without any manual cert setup.
+        # This is NFS-specific: other services such as NVMe-oF retrieve their
+        # client certificates at runtime and do not require them to be
+        # pre-deployed on the admin host. Add a similar block here only when
+        # another service explicitly requires pre-deployed client credentials.
+        nfs_svc = cast(Optional[NFSService], service_registry.get_service('nfs'))
+        if nfs_svc:
+            try:
+                for host, files in nfs_svc.get_client_files().items():
+                    client_files.setdefault(host, {}).update(files)
+            except Exception as e:
+                self.log.warning(f'unable to get NFS gRPC client files: {e}')
+
         @forall_hosts
         def _write_files(host: str) -> None:
             self._write_client_files(client_files, host)

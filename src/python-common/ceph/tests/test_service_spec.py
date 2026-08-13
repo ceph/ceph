@@ -465,6 +465,7 @@ service_type: nfs
 service_id: mynfs
 service_name: nfs.mynfs
 spec:
+  grpc_certificate_source: cephadm-signed
   idmap_conf:
     general:
       local-realms: domain.org

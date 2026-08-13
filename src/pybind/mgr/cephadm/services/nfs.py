@@ -1,4 +1,5 @@
 import errno
+import hashlib
 import ipaddress
 import logging
 import os
@@ -9,10 +10,11 @@ from typing import Dict, Tuple, Any, List, Set, cast, Optional, TYPE_CHECKING
 from configparser import ConfigParser
 from io import StringIO
 from cephadm import utils
+from cephadm.utils import SpecialHostLabels
 from mgr_module import HandleCommandResult
 from mgr_module import NFS_POOL_NAME as POOL_NAME
 
-from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec
+from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, CertificateSource
 from .service_registry import register_cephadm_service
 
 from orchestrator import DaemonDescription, OrchestratorError
@@ -22,6 +24,13 @@ if TYPE_CHECKING:
     from ..module import CephadmOrchestrator
 
 logger = logging.getLogger(__name__)
+
+# Lookup keys for the cert_mgr store — used to save/retrieve the 5 gRPC cert files.
+NFS_GRPC_SERVER_CERT = 'nfs_grpc_server_cert'
+NFS_GRPC_SERVER_KEY = 'nfs_grpc_server_key'
+NFS_GRPC_CLIENT_CERT = 'nfs_grpc_client_cert'
+NFS_GRPC_CLIENT_KEY = 'nfs_grpc_client_key'
+NFS_GRPC_CA_CERT = 'nfs_grpc_ca_cert'
 
 
 @register_cephadm_service
@@ -129,11 +138,137 @@ class NFSService(CephService):
                         self.mgr.spec_store.save_rank_map(service_name, rank_map)
         self._update_failed_fencing_services(service_name, fence_failed, not fence_failed)
 
+    def _get_grpc_certs(self, spec: NFSServiceSpec,
+                        daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str, str, str, str]:
+        """Return (server_cert, server_key, client_cert, client_key, ca_cert) PEM strings."""
+        svc_name = spec.service_name()
+
+        # Server cert: all modes go through get_certificates_generic().
+        # label='grpc' routes cephadm-signed to _get_cephadm_signed_certificates_with_label()
+        server_creds = self.get_certificates_generic(
+            svc_spec=spec, daemon_spec=daemon_spec,
+            cert_source_attr='grpc_certificate_source',
+            cert_attr='grpc_server_cert', cert_name=NFS_GRPC_SERVER_CERT,
+            key_attr='grpc_server_key', key_name=NFS_GRPC_SERVER_KEY,
+            label='grpc',
+        )
+        if not server_creds:
+            raise OrchestratorError('Unable to load NFS gRPC server credentials')
+
+        # For cephadm-signed, use _get_or_generate_service_cert() — generates a
+        # simple CN-only cert at SERVICE scope (no host IP in SAN).
+        # For inline/reference, get_certificates_generic() reads from spec/certmgr.
+        if spec.grpc_certificate_source == CertificateSource.CEPHADM_SIGNED.value:
+            client_cert, client_key = self._get_or_generate_service_cert(
+                NFS_GRPC_CLIENT_CERT, NFS_GRPC_CLIENT_KEY, 'nfs-grpc-client', svc_name)
+            ca_cert = self.mgr.cert_mgr.get_root_ca()
+        else:
+            client_creds = self.get_certificates_generic(
+                svc_spec=spec, daemon_spec=daemon_spec,
+                cert_source_attr='grpc_certificate_source',
+                cert_attr='grpc_client_cert', cert_name=NFS_GRPC_CLIENT_CERT,
+                key_attr='grpc_client_key', key_name=NFS_GRPC_CLIENT_KEY,
+                ca_cert_attr='grpc_ca_cert', ca_cert_name=NFS_GRPC_CA_CERT,
+            )
+            if not client_creds or not client_creds.ca_cert:
+                raise OrchestratorError(
+                    'Unable to load complete NFS gRPC client credentials and CA certificate'
+                )
+            client_cert, client_key, ca_cert = (
+                client_creds.cert, client_creds.key, client_creds.ca_cert)
+
+        return (server_creds.cert, server_creds.key, client_cert, client_key, ca_cert)
+
+    def get_client_files(self) -> Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]]:
+        """Deploy gRPC client cert bundles to admin hosts, one folder per NFS service.
+
+        Called by serve.py on every reconcile cycle for the whole cluster — must
+        return bundles for all NFS services so all per-service folders are kept
+        up to date on every admin host (hosts with the _admin label). Deploying
+        only to admin hosts ensures the certs are accessible from cephadm shell
+        on any admin node:
+          /var/lib/ceph/<fsid>/nfs_grpc-client-certs/<svc_name>/{ca.crt, client.crt, client.key}
+        """
+        client_files: Dict[str, Dict[str, Tuple[int, int, int, bytes, str]]] = {}
+        try:
+            all_hosts = [
+                h for h in self.mgr.inventory.keys()
+                if self.mgr.inventory.has_label(h, SpecialHostLabels.ADMIN)
+            ]
+            if not all_hosts:
+                return client_files
+
+            for svc_name, svc_entry in self.mgr.spec_store.all_specs.items():
+                if svc_entry.service_type != 'nfs':
+                    continue
+                spec = cast(NFSServiceSpec, svc_entry)
+                grpc_source = spec.grpc_certificate_source
+
+                client_cert: Optional[str] = None
+                client_key: Optional[str] = None
+                ca_cert: Optional[str] = None
+
+                if grpc_source == CertificateSource.CEPHADM_SIGNED.value:
+                    client_cert = self.mgr.cert_mgr.get_cert(
+                        NFS_GRPC_CLIENT_CERT, service_name=svc_name)
+                    client_key = self.mgr.cert_mgr.get_key(
+                        NFS_GRPC_CLIENT_KEY, service_name=svc_name)
+                    ca_cert = self.mgr.cert_mgr.get_root_ca()
+                elif grpc_source == CertificateSource.INLINE.value:
+                    client_cert = spec.grpc_client_cert
+                    client_key = spec.grpc_client_key
+                    ca_cert = spec.grpc_ca_cert
+                elif grpc_source == CertificateSource.REFERENCE.value:
+                    client_cert = self.mgr.cert_mgr.get_cert(
+                        NFS_GRPC_CLIENT_CERT, service_name=svc_name)
+                    client_key = self.mgr.cert_mgr.get_key(
+                        NFS_GRPC_CLIENT_KEY, service_name=svc_name)
+                    ca_cert = self.mgr.cert_mgr.get_cert(
+                        NFS_GRPC_CA_CERT, service_name=svc_name)
+                else:
+                    continue
+
+                if not (client_cert and client_key and ca_cert):
+                    continue
+
+                base = f'/var/lib/ceph/{self.mgr._cluster_fsid}/nfs_grpc-client-certs/{svc_name}'
+                for host in all_hosts:
+                    client_files.setdefault(host, {})
+                    for path, content, mode in [
+                        (f'{base}/ca.crt', ca_cert, 0o644),
+                        (f'{base}/client.crt', client_cert, 0o644),
+                        (f'{base}/client.key', client_key, 0o600),
+                    ]:
+                        data = content.encode('utf-8')
+                        digest = ''.join('%02x' % c for c in hashlib.sha256(data).digest())
+                        client_files[host][path] = (mode, 0, 0, data, digest)
+        except Exception as e:
+            logger.warning('Failed to calc gRPC client files: %s', e)
+        return client_files
+
     def config(self, spec: NFSServiceSpec) -> None:  # type: ignore
         from nfs.cluster import create_ganesha_pool
 
         assert self.TYPE == spec.service_type
         create_ganesha_pool(self.mgr)
+
+    def reconcile_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        """Extend base TLS cleanup with gRPC cert cleanup when grpc_certificate_source changes."""
+        super().reconcile_certificates(daemon_spec)
+        spec = cast(NFSServiceSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
+        grpc_source = spec.grpc_certificate_source
+        svc_name = spec.service_name()
+        host = daemon_spec.host
+        # Remove inline-saved gRPC certs when no longer using inline.
+        if grpc_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
+            self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
+                NFS_GRPC_SERVER_CERT, NFS_GRPC_SERVER_KEY,
+                service_name=svc_name, host=host, ca_cert_name=NFS_GRPC_CA_CERT)
+            self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
+                NFS_GRPC_CLIENT_CERT, NFS_GRPC_CLIENT_KEY, service_name=svc_name)
+        # Remove cephadm-signed gRPC server cert when no longer using cephadm-signed.
+        if grpc_source != CertificateSource.CEPHADM_SIGNED.value:
+            self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host, label='grpc')
 
     @classmethod
     def get_dependencies(
@@ -162,6 +297,14 @@ class NFSService(CephService):
             deps.append(f'tls_min_version: {nfs_spec.tls_min_version}')
         if nfs_spec.tls_ciphers is not None:
             deps.append(f'tls_ciphers: {nfs_spec.tls_ciphers}')
+        # gRPC related
+        deps.append(f'grpc_certificate_source: {nfs_spec.grpc_certificate_source}')
+        if nfs_spec.grpc_certificate_source == CertificateSource.INLINE.value:
+            for field in ['grpc_server_cert', 'grpc_server_key',
+                          'grpc_client_cert', 'grpc_client_key', 'grpc_ca_cert']:
+                val = getattr(nfs_spec, field, None)
+                if val:
+                    deps.append(f'{field}: {hashlib.sha256(val.encode()).hexdigest()[:8]}')
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -344,6 +487,12 @@ class NFSService(CephService):
                     'tls_key.pem': tls_creds.key,
                     'tls_ca_cert.pem': tls_creds.ca_cert,
                 })
+            server_cert, server_key, client_cert, client_key, ca_cert = self._get_grpc_certs(spec, daemon_spec)
+            config['files'].update({
+                'grpc_server.crt': server_cert,
+                'grpc_server.key': server_key,
+                'grpc_ca.crt': ca_cert,
+            })
             config.update(
                 self.get_config_and_keyring(
                     daemon_type, daemon_id,
