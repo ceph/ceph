@@ -15674,6 +15674,14 @@ struct C_Migrate : public Context {
         auto head = oid.get_head();
         pg->recovering.erase(head);
         pg->pool_migrations_in_flight.erase(head);
+        // handle_pool_migration_copy_failure already checked for quiesce
+        // completion, but it ran before we removed the head here.  Check
+        // again now that the set may be empty.
+        if (pg->pool_migration_quiesce_reason !=
+            PrimaryLogPG::PoolMigrationQuiesceReason::NONE &&
+            pg->pool_migrations_in_flight.empty()) {
+          pg->handle_pool_migration_quiesce_complete();
+        }
       }
     } else if (action == COPY_DELETE_NEXT) {
       // Object copied to target pool, now delete from source pool
@@ -16004,7 +16012,7 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 
   // If already quiescing, treat -EIO as retryable since it's expected
   // when C_Migrate::finish converts completions to -EIO during quiesce
-  bool is_retryable = (r == -EBUSY || r == -ERANGE | r == -EOVERFLOW) ||
+  bool is_retryable = (r == -EBUSY || r == -ERANGE || r == -EOVERFLOW) ||
     (r == -EIO && pool_migration_quiesce_reason != PoolMigrationQuiesceReason::NONE);
   bool is_fatal = (r == -ENOENT || r == -EPERM) ||
     (r == -EIO && pool_migration_quiesce_reason == PoolMigrationQuiesceReason::NONE);
