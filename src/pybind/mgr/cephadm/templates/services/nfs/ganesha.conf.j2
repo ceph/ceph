@@ -57,26 +57,36 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
-CEPH {
-        Ceph_Conf = "/etc/ceph/ceph.conf";
-        umask = 0000;
-        client_oc = false;
-        async = false;
-        zerocopy = false;
-        use_old_uuid = false;
-
-        register_service = true;
-        nodeid = "{{ nodeid }}";
-}
-
 RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
-
 {% if use_old_nodeid %}
-Ceph {
+CEPH {
 	Use_old_uuid = true;
+}
+
+{% endif %}
+{% if kmip_addrs %}
+%plugin ganesha/libkmip_fscrypt.so
+KMIP {
+{% for kmip_addr in kmip_addrs %}
+        HOST {
+                addr = "{{  kmip_addr.get('addr', '') }}";
+{% if kmip_addr.get('port') %}
+                port = {{  kmip_addr.get('port') }};
+{% endif %}
+{% if 'servername' in kmip_addr %}
+                servername = "{{  kmip_addr.get('servername') }}";
+{% endif %}
+{% if 'verify_hostname' in kmip_addr %}
+                verify_hostname = "{{  kmip_addr.get('verify_hostname') }}";
+{% endif %}
+        }
+{% endfor %}
+        cert = /etc/ganesha/kmip/kmip_cert.pem;
+        key = /etc/ganesha/kmip/kmip_key.pem;
+        ca = /etc/ganesha/kmip/kmip_ca_cert.pem;
 }
 
 {% endif %}
@@ -99,5 +109,7 @@ TLS_CONFIG{
         Enable_debug = {{ tls_debug }};
 {% endif %}
 }
+
 {% endif %}
+
 %url    {{ url }}
