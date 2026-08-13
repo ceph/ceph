@@ -151,7 +151,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             log.error(f"Failed to add clone failure status clone={self.subvol_name} group={self.group_name} "
                       f"reason={me.args[1]}, errno:{-me.args[0]}, {os.strerror(-me.args[0])}")
 
-    def create_clone(self, pool, source_volname, source_subvolume, snapname):
+    def create_clone(self, pool, source_volname, source_subvolume, snapname, namespace_isolated=False, preserve_namespace=False):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -173,8 +173,19 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
 
             # override snapshot pool setting, if one is provided for the clone
             if pool is not None:
+                source_pool = attrs["data_pool"]
+                if preserve_namespace and pool != source_pool:
+                    raise VolumeException(
+                        -errno.EINVAL,
+                        "--preserve-namespace cannot be used with --pool_layout when the "
+                        "target pool differs from the source subvolume's pool")
                 attrs["data_pool"] = pool
-                attrs["pool_namespace"] = None
+                # historical default: a pool override lands the clone in the new
+                # pool's default namespace unless the caller asks otherwise
+                if not preserve_namespace:
+                    attrs["pool_namespace"] = None
+            if namespace_isolated:
+                attrs["pool_namespace"] = self.namespace
 
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
@@ -832,9 +843,15 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                           'data_pool':'ceph.dir.layout.pool'}
             for key, val in snap_attrs.items():
                 snap_info[key] = self.fs.getxattr(snappath, val)
+            try:
+                pool_namespace = self.fs.getxattr(
+                    snappath, 'ceph.dir.layout.pool_namespace').decode('utf-8')
+            except cephfs.NoData:
+                pool_namespace = ''
             pending_clones_info = self.get_pending_clones(snapname)
             info_dict = {'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
-                    'data_pool': snap_info['data_pool'].decode('utf-8')}
+                    'data_pool': snap_info['data_pool'].decode('utf-8'),
+                    'pool_namespace': pool_namespace}
             info_dict.update(pending_clones_info);
             return info_dict
         except cephfs.Error as e:

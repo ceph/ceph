@@ -206,7 +206,7 @@ class SubvolumeV2(SubvolumeV1):
                 e = VolumeException(-e.args[0], e.args[1])
             raise e
 
-    def create_clone(self, pool, source_volname, source_subvolume, snapname):
+    def create_clone(self, pool, source_volname, source_subvolume, snapname, namespace_isolated=False, preserve_namespace=False):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
@@ -231,8 +231,19 @@ class SubvolumeV2(SubvolumeV1):
 
             # override snapshot pool setting, if one is provided for the clone
             if pool is not None:
+                source_pool = attrs["data_pool"]
+                if preserve_namespace and pool != source_pool:
+                    raise VolumeException(
+                        -errno.EINVAL,
+                        "--preserve-namespace cannot be used with --pool_layout when the "
+                        "target pool differs from the source subvolume's pool")
                 attrs["data_pool"] = pool
-                attrs["pool_namespace"] = None
+                # historical default: a pool override lands the clone in the new
+                # pool's default namespace unless the caller asks otherwise
+                if not preserve_namespace:
+                    attrs["pool_namespace"] = None
+            if namespace_isolated:
+                attrs["pool_namespace"] = self.namespace
 
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, attrs.get("mode"))
