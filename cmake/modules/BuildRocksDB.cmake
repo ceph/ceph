@@ -89,6 +89,13 @@ function(build_rocksdb)
     CMAKE_ARGS ${rocksdb_CMAKE_ARGS}
     BINARY_DIR "${rocksdb_BINARY_DIR}"
     BUILD_COMMAND "${make_cmd}"
+    # always re-enter the RocksDB build: ExternalProject's stamp files do not
+    # track the source tree, so without this a submodule bump (or a rebase
+    # across one) silently keeps linking the previously built librocksdb.a
+    # while the rest of the tree compiles against the updated headers in
+    # ${rocksdb_SOURCE_DIR}/include, producing ABI-mismatched binaries. the
+    # inner build is incremental, so the steady-state cost is a no-op check.
+    BUILD_ALWAYS ON
     BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
     INSTALL_COMMAND ""
     LIST_SEPARATOR !)
