@@ -168,7 +168,7 @@ PyObject *ActivePyModules::get_metadata_python(
     Py_RETURN_NONE;
   }
   auto l = without_gil([&] {
-    return std::lock_guard(lock);
+    return std::lock_guard(metadata->lock);
   });
   PyFormatter f;
   f.dump_string("hostname", metadata->hostname);
@@ -189,7 +189,7 @@ PyObject *ActivePyModules::get_daemon_status_python(
     Py_RETURN_NONE;
   }
   auto l = without_gil([&] {
-    return std::lock_guard(lock);
+    return std::lock_guard(metadata->lock);
   });
   PyFormatter f;
   for (const auto &[daemon, status] : metadata->service_status) {
