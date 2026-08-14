@@ -269,6 +269,15 @@ add_executable(unittest_ec_omap_journal
 add_ceph_unittest(unittest_ec_omap_journal)
 target_link_libraries(unittest_ec_omap_journal osd global ${BLKID_LIBRARIES})
 
+# unittest_split_ops_ut
+add_executable(unittest_split_ops_ut
+  TestSplitOpsUT.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_split_ops_ut)
+target_link_libraries(unittest_split_ops_ut osd global ${BLKID_LIBRARIES})
+add_dependencies(unittest_split_ops_ut ${EC_ISA_LIB} ec_jerasure)
+
 # osd_unittests: custom target that builds and runs all OSD unit tests
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS
@@ -292,6 +301,7 @@ set(OSD_UNITTESTS
   unittest_pg_transaction
   unittest_pglog
   unittest_scrubber_be
+  unittest_split_ops_ut
 )
 
 # osd_unittests: build all OSD unit tests and run them via ctest.
