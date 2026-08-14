@@ -23,6 +23,7 @@
 #include "include/utime_fmt.h"
 #include "msg/msg_fmt.h"
 #include "msg/msg_types.h"
+#include "common/cmdparse.h"
 #include "common/entity_name.h"
 #include "ostream_temp.h"
 #include "LRUSet.h"
@@ -31,6 +32,7 @@
 #include <iostream>
 #include <list>
 #include <map>
+#include <optional>
 #include <string>
 #include <unordered_set>
 
@@ -122,6 +124,8 @@ struct LogMsg {
   std::string cmd_args;
   std::string cmd_state;
   int cmd_retval;
+  std::string json_dump;
+  std::string audit_channel;
 
   void encode(bufferlist& bl, uint64_t features) const;
   void decode(bufferlist::const_iterator& p);
@@ -138,6 +142,39 @@ inline std::ostream& operator<<(std::ostream &os, const LogMsg &m) {
   os << ": " << m.cmd_state;
   return os;
 }
+
+/**
+ * Structured audit record for a single admin socket command execution.
+ */
+class AdminCmdAuditEntry {
+public:
+  AdminCmdAuditEntry(std::string cmd,
+                     const cmdmap_t& cmdmap,
+                     std::optional<int> retval,
+                     std::optional<std::string> error,
+                     std::optional<uint32_t> start_time,
+                     std::optional<uint32_t> end_time);
+
+  const std::string& get_human_log_msg() const    { return human_log_msg_; }
+  const std::string& get_json_audit_entry() const { return json_audit_entry_; }
+
+  static std::string build_cmd_args(const cmdmap_t& cmdmap);
+
+private:
+  std::string to_human_log_msg() const;
+  std::string to_json_audit_entry() const;
+
+  std::string                cmd_;
+  std::string                cmd_args_;
+  std::optional<int>         retval_;
+  std::optional<std::string> error_;
+  std::optional<uint32_t>    start_time_;
+  std::optional<uint32_t>    end_time_;
+
+  // cached at construction
+  std::string human_log_msg_;
+  std::string json_audit_entry_;
+};
 
 struct LogEntry {
   EntityName name;

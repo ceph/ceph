@@ -2,11 +2,13 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 //
+#include <sstream>
 #include <syslog.h>
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "LogEntry.h"
 #include "Formatter.h"
+#include "JSONFormatter.h"
 #include "include/stringify.h"
 
 using std::list;
@@ -198,6 +200,8 @@ void LogMsg::encode(bufferlist& bl, uint64_t features) const
   encode(cmd_args, bl);
   encode(cmd_state, bl);
   encode(cmd_retval, bl);
+  encode(json_dump, bl);
+  encode(audit_channel, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -211,6 +215,8 @@ void LogMsg::decode(bufferlist::const_iterator& p)
   decode(cmd_args, p);
   decode(cmd_state, p);
   decode(cmd_retval, p);
+  decode(json_dump, p);
+  decode(audit_channel, p);
   DECODE_FINISH(p);
 }
 
@@ -226,6 +232,94 @@ void LogEntry::log_to_syslog(string level, string facility) const
 	   (long long unsigned)seq,
 	   msg.c_str());
   }
+}
+
+// ----
+// AdminCmdAuditEntry
+
+std::string AdminCmdAuditEntry::build_cmd_args(const cmdmap_t& cmdmap)
+{
+  std::string out;
+  for (const auto& [k, v] : cmdmap) {
+    if (k == "prefix" || k == "format") {
+      continue;
+    }
+    if (!out.empty()) {
+      out += ' ';
+    }
+    out += k + '=' + cmd_vartype_stringify(v);
+  }
+  return out;
+}
+
+AdminCmdAuditEntry::AdminCmdAuditEntry(std::string cmd,
+                                       const cmdmap_t& cmdmap,
+                                       std::optional<int> retval,
+                                       std::optional<std::string> error,
+                                       std::optional<uint32_t> start_time,
+                                       std::optional<uint32_t> end_time)
+  : cmd_(std::move(cmd)),
+    cmd_args_(build_cmd_args(cmdmap)),
+    retval_(retval),
+    error_(std::move(error)),
+    start_time_(start_time),
+    end_time_(end_time),
+    human_log_msg_(to_human_log_msg()),
+    json_audit_entry_(to_json_audit_entry())
+{}
+
+std::string AdminCmdAuditEntry::to_human_log_msg() const
+{
+  std::ostringstream os;
+  os << "channel='admin_socket_cmds'"
+     << " cmd='" << cmd_ << "'"
+     << " args='" << cmd_args_ << "'";
+  if (retval_) {
+    os << " r=" << *retval_;
+  }
+  if (start_time_) {
+    os << " start_time=" << *start_time_;
+  }
+  if (end_time_) {
+    os << " end_time=" << *end_time_;
+  }
+  if (error_) {
+    os << " error='" << *error_ << "'";
+  }
+  return os.str();
+}
+
+std::string AdminCmdAuditEntry::to_json_audit_entry() const
+{
+  ceph::JSONFormatter f;
+  f.open_object_section("");
+  f.dump_string("channel", "admin_socket_cmds");
+  f.dump_string("cmd", cmd_);
+  f.dump_string("cmd_args", cmd_args_);
+  if (retval_) {
+    f.dump_int("retval", *retval_);
+  } else {
+    f.dump_null("retval");
+  }
+  if (error_) {
+    f.dump_string("error", *error_);
+  } else {
+    f.dump_null("error");
+  }
+  if (start_time_) {
+    f.dump_unsigned("start_time", *start_time_);
+  } else {
+    f.dump_null("start_time");
+  }
+  if (end_time_) {
+    f.dump_unsigned("end_time", *end_time_);
+  } else {
+    f.dump_null("end_time");
+  }
+  f.close_section();
+  std::ostringstream ss;
+  f.flush(ss);
+  return ss.str();
 }
 
 void LogEntry::encode(bufferlist& bl, uint64_t features) const

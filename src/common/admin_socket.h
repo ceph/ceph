@@ -33,6 +33,7 @@
 #include "common/admin_finisher.h"
 #include "common/ref.h"
 #include "common/cmdparse.h"
+#include "common/LogClient.h"
 
 #ifdef WIN32
 #include "include/win32/fs_compat.h" // for uid_t, gid_t
@@ -157,6 +158,8 @@ public:
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
 
+  void set_audit_clog(LogChannelRef clog) { audit_clog = std::move(clog); }
+
   /// execute (async)
   void execute_command(
     const std::vector<std::string>& cmd,
@@ -188,6 +191,7 @@ private:
   void do_tell_queue();
 
   CephContext *m_cct;
+  LogChannelRef audit_clog;
   std::string m_path;
   int m_sock_fd = -1;
   int m_wakeup_rd_fd = -1;
