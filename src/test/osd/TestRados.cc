@@ -487,6 +487,8 @@ void usage(const char *prog)
   cout << "        [--pool-snaps]" << std::endl;
   cout << "        [--balance-reads]" << std::endl;
   cout << "        [--localize-reads]" << std::endl;
+  cout << "        [--crush-location <loc>]   set client crush_location for zone-aware reads," << std::endl;
+  cout << "                                   e.g. --crush-location datacenter=zone-0" << std::endl;
   cout << "        [--offlen_randomization_ratio <0-100>]" << std::endl;
   cout << "        [--write-fadvise-dontneed]" << std::endl;
   cout << "        [--max-attr-len <bytes>]" << std::endl;
@@ -566,6 +568,7 @@ int main(int argc, char **argv)
   bool no_sparse = false;
   bool balance_reads = false;
   bool localize_reads = false;
+  string crush_location;  // --crush-location value; sets crush_location config key
   uint8_t offlen_randomization_ratio = 50;
   bool set_redirect = false;
   bool set_chunk = false;
@@ -604,7 +607,14 @@ int main(int argc, char **argv)
       balance_reads = true;
     else if (strcmp(argv[i], "--localize-reads") == 0)
       localize_reads = true;
-    else if (strcmp(argv[i], "--offlen_randomization_ratio") == 0)
+    else if (strcmp(argv[i], "--crush-location") == 0) {
+      if (i + 1 >= argc) {
+        cerr << "Missing argument after --crush-location" << std::endl;
+        usage(argv[0]);
+        exit(1);
+      }
+      crush_location = argv[++i];
+    } else if (strcmp(argv[i], "--offlen_randomization_ratio") == 0)
       offlen_randomization_ratio = atoi(argv[++i]);
     else if (strcmp(argv[i], "--pool-snaps") == 0)
       pool_snaps = true;
@@ -763,6 +773,7 @@ int main(int argc, char **argv)
     chunk_algo,
     chunk_size,
     max_attr_len,
+    crush_location,
     id);
 
   TestOpStat stats;

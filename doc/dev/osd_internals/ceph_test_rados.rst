@@ -67,6 +67,7 @@ Synopsis
         [--pool-snaps]
         [--balance-reads]
         [--localize-reads]
+        [--crush-location <loc>]
         [--offlen_randomization_ratio <0-100>]
         [--write-fadvise-dontneed]
         [--max-attr-len <bytes>]
@@ -160,6 +161,13 @@ Read Routing
 ``--localize-reads``
     Set ``LIBRADOS_OPERATION_LOCALIZE_READS`` on read operations,
     preferring the closest replica.
+
+``--crush-location <loc>``
+    Set the client's CRUSH location for zone-aware reads (e.g.,
+    ``datacenter=zone-0``).  The location is applied via
+    ``crush_location`` in the librados configuration and influences
+    which OSD shard handles split reads on EC pools.  Has no effect
+    unless the cluster is configured for zone-aware placement.
 
 ``--offlen_randomization_ratio <n>``
     Percentage chance (0–100) that a read uses a randomized offset
