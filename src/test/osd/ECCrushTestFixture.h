@@ -19,24 +19,29 @@
 
 /**
  * ECCrushTestFixture - EC test fixture with a proper CRUSH map and a real
- * EC indep rule attached to the pool.
+ * EC rule attached to the pool.
  *
  * ECPeeringTestFixture uses a minimal CRUSH map (item names only, no bucket
  * hierarchy, crush_rule = 0 which is unset) and overrides placement with a
- * pg_upmap.  This fixture builds on top of that by replacing the CRUSH map
- * with a complete bucket hierarchy (root → rack → host → osds) plus a named
- * EC indep rule, and pointing the pool at that rule.
+ * pg_upmap. This fixture replaces that with a complete CRUSH hierarchy and
+ * updates the pool to use the resulting rule.
  *
- * The pg_upmap is kept intact so the shard == osd invariant is preserved
- * throughout.  Tests that inherit from this fixture exercise the real CRUSH
- * rule evaluation path while remaining simple to reason about.
- *
- * Topology:
+ * For `num_zones == 1`, the topology is:
  *   root "default"
  *     └─ rack "localrack"
  *          └─ host "localhost"
  *               └─ osd.0 … osd.(k+m-1)
  *   rule "ec_rule"  type erasure  mode indep  failure_domain osd
+ *
+ * For `num_zones > 1`, the topology is:
+ *   root "default"
+ *     ├─ datacenter "zone-0"  →  host "host-0"  →  local OSDs
+ *     └─ datacenter "zone-1"  →  host "host-1"  →  remote OSDs
+ *   rule "ec_stretch_rule"  type erasure  mode indep
+ *
+ * The pg_upmap is kept disabled so CRUSH determines placement directly.
+ * Tests that inherit from this fixture exercise the real CRUSH rule
+ * evaluation path while remaining simple to reason about.
  */
 class ECCrushTestFixture : public ECPeeringTestFixture {
 public:

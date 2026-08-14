@@ -197,13 +197,26 @@ protected:
   void set_allow_ec_overwrites();
   static std::string pool_name_default;
   static std::string pool_name_fast;
+  static std::string pool_name_stretch;
+
+  // Inject/clear an EIO read error on every shard of objname.
   void inject_ec_read_error(const std::string &objname);
   void clear_ec_read_error(const std::string &objname);
+
+  // Inject/clear an EIO read error on a specific shard of objname.
+  void inject_ec_read_error_on_shard(const std::string &objname, shard_id_t shard);
+  void clear_ec_read_error_on_shard(const std::string &objname, shard_id_t shard);
+
   void inject_ec_write_error(const std::string &objname, int error_type, shard_id_t shard);
   void inject_ec_write_error_all_osds(const std::string &objname, int error_type);
   void clear_ec_write_error(const std::string &objname, int error_type, shard_id_t shard);
   void clear_ec_write_error_all_osds(const std::string &objname, int error_type);
   void wait_for_stable_acting_set(const std::string &objname);
+
+  // Returns true if the cluster has at least two CRUSH datacenter buckets.
+  // Used as a precondition assertion for zone-aware split-read tests;
+  // tests FAIL (not skip) when the cluster topology is missing.
+  bool has_two_zone_topology() const;
 
   std::string pool_name;
   void SetUp() override;
@@ -212,6 +225,9 @@ protected:
   std::string nspace;
   uint64_t alignment = 0;
   bool fast_ec = false;
+  int ec_k = -1;
+  int ec_m = -1;
+  int ec_num_zones = -1;
 };
 
 class RadosTestECOptimisedPP : public RadosTestPP {

@@ -385,6 +385,7 @@ void RadosTestParamPP::cleanup_namespace(librados::IoCtx ioctx, std::string ns)
 
 std::string RadosTestECPP::pool_name_default;
 std::string RadosTestECPP::pool_name_fast;
+std::string RadosTestECPP::pool_name_stretch;
 
 void RadosTestECPP::SetUpTestCase()
 {
@@ -392,10 +393,14 @@ void RadosTestECPP::SetUpTestCase()
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
   pool_name_default = get_temp_pool_name(pool_prefix);
   pool_name_fast = get_temp_pool_name(pool_prefix);
+  pool_name_stretch = get_temp_pool_name(pool_prefix);
   std::map<std::string, std::string> config = {{"rados_replica_read_policy", "default"}};
   ASSERT_EQ("", connect_cluster_pp(s_cluster, config));
   ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
   ASSERT_EQ("", create_ec_pool_pp(pool_name_fast, s_cluster, true));
+  ASSERT_EQ("", create_ec_pool_pp(pool_name_stretch, s_cluster,
+                                   /*optimised_ec=*/true, /*enable_omap=*/false,
+                                   /*k_per_zone=*/2, /*m_per_zone=*/1));
   s_cluster.wait_for_latest_osdmap();
 }
 
@@ -404,6 +409,7 @@ void RadosTestECPP::TearDownTestCase()
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, destroy_pool_pp(pool_name_default, s_cluster));
   ASSERT_EQ(0, destroy_pool_pp(pool_name_fast, s_cluster));
+  ASSERT_EQ(0, destroy_pool_pp(pool_name_stretch, s_cluster));
   s_cluster.shutdown();
 }
 
@@ -434,6 +440,9 @@ void RadosTestECPP::SetUp()
   ASSERT_TRUE(req);
   ASSERT_EQ(0, ioctx.pool_required_alignment2(&alignment));
   ASSERT_NE(0U, alignment);
+  ec_k = 2;
+  ec_m = 1;
+  ec_num_zones = 1;
 }
 
 void RadosTestECPP::TearDown()
@@ -475,13 +484,10 @@ void RadosTestECPP::set_allow_ec_overwrites()
 }
 
 void RadosTestECPP::wait_for_stable_acting_set(const std::string &objname) {
-  ceph::consistency::RadosCommands ec_commands(s_cluster);
-
-  // Get EC profile to determine expected number of shards
-  ceph::ErasureCodeProfile profile = ec_commands.get_ec_profile_for_pool(pool_name);
-  int k = std::stoi(profile["k"]);
-  int m = std::stoi(profile["m"]);
-  int num_shards = k + m;
+  ASSERT_GT(ec_k, 0);
+  ASSERT_GT(ec_m, 0);
+  ASSERT_GT(ec_num_zones, 0);
+  int num_shards = (ec_k + ec_m) * ec_num_zones;
 
   const auto end = std::chrono::steady_clock::now() + std::chrono::seconds(120);
   while (std::chrono::steady_clock::now() < end) {
@@ -505,7 +511,7 @@ void RadosTestECPP::wait_for_stable_acting_set(const std::string &objname) {
     reply.decode_json(&p);
 
     // Check if acting set is stable:
-    // 1. Acting set size matches expected
+    // 1. Acting set size matches expected (k + m) * num_zones
     // 2. All OSDs in acting set are valid (not CRUSH_ITEM_NONE)
     // 3. Acting set equals up set
     // 4. Primary OSD is shard 0
@@ -639,6 +645,115 @@ void RadosTestECPP::clear_ec_write_error_all_osds(const std::string &objname, in
     int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
     ASSERT_EQ(0, rc);
   }
+}
+
+void RadosTestECPP::inject_ec_read_error(const std::string &objname)
+{
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  ceph::ErasureCodeProfile profile = ec_commands.get_ec_profile_for_pool(pool_name);
+  int k = std::stoi(profile["k"]);
+  int m = std::stoi(profile["m"]);
+  int num_shards = k + m;
+
+  for (int i = 0; i < num_shards; i++) {
+    shard_id_t shard(i);
+    inject_ec_read_error_on_shard(objname, shard);
+  }
+}
+
+void RadosTestECPP::clear_ec_read_error(const std::string &objname)
+{
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  ceph::ErasureCodeProfile profile = ec_commands.get_ec_profile_for_pool(pool_name);
+  int k = std::stoi(profile["k"]);
+  int m = std::stoi(profile["m"]);
+  int num_shards = k + m;
+
+  for (int i = 0; i < num_shards; i++) {
+    shard_id_t shard(i);
+    clear_ec_read_error_on_shard(objname, shard);
+  }
+}
+
+void RadosTestECPP::inject_ec_read_error_on_shard(const std::string &objname,
+                                                   shard_id_t shard)
+{
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  int osd = ec_commands.get_shard_osd(pool_name, objname, shard, nspace);
+
+  ceph::messaging::osd::InjectECErrorRequest<io_exerciser::InjectOpType::ReadEIO>
+    req(pool_name, objname, shard.id,
+        static_cast<uint64_t>(io_exerciser::InjectOpType::ReadEIO),
+        0, std::numeric_limits<int64_t>::max());
+
+  JSONFormatter f;
+  encode_json("ReadEIOInject", req, &f);
+  std::ostringstream oss;
+  f.flush(oss);
+
+  std::cout << " Inject ReadEIO on osd." << osd
+            << " shard " << shard.id << std::endl;
+  int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
+  ASSERT_EQ(0, rc);
+}
+
+void RadosTestECPP::clear_ec_read_error_on_shard(const std::string &objname,
+                                                  shard_id_t shard)
+{
+  ceph::consistency::RadosCommands ec_commands(s_cluster);
+  int osd = ec_commands.get_shard_osd(pool_name, objname, shard, nspace);
+
+  ceph::messaging::osd::InjectECClearErrorRequest<io_exerciser::InjectOpType::ReadEIO>
+    req{pool_name, objname, shard.id,
+        static_cast<uint64_t>(io_exerciser::InjectOpType::ReadEIO)};
+
+  JSONFormatter f;
+  encode_json("ReadEIOClear", req, &f);
+  std::ostringstream oss;
+  f.flush(oss);
+
+  std::cout << " Clear ReadEIO on osd." << osd
+            << " shard " << shard.id << std::endl;
+  int rc = s_cluster.osd_command(osd, oss.str(), {}, {}, nullptr);
+  ASSERT_EQ(0, rc);
+}
+
+bool RadosTestECPP::has_two_zone_topology() const
+{
+  // Ask the monitor for the CRUSH map and count datacenter-type buckets.
+  // Returns true only when there are at least two, which is the minimum
+  // required for zone-aware split-read tests.
+  bufferlist outbl;
+  std::string outs;
+  int rc = s_cluster.mon_command(
+    "{\"prefix\": \"osd crush dump\", \"format\": \"json\"}",
+    {}, &outbl, &outs);
+  if (rc != 0) {
+    return false;
+  }
+
+  JSONParser p;
+  if (!p.parse(outbl.c_str(), outbl.length())) {
+    return false;
+  }
+
+  // Count buckets whose type_name is "datacenter"
+  int dc_count = 0;
+  JSONObj *buckets = p.find_obj("buckets");
+  if (!buckets) {
+    return false;
+  }
+  auto it = buckets->find_first();
+  while (!it.end()) {
+    JSONObj *bucket = *it;
+    std::string type_name;
+    JSONDecoder::decode_json("type_name", type_name, bucket);
+    if (type_name == "datacenter") {
+      ++dc_count;
+    }
+    ++it;
+  }
+  return dc_count >= 2;
 }
 
 uint64_t RadosTestPPBase::get_perf_counter_by_path(std::string_view path) {
