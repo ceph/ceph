@@ -120,6 +120,33 @@ Version stamps become readable and orderable only after commit resolution.
 Trying to read an unresolved stamp is a `std::invalid_argument`; trying to reuse a
 resolved stamp as a new commit output is a `std::invalid_argument`.
 
+## Transaction Versions
+
+Transaction versions let application code connect a successful write to a later
+consistent read. `committed_version()` is available after a successful commit,
+`set_read_version()` pins another transaction to that version, and
+`read_version()` reports the version an active transaction reads from. This is a
+consistency tool, not durable historical storage:
+
+```cpp
+auto write_txn = lfdb::make_transaction(dbh);
+
+lfdb::set(write_txn, "person/grace-hopper/name", "Grace Hopper");
+
+if (lfdb::commit(write_txn)) {
+  const auto version = lfdb::committed_version(write_txn);
+
+  auto read_txn = lfdb::make_transaction(dbh);
+  lfdb::set_read_version(read_txn, version);
+
+  std::string name;
+  if (lfdb::get(read_txn, "person/grace-hopper/name", name)) {
+    const auto observed_version = lfdb::read_version(read_txn);
+    record_observation(name, observed_version);
+  }
+}
+```
+
 ## Setup
 
 ```cpp

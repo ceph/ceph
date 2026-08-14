@@ -74,7 +74,8 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
 
 // Note: only rarely is a direct call to this needed. You can use transactors or pass database_handles
 // to get automagic.
-// Note: after a transaction is committed, it cannot be used again.
+// Note: after a transaction is committed, it cannot be used for more database
+// work. Post-commit observation helpers such as committed_version() are okay.
 // On false, the client should retry the transaction:
 [[nodiscard]] inline bool commit(transaction_handle& txn)
 {
@@ -86,6 +87,21 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
 {
  txn->mark_version(stamp);
  return commit(txn);
+}
+
+[[nodiscard]] inline std::int64_t committed_version(const transaction_handle& txn)
+{
+ return txn->committed_version();
+}
+
+[[nodiscard]] inline std::int64_t read_version(const transaction_handle& txn)
+{
+ return txn->read_version();
+}
+
+inline void set_read_version(const transaction_handle& txn, const std::int64_t version)
+{
+ txn->set_read_version(version);
 }
 
 [[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key)

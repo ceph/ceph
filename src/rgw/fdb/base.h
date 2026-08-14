@@ -118,6 +118,7 @@ inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
 inline future_value wait_for_on_error(FDBTransaction* txn, fdb_error_t original_error);
 inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& selection, int iteration);
+[[nodiscard]] inline std::int64_t extract_int64(future_value result_owner);
 
 // A generator that produces successive spans for a range:
 inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn, ceph::libfdb::select key_range);
@@ -886,6 +887,29 @@ class transaction final
     return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {});
  }
 
+ [[nodiscard]] std::int64_t committed_version() const
+ {
+  std::int64_t version = 0;
+
+  if (fdb_error_t r = fdb_transaction_get_committed_version(raw_handle(), &version); 0 != r) {
+   throw libfdb_exception(r);
+  }
+
+  return version;
+ }
+
+ [[nodiscard]] std::int64_t read_version() const
+ {
+  return detail::extract_int64(
+           detail::block_until_ready(
+            detail::future_value(fdb_transaction_get_read_version(raw_handle()))));
+ }
+
+ void set_read_version(const std::int64_t version)
+ {
+  fdb_transaction_set_read_version(raw_handle(), version);
+ }
+
  bool commit();
  bool commit(fdb_error_t *replay_error);
  void destroy() noexcept { txn_handle.reset(); }
@@ -926,6 +950,9 @@ class transaction final
 
  friend inline bool commit(transaction_handle& txn);
  friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
+ friend inline std::int64_t committed_version(const transaction_handle& txn);
+ friend inline std::int64_t read_version(const transaction_handle& txn);
+ friend inline void set_read_version(const transaction_handle& txn, std::int64_t version);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
@@ -1178,6 +1205,17 @@ inline split_point_result extract_split_points(future_value result_owner)
                             : std::span<const FDBKey>(),
   .error = error
  };
+}
+
+[[nodiscard]] inline std::int64_t extract_int64(future_value result_owner)
+{
+ std::int64_t value = 0;
+
+ if (fdb_error_t r = fdb_future_get_int64(result_owner.raw_ptr_or_throw(), &value); 0 != r) {
+  throw libfdb_exception(r);
+ }
+
+ return value;
 }
 
 inline query_window read_query_window(transaction& txn, const select& key_range, const int iteration)

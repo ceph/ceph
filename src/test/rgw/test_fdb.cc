@@ -341,10 +341,11 @@ TEST_CASE("version stamps", "[fdb]") {
  }
 
  SECTION("commit resolves explicit version stamp") {
+  const auto key = test_key("versionstamp/explicit");
   auto txn = lfdb::make_transaction(dbh);
   lfdb::versionstamp stamp;
 
-  lfdb::set(txn, "versionstamp/explicit", "value");
+  lfdb::set(txn, key, "value");
   REQUIRE(lfdb::commit(txn, stamp));
 
   CHECK(stamp.is_resolved());
@@ -352,15 +353,17 @@ TEST_CASE("version stamps", "[fdb]") {
  }
 
  SECTION("resolved versionstamp cannot be reused for commit") {
+  const auto first_key = test_key("versionstamp/reuse/first");
+  const auto second_key = test_key("versionstamp/reuse/second");
   lfdb::versionstamp stamp;
 
   auto txn = lfdb::make_transaction(dbh);
-  lfdb::set(txn, "versionstamp/reuse/first", "value");
+  lfdb::set(txn, first_key, "value");
   REQUIRE(lfdb::commit(txn, stamp));
   REQUIRE(stamp.is_resolved());
 
   auto reuse_txn = lfdb::make_transaction(dbh);
-  lfdb::set(reuse_txn, "versionstamp/reuse/second", "value");
+  lfdb::set(reuse_txn, second_key, "value");
 
   CHECK_THROWS_MATCHES(lfdb::commit(reuse_txn, stamp),
                        std::invalid_argument,
@@ -413,34 +416,36 @@ TEST_CASE("version stamps", "[fdb]") {
  }
 
  SECTION("versionstamp key") {
-  lfdb::erase(dbh, lfdb::select { "versionstamp/key/" });
+  const auto prefix = test_key("versionstamp/key/");
+  lfdb::erase(dbh, lfdb::select { prefix });
 
   lfdb::versionstamp stamp;
 
   lfdb::set(dbh,
-            lfdb::versioned("versionstamp/key/", "/entry", stamp),
+            lfdb::versioned(prefix, "/entry", stamp),
             "value"s);
 
   REQUIRE(stamp.is_resolved());
 
   std::map<std::string, std::string> out;
-  lfdb::get(dbh, lfdb::select { "versionstamp/key/" }, std::inserter(out, out.end()));
+  lfdb::get(dbh, lfdb::select { prefix }, std::inserter(out, out.end()));
 
   REQUIRE(1 == out.size());
   CHECK("value" == out.begin()->second);
  }
 
  SECTION("versionstamp value") {
+  const auto key = test_key("versionstamp/value");
   lfdb::versionstamp stamp;
 
   lfdb::set(dbh,
-            "versionstamp/value",
+            key,
             lfdb::versioned("", stamp));
 
   REQUIRE(stamp.is_resolved());
 
   lfdb::versionstamp out;
-  REQUIRE(lfdb::get(dbh, "versionstamp/value", out));
+  REQUIRE(lfdb::get(dbh, key, out));
 
   REQUIRE(out.is_resolved());
   CHECK(stamp.resolved_bytes() == out.resolved_bytes());
@@ -449,11 +454,12 @@ TEST_CASE("version stamps", "[fdb]") {
  SECTION("versionstamp overloads compile and commit") {
   // As these overloads share call paths, just check that they compile and briefly check output:
   {
+    const auto key_prefix = test_key("versionstamp/overload/key/");
     auto txn = lfdb::make_transaction(dbh);
     lfdb::versionstamp stamp;
 
     lfdb::set(txn,
-              lfdb::versioned("versionstamp/overload/key/", stamp),
+              lfdb::versioned(key_prefix, stamp),
               "value",
               lfdb::commit_after_op::commit);
 
@@ -461,16 +467,59 @@ TEST_CASE("version stamps", "[fdb]") {
   }
 
   {
+    const auto key = test_key("versionstamp/overload/value");
     auto txn = lfdb::make_transaction(dbh);
     lfdb::versionstamp stamp;
 
     lfdb::set(txn,
-              "versionstamp/overload/value",
+              key,
               lfdb::versioned("value:", stamp),
               lfdb::commit_after_op::commit);
 
     CHECK(stamp.is_resolved());
   }
+ }
+}
+
+TEST_CASE("transaction versions", "[fdb]") {
+ janitor dbh;
+
+ SECTION("read version is available in an active transaction") {
+  auto txn = lfdb::make_transaction(dbh);
+
+  CHECK(0 < lfdb::read_version(txn));
+ }
+
+ SECTION("committed version is available after commit") {
+  const auto key = test_key("transaction-version/committed");
+  auto txn = lfdb::make_transaction(dbh);
+
+  lfdb::set(txn, key, "value");
+  REQUIRE(lfdb::commit(txn));
+
+  CHECK(0 < lfdb::committed_version(txn));
+ }
+
+ SECTION("explicit read version can read an earlier committed value") {
+  const auto key = test_key("transaction-version/read-at");
+
+  auto first_txn = lfdb::make_transaction(dbh);
+  lfdb::set(first_txn, key, "first");
+  REQUIRE(lfdb::commit(first_txn));
+  const auto first_version = lfdb::committed_version(first_txn);
+
+  auto second_txn = lfdb::make_transaction(dbh);
+  lfdb::set(second_txn, key, "second");
+  REQUIRE(lfdb::commit(second_txn));
+
+  auto read_txn = lfdb::make_transaction(dbh);
+  lfdb::set_read_version(read_txn, first_version);
+
+  std::string value;
+  REQUIRE(lfdb::get(read_txn, key, value));
+
+  CHECK(first_version == lfdb::read_version(read_txn));
+  CHECK("first" == value);
  }
 }
 
