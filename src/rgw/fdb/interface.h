@@ -17,7 +17,30 @@
 #include "base.h"
 #include "conversion.h"
 
+#include <tuple>
+
 namespace ceph::libfdb {
+
+// Overload tag for transactors that should report replay/commit metadata:
+struct with_result_t final {};
+inline constexpr with_result_t with_result;
+
+// Describes replay/commit work performed by result-reporting transactors.
+struct transaction_result final {
+ bool committed = false;
+ std::size_t attempts = 0;
+
+ // Replays prepared after retryable failures; excludes a final exhausted attempt:
+ std::size_t replay_count = 0;
+
+ fdb_error_t last_error = 0;
+};
+
+// Describes a commit attempt when the caller owns transaction replay.
+struct commit_result final {
+ bool committed = false;
+ fdb_error_t replay_error = 0;
+};
 
 /* This should be called when the application is all done with FoundationDB: */
 inline void shutdown_libfdb()
@@ -62,6 +85,10 @@ inline database_handle create_database(const std::filesystem::path dbfile,
 
 inline transaction_handle make_transaction(database_handle dbh)
 {
+ if (!dbh) {
+  throw std::invalid_argument("make_transaction() requires database handle");
+ }
+
  return std::make_shared<transaction>(dbh);
 }
 
@@ -76,8 +103,13 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
 // On false, the client should retry the transaction:
 [[nodiscard]] inline bool commit(transaction_handle& txn)
 {
- return txn->commit(); 
+ return txn->commit();
 }
+
+// Prepare a transaction to replay after a retryable operation-body error:
+void prepare_replay(transaction_handle& txn, fdb_error_t error);
+
+[[nodiscard]] commit_result commit(with_result_t, transaction_handle& txn);
 
 [[nodiscard]] inline bool commit(transaction_handle& txn,
                                  const versionstamp& stamp)
@@ -96,19 +128,34 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
 namespace ceph::libfdb::detail {
 
 // Forward declarations:
-template <typename FnT>
+template <typename FnT, typename ...ArgTs>
 using transaction_invocation_result_t =
- std::invoke_result_t<FnT&, transaction_handle&>;
+ std::invoke_result_t<FnT&, transaction_handle&, ArgTs&...>;
 
-template <typename FnT>
-concept supported_transaction_invocation =
- concepts::supported_invocation_result<transaction_invocation_result_t<FnT>>;
+template <typename FnT, typename ...ArgTs>
+concept transaction_op =
+ std::invocable<FnT&, transaction_handle&, ArgTs&...> &&
+ concepts::supported_invocation_result<transaction_invocation_result_t<FnT, ArgTs...>>;
+
+template <typename FnT, typename ...ArgTs>
+concept result_reporting_transaction_op =
+ transaction_op<FnT, ArgTs...> &&
+ std::is_void_v<transaction_invocation_result_t<FnT, ArgTs...>>;
+
+template <typename FnT, typename ...ArgTs>
+concept bound_transaction_op =
+ std::constructible_from<std::decay_t<FnT>, FnT> &&
+ (std::constructible_from<std::decay_t<ArgTs>, ArgTs> && ...) &&
+ transaction_op<std::decay_t<FnT>, std::decay_t<ArgTs>...>;
 
 template <typename FnT>
 using operation_result_t =
  std::conditional_t<std::is_void_v<transaction_invocation_result_t<FnT>>,
                     void,
                     std::remove_cvref_t<transaction_invocation_result_t<FnT>>>;
+
+template <result_reporting_transaction_op FnT>
+transaction_result maybe_retry_with_result(transaction_handle txn, FnT&& fn);
 
 template <typename OutValuesT>
 struct value_collector_t final
@@ -121,14 +168,28 @@ struct value_collector_t final
 template <typename OutValuesT>
 auto value_collector(OutValuesT& out_values) -> value_collector_t<OutValuesT>;
 
-template <supported_transaction_invocation FnT>
+template <typename OutputTargetOrFnT>
+requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>
+decltype(auto) get_output_for(OutputTargetOrFnT&& output_target_or_fn)
+{
+ return std::forward<OutputTargetOrFnT>(output_target_or_fn);
+}
+
+template <typename OutputTargetOrFnT>
+requires (not concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>)
+auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
+{
+ return value_collector(output_target_or_fn);
+}
+
+template <transaction_op FnT>
 auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>;
 
-template <supported_transaction_invocation FnT>
+template <transaction_op FnT>
 auto commit_noreplay(transaction_handle txn, const commit_after_op commit_after, FnT&& fn)
  -> operation_result_t<FnT>;
 
-template <supported_transaction_invocation FnT>
+template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn)
  -> operation_result_t<FnT>;
 
@@ -145,7 +206,12 @@ namespace ceph::libfdb {
 }
 
 template <typename FnT>
-requires std::invocable<FnT&, std::string_view>
+concept watch_callback =
+ std::invocable<FnT&, std::string_view> &&
+ std::is_void_v<std::invoke_result_t<FnT&, std::string_view>>;
+
+template <typename FnT>
+requires watch_callback<FnT>
 void watched_loop(database_handle dbh, std::string_view key, std::stop_token stop_token, FnT&& fn)
 {
  std::string watched_key(key);
@@ -160,7 +226,7 @@ void watched_loop(database_handle dbh, std::string_view key, std::stop_token sto
  * For more complex stop behavior, see make_watch(), ready(), cancel(), and
  * wait_for_event(): */
 template <typename FnT>
-requires std::invocable<FnT&, std::string_view>
+requires watch_callback<FnT>
 void watched_loop(database_handle dbh, std::string_view key, FnT&& fn)
 {
  return watched_loop(dbh, key, std::stop_token{}, std::forward<FnT>(fn));
@@ -426,11 +492,6 @@ inline select select_from_initializer_list(std::initializer_list<std::string_vie
 }
 
 template <typename OutT>
-concept string_pair_output =
- concepts::string_pair_output_iterator<OutT> ||
- concepts::string_pair_output_range<OutT>;
-
-template <typename OutT>
 struct materialized_string_pair_output final
 {
  OutT values;
@@ -455,7 +516,7 @@ inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
   }
  }
 
- if constexpr (concepts::has_merge<ContainerT>) {
+ if constexpr (requires { out.merge(tmp); }) {
   out.merge(tmp);
   return;
  }
@@ -463,7 +524,9 @@ inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
  ceph::util::append_range(out, move_range(tmp));
 }
 
-template <query::expression SelectionT, string_pair_output OutT>
+template <query::expression SelectionT, typename OutT>
+requires concepts::string_pair_output_iterator<OutT> ||
+         concepts::string_pair_output_range<OutT>
 inline std::size_t get_value_selection_from_transaction(transaction& txn,
                                                         const SelectionT& selection,
                                                         OutT& out)
@@ -595,12 +658,8 @@ inline bool get(ceph::libfdb::transaction_handle txn,
 {
  return detail::commit_noreplay(txn, commit_after,
           [key = detail::as_fdb_span(key), &output_target_or_fn](const transaction_handle& active_txn) {
-            if constexpr (concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>>) {
-              return active_txn->get(key, output_target_or_fn);
-            } else {
-              return active_txn->get(key,
-                              detail::value_collector(output_target_or_fn));
-            }
+            return active_txn->get(key,
+                                   detail::get_output_for(output_target_or_fn));
           });
 }
 
@@ -661,7 +720,7 @@ namespace ceph::libfdb {
 
 /* A "transactor" is a function-like wrapper for running replayable transactions.
  * It defers transaction creation until called, commits after the user function
- * returns, retries when FoundationDB requests replay, and throws when recovery
+ * returns, replays when FoundationDB requests replay, and throws when recovery
  * fails or retry attempts are exhausted. Plus, the name is pretty cool. */
 class transactor final
 {
@@ -679,15 +738,58 @@ class transactor final
     opts(opts_)
  {}
 
+ // Bind the callable and arguments once so replays see stable state:
+ template <typename FnT, typename ...ArgTs>
+ static auto bind_invocation(FnT&& fn, ArgTs&& ...args)
+ {
+  return [frame = std::tuple<std::decay_t<FnT>, std::decay_t<ArgTs>...> {
+            std::forward<FnT>(fn), std::forward<ArgTs>(args)...
+          }](transaction_handle& txn) mutable -> decltype(auto) {
+    return std::apply([&txn](auto& active_fn, auto& ...active_args) -> decltype(auto) {
+      return std::invoke(active_fn, txn, active_args...);
+    }, frame);
+  };
+ }
+
+ transaction_handle make_transaction_for_call() const
+ {
+  return opts ? make_transaction(dbh, *opts) : make_transaction(dbh);
+ }
+
  public:
  template <typename FnT>
- requires std::invocable<FnT&, transaction_handle&>
+ requires detail::transaction_op<FnT>
  decltype(auto) operator()(FnT&& fn) const
  {
-  auto txn = opts ? make_transaction(dbh, *opts)
-                  : make_transaction(dbh);
+  return detail::maybe_retry(make_transaction_for_call(), std::forward<FnT>(fn));
+ }
 
-  return detail::maybe_retry(txn, std::forward<FnT>(fn));
+ template <typename FnT, typename ...ArgTs>
+ requires (sizeof...(ArgTs) > 0 && detail::bound_transaction_op<FnT, ArgTs...>)
+ decltype(auto) operator()(FnT&& fn, ArgTs&& ...args) const
+ {
+  auto bound = bind_invocation(std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
+
+  return (*this)(bound);
+ }
+
+ template <typename FnT>
+ requires detail::result_reporting_transaction_op<FnT>
+ transaction_result operator()(with_result_t, FnT&& fn) const
+ {
+  return detail::maybe_retry_with_result(make_transaction_for_call(), std::forward<FnT>(fn));
+ }
+
+ template <typename FnT, typename ...ArgTs>
+ requires (sizeof...(ArgTs) > 0 &&
+           detail::bound_transaction_op<FnT, ArgTs...> &&
+           detail::result_reporting_transaction_op<
+             std::decay_t<FnT>, std::decay_t<ArgTs>...>)
+ transaction_result operator()(with_result_t, FnT&& fn, ArgTs&& ...args) const
+ {
+  auto bound = bind_invocation(std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
+
+  return (*this)(with_result, bound);
  }
 
  private:
@@ -826,9 +928,9 @@ auto blocks_selector(ceph::libfdb::database_handle dbh, ceph::libfdb::select sel
 
  auto read_blocks = [txr = make_transactor(dbh)](this auto& self, ceph::libfdb::select range, const int iteration)
  -> std::generator<AssocT> {
-  auto read_result = txr([range, iteration](auto& txn) {
-   return detail::materialize_query_window<ValueT, AssocT>(*txn, range, iteration);
-  });
+  auto read_result = txr([](auto& txn, ceph::libfdb::select range, const int iteration) {
+   return detail::materialize_query_window<ValueT, AssocT>(*txn, std::move(range), iteration);
+  }, std::move(range), iteration);
 
   auto next_range = std::move(read_result.next_range);
 
@@ -924,6 +1026,32 @@ inline bool commit_or_throw(transaction_handle& txn)
  return true;
 }
 
+} // namespace ceph::libfdb::detail
+
+namespace ceph::libfdb {
+
+inline void prepare_replay(transaction_handle& txn, const fdb_error_t error)
+{
+ if (not detail::retry_after_error(txn, error)) {
+  throw libfdb_exception(error);
+ }
+}
+
+[[nodiscard]] inline commit_result commit(with_result_t, transaction_handle& txn)
+{
+ fdb_error_t replay_error = 0;
+ const auto committed = txn->commit(&replay_error);
+
+ return {
+  .committed = committed,
+  .replay_error = replay_error,
+ };
+}
+
+} // namespace ceph::libfdb
+
+namespace ceph::libfdb::detail {
+
 template <typename OutValuesT>
 void value_collector_t<OutValuesT>::operator()(std::span<const std::uint8_t> out_data) const
 {
@@ -940,40 +1068,72 @@ enum struct invocation_failure_policy { no_retry, retry };
 
 struct no_invocation_result final {};
 
-template <typename ResultT>
-using stored_invocation_result_t =
- std::conditional_t<std::is_void_v<ResultT>,
-                    no_invocation_result,
-                    std::remove_cvref_t<ResultT>>;
+// Keep the existing transactor retry behavior in one place.
+constexpr std::size_t transaction_retry_attempts = 10;
 
-template <typename ResultT, typename FnT>
-requires concepts::supported_invocation_result<ResultT>
-auto store_invocation_result(transaction_handle& txn, FnT&& fn)
- -> stored_invocation_result_t<ResultT>
+inline void record_transaction_replay(transaction_result& result,
+                                      const fdb_error_t r,
+                                      const bool can_replay)
 {
- if constexpr (std::is_void_v<ResultT>) {
-  return (std::invoke(fn, txn), stored_invocation_result_t<ResultT>{});
- } else {
-  return std::invoke(fn, txn);
+ result.last_error = r;
+
+ if (can_replay) {
+  ++result.replay_count;
  }
 }
 
-template <typename ResultT, typename StoredT>
-requires std::is_void_v<ResultT> || concepts::storable_invocation_result<ResultT>
-auto invocation_value_from_result(std::optional<StoredT>&& result)
-{
- if constexpr (std::is_void_v<ResultT>) {
-  return;
- } else {
+template <typename ResultT>
+struct invocation_result_traits final {
+ using stored_t = std::remove_cvref_t<ResultT>;
+
+ template <typename FnT>
+ static stored_t store(transaction_handle& txn, FnT&& fn)
+ {
+  return std::invoke(std::forward<FnT>(fn), txn);
+ }
+
+ static stored_t take(std::optional<stored_t>&& result)
+ {
   return *std::move(result);
  }
+};
+
+template <>
+struct invocation_result_traits<void> final {
+ using stored_t = no_invocation_result;
+
+ template <typename FnT>
+ static stored_t store(transaction_handle& txn, FnT&& fn)
+ {
+  std::invoke(std::forward<FnT>(fn), txn);
+
+  return {};
+ }
+
+ static void take(std::optional<stored_t>&&)
+ {}
+};
+
+template <typename ResultT>
+using stored_invocation_result_t = typename invocation_result_traits<ResultT>::stored_t;
+
+template <typename ResultT, typename FnT>
+auto store_invocation_result(transaction_handle& txn, FnT&& fn)
+ -> stored_invocation_result_t<ResultT>
+{
+ return invocation_result_traits<ResultT>::store(txn, std::forward<FnT>(fn));
+}
+
+template <typename ResultT, typename StoredT>
+decltype(auto) invocation_value_from_result(std::optional<StoredT>&& result)
+{
+ return invocation_result_traits<ResultT>::take(std::move(result));
 }
 
 template <invocation_failure_policy FailurePolicy,
           typename FnT,
           typename CommitFnT,
           typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-requires concepts::supported_invocation_result<ResultT>
 auto attempt_invocation(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn)
  -> std::optional<stored_invocation_result_t<ResultT>>
 {
@@ -982,21 +1142,21 @@ auto attempt_invocation(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn
  std::optional<stored_result_t> result;
 
  try {
-     result.emplace(store_invocation_result<ResultT>(txn, fn));
+  result.emplace(store_invocation_result<ResultT>(txn, fn));
  }
  catch (const libfdb_exception& e) {
-     // Figure out how to recover from invocation failure:
+  // Figure out how to recover from invocation failure:
 
-     if constexpr (invocation_failure_policy::no_retry == FailurePolicy) {
-      throw;
-     }
+  if constexpr (invocation_failure_policy::no_retry == FailurePolicy) {
+   throw;
+  }
 
-     if (not e.retryable()) {
-      throw;
-     }
+  if (not e.retryable()) {
+   throw;
+  }
 
-     retry_after_error(txn, e.fdb_error_value);
-     return std::nullopt;
+  prepare_replay(txn, e.fdb_error_value);
+  return std::nullopt;
  }
 
  if (!std::invoke(commit_fn, txn)) {
@@ -1010,10 +1170,9 @@ template <invocation_failure_policy FailurePolicy,
           typename FnT,
           typename CommitFnT,
           typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-requires concepts::supported_invocation_result<ResultT>
 decltype(auto) invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn)
 {
- for (auto tries = 10; tries; --tries) {
+ for (auto tries = transaction_retry_attempts; tries; --tries) {
   if (auto result = attempt_invocation<FailurePolicy>(txn, fn, commit_fn)) {
    return invocation_value_from_result<ResultT>(std::move(result));
   }
@@ -1022,7 +1181,7 @@ decltype(auto) invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& 
  throw libfdb_exception("transaction retry limit exceeded");
 }
 
-template <supported_transaction_invocation FnT>
+template <transaction_op FnT>
 auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
 {
  return invoke_with_retry<invocation_failure_policy::retry>(
@@ -1032,7 +1191,46 @@ auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
           });
 }
 
-template <supported_transaction_invocation FnT>
+template <result_reporting_transaction_op FnT>
+transaction_result maybe_retry_with_result(transaction_handle txn, FnT&& fn)
+{
+ transaction_result result;
+
+ for (auto attempts_left = transaction_retry_attempts; attempts_left; --attempts_left) {
+  ++result.attempts;
+
+  try {
+   std::invoke(fn, txn);
+  } catch (const libfdb_exception& e) {
+   if (not e.retryable()) {
+    throw;
+   }
+
+   prepare_replay(txn, e.fdb_error_value);
+   record_transaction_replay(result, e.fdb_error_value, 1 < attempts_left);
+
+   continue;
+  }
+
+  const auto commit_state = commit(with_result, txn);
+  if (not commit_state.committed and 0 == commit_state.replay_error) {
+   throw libfdb_exception("transactor commit did not start");
+  }
+
+  if (not commit_state.committed) {
+   record_transaction_replay(result, commit_state.replay_error, 1 < attempts_left);
+
+   continue;
+  }
+
+  result.committed = true;
+  return result;
+ }
+
+ return result;
+}
+
+template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn)
  -> operation_result_t<FnT>
 {
@@ -1040,7 +1238,7 @@ auto in_transaction(database_handle dbh, FnT&& fn)
 }
 
 // Commit only once; the caller is responsible for transaction replay:
-template <supported_transaction_invocation FnT>
+template <transaction_op FnT>
 auto commit_noreplay(transaction_handle txn, const commit_after_op commit_after, FnT&& fn)
  -> operation_result_t<FnT>
 {
