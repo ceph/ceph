@@ -9,6 +9,7 @@ import sys
 
 from io import StringIO
 from teuthology.orchestra import run
+from teuthology.misc import deep_merge
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology.parallel import parallel
@@ -311,13 +312,37 @@ def dev_create(ctx, config):
     for role, properties in images:
         if properties is None:
             properties = {}
+        cluster, _type, _id = teuthology.split_role(role)
+        (remote,) = ctx.cluster.only(role).remotes.keys()
+        ceph_manager = ctx.managers[cluster]
+
+        key_type = properties.get('key_type', 'aes')
+        if key_type == 'aes':
+            log.info("Configuring cluster to allow insecure 'aes' cipher for kclient...")
+            try:
+                ceph_manager.ceph('health mute AUTH_INSECURE_CLIENT_KEY_TYPE --sticky')
+                ceph_manager.ceph('health mute AUTH_INSECURE_KEYS_ALLOWED --sticky')
+                ceph_manager.ceph('health mute AUTH_INSECURE_KEYS_CREATABLE --sticky')
+                ceph_manager.ceph('mon set auth_allowed_ciphers aes,aes256k')
+                ceph_manager.ceph('config set mon mon_auth_allow_insecure_key true')
+            except CommandFailedError as e:
+                log.warning(f"Failed to set cluster configs for legacy aes key: {e}")
+
+            # Ensure the client key is generated with the desired cipher type
+            keyring_path = f"/etc/ceph/{cluster}.{_type}.{_id}.keyring"
+            try:
+                log.info(f"Generating key for {_type}.{_id} with key-type {key_type} at {keyring_path}")
+                p = ceph_manager.ceph(f'auth rotate {_type}.{_id} --key-type={key_type}', stdout=StringIO())
+            except CommandFailedError as e:
+                log.warning(f"Failed to rotate key, maybe --key-type is unsupported: {e}")
+            else:
+                remote.write_file(keyring_path, p.stdout.getvalue(), sudo=True)
+
         name = properties.get('image_name', default_image_name(role))
-        cluster, _, _ = teuthology.split_role(role)
         parent_encryption_format = properties.get('parent_encryption_format',
                                                   'none')
         encryption_format = properties.get('encryption_format',
                                            parent_encryption_format)
-        (remote,) = ctx.cluster.only(role).remotes.keys()
 
         if encryption_format == 'none' and parent_encryption_format == 'none':
             device_path[role] = '/dev/rbd/rbd/{image}'.format(image=name)
@@ -734,12 +759,20 @@ def task(ctx, config):
     norm_config = config
     if isinstance(config, dict):
         norm_config = teuthology.replace_all_with_clients(ctx.cluster, config)
+
+    overrides = ctx.config.get('overrides', {}).get('rbd', {})
+    top_overrides = dict(filter(lambda x: not str(x[0]).startswith('client.'), overrides.items()))
+
     if isinstance(norm_config, dict):
         role_images = {}
-        for role, properties in norm_config.items():
-            if properties is None:
-                properties = {}
-            role_images[role] = properties.get('image_name')
+        for role in list(norm_config.keys()):
+            if norm_config[role] is None:
+                norm_config[role] = {}
+            deep_merge(norm_config[role], top_overrides)
+            client_overrides = overrides.get(role, {})
+            if isinstance(client_overrides, dict):
+                deep_merge(norm_config[role], client_overrides)
+            role_images[role] = norm_config[role].get('image_name')
     else:
         role_images = norm_config
 
