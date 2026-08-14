@@ -24,35 +24,87 @@ void ECCrushTestFixture::pre_peering_hook()
   // proper bucket hierarchy and a real EC indep rule, then remove the
   // pg_temp so CRUSH drives placement.
   //
-  // build_simple_crush_map() creates:
-  //   root "default"
-  //     └─ rack "localrack"
-  //          └─ host "localhost"
-  //               └─ osd.0 … osd.(k+m-1)
-  //   rule 0: "replicated_rule" (firstn, TYPE_REPLICATED)
+  // Single-zone (num_zones == 1):
+  //   build_simple_crush_map() gives us the standard flat hierarchy and
+  //   we add:  rule "ec_rule"  (indep, TYPE_ERASURE, failure_domain=osd)
   //
-  // We add:
-  //   rule 1: "ec_rule"  (indep, TYPE_ERASURE, failure_domain=osd)
+  // Multi-zone (num_zones > 1):
+  //   We use insert_item() with a location map (the same API that
+  //   build_simple_crush_map itself uses internally) to build:
+  //     root "default"
+  //       ├─ datacenter "zone-0"  →  host "host-0"  →  osd.0 … osd.(k+m-1)
+  //       └─ datacenter "zone-1"  →  host "host-1"  →  osd.(k+m) … osd.(2*(k+m)-1)
+  //   and add:  rule "ec_stretch_rule"  via add_simple_stretch_rule()
   //
-  // The pool's crush_rule is updated to the new EC rule.
-  // The pg_temp from setup_ec_pool() is removed so OSDMap consults CRUSH.
+  // In both cases the pool's crush_rule is updated and the pg_temp from
+  // setup_ec_pool() is removed so OSDMap consults CRUSH.
   // ------------------------------------------------------------------
 
   CephContext* cct = g_ceph_context;
 
-  // Build a fresh CRUSH map for k+m OSDs.
   CrushWrapper new_crush;
-  {
+  std::string rule_name;
+
+  if (num_zones <= 1) {
+    // Single-zone: reuse the standard helper.
     std::stringstream ss;
     int r = OSDMap::build_simple_crush_map(cct, new_crush, k + m, &ss);
     ceph_assert(r == 0);
 
+    rule_name = "ec_rule";
     r = new_crush.add_simple_rule(
-      "ec_rule", "default", "osd", "",
+      rule_name, "default", "osd", "",
       "indep", pg_pool_t::TYPE_ERASURE, &ss);
     ceph_assert(r >= 0);
+  } else {
+    // Multi-zone: build a per-datacenter hierarchy using insert_item(),
+    // which is the same API build_simple_crush_map() uses internally and
+    // which the existing stretch_ec test in test/crush/CrushWrapper.cc
+    // also relies on.  insert_item() creates intermediate buckets
+    // (datacenter, host) on demand — no manual bucket plumbing needed.
+    new_crush.create();
+    OSDMap::_build_crush_types(new_crush);
+
+    int root_type = new_crush.get_type_id("root");
+    ceph_assert(root_type >= 0);
+    int rootid = 0;
+    int r = new_crush.add_bucket(0, CRUSH_BUCKET_STRAW2, CRUSH_HASH_DEFAULT,
+                                 root_type, 0, nullptr, nullptr, &rootid);
+    ceph_assert(r == 0);
+    new_crush.set_item_name(rootid, "default");
+
+    int shards_per_zone = k + m;
+    for (int z = 0; z < num_zones; z++) {
+      std::map<std::string, std::string> loc;
+      loc["root"]       = "default";
+      loc["datacenter"] = "zone-" + std::to_string(z);
+      loc["host"]       = "host-" + std::to_string(z);
+      for (int i = 0; i < shards_per_zone; i++) {
+        int osd = z * shards_per_zone + i;
+        new_crush.insert_item(cct, osd, 1.0, "osd." + std::to_string(osd), loc);
+      }
+    }
+
+    rule_name = "ec_stretch_rule";
+    std::stringstream ss;
+    r = new_crush.add_simple_stretch_rule(
+      rule_name, "default",
+      "datacenter",    // zone_failure_domain: choose across zones
+      "osd",           // osd_failure_domain: chooseleaf down to individual OSDs
+      num_zones,       // num_failure_domains
+      shards_per_zone, // num_replica_per_zone (k+m OSDs selected per zone)
+      "",              // device_class
+      "indep",
+      pg_pool_t::TYPE_ERASURE,
+      false,
+      &ss);
+    if (r < 0) {
+      lderr(cct) << "add_simple_stretch_rule failed: " << ss.str() << dendl;
+    }
+    ceph_assert(r >= 0);
   }
-  const int ec_rule_id = new_crush.get_rule_id("ec_rule");
+
+  const int ec_rule_id = new_crush.get_rule_id(rule_name);
   ceph_assert(ec_rule_id >= 0);
   new_crush.finalize();
 
