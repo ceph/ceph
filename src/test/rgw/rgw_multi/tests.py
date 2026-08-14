@@ -7116,3 +7116,148 @@ def test_stale_bucket_owner_after_concurrent_chown():
         for uid in (uid_a, uid_b1, uid_b2):
             master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
                                       check_retcode=False)
+
+def test_stale_metadata_applied_after_concurrent_updates():
+    """ Integration test for https://tracker.ceph.com/issues/79311
+
+    Verify that metadata sync does not apply a stale bucket.instance update
+    on top of a newer one already stored on the secondary.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest('test_stale_metadata_applied_after_concurrent_updates requires at least 2 read-write zones')
+
+    master = zonegroup_conns.master_zone
+    secondary = next(z for z in zonegroup_conns.rw_zones if z != master)
+
+    # pick up mdlog entries promptly, so the two updates below are fetched
+    # without waiting out the default poll interval
+    poll_interval = 1
+
+    def set_instance_hold(enabled):
+        cluster = secondary.zone.cluster
+        if enabled:
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_meta_sync_poll_interval',
+                                str(poll_interval)])
+            # rgw_inject_delay_sec is only an on switch here, not a duration
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_sec', '1'])
+            cluster.ceph_admin(['config', 'set', 'client', 'rgw_inject_delay_pattern',
+                                'delay_meta_sync_bucket_instance_hold'])
+        else:
+            # clearing the pattern releases the held entry
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_pattern'])
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_inject_delay_sec'])
+            cluster.ceph_admin(['config', 'rm', 'client', 'rgw_meta_sync_poll_interval'])
+
+    # returns the data object of a metadata entry as seen by this zone
+    def meta_data(zone_conn, key):
+        out, _ = zone_conn.zone.cluster.admin(
+            ['metadata', 'get', key] + zone_conn.zone.zone_args(),
+            check_retcode=False, read_only=True)
+        try:
+            return json.loads(out)['data']
+        except (ValueError, KeyError):
+            return {}
+
+    def instance_owner(zone_conn, key):
+        return meta_data(zone_conn, 'bucket.instance:' + key).get(
+            'bucket_info', {}).get('owner')
+
+    def entrypoint_owner(zone_conn, name):
+        return meta_data(zone_conn, 'bucket:' + name).get('owner')
+
+    uid_a = run_prefix + '-stale-a'
+    uid_b1 = run_prefix + '-stale-b1'
+    uid_b2 = run_prefix + '-stale-b2'
+    ak_a, sk_a = uid_a + 'AK', uid_a + 'SK'
+
+    master.zone.cluster.admin(['user', 'create', '--uid', uid_a, '--display-name', uid_a,
+                               '--access-key', ak_a, '--secret-key', sk_a])
+    for uid in (uid_b1, uid_b2):
+        master.zone.cluster.admin(['user', 'create', '--uid', uid, '--display-name', uid])
+
+    zonegroup_meta_checkpoint(zonegroup)
+    bucket_name = gen_bucket_name()
+
+    with override_config(checkpoint_retries=30, checkpoint_delay=2):
+        try:
+            region = zonegroup.name
+            owner_conn = get_gateway_connection(master.zone.gateways[0],
+                                                Credentials(ak_a, sk_a), region)
+            owner_conn.create_bucket(Bucket=bucket_name)
+            zonegroup_meta_checkpoint(zonegroup)
+
+            instance_list_json, _ = master.zone.cluster.admin(
+                ['metadata', 'list', 'bucket.instance'] + master.zone.zone_args(),
+                read_only=True)
+            instance_key = next(k for k in json.loads(instance_list_json)
+                                if k.startswith(bucket_name + ':'))
+
+            # hold the next bucket.instance update on the secondary between
+            # fetch and apply, released by clearing the pattern
+            set_instance_hold(True)
+            time.sleep(10)  # let the config reach the secondary's radosgws
+
+            # first update: the secondary fetches it and is held before applying
+            master.zone.cluster.admin(['bucket', 'link', '--bucket', bucket_name,
+                                       '--uid', uid_b1])
+            assert instance_owner(master, instance_key) == uid_b1, \
+                'master did not record the first update'
+
+            # wait for proof that the instance update is held: the entrypoint
+            # has updated but the instance has not. only then link uid_b2, so
+            # that the held update is the older one
+            window_hit = False
+            for _ in range(config.checkpoint_retries):
+                time.sleep(config.checkpoint_delay)
+                ep_owner = entrypoint_owner(secondary, bucket_name)
+                inst = instance_owner(secondary, instance_key)
+                log.info('secondary state: entrypoint=%s instance=%s', ep_owner, inst)
+                if ep_owner == uid_b1 and inst == uid_a:
+                    window_hit = True
+                    break
+                if ep_owner == uid_b1 and inst == uid_b1:
+                    break  # the instance applied too; the hold never engaged
+            assert window_hit, \
+                'could not reproduce held-bucket.instance window on secondary'
+
+            # second update: not held, the hold is already taken
+            master.zone.cluster.admin(['bucket', 'link', '--bucket', bucket_name,
+                                       '--uid', uid_b2])
+            assert instance_owner(master, instance_key) == uid_b2, \
+                'master did not record the second update'
+
+            fresh_applied = False
+            for _ in range(config.checkpoint_retries):
+                time.sleep(config.checkpoint_delay)
+                if instance_owner(secondary, instance_key) == uid_b2:
+                    fresh_applied = True
+                    break
+            assert fresh_applied, \
+                'second update never reached the secondary'
+
+            # sync is running, so remaining mdlog lag can only be the first
+            # update, still held before its apply
+            master_status = meta_master_log_status(master.zone)
+            _, _, _, _, sync_status = meta_sync_status(secondary.zone)
+            assert not compare_meta_status(secondary.zone, master_status, sync_status), \
+                'secondary is fully caught up: the first update was not held'
+
+            # release it: the held entry now applies an older version on top of
+            # the newer one, which is what the guard must refuse
+            set_instance_hold(False)
+
+            # cannot complete until the released entry finishes, so this waits
+            # on the stale apply rather than on a fixed duration
+            zone_meta_checkpoint(secondary.zone)
+
+            owner = instance_owner(secondary, instance_key)
+            assert owner == uid_b2, \
+                'secondary regressed to stale owner %r, expected %r' % (owner, uid_b2)
+        finally:
+            set_instance_hold(False)
+            zonegroup_meta_checkpoint(zonegroup)
+            for uid in (uid_a, uid_b1, uid_b2):
+                master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
+                                          check_retcode=False)
