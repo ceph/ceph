@@ -24,10 +24,12 @@
 #include "common/BackTrace.h"
 #include "common/JSONFormatter.h"
 #include "common/split.h"
+#include "common/LogEntry.h"
 #include "global/signal_handler.h"
 
 #include "common/debug.h"
 #include "common/errno.h"
+#include <boost/python.hpp>
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 
@@ -796,18 +798,41 @@ PyModule::~PyModule()
   }
 }
 
-int PyModule::perf_counter_build(CephContext *cct) {
-  ceph_assert(perfcounter == nullptr);
-  PerfCountersBuilder pcb(cct, "mgr_module_" + get_name(), l_pym_first, l_pym_last);
-  pcb.add_u64_avg(l_pym_notify_avg_usec, "notify_avg_usec", "Average time spent in notify calls", "nsec", 0);
-  pcb.add_u64_avg(l_pym_cmd_avg_usec, "cmd_avg_usec", "Average time spent in command calls", "csec", 0);
-  pcb.add_u64(l_pym_alive, "alive", "Is the module alive?", "aliv", 0, uint64_t(1));
-  pcb.add_u64(l_pym_cpu_usage, "cpu_usage", "CPU usage in percent", "cpu", 0, uint64_t(100));
-  pcb.add_u64(l_pym_mem_rss_change, "mem_rss_change", "Memory RSS change in bytes", "", 0);
-  pcb.add_u64(l_pym_mem_rss_current, "mem_rss_current", "Memory RSS current in bytes", "", 0);
-  pcb.add_u64(l_pym_serve_cpu_usage, "serve_cpu_usage", "Serve thread CPU usage in percent", "cpu", 0, uint64_t(100));
-  perfcounter = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
-  cct->get_perfcounters_collection()->add(perfcounter.get());
+void PyModule::export_log_entry() {
+    static bool exported = false;
+    if (exported) {
+      return;
+    }
 
-  return 0;
+    using namespace boost::python;
+
+    // 1. Register the nested LogMsg structure
+    class_<LogMsg>("LogMsg", no_init)
+        .add_property("name", +[](const LogMsg& m) { return stringify(m.name); })
+        .add_property("addrs", +[](const LogMsg& m) { return stringify(m.addrs); })
+        .add_property("entity_name", +[](const LogMsg& m) { return stringify(m.entity_name); })
+        .def_readonly("cmd", &LogMsg::cmd)
+        .def_readonly("cmd_args", &LogMsg::cmd_args)
+        .def_readonly("cmd_state", &LogMsg::cmd_state)
+        .def_readonly("cmd_retval", &LogMsg::cmd_retval)
+        .def("__str__", +[](const LogMsg& m) { return stringify(m); });
+
+    // 2. Register the main LogEntry structure
+    class_<LogEntry>("LogEntry", no_init)
+        .add_property("name", +[](const LogEntry& e) { return stringify(e.name); })
+        .add_property("rank", +[](const LogEntry& e) { return stringify(e.rank); })
+        .add_property("addrs", +[](const LogEntry& e) { return stringify(e.addrs); })
+        .add_property("stamp", +[](const LogEntry& e) { return stringify(e.stamp); })
+        .add_property("prio", +[](const LogEntry& e) { return static_cast<int>(e.prio); })
+        .def_readonly("seq", &LogEntry::seq)
+        .def_readonly("msg", &LogEntry::msg)
+        .def_readonly("channel", &LogEntry::channel)
+        .def_readonly("epoch", &LogEntry::epoch)
+        // Access the nested LogMsg object
+        .def_readonly("logmsg", &LogEntry::logmsg)
+        .def("__str__", +[](const LogEntry& e) {
+             // Logic to represent the full log entry as a string
+             return stringify(e.stamp) + " " + stringify(e.name) + ": " + e.msg;
+        });
+    exported = true;
 }
