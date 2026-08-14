@@ -34,6 +34,24 @@ struct ConnectionPipeline {
   } get_pg_mapping;
 };
 
+/**
+ * PerShardPipeline
+ *
+ * Each shard holds three of these, reached through
+ * ShardServices::get_client_request_pipeline(),
+ * get_replicated_request_pipeline() and get_peering_request_pipeline().
+ * They are independent, so an op stalled in one of them does not hold up
+ * the other two, but every instance reports the same type_name, which is
+ * worth remembering when reading a blocked-operation dump.
+ *
+ * create_or_wait_pg guards the lookup of a pg that may not exist yet.
+ * Being an exclusive phase, it orders every op on its pipeline against
+ * every other, which is wider than what the osd owes: per
+ * doc/dev/osd_internals/map_message_handling.rst, only ops referring to
+ * the same object may not be reordered, and those share a pg by
+ * construction.  Ordering across distinct pgids is therefore incidental,
+ * and only exists at all for pgids that happen to share a shard.
+ */
 struct PerShardPipeline {
   struct CreateOrWaitPG : OrderedExclusivePhaseT<CreateOrWaitPG> {
     static constexpr auto type_name =
