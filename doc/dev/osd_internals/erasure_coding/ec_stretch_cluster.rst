@@ -609,58 +609,109 @@ falls back to the Primary read path (Section 7.1).
   ``-EAGAIN`` rejection, or medium error — results in the client redirecting
   the operation to the **Primary** (regardless of the Primary's location).
 
-7.3 Direct Reads — Zone-Local — *R1*
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+7.3 Direct Reads — Zone-Aware — *R1*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The client will read from a zone-local shard.
+The client selects which zone to read each data shard from based on the
+read mode flag set on the operation. Two modes are supported:
 
-- **Zone-Local Shard Identification**: The client determines which OSDs in the
-  acting set reside within its own zone by comparing OSD CRUSH
-  locations against its own. This identifies the ``k+m`` shards of the local
-  zone. The client then selects a suitable set of data shards for the
-  direct read.
+.. note::
 
-- **Unavailable Zone-local OSDs**: If the zone-local shards are not available (e.g., the
-  zone-local OSDs are down or the client cannot identify any zone-local replica), the
-  client does not attempt a direct read and instead directs the operation to
-  the Primary. In later releases this will be improved to redirect to the
-  local Zone Primary instead.
+   The stretch CRUSH rule guarantees that the acting array is zone-contiguous::
 
-- **Direct Read Execution**: If a zone-local shard is available, the client sends
-  the read directly to that OSD. As detailed in the ``ec_direct_reads.rst``
-  design, it is generally acceptable for reads to overtake in-flight writes.
-  However, the OSD is aware if it has an "uncommitted" write (a write that
-  could potentially be rolled back) for the requested object. If such a write
-  exists, or if the client's operation requires strict ordering (e.g. the
-  ``rwordered`` flag is set), the OSD rejects the operation with ``-EAGAIN``.
-  Data access errors (e.g., a media error on the underlying storage) also cause
-  the OSD to reject the operation.
+       acting[0 .. zone_size-1]             → zone 0
+       acting[zone_size .. 2*zone_size-1]   → zone 1
+       …
+
+   so the absolute raw shard index is ``rel_shard + zone_index × zone_size``.
+   This arithmetic is the same for non-stretch pools (``zone_size == pool.size``,
+   ``zone_index == 0``), so no separate code path is needed.
+
+7.3.1 Localized Reads (``CEPH_OSD_FLAG_LOCALIZE_READS``) — *R1*
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+All data shards for a single operation are read from the **same zone** — the one
+nearest to the client.
+
+- **Zone Selection**: The client scores each zone by picking one arbitrary OSD
+  from that zone's acting-set range and computing its CRUSH locality distance
+  to the client via ``CrushWrapper::get_common_ancestor_distance()``. The zone
+  with the lowest (nearest) distance wins. Ties are broken in favour of the
+  lower-indexed zone. If no zone can be scored (``crush_location`` unset, all
+  representatives absent, or no common ancestor), zone 0 is used as the
+  default, which is also the correct behaviour for non-stretch pools.
+
+- **Shard Selection**: For each required data chunk, the client selects the
+  corresponding shard from the chosen zone. Every shard in the operation comes
+  from the same zone. If any shard's OSD is unavailable (absent from the acting
+  set or not ``exists()``), the split read is aborted and the operation falls
+  back to the Primary. There is no cross-zone fallback.
+
+- **Unavailable Zone**: If any required shard in the chosen zone is unavailable,
+  the client does not attempt a direct read and instead directs the operation to
+  the Primary. In later releases this will be improved to redirect to the local
+  Zone Primary instead.
+
+7.3.2 Balanced Reads (``CEPH_OSD_FLAG_BALANCE_READS``) — *R1*
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Each data shard for a single operation is read from a **randomly chosen zone**,
+selected independently for each shard. This spreads read load across all zones
+without requiring knowledge of the client's physical location.
+
+- **Per-Shard Zone Selection**: For each required data shard ``rel_shard``
+  (``0`` to ``k-1``), a zone is chosen uniformly at random from the available
+  zones. The selection for each shard is independent; different shards in the
+  same operation may come from different zones.
+
+- **Shard Selection**: The absolute raw shard is
+  ``rel_shard + random_zone × zone_size``. If the chosen zone's OSD for a given
+  shard is unavailable (absent from the acting set or not ``exists()``), the
+  split read is aborted and the operation falls back to the Primary.
+
+- **No Locality Requirement**: Unlike Localized Reads, this mode does not
+  require ``crush_location`` to be set on the client. It is suitable as a
+  general-purpose load-balancing read strategy across all zones.
+
+7.3.3 Common Behaviour
+^^^^^^^^^^^^^^^^^^^^^^^
+
+The following applies to both Localized and Balanced read modes:
+
+- **Direct Read Execution**: The client sends each shard read directly to the
+  target OSD. As detailed in the ``ec_direct_reads.rst`` design, it is generally
+  acceptable for reads to overtake in-flight writes. However, the OSD is aware
+  if it has an "uncommitted" write (a write that could potentially be rolled
+  back) for the requested object. If such a write exists, or if the client's
+  operation requires strict ordering (e.g. the ``rwordered`` flag is set), the
+  OSD rejects the operation with ``-EAGAIN``. Data access errors (e.g., a media
+  error on the underlying storage) also cause the OSD to reject the operation.
 
 - **Failure Handling & Redirection (R1)**:
 
-  An -EAGAIN will cause the client to retry the op. For R1, the op will be 
-  redriven to the primary.  R2 will redrive the op to the zone primary. 
+  An ``-EAGAIN`` will cause the client to retry the op. For R1, the op will be
+  redriven to the Primary. R2 will redrive the op to the Zone Primary.
 
 7.4 Read from Zone Primary — *Later Release*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 In the R1 release, the primary will handle all failures. In later releases,
-an op which cannot be processed as a direct read will be directed at the 
+an op which cannot be processed as a direct read will be directed at the
 zone primary instead. The zone primary will attempt to reconstruct the
-read data from the zone-local shards directly. 
+read data from the zone-local shards directly.
 
-A conflict due to an uncommitted write will be continue to be handled by
-the primary, as the zone primary must also rejected an op if an
-uncommitted write exists for that object. 
+A conflict due to an uncommitted write will continue to be handled by
+the primary, as the zone primary must also reject an op if an
+uncommitted write exists for that object.
 
 - **Zone-local Recovery**: A read directed to a Zone Primary will attempt to serve
   the request by recovering data using only OSDs within the same data center
   (the remote zone).
 - **Zone Degradation**: If a zone has insufficient redundancy to reconstruct
   data locally, that zone should be taken offline to clients rather than serving
-  reads that would require inter-zone link access. (How? - Needs to be covered elsewhere)
+  reads that would require inter-zone link access.
 - **``-EAGAIN`` Behavior**: The Zone Primary will return ``-EAGAIN`` only in
-  short-lived transient conditions:
+  short-lived transient conditions.
 
 
 7.4.1 Safe Shard Identification & Synchronous Recovery — *Later Release*
@@ -703,6 +754,93 @@ enhanced.
     to read from a shard within the Synchronous Recovery Set.
   - This request will trigger the necessary recovery for that specific object
     (if not already complete) before the read is permitted.
+
+
+7.5 Zone-Aware Replica Split Ops — *R1*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   This section applies to **replicated pools** only. It is not specific to EC
+   and does not require Fast EC. The mechanism described here is an enhancement
+   to the existing ``ReplicaSplitOp`` implementation in
+   ``src/osdc/SplitOp.cc``.
+
+The existing ``ReplicaSplitOp`` path (see :class:`ReplicaSplitOp`) divides
+large read operations across replicas for parallel execution. When the
+``CEPH_OSD_FLAG_BALANCE_READS`` flag is set, chunks are distributed round-robin
+across all available replicas, starting from a randomly selected replica for
+load balancing. When the ``CEPH_OSD_FLAG_LOCALIZE_READS`` flag is set on a
+non-stretch replica pool today, there is no zone-awareness — the replica
+selection is still effectively unconstrained.
+
+For stretched replicated pools (``zones > 1``), when
+``CEPH_OSD_FLAG_LOCALIZE_READS`` is set, the ``ReplicaSplitOp`` restricts
+all sub-read shards to replicas that reside within the **local zone** — the
+zone nearest to the client.
+
+**Mechanism — Shard Selection**
+
+The zone is selected using the same closeness-score algorithm already employed
+by the EC split path:
+
+1. For each zone in the pool's acting set, one representative OSD is sampled
+   (the first non-``CRUSH_ITEM_NONE`` entry in that zone's acting-set range).
+2. The representative OSD's CRUSH locality distance to the client is computed
+   via ``CrushWrapper::get_common_ancestor_distance()``.
+3. The zone with the **lowest** (nearest) closeness score wins. Ties are broken
+   in favour of the lower-indexed zone. If no zone can be scored
+   (``crush_location`` unset, all representatives absent, or no common
+   ancestor), zone 0 is used as the default — which is also the correct
+   behaviour for non-stretch pools.
+4. All sub-read shards are then selected **exclusively** from the OSDs that
+   belong to the chosen zone. Shards from other zones are not used, regardless
+   of how many replicas are available there.
+
+If any OSD in the chosen zone is unavailable (absent from the acting set or
+not ``exists()``), the split-read is aborted and the operation falls back to
+the Primary, exactly as the existing failure path works today.
+
+**Non-Stretch Pools**
+
+For non-stretch replica pools (``zones == 1``), the behaviour is unchanged:
+``LOCALIZE_READS`` is treated identically to ``BALANCE_READS`` for split ops,
+because all replicas share the same zone.
+
+**Relationship to EC Zone-Aware Reads**
+
+This mechanism is the replica analogue of the EC zone-aware direct-read path
+described in Section 7.3.1. Both share the same zone-selection algorithm
+(``get_common_ancestor_distance`` / lowest closeness score), and both fall back
+to the Primary on any shard unavailability. The shared implementation lives in
+the ``SplitOp::local_zone_for_acting_set()`` static helper in ``SplitOp.cc``,
+reused by both ``ECSplitOp`` and ``ReplicaSplitOp``.
+
+
+7.6 Zone-Aware Read Enhancements — *Later Release*
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The following enhancements to the EC and replica zone-aware read paths are
+fully designed but are not required for R1 and will land in a later release.
+
+- **Zone Primary Fallback (EC and Replica)**: A failed localized read —
+  whether an EC direct read or a replica split op — will be redirected to the
+  local Zone Primary rather than the global Primary, consistent with the
+  improvements described in Section 7.4. This avoids cross-zone latency on
+  the fallback path when the client's zone is healthy but a single shard is
+  temporarily unavailable.
+
+- **Per-Zone ``min_size`` Interaction**: Once per-zone ``min_size`` enforcement
+  (Section 11.2.2) is implemented, both the EC split-op path and the replica
+  split-op path should also consult the per-zone availability state before
+  choosing a zone for localized reads. This prevents routing reads to a zone
+  that the monitor has already determined to be below its minimum shard
+  threshold.
+
+- **Zone-Aware Balanced Reads for Replica Pools**: The ``BALANCE_READS``
+  implementation for replica pools will be extended to restrict balanced reads
+  to zone-local replicas when sufficient replicas are available, combining load
+  distribution with locality.
 
 
 8. Write Path & Transaction Handling
@@ -1911,3 +2049,5 @@ system to generate a CRUSH rule that starts with ``take DC1``, ensuring all
 data for that pool resides completely within that datacenter. This allows non-redundant 
 applications to leverage zone-local storage without incurring the latency or bandwidth 
 costs of crossing the inter-zone link.
+
+
