@@ -14608,6 +14608,23 @@ void MDCache::upkeep_main(void)
   }
 }
 
+// In a multi-object layout where each object spans multiple stripe units,
+// a contiguous object range can map to disjoint file ranges.
+static void add_file_extents(const file_layout_t& layout, uint64_t objectno,
+			     const interval_set<uint64_t>& object_extent,
+			     interval_set<uint64_t> *file_extents)
+{
+  file_layout_t l = layout; // extent_to_file() wants a non-const layout
+  std::vector<std::pair<uint64_t, uint64_t>> mapped;
+  for (const auto& [off, len] : object_extent) {
+    mapped.clear();
+    Striper::extent_to_file(g_ceph_context, &l, objectno, off, len, mapped);
+    for (const auto& [file_off, file_len] : mapped) {
+      file_extents->union_insert(file_off, file_len);
+    }
+  }
+}
+
 struct C_ListSnapsAggregator : public MDSIOContext {
   C_ListSnapsAggregator(MDSRank *mds, CInode *in1, CInode *in2, BlockDiff *block_diff,
 			Context *on_finish)
@@ -14761,9 +14778,9 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 	continue;
       }
 
-      interval_set<uint64_t> extent;
-      uint64_t offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
-						 snap_set->objectid, 0);
+      const auto& layout = in2->get_inode()->layout;
+      // both in object coordinates, like clone_info_t::size and ::overlap
+      interval_set<uint64_t> object_extent, unchanged;
 
       for (auto hops = std::distance(it1, it2); hops > 0; --hops) {
 	dout(20) << __func__ << ": [cloneid: " << it1->cloneid << " snaps: " << it1->snaps
@@ -14777,21 +14794,23 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
 	  // TODO: report holes in blockdiff strucuter. that way,
 	  // caller can optimize and punch holes rather than writing
 	  // zeros.
-	  dout(10) << __func__ << ": hole: [" << offset << "~" << it1->size << "]" << dendl;
+	  dout(10) << __func__ << ": hole: object " << snap_set->objectid
+		   << " [0~" << it1->size << "]" << dendl;
 	  dout(10) << __func__ << ": adding whole extent - reader will read zeros" << dendl;
 	  sz = it1->size;
 	}
 
-	extent.clear();
-	extent.union_insert(offset, sz);
+	object_extent.clear();
+	object_extent.union_insert(0, sz);
+	unchanged.clear();
 	for (auto &overlap_region : it1->overlap) {
-	  uint64_t overlap_offset = Striper::get_file_offset(g_ceph_context, &(in2->get_inode()->layout),
-							     snap_set->objectid, overlap_region.first);
-	  extent.erase(overlap_offset, overlap_region.second);
+	  unchanged.union_insert(overlap_region.first, overlap_region.second);
 	}
+	unchanged.intersection_of(object_extent);
+	object_extent.subtract(unchanged);
 
-	dout(20) << __func__ << ": (non overlapping) extent=" << extent << dendl;
-	extents.union_of(extent);
+	dout(20) << __func__ << ": (non overlapping) object extent=" << object_extent << dendl;
+	add_file_extents(layout, snap_set->objectid, object_extent, &extents);
 	dout(20) << __func__ << ": (modified) extents=" << extents << dendl;
 	++it1;
       }
