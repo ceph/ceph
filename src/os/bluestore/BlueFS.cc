@@ -3783,11 +3783,13 @@ uint64_t BlueFS::_need_extend_log() {
 
 void BlueFS::_extend_log(uint64_t amount) {
   ceph_assert(ceph_mutex_is_locked(log.lock));
-  std::unique_lock<ceph::mutex> ll(log.lock, std::adopt_lock);
-  while (log_forbidden_to_expand.load() == true) {
-    log_cond.wait(ll);
-  }
-  ll.release();
+  // The caller waited out log_forbidden_to_expand BEFORE reserving seqs
+  // (see _flush_and_sync_log_LD) and has held log.lock ever since; the
+  // flag cannot be set anew without log.lock, so expanding is safe.
+  // Waiting here instead - after the reservation, releasing log.lock -
+  // would let another flusher append later seqs first and our reserved
+  // seqs would land out of order in the journal.
+  ceph_assert(log_forbidden_to_expand.load() == false);
   uint64_t allocated_before_extension = log.writer->file->fnode.get_allocated();
   amount = round_up_to(amount, super.block_size);
   int r = _allocate(
@@ -3910,24 +3912,45 @@ void BlueFS::_release_pending_allocations(vector<interval_set<uint64_t>>& to_rel
 
 int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
 {
-  log.lock.lock();
+  std::unique_lock<ceph::mutex> ll(log.lock);
   dirty.lock.lock();
-  if (want_seq && want_seq <= dirty.seq_stable) {
-    dout(10) << __func__ << " want_seq " << want_seq << " <= seq_stable "
-      << dirty.seq_stable << ", done" << dendl;
+  uint64_t extend_amount;
+  while (true) {
+    if (want_seq && want_seq <= dirty.seq_stable) {
+      dout(10) << __func__ << " want_seq " << want_seq << " <= seq_stable "
+        << dirty.seq_stable << ", done" << dendl;
+      dirty.lock.unlock();
+      return 0;
+    }
+
+    ceph_assert(want_seq == 0 || want_seq <= dirty.seq_live); // illegal to request seq that was not created yet
+    // Compose log.t before advancing the seq so the extension decision
+    // below is exact; dirty.lock is held across both, so nothing can
+    // register under the current seq in between.
+    _consume_dirty(log.seq_live);
+    extend_amount = _need_extend_log();
+    if (extend_amount == 0 || !log_forbidden_to_expand.load()) {
+      break;
+    }
+    // An async compaction is switching to a new log and forbids its
+    // expansion. Wait that out *before* reserving any seq: parking with
+    // reserved seqs (as _extend_log()'s wait releases log.lock) would
+    // let another flusher flush the shared log.t under later seqs, and
+    // the parked seqs would then be appended out of order, which replay
+    // treats as end-of-log. Nothing is reserved yet, so waiting here is
+    // safe; on wakeup we re-evaluate from scratch - re-consuming is
+    // fine because files already encoded into log.t re-encode as empty
+    // deltas, while files dirtied during the wait get picked up.
+    // Flushers that fit the runway never enter this wait.
     dirty.lock.unlock();
-    log.lock.unlock();
-    return 0;
+    log_cond.wait(ll, [&] { return !log_forbidden_to_expand.load(); });
+    dirty.lock.lock();
   }
-  
-  ceph_assert(want_seq == 0 || want_seq <= dirty.seq_live); // illegal to request seq that was not created yet
   uint64_t seq =_log_advance_seq();
-  _consume_dirty(seq);
   // Reserve a dedicated seq for the log-extension transaction (if one is
   // needed) while dirty.lock is still held; otherwise a concurrent
   // _signal_dirty_to_log_D() could register a file under a seq that no
   // _consume_dirty() will ever visit (https://tracker.ceph.com/issues/79068).
-  uint64_t extend_amount = _need_extend_log();
   if (extend_amount) {
     ++dirty.seq_live;
     ++log.seq_live;
@@ -3943,7 +3966,7 @@ int BlueFS::_flush_and_sync_log_LD(uint64_t want_seq)
   _flush_bdev(log.writer);
   logger->set(l_bluefs_log_bytes, log.writer->file->fnode.size);
   //now log.lock is no longer needed
-  log.lock.unlock();
+  ll.unlock();
 
   _clear_dirty_set_stable_D(seq);
   _release_pending_allocations(to_release);
