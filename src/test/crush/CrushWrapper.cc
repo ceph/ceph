@@ -1193,6 +1193,104 @@ TEST_F(CrushWrapperTest, device_class_clone) {
 				 &other_clone_id, &cmap_item_weight), -EBADF);
 }
 
+TEST_F(CrushWrapperTest, verify_upmap_multi_take_device_class) {
+  CrushWrapper c;
+  c.create();
+  c.set_type_name(1, "host");
+  c.set_type_name(2, "zone");
+  c.set_type_name(3, "root");
+
+  int weight = 1;
+  auto add_osd = [&](int id, const string& host, const string& zone,
+                     const string& device_class) {
+    map<string,string> loc;
+    loc["host"] = host;
+    loc["zone"] = zone;
+    loc["root"] = "default";
+    ASSERT_EQ(0, c.insert_item(cct, id, weight, "osd." + stringify(id), loc));
+    ASSERT_EQ(0, c.set_item_class(id, device_class));
+  };
+  // zone dc1: hosts a1 (osd.0, osd.6 ssd), a2 (osd.2 hdd), a3 (osd.4 ssd)
+  // zone dc2: hosts b1 (osd.1 ssd), b2 (osd.3 hdd), b3 (osd.5 ssd)
+  add_osd(0, "a1", "dc1", "ssd");
+  add_osd(6, "a1", "dc1", "ssd");
+  add_osd(4, "a3", "dc1", "ssd");
+  add_osd(2, "a2", "dc1", "hdd");
+  add_osd(1, "b1", "dc2", "ssd");
+  add_osd(5, "b3", "dc2", "ssd");
+  add_osd(3, "b2", "dc2", "hdd");
+  c.reweight(cct);
+  int ssd_class = c.get_class_id("ssd");
+  int hdd_class = c.get_class_id("hdd");
+  ASSERT_LE(0, ssd_class);
+  ASSERT_LE(0, hdd_class);
+
+  map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
+  set<int32_t> used_ids;
+  int root_id = c.get_item_id("default");
+  int ssd_root, hdd_root;
+  ASSERT_EQ(0, c.device_class_clone(root_id, ssd_class, old_class_bucket,
+                                    used_ids, &ssd_root, &cmap_item_weight));
+  ASSERT_EQ(0, c.device_class_clone(root_id, hdd_class, old_class_bucket,
+                                    used_ids, &hdd_root, &cmap_item_weight));
+
+  // hybrid rule: one ssd per zone, then one hdd per zone
+  int ruleno = c.add_rule(-1, 8, 1);
+  ASSERT_LE(0, ruleno);
+  int step = 0;
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_TAKE, ssd_root, 0));
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_CHOOSE_FIRSTN, 2, 2));
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 1, 1));
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_EMIT, 0, 0));
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_TAKE, hdd_root, 0));
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_CHOOSE_FIRSTN, 2, 2));
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 1, 1));
+  ASSERT_EQ(0, c.set_rule_step(ruleno, step++, CRUSH_RULE_EMIT, 0, 0));
+
+  // a mapping matching the rule exactly: one ssd and one hdd per zone.
+  // this used to be falsely rejected: the same physical zone was counted
+  // once per device-class shadow bucket, so the checker saw 4 zones > 2.
+  ASSERT_EQ(0, c.verify_upmap(cct, ruleno, 4, {0, 1, 2, 3}));
+  // a legal upmap replacement within the ssd scope (osd.0 -> osd.4,
+  // a different dc1 host)
+  ASSERT_EQ(0, c.verify_upmap(cct, ruleno, 4, {4, 1, 2, 3}));
+  // two ssd replicas on the same host must still be rejected
+  ASSERT_EQ(-EINVAL, c.verify_upmap(cct, ruleno, 4, {0, 6, 2, 3}));
+  // an hdd osd in the ssd scope must still be rejected
+  ASSERT_EQ(-EINVAL, c.verify_upmap(cct, ruleno, 4, {2, 1, 0, 3}));
+
+  // regression guard: single-take rule behavior is unchanged
+  int ruleno2 = c.add_rule(-1, 4, 1);
+  ASSERT_LE(0, ruleno2);
+  step = 0;
+  ASSERT_EQ(0, c.set_rule_step(ruleno2, step++, CRUSH_RULE_TAKE, ssd_root, 0));
+  ASSERT_EQ(0, c.set_rule_step(ruleno2, step++, CRUSH_RULE_CHOOSE_FIRSTN, 2, 2));
+  ASSERT_EQ(0, c.set_rule_step(ruleno2, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 1, 1));
+  ASSERT_EQ(0, c.set_rule_step(ruleno2, step++, CRUSH_RULE_EMIT, 0, 0));
+  ASSERT_EQ(0, c.verify_upmap(cct, ruleno2, 2, {0, 1}));
+  ASSERT_EQ(-EINVAL, c.verify_upmap(cct, ruleno2, 2, {0, 6}));
+
+  // multi-take rule reusing the same root (no device classes).  CRUSH
+  // provides no uniqueness across take..emit scopes for such rules, so
+  // a mapping placing replicas of different scopes on the same host is
+  // not a rule violation and must be accepted; a duplicate within one
+  // scope must still be rejected.
+  int ruleno3 = c.add_rule(-1, 6, 1);
+  ASSERT_LE(0, ruleno3);
+  step = 0;
+  ASSERT_EQ(0, c.set_rule_step(ruleno3, step++, CRUSH_RULE_TAKE, root_id, 0));
+  ASSERT_EQ(0, c.set_rule_step(ruleno3, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1));
+  ASSERT_EQ(0, c.set_rule_step(ruleno3, step++, CRUSH_RULE_EMIT, 0, 0));
+  ASSERT_EQ(0, c.set_rule_step(ruleno3, step++, CRUSH_RULE_TAKE, root_id, 0));
+  ASSERT_EQ(0, c.set_rule_step(ruleno3, step++, CRUSH_RULE_CHOOSELEAF_FIRSTN, 2, 1));
+  ASSERT_EQ(0, c.set_rule_step(ruleno3, step++, CRUSH_RULE_EMIT, 0, 0));
+  // osd.0/osd.6 share host a1 but sit in different scopes: accepted
+  ASSERT_EQ(0, c.verify_upmap(cct, ruleno3, 4, {0, 2, 6, 3}));
+  // osd.0/osd.6 within the same scope: still rejected
+  ASSERT_EQ(-EINVAL, c.verify_upmap(cct, ruleno3, 4, {0, 6, 2, 3}));
+}
+
 TEST_F(CrushWrapperTest, split_id_class) {
   CrushWrapper c;
   c.create();
