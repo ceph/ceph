@@ -258,6 +258,41 @@ class TestCephadm(object):
             cephadm_module._add_host(HostSpec('test2'))
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_re_add_host_resets_conn_on_addr_change(self, resolve_ip, cephadm_module):
+        resolve_ip.return_value = '192.168.122.1'
+        cephadm_module._add_host(HostSpec('test', '192.168.122.1'))
+        assert cephadm_module.inventory.get_addr('test') == '192.168.122.1'
+
+        with mock.patch.object(cephadm_module.ssh, 'reset_con') as mock_reset:
+            resolve_ip.return_value = '192.168.122.2'
+            cephadm_module._add_host(HostSpec('test', '192.168.122.2'))
+            mock_reset.assert_called_once_with('test')
+        assert cephadm_module.inventory.get_addr('test') == '192.168.122.2'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_re_add_host_no_reset_on_same_addr(self, resolve_ip, cephadm_module):
+        resolve_ip.return_value = '192.168.122.1'
+        cephadm_module._add_host(HostSpec('test', '192.168.122.1'))
+
+        with mock.patch.object(cephadm_module.ssh, 'reset_con') as mock_reset:
+            cephadm_module._add_host(HostSpec('test', '192.168.122.1'))
+            mock_reset.assert_not_called()
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    @mock.patch("cephadm.utils.resolve_ip")
+    def test_update_host_addr_resets_conn_before_check(self, resolve_ip, cephadm_module):
+        resolve_ip.return_value = '192.168.122.1'
+        cephadm_module._add_host(HostSpec('test', '192.168.122.1'))
+
+        with mock.patch.object(cephadm_module.ssh, 'reset_con') as mock_reset:
+            resolve_ip.return_value = '192.168.122.2'
+            cephadm_module.update_host_addr('test', '192.168.122.2')
+            mock_reset.assert_called_with('test')
+            assert mock_reset.call_count == 2
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_service_ls(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             c = cephadm_module.list_daemons(refresh=True)
