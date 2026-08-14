@@ -3105,6 +3105,45 @@ Traceback (most recent call last):
         cephadm_module.spec_store.set_unmanaged('crash', False)
         assert not cephadm_module.spec_store._specs['crash'].unmanaged
 
+    def test_unmanaged_noop_note(self, cephadm_module):
+        # No matching spec (e.g. bare "osd" / adopted OSDs): no note — actions still run.
+        assert cephadm_module._unmanaged_noop_note('osd') is None
+
+        cephadm_module.spec_store._specs['rgw.foo'] = ServiceSpec(
+            'rgw', service_id='foo', unmanaged=False)
+        assert cephadm_module._unmanaged_noop_note('rgw.foo') is None
+
+        cephadm_module.spec_store.set_unmanaged('rgw.foo', True)
+        note = cephadm_module._unmanaged_noop_note('rgw.foo')
+        assert note is not None
+        assert 'rgw.foo is unmanaged' in note
+        assert 'set-managed rgw.foo' in note
+
+        # Unmanaged OSD drive-group: note is expected (apply/reconcile no-ops).
+        cephadm_module.spec_store._specs['osd.hdd'] = DriveGroupSpec(
+            service_id='hdd', unmanaged=True)
+        note = cephadm_module._unmanaged_noop_note('osd.hdd')
+        assert note is not None
+        assert 'osd.hdd is unmanaged' in note
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_unmanaged_daemon_action_note(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'test'):
+            # Deploy managed first, then mark unmanaged (add_daemon would overwrite the flag).
+            with with_service(cephadm_module,
+                              RGWSpec(service_id='myrgw.foobar'),
+                              host='test') as d_names:
+                assert d_names
+                cephadm_module.spec_store.set_unmanaged('rgw.myrgw.foobar', True)
+                d_name = d_names[0]
+                msg = wait(cephadm_module, cephadm_module.daemon_action('redeploy', d_name))
+                assert msg.startswith(f"Scheduled to redeploy {d_name} on host 'test'")
+                assert 'rgw.myrgw.foobar is unmanaged' in msg
+                assert 'set-managed rgw.myrgw.foobar' in msg
+
+                # Bare "osd" (no matching unmanaged drive-group) must not warn.
+                assert cephadm_module._unmanaged_noop_note('osd') is None
+
     def test_inventory_known_hostnames(self, cephadm_module):
         cephadm_module.inventory.add_host(HostSpec('host1', '1.2.3.1'))
         cephadm_module.inventory.add_host(HostSpec('host2', '1.2.3.2'))

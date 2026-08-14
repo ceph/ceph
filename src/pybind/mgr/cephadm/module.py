@@ -3048,6 +3048,26 @@ Then run the following:
                 result.append(dd)
         return result
 
+    def _unmanaged_noop_note(self, service_name: str) -> Optional[str]:
+        """Warn when an orch action is scheduled but deferred by unmanaged.
+
+        Returns a note only when a matching service spec exists with
+        ``unmanaged=True``. That matches serve.py behavior: scheduled daemon
+        actions and reconciliation are skipped for those specs.
+
+        Intentionally returns None for daemons whose service name is not in
+        the spec store (notably adopted OSDs under the bare ``osd`` service).
+        Those are still acted on by explicit ``ceph orch daemon ...`` commands.
+        """
+        spec = self.spec_store.all_specs.get(service_name)
+        if not spec or not spec.unmanaged:
+            return None
+        return (
+            f'NOTE: {service_name} is unmanaged. The operation will take effect'
+            f' only when the service becomes managed'
+            f' (e.g. `ceph orch set-managed {service_name}`).'
+        )
+
     def perform_service_action(self, action: str, service_name: str) -> List[str]:
         dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
         if not dds:
@@ -3067,7 +3087,11 @@ Then run the following:
         if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd']:
             return [f'Stopping entire {service_name} service is prohibited.']
 
-        return self.perform_service_action(action, service_name)
+        results = self.perform_service_action(action, service_name)
+        note = self._unmanaged_noop_note(service_name)
+        if note:
+            results.append(note)
+        return results
 
     def _rotate_daemon_key(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         self.log.info(f'Rotating authentication key for {daemon_spec.name()}')
@@ -3259,7 +3283,11 @@ Then run the following:
         self._daemon_action_set_image(action, image, d.daemon_type, d.daemon_id)
 
         self.log.info(f'Schedule {action} daemon {daemon_name}')
-        return self._schedule_daemon_action(daemon_name, action)
+        msg = self._schedule_daemon_action(daemon_name, action)
+        note = self._unmanaged_noop_note(d.service_name())
+        if note:
+            msg += f'\n{note}'
+        return msg
 
     def daemon_is_self(self, daemon_type: str, daemon_id: str) -> bool:
         return daemon_type == 'mgr' and daemon_id == self.get_mgr_id()
@@ -4639,7 +4667,18 @@ Then run the following:
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        return f"Scheduled {spec.service_name()} update...{cert_warning}"
+        msg = f"Scheduled {spec.service_name()} update...{cert_warning}"
+        if spec.unmanaged:
+            # Spec is stored, but reconciliation/_check_daemons will no-op until
+            # the service is managed again. Do not special-case OSDs here: an
+            # unmanaged drive-group apply also creates no OSDs.
+            msg += (
+                f'\nNOTE: {spec.service_name()} is unmanaged. The spec has been'
+                f' saved but daemon changes will take effect only when the'
+                f' service becomes managed'
+                f' (e.g. `ceph orch set-managed {spec.service_name()}`).'
+            )
+        return msg
 
     @handle_orch_error
     def apply(

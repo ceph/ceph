@@ -870,10 +870,39 @@ would set ``unmanaged: false`` for the ``mon`` service.
 
 .. note::
 
-  The ``osd`` service used to track OSDs that are not tied to any specific
-  service spec is special and will always be marked unmanaged. Attempting
-  to modify it with ``ceph orch set-unmanaged`` or ``ceph orch set-managed``
-  will result in a message ``No service of name osd found. Check "ceph orch ls" for all known services``.
+  When ``unmanaged: true`` is set on a service spec, cephadm stops reconciling
+  that service: it will not deploy, remove, restart, redeploy, or reconfigure
+  its daemons to match the spec. Running ``ceph orch apply`` still saves the
+  updated spec, but daemon changes take effect only after the service becomes
+  managed again. Commands such as ``ceph orch daemon restart``,
+  ``ceph orch daemon redeploy``, or ``ceph orch daemon reconfig`` print
+  ``Scheduled...`` and append a short ``NOTE`` that the operation will take
+  effect only when the service becomes managed.
+
+  To apply pending spec or scheduled daemon changes, temporarily re-enable
+  automatic management:
+
+  .. prompt:: bash #
+
+      ceph orch set-managed <service-name>
+
+  Wait for the reconciliation loop to apply the changes (check progress with
+  ``ceph orch ls``), then set the service back to unmanaged:
+
+  .. prompt:: bash #
+
+      ceph orch set-unmanaged <service-name>
+
+.. note::
+
+  Daemons whose service has no spec are not subject to the above: actions on
+  those daemons execute normally and no ``NOTE`` is printed. For example, OSD
+  daemons that are no longer tied to a drive-group spec (visible as the ``osd``
+  service in ``ceph orch ls``) fall into this category and respond to
+  ``ceph orch daemon`` commands as usual. That ``osd`` service cannot be
+  toggled with ``ceph orch set-unmanaged`` / ``ceph orch set-managed``;
+  attempting to do so results in
+  ``No service of name osd found. Check "ceph orch ls" for all known services``.
 
 
 Deploying a Daemon on a Host Manually
