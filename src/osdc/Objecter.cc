@@ -425,7 +425,17 @@ void Objecter::init()
   int ret = admin_socket->register_command(
       cmd_name, m_request_state_hook, "show in-progress osd requests");
 
-  if (ret < 0) {
+  if (ret == -EEXIST && m_admin_socket_name.empty()) {
+    /* Don't warn on EEXIST for unnamed clients, happens if multiple ceph
+     * clients are instantiated from one process.  Only the first
+     * registration wins */
+    ldout(cct, 1)
+        << "admin socket command " << cmd_name
+        << " is already registered by another objecter in this process; "
+           "requests issued by this objecter will not be shown. Call "
+           "set_objecter_admin_socket_name() to register under a distinct name"
+        << dendl;
+  } else if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(ret) << dendl;
   }
