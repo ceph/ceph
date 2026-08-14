@@ -197,3 +197,18 @@ def verify_non_empty_string(field: Any, field_name: str) -> None:
     # isinstance first so we never call .strip() on None or non-str
     if not isinstance(field, str) or not field.strip():
         raise SpecValidationError(f"Invalid {field_name}: Must be a non-empty string.")
+
+
+def verify_path(field: Any, field_name: str) -> None:
+    """
+    Validate an absolute filesystem path string without touching the host FS.
+    """
+    if field is None:
+        return
+    verify_non_empty_string(field, field_name)
+    if not field.startswith('/'):
+        raise SpecValidationError(
+            f'{field_name} must be an absolute path starting with /, got {field!r}')
+    if field == '/':
+        raise SpecValidationError(
+            f'{field_name} must not be the filesystem root (/), got {field!r}')

@@ -5,7 +5,7 @@ import re
 from typing import Dict, List, Optional, Tuple, Union
 
 from ..call_wrappers import call, CallVerbosity
-from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF
+from ..constants import DEFAULT_IMAGE, CEPH_DEFAULT_CONF, LOG_DIR_MODE
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
 from ..container_types import CephContainer, extract_uid_gid
 from ..context import CephadmContext
@@ -64,6 +64,12 @@ class NFSGanesha(ContainerDaemonForm):
         self.files = dict_get(config_json, 'files', {})
         self.rgw = dict_get(config_json, 'rgw', {})
         self.enable_rdma = dict_get(config_json, 'enable_rdma', False)
+        self.enable_cephfs_client_log = dict_get(
+            config_json, 'enable_cephfs_client_log', False
+        )
+        self.cephfs_client_log_dir = dict_get(
+            config_json, 'cephfs_client_log_dir', None
+        )
 
         # validate the supplied args
         self.validate()
@@ -101,11 +107,19 @@ class NFSGanesha(ContainerDaemonForm):
             ] = '/var/lib/ceph/radosgw/%s-%s/keyring:z' % (cluster, rgw_user)
         return mounts
 
+    def _get_host_log_dir(self, ctx: CephadmContext) -> str:
+        if self.cephfs_client_log_dir:
+            return self.cephfs_client_log_dir
+        return os.path.join(ctx.log_dir, self.identity.fsid)
+
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
     ) -> None:
         data_dir = self.identity.data_dir(ctx.data_dir)
         mounts.update(self._get_container_mounts(data_dir))
+        if self.enable_cephfs_client_log:
+            host_log_dir = self._get_host_log_dir(ctx)
+            mounts[host_log_dir] = '/var/log/ceph:z'
 
     @staticmethod
     def get_container_envs():
@@ -243,6 +257,11 @@ set -e
         with write_new(entrypoint_path, owner=(uid, gid)) as f:
             f.write(self.ganesha_entrypoint_script(nfsv3=nfsv3))
         os.chmod(entrypoint_path, 0o700)
+
+        if self.enable_cephfs_client_log:
+            host_log_dir = self._get_host_log_dir(self.ctx)
+            if not os.path.exists(host_log_dir):
+                makedirs(host_log_dir, uid, gid, LOG_DIR_MODE)
 
         # write the RGW keyring
         if self.rgw:
