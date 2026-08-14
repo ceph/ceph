@@ -75,8 +75,10 @@ struct interval;
 } // namespace query
 
 using select = query::interval;
+struct with_result_t;
 struct versionstamp;
 struct watch_handle;
+struct commit_result;
 
 class database;
 class transaction;
@@ -925,6 +927,7 @@ class transaction final
                                const commit_after_op commit_after);
 
  friend inline bool commit(transaction_handle& txn);
+ friend inline commit_result commit(with_result_t, transaction_handle& txn);
  friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);

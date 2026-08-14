@@ -1839,12 +1839,155 @@ SCENARIO("transactor", "[fdb]")
   CHECK("final" == out);
  }
 
+ SECTION("direct commit can report success") {
+  const auto key = test_key("direct-result-key");
+
+  auto txn = lfdb::make_transaction(j);
+  lfdb::set(txn, key, "value");
+
+  const auto result = lfdb::commit(lfdb::with_result, txn);
+  CHECK(result.committed);
+  CHECK(0 == result.replay_error);
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("value" == out);
+ }
+
+ SECTION("direct commit can report replay") {
+  const auto key = test_key("direct-result-conflict-key");
+
+  lfdb::set(j, key, "initial");
+
+  auto txn = lfdb::make_transaction(j);
+
+  std::string out;
+  REQUIRE(lfdb::get(txn, key, out));
+  CHECK("initial" == out);
+
+  lfdb::set(j, key, "conflict");
+  lfdb::set(txn, key, "final");
+
+  auto result = lfdb::commit(lfdb::with_result, txn);
+  CHECK_FALSE(result.committed);
+  CHECK(0 != result.replay_error);
+
+  REQUIRE(lfdb::get(txn, key, out));
+  CHECK("conflict" == out);
+
+  lfdb::set(txn, key, "final");
+
+  result = lfdb::commit(lfdb::with_result, txn);
+  CHECK(result.committed);
+  CHECK(0 == result.replay_error);
+
+  CHECK(lfdb::get(j, key, out));
+  CHECK("final" == out);
+ }
+
+ SECTION("transactor can report transaction results") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("result-key");
+
+  auto result = txr(lfdb::with_result, [&key](auto txn) {
+    lfdb::set(txn, key, "value");
+  });
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("value" == out);
+
+  CHECK(result.committed);
+  CHECK(result.attempts == 1);
+  CHECK(result.retries == 0);
+  CHECK(0 == result.last_error);
+ }
+
+ SECTION("transactor accepts stable invocation arguments") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("argument-key");
+  const std::string value = "argument-value";
+
+  txr([](auto txn, const std::string& key, const std::string& value) {
+    lfdb::set(txn, key, value);
+  }, key, value);
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK(value == out);
+ }
+
+ SECTION("result-reporting transactor replays after conflict") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("result-conflict-key");
+
+  lfdb::set(j, key, "initial");
+
+  auto result = txr(lfdb::with_result, [&j, &key](auto txn) {
+    std::string out;
+    if (not lfdb::get(txn, key, out)) {
+     throw std::runtime_error("expected key does not exist");
+    }
+
+    // Force a conflict, making the transactor replay the body:
+    if ("initial" == out) {
+     lfdb::set(j, key, "conflict");
+    }
+
+    lfdb::set(txn, key, "final");
+  });
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("final" == out);
+
+  CHECK(result.committed);
+  CHECK(result.attempts == 2);
+  CHECK(result.retries == 1);
+  CHECK(0 != result.last_error);
+ }
+
+ SECTION("result-reporting transactor reports retry exhaustion") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("result-retry-limit-key");
+
+  lfdb::set(j, key, "initial");
+
+  auto result = txr(lfdb::with_result, [&j, &key](auto txn) {
+    std::string out;
+    if (not lfdb::get(txn, key, out)) {
+     throw std::runtime_error("expected key does not exist");
+    }
+
+    // Force every commit attempt to conflict:
+    lfdb::set(j, key, "conflict");
+    lfdb::set(txn, key, "final");
+  });
+
+  std::string out;
+  CHECK(lfdb::get(j, key, out));
+  CHECK("conflict" == out);
+
+  CHECK_FALSE(result.committed);
+  CHECK(result.attempts == 10);
+  CHECK(result.retries == 9);
+  CHECK(0 != result.last_error);
+ }
+
  SECTION("transactor propagates transaction body exceptions") {
   auto txr = lfdb::make_transactor(j);
 
   CHECK_THROWS_WITH(txr([](auto) {
     throw std::runtime_error("transaction body failed");
   }), "transaction body failed");
+ }
+
+ SECTION("result-reporting transactor propagates transaction body exceptions") {
+  auto txr = lfdb::make_transactor(j);
+
+  CHECK_THROWS_AS(txr(lfdb::with_result, [](auto) {
+    throw std::runtime_error("transaction body failed");
+  }), std::runtime_error);
  }
 }
 

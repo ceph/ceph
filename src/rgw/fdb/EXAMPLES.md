@@ -61,6 +61,20 @@ if (!lfdb::commit(txn)) {
 }
 ```
 
+```cpp
+// Ask commit() to report whether the transaction should be replayed:
+auto txn = lfdb::make_transaction(dbh);
+
+lfdb::set(txn, "person/frances-allen/name", "Frances Allen");
+
+const auto result = lfdb::commit(lfdb::with_result, txn);
+
+if (not result.committed and 0 != result.replay_error) {
+  // A non-zero replay_error means FoundationDB prepared txn for replay.
+  retry_transaction_body(txn, result.replay_error);
+}
+```
+
 ## Version Stamps
 
 ```cpp
@@ -941,6 +955,26 @@ txr([](auto& txn) {
   lfdb::set(txn, "person/eleanor-of-aquitaine/name", "Eleanor of Aquitaine");
   lfdb::set(txn, "person/eleanor-of-aquitaine/title", "Duchess of Aquitaine");
 });
+```
+
+### Reporting replay results
+
+Use `with_result` when application code needs to stop, resume, or report retry
+progress instead of treating retry exhaustion as an exception. The returned
+`transaction_result` describes the transaction machinery, not the user
+operation's value. `last_error == 0` means there was no FoundationDB replay
+error to report.
+
+```cpp
+auto txr = lfdb::make_transactor(dbh);
+
+auto result = txr(lfdb::with_result, [](auto& txn, std::string_view key, std::string_view title) {
+  lfdb::set(txn, key, title);
+}, "person/murasaki-shikibu/title", "Novelist");
+
+if (!result.committed) {
+  record_retry_exhaustion(result.attempts, result.retries, result.last_error);
+}
 ```
 
 ### Transactor options
