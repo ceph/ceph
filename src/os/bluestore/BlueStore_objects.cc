@@ -19,6 +19,7 @@
 #include "BlueStore_objects.h"
 #include "BlueStore_inlines.h"
 #include "Compression.h"
+#include "os/bluestore/bluestore_common.h"
 #include "os/kv.h"
 #include "common/pretty_binary.h"
 
