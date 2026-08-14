@@ -3,6 +3,7 @@ import socket
 from typing import Tuple, Optional, Any, List
 from urllib.parse import urlparse
 from ceph.deployment.hostspec import SpecValidationError
+from ceph.utils import with_units_to_int
 from numbers import Number
 
 
@@ -142,6 +143,24 @@ def verify_non_negative_int(field: Any, field_name: str) -> None:
         verify_int(field, field_name)
         if field < 0:
             raise SpecValidationError(f"{field_name} can't be negative")
+
+
+def verify_size_with_units(field: Any, field_name: str) -> Optional[int]:
+    """Validate a size value that may be an int (bytes) or a size string.
+
+    Accepts None, an int (bytes), or a size string such as ``512KiB``,
+    ``100MB``, or ``1GiB``. Returns the size in bytes, or None when
+    ``field`` is None.
+    """
+    if field is None:
+        return None
+    try:
+        size = with_units_to_int(str(field))
+    except (ValueError, TypeError, IndexError, UnboundLocalError):
+        raise SpecValidationError(f'{field_name}: invalid size {field!r}')
+    if size < 0:
+        raise SpecValidationError(f"{field_name} can't be negative")
+    return size
 
 
 def verify_positive_int(field: Any, field_name: str) -> None:

@@ -57,26 +57,25 @@ RADOS_URLS {
         watch_url = "{{ url }}";
 }
 
-CEPH {
-        Ceph_Conf = "/etc/ceph/ceph.conf";
-        umask = 0000;
-        client_oc = false;
-        async = false;
-        zerocopy = false;
-        use_old_uuid = false;
-
-        register_service = true;
-        nodeid = "{{ nodeid }}";
-}
-
 RGW {
         cluster = "ceph";
         name = "client.{{ rgw_user }}";
 }
 
+{% if use_old_nodeid or enable_client_object_cache %}
+CEPH {
 {% if use_old_nodeid %}
-Ceph {
 	Use_old_uuid = true;
+{% endif %}
+{% if enable_client_object_cache or client_object_cache_size is not none or client_object_cache_max_dirty is not none %}
+        client_oc = {{ enable_client_object_cache | lower }};
+{% if client_object_cache_size is not none %}
+        client_oc_size = {{ client_object_cache_size }};
+{% endif %}
+{% if client_object_cache_max_dirty is not none %}
+        client_oc_max_dirty = {{ client_object_cache_max_dirty }};
+{% endif %}
+{% endif %}
 }
 
 {% endif %}
