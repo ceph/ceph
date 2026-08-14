@@ -110,6 +110,70 @@ protected:
   }
 };
 
+// BALANCE_READS alone is sufficient for a non-Crimson pool.
+TEST_F(TestValidateFlags, BalanceReadsAccepted)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &ec_pool, CEPH_OSD_FLAG_BALANCE_READS, cct));
+}
+
+// LOCALIZE_READS alone is also sufficient.
+TEST_F(TestValidateFlags, LocalizeReadsAccepted)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &ec_pool, CEPH_OSD_FLAG_LOCALIZE_READS, cct));
+}
+
+// Both flags together must also pass.
+TEST_F(TestValidateFlags, BothReadFlagsAccepted)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &ec_pool,
+    CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_LOCALIZE_READS,
+    cct));
+}
+
+// Neither flag set — must be rejected.
+TEST_F(TestValidateFlags, NoReadFlagsRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(&ec_pool, 0, cct));
+}
+
+// WRITE flag alone (no read flag) — must be rejected.
+TEST_F(TestValidateFlags, WriteFlagAloneRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &ec_pool, CEPH_OSD_FLAG_WRITE, cct));
+}
+
+// WRITE flag combined with BALANCE_READS — write wins, must reject.
+TEST_F(TestValidateFlags, WritePlusBalanceReadsRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &ec_pool,
+    CEPH_OSD_FLAG_BALANCE_READS | CEPH_OSD_FLAG_WRITE,
+    cct));
+}
+
+// Crimson pool must always be rejected regardless of read flags.
+TEST_F(TestValidateFlags, CrimsonPoolRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &ec_crimson_pool, CEPH_OSD_FLAG_BALANCE_READS, cct));
+}
+
+// Replicated pool — same flag rules apply.
+TEST_F(TestValidateFlags, ReplicatedBalanceReadsAccepted)
+{
+  EXPECT_TRUE(SplitOp::validate_flags(
+    &rep_pool, CEPH_OSD_FLAG_BALANCE_READS, cct));
+}
+
+TEST_F(TestValidateFlags, ReplicatedNoReadFlagsRejected)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(&rep_pool, 0, cct));
+}
+
 // ===========================================================================
 // Section 2: ECStripeIterator / ECStripeView
 //
@@ -337,6 +401,57 @@ protected:
     return loc;
   }
 };
+
+// num_zones < 2 → always zone 0.
+TEST_F(TestLocalZoneGuards, SingleZoneReturnsZero)
+{
+  auto acting = make_acting(6);
+  auto loc    = make_loc("dc0");
+  // crush pointer is null — but the guard fires on num_zones first.
+  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/1, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, loc));
+}
+
+// zone_size <= 0 → always zone 0.
+TEST_F(TestLocalZoneGuards, ZeroZoneSizeReturnsZero)
+{
+  auto acting = make_acting(6);
+  auto loc    = make_loc("dc0");
+  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/0,
+    /*crush=*/nullptr, cct, loc));
+}
+
+// crush == nullptr → always zone 0.
+TEST_F(TestLocalZoneGuards, NullCrushReturnsZero)
+{
+  auto acting = make_acting(12);
+  auto loc    = make_loc("dc0");
+  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, loc));
+}
+
+// Empty crush_location → always zone 0.
+TEST_F(TestLocalZoneGuards, EmptyCrushLocationReturnsZero)
+{
+  auto acting = make_acting(12);
+  std::multimap<std::string, std::string> empty_loc;
+  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, empty_loc));
+}
+
+// Acting set too small (< num_zones * zone_size) → always zone 0.
+TEST_F(TestLocalZoneGuards, ActingTooSmallReturnsZero)
+{
+  auto acting = make_acting(3);  // needs 12 (2 zones × 6)
+  auto loc    = make_loc("dc0");
+  EXPECT_EQ(0, ECSplitOp::local_zone_for_acting_set(
+    acting, /*num_zones=*/2, /*zone_size=*/6,
+    /*crush=*/nullptr, cct, loc));
+}
 
 // ===========================================================================
 // Section 4: abs_shard computation for reference_sub_read (Bug 2 regression)
