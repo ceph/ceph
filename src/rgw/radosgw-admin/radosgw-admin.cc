@@ -5,6 +5,9 @@
  * Copyright (C) 2025 IBM
  */
 
+#include <sys/stat.h>
+
+#include <cctype>
 #include <cerrno>
 #include <string>
 #include <sstream>
@@ -35,10 +38,12 @@ extern "C" {
 #include "common/XMLFormatter.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/ceph_crypto.h"
 #include "common/fault_injector.h"
 
 #include "common/async/blocked_completion.h"
 
+#include "include/compat.h"
 #include "include/util.h"
 
 #ifdef WITH_RADOSGW_RADOS
@@ -395,8 +400,11 @@ void usage()
   cout << "   --max-groups                      max number of groups for an account\n";
   cout << "   --max-access-keys                 max number of keys per user for an account\n";
   cout << "   --access-key=<key>                S3 access key\n";
+  cout << "   --access-key-file=<path>          file containing the S3 access key\n";
   cout << "   --email=<email>                   user's email address\n";
   cout << "   --secret/--secret-key=<key>       specify secret key\n";
+  cout << "   --secret-file/--secret-key-file=<path>\n";
+  cout << "                                     file containing the secret key\n";
   cout << "   --gen-access-key                  generate random access key (for S3)\n";
   cout << "   --gen-secret                      generate random secret key\n";
   cout << "   --generate-key                    create user with or without credentials\n";
@@ -1430,6 +1438,73 @@ static int init_bucket(const string& tenant_name,
 {
   rgw_bucket b{tenant_name, bucket_name, bucket_id};
   return init_bucket(b, bucket);
+}
+
+/*
+ * Read a credential from a file so that it never has to appear in argv, where
+ * any local user could read it out of /proc/<pid>/cmdline.
+ */
+static int read_credential_file(const string& path, string& credential)
+{
+  int fd = ::open(path.c_str(), O_RDONLY | O_CLOEXEC);
+  if (fd < 0) {
+    int err = -errno;
+    cerr << "ERROR: failed to open " << path << ": " << cpp_strerror(-err)
+         << std::endl;
+    return err;
+  }
+
+  struct stat st;
+  if (::fstat(fd, &st) < 0) {
+    int err = -errno;
+    cerr << "ERROR: failed to stat " << path << ": " << cpp_strerror(-err)
+         << std::endl;
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return err;
+  }
+
+  if (!S_ISREG(st.st_mode)) {
+    cerr << "ERROR: " << path << " is not a regular file" << std::endl;
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return -EINVAL;
+  }
+
+  if (st.st_mode & (S_IRWXG | S_IRWXO)) {
+    cerr << "WARNING: credential file " << path << " is accessible by group or "
+         << "others, recommended permissions are 0600" << std::endl;
+  }
+
+  constexpr int max_len = 4096;
+  char buf[max_len];
+  ssize_t len = safe_read(fd, buf, sizeof(buf));
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  if (len < 0) {
+    cerr << "ERROR: failed to read " << path << ": "
+         << cpp_strerror(static_cast<int>(-len)) << std::endl;
+    return static_cast<int>(len);
+  }
+
+  /* a full buffer means the file may be larger than it, so the read could have
+   * stopped mid-credential; refuse it rather than use a truncated key */
+  if (len == max_len) {
+    ::ceph::crypto::zeroize_for_security(buf, sizeof(buf));
+    cerr << "ERROR: " << path << " is too large to hold a credential"
+         << std::endl;
+    return -EINVAL;
+  }
+
+  while (len > 0 && std::isspace(static_cast<unsigned char>(buf[len - 1]))) {
+    --len;
+  }
+  credential.assign(buf, static_cast<size_t>(len));
+  ::ceph::crypto::zeroize_for_security(buf, sizeof(buf));
+
+  if (credential.empty()) {
+    cerr << "ERROR: " << path << " contains no credential" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 static int read_input(const string& infile, bufferlist& bl)
@@ -3777,6 +3852,7 @@ int main(int argc, const char **argv)
   rgw_account_id account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
+  std::string access_key_file, secret_key_file;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
   std::string date, subuser, access, format;
@@ -4109,10 +4185,14 @@ int main(int argc, const char **argv)
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--access-key-file", (char*)NULL)) {
+      access_key_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
       subuser = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--secret", "--secret-key", (char*)NULL)) {
       secret_key = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--secret-file", "--secret-key-file", (char*)NULL)) {
+      secret_key_file = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-e", "--email", (char*)NULL)) {
       user_email = val;
     } else if (ceph_argparse_witharg(args, i, &val, "-n", "--display-name", (char*)NULL)) {
@@ -4700,6 +4780,32 @@ int main(int argc, const char **argv)
       return EINVAL;
     } else {
       ++i;
+    }
+  }
+
+  /* resolved here rather than in the parse loop so that the file and its
+   * inline counterpart can be given in either order */
+  if (!access_key_file.empty()) {
+    if (!access_key.empty()) {
+      cerr << "ERROR: --access-key and --access-key-file are mutually exclusive"
+           << std::endl;
+      return EINVAL;
+    }
+    int ret = read_credential_file(access_key_file, access_key);
+    if (ret < 0) {
+      return -ret;
+    }
+  }
+
+  if (!secret_key_file.empty()) {
+    if (!secret_key.empty()) {
+      cerr << "ERROR: --secret/--secret-key and --secret-file/--secret-key-file "
+           << "are mutually exclusive" << std::endl;
+      return EINVAL;
+    }
+    int ret = read_credential_file(secret_key_file, secret_key);
+    if (ret < 0) {
+      return -ret;
     }
   }
 

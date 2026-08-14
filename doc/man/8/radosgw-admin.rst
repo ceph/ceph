@@ -554,6 +554,15 @@ Options
 
    S3 access key.
 
+.. option:: --access-key-file=<path>
+
+   Path to a file containing the S3 access key. Use this instead of
+   ``--access-key`` to keep the key out of the command line, which any local
+   user can read from ``/proc``. Trailing whitespace is ignored, so a file
+   ending in a newline works as expected. Restrict the file to mode 0600;
+   radosgw-admin warns if it is readable by group or others. This option cannot
+   be combined with ``--access-key``.
+
 .. option:: --email=email
 
    The e-mail address of the user.
@@ -561,6 +570,12 @@ Options
 .. option:: --secret/--secret-key=<key>
 
    The secret key.
+
+.. option:: --secret-file/--secret-key-file=<path>
+
+   Path to a file containing the secret key, with the same handling as
+   ``--access-key-file``. This option cannot be combined with ``--secret`` or
+   ``--secret-key``.
 
 .. option:: --gen-access-key
 

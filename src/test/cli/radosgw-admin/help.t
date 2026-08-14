@@ -240,8 +240,11 @@
      --max-groups                      max number of groups for an account
      --max-access-keys                 max number of keys per user for an account
      --access-key=<key>                S3 access key
+     --access-key-file=<path>          file containing the S3 access key
      --email=<email>                   user's email address
      --secret/--secret-key=<key>       specify secret key
+     --secret-file/--secret-key-file=<path>
+                                       file containing the secret key
      --gen-access-key                  generate random access key (for S3)
      --gen-secret                      generate random secret key
      --generate-key                    create user with or without credentials
