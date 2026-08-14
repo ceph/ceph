@@ -479,7 +479,11 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Out:{out}\n'
                     f'Err:{err}'
                 )
-
+        call(
+            ctx,
+            ['systemctl', 'restart', self.identity.unit_name],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
 
 @register_daemon_form
 class CephExporter(ContainerDaemonForm):
