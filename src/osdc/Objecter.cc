@@ -192,6 +192,7 @@ enum {
   l_osdc_replica_read_completed,
 
   l_osdc_split_op_reads,
+  l_osdc_localize_zone_miss,
 
   l_osdc_last,
 };
@@ -409,6 +410,8 @@ void Objecter::init()
 			"Operations completed by replica");
     pcb.add_u64_counter(l_osdc_split_op_reads, "split_op_reads",
                     "Client read ops split by SplitOp");
+    pcb.add_u64_counter(l_osdc_localize_zone_miss, "localize_zone_miss",
+                    "Split-op sub-reads sent to a non-local zone despite LOCALIZE_READS");
 
     logger = pcb.create_perf_counters();
     cct->get_perfcounters_collection()->add(logger);
@@ -2572,6 +2575,8 @@ void Objecter::_op_submit(Op *op, shunique_lock<ceph::shared_mutex>& sul, ceph_t
   if (op->target.flags & CEPH_OSD_FLAG_FORCE_OSD) {
     logger->inc(l_osdc_split_op_reads);
   }
+
+  _check_and_record_localize_zone_miss(op);
 
   // pick target
   ceph_assert(op->session == NULL);
@@ -5518,7 +5523,32 @@ void Objecter::set_epoch_barrier(epoch_t epoch)
   }
 }
 
-
+void Objecter::_check_and_record_localize_zone_miss(Op *op)
+{
+  // If LOCALIZE_READS was set and the OSD's zone-bucket differs from the
+  // client's zone-bucket, count this as a zone miss.
+  if (!(op->target.flags & CEPH_OSD_FLAG_LOCALIZE_READS)) {
+    return;
+  }
+  const pg_pool_t *pi = osdmap->get_pg_pool(op->target.base_oloc.pool);
+  if (!pi || !pi->is_stretch_pool() || pi->peering_crush_bucket_barrier == 0
+      || op->target.osd < 0 || crush_location.empty()) {
+    return;
+  }
+  const char *barrier_type = osdmap->crush->get_type_name(
+      pi->peering_crush_bucket_barrier);
+  if (!barrier_type) {
+    return;
+  }
+  std::string barrier_type_str(barrier_type);
+  auto osd_loc = osdmap->crush->get_full_location(op->target.osd);
+  auto client_it = crush_location.find(barrier_type_str);
+  auto osd_it = osd_loc.find(barrier_type_str);
+  if (client_it != crush_location.end() && osd_it != osd_loc.end()
+      && client_it->second != osd_it->second) {
+    logger->inc(l_osdc_localize_zone_miss);
+  }
+}
 
 hobject_t Objecter::enumerate_objects_begin()
 {

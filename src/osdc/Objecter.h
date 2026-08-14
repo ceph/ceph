@@ -4080,6 +4080,8 @@ private:
   bool retry_writes_after_first_reply =
     cct->_conf->objecter_retry_writes_after_first_reply;
 
+
+  void _check_and_record_localize_zone_miss(Op *op);
 public:
   void set_epoch_barrier(epoch_t epoch);
 
