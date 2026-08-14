@@ -13848,21 +13848,37 @@ void PrimaryLogPG::_on_activate_committed(HBHandle *handle)
     // Missing objects are not in the object store, so scan_range_migration
     // does not find them. If we only used the scan result for the interval,
     // next_pool_migration() would skip any missing objects. Merge every
-    // non-deleted missing object into pool_migration_info.objects now.
+    // non-deleted missing object within the scan boundary into
+    // pool_migration_info.objects now. Missing objects beyond end are excluded.
+    // Recovery always completes before migration work begins,
+    // so any missing objects beyond end will have been
+    // recovered and will be in the object store by the time
+    // update_range() rescans from the watermark.
+    // pool_migration_info.begin is corrected after the loop using
+    // earliest_pool_migration(), which accounts for missing objects
+    // and deletions.
+    // Also remove any objects that are pending deletion that
+    // scan_range_migration has already inserted into pool_migration_info.objects
     for (const auto &[hoid, item] :
          recovery_state.get_pg_log().get_missing().get_items()) {
       if (hoid >= pool_migration_info.end) {
         break;
       }
-      if (!recovery_state.get_missing_loc().is_deleted(hoid)) {
+      if (recovery_state.get_missing_loc().is_deleted(hoid)) {
+        // Object is pending deletion - remove it from objects
+        dout(20) << __func__ << " removing pending-delete object " << hoid
+                 << " from pool_migration_info" << dendl;
+        pool_migration_info.objects.erase(hoid);
+      } else {
         dout(20) << __func__ << " merging missing object " << hoid
                  << " into pool_migration_info" << dendl;
         pool_migration_info.objects.insert({hoid, item.need});
       }
     }
 
-    pool_migration_info.trim();
-    update_migration_watermark(earliest_pool_migration());
+    hobject_t earliest = earliest_pool_migration();
+    pool_migration_info.begin = earliest;
+    update_migration_watermark(earliest);
     dout(10) << __func__ << " pool_migration_info.begin=" << pool_migration_info.begin
              << " pool_migration_watermark=" << pool_migration_watermark << dendl;
     if (is_primary()) {
