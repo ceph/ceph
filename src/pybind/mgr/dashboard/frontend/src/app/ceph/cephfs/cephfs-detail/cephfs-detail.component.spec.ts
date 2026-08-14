@@ -50,6 +50,6 @@ describe('CephfsDetailComponent', () => {
   });
 
   it('prepares standby on change', () => {
-    expect(component.standbys).toEqual([{ key: 'Standby daemons', value: 'b' }]);
+    expect(component.standbys).toEqual([{ key: 'Standby service instances', value: 'b' }]);
   });
 });

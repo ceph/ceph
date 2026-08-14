@@ -146,7 +146,7 @@ export class HostSidebarComponent implements OnInit, OnDestroy {
 
     if (permissions.hosts?.read) {
       items.push({
-        label: $localize`Daemons`,
+        label: $localize`Service instances`,
         route: [this.basePath, this.hostname, 'daemons'],
         routerLinkActiveOptions: { exact: true }
       });
