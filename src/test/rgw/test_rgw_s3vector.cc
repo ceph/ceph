@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "gtest/gtest.h"
+#include "rgw_s3vector.h"
 #include "rgw_s3vector_filter.h"
 #include "common/ceph_json.h"
 #include "common/dout.h"
@@ -709,6 +710,56 @@ TEST_F(S3VectorFilterTest, ObjectValueInJsonInListRejected) {
   auto result = build(R"({"color": {"$in": [{"nested": "value"}]}})");
   EXPECT_FALSE(result.has_value());
   EXPECT_FALSE(errors.empty());
+}
+
+// decode a QueryVectors request. "vectorBucketName", "indexName" and "topK"
+// are always supplied, since they  are validated before "queryVector" is decoded
+// and the tests below are about
+static void decode_query(const std::string& query_vector, query_vectors_t& req) {
+  const auto json = fmt::format(
+      R"({{"vectorBucketName": "bkt", "indexName": "idx", "topK": 3, "queryVector": {}}})",
+      query_vector);
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(json.c_str(), json.size()));
+  req.decode_json(&parser);
+}
+
+TEST(S3VectorDecodeTest, QueryVectorValid) {
+  query_vectors_t req;
+  ASSERT_NO_THROW(decode_query(R"({"float32": [1.0, 2.0, 3.0]})", req));
+  ASSERT_EQ(req.query_vector.size(), 3);
+  EXPECT_FLOAT_EQ(req.query_vector[0], 1.0);
+  EXPECT_FLOAT_EQ(req.query_vector[2], 3.0);
+}
+
+// an empty "queryVector" object leaves the "float32" lookup at the end
+// iterator, which used to be dereferenced unconditionally
+TEST(S3VectorDecodeTest, QueryVectorMissingFloat32) {
+  query_vectors_t req;
+  EXPECT_THROW(decode_query("{}", req), JSONDecoder::err);
+}
+
+TEST(S3VectorDecodeTest, QueryVectorFloat32NotAnArray) {
+  query_vectors_t req;
+  EXPECT_THROW(decode_query(R"({"float32": 5})", req), JSONDecoder::err);
+}
+
+TEST(S3VectorDecodeTest, QueryVectorEmptyArray) {
+  query_vectors_t req;
+  EXPECT_THROW(decode_query(R"({"float32": []})", req), JSONDecoder::err);
+}
+
+TEST(S3VectorDecodeTest, QueryVectorNonNumericElement) {
+  query_vectors_t req;
+  EXPECT_THROW(decode_query(R"({"float32": ["abc"]})", req), JSONDecoder::err);
+}
+
+TEST(S3VectorDecodeTest, QueryVectorMissingAltogether) {
+  query_vectors_t req;
+  const std::string json = R"({"vectorBucketName": "bkt", "indexName": "idx", "topK": 3})";
+  JSONParser parser;
+  ASSERT_TRUE(parser.parse(json.c_str(), json.size()));
+  EXPECT_THROW(req.decode_json(&parser), JSONDecoder::err);
 }
 
 int main(int argc, char** argv) {

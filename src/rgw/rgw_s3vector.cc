@@ -445,7 +445,14 @@ namespace rgw::s3vector {
       throw JSONDecoder::err(std::string("missing field: ") + field_name);
     }
     auto arr_it = (*it)->find("float32");
-    for (auto value_it = (*arr_it)->find_first(); !value_it.end(); ++value_it) {
+    if (arr_it.end()) {
+      throw JSONDecoder::err(std::string("missing field: ") + field_name + ".float32");
+    }
+    JSONObj* arr = *arr_it;
+    if (!arr->is_array()) {
+      throw JSONDecoder::err(std::string("field is not an array: ") + field_name + ".float32");
+    }
+    for (auto value_it = arr->find_first(); !value_it.end(); ++value_it) {
       float value;
       decode_from_chars(value, (*value_it)->get_data());
       data.push_back(value);
