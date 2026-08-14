@@ -36,7 +36,10 @@ jobs:
                 console.log(`Failed to fetch permissions for ${author}: ${error.message}`);
               }
             }
-            if (permission === 'none') {
+            // On a public repo every user has at least 'read', so checking for
+            // 'none' would never match a human author; require write or admin.
+            const hasWrite = ['admin', 'write'].includes(permission);
+            if (!hasWrite) {
               const currentLabels = pr.labels.map(label => label.name);
 
               // 1. Revoke approval on new pushes/updates by removing 'ci-approved'
