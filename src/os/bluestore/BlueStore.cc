@@ -3272,11 +3272,11 @@ int BlueStore::_check_or_set_bdev_label(
     label.size = bdev->get_size();
     label.btime = ceph_clock_now();
     label.description = desc;
-    int r = _write_bdev_label(cct, bdev, path, label);
+    int r = _write_bdev_label(cct, bdev, path, label, {BDEV_FIRST_LABEL_POSITION});
     if (r < 0)
       return r;
   } else {
-    int r = _read_bdev_label(cct, bdev, path, &label);
+    int r = _read_bdev_label(cct, bdev, path, &label, BDEV_FIRST_LABEL_POSITION);
     if (r < 0)
       return r;
     if (cct->_conf->bluestore_debug_permit_any_bdev_label) {
@@ -5466,7 +5466,7 @@ int BlueStore::expand_devices(ostream& out)
     if (my_bdev->supported_bdev_label()) {
       string my_path = get_device_path(devid);
       bluestore_bdev_label_t my_label;
-      r = _read_bdev_label(cct, my_bdev, my_path, &my_label);
+      r = _read_bdev_label(cct, my_bdev, my_path, &my_label, BDEV_FIRST_LABEL_POSITION);
       if (r < 0) {
         derr << "unable to read label for " << my_path << ": "
               << cpp_strerror(r) << dendl;
@@ -5491,7 +5491,8 @@ int BlueStore::expand_devices(ostream& out)
 	      << " : Expanding to 0x" << std::hex << size
 	      << std::dec << "(" << byte_u_t(size) << ")"
 	      << std::endl;
-          r = _write_bdev_label(cct, my_bdev, my_path, my_label);
+          r = _write_bdev_label(cct, my_bdev, my_path, my_label,
+                {BDEV_FIRST_LABEL_POSITION});
           if (r < 0) {
             derr << "unable to write label for " << my_path << ": "
                   << cpp_strerror(r) << dendl;

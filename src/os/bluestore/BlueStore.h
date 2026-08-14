@@ -57,11 +57,11 @@
 #include "os/ObjectStore.h"
 
 #include "bluestore_types.h"
-#include "bluestore_common.h"
 #include "BlueFS.h"
 #include "BlueStore_objects_impl.h"
 #include "common/EventTrace.h"
 #include "common/admin_socket.h"
+#include "kv/KeyValueDB.h"
 #ifdef WITH_CPUTRACE
 #include "common/cputrace.h"
 #endif
@@ -1445,10 +1445,10 @@ private:
     BlockDevice* bdev,
     const std::string &path,
     bluestore_bdev_label_t label,
-    std::vector<uint64_t> locations = std::vector<uint64_t>({BDEV_FIRST_LABEL_POSITION}));
+    std::vector<uint64_t> locations);
   static int _read_bdev_label(
     CephContext* cct, BlockDevice* bdev, const std::string &path,
-    bluestore_bdev_label_t *label, uint64_t disk_position = BDEV_FIRST_LABEL_POSITION);
+    bluestore_bdev_label_t *label, uint64_t disk_position);
   int _check_or_set_bdev_label(BlockDevice* bdev, const std::string& path,
                                const std::string& desc, bool create);
   int _set_main_bdev_label();
@@ -2869,37 +2869,6 @@ private:
   // non-shared extents with multiple references
   fsck_interval misreferenced_extents;
 
-};
-
-struct FragMetric {
-  // Computes fragmentation as the number of disjoint segments
-  // produced by a stream of mapped ranges.
-  // frag_score == current disjoint segment count.
-
-  std::unordered_set<uint64_t> endpoints;
-  uint64_t frag_score = 0;
-
-  FragMetric() {}
-
-  inline void note(uint64_t offset, uint64_t length) {
-    bool merge_left = endpoints.count(offset);
-    bool merge_right = endpoints.count(offset + length);
-    if (merge_left && merge_right) {
-      endpoints.erase(offset);
-      endpoints.erase(offset + length);
-      frag_score--;
-    } else if (merge_left) {
-      endpoints.erase(offset);
-      endpoints.insert(offset + length);
-    } else if (merge_right) {
-      endpoints.erase(offset + length);
-      endpoints.insert(offset);
-    } else {
-      endpoints.insert(offset);
-      endpoints.insert(offset + length);
-      frag_score++;
-    }
-  }
 };
 
 #endif
