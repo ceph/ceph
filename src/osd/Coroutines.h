@@ -18,10 +18,12 @@
  *
  * - yield_token_t (pull_type): Is used by a coroutine to suspend execution (yield)
  * while waiting for an I/O operation to complete.
- * - resume_token_t (push_type): Is used by the completion callback to
+ * - resume_token_t (push_type): Is used by the completion callback to resume execution
+ * once the I/O operations are complete.
  */
 
 #pragma once
+#include <memory>
 #include <boost/coroutine2/all.hpp>
 
 using yield_token_t = boost::coroutines2::coroutine<void>::pull_type;
@@ -29,5 +31,5 @@ using resume_token_t = boost::coroutines2::coroutine<void>::push_type;
 
 struct CoroHandles {
   yield_token_t& yield;
-  resume_token_t& resume;
+  std::shared_ptr<resume_token_t> resume;
 };

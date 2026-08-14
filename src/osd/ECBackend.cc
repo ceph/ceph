@@ -1240,13 +1240,15 @@ int ECBackend::objects_read_sync(
   bool done = false;
   bool waiting = false;
 
-  // Callback for the async read
-  Context *on_finish = new LambdaContext([&, coro](int r) {
+  std::weak_ptr<resume_token_t> weak_resume = coro.resume;
+  Context *on_finish = new LambdaContext([&, weak_resume](int r) {
     result = r;
     done = true;
 
     if (waiting) {
-      coro.resume();
+      if (auto locked = weak_resume.lock(); locked) {
+        (*locked)();
+      }
     }
   });
 
