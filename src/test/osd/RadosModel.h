@@ -203,6 +203,7 @@ public:
   std::string chunk_algo;
   std::string chunk_size;
   bool timestamp;
+  std::string crush_location;
 
   RadosTestContext(const std::string &pool_name,
 		   int max_in_flight,
@@ -219,6 +220,7 @@ public:
 		   std::string chunk_algo,
 		   std::string chunk_size,
 		   size_t max_attr_len,
+		   std::string crush_location,
 		   const char *id = 0) :
     pool_obj_cont(),
     current_snap(0),
@@ -228,7 +230,7 @@ public:
     max_in_flight(max_in_flight),
     seq_num(0), seq(0),
     rados_id(id), initialized(false),
-    max_size(max_size), 
+    max_size(max_size),
     min_stride_size(min_stride_size), max_stride_size(max_stride_size),
     attr_gen(2000, max_attr_len),
     no_omap(no_omap),
@@ -240,7 +242,8 @@ public:
     enable_dedup(enable_dedup),
     chunk_algo(chunk_algo),
     chunk_size(chunk_size),
-    timestamp(timestamp)
+    timestamp(timestamp),
+    crush_location(std::move(crush_location))
   {
   }
 
@@ -255,6 +258,14 @@ public:
     r = rados.conf_parse_env(NULL);
     if (r < 0)
       return r;
+    if (!crush_location.empty()) {
+      r = rados.conf_set("crush_location", crush_location.c_str());
+      if (r < 0) {
+        std::cerr << "Warning: failed to set crush_location '"
+                  << crush_location << "': " << cpp_strerror(r) << std::endl;
+        // Non-fatal: zone filtering will be disabled (index stays -1).
+      }
+    }
     r = rados.connect();
     if (r < 0)
       return r;
