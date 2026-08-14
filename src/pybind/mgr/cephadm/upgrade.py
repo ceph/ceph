@@ -1951,10 +1951,15 @@ class CephadmUpgrade:
                     _, n1, n2, __ = self._detect_need_upgrade(ceph_daemons, target_digests, target_image)
                     if not n1 and not n2:
                         # no ceph daemons need upgrade
+                        need_upgrade_names = [d[0].name() for d in need_upgrade] + \
+                            [d[0].name() for d in need_upgrade_deployer]
                         dds = [d for d in self.mgr.cache.get_daemons_by_type(
                             daemon_type) if d.name() not in need_upgrade_names]
                         _, ___, n2, ____ = self._detect_need_upgrade(dds, target_digests, target_image)
                         need_upgrade_deployer += n2
+                    else:
+                        # don't upgrade if ceph image daemons are not yet fully upgraded.
+                        need_upgrade_deployer = []
 
             if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
                 # only after the mgr itself is upgraded can we expect daemons to have
