@@ -8,8 +8,6 @@
     columnMode="flex"
     [columns]="columns"
     selectionType="single"
-    [hasDetails]="true"
-    (setExpandedRow)="setExpandedRow($event)"
     (fetchData)="loadSMBCluster($event)"
     (updateSelection)="updateSelection($event)"
   >
@@ -22,10 +20,5 @@
       >
       </cd-table-actions>
     </div>
-    <cd-smb-cluster-tabs
-      *cdTableDetail
-      [selection]="expandedRow"
-    >
-    </cd-smb-cluster-tabs>
   </cd-table>
 </ng-container>
