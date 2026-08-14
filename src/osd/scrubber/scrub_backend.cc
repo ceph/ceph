@@ -1645,8 +1645,9 @@ bool ScrubBackend::compare_obj_details(pg_shard_t auth_shard,
     ceph_assert(can_attr != candidate.attrs.end());
     const bufferlist& can_bl = can_attr->second;
 
-    // For EC pools, convert absolute shard to relative shard (shard % (k+m))
-    shard_id_t rel_shard = m_is_replicated ? shard.shard : m_pg.get_ec_sinfo().get_rel_shard(shard.shard);
+    shard_id_t rel_shard = m_is_optimized_ec
+                               ? m_pg.get_ec_sinfo().get_rel_shard(shard.shard)
+                               : shard.shard;
 
     if (auth_oi.get_version_for_shard(rel_shard) == auth_oi.version) {
       // The expected version of the shard and the authoritative shard are the
