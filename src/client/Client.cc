@@ -5133,7 +5133,7 @@ void Client::remove_session_caps(MetaSession *s, int err)
     if (dirty_caps) {
       lderr(cct) << __func__ << " still has dirty|flushing caps on " << *in << dendl;
       if (in->flushing_caps) {
-	num_flushing_caps--;
+  logger->dec(l_c_caps_flushing);
 	in->flushing_cap_tids.clear();
       }
       in->flushing_caps = 0;
@@ -5389,7 +5389,6 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
 
   if (!in->flushing_caps) {
     ldout(cct, 10) << __func__ << " " << ccap_string(flushing) << " " << *in << dendl;
-    num_flushing_caps++;
     logger->inc(l_c_caps_flushing); // When a new inode enters flushing stat
   } else {
     ldout(cct, 10) << __func__ << " (more) " << ccap_string(flushing) << " " << *in << dendl;
@@ -5465,7 +5464,7 @@ void Client::wait_sync_caps(ceph_tid_t want)
 {
  retry:
   ldout(cct, 10) << __func__ << " want " << want  << " (last is " << last_flush_tid << ", "
-	   << num_flushing_caps << " total flushing)" << dendl;
+	   << logger->get(l_c_caps_flushing) << " total flushing)" << dendl;
   for (auto &p : mds_sessions) {
     auto s = p.second;
     if (s->flushing_caps_tids.empty())
@@ -6114,7 +6113,6 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
       in->flushing_caps &= ~cleaned;
       if (in->flushing_caps == 0) {
 	ldout(cct, 10) << " " << *in << " !flushing" << dendl;
-	num_flushing_caps--;
   logger->dec(l_c_caps_flushing); //when the inode finishes flushing the caps
        if (in->flushing_cap_tids.empty())
 	  in->flushing_cap_item.remove_myself();

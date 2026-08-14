@@ -2450,7 +2450,6 @@ private:
   ceph_tid_t last_flush_tid = 1;
 
   xlist<Inode*> delayed_list;
-  int num_flushing_caps = 0;
   std::unordered_map<inodeno_t, SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
 
