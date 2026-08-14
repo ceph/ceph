@@ -671,6 +671,11 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Out:{out}\n'
                     f'Err:{err}'
                 )
+        call(
+            ctx,
+            ['systemctl', 'restart', get_unit_name(self.fsid, 'osd', self.daemon_id)],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
 
 
 ##################################
