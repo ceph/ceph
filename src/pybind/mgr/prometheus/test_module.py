@@ -510,3 +510,33 @@ class PoolRepairedObjectsTest(TestCase):
             self.module.metrics['pool_objects_repaired'].value,
             {(1,): 7, (2,): 0},
         )
+
+
+class GetOnceTest(TestCase):
+    """Tests for the per-collection memo in front of self.get()."""
+
+    def setUp(self):
+        from prometheus.module import Module
+        self.module = mock.MagicMock(spec=Module)
+        self.module._get_cache = {}
+        self.module.get_once = Module.get_once.__get__(self.module)
+
+    def test_fetches_once_per_key(self):
+        self.module.get.return_value = {'epoch': 1}
+        first = self.module.get_once('osd_map')
+        second = self.module.get_once('osd_map')
+        self.module.get.assert_called_once_with('osd_map')
+        self.assertIs(first, second)
+
+    def test_distinguishes_keys(self):
+        self.module.get.side_effect = lambda what: {'key': what}
+        self.assertEqual(self.module.get_once('osd_map'), {'key': 'osd_map'})
+        self.assertEqual(self.module.get_once('pg_summary'), {'key': 'pg_summary'})
+        self.assertEqual(self.module.get.call_count, 2)
+
+    def test_caches_falsy_result(self):
+        """An empty dump must not be re-fetched on every call."""
+        self.module.get.return_value = {}
+        self.module.get_once('pg_summary')
+        self.module.get_once('pg_summary')
+        self.module.get.assert_called_once_with('pg_summary')
