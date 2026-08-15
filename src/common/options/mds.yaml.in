@@ -353,7 +353,7 @@ options:
   long_desc: This determines how long a session needs to be quiescent before the MDS
     begins preemptively recalling capabilities. The default of 5 minutes will cause
     10 halvings of the decay counter after 1 hour, or 1/1024. The default magnitude
-    of 10 (1^10 or 1024) is chosen so that the MDS considers a previously chatty session
+    of 10 (2^10 or 1024) is chosen so that the MDS considers a previously chatty session
     (approximately) to be quiescent after 1 hour.
   default: 5_min
   services:
@@ -518,7 +518,7 @@ options:
 - name: mds_replay_unsafe_with_closed_session
   type: bool
   level: advanced
-  desc: complete all the replay request when mds is restarted, no matter the session
+  desc: complete all replay requests when MDS is restarted, no matter the session
     is closed or not
   default: false
   services:
@@ -1561,8 +1561,8 @@ options:
 - name: mds_task_status_update_interval
   type: float
   level: dev
-  desc: task status update interval to manager
-  long_desc: interval (in seconds) for sending mds task status to ceph manager
+  desc: task status update interval to the Manager
+  long_desc: interval (in seconds) for sending MDS task status to the Manager
   default: 2
   services:
   - mds
