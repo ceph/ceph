@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <memory>
 #include <string>
 
@@ -17,8 +18,10 @@ namespace rgw::s3vector {
   void shutdown();
   void pause();
   void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver);
-  // update whenever new vectors are added to an index
-  bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name);
+  // update whenever vectors are added to an index (row_count = number of rows mutated)
+  bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, uint64_t row_count);
+  // update whenever vectors are deleted from an index (row_count = number of keys deleted)
+  bool notify_index_delete(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, uint64_t row_count);
   // update whenever a index is removed
   bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name);
   // get LanceDB session for a bucket, returns nullptr if session doesn't exist or manager is not initialized

@@ -1,7 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab
 
+#include <atomic>
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <boost/functional/hash.hpp>
 #include <boost/lockfree/queue.hpp>
 #include <boost/asio/basic_waitable_timer.hpp>
@@ -11,19 +14,76 @@
 #include <boost/context/protected_fixedsize_stack.hpp>
 #include "common/ceph_time.h"
 #include "common/dout.h"
+#include "common/random_string.h"
 #include <chrono>
+#include <charconv>
 #include <fmt/format.h>
-#include "common/async/yield_waiter.h"
 #include <future>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include "rgw_sal.h"
+#include "rgw_common.h"
+#include "rgw_acl.h"
+#include "common/ceph_json.h"
+#include "common/ceph_crypto.h"
 #include "rgw_s3vector.h"
 #include "lancedb.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::s3vector {
+
+// table metadata key for build coordination state
+static constexpr const char* build_state_metadata_key = "s3v_index_state";
+
+// lock object key prefix/suffix within the vector bucket
+static constexpr const char* lock_key_prefix = ".s3v-lock-";
+static constexpr const char* lock_key_suffix = ".lock";
+
+
+struct build_state_t {
+  bool build_in_progress = false;
+  int64_t build_started_at = 0;
+  int64_t build_lease_seconds = 600;
+  std::string builder_id;
+  uint64_t global_delete_count = 0;
+
+  void dump(ceph::Formatter *f) const {
+    encode_json("build_in_progress", build_in_progress, f);
+    encode_json("build_started_at", build_started_at, f);
+    encode_json("build_lease_seconds", build_lease_seconds, f);
+    encode_json("builder_id", builder_id, f);
+    encode_json("global_delete_count", global_delete_count, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    JSONDecoder::decode_json("build_in_progress", build_in_progress, obj);
+    JSONDecoder::decode_json("build_started_at", build_started_at, obj);
+    JSONDecoder::decode_json("build_lease_seconds", build_lease_seconds, obj);
+    JSONDecoder::decode_json("builder_id", builder_id, obj);
+    JSONDecoder::decode_json("global_delete_count", global_delete_count, obj);
+  }
+
+  std::string to_json_str() const {
+    JSONFormatter f;
+    f.open_object_section("");
+    dump(&f);
+    f.close_section();
+    std::ostringstream oss;
+    f.flush(oss);
+    return oss.str();
+  }
+
+  bool from_json_str(const char* str) {
+    JSONParser parser;
+    if (!parser.parse(str, strlen(str))) {
+      return false;
+    }
+    decode_json(&parser);
+    return true;
+  }
+};
 
 class Manager : public DoutPrefixProvider {
 public:
@@ -45,7 +105,10 @@ public:
 private:
   // use mmap/mprotect to allocate 128k coroutine stacks
   auto make_stack_allocator() {
-    return boost::context::protected_fixedsize_stack{128*1024};
+    // LanceDB's Rust/tokio runtime needs deep stacks for table open, index
+    // stats, and index build operations
+//note: without increasing the stack-size it may cause a crash.
+    return boost::context::protected_fixedsize_stack{1024*1024};
   }
   using MessageQueue =  boost::lockfree::queue<message_t*, boost::lockfree::fixed_sized<true>>;
   using Executor = boost::asio::io_context::executor_type;
@@ -63,60 +126,40 @@ private:
     }
   };
   using SessionPtr = std::shared_ptr<LanceDBSession>;
-  ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex"); 
+  ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex");
   std::unordered_map<std::string, SessionPtr> sessions;
-  std::unordered_map<table_name_t, ceph::coarse_real_time, boost::hash<table_name_t>> tables;
+
+  struct table_state_t {
+    // track local insert/delete counts for each table, last_rebuild_time, to determine if a rebuild is needed.
+    // data is saved into table metadata to persist across RGW restarts and allow other RGW instances to see the global state.
+    std::atomic<uint64_t> insert_count{0};
+    std::atomic<uint64_t> delete_count{0};
+    ceph::coarse_real_time last_rebuild_time;
+    table_state_t() = default;
+    table_state_t(table_state_t&& o) noexcept
+      : insert_count(o.insert_count.load()),
+        delete_count(o.delete_count.load()),
+        last_rebuild_time(o.last_rebuild_time) {}
+  };
+  std::shared_mutex tables_mutex;
+  std::unordered_map<table_name_t, table_state_t, boost::hash<table_name_t>> tables;
+  std::mutex active_builds_mutex;
+  std::unordered_set<table_name_t, boost::hash<table_name_t>> active_builds;//to check locally if a table is already being rebuilt by this RGW instance(a cheap check before acquiring the distributed lock)
+  std::atomic<int> active_rebuild_count{0};//how many rebuilds are currently active, in order to control the number of concurrent tasks.
+
+  struct active_lock_t {
+    std::string token;
+    std::string etag;
+    ceph::coarse_real_clock::time_point last_refresh;
+    bool lock_lost = false;
+  };
+  std::map<table_name_t, active_lock_t> active_locks; // protected by active_builds_mutex
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
 
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return dout_subsys; }
   std::ostream& gen_prefix(std::ostream& out) const override { return out << "s3vectors manager: "; }
-
-  class tokens_waiter {
-    size_t pending_tokens = 0;
-    DoutPrefixProvider* const dpp;
-    ceph::async::yield_waiter<void> waiter;
-
-  public:
-    class token{
-      tokens_waiter* tw;
-    public:
-      token(const token& other) = delete;
-      token(token&& other) : tw(other.tw) {
-        other.tw = nullptr; // mark as moved
-      }
-      token& operator=(const token& other) = delete;
-      token(tokens_waiter* _tw) : tw(_tw) {
-        ++tw->pending_tokens;
-      }
-
-      ~token() {
-        if (!tw) {
-          return; // already moved
-        }
-        --tw->pending_tokens;
-        if (tw->pending_tokens == 0 && tw->waiter) {
-          tw->waiter.complete(boost::system::error_code{});
-        }
-      }
-    };
-
-    tokens_waiter(DoutPrefixProvider* _dpp) : dpp(_dpp) {}
-    tokens_waiter(const tokens_waiter& other) = delete;
-    tokens_waiter& operator=(const tokens_waiter& other) = delete;
-
-    void async_wait(boost::asio::yield_context yield) {
-      if (pending_tokens == 0) {
-        return;
-      }
-      ldpp_dout(dpp, 20) << "INFO: tokens waiter is waiting on " <<
-        pending_tokens << " tokens" << dendl;
-      boost::system::error_code ec;
-      waiter.async_wait(yield[ec]);
-      ldpp_dout(dpp, 20) << "INFO: tokens waiter finished waiting for all tokens" << dendl;
-    }
-  };
 
   void async_sleep(boost::asio::yield_context yield, const std::chrono::milliseconds& duration) {
     using Clock = ceph::coarse_mono_clock;
@@ -131,53 +174,868 @@ private:
     }
   }
 
-  // processing of a specific table
-  int process_table(const table_name_t& table_name, boost::asio::yield_context yield) {
-    // TODO: check if processing is needed based on unindexed rows stats and skip if not needed
-    // TODO: check if processign already started for the table and skip if yes
-    // TODO: implement actual lancedb table processing logic here
-    // for PoC just sleep for some time to simulate processing
-    ldpp_dout(this, 20) << "INFO: started processing table: " << table_name.first << "." << table_name.second << dendl;
-    async_sleep(yield, idle_sleep);
-    ldpp_dout(this, 20) << "INFO: done processing table: " << table_name.first << "." << table_name.second << dendl;
+  // ============================================================================
+  // Build state management via LanceDB table metadata
+  // ============================================================================
+
+  int read_build_state(const LanceDBTable* table, build_state_t& state) {
+    const char* key = build_state_metadata_key;
+    char** keys_out = nullptr;
+    char** values_out = nullptr;
+    size_t count = 0;
+    char* error_message = nullptr;
+
+    if (const auto result = lancedb_table_get_metadata(
+            table, &key, 1, &keys_out, &values_out, &count, &error_message);
+        result != LANCEDB_SUCCESS) {
+      ldpp_dout(this, 1) << "ERROR: failed to read build state from table metadata: "
+          << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return -EIO;
+    }
+
+    if (count > 0 && values_out[0]) {
+      state.from_json_str(values_out[0]);
+    }
+    lancedb_free_metadata(keys_out, values_out, count);
+    return 0;
+  }
+
+  int write_build_state(const LanceDBTable* table, const build_state_t& state) {
+    const std::string json_str = state.to_json_str();
+    const char* key = build_state_metadata_key;
+    const char* value = json_str.c_str();
+    char* error_message = nullptr;
+
+    if (const auto result = lancedb_table_set_metadata(
+            table, &key, &value, 1, &error_message);
+        result != LANCEDB_SUCCESS) {
+      ldpp_dout(this, 1) << "ERROR: failed to write build state to table metadata: "
+          << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return -EIO;
+    }
     return 0;
   }
 
   // process all work items for tables and sessions
   void process_messages(boost::asio::yield_context yield) {
     ldpp_dout(this, 5) << "INFO: manager started. starting to process messages for background table and session operations" << dendl;
+  }
+
+  // ============================================================================
+  // Index stats helper
+  // ============================================================================
+
+  struct index_stats_result {
+    LanceDBIndexStats stats = {};
+    bool ok = false;
+  };
+
+  index_stats_result get_vector_index_stats(const LanceDBTable* table) {
+    index_stats_result result;
+    char* error_message = nullptr;
+
+    // query the vector index directly by its known name (data_idx).
+    // LanceDB names indices as {column_name}_idx — our vector column is
+    // always "data", so the vector index is always "data_idx".
+    // this avoids picking up the scalar "key_idx" which reports misleading
+    // unindexed counts (scalar BTree indices always show indexed=0).
+    if (const auto err = lancedb_table_index_stats(
+            table, vector_index_name, &result.stats, &error_message);
+        err == LANCEDB_SUCCESS) {
+      result.ok = true;
+      return result;
+    }
+
+    ldpp_dout(this, 5) << "WARNING: lancedb_table_index_stats failed for '"
+        << vector_index_name << "': "
+        << (error_message ? error_message : "unknown") << dendl;
+
+    if (error_message) {
+      lancedb_free_string(error_message);
+    }
+
+    // vector index doesn't exist yet — all rows are unindexed
+    result.stats.num_indexed_rows = 0;
+    result.stats.num_unindexed_rows = lancedb_table_count_rows(table);
+    result.stats.num_indices = 0;
+    result.ok = true;
+    return result;
+  }
+
+  // ============================================================================
+  // Distributed lock via S3 conditional write (SAL)
+  // ============================================================================
+
+  static std::string make_lock_key(const std::string& index_name) {
+    return std::string(lock_key_prefix) + index_name + lock_key_suffix;
+  }
+
+  std::string generate_lock_token() {
+    //returns a random 32-character alphanumeric string as the lock token, to enable owenrship verification during release and prevent deleting another instance's lock.
+    char buf[33];
+    gen_rand_alphanumeric(cct, buf, sizeof(buf) - 1);
+    buf[32] = '\0';
+    return std::string(buf, 32);
+  }
+
+  struct lock_body_t {
+    std::string token;
+    int64_t timestamp = 0;
+
+    void dump(ceph::Formatter *f) const {
+      encode_json("token", token, f);
+      encode_json("timestamp", timestamp, f);
+    }
+
+    void decode_json(JSONObj *obj) {
+      JSONDecoder::decode_json("token", token, obj);
+      JSONDecoder::decode_json("timestamp", timestamp, obj);
+    }
+
+    std::string to_json_str() const {
+      JSONFormatter f;
+      f.open_object_section("");
+      dump(&f);
+      f.close_section();
+      std::ostringstream oss;
+      f.flush(oss);
+      return oss.str();
+    }
+
+    bool from_json_str(const std::string& str) {
+      JSONParser parser;
+      if (!parser.parse(str.c_str(), str.size())) {
+        return false;
+      }
+      decode_json(&parser);
+      return true;
+    }
+  };
+
+  lock_body_t make_lock_body(const std::string& token) {
+    lock_body_t body;
+    body.token = token;
+    body.timestamp = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    return body;
+  }
+
+  // load the vector bucket as a regular Bucket for lock object operations.
+  // vector buckets have default-placement set at creation, so PUT/GET/DELETE
+  // by exact key works (indexless only skips bucket index updates).
+  // Load the regular S3 backing bucket (not the vector bucket) for lock operations.
+  // The vector bucket is created with BucketIndexType::Indexless and has no bucket
+  // index shards, so direct SAL writes (get_atomic_writer) fail with -ENOENT on
+  // get_bucket_shard(). The regular S3 bucket (same name) has normal index shards
+  // and is the same bucket that LanceDB uses for data storage via rgw_sal_wrapper.
+  // TODO: the backing S3 bucket is currently created externally (e.g. by tests);
+  // CreateVectorBucket should create it automatically for the RGW backend.
+  int load_bucket_for_lock(const std::string& vector_bucket_name,
+                           std::unique_ptr<rgw::sal::Bucket>& bucket,
+                           optional_yield y) {
+    rgw_bucket bucket_id;
+    bucket_id.name = vector_bucket_name;
+    int ret = driver->load_bucket(this, bucket_id, &bucket, y);
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to load bucket for lock: "
+          << vector_bucket_name << " ret=" << ret << dendl;
+      return ret;
+    }
+    return 0;
+  }
+
+  // ---- low-level lock object operations ----
+
+  // PUT lock object with if-none-match="*" (conditional create).
+  // exactly one concurrent caller succeeds, others get -ERR_PRECONDITION_FAILED.
+  int put_lock_object(const std::string& vector_bucket_name,
+                      const std::string& lock_key,
+                      const std::string& token,
+                      optional_yield y,
+                      std::string* etag_out = nullptr) {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    if (ret < 0) return ret;
+
+    auto obj = bucket->get_object({lock_key});
+    std::string req_id = driver->zone_unique_id(driver->get_new_req_id());
+    ACLOwner owner;
+    owner.id = bucket->get_owner();
+    auto writer = driver->get_atomic_writer(this, y, obj.get(),
+        owner, nullptr, 0, req_id);
+
+    ret = writer->prepare(y);
+    if (ret < 0) return ret;
+
+    lock_body_t lock_body = make_lock_body(token);
+    std::string body = lock_body.to_json_str();
+    bufferlist bl;
+    bl.append(body);
+    const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl).to_str();
+    ret = writer->process(std::move(bl), 0);
+    if (ret < 0) return ret;
+
+    ret = writer->process({}, body.size());
+    if (ret < 0) return ret;
+
+    std::map<std::string, bufferlist> attrs;
+    bufferlist etag_bl;
+    etag_bl.append(etag.c_str(), etag.size());
+    attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
+    const req_context rctx{this, y, nullptr};
+    bool canceled = false;
+
+    ret = writer->complete(body.size(), etag,
+                           nullptr, ceph::real_clock::now(), attrs,
+                           rgw::cksum::no_cksum, ceph::real_time(),
+                           /*if_match=*/nullptr,
+                           /*if_nomatch=*/"*",
+                           nullptr, nullptr, &canceled,
+                           rctx, 0);
+
+    if (canceled) {
+      return -ERR_PRECONDITION_FAILED;
+    }
+    if (ret == 0 && etag_out) {
+      *etag_out = etag;
+    }
+    return ret;
+  }
+
+  struct refresh_result {
+    int ret;
+    std::string new_etag;
+  };
+
+  // Refresh (conditional overwrite) the lock object with a fresh timestamp.
+  // Uses if_match=current_etag to ensure only the lock holder can refresh.
+  // Returns the new ETag on success for subsequent refresh calls.
+  refresh_result refresh_lock_object(const std::string& vector_bucket_name,
+                                     const std::string& lock_key,
+                                     const std::string& token,
+                                     const std::string& current_etag,
+                                     optional_yield y) {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    if (ret < 0) return {ret, {}};
+
+    auto obj = bucket->get_object({lock_key});
+    std::string req_id = driver->zone_unique_id(driver->get_new_req_id());
+    ACLOwner owner;
+    owner.id = bucket->get_owner();
+    auto writer = driver->get_atomic_writer(this, y, obj.get(),
+        owner, nullptr, 0, req_id);
+
+    ret = writer->prepare(y);
+    if (ret < 0) return {ret, {}};
+
+    lock_body_t lock_body = make_lock_body(token);
+    std::string body = lock_body.to_json_str();
+    bufferlist bl;
+    bl.append(body);
+    const auto etag = TOPNSPC::crypto::digest<TOPNSPC::crypto::MD5>(bl).to_str();
+    ret = writer->process(std::move(bl), 0);
+    if (ret < 0) return {ret, {}};
+
+    ret = writer->process({}, body.size());
+    if (ret < 0) return {ret, {}};
+
+    std::map<std::string, bufferlist> attrs;
+    bufferlist etag_bl;
+    etag_bl.append(etag.c_str(), etag.size());
+    attrs[RGW_ATTR_ETAG] = std::move(etag_bl);
+
+    const req_context rctx{this, y, nullptr};
+    bool canceled = false;
+
+    ret = writer->complete(body.size(), etag,
+                           nullptr, ceph::real_clock::now(), attrs,
+                           rgw::cksum::no_cksum, ceph::real_time(),
+                           /*if_match=*/current_etag.c_str(),
+                           /*if_nomatch=*/nullptr,
+                           nullptr, nullptr, &canceled,
+                           rctx, 0);
+
+    if (canceled) {
+      return {-ERR_PRECONDITION_FAILED, {}};
+    }
+    return {ret, etag};
+  }
+
+  // DELETE lock object with conditional if_match (ETag).
+  // if etag is non-empty, only deletes if the object's current ETag matches —
+  // prevents deleting a lock that was reclaimed by another instance.
+  // if etag is empty, performs unconditional delete.
+  int delete_lock_object(const std::string& vector_bucket_name,
+                         const std::string& lock_key,
+                         const std::string& etag,
+                         optional_yield y) {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    if (ret < 0) return ret;
+
+    auto obj = bucket->get_object({lock_key});
+    auto del_op = obj->get_delete_op();
+    if (!etag.empty()) {
+      del_op->params.if_match = etag.c_str();
+    } else {
+      ldpp_dout(this, 0) << "CRITICAL: lock object " << lock_key
+          << " has no ETag — conditional delete protection is disabled."
+          << " This should not happen; the lock was likely created without"
+          << " RGW_ATTR_ETAG. Proceeding with unconditional delete." << dendl;
+    }
+    return del_op->delete_obj(this, y, 0);
+  }
+
+  // GET lock object body and ETag.
+  // returns {error_code, body, etag}. the ETag is used for conditional delete.
+  struct lock_read_result {
+    int ret = -1;
+    std::string body;
+    std::string etag;
+  };
+
+  lock_read_result get_lock_object(const std::string& vector_bucket_name,
+                                   const std::string& lock_key,
+                                   optional_yield y) {
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    int ret = load_bucket_for_lock(vector_bucket_name, bucket, y);
+    if (ret < 0) return {ret, {}, {}};
+
+    auto obj = bucket->get_object({lock_key});
+    auto read_op = obj->get_read_op();
+    ret = read_op->prepare(y, this);
+    if (ret < 0) return {ret, {}, {}};
+
+    bufferlist bl;
+    const auto size = obj->get_size();
+    if (size > 0) {
+      ret = read_op->read(0, size - 1, bl, y, this);
+      if (ret < 0) return {ret, {}, {}};
+    }
+
+    bufferlist etag_bl;
+    ret = read_op->get_attr(this, RGW_ATTR_ETAG, etag_bl, y);
+    std::string etag = (ret >= 0) ? etag_bl.to_str() : std::string{};
+
+    return {0, bl.to_str(), std::move(etag)};
+  }
+
+  // ---- high-level lock protocol ----
+
+  // Distributed lock acquisition protocol using S3 conditional operations.
+  //
+  // Step 1 — GET: read the existing lock object (body + ETag).
+  //   - if no lock exists (ENOENT): proceed to step 3 (no lock to clear).
+  //   - if lock exists and is fresh (age < TTL): return empty (build in progress).
+  //   - if lock exists and is stale (age >= TTL): proceed to step 2.
+  //
+  // Step 2 — conditional DELETE (if_match=ETag from step 1):
+  //   delete the stale lock only if its ETag still matches what we read.
+  //   race condition: multiple instances may detect the same stale lock.
+  //   - DELETE succeeds: we removed the stale lock. proceed to step 3.
+  //   - ENOENT: another reclaimer already deleted it, but no new lock exists
+  //     yet. proceed to step 3 to compete for the new lock.
+  //   - PRECONDITION_FAILED: the lock was already reclaimed by another instance
+  //     (D) which created a fresh lock with a different ETag. D holds the lock.
+  //     return empty — no point attempting the PUT.
+  //
+  // Step 3 — conditional PUT (if_nomatch="*"):
+  //   create the lock object with a fresh random token. RADOS exclusive-create
+  //   guarantees exactly one concurrent caller succeeds.
+  //   - if PUT succeeds: lock acquired, return the token.
+  //   - if PUT fails (PRECONDITION_FAILED): another instance won, return empty.
+  //
+  // note: the main loop periodically refreshes the lock timestamp during builds,
+  // so the TTL does not need to exceed the build duration. if the builder crashes,
+  // refreshes stop and the lock becomes reclaimable after TTL expires.
+  struct lock_acquire_result {
+    std::string token;
+    std::string etag;
+  };
+
+  lock_acquire_result try_acquire_lock(const std::string& bucket_name,
+                                       const std::string& index_name,
+                                       optional_yield y) {
+    const std::string lock_key = make_lock_key(index_name);
+
+    // step 1: read existing lock
+    auto lock_info = get_lock_object(bucket_name, lock_key, y);
+    if (lock_info.ret == 0) {
+      lock_body_t existing_lock;
+      if (!existing_lock.from_json_str(lock_info.body)) {
+        ldpp_dout(this, 1) << "ERROR: failed to parse lock body for " << bucket_name << "." << index_name << dendl;
+        return {};
+      }
+      auto now = std::chrono::duration_cast<std::chrono::seconds>(
+          std::chrono::system_clock::now().time_since_epoch()).count();
+      int64_t lock_ttl = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_lock_ttl_seconds");
+      int64_t age = now - existing_lock.timestamp;
+
+      if (existing_lock.timestamp > 0 && age < lock_ttl) {
+        ldpp_dout(this, 5) << "INFO: lock held for " << bucket_name << "." << index_name
+            << " by " << existing_lock.token
+            << " (age=" << age << "s)" << dendl;
+        return {};
+      }
+
+      // step 2: stale lock — conditional delete using ETag from step 1
+      ldpp_dout(this, 5) << "INFO: deleting stale lock for " << bucket_name
+          << "." << index_name << " (age=" << age << "s, ttl=" << lock_ttl << "s)" << dendl;
+      int del_ret = delete_lock_object(bucket_name, lock_key, lock_info.etag, y);
+      if (del_ret == -ERR_PRECONDITION_FAILED) {
+        ldpp_dout(this, 5) << "INFO: stale lock for " << bucket_name << "." << index_name
+            << " was already reclaimed by another instance" << dendl;
+        return {};
+      }
+    }
+
+    // step 3: conditional create — only one caller wins
+    // create-if-absent (atomic create)
+    std::string token = generate_lock_token();
+    std::string etag;
+    int ret = put_lock_object(bucket_name, lock_key, token, y, &etag);
+    if (ret == 0) {
+      ldpp_dout(this, 5) << "INFO: acquired lock for " << bucket_name
+          << "." << index_name << " token=" << token << dendl;
+      return {std::move(token), std::move(etag)};
+    }
+
+    if (ret == -ERR_PRECONDITION_FAILED) {
+      ldpp_dout(this, 5) << "INFO: lock acquired by another instance for "
+          << bucket_name << "." << index_name << dendl;
+    } else {
+      ldpp_dout(this, 1) << "ERROR: failed to acquire lock for " << bucket_name
+          << "." << index_name << " ret=" << ret << dendl;
+    }
+    return {};
+  }
+
+  // Release the lock only if we still own it.
+  //
+  // Step 1 — GET: read the lock body and ETag.
+  // Step 2 — token check: if the token doesn't match ours, another instance
+  //   reclaimed the lock (e.g., our build exceeded the TTL). skip the delete.
+  // Step 3 — conditional DELETE (if_match=ETag from step 1): delete only if the
+  //   lock hasn't been replaced since we read it. this closes the TOCTOU window
+  //   between the GET and DELETE — if another instance reclaimed the lock between
+  //   our GET and DELETE, the ETag changed and the DELETE fails safely.
+  //
+  // note: in the normal case (build completes within TTL), no other instance
+  // touches the lock, so the token check and conditional DELETE are redundant
+  // safety. they matter only when the build exceeds TTL.
+  void release_lock(const std::string& bucket_name,
+                    const std::string& index_name,
+                    const std::string& token,
+                    optional_yield y) {
+    const std::string lock_key = make_lock_key(index_name);
+
+    // step 1: read lock
+    auto lock_info = get_lock_object(bucket_name, lock_key, y);
+    if (lock_info.ret < 0) return;
+
+    // step 2: verify ownership
+    lock_body_t existing_lock;
+    if (!existing_lock.from_json_str(lock_info.body)) {
+      ldpp_dout(this, 1) << "ERROR: failed to parse lock body for " << bucket_name << "." << index_name << dendl;
+      return;
+    }
+    if (existing_lock.token != token) {
+      ldpp_dout(this, 5) << "WARNING: lock for " << bucket_name << "." << index_name
+          << " owned by another instance (ours=" << token
+          << ", current=" << existing_lock.token << "), not releasing" << dendl;
+      return;
+    }
+
+    // step 3: conditional delete using ETag from step 1
+    // in the case some other instance reclaimed the lock between our GET and DELETE, 
+    // the ETag changed and this delete fails safely without deleting the new holder's lock.
+    int ret = delete_lock_object(bucket_name, lock_key, lock_info.etag, y);
+    if (ret == -ERR_PRECONDITION_FAILED) {
+      ldpp_dout(this, 5) << "INFO: lock for " << bucket_name << "." << index_name
+          << " was reclaimed between read and delete, not releasing" << dendl;
+    } else if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(this, 1) << "ERROR: failed to release lock for " << bucket_name
+          << "." << index_name << " ret=" << ret << dendl;
+    }
+  }
+
+  // ============================================================================
+  // Vector index build
+  // ============================================================================
+
+  static LanceDBIndexType string_to_index_type(const std::string& s) {
+    if (s == "ivf_pq") return LANCEDB_INDEX_IVF_PQ;
+    if (s == "ivf_hnsw_pq") return LANCEDB_INDEX_IVF_HNSW_PQ;
+    if (s == "ivf_hnsw_sq") return LANCEDB_INDEX_IVF_HNSW_SQ;
+    if (s == "ivf_flat") return LANCEDB_INDEX_IVF_FLAT;
+    return LANCEDB_INDEX_AUTO;
+  }
+
+  int run_vector_index_build(LanceDBTable* table, LanceDBDistanceType distance_type) {
+    LanceDBVectorIndexConfig vec_config = {};
+    vec_config.num_partitions = -1;    // auto
+    vec_config.num_sub_vectors = -1;   // auto
+    vec_config.max_iterations = -1;    // default
+    vec_config.sample_rate = 0.0f;     // default
+    vec_config.distance_type = distance_type;
+    vec_config.accelerator = nullptr;  // CPU
+    vec_config.replace = 1;            // replace existing index
+
+    const auto index_type_str = cct->_conf.get_val<std::string>("rgw_s3vector_index_type");
+    const LanceDBIndexType index_type = string_to_index_type(index_type_str);
+
+    const char* columns[] = {data_field};
+    char* error_message = nullptr;
+
+    const LanceDBError result = lancedb_table_create_vector_index(
+        table, columns, 1, index_type, &vec_config, &error_message);
+
+    if (result != LANCEDB_SUCCESS) {
+      const bool permanent = (result == LANCEDB_LANCE ||
+                              result == LANCEDB_INVALID_INPUT ||
+                              result == LANCEDB_NOT_SUPPORTED);
+      ldpp_dout(this, 0) << "ERROR: lancedb_table_create_vector_index failed"
+          << " (error_code=" << result
+          << ", " << (permanent ? "permanent" : "transient") << "): "
+          << (error_message ? error_message : "unknown") << dendl;
+      lancedb_free_string(error_message);
+      return permanent ? -ENOTSUP : -EIO;
+    }
+    return 0;
+  }
+
+  // ============================================================================
+  // Core table processing: stats check → lock → build → cleanup
+  // ============================================================================
+
+  static constexpr int RESULT_SUCCESS = 0;
+  static constexpr int RESULT_SKIPPED = 1;
+  static constexpr int RESULT_ALREADY_BUILDING = 2;
+  static constexpr int RESULT_REBUILD_DISABLED = 3;
+
+  void restore_counters(const table_name_t& table_name,
+                        uint64_t inserts, uint64_t deletes) {
+    std::shared_lock sl(tables_mutex);
+    auto it = tables.find(table_name);
+    if (it != tables.end()) {
+      if (inserts > 0) {
+        it->second.insert_count.fetch_add(inserts, std::memory_order_relaxed);
+      }
+      if (deletes > 0) {
+        it->second.delete_count.fetch_add(deletes, std::memory_order_relaxed);
+      }
+    }
+  }
+
+  int process_table(const table_name_t& table_name,
+                    uint64_t local_inserts, uint64_t local_deletes,
+                    boost::asio::yield_context yield) {
+    const auto& bucket_name = table_name.first;
+    const auto& index_name = table_name.second;
+
+    // step 1: check if this RGW is already building this table (cheapest check).
+    {
+      std::lock_guard lg(active_builds_mutex);
+      if (active_builds.count(table_name)) {
+        ldpp_dout(this, 5) << "INFO: this RGW is already building "
+            << bucket_name << "." << index_name << ", skipping"
+            << " (local_inserts=" << local_inserts
+            << ", local_deletes=" << local_deletes << ")" << dendl;
+        restore_counters(table_name, local_inserts, local_deletes);
+        return RESULT_ALREADY_BUILDING;
+      }
+    }
+
+    // step 2: read ratio-based config
+    const double insert_ratio_threshold = cct->_conf.get_val<double>("rgw_s3vector_index_insert_rebuild_ratio");
+    const double delete_ratio_threshold = cct->_conf.get_val<double>("rgw_s3vector_index_delete_rebuild_ratio");
+    if (insert_ratio_threshold <= 0.0 && delete_ratio_threshold <= 0.0) {
+      ldpp_dout(this, 20) << "INFO: automatic index rebuild disabled for "
+          << bucket_name << "." << index_name << dendl;
+      return RESULT_REBUILD_DISABLED;
+    }
+
+    // step 3: open table
+    LanceDBConnection* conn = s3vector::connect(this, driver, nullptr, nullptr, bucket_name);
+    if (!conn) {
+      ldpp_dout(this, 5) << "WARNING: cannot connect to database for "
+          << bucket_name << ", skipping" << dendl;
+      return -EIO;
+    }
+    LanceDBTable* table = lancedb_connection_open_table(conn, index_name.c_str());
+    if (!table) {
+      ldpp_dout(this, 5) << "WARNING: cannot open table "
+          << bucket_name << "." << index_name << ", may have been deleted" << dendl;
+      lancedb_connection_free(conn);
+      return -ENOENT;
+    }
+
+    struct table_guard_t {
+      LanceDBTable* table;
+      LanceDBConnection* conn;
+      ~table_guard_t() {
+        lancedb_table_free(table);
+        lancedb_connection_free(conn);
+      }
+    } table_guard{table, conn};
+
+    // step 4: get index stats(lanceDB index stats are global ground truth, no lock needed, it does not reflect deleted rows)
+    auto stats_result = get_vector_index_stats(table);
+    if (!stats_result.ok) {
+      ldpp_dout(this, 1) << "ERROR: failed to get index stats for "
+          << bucket_name << "." << index_name << dendl;
+      return -EIO;
+    }
+    const auto& vector_index_status = stats_result.stats;
+
+    ldpp_dout(this, 1) << "INFO: index stats for " << bucket_name << "." << index_name
+        << ": indexed=" << vector_index_status.num_indexed_rows
+        << " unindexed=" << vector_index_status.num_unindexed_rows
+        << " num_indices=" << vector_index_status.num_indices
+        << " local_inserts=" << local_inserts
+        << " local_deletes=" << local_deletes << dendl;
+
+    // step 4b: minimum row count check
+    const uint64_t min_rows = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_min_rows");
+    const uint64_t total_rows_int = vector_index_status.num_indexed_rows + vector_index_status.num_unindexed_rows;
+    if (total_rows_int < min_rows) {
+      ldpp_dout(this, 5) << "INFO: " << bucket_name << "." << index_name
+          << " has " << total_rows_int << " rows, below minimum " << min_rows
+          << " for index build" << dendl;
+      return RESULT_SKIPPED;
+    }
+
+    // step 5: insert ratio pre-check (stats are global ground truth, no lock needed)
+    const double total_rows = static_cast<double>(total_rows_int);
+    bool insert_rebuild = false;
+    if (total_rows > 0 && insert_ratio_threshold > 0.0) {
+      const double insert_ratio = static_cast<double>(vector_index_status.num_unindexed_rows) / total_rows;
+      insert_rebuild = (insert_ratio >= insert_ratio_threshold);
+      ldpp_dout(this, 5) << "INFO: insert ratio for " << bucket_name << "." << index_name
+          << ": " << insert_ratio << " (threshold=" << insert_ratio_threshold << ")" << dendl;
+    }
+
+    if (!insert_rebuild && local_deletes == 0) {
+      ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
+          << " below insert threshold and no local deletes, skipping" << dendl;
+      return RESULT_SKIPPED;
+    }
+
+    // step 6: acquire distributed lock.
+    // needed to read/write global_delete_count atomically (LanceDB metadata
+    // commits are not mutual-exclusive — concurrent writes cause CommitConflict)
+    // and to protect the rebuild itself.
+    optional_yield y(yield);
+    auto lock_result = try_acquire_lock(bucket_name, index_name, y);
+    if (lock_result.token.empty()) {
+      ldpp_dout(this, 5) << "INFO: lock held by another process for "
+          << bucket_name << "." << index_name << ", skipping" << dendl;
+      restore_counters(table_name, local_inserts, local_deletes);
+      return RESULT_SKIPPED;
+    }
+    const std::string& lock_token = lock_result.token;
+
+    {
+      std::lock_guard lg(active_builds_mutex);
+      active_builds.insert(table_name);
+      active_locks[table_name] = {lock_token, lock_result.etag,
+                                   ceph::coarse_real_clock::now(), false};
+    }
+
+    struct lock_guard_t {
+      Manager* mgr;
+      const table_name_t& table_name;
+      const std::string& bucket_name;
+      const std::string& index_name;
+      const std::string& token;
+      optional_yield y;
+      ~lock_guard_t() {
+        {
+          std::lock_guard lg(mgr->active_builds_mutex);
+          mgr->active_builds.erase(table_name);
+          mgr->active_locks.erase(table_name);
+        }
+        mgr->release_lock(bucket_name, index_name, token, y);
+      }
+    } lock_guard{this, table_name, bucket_name, index_name, lock_token, y};
+
+    // step 7: read build state under lock — fresh global_delete_count
+    build_state_t prev_state;
+    read_build_state(table, prev_state);
+    const uint64_t global_delete_count = prev_state.global_delete_count + local_deletes;
+
+    // step 8: delete ratio check (requires global counter, must be under lock)
+    bool delete_rebuild = false;
+    if (vector_index_status.num_indexed_rows > 0 && delete_ratio_threshold > 0.0 && global_delete_count > 0) {
+      const double delete_ratio = static_cast<double>(global_delete_count)
+          / (static_cast<double>(vector_index_status.num_indexed_rows) + global_delete_count);
+      delete_rebuild = (delete_ratio >= delete_ratio_threshold);
+      ldpp_dout(this, 5) << "INFO: delete ratio for " << bucket_name << "." << index_name
+          << ": " << delete_ratio << " (threshold=" << delete_ratio_threshold
+          << ", global_delete_count=" << global_delete_count << ")" << dendl;
+    }
+
+    if (!insert_rebuild && !delete_rebuild) {
+      ldpp_dout(this, 1) << "INFO: " << bucket_name << "." << index_name
+          << " below rebuild thresholds, skipping" << dendl;
+      if (local_deletes > 0) {
+        prev_state.global_delete_count = global_delete_count;
+        write_build_state(table, prev_state);
+      }
+      return 1;
+    }
+
+    // step 9: record build state
+    build_state_t state;
+    state.build_in_progress = true;
+    state.build_started_at = std::chrono::duration_cast<std::chrono::seconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    state.build_lease_seconds = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_build_lease_seconds");
+    state.builder_id = lock_token;
+    state.global_delete_count = global_delete_count;
+    if (int ret = write_build_state(table, state); ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: failed to record build state for "
+          << bucket_name << "." << index_name
+          << ", aborting rebuild (ret=" << ret << ")" << dendl;
+      return ret;
+    }
+
+    // step 10: get distance metric for index config
+    DistanceMetric metric = s3vector::get_distance_metric(table, this);
+    LanceDBDistanceType distance_type = to_lancedb_distance(metric);
+
+    // step 11: run the vector index build
+    ldpp_dout(this, 1) << "INFO: starting vector index build for "
+        << bucket_name << "." << index_name
+        << " (unindexed=" << vector_index_status.num_unindexed_rows
+        << ", insert_rebuild=" << insert_rebuild
+        << ", delete_rebuild=" << delete_rebuild << ")" << dendl;
+
+    int build_ret = run_vector_index_build(table, distance_type);
+
+    // step 12: check if the lock was lost during the build (detected by main-loop refresh)
+    bool lock_lost = false;
+    {
+      std::lock_guard lg(active_builds_mutex);
+      auto it = active_locks.find(table_name);
+      if (it != active_locks.end()) {
+        lock_lost = it->second.lock_lost;
+      }
+    }
+
+    if (lock_lost) {
+      ldpp_dout(this, 1) << "WARNING: lock was lost during build for "
+          << bucket_name << "." << index_name
+          << " — skipping metadata update" << dendl;
+    } else {
+      // step 13: mark build complete in table metadata
+      build_state_t post_state;
+      if (int ret = read_build_state(table, post_state); ret < 0) {
+        ldpp_dout(this, 1) << "WARNING: failed to read build state after build for "
+            << bucket_name << "." << index_name << dendl;
+      }
+      post_state.build_in_progress = false;
+      post_state.build_started_at = 0;
+      if (build_ret == 0 && delete_rebuild) {
+        post_state.global_delete_count = 0;
+      }
+      if (int ret = write_build_state(table, post_state); ret < 0) {
+        ldpp_dout(this, 1) << "WARNING: failed to clear build state for "
+            << bucket_name << "." << index_name << dendl;
+      }
+    }
+
+    if (build_ret == 0) {
+      auto post_stats = get_vector_index_stats(table);
+      if (post_stats.ok) {
+        ldpp_dout(this, 1) << "INFO: vector index build complete for "
+            << bucket_name << "." << index_name
+            << " (indexed=" << post_stats.stats.num_indexed_rows
+            << ", unindexed=" << post_stats.stats.num_unindexed_rows << ")" << dendl;
+      } else {
+        ldpp_dout(this, 1) << "INFO: vector index build complete for "
+            << bucket_name << "." << index_name << dendl;
+      }
+    } else if (build_ret == -ENOTSUP) {
+      ldpp_dout(this, 1) << "WARNING: vector index build not possible for "
+          << bucket_name << "." << index_name
+          << " (permanent error, not retrying)" << dendl;
+    } else {
+      ldpp_dout(this, 1) << "ERROR: vector index build FAILED for "
+          << bucket_name << "." << index_name
+          << " (transient error, will retry)" << dendl;
+      restore_counters(table_name, local_inserts, local_deletes);
+    }
+
+    return build_ret;
+  }
+
+  // ============================================================================
+  // Lock refresh: keep distributed locks alive during long builds
+  // ============================================================================
+
+  void refresh_active_locks(boost::asio::yield_context yield) {
+    std::lock_guard lg(active_builds_mutex);
+    if (active_locks.empty()) return;
+
+    const auto now = ceph::coarse_real_clock::now();
+    const uint64_t lock_ttl = cct->_conf.get_val<uint64_t>("rgw_s3vector_index_lock_ttl_seconds");
+    const auto refresh_interval = std::chrono::seconds(lock_ttl / 3);
+
+    for (auto& [name, lock] : active_locks) {
+      if (lock.lock_lost) continue;
+      if (now - lock.last_refresh < refresh_interval) continue;
+
+      const std::string lock_key = make_lock_key(name.second);
+      auto result = refresh_lock_object(name.first, lock_key,
+                                        lock.token, lock.etag,
+                                        optional_yield(yield));
+      if (result.ret == 0) {
+        lock.etag = result.new_etag;
+        lock.last_refresh = now;
+        ldpp_dout(this, 10) << "INFO: refreshed lock for "
+            << name.first << "." << name.second << dendl;
+      } else if (result.ret == -ERR_PRECONDITION_FAILED) {
+        lock.lock_lost = true;
+        ldpp_dout(this, 1) << "WARNING: lock lost (stolen) for "
+            << name.first << "." << name.second
+            << " during active build" << dendl;
+      } else {
+        ldpp_dout(this, 1) << "WARNING: failed to refresh lock for "
+            << name.first << "." << name.second
+            << " (ret=" << result.ret << "), will retry" << dendl;
+      }
+    }
+  }
+
+  // ============================================================================
+  // Main processing loop
+  // ============================================================================
+
+  void process_tables(boost::asio::yield_context yield) {
+    ldpp_dout(this, 5) << "INFO: start processing tables" << dendl;
     while (!shutdown) {
-      std::vector<table_name_t> tables_to_process;
-      const auto message_count = messages.consume_all([&tables_to_process, this](auto message) {
+      const int max_concurrent = cct->_conf.get_val<int64_t>("rgw_s3vector_max_concurrent_rebuilds");
+      const auto cooldown = std::chrono::seconds(
+          cct->_conf.get_val<uint64_t>("rgw_s3vector_index_rebuild_cooldown"));
+
+      // 1. consume control messages (REMOVE / SESSION_CREATE / SESSION_DELETE)
+      messages.consume_all([this](auto message) {
+          // this message consumption should be quite fast, since there is no blocking I/O and no long-running operations.
         std::unique_ptr<message_t> message_guard(message);
         const auto table_name = std::move(message->table_name);
         switch(message->type) {
           case message_t::Op::REMOVE:
-            ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
-            tables.erase(table_name);
-            return;
-          case message_t::Op::UPDATE:
             {
-              ldpp_dout(this, 20) << "INFO: received update message for table: " << table_name.first << "." << table_name.second << dendl;
-              auto [it, inserted] = tables.emplace(table_name, ceph::coarse_real_clock::now());
-              if (inserted) {
-                ldpp_dout(this, 20) << "INFO: will try to process new table: " << table_name.first << "." << table_name.second << dendl;
-                tables_to_process.push_back(table_name);
-                return;
-              }
-              const auto now = ceph::coarse_real_clock::now();
-              const auto time_since_last_process = now - it->second;
-              if (time_since_last_process > std::chrono::milliseconds(5000)) {
-                ldpp_dout(this, 20) << "INFO: will try to process table: " << table_name.first << "." << table_name.second <<
-                ". " << time_since_last_process << " passed since last processing" << dendl;
-                it->second = now;
-                tables_to_process.push_back(table_name);
-              } else {
-                ldpp_dout(this, 20) << "INFO: will skip processing table: " << table_name.first << "." << table_name.second <<
-                ". only " << time_since_last_process << " passed since last processing" << dendl;
-              }
+              ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
+              std::unique_lock ul(tables_mutex);//exclusive lock to erase the table from the map, since we don't want any other thread to be reading or writing to this table while it's being removed.(short time)
+              tables.erase(table_name);
               return;
-            }            
+            }
           case message_t::Op::SESSION_CREATE:
             {
               ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << table_name.first << dendl;
@@ -214,7 +1072,7 @@ private:
             }
           case message_t::Op::SESSION_DELETE:
             {
-              ldpp_dout(this, 20) << "INFO: received session delete message for bucket: " << table_name.first << dendl; 
+              ldpp_dout(this, 20) << "INFO: received session delete message for bucket: " << table_name.first << dendl;
               std::unique_lock l(sessions_mutex);
               if (sessions.erase(table_name.first) > 0) {
                 ldpp_dout(this, 20) << "INFO: deleted session for bucket: " << table_name.first << dendl;
@@ -224,36 +1082,89 @@ private:
               return;
             }
           default:
-            ldpp_dout(this, 1) << "ERROR: received message with unknown type for bucket: " << table_name.first << " index: " << table_name.second << dendl;
-            return; 
+            return;
         }
       });
 
-      tokens_waiter tw(this);
-      for (const auto& table_name : tables_to_process) {
-        // start processing a table
-        tokens_waiter::token token(&tw);
-        boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
-            [this, token = std::move(token), table_name](boost::asio::yield_context yield) {
-          const int rc = process_table(table_name, yield);
-          if (rc < 0) {
-            ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first << "." << table_name.second << " with error code: " << rc << dendl;
-            tables[table_name] = ceph::coarse_real_clock::now() - std::chrono::milliseconds(5000); // set last processed time to past to allow retry on next loop
+      // 2. scan tables for pending mutations
+      {
+        std::shared_lock sl(tables_mutex);//this lock is held only for the duration of scanning the tables map, not for the entire processing of each table.
+        const auto now = ceph::coarse_real_clock::now();
+        for (auto& [name, state] : tables) {
+          if (active_rebuild_count.load(std::memory_order_relaxed) >= max_concurrent) {
+            ldpp_dout(this, 1) << "INFO: rebuild concurrency limit reached"
+                << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
+                << ", max_concurrent=" << max_concurrent
+                << "), deferring remaining tables" << dendl;
+            break;
           }
-        }, [] (std::exception_ptr eptr) {
-          if (eptr) std::rethrow_exception(eptr);
-        });
-      }
-      if (!tables_to_process.empty()) {
-        // wait for all pending work to finish
-        tw.async_wait(yield);
-      }
 
-      if (message_count == 0) {
-        // if no messages, sleep for a while before checking again
-        ldpp_dout(this, 20) << "INFO: no messages to process" << dendl;
-        async_sleep(yield, idle_sleep);
-      }
+          const uint64_t inserts = state.insert_count.load(std::memory_order_relaxed);
+          const uint64_t deletes = state.delete_count.load(std::memory_order_relaxed);
+          if (inserts == 0 && deletes == 0) {
+            continue;
+          }
+          if (now - state.last_rebuild_time < cooldown) {
+            ldpp_dout(this, 20) << "INFO: table " << name.first << "." << name.second
+                << " under cooldown, deferring (inserts=" << inserts
+                << ", deletes=" << deletes << ")" << dendl;
+            continue;
+          }
+          {
+            std::lock_guard lg(active_builds_mutex);
+            if (active_builds.count(name)) {
+              continue;
+            }
+          }
+
+          state.insert_count.fetch_sub(inserts, std::memory_order_relaxed);
+          state.delete_count.fetch_sub(deletes, std::memory_order_relaxed);
+          active_rebuild_count.fetch_add(1, std::memory_order_relaxed);
+
+          ldpp_dout(this, 1) << "INFO: spawning rebuild coroutine for "
+              << name.first << "." << name.second
+              << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
+              << "/" << max_concurrent
+              << ", inserts=" << inserts
+              << ", deletes=" << deletes << ")" << dendl;
+
+          boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
+              [this, table_name = name, inserts, deletes](boost::asio::yield_context yield) {
+            const int rc = process_table(table_name, inserts, deletes, yield);
+            if (rc == 0) {
+              std::shared_lock sl(tables_mutex);//short time lock to update last_rebuild_time after successful rebuild
+              auto it = tables.find(table_name);
+              if (it != tables.end()) {
+                it->second.last_rebuild_time = ceph::coarse_real_clock::now();
+              }
+            } else if (rc < 0) {
+              ldpp_dout(this, 1) << "ERROR: failed to process table: " << table_name.first
+                  << "." << table_name.second << " with error code: " << rc << dendl;
+            }
+            ldpp_dout(this, 1) << "INFO: rebuild coroutine finished for "
+                << table_name.first << "." << table_name.second
+                << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
+                << ", rc=" << rc << ")" << dendl;
+          }, [this, table_name = name, inserts, deletes] (std::exception_ptr eptr) {
+            if (eptr) {
+              try {
+                std::rethrow_exception(eptr);
+              } catch (const std::exception& e) {
+                ldpp_dout(this, 0) << "ERROR: rebuild coroutine exception for "
+                    << table_name.first << "." << table_name.second
+                    << ": " << e.what() << dendl;
+              }
+              restore_counters(table_name, inserts, deletes);
+            }
+            active_rebuild_count.fetch_sub(1, std::memory_order_relaxed);
+          });
+        }
+      }// end of scan tables for pending mutations
+
+      // 3. refresh distributed lock timestamps for active builds
+      refresh_active_locks(yield);
+
+      async_sleep(yield, idle_sleep);
     }
     ldpp_dout(this, 5) << "INFO: manager stopped. done processing all table and session operations" << dendl;
   }
@@ -290,25 +1201,28 @@ public:
   void init() {
     boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
         [this](boost::asio::yield_context yield) {
-          process_messages(yield);
+          process_tables(yield);
         }, [] (std::exception_ptr eptr) {
           if (eptr) std::rethrow_exception(eptr);
         });
 
-    // start the worker threads to do the actual queue processing
-    // TODO: use multiple threads
-    workers.emplace_back(std::thread([this]() {
-      ceph_pthread_setname("notif-worker");
-      try {
-        ldpp_dout(this, 10) << "INFO: worker started" << dendl;
-        io_context.run();
-        ldpp_dout(this, 10) << "INFO: worker ended" << dendl;
-      } catch (const std::exception& err) {
-        ldpp_dout(this, 1) << "ERROR: worker failed with error: " << err.what() << dendl;
-        throw err;
-      }
-    }));
-    ldpp_dout(this, 10) << "INfO: started manager" << dendl;
+    const int num_workers = std::max(1,
+        static_cast<int>(cct->_conf.get_val<int64_t>("rgw_s3vector_background_workers")));
+    for (int i = 0; i < num_workers; ++i) {
+      workers.emplace_back(std::thread([this, i]() {
+        const auto name = fmt::format("s3v-worker-{}", i);
+        ceph_pthread_setname(name.c_str());
+        try {
+          ldpp_dout(this, 10) << "INFO: worker " << i << " started" << dendl;
+          io_context.run();
+          ldpp_dout(this, 10) << "INFO: worker " << i << " ended" << dendl;
+        } catch (const std::exception& err) {
+          ldpp_dout(this, 1) << "ERROR: worker " << i << " failed with error: " << err.what() << dendl;
+          throw err;
+        }
+      }));
+    }
+    ldpp_dout(this, 10) << "INFO: started manager with " << num_workers << " worker threads" << dendl;
   }
 
   bool notify_index(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, message_t::Op op) {
@@ -324,6 +1238,47 @@ public:
     }
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index: queue is full" << dendl;
     return false;
+  }
+
+  bool notify_index_mutation(const DoutPrefixProvider* dpp,
+                             const std::string& bucket_name,
+                             const std::string& index_name,
+                             uint64_t row_count,
+                             bool is_delete) {
+    if (shutdown) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index mutation: manager is shutting down" << dendl;
+      return false;
+    }
+    const table_name_t table_name(bucket_name, index_name);
+
+    {
+      std::shared_lock sl(tables_mutex);
+      auto it = tables.find(table_name);
+      if (it != tables.end()) {
+        if (is_delete) {
+          it->second.delete_count.fetch_add(row_count, std::memory_order_relaxed);
+        } else {
+          it->second.insert_count.fetch_add(row_count, std::memory_order_relaxed);
+        }
+        ldpp_dout(dpp, 20) << "INFO: incremented " << (is_delete ? "delete" : "insert")
+            << " counter by " << row_count << " for " << bucket_name << "." << index_name << dendl;
+        return true;
+      }
+    }
+
+    {
+      std::unique_lock ul(tables_mutex);//exclusive lock to create a new entry in the tables map if it doesn't exist
+      auto [it, inserted] = tables.emplace(table_name, table_state_t{});
+      if (is_delete) {
+        it->second.delete_count.fetch_add(row_count, std::memory_order_relaxed);
+      } else {
+        it->second.insert_count.fetch_add(row_count, std::memory_order_relaxed);
+      }
+      ldpp_dout(dpp, 20) << "INFO: " << (inserted ? "created entry and incremented" : "incremented")
+          << " " << (is_delete ? "delete" : "insert")
+          << " counter by " << row_count << " for " << bucket_name << "." << index_name << dendl;
+    }
+    return true;
   }
 
   bool notify_session(const DoutPrefixProvider* dpp, const std::string& bucket_name, message_t::Op op) {
@@ -384,12 +1339,20 @@ void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver) {
   init(dpp, driver);
 }
 
-bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
+bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, uint64_t row_count) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table update: manager is not initialized" << dendl;
     return false;
   }
-  return s_manager->notify_index(dpp, bucket_name, index_name, Manager::message_t::Op::UPDATE);
+  return s_manager->notify_index_mutation(dpp, bucket_name, index_name, row_count, false);
+}
+
+bool notify_index_delete(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, uint64_t row_count) {
+  if (!s_manager) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table delete: manager is not initialized" << dendl;
+    return false;
+  }
+  return s_manager->notify_index_mutation(dpp, bucket_name, index_name, row_count, true);
 }
 
 bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
@@ -427,4 +1390,3 @@ bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& buc
 
 
 } // namespace rgw::s3vector
-
