@@ -1943,12 +1943,20 @@ class Module(MgrModule, OrchestratorClientMixin):
                 cast(MetricCounter, sum_metric).add(duration, (method_name,))
                 cast(MetricCounter, count_metric).add(1, (method_name,))
 
+    @profile_method()
     def get_pool_repaired_objects(self) -> None:
-        dump = self.get('pg_dump')
-        for stats in dump['pool_stats']:
+        # 'pool_stats' is PGMap::dump_pool_stats(), which is exactly the
+        # 'pool_stats' section that the far larger 'pg_dump' embeds -- see
+        # PGMap::dump(), which produces it by calling dump_pool_stats().
+        # Asking for 'pg_dump' here additionally dumped dump_basic(),
+        # dump_pg_stats() (every PG in the cluster) and dump_osd_stats()
+        # into Python objects under the GIL, all of it discarded, just to
+        # read one counter per pool.
+        stats = self.get('pool_stats')
+        for pool in stats['pool_stats']:
             path = 'pool_objects_repaired'
-            self.metrics[path].set(stats['stat_sum']['num_objects_repaired'],
-                                   labelvalues=(stats['poolid'],))
+            self.metrics[path].set(pool['stat_sum']['num_objects_repaired'],
+                                   labelvalues=(pool['poolid'],))
 
     def get_all_daemon_health_metrics(self) -> None:
         daemon_metrics = self.get_daemon_health_metrics()
