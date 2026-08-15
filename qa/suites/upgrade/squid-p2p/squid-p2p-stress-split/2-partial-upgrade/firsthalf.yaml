@@ -10,4 +10,7 @@ tasks:
 - ceph.restart:
     daemons: [mon.a,mon.b,mon.c,mgr.x,osd.0,osd.1,osd.2,osd.3]
     mon-health-to-clog: false
+    wait-for-healthy: false
+- sequential: [ignore-auth-warn-pkg]
+- ceph.healthy:
 - print: "**** done ceph.restart 1st half"
