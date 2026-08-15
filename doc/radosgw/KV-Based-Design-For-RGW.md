@@ -8,14 +8,22 @@ An S3-compatible object store must maintain metadata for every object:
 - User-visible attributes — content-type, etag, tags, ACLs, checksums.
 - Internal data attributes — manifest, compression, encryption.
 
-This metadata must be accessible independently of the data itself.
-HEAD requests return it without reading any data.
+This metadata must be accessible independently of the data itself. \
+HEAD requests return it without reading any data. \
 Bucket listing must enumerate it efficiently across potentially billions of objects.
 
-In RGW, RADOS head objects serve this purpose. Every S3 object has a corresponding head object that holds its identity, attributes, and a manifest pointing to data chunks.
+In RGW, RADOS head objects serve this purpose.\
+Every S3 object has a corresponding head object that holds its:
+- identity
+- attributes
+- and a manifest pointing to data chunks.
 
-For small objects, the data itself is inlined into the head object.\
-For multipart uploads, storage-class placement, versioning (OLH), and cloud tiering — the head object acts as a pure metadata pointer, a redirection layer to data stored elsewhere.
+The head object acts as a metadata pointer, a redirection layer to data stored elsewhere:
+- multipart uploads
+- storage-class placement
+- versioning (OLH) 
+
+There is a special case where the data itself is inlined into the head object - when object size is smaller than 4MB and is non of the above cases.
 
 In effect, RGW is already using head objects as a de facto KV system, but implemented with full RADOS objects carrying all their associated overhead.
 
@@ -34,7 +42,6 @@ Each S3 object, no matter how small, requires its own RADOS object.
 - Prevents aggregating small objects into larger blobs.
 - Every small object carries full RADOS overhead: OSD tracking, PG membership, recovery bookkeeping.
 - Recovery cost scales with object count rather than data volume.
-- The storage tier cannot optimize for large sequential I/O.
 
 **2. Versioning (OLH).**
 Object Lifecycle Head objects add complexity beyond the extra RADOS object itself:
@@ -51,12 +58,13 @@ Object Lifecycle Head objects add complexity beyond the extra RADOS object itsel
 RADOS transactions are scoped to a single PG. Objects mapped to different PGs (via CRUSH) cannot share a transaction.\
 Every S3 mutation touches at least two RADOS objects — the head object and the bucket-index entry — which are on different PGs. There is no way to update them atomically.
 
-- **PUT** — writes the head object and updates the bucket-index entry in two separate operations. A crash between them leaves the bucket-index inconsistent with the actual object state.
-- **DELETE** — removes the bucket-index entry and deletes the head object separately. A crash can leave an orphaned head object (invisible but consuming storage) or a dangling bucket-index entry (pointing to nothing).
+- **PUT** — writes the head object and updates the bucket-index entry in two separate operations.
+- **DELETE** — removes the bucket-index entry and deletes the head object separately.
 - **Versioning** — the worst case. OLH, head object, and bucket-index are three separate RADOS objects, potentially on three different OSDs. Updating the version pointer, writing the new head, and updating the index are three non-atomic steps.
 - **CompleteMultipartUpload** — writes the final head object, updates the bucket-index, and cleans up multipart part objects. Multiple non-atomic operations across different PGs.
 
-A KV store eliminates this problem. The bucket-index is gone — all related entries can be committed in a single transaction.
+A KV store eliminates this problem.\
+The bucket-index is gone — all related entries can be committed in a single transaction.
 
 **5. Server-Side Copy and dedup.**
 Multiple S3 objects cannot share a head object.
@@ -185,8 +193,6 @@ A crash between the bucket-index update and the head-object delete can leave the
 
 On EC pools, each RADOS object deletion fans out across all K+M members (6 OSDs for 4+2, 11 for 8+3).
 
-When RADOS objects are stored on HDD, the delete must wait for all members to complete on slow HDD.
-
 ### KV Delete Benefits
 
 **Single atomic operation.**
@@ -205,30 +211,6 @@ Delete never touches slow HDD — important when data is stored on HDD.
 **Faster than RADOS object delete.**
 Even on the same hardware, a KV delete is a lightweight metadata operation compared to the full transaction overhead of deleting a RADOS object.
 
-PR #48711 added a new concept (`inline-data=false`) to avoid the delete penalty inline — empty head objects on a fast tier with replica×3.
-But even with this change, GC still needs to delete K+M members on the storage tier, which can degrade system performance under heavy delete load.
-
-### Background Data Cleanup
-
-Background processing to reclaim storage-tier space is needed regardless of the metadata model.
-
-The KV design uses a dedicated `G` (GC) namespace:
-- Every operation that orphans data (DELETE, PUT-overwrite) moves the old KV entry to the `G` namespace with a stripped value retaining only cleanup information.
-- Background workers scan `G` entries, free storage-tier data, remove child KV entries, and delete the `G` entry.
-- The `G` key includes a logarithmic `size_tier` byte enabling prioritized cleanup — small objects can be batched for throughput, large objects prioritized for capacity recovery.
-
-Because the move to `G` is in the same transaction as the KV mutation, there is no orphan window — every orphaned data reference is tracked. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup) for the full protocol.
-
-The `G` namespace supports both per-instance entries (`G:O`, `G:V`, `G:U`, `G:A` — fixed-length, one entry per deleted/overwritten instance or multipart part) and directive entries (`G:M` — one entry to clean up all parts of a completed or aborted upload; `G:F` — one entry to clean up all versions of an object). Directives reduce the number of `G` entries for bulk operations from thousands to one.
-
-**Storage-tier idempotency.** KV and storage-tier operations cannot be atomic. Every storage-tier chunk embeds its `ref_tag`, enabling GC workers to verify ownership before freeing data. This makes all GC deletions idempotent — safe to retry after a crash at any point. For packed small objects, "freeing data" means a Logical-Punch-Hole rather than a physical delete. See [Storage-Tier-Requirements.md](Storage-Tier-Requirements.md).
-
-**Three-tier data storage.** Object data is stored at one of three tiers based on size: (1) inline in the O: value (< 256B — single KV write, single KV read), (2) D: namespace entry (256B–8KB — single transaction, no storage-tier involvement), (3) storage tier (> 8KB — three-phase protocol with P:O coordination). The chunk descriptor in O: encapsulates the data location: `{type: INLINE, data}`, `{type: CHILD_D, size_tier, mtime}`, or `{type: STORAGE, storage_id, blob_id, offset, length}`. Multipart uploads always use Tier 3. Tier 2 objects can be migrated to Tier 3 via background packing (P:D coordination) when KV capacity is under pressure or objects become cold. The D: key includes a hash_prefix for write scatter and mtime for LRU ordering. Pre-reshard protocol drains all D: entries before resharding to keep shard migration lightweight. See [data-tiering.md](data-tiering.md) for the full protocol.
-
-**Transaction model.** Operations that write storage-tier data use coordination entries to prevent orphaned data on crash. PutObject (Tier 3) and PutObjectAnnotation (large annotations) use entries in the `P` (pending) namespace — written before data, verified and deleted in the commit transaction. CompleteMultipartUpload creates a `P:M` entry at completion Phase 1 as a crash-recovery anchor. UploadPart uses `:M:` part entries directly as coordination records (no per-part `P` entries). Tiers 1 and 2 need no coordination entries — data and metadata commit atomically in a single KV transaction. A background sweeper moves stale `P` entries to `G` for asynchronous data cleanup. See [bucket_delete.md](bucket_delete.md) for the full transaction protocol and race-condition analysis.
-
-**Vendor-unique delete-all-versions.** AWS S3 does not provide a single API to delete an object along with all its versions. The `G:F` directive enables an optional vendor-specific extension: a single call deletes the `:O:` entry and writes one `G:F` directive; background workers asynchronously clean up all versions, parts, and children. This extension may never be implemented. See [S3 Operations — Delete All Versions](S3-Operations-Over-KV.md#delete-all-versions-optional-vendor-extension) for the detailed design.
-
 ---
 
 ## Bucket Listing
@@ -245,7 +227,7 @@ Listing is a direct range scan on the KV store — each entry already contains a
 No secondary structure, no dual updates.
 
 Listing performance depends on key ordering:
-- **Without sharding** — a bucket's objects form a contiguous key range. Listing is a simple range scan.
+- **Without sharding (i.e single cluster)** — a bucket's objects form a contiguous key range. Listing is a simple range scan.
 - **With sharding** — listing requires parallel scans across shards followed by a merge-sort. Still efficient, but more complex.
 
 The full analysis of sharding trade-offs is covered in a separate document.
@@ -263,6 +245,54 @@ RGW owns all intelligence: access control, manifest interpretation, compression,
 
 The bucket-index is eliminated.
 Its functions — listing, metadata lookup, bucket stats — are absorbed by the KV store.
+
+### Three-tier data storage
+
+Object data is stored at one of three tiers based on size:
+- inline in the O: value (< 256B — single KV write, single KV read)
+- D: namespace entry (256B–8KB — single transaction, no storage-tier involvement) 
+- storage tier (> 8KB — three-phase protocol with P:O coordination)
+
+The chunk descriptor in O: encapsulates the data location:
+- `{type: INLINE, data}`
+- `{type: CHILD_D, size_tier, mtime}`
+- `{type: STORAGE, storage_id, blob_id, offset, length}`
+
+Multipart uploads always use Tier 3.\
+Tier 2 objects can be migrated to Tier 3 via background packing (P:D coordination) when KV capacity is under pressure or objects become cold.\
+See [data-tiering.md](data-tiering.md) for the full protocol.
+
+### Transaction model
+
+Operations that write storage-tier data use coordination entries to prevent orphaned data on crash.\
+PutObject (Tier 3) and PutObjectAnnotation (large annotations) use entries in the `P` (pending) namespace:
+- written before data
+- verified and deleted in the commit transaction.
+
+CompleteMultipartUpload creates a `P:M` entry at completion Phase 1 as a crash-recovery anchor.\
+UploadPart uses `:M:` part entries directly as coordination records (no per-part `P` entries).\
+Tiers 1 and 2 need no coordination entries — data and metadata commit atomically in a single KV transaction.\
+A background sweeper moves stale `P` entries to `G` for asynchronous data cleanup.\
+See [bucket_delete.md](bucket_delete.md) for the full transaction protocol and race-condition analysis.
+
+
+### Background Data Cleanup
+
+Background processing to reclaim storage-tier space is needed regardless of the metadata model.
+
+The KV design uses a dedicated `G` (GC) namespace:
+- Every operation that orphans data (DELETE, PUT-overwrite) moves the old KV entry to the `G` namespace with a stripped value retaining only cleanup information.
+- Background workers scan `G` entries, free storage-tier data, remove child KV entries, and delete the `G` entry.
+- The `G` key includes a logarithmic `size_tier` byte enabling prioritized cleanup — small objects can be batched for throughput, large objects prioritized for capacity recovery.
+
+Because the move to `G` is in the same transaction as the KV mutation, there is no orphan window — every orphaned data reference is tracked. See [S3 Operations — GC Namespace](S3-Operations-Over-KV.md#gc-namespace-and-background-cleanup) for the full protocol.
+
+The `G` namespace supports both per-instance entries (`G:O`, `G:V`, `G:U`, `G:A` — fixed-length, one entry per deleted/overwritten instance or multipart part) and directive entries (`G:M` — one entry to clean up all parts of a completed or aborted upload). Directives reduce the number of `G` entries for bulk operations from thousands to one.
+
+**Storage-tier idempotency.** 
+- KV and storage-tier operations cannot be atomic. 
+- Every storage-tier chunk embeds its `ref_tag`, enabling GC workers to verify ownership before freeing data. 
+- This makes all GC deletions idempotent — safe to retry after a crash at any point.
 
 ---
 
@@ -567,48 +597,6 @@ Object KV entries are not cached locally on RGW servers.\
 The KV store's own distributed cache serves frequently accessed entries from memory.
 
 Keeping values small maximizes cache efficiency — more entries fit in the same amount of memory.
-
-### Small-Object Data in KV — Cache Bypass
-
-When small objects (≤ 64 KB) are stored as KV entries in the `D` namespace (pending aggregation into packed blobs on the storage tier), their data values are large and transient. Reading them must not pollute the KV store's block/page cache — these are write-once entries that will be deleted after aggregation.
-
-**Rule:** All reads of small-object data from the `D` namespace — whether by the aggregator's bulk scan or by a GET serving a not-yet-aggregated object — must use the KV store's cache-bypass flag.
-
-**FDB — `READ_SERVER_SIDE_CACHE_DISABLE` (transaction option 508).**
-
-Set on the transaction before issuing reads:
-
-```
-fdb_transaction_set_option(tr, 508, NULL, 0);  // READ_SERVER_SIDE_CACHE_DISABLE
-```
-
-> "Storage server should not cache disk blocks needed for subsequent read requests in this transaction. This can be used to avoid cache pollution for reads not expected to be repeated."
-
-This is a transaction-level option — all reads in that transaction bypass the storage server's block cache. Use a dedicated transaction for D-namespace reads, separate from any metadata reads that benefit from caching.
-
-**TiKV — `ReadOptions::fill_cache(false)`.**
-
-RocksDB's native per-request option, exposed through TiKV's engine interface:
-
-```
-let mut opts = ReadOptions::new();
-opts.fill_cache(false);
-```
-
-> "Specify whether the data block / index block / filter block read for this iteration should be cached in memory. Callers may wish to set this field to false for bulk scans."
-
-Per-request granularity — can be set independently for each Get or iterator without affecting other reads in the same transaction.
-
-**Write-path cache behavior.**
-
-There is no "no-cache write" flag in either system. The impact of writes on the read cache depends on the storage engine:
-
-| Engine | Write populates read cache? | Notes |
-|---|---|---|
-| RocksDB (TiKV, FDB ssd-rocksdb-v1) | No — writes go to memtable, a separate memory pool from the block cache | Non-issue. Block cache is only populated by reads. |
-| Redwood (FDB ssd-redwood-1, default) | Yes — B-tree page modifications remain in the page cache | Mitigated by key-range separation: D-namespace keys occupy different B-tree pages from S-namespace metadata. Pages evicted by LRU as D entries are short-lived. |
-
-For deployments where write-path cache pollution is a concern, the RocksDB-based engine provides natural isolation.
 
 ---
 
