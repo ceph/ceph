@@ -135,16 +135,14 @@ class ResultGroup:
         return one(self._contents)
 
     def squash(self, target: SMBResource) -> Result:
-        match: Optional[Result] = None
+        match: Optional[ResourceResult] = None
         others: List[Result] = []
         for result in self._contents:
-            assert isinstance(result, ResourceResult)  # FIXME
-            if result.src == target:
+            if isinstance(result, ResourceResult) and result.src == target:
                 match = result
             else:
                 others.append(result)
         if match:
-            assert isinstance(match, ResourceResult)  # FIXME
             match.success = self.success
             match.status = {} if match.status is None else match.status
             match.status['additional_results'] = [
