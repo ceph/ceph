@@ -998,7 +998,7 @@ class CephadmUpgrade:
                 if str(osd_daemon.daemon_id) in rotated_osd_ids:
                     logger.debug('Skipping rotation of osd.%s, already rotated', str(osd_daemon.daemon_id))
                     continue
-                r = service_registry.get_service('osd').ok_to_stop([osd_daemon.daemon_id])
+                r = self.mgr.cephadm_services['osd'].ok_to_stop([osd_daemon.daemon_id])
                 if r.retval:
                     logger.info('Delaying rotation of keyring for %s, not ok-to-stop', osd_daemon.name())
                     skipped = True
@@ -1025,7 +1025,7 @@ class CephadmUpgrade:
                     logger.debug('Skipping rotation of mds.%s, already rotated', str(mds_daemon.daemon_id))
                     continue
                 if self._enough_mds_for_ok_to_stop(mds_daemon):
-                    r = service_registry.get_service('mds').ok_to_stop([mds_daemon.daemon_id])
+                    r = self.mgr.cephadm_services['mds'].ok_to_stop([mds_daemon.daemon_id])
                     if r.retval:
                         logger.info('Delaying rotation of keyring for %s, not ok-to-stop', mds_daemon.name())
                         skipped = True
