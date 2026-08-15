@@ -768,6 +768,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         self.cache = True
         self.stale_cache_strategy: str = self.STALE_CACHE_FAIL
         self.collect_cache: Optional[str] = None
+        self._get_cache: Dict[str, Any] = {}
         self.rbd_stats = {
             'pools': {},
             'pools_refresh_time': 0,
@@ -790,6 +791,21 @@ class Module(MgrModule, OrchestratorClientMixin):
         _global_instance = self
         self.metrics_thread = MetricCollectionThread(_global_instance)
         self.health_history = HealthHistory(self)
+
+    def get_once(self, data_name: str) -> Any:
+        """self.get(), memoized for the duration of a single collect() call.
+
+        Only safe for collectors driven from collect(), which resets the
+        memo on entry and on exit. collect() is serialised: with the cache
+        enabled it only ever runs on MetricCollectionThread, and with the
+        cache disabled it only ever runs under collect_lock.
+        """
+        try:
+            return self._get_cache[data_name]
+        except KeyError:
+            value = self.get(data_name)
+            self._get_cache[data_name] = value
+            return value
 
     def _setup_static_metrics(self) -> Dict[str, Metric]:
         metrics = {}
@@ -1362,7 +1378,7 @@ class Module(MgrModule, OrchestratorClientMixin):
     @profile_method()
     def get_pg_status(self) -> None:
 
-        pg_summary = self.get('pg_summary')
+        pg_summary = self.get_once('pg_summary')
 
         for pool in pg_summary['by_pool']:
             num_by_state: DefaultDict[str, int] = defaultdict(int)
@@ -1403,7 +1419,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     @profile_method()
     def get_metadata_and_osd_status(self) -> None:
-        osd_map = self.get('osd_map')
+        osd_map = self.get_once('osd_map')
 
         cluster_nearfull_ratio = osd_map.get('nearfull_ratio', None)
         cluster_full_ratio = osd_map.get('full_ratio', None)
@@ -1636,7 +1652,7 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     @profile_method()
     def get_num_objects(self) -> None:
-        pg_sum = self.get('pg_summary')['pg_stats_sum']['stat_sum']
+        pg_sum = self.get_once('pg_summary')['pg_stats_sum']['stat_sum']
         for obj in NUM_OBJECTS:
             stat = 'num_objects_{}'.format(obj)
             self.metrics[stat].set(pg_sum[stat])
@@ -1662,7 +1678,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         # '*' can be used to indicate all pools or namespaces
         pools_string = cast(str, self.get_localized_module_option('rbd_stats_pools'))
         pool_keys = set()
-        osd_map = self.get('osd_map')
+        osd_map = self.get_once('osd_map')
         rbd_pools = [pool['pool_name'] for pool in osd_map['pools']
                      if 'rbd' in pool.get('application_metadata', {})]
         for x in re.split(r'[\s,]+', pools_string):
@@ -2257,6 +2273,17 @@ class Module(MgrModule, OrchestratorClientMixin):
         for k in self.metrics.keys():
             self.metrics[k].clear()
 
+        # Memoize self.get() for the duration of this collection. Several
+        # collectors below need the same cluster structures, and every
+        # self.get() miss costs a full C++ dump of that structure into Python
+        # objects, performed with the GIL held (see
+        # ActivePyModules::get_python()). Fetching 'osd_map' or 'pg_summary'
+        # twice therefore stalls every other thread in ceph-mgr -- including
+        # the CherryPy thread trying to answer the scrape -- for twice as long
+        # as necessary. As a bonus, all collectors now observe one consistent
+        # snapshot rather than two maps fetched seconds apart.
+        self._get_cache = {}
+
         self.get_health()
         self.get_df()
         self.get_osd_blocklisted_entries()
@@ -2284,6 +2311,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         _metrics = [m.str_expfmt() for m in self.metrics.values()]
         for k in self.metrics.keys():
             self.metrics[k].clear()
+        self._get_cache = {}
 
         return ''.join(_metrics) + '\n'
 
