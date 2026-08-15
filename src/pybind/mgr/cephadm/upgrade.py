@@ -1,11 +1,7 @@
 import asyncio
 import errno
-import hashlib
-import ipaddress
 import json
 import logging
-import os
-import shlex
 import time
 import uuid
 from dataclasses import dataclass, field, asdict
@@ -13,14 +9,12 @@ from typing import TYPE_CHECKING, Optional, Dict, List, Tuple, Any, cast, Set
 from cephadm.services.service_registry import service_registry
 
 import orchestrator
-from ceph.deployment.service_spec import PlacementSpec
 from cephadm.registry import Registry
 from cephadm.serve import CephadmServe
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.utils import ceph_release_to_major, name_to_config_section, CEPH_UPGRADE_ORDER, \
-    CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES, \
-    SpecialHostLabels
-from cephadm.ssh import HostConnectionError, RemoteCommand, RemoteExecutable, Executables
+    CEPH_TYPES, CEPH_IMAGE_TYPES, NON_CEPH_IMAGE_TYPES, MONITORING_STACK_TYPES, GATEWAY_TYPES
+from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
 
 from mgr_module import MonCommandFailed
@@ -39,12 +33,11 @@ CEPH_ORCH_VALID_OSD_UPGRADE_CRUSH_BUCKETS = frozenset({'rack', 'chassis', 'host'
 CEPH_MDSMAP_ALLOW_STANDBY_REPLAY = (1 << 5)
 CEPH_MDSMAP_NOT_JOINABLE = (1 << 0)
 
-# Whole mirror phase (save + HTTP fan-out + load on all hosts). Single-command
+# Parallel registry pre-pull across many hosts. Single-command
 # default_cephadm_command_timeout (15m) is too short for multi-GB images.
 UPGRADE_IMAGE_MIRROR_MIN_TIMEOUT = 7200
 
 UPGRADE_IMAGE_MIRROR_METHOD_NONE = 'none'
-UPGRADE_IMAGE_MIRROR_METHOD_LOCAL_HTTP = 'local_http'
 UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY = 'registry'
 # Empty string or "none" disables pre-distribution (default).
 UPGRADE_IMAGE_MIRROR_METHODS_DISABLED = frozenset({
@@ -53,23 +46,7 @@ UPGRADE_IMAGE_MIRROR_METHODS_DISABLED = frozenset({
 })
 UPGRADE_IMAGE_MIRROR_METHODS_ENABLED = frozenset({
     UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY,
-    UPGRADE_IMAGE_MIRROR_METHOD_LOCAL_HTTP,
 })
-
-
-def _remote_shell(script: str) -> RemoteCommand:
-    return RemoteCommand(RemoteExecutable('bash'), ['-c', script])
-
-
-def _http_url_host(addr: str) -> str:
-    bare = addr.split('/')[0]
-    try:
-        ip = ipaddress.ip_address(bare)
-        if isinstance(ip, ipaddress.IPv6Address):
-            return f'[{bare}]'
-    except ValueError:
-        pass
-    return bare
 
 
 def normalize_image_digest(digest: str, default_registry: str) -> str:
@@ -1797,110 +1774,6 @@ class CephadmUpgrade:
         hosts = sorted({d.hostname for d in daemons if d.hostname})
         return [h for h in hosts if h not in self.mgr.offline_hosts]
 
-    def _mirror_tar_basename(self, target_digests: List[str]) -> str:
-        digest = target_digests[0] if target_digests else 'unknown'
-        safe = digest.replace('@', '-').replace(':', '-').replace('/', '_')
-        if len(safe) > 80:
-            safe = hashlib.sha256(digest.encode()).hexdigest()[:16]
-        return f'upgrade-image-{safe}.tar.gz'
-
-    def _mirror_paths(self, target_digests: List[str]) -> Tuple[str, str, str]:
-        mirror_dir = f'/var/lib/ceph/{self.mgr._cluster_fsid}'
-        tar_name = self._mirror_tar_basename(target_digests)
-        tar_path = f'{mirror_dir}/{tar_name}'
-        pid_path = f'{mirror_dir}/upgrade-image-http.pid'
-        return mirror_dir, tar_path, pid_path
-
-    def _select_image_mirror_seed_host(self, hosts: List[str]) -> str:
-        admin_hosts = PlacementSpec(
-            label=SpecialHostLabels.ADMIN
-        ).filter_matching_hostspecs(self.mgr.inventory.all_specs())
-        for host in admin_hosts:
-            if host in hosts and host not in self.mgr.offline_hosts:
-                return host
-
-        active_mgr = self.mgr.get_active_mgr()
-        if active_mgr.hostname and active_mgr.hostname in hosts:
-            return active_mgr.hostname
-
-        if not hosts:
-            raise OrchestratorError('no hosts in upgrade scope for image mirror')
-        return hosts[0]
-
-    def _ceph_networks(self) -> List[str]:
-        networks: List[str] = []
-        for entity, key in (('mon', 'public_network'), ('osd', 'cluster_network')):
-            try:
-                value = str(self.mgr.get_foreign_ceph_option(entity, key))
-            except Exception:
-                continue
-            if '/' not in value:
-                continue
-            for net in value.split(','):
-                net = net.strip()
-                if net and net not in networks:
-                    networks.append(net)
-        return networks
-
-    def _ips_on_host_networks(
-        self,
-        host: str,
-        ipv4_only: bool = False,
-        ceph_networks_only: bool = False,
-    ) -> List[str]:
-        ceph_networks = self._ceph_networks() if ceph_networks_only else []
-        ips: List[str] = []
-        for subnet, ifaces in self.mgr.cache.networks.get(host, {}).items():
-            on_ceph_net = False
-            if ceph_networks:
-                try:
-                    host_subnet = ipaddress.ip_network(subnet, strict=False)
-                except ValueError:
-                    continue
-                for ceph_net in ceph_networks:
-                    try:
-                        if host_subnet.overlaps(ipaddress.ip_network(ceph_net, strict=False)):
-                            on_ceph_net = True
-                            break
-                    except ValueError:
-                        continue
-                if not on_ceph_net:
-                    continue
-            for _iface, addr_list in ifaces.items():
-                for addr in addr_list:
-                    bare = addr.split('/')[0]
-                    try:
-                        ip = ipaddress.ip_address(bare)
-                    except ValueError:
-                        continue
-                    if ipv4_only and not isinstance(ip, ipaddress.IPv4Address):
-                        continue
-                    ips.append(str(ip))
-        return ips
-
-    def _get_image_mirror_host_addr(self, host: str) -> str:
-        """Pick a cluster-reachable address for the HTTP mirror (prefer IPv4)."""
-        for ceph_ipv4 in self._ips_on_host_networks(
-                host, ipv4_only=True, ceph_networks_only=True):
-            return ceph_ipv4
-        for host_ipv4 in self._ips_on_host_networks(host, ipv4_only=True):
-            return host_ipv4
-        inventory_addr = self.mgr.inventory.get_addr(host).split('/')[0]
-        try:
-            ip = ipaddress.ip_address(inventory_addr)
-            if isinstance(ip, ipaddress.IPv4Address):
-                return str(ip)
-        except ValueError:
-            pass
-        ceph_ips = self._ips_on_host_networks(
-            host, ceph_networks_only=True)
-        if ceph_ips:
-            return ceph_ips[0]
-        host_ips = self._ips_on_host_networks(host)
-        if host_ips:
-            return host_ips[0]
-        return inventory_addr
-
     async def _inspect_image_on_host(
         self,
         host: str,
@@ -1970,271 +1843,11 @@ class CephadmUpgrade:
                 return True
         return False
 
-    async def _get_host_container_engine(self, host: str) -> str:
-        cmd = _remote_shell(
-            'command -v podman 2>/dev/null || command -v docker 2>/dev/null')
-        out, _, code = await self.mgr.ssh._execute_command(host, cmd)
-        engine = (out or '').strip().splitlines()[-1].strip() if not code else ''
-        if not engine:
-            raise OrchestratorError(f'no container engine found on host {host}')
-        return engine
-
-    def _mirror_image_tag_name(self) -> Optional[str]:
-        """
-        Human image:tag used to start the upgrade, if any.
-
-        When use_repo_digest is enabled, ``target_image`` becomes a digest ref
-        (``repo@sha256:…``). Saving/loading by digest restores the layers but
-        leaves TAG as ``<none>`` on worker hosts. Prefer the original tag name
-        for save + an explicit retag after load.
-        """
-        assert self.upgrade_state is not None
-        name = self.upgrade_state._target_name
-        if not name or '@' in name:
-            return None
-        return name
-
-    async def _tag_image_on_host(
-        self,
-        host: str,
-        engine: str,
-        image_ref: str,
-        tag_name: str,
-    ) -> None:
-        script = (
-            f'{shlex.quote(engine)} tag '
-            f'{shlex.quote(image_ref)} {shlex.quote(tag_name)}'
-        )
-        await self.mgr.ssh._check_execute_command(host, _remote_shell(script))
-
-    async def _save_image_on_host(
-        self,
-        host: str,
-        engine: str,
-        image: str,
-        tar_path: str,
-    ) -> None:
-        # gzip --fast: podman/docker load accepts gzip-compressed archives.
-        script = (
-            f'{shlex.quote(engine)} save {shlex.quote(image)} | '
-            f'python3 -m gzip --fast > {shlex.quote(tar_path)}'
-        )
-        await self.mgr.ssh._check_execute_command(host, _remote_shell(script))
-
-    async def _load_image_from_url_on_host(
-        self,
-        host: str,
-        engine: str,
-        url: str,
-        tar_path: str,
-        tag_name: Optional[str] = None,
-        image_id: Optional[str] = None,
-    ) -> None:
-        script = (
-            f'curl -sf {shlex.quote(url)} -o {shlex.quote(tar_path)} && '
-            f'{shlex.quote(engine)} load -i {shlex.quote(tar_path)} && '
-            f'rm -f {shlex.quote(tar_path)}'
-        )
-        # podman/docker load of a digest-saved archive often leaves TAG <none>.
-        # Always retag to the upgrade's original image:tag when we know both.
-        if tag_name and image_id:
-            script += (
-                f' && {shlex.quote(engine)} tag '
-                f'{shlex.quote(image_id)} {shlex.quote(tag_name)}'
-            )
-        await self.mgr.ssh._check_execute_command(host, _remote_shell(script))
-
-    async def _wait_for_http_server(self, host: str, url: str) -> None:
-        last_error = ''
-        curl_check = (
-            f'code=$(curl -sf -o /dev/null -w "%{{http_code}}" {shlex.quote(url)}); '
-            f'test "$code" = "200"'
-        )
-        for _ in range(30):
-            try:
-                await self.mgr.ssh._check_execute_command(
-                    host, _remote_shell(curl_check))
-                return
-            except Exception as e:
-                last_error = str(e)
-                await asyncio.sleep(1)
-        raise OrchestratorError(
-            f'HTTP mirror on {host} did not serve {url} (expected HTTP 200): {last_error}')
-
     async def _registry_login_if_needed(self, host: str) -> None:
         if self.mgr.cache.host_needs_registry_login(host) and self.mgr.registry_url:
             creds = self.mgr.get_store('registry_credentials')
             if creds:
                 await CephadmServe(self.mgr)._registry_login(host, json.loads(str(creds)))
-
-    async def _mirror_cleanup(
-        self,
-        seed_host: str,
-        pid_path: str,
-        tar_path: str,
-    ) -> None:
-        cleanup_cmd = (
-            f'if [ -f {shlex.quote(pid_path)} ]; then '
-            f'kill "$(cat {shlex.quote(pid_path)})" 2>/dev/null || true; '
-            f'rm -f {shlex.quote(pid_path)}; fi; '
-            f'rm -f {shlex.quote(tar_path)}'
-        )
-        try:
-            await self.mgr.ssh._check_execute_command(
-                seed_host, _remote_shell(cleanup_cmd))
-        except Exception as e:
-            logger.warning('Upgrade: image mirror cleanup on %s failed: %s', seed_host, e)
-
-    async def _mirror_upgrade_image_via_http_async(
-        self,
-        target_image: str,
-        target_digests: List[str],
-        hosts: List[str],
-    ) -> bool:
-        assert self.upgrade_state is not None
-        hosts_needing_image: List[str] = []
-        for host in hosts:
-            if not await self._host_has_target_image_on_host(
-                    host, target_image, target_digests):
-                hosts_needing_image.append(host)
-
-        if not hosts_needing_image:
-            logger.info('Upgrade: all in-scope hosts already have target image')
-            self.upgrade_state.image_mirror_done = True
-            self._save_upgrade_state()
-            return True
-
-        seed_host: Optional[str] = None
-        mirror_dir, tar_path, pid_path = self._mirror_paths(target_digests)
-        tar_name = os.path.basename(tar_path)
-
-        try:
-            seed_host = self._select_image_mirror_seed_host(hosts)
-            seed_addr = self._get_image_mirror_host_addr(seed_host)
-            mirror_port = self.mgr.upgrade_image_mirror_port
-            image_url = (
-                f'http://{_http_url_host(seed_addr)}:'
-                f'{mirror_port}/{tar_name}')
-
-            logger.info(
-                'Upgrade: mirroring target image from seed host %s to %d host(s)',
-                seed_host, len(hosts_needing_image))
-            self.upgrade_info_str = (
-                f'Mirroring upgrade image from {seed_host} to {len(hosts_needing_image)} host(s)')
-
-            await self.mgr.ssh._check_execute_command(
-                seed_host, RemoteCommand(Executables.MKDIR, ['-p', mirror_dir]))
-
-            seed_inspect = await self._inspect_image_on_host(seed_host, target_image)
-            if not self._host_has_target_image(seed_inspect, target_digests):
-                await self._registry_login_if_needed(seed_host)
-                self.upgrade_info_str = f'Pulling upgrade image on seed host {seed_host}'
-                pullargs: List[str] = []
-                if self.mgr.registry_insecure:
-                    pullargs.append('--insecure')
-                await CephadmServe(self.mgr)._run_cephadm_json(
-                    seed_host, '', 'pull', pullargs,
-                    image=target_image, no_fsid=True)
-
-            seed_engine = await self._get_host_container_engine(seed_host)
-            tag_name = self._mirror_image_tag_name()
-            save_ref = tag_name or target_image
-            if tag_name and self.upgrade_state.target_id:
-                # Ensure seed has image:tag even if only the digest ref exists
-                # locally (common when use_repo_digest is enabled).
-                await self._tag_image_on_host(
-                    seed_host, seed_engine,
-                    self.upgrade_state.target_id, tag_name)
-            self.upgrade_info_str = f'Saving upgrade image on seed host {seed_host}'
-            await self._save_image_on_host(
-                seed_host, seed_engine, save_ref, tar_path)
-
-            http_log = f'{mirror_dir}/upgrade-image-http.log'
-            start_server_cmd = (
-                f'if [ -f {shlex.quote(pid_path)} ]; then '
-                f'kill "$(cat {shlex.quote(pid_path)})" 2>/dev/null || true; '
-                f'rm -f {shlex.quote(pid_path)}; fi; '
-                f'if command -v fuser >/dev/null 2>&1; then '
-                f'fuser -k {mirror_port}/tcp 2>/dev/null || true; fi; '
-                f'nohup python3 -m http.server {mirror_port} '
-                f'--directory {shlex.quote(mirror_dir)} '
-                f'--bind {shlex.quote(seed_addr)} '
-                f'> {shlex.quote(http_log)} 2>&1 & echo $! > {shlex.quote(pid_path)}'
-            )
-            await self.mgr.ssh._check_execute_command(
-                seed_host, _remote_shell(start_server_cmd))
-
-            await self._wait_for_http_server(seed_host, image_url)
-
-            hosts_to_load = [h for h in hosts_needing_image if h != seed_host]
-
-            max_parallel = max(1, self.mgr.upgrade_image_mirror_max_parallel)
-            sem = asyncio.Semaphore(max_parallel)
-            failed_hosts: List[Tuple[str, str]] = []
-
-            async def _load_on_host(host: str, index: int) -> None:
-                async with sem:
-                    self.upgrade_info_str = (
-                        f'Mirroring upgrade image to {host} '
-                        f'({index + 1}/{len(hosts_to_load)})')
-                    host_tar = f'{mirror_dir}/{tar_name}.load'
-                    try:
-                        engine = await self._get_host_container_engine(host)
-                        await self._load_image_from_url_on_host(
-                            host, engine, image_url, host_tar,
-                            tag_name=tag_name,
-                            image_id=self.upgrade_state.target_id if self.upgrade_state else None)
-                    except Exception as e:
-                        failed_hosts.append((host, str(e)))
-
-            if hosts_to_load:
-                await asyncio.gather(*[
-                    _load_on_host(host, i) for i, host in enumerate(hosts_to_load)
-                ])
-
-            if failed_hosts:
-                detail = [
-                    f'failed to mirror image to {host}: {reason}'
-                    for host, reason in failed_hosts
-                ]
-                self._fail_upgrade('UPGRADE_FAILED_PULL', {
-                    'severity': 'warning',
-                    'summary': 'Upgrade: failed to mirror target image',
-                    'count': len(failed_hosts),
-                    'detail': detail,
-                })
-                return False
-
-            for host in hosts_needing_image:
-                if not await self._host_has_target_image_on_host(
-                        host, target_image, target_digests):
-                    tried = self._target_image_inspect_refs(target_image)
-                    self._fail_upgrade('UPGRADE_FAILED_PULL', {
-                        'severity': 'warning',
-                        'summary': 'Upgrade: failed to mirror target image',
-                        'count': 1,
-                        'detail': [
-                            f'host {host} does not have target image after mirror '
-                            f'(inspect refs: {tried})'],
-                    })
-                    return False
-
-            self.upgrade_state.image_mirror_done = True
-            self._save_upgrade_state()
-            logger.info('Upgrade: image mirror complete')
-            return True
-        except Exception as e:
-            logger.exception('Upgrade: image mirror failed')
-            self._fail_upgrade('UPGRADE_FAILED_PULL', {
-                'severity': 'warning',
-                'summary': 'Upgrade: failed to mirror target image',
-                'count': 1,
-                'detail': [str(e)],
-            })
-            return False
-        finally:
-            if seed_host:
-                await self._mirror_cleanup(seed_host, pid_path, tar_path)
 
     def _parse_pull_image_info(self, out: List[str]) -> Optional[Dict[str, Any]]:
         try:
@@ -2423,8 +2036,8 @@ class CephadmUpgrade:
     ) -> bool:
         assert self.upgrade_state is not None
         # Discover digests/version from parallel pulls only when digests are
-        # unknown. If digests are already known (typical resume / local_http
-        # first-pull path), use the normal skip-or-pull flow.
+        # unknown. If digests are already known (typical resume path), use the
+        # normal skip-or-pull flow.
         discovering = not target_digests
         if discovering:
             return await self._pre_pull_image_discover_async(target_image, hosts)
@@ -2537,21 +2150,6 @@ class CephadmUpgrade:
         per_host = max(self.mgr.default_cephadm_command_timeout, 1800)
         return max(UPGRADE_IMAGE_MIRROR_MIN_TIMEOUT, per_host * max(host_count, 1))
 
-    def _mirror_upgrade_image_via_http(
-        self,
-        target_image: str,
-        target_digests: List[str],
-        hosts: List[str],
-    ) -> bool:
-        timeout = self._mirror_operation_timeout(len(hosts))
-        logger.info(
-            'Upgrade: image mirror timeout set to %d seconds for %d host(s)',
-            timeout, len(hosts))
-        return self.mgr.wait_async(
-            self._mirror_upgrade_image_via_http_async(
-                target_image, target_digests, hosts),
-            timeout=timeout)
-
     def _get_upgrade_image_mirror_method(self) -> str:
         raw = getattr(self.mgr, 'upgrade_image_mirror_method', '') or ''
         return str(raw).strip().lower()
@@ -2571,9 +2169,6 @@ class CephadmUpgrade:
         if method == UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY:
             return self._pre_pull_image_on_hosts(
                 target_image, target_digests, hosts)
-        if method == UPGRADE_IMAGE_MIRROR_METHOD_LOCAL_HTTP:
-            return self._mirror_upgrade_image_via_http(
-                target_image, target_digests, hosts)
         self._fail_upgrade('UPGRADE_FAILED_PULL', {
             'severity': 'error',
             'summary': 'Upgrade: invalid upgrade_image_mirror_method',
@@ -2581,8 +2176,7 @@ class CephadmUpgrade:
             'detail': [
                 f'unknown upgrade_image_mirror_method {method!r}; '
                 f'expected empty/{UPGRADE_IMAGE_MIRROR_METHOD_NONE!r} '
-                f'(disabled), {UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY!r}, or '
-                f'{UPGRADE_IMAGE_MIRROR_METHOD_LOCAL_HTTP!r}',
+                f'(disabled) or {UPGRADE_IMAGE_MIRROR_METHOD_REGISTRY!r}',
             ],
         })
         return False
@@ -2704,8 +2298,8 @@ class CephadmUpgrade:
             self._upgrade_image_mirror_enabled()
             and not self.upgrade_state.image_mirror_done
         ):
-            # local_http, or registry when metadata was already known (resume).
-            # Registry discover path above already marked image_mirror_done.
+            # Registry when metadata was already known (resume). Discover path
+            # above already marked image_mirror_done.
             daemons = self._get_filtered_daemons()
             hosts = self._get_upgrade_scope_hosts(daemons)
             if hosts and not self._pre_distribute_upgrade_images(

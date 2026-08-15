@@ -173,25 +173,6 @@ public or cluster network. For example:
    Ceph OSD Daemons, you can consolidate the public network configuration step. 
 
 
-Cephadm upgrade image mirror (optional)
----------------------------------------
-
-When cephadm upgrade image pre-distribution is enabled with method
-``local_http`` (see :ref:`cephadm-upgrade`), the seed host briefly
-listens on TCP port ``8766`` by default to serve the target container
-image tar to other cluster hosts. The port is configurable via
-``mgr/cephadm/upgrade_image_mirror_port`` and is closed after the
-pre-distribution phase. Allow this port between Ceph hosts if you manage
-host firewalls manually. The ``registry`` pre-distribution method does not
-use this port.
-
-Example:
-
-.. prompt:: bash $
-
-   sudo iptables -A INPUT -i {iface} -p tcp -s {ip-address}/{netmask} --dport 8766 -j ACCEPT
-
-
 Cephadm service discovery (optional)
 ------------------------------------
 
