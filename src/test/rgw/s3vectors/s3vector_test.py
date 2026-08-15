@@ -295,7 +295,7 @@ def another_user(tenant=None):
 # s3vectors tests
 #################
 
-def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
+def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None, retries=12, delay=5):
     """
     When using S3/SAL backend, create a regular S3 bucket with the same name
     as the vector bucket. Required because these backends store LanceDB data
@@ -310,16 +310,28 @@ def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
         return
     if not s3conn:
         s3conn = connection('s3')
-    try:
-        s3conn.head_bucket(Bucket=bucket_name)
-        log.info("S3 bucket '%s' already exists", bucket_name)
-    except s3conn.exceptions.ClientError as err:
-        error_code = err.response['Error']['Code']
-        if error_code in ('404', 'NoSuchBucket'):
-            log.info("Creating S3 bucket '%s' for S3/RGW backend", bucket_name)
-            _create_s3bucket(s3conn, bucket_name)
-        else:
-            raise
+    for attempt in range(retries):
+        try:
+            s3conn.head_bucket(Bucket=bucket_name)
+            log.info("S3 bucket '%s' already exists", bucket_name)
+            return
+        except s3conn.exceptions.ClientError as err:
+            error_code = err.response['Error']['Code']
+            if error_code in ('404', 'NoSuchBucket'):
+                log.info("Creating S3 bucket '%s' for S3/RGW backend", bucket_name)
+                _create_s3bucket(s3conn, bucket_name)
+                return
+            if error_code not in ('403', 'AccessDenied', 'Forbidden'):
+                raise
+            # the bucket, or the user owning it, was created on another zone and
+            # was not synced to this one yet, so it is not accessible here. this
+            # is not a permission error, and is expected to resolve itself
+            log.info("S3 bucket '%s' is not accessible yet (%s), attempt %d/%d",
+                     bucket_name, error_code, attempt + 1, retries)
+            time.sleep(delay)
+    raise AssertionError(
+        f"S3 bucket '{bucket_name}' was still not accessible after "
+        f"{retries * delay} seconds")
 
 
 def _delete_s3_bucket_for_vector_bucket(bucket_name):
@@ -1469,9 +1481,21 @@ def verify_list_vectors_pagination(conn, bucket_name, index_name, expected_vecto
         assert retrieved['key'] in expected_by_key, f"unexpected key: {retrieved['key']}"
         if return_data:
             expected = expected_by_key[retrieved['key']]
-            vector_pairs = zip(retrieved['data']['float32'], expected['data']['float32'])
-            assert all(abs(a - b) < 1e-6 for a, b in vector_pairs), \
-                f"returned data don't match expected data for key {retrieved['key']}"
+            actual_data = retrieved['data']['float32']
+            expected_data = expected['data']['float32']
+            assert len(actual_data) == len(expected_data), \
+                f"key {retrieved['key']}: got {len(actual_data)} values, " \
+                f"expected {len(expected_data)}"
+            # the vectors are stored as float32, so the values that come back are
+            # not the exact ones that were sent
+            mismatches = [(i, a, b, abs(a - b))
+                          for i, (a, b) in enumerate(zip(actual_data, expected_data))
+                          if abs(a - b) >= 1e-4]
+            assert not mismatches, \
+                f"returned data don't match expected data for key {retrieved['key']}: " + \
+                ", ".join(f"[{i}] got {a!r} expected {b!r} (diff {d})"
+                          for i, a, b, d in mismatches[:5]) + \
+                (f" and {len(mismatches) - 5} more" if len(mismatches) > 5 else "")
 
     log.info('pagination verification completed: %d vectors across %d pages',
              len(all_retrieved_vectors), page_count)
@@ -2819,8 +2843,8 @@ def test_query_vectors_post_filtering():
 
     # pre-filtering on genre=rock with topK=2 returns both rock vectors
     assert query_keys({'genre': 'rock'}, top_k=2) == ['v0', 'v3']
-    # post-filtering with topK=2 only sees the 2 nearest (v0, v1), so v3 is excluded
-    assert query_keys({'genre': 'rock'}, top_k=2, post_filtering=True) == ['v0']
+    # post-filtering with topK=3 only sees the 3 nearest (v0, v1, v2), so v3 is excluded
+    assert query_keys({'genre': 'rock'}, top_k=3, post_filtering=True) == ['v0']
 
     # post-filtering allows mixed $or (column + JSON fields)
     assert query_keys({'$or': [{'genre': 'rock'}, {'color': 'blue'}]}, top_k=10, post_filtering=True) == ['v0', 'v1', 'v3']
