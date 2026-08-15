@@ -10,7 +10,6 @@ tasks:
 - print: "**** done install task..."
 - cephadm:
     image: quay.io/ceph/ceph:v18.2.1
-    roleless: true
     compiled_cephadm_branch: reef
     conf:
       osd:
