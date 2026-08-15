@@ -359,7 +359,7 @@ options:
 - name: rbd_read_from_replica_policy
   type: str
   level: basic
-  desc: Read replica policy send to the OSDS during reads
+  desc: Read replica policy send to the OSDs during reads
   fmt_desc: |
     Policy for determining which OSD will receive read operations.
     If set to ``default``, each PG's primary OSD will always be used
@@ -817,7 +817,7 @@ options:
 - name: rbd_io_scheduler_simple_max_delay
   type: uint
   level: advanced
-  desc: maximum I/O delay (in milliseconds) for simple I/O scheduler (if set to 0 dalay
+  desc: maximum I/O delay (in milliseconds) for simple I/O scheduler (if set to 0, delay
     is calculated based on latency stats)
   default: 0
   services:

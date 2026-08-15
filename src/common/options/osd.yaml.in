@@ -5,7 +5,7 @@ options:
 - name: osd_numa_prefer_iface
   type: bool
   level: advanced
-  desc: prefer IP on network interface on same numa node as storage
+  desc: prefer IP on network interface on same NUMA node as storage
   default: true
   see_also:
   - osd_numa_auto_affinity
@@ -14,14 +14,14 @@ options:
 - name: osd_numa_auto_affinity
   type: bool
   level: advanced
-  desc: automatically set affinity to numa node when storage and network match
+  desc: automatically set affinity to NUMA node when storage and network match
   default: true
   flags:
   - startup
 - name: osd_numa_node
   type: int
   level: advanced
-  desc: set affinity to a numa node (-1 for none)
+  desc: set affinity to a NUMA node (-1 for none)
   default: -1
   see_also:
   - osd_numa_auto_affinity
@@ -31,9 +31,9 @@ options:
   type: bool
   level: advanced
   desc: set the keepcaps flag before changing UID, preserving the permitted capability set
-  long_desc: When ceph switches from root to the ceph uid, all capabilities in all sets are eraseed. If
-    a component that is capability aware needs a specific capability, the keepcaps flag maintains
-     the permitted capability set, allowing the capabilities in the effective set to be activated as needed.
+  long_desc: When Ceph switches from root to the ceph UID, all capabilities in all sets are erased. If
+    a component that is capability-aware needs a specific capability, the keepcaps flag maintains
+    the permitted capability set, allowing the capabilities in the effective set to be activated as needed.
   default: false
   flags:
   - startup
@@ -155,7 +155,7 @@ options:
   type: float
   level: advanced
   desc: Time in seconds to sleep before next recovery or backfill op for HDDs
-    when PGs is degraded.
+    when PGs are degraded.
   fmt_desc: Time in seconds to sleep before next recovery or backfill op
     for HDDs when PGs are degraded.
   default: 0.1
@@ -340,7 +340,7 @@ options:
   type: float
   level: advanced
   desc: The desired interval between scrubs of a specific PG. Note that this option
-    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
+    must be set at the ``global`` scope, or for both ``mgr`` and ``osd``.
   fmt_desc: The desired interval in seconds between scrubs of a specific PG.
   default: 1_day
   see_also:
@@ -350,7 +350,7 @@ options:
   type: float
   level: advanced
   desc: Scrub each PG no less often than this interval. Note that this option
-    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
+    must be set at the ``global`` scope, or for both ``mgr`` and ``osd``.
   fmt_desc: The maximum interval in seconds for scrubbing each PG.
   default: 7_day
   see_also:
@@ -492,7 +492,7 @@ options:
   type: float
   level: advanced
   desc: Deep scrub each PG (i.e., verify data checksums) at least this often. Note that this option
-    must be set at ``global`` scope, or for both ``mgr`` and``osd``.
+    must be set at the ``global`` scope, or for both ``mgr`` and ``osd``.
   fmt_desc: The interval for "deep" scrubbing (fully reading all data).
   default: 7_day
   with_legacy: true
@@ -505,12 +505,12 @@ options:
     Technically ``osd_deep_scrub_interval_cv`` is the coefficient of variation for
     the deep scrub interval.
   fmt_desc: The coefficient of variation for the deep scrub interval, specified as a
-    ratio. On average, the next deep scrub for a PG is scheduled osd_deep_scrub_interval
-    after the last deep scrub . The actual time is randomized to a normal distribution
-    with a standard deviation of osd_deep_scrub_interval * osd_deep_scrub_interval_cv
+    ratio. On average, the next deep scrub for a PG is scheduled ``osd_deep_scrub_interval``
+    after the last deep scrub. The actual time is randomized to a normal distribution
+    with a standard deviation of ``osd_deep_scrub_interval`` * ``osd_deep_scrub_interval_cv``
     (clamped to within 2 standard deviations).
     The default value guarantees that 95% of deep scrubs will be scheduled in the range
-    [0.8 * osd_deep_scrub_interval, 1.2 * osd_deep_scrub_interval].
+    [0.8 * ``osd_deep_scrub_interval``, 1.2 * ``osd_deep_scrub_interval``].
   min: 0
   max: 0.4
   default: 0.2
@@ -656,8 +656,8 @@ options:
   type: bool
   level: advanced
   desc: Disable queuing of scrub reservations
-  long_desc: When set - scrub replica reservations are responded to immediately, with
-    either success or failure (the pre-Squid version behaviour). This configuration
+  long_desc: If set to true, scrub replica reservations are responded to immediately, with
+    either success or failure (the pre-Squid version behavior). This configuration
     option is introduced to support mixed-version clusters and debugging, and will
     be removed in the next release.
   default: false
@@ -893,7 +893,7 @@ options:
 - name: osd_pg_epoch_max_lag_factor
   type: float
   level: advanced
-  desc: Max multiple of the map cache that PGs can lag before we throttle map injest
+  desc: Max multiple of the map cache that PGs can lag before we throttle map ingest
   default: 2
   see_also:
   - osd_map_cache_size
@@ -907,7 +907,7 @@ options:
   level: dev
   default: false
   with_legacy: true
-# shutdown the OSD if stuatus flipping more than max_markdown_count times in recent max_markdown_period seconds
+# shutdown the OSD if status flipping more than max_markdown_count times in recent max_markdown_period seconds
 - name: osd_max_markdown_period
   type: int
   level: advanced
@@ -958,8 +958,8 @@ options:
   type: bool
   level: advanced
   desc: Allow OSD daemon to send an aggregated slow ops to the cluster log
-  fmt_desc: If set to ``true``, the OSD daemon will send slow ops information in 
-    an aggregated format to the cluster log else sends every slow op to the
+  fmt_desc: If set to ``true``, the OSD daemon will send slow ops information in
+    an aggregated format to the cluster log; otherwise, it sends every slow op to the
     cluster log.
   default: true
   with_legacy: true
@@ -1028,7 +1028,7 @@ options:
 - name: osd_skip_data_digest
   type: bool
   level: dev
-  desc: Do not store full-object checksums if the backend (bluestore) does its own
+  desc: Do not store full-object checksums if the backend (BlueStore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
 # Weighted Priority Queue (wpq), mClock Scheduler (mclock_scheduler: default)
