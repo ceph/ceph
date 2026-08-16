@@ -28,19 +28,8 @@ extern "C" {
 }
 
 int main(int argc, char** argv) {
-  bool has_conf = false;
-  for (int i = 1; i < argc; i++) {
-    if (std::string(argv[i]) == "-c" && i + 1 < argc) {
-      has_conf = true;
-      break;
-    }
-  }
-  if (!has_conf) {
-    std::cerr << "ERROR: -c <ceph.conf> is required." << std::endl;
-    std::cerr << "Usage: " << argv[0] << " -c <path/to/ceph.conf>" << std::endl;
-    return 1;
-  }
-
+  // ceph.conf is found via -c flag, $CEPH_CONF, or default paths.
+  // When running under teuthology, the default path is used.
   auto args = argv_to_vec(argc, const_cast<const char**>(argv));
 
   auto cct = rgw_global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
