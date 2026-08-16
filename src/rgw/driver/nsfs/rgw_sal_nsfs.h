@@ -27,6 +27,7 @@
 #include "../posix/multipart_cache.h"
 #include "../posix/posixDB.h"
 #include "../posix/user_cache.h"
+#include "../posix/qd2_pending.h"
 #include "fs_strategy.h"
 
 class RGWLC;
@@ -1336,6 +1337,7 @@ private:
   uint64_t olh_epoch;
   const std::string& unique_tag;
   NSFSObject* obj;
+  QD2PendingWrite pending_write;
 
 public:
   NSFSAtomicWriter(const DoutPrefixProvider *dpp,
@@ -1378,6 +1380,7 @@ private:
   std::unique_ptr<nsfs::Directory> upload_dir;
   std::unique_ptr<nsfs::File> part_file;
   file::listing::MultipartCacheKey mp_cache_key;
+  QD2PendingWrite pending_write;
 
 public:
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
