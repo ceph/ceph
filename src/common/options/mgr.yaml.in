@@ -614,6 +614,19 @@ options:
     each enabled module. If set to 0, collection of these stats will be disabled.
   default: 5
   min: 0
+- name: mgr_module_shutdown_timeout
+  type: secs
+  level: advanced
+  desc: Maximum time in seconds to wait for a standby Manager module's shutdown()
+    during promotion to active.
+  long_desc: If a standby module's shutdown() call and serve() thread do not finish
+    within this many seconds, the module's standby thread is abandoned and reported
+    with the MGR_MODULE_SHUTDOWN_TIMEOUT health warning, so it cannot block the
+    standby manager's promotion to active.
+  default: 30
+  min: 1
+  services:
+  - mgr
 - name: mgr_tick_period
   type: secs
   level: advanced

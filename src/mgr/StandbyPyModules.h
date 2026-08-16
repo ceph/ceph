@@ -16,6 +16,8 @@
 
 #include <string>
 #include <map>
+#include <memory>
+#include <set>
 
 #include <Python.h>
 
@@ -124,7 +126,10 @@ public:
 
   void start_one(PyModuleRef py_module);
 
-  void shutdown();
+  // Returns the modules whose shutdown() timed out. They stay running
+  // and reference this object, so if any are returned it must not be
+  // destroyed.
+  [[nodiscard]] std::set<std::string> shutdown();
 
   void handle_mgr_map(const MgrMap &mgr_map)
   {

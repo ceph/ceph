@@ -52,6 +52,10 @@ private:
   std::unique_ptr<StandbyPyModules> standby_modules;
   std::unique_ptr<ThreadMonitor> thread_monitor;
 
+  // Modules whose standby shutdown() timed out during promotion, with
+  // the reason. Their code may still be running; reported in health.
+  std::map<std::string, std::string> abandoned_standby_modules;
+
   PyThreadState *pMainThreadState;
 
   // We have our own copy of MgrMap, because we are constructed
