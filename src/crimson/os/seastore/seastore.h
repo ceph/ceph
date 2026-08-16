@@ -401,6 +401,11 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
+    tm_ret _migrate_onode(
+      internal_context_t &ctx,
+      const coll_t &src_cid,
+      OnodeRef &onode,
+      OnodeRef &d_onode);
     tm_ret _clone_range(
       internal_context_t &ctx,
       OnodeRef &src_onode,

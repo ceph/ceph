@@ -2413,16 +2413,29 @@ SeaStore::Shard::_rename(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
-  auto prefix = onode->get_clone_prefix();
-  assert(prefix);
-  prefix->set_pool(onode->get_hobj().get_logical_pool());
-  auto object_id = prefix->get_local_object_id();
-  std::ignore = d_onode->maybe_set_sibling_object_id(object_id);
+  auto cid = ctx.ch->get_cid();
+  return _migrate_onode(ctx, cid, onode, d_onode);
+}
+
+SeaStore::Shard::tm_ret
+SeaStore::Shard::_migrate_onode(
+  internal_context_t &ctx,
+  const coll_t &src_cid,
+  OnodeRef &onode,
+  OnodeRef &d_onode)
+{
+  if (auto prefix = onode->get_clone_prefix(); prefix) {
+    prefix->set_pool(onode->get_hobj().get_logical_pool());
+    auto object_id = prefix->get_local_object_id();
+    std::ignore = d_onode->maybe_set_sibling_object_id(object_id);
+  }
   auto olayout = onode->get_layout();
-  ObjectDataHandler objHandler(max_object_size);
-  co_await objHandler.rename(ObjectDataHandler::context_t{
-    *transaction_manager, *ctx.transaction, *onode, d_onode.get()
-  });
+  if (!olayout.object_data.get().is_null()) {
+    ObjectDataHandler objHandler(max_object_size);
+    co_await objHandler.rename(ObjectDataHandler::context_t{
+      *transaction_manager, *ctx.transaction, *onode, d_onode.get()
+    });
+  }
 
   uint32_t size = olayout.size;
   auto oi_bl = ceph::bufferlist::static_from_mem(
@@ -2437,11 +2450,11 @@ SeaStore::Shard::_rename(
   d_onode->update_snapset(*ctx.transaction, ss_bl);
   rename_onode_omap_metadata(*ctx.transaction, *onode, *d_onode);
   co_await onode_manager->erase_onode(
-    *ctx.transaction, ctx.ch->get_cid(), onode
+    *ctx.transaction, src_cid, onode
   ).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(
-      "Invalid error in SeaStoreS::_rename"));
+      "Invalid error in SeaStoreS::_migrate_onode"));
 }
 
 SeaStore::Shard::tm_ret
