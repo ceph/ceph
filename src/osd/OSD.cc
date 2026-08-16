@@ -2581,84 +2581,133 @@ int OSD::pre_init()
   return 0;
 }
 
-int OSD::set_numa_affinity()
+int OSD::set_numa_node(int node)
 {
-  // storage numa node
-  int store_node = -1;
-  store->get_numa_node(&store_node, nullptr, nullptr);
-  if (store_node >= 0) {
-    dout(1) << __func__ << " storage numa node " << store_node << dendl;
+  int r = get_numa_node_cpu_set(node, &numa_cpu_set_size, &numa_cpu_set);
+  if (r < 0) {
+    dout(1) << __func__ << " unable to determine numa node " << node
+	    << " CPUs" << dendl;
+    return r;
   }
 
-  // check network numa node(s)
-  int front_node = -1, back_node = -1;
-  string front_iface = pick_iface(
-    cct,
-    client_messenger->get_myaddrs().front().get_sockaddr_storage());
-  string back_iface = pick_iface(
-    cct,
-    cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
-  int r = get_iface_numa_node(front_iface, &front_node);
-  if (r >= 0 && front_node >= 0) {
-    dout(1) << __func__ << " public network " << front_iface << " numa node "
-            << front_node << dendl;
-    r = get_iface_numa_node(back_iface, &back_node);
-    if (r >= 0 && back_node >= 0) {
+  dout(1) << __func__ << " setting numa affinity to node " << node << " cpus "
+	  << cpu_set_to_str_list(numa_cpu_set_size, &numa_cpu_set) << dendl;
+
+  r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
+  if (r < 0) {
+    derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  numa_node = node;
+
+  return 0;
+}
+
+int OSD::set_numa_affinity()
+{
+  if (int node = g_conf().get_val<int64_t>("osd_numa_node"); node >= 0) {
+    // this takes precedence over the automagic logic
+    return set_numa_node(node);
+  }
+
+  if (!g_conf().get_val<bool>("osd_numa_auto_affinity")) {
+    return 0;
+  }
+
+  string affinity_policy = g_conf().get_val<string>("osd_numa_auto_affinity_policy");
+  dout(1) << __func__ << " numa auto affinity policy is " << affinity_policy << dendl;
+
+  // storage numa node
+  int store_node = -1;
+  if (affinity_policy == "storage" || affinity_policy == "all") {
+    set<int> nodes;
+    store->get_numa_node(&store_node, &nodes, nullptr);
+    if (store_node >= 0) {
+      dout(1) << __func__ << " storage numa node " << store_node << dendl;
+      if (affinity_policy == "storage") {
+	return set_numa_node(store_node);
+      }
+    } else {
+      if (nodes.size() > 0) {
+	dout(1) << __func__ << " storage numa nodes do not match" << dendl;
+      } else {
+	dout(1) << __func__ << " unable to identify storage numa node" << dendl;
+      }
+      dout(1) << __func__ << " not setting numa affinity" << dendl;
+      return 0;
+    }
+  }
+
+  // public network numa node
+  int front_node = -1;
+  if (affinity_policy == "public_network" || affinity_policy == "network" || affinity_policy == "all") {
+    string front_iface = pick_iface(cct,
+      client_messenger->get_myaddrs().front().get_sockaddr_storage());
+    if (int r = get_iface_numa_node(front_iface, &front_node); r >= 0 && front_node >= 0) {
+      dout(1) << __func__ << " public network " << front_iface << " numa node "
+	      << front_node << dendl;
+      if (affinity_policy == "public_network") {
+	return set_numa_node(front_node);
+      }
+    } else {
+      if (front_node == -2) {
+	dout(1) << __func__ << " public network " << front_iface
+		<< " ports numa nodes do not match" << dendl;
+      } else {
+	dout(1) << __func__ << " unable to identify public interface '" << front_iface
+		<< "' numa node: " << cpp_strerror(r) << dendl;
+      }
+      dout(1) << __func__ << " not setting numa affinity" << dendl;
+      return 0;
+    }
+  }
+
+  // cluster network numa node
+  int back_node = -1;
+  if (affinity_policy == "cluster_network" || affinity_policy == "network" || affinity_policy == "all") {
+    string back_iface = pick_iface(cct,
+      cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
+    if (int r = get_iface_numa_node(back_iface, &back_node); r >= 0 && back_node >= 0) {
       dout(1) << __func__ << " cluster network " << back_iface << " numa node "
 	      << back_node << dendl;
-      if (front_node == back_node &&
-	  front_node == store_node) {
-	dout(1) << " objectstore and network numa nodes all match" << dendl;
-	if (g_conf().get_val<bool>("osd_numa_auto_affinity")) {
-	  numa_node = front_node;
-	}
-      } else if (front_node != back_node) {
-        dout(1) << __func__ << " public and cluster network numa nodes do not match"
-                << dendl;
+      if (affinity_policy == "cluster_network") {
+	return set_numa_node(back_node);
+      }
+    } else {
+      if (back_node == -2) {
+	dout(1) << __func__ << " cluster network " << back_iface
+		<< " ports numa nodes do not match" << dendl;
       } else {
-	dout(1) << __func__ << " objectstore and network numa nodes do not match"
-		<< dendl;
+	dout(1) << __func__ << " unable to identify cluster interface '" << back_iface
+		<< "' numa node: " << cpp_strerror(r) << dendl;
       }
-    } else if (back_node == -2) {
-      dout(1) << __func__ << " cluster network " << back_iface
-              << " ports numa nodes do not match" << dendl;
-    } else {
-      derr << __func__ << " unable to identify cluster interface '" << back_iface
-           << "' numa node: " << cpp_strerror(r) << dendl;
+      dout(1) << __func__ << " not setting numa affinity" << dendl;
+      return 0;
     }
-  } else if (front_node == -2) {
-    dout(1) << __func__ << " public network " << front_iface
-            << " ports numa nodes do not match" << dendl;
-  } else {
-    derr << __func__ << " unable to identify public interface '" << front_iface
-	 << "' numa node: " << cpp_strerror(r) << dendl;
   }
-  if (int node = g_conf().get_val<int64_t>("osd_numa_node"); node >= 0) {
-    // this takes precedence over the automagic logic above
-    numa_node = node;
-  }
-  if (numa_node >= 0) {
-    int r = get_numa_node_cpu_set(numa_node, &numa_cpu_set_size, &numa_cpu_set);
-    if (r < 0) {
-      dout(1) << __func__ << " unable to determine numa node " << numa_node
-	      << " CPUs" << dendl;
-      numa_node = -1;
-    } else {
-      dout(1) << __func__ << " setting numa affinity to node " << numa_node
-	      << " cpus "
-	      << cpu_set_to_str_list(numa_cpu_set_size, &numa_cpu_set)
-	      << dendl;
-      r = set_cpu_affinity_all_threads(numa_cpu_set_size, &numa_cpu_set);
-      if (r < 0) {
-	r = -errno;
-	derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
-	     << dendl;
-	numa_node = -1;
-      }
+
+  ceph_assert(affinity_policy == "network" || affinity_policy == "all");
+
+  ceph_assert(front_node >= 0);
+  ceph_assert(back_node >= 0);
+  if (affinity_policy == "network") {
+    if (front_node == back_node) {
+      dout(1) << __func__ << " network numa nodes match" << dendl;
+      return set_numa_node(front_node);
     }
-  } else {
-    dout(1) << __func__ << " not setting numa affinity" << dendl;
+    dout(1) << __func__ << " not setting numa affinity, network numa nodes do not match: public_network="
+	    << front_node << " cluster_network=" << back_node << dendl;
+    return 0;
   }
+
+  ceph_assert(store_node >= 0);
+  if (store_node == front_node && front_node == back_node) {
+    dout(1) << __func__ << " storage and network numa nodes all match" << dendl;
+    return set_numa_node(store_node);
+  }
+  dout(1) << __func__ << " not setting numa affinity, numa nodes do not match: storage=" << store_node
+	  << " public_network=" << front_node << " cluster_network=" << back_node << dendl;
   return 0;
 }
 

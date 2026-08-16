@@ -2254,6 +2254,7 @@ public:
   void final_init();
 
   int enable_disable_fuse(bool stop);
+  int set_numa_node(int node);
   int set_numa_affinity();
 
   void suicide(int exitcode);
