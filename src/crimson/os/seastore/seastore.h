@@ -403,7 +403,7 @@ public:
       OnodeRef &d_onode);
     tm_ret _migrate_onode(
       internal_context_t &ctx,
-      const coll_t &src_cid,
+      coll_t src_cid,
       OnodeRef &onode,
       OnodeRef &d_onode);
     tm_ret _clone_range(
@@ -443,7 +443,7 @@ public:
       const coll_t& cid, int bits);
     tm_ret _split_collection(
       internal_context_t &ctx,
-      const coll_t& cid, int bits);
+      const coll_t cid, int bits, int rem, const coll_t dest_cid);
     tm_ret _merge_collection(
       internal_context_t &ctx,
       coll_t cid,

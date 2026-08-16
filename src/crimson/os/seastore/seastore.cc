@@ -2049,11 +2049,12 @@ SeaStore::Shard::_do_transaction_step(
     case Transaction::OP_SPLIT_COLLECTION2:
     {
       uint32_t bits = op->split_bits;
+      uint32_t rem = op->split_rem;
       coll_t cid = i.get_cid(op->cid);
       coll_t dest_cid = i.get_cid(op->dest_cid);
-      DEBUGT("op OP_SPLIT_COLLECTION2, cid={}, dest_cid={}, bits={}",
-	*ctx.transaction, cid, dest_cid, bits);
-      return _split_collection(ctx, cid, bits);
+      DEBUGT("op OP_SPLIT_COLLECTION2, cid={}, dest_cid={}, bits={}, rem={}",
+	*ctx.transaction, cid, dest_cid, bits, rem);
+      return _split_collection(ctx, cid, bits, rem, dest_cid);
     }
     case Transaction::OP_MERGE_COLLECTION:
     {
@@ -2420,7 +2421,7 @@ SeaStore::Shard::_rename(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_migrate_onode(
   internal_context_t &ctx,
-  const coll_t &src_cid,
+  coll_t src_cid,
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
@@ -2858,11 +2859,71 @@ SeaStore::Shard::_rmattrs(
 SeaStore::Shard::tm_ret
 SeaStore::Shard::_split_collection(
   internal_context_t &ctx,
-  const coll_t &cid,
-  int bits)
+  const coll_t cid,
+  int bits,
+  int rem,
+  const coll_t dest_cid)
 {
-  // POC: split would have to repartition the parent's onodes into the children's trees
-  ceph_abort_msg("PG split not supported with per-collection onode trees (POC)");
+  LOG_PREFIX(SeaStoreS::_split_collection);
+  auto cmroot = co_await transaction_manager->read_collection_root(
+    *ctx.transaction);
+  auto coll_node = co_await collection_manager->get_coll_node(
+    cmroot, *ctx.transaction
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_split_collection reading collection node"));
+  ceph_assert(coll_node->contains(dest_cid));
+
+  uint64_t moved = 0;
+  ghobject_t next;
+  do {
+    auto [objects, cursor] = co_await onode_manager->list_onodes(
+      *ctx.transaction, cid, next, ghobject_t::get_max(), 4096);
+    for (auto &oid : objects) {
+      if (!oid.match(bits, rem)) {
+        continue;
+      }
+      auto onode = co_await onode_manager->get_onode(*ctx.transaction, cid, oid
+      ).handle_error_interruptible(
+        tm_iertr::pass_further{},
+        crimson::ct_error::assert_all(
+          "Invalid error in SeaStoreS::_split_collection: onode listed but "
+          "not found"));
+      auto d_onode = co_await onode_manager->get_or_create_onode(
+        *ctx.transaction, dest_cid, oid
+      ).handle_error_interruptible(
+        tm_iertr::pass_further{},
+        crimson::ct_error::assert_all(
+          "Invalid error in SeaStoreS::_split_collection: create dest onode"));
+      co_await _migrate_onode(ctx, cid, onode, d_onode);
+      ++moved;
+    }
+    next = cursor;
+  } while (next != ghobject_t::get_max());
+  DEBUGT("split {} -> {} bits={} rem={} moved {} onodes",
+         *ctx.transaction, cid, dest_cid, bits, rem, moved);
+
+  //Re-fetch rather than reuse coll_node from above, since it may have gone through
+  // copy-on-write during the migration loop.
+  coll_node = co_await collection_manager->get_coll_node(
+    cmroot, *ctx.transaction
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_split_collection re-reading collection "
+      "node"));
+  auto cid_info = coll_node->get_value(cid);
+  co_await collection_manager->update(
+    cmroot, *ctx.transaction, cid,
+    coll_info_t{static_cast<unsigned>(bits), cid_info.onode_root}
+  ).handle_error_interruptible(
+    tm_iertr::pass_further{},
+    crimson::ct_error::assert_all(
+      "Invalid error in SeaStoreS::_split_collection updating cid bits"));
+  if (cmroot.must_update()) {
+    transaction_manager->write_collection_root(*ctx.transaction, cmroot);
+  }
 }
 
 SeaStore::Shard::tm_ret
