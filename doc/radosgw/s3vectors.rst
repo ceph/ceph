@@ -184,8 +184,9 @@ are multiple fields at the top level of the filter::
    {"genre": "rock", "year": {"$gte": 2000}}   // genre == "rock" AND year >= 2000
 
 Field names always refer to top-level keys of the metadata document. Nested
-documents cannot be addressed, and a name that contains a ``.`` is rejected with
-a validation error, since a metadata key may not contain a ``.`` either.
+documents cannot be addressed, and a name that is not a valid metadata key name
+is rejected with a validation error, since no such key could have been stored.
+See: `Metadata Key Names`_.
 
 A field that was declared in ``nonFilterableMetadataKeys`` must not appear in a filter at all.
 A field that was declared in ``filterableMetadataKeys`` would be used in pre-filtering.
@@ -448,6 +449,21 @@ at the offending fields::
 Other requests that encounter errors that are the result of an invalid request return a ``400`` status and
 the ``InvalidArgument`` code, without a ``fieldList``.
 
+Metadata Key Names
+~~~~~~~~~~~~~~~~~~
+
+The same rules apply to every metadata key name: the ones declared at
+``CreateIndex``, the top-level field names of the ``metadata`` document of a
+vector, and the field names used in a query filter. A key name:
+
+- must be between 1 and 63 characters long
+- must not start with an underscore (``_``), since names with that prefix are
+  reserved for internal fields of the index. (This is an extension to the S3
+  Vectors API.)
+- must not contain a ``.`` so they are not confused with nested fields
+
+A name that breaks any of these rules is rejected with a validation error.
+
 Vector Buckets
 ~~~~~~~~~~~~~~
 
@@ -633,15 +649,15 @@ Request parameters:
   ``euclidean``.
 - ``metadataConfiguration.nonFilterableMetadataKeys``: Up to 10 metadata keys
   that may not be used in a query filter. A filter that references one of them
-  is rejected. Key names must not contain a ``.``, and must not be repeated in
-  the list.
+  is rejected. Key names must be valid (see: `Metadata Key Names`_) and must
+  not be repeated in the list.
 - ``metadataConfiguration.filterableMetadataKeys``: Up to 10 metadata keys that
   are stored as fields of the index, so that filters over them are evaluated
   before the vector search. (This is an extension to the S3 Vectors API. See:
   `Metadata Filtering`_.) Each entry has:
 
-  - ``name``: The metadata key. Must not start with ``_`` and must not contain
-    a ``.``. A key must not be repeated in the list, even with a different
+  - ``name``: The metadata key. Must be a valid key name (see: `Metadata Key
+    Names`_). A key must not be repeated in the list, even with a different
     ``type`` or ``mustExist``, and may not appear both in
     ``filterableMetadataKeys`` and in ``nonFilterableMetadataKeys``.
   - ``type``: The type of the value. (This is ``String`` by default.) The list
@@ -788,11 +804,12 @@ Request parameters:
   - ``data.float32``: The vector itself. Its length must match the ``dimension``
     of the index.
   - ``metadata``: An optional JSON object attached to the vector. It may hold up
-    to 50 top-level fields, and must not exceed 40KB. Field names must not
-    contain a ``.``, must not be duplicated, and ``null`` values are not
-    supported. These are validated for the top-level fields of the document only:
-    a nested document may hold duplicate names, names with a ``.``, and ``null``
-    values, but its fields cannot be used in a filter. (See: `Filter Syntax`_.)
+    to 50 top-level fields, and must not exceed 40KB. Field names must be valid
+    (see: `Metadata Key Names`_) and must not be duplicated, and a field must
+    not hold a ``null`` value. These are validated for the top-level fields of
+    the document only: a nested document may hold duplicate names, names with a
+    ``.``, and ``null`` values, but its fields cannot be used in a filter.
+    (See: `Filter Syntax`_.)
     Any field that was declared in ``filterableMetadataKeys`` must hold a value
     of the declared type, and must be present if the key was declared with
     ``mustExist``.

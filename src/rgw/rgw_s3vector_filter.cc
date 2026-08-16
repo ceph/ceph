@@ -12,8 +12,6 @@
 
 namespace rgw::s3vector {
 
-  static constexpr const char* metadata_field = "metadata";
-
   const filterable_metadata_key_t* find_filterable_key(
       const std::string& field_name,
       const std::vector<filterable_metadata_key_t>& filterable_keys) {
@@ -285,11 +283,12 @@ namespace rgw::s3vector {
       const std::vector<std::string>& nonfilterable_keys,
       DoutPrefixProvider* dpp,
       std::vector<validation_error_t>& errors) {
-    // a metadata key may not contain a '.', so such a field could never be matched.
-    // note that nested documents cannot be addressed either
-    if (field_name.find('.') != std::string::npos) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector filter: field name '" << field_name << "' must not contain '.'" << dendl;
-      errors.push_back({"filter", fmt::format("field name '{}' must not contain '.'", field_name)});
+    // a name that is not a valid metadata key name could never be matched, since
+    // no such key could have been stored. note that a '.' is rejected here as
+    // well, so nested documents cannot be addressed either
+    if (const auto invalid = validate_metadata_key_name(field_name); invalid) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector filter: field name '" << field_name << "' " << *invalid << dendl;
+      errors.push_back({"filter", fmt::format("field name '{}' {}", field_name, *invalid)});
       return std::nullopt;
     }
 
