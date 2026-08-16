@@ -614,6 +614,17 @@ if(WITH_RADOSGW_LANCEDB)
     IMPORTED_LOCATION ${RGW_LANCEDB_STATIC_LIB}
     INTERFACE_LINK_LIBRARIES "${LANCEDB_NATIVE_STATIC_LIBS}"
   )
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64" AND NOT USING_MOLD_LINKER)
+    include(CheckLinkerFlag)
+    check_linker_flag(CXX "-fuse-ld=lld" HAVE_FUSE_LD_LLD)
+    if(HAVE_FUSE_LD_LLD)
+      set(RGW_LANCEDB_LINKER_OPTIONS "-fuse-ld=lld")
+    else()
+      message(WARNING "aarch64: lld not usable, linking librgw_lancedb.a with "
+        "the default linker is likely to fail with R_AARCH64_CALL26 relocation "
+        "overflows -- install lld or build with -DWITH_RADOSGW_LANCEDB=OFF")
+    endif()
+  endif()
   # librgw_lancedb.a references the rgw_sal_wrapper_* symbols defined in
   # rgw_common (rgw_sal_wrapper.cc) while rgw_common calls the C API
   # exported by the archive.  Nothing in the C++ code references the
@@ -628,6 +639,9 @@ if(WITH_RADOSGW_LANCEDB)
   target_link_options(rgw_common PUBLIC
     "LINKER:--exclude-libs,librgw_lancedb.a"
   )
+  if(RGW_LANCEDB_LINKER_OPTIONS)
+    target_link_options(rgw_common PUBLIC ${RGW_LANCEDB_LINKER_OPTIONS})
+  endif()
   target_link_libraries(rgw_common PUBLIC rgw_lancedb)
   target_include_directories(rgw_common PRIVATE
     ${CMAKE_SOURCE_DIR}/src/rgw
@@ -645,6 +659,9 @@ if(WITH_RADOSGW_LANCEDB)
     target_link_options(rgw_common_standalone PUBLIC
       "LINKER:--exclude-libs,librgw_lancedb.a"
     )
+    if(RGW_LANCEDB_LINKER_OPTIONS)
+      target_link_options(rgw_common_standalone PUBLIC ${RGW_LANCEDB_LINKER_OPTIONS})
+    endif()
     target_link_libraries(rgw_common_standalone PUBLIC rgw_lancedb)
     target_include_directories(rgw_common_standalone PRIVATE
       ${CMAKE_SOURCE_DIR}/src/rgw
