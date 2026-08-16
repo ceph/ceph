@@ -855,30 +855,6 @@ def test_create_index_invalid_filterable_keys():
             'genre', 'year', 'genre'
         ]}, **common)
 
-    # reserved column name: key
-    assert_create_index_validation_error(conn,
-        'metadataConfiguration.filterableMetadataKeys',
-        indexName='reserved-key',
-        metadataConfiguration={'filterableMetadataKeys': [
-            {'name': 'key'}
-        ]}, **common)
-
-    # reserved column name: data
-    assert_create_index_validation_error(conn,
-        'metadataConfiguration.filterableMetadataKeys',
-        indexName='reserved-data',
-        metadataConfiguration={'filterableMetadataKeys': [
-            {'name': 'data'}
-        ]}, **common)
-
-    # reserved column name: metadata
-    assert_create_index_validation_error(conn,
-        'metadataConfiguration.filterableMetadataKeys',
-        indexName='reserved-metadata',
-        metadataConfiguration={'filterableMetadataKeys': [
-            {'name': 'metadata'}
-        ]}, **common)
-
     # filterable key name starting with underscore
     assert_create_index_validation_error(conn,
         'metadataConfiguration.filterableMetadataKeys[0].name',
@@ -886,6 +862,66 @@ def test_create_index_invalid_filterable_keys():
         metadataConfiguration={'filterableMetadataKeys': [
             {'name': '_internal'}
         ]}, **common)
+
+    # the internal columns are all underscore prefixed, so the unprefixed
+    # names are just regular metadata keys
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='underscore-reserved-key',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': '_key'}
+        ]}, **common)
+
+    # non-filterable key name starting with underscore
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys[1]',
+        indexName='underscore-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': [
+            'genre', '_metadata'
+        ]}, **common)
+
+    # filterable key name with a '.'
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='dot-filterable',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'a.b'}
+        ]}, **common)
+
+    # non-filterable key name with a '.'
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys[0]',
+        indexName='dot-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': ['a.b']}, **common)
+
+    # key names longer than 63 characters
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='long-filterable',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'k'*64}
+        ]}, **common)
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys[0]',
+        indexName='long-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': ['k'*64]}, **common)
+
+    # exactly 63 characters is allowed
+    result = conn.create_index(indexName='max-length-keys',
+        metadataConfiguration={
+            'nonFilterableMetadataKeys': ['n'*63],
+            'filterableMetadataKeys': [{'name': 'f'*63}]
+        }, **common)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the internal columns are all underscore prefixed, so the unprefixed names
+    # are ordinary metadata keys and are accepted
+    result = conn.create_index(indexName='unreserved-names',
+        metadataConfiguration={
+            'nonFilterableMetadataKeys': ['metadata'],
+            'filterableMetadataKeys': [{'name': 'key'}, {'name': 'data'}]
+        }, **common)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     # overlap between filterable and non-filterable keys
     assert_create_index_validation_error(conn,
@@ -2347,8 +2383,395 @@ def test_put_vectors_null_metadata_value():
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
-def test_put_vectors_dots_in_metadata_field_names():
-    """Test that vectors with dots in metadata field names are rejected."""
+def test_put_vectors_invalid_metadata_field_names():
+    """Test that vectors with invalid metadata field names are rejected."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # field name with a '.'
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'user.name': 'alice'})},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata.user.name',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # field name starting with an underscore, which is reserved for the
+    # internal fields of the index
+    for name in ['_key', '_data', '_metadata', '_distance', '_anything']:
+        vectors = [
+            {'key': 'v0', 'data': generate_data(dimension, 0),
+             'metadata': json.dumps({name: 'alice'})},
+        ]
+        assert_put_vectors_validation_error(conn,
+            f'vectors[0].metadata.{name}',
+            vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # empty field name
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'': 'alice'})},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata.',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # a metadata field name is not bounded in length - only the names declared at
+    # CreateIndex are. the document as a whole is guarded by its size and by the
+    # number of fields it may hold. an underscore that is not the first character
+    # is fine too
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'k'*64: 'alice', 'j'*512: 'carol',
+                                 'user_name': 'bob', 'key': 'v0'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the nested fields are not validated
+    vectors = [
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'info': {'_key': 'x', 'a.b': 'y', 'k'*64: 'z'}})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_metadata_field_names_with_special_characters():
+    """Test that a metadata key name is only restricted by the documented rules.
+    Any other name is stored, returned and filtered on as it was given - which is
+    also what the AWS API does with all of these names."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    names = [
+        'my key',        # a space
+        ' mykey ',       # leading and trailing spaces
+        '"mykey"',       # wrapped in double quotes
+        '`my-key`',      # wrapped in backticks
+        "'mykey'",       # wrapped in single quotes
+        "my'key",        # a single quote inside
+        'my"key',        # a double quote inside
+        'MyKey',         # mixed case
+        'select',        # a SQL keyword
+        '1key',          # a leading digit
+        'user_name',     # an underscore that is not the first character
+        'k'*63,          # the bound that applies to a declared key name
+        'k'*200,         # which does not apply to a metadata document's keys
+    ]
+
+    vectors = [
+        {'key': f'v{i}', 'data': generate_data(dimension, i),
+         'metadata': json.dumps({name: 'example'})}
+        for i, name in enumerate(names)
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the names are returned exactly as they were stored
+    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                              keys=[f'v{i}' for i in range(len(names))], returnMetadata=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    returned = {v['key']: list(json.loads(v['metadata']).keys()) for v in result['vectors']}
+    for i, name in enumerate(names):
+        assert returned[f'v{i}'] == [name], \
+            f"expected {name!r} to be returned as is, but got {returned[f'v{i}']}"
+
+    # and each one can be filtered on
+    query_vector = generate_data(dimension, 0)
+    for i, name in enumerate(names):
+        result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                    queryVector=query_vector, topK=len(names),
+                                    filter={name: {'$eq': 'example'}})
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        keys = sorted([v['key'] for v in result['vectors']])
+        assert keys == [f'v{i}'], f"filter on {name!r} matched {keys}"
+
+    log.info('test_metadata_field_names_with_special_characters: verified %d names', len(names))
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.index_test
+def test_declared_key_wrapped_in_backticks_rejected():
+    """Test that a metadata key holding a backtick is rejected at CreateIndex.
+    Lance fails to write a column whose name holds a backtick anywhere in it,
+    so without this rule the failure would surface as an internal error at
+    PutVectors, long after the index was created. The same name is fine as a
+    key of a metadata document, since that is never a column."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    common = dict(vectorBucketName=bucket_name, dataType='float32',
+                  dimension=dimension, distanceMetric='euclidean')
+
+    # in either of the declared lists, wherever the backtick is
+    for i, name in enumerate(['`backticked`', 'my`key', '`lead', 'trail`', '`']):
+        assert_create_index_validation_error(conn,
+            'metadataConfiguration.filterableMetadataKeys[0].name',
+            indexName=f'backticks-filterable-{i}',
+            metadataConfiguration={'filterableMetadataKeys': [{'name': name}]}, **common)
+        assert_create_index_validation_error(conn,
+            'metadataConfiguration.nonFilterableMetadataKeys[0]',
+            indexName=f'backticks-nonfilterable-{i}',
+            metadataConfiguration={'nonFilterableMetadataKeys': [name]}, **common)
+
+    # as a key of the metadata document such a name is fine, since it never
+    # becomes a column
+    index_name = 'backticks-json'
+    result = conn.create_index(indexName=index_name, **common)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'`backticked`': 'example'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                queryVector=generate_data(dimension, 0), topK=5,
+                                filter={'`backticked`': 'example'})
+    assert sorted([v['key'] for v in result['vectors']]) == ['v0']
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_filter_non_ascii_names_and_values():
+    """Test filtering on non-ascii metadata key names and values, on both the
+    filterable column path and the metadata JSON path. The filter object is read
+    into a string and parsed again on the way in, so this guards that round trip
+    against re-escaping the text. (See raw_utf8 in JSONObj::init.)"""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'café'}, {'name': 'genre'}]})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'café': 'example', 'המפתח שלי': 'example',
+                                 'genre': 'café', 'tag': 'café'})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'café': 'other', 'המפתח שלי': 'other',
+                                 'genre': 'rock', 'tag': 'rock'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+
+    def query_keys(filter_expr):
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=10, filter=filter_expr)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    # a non-ascii key name, as a filterable column and as a JSON metadata key
+    assert query_keys({'café': 'example'}) == ['v0']
+    assert query_keys({'המפתח שלי': 'example'}) == ['v0']
+
+    # a non-ascii value, on both paths
+    assert query_keys({'genre': 'café'}) == ['v0']
+    assert query_keys({'tag': 'café'}) == ['v0']
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_filterable_keys_with_special_characters():
+    """Test filtering on filterable metadata keys whose names are not plain
+    identifiers. A filterable key becomes a column of the index table, and the
+    column name is parsed by datafusion as a SQL identifier: unless it is quoted,
+    a filter on 'Genre' would reference a column named 'genre', which does not
+    exist, and a name wrapped in quotes or backticks would be unwrapped."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    # 'Genre' and 'genre' are two different keys, and so two different columns
+    filterable_keys = [
+        {'name': 'Genre'},
+        {'name': 'genre'},
+        {'name': 'my key'},
+        {'name': 'my"key'},
+        {'name': '"quoted"'},
+        {'name': "'squoted'"},
+        {'name': '$or'},
+        {'name': ' spaced '},
+    ]
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'Genre': 'rock', 'genre': 'jazz', 'my key': 'a',
+                                 'my"key': 'b', '"quoted"': 'c', "'squoted'": 'd',
+                                 '$or': 'f', ' spaced ': 'g'})},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'Genre': 'jazz', 'genre': 'rock', 'my key': 'z',
+                                 'my"key': 'z', '"quoted"': 'z', "'squoted'": 'z',
+                                 '$or': 'z', ' spaced ': 'z'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+
+    def query_keys(filter_expr):
+        result = conn.query_vectors(
+            vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=10, filter=filter_expr)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    # key names are case sensitive, and the two columns are told apart
+    assert query_keys({'Genre': 'rock'}) == ['v0']
+    assert query_keys({'genre': 'rock'}) == ['v1']
+    assert query_keys({'Genre': 'jazz'}) == ['v1']
+    assert query_keys({'genre': 'jazz'}) == ['v0']
+
+    # names that a SQL parser would rewrite or reject
+    assert query_keys({'my key': 'a'}) == ['v0']
+    assert query_keys({'my"key': 'b'}) == ['v0']
+    assert query_keys({'"quoted"': 'c'}) == ['v0']
+    assert query_keys({"'squoted'": 'd'}) == ['v0']
+    assert query_keys({'$or': 'f'}) == ['v0']
+    assert query_keys({' spaced ': 'g'}) == ['v0']
+
+    # the other operators reach the column the same way
+    assert query_keys({'Genre': {'$ne': 'rock'}}) == ['v1']
+    assert query_keys({'my key': {'$in': ['a', 'b']}}) == ['v0']
+    assert query_keys({'my"key': {'$exists': True}}) == ['v0', 'v1']
+
+    log.info('test_filterable_keys_with_special_characters: verified column name quoting')
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_filter_field_names_that_are_operators():
+    """Test that a metadata key named after a filter operator stays usable.
+    '$and' and '$or' are the logical operators only when their value is an array
+    of conditions - with any other value the name is a metadata key name, which
+    is how the AWS API resolves the ambiguity."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    index_name = 'test-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    operator_names = ['$eq', '$ne', '$gt', '$gte', '$lt', '$lte',
+                      '$in', '$nin', '$exists', '$and', '$or']
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps(dict({name: 'example' for name in operator_names},
+                                     color='red'))},
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'color': 'blue'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector=query_vector, topK=10)
+
+    def query_keys(filter_expr):
+        result = conn.query_vectors(filter=filter_expr, **query_args)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        return sorted([v['key'] for v in result['vectors']])
+
+    # every operator name works as a key name, with implicit equality
+    for name in operator_names:
+        assert query_keys({name: 'example'}) == ['v0'], f"key name {name}"
+
+    # and with an explicit operator applied to it
+    for name in operator_names:
+        assert query_keys({name: {'$eq': 'example'}}) == ['v0'], f"key name {name}"
+
+    # with an array value, the logical operators are still operators
+    assert query_keys({'$or': [{'color': 'red'}, {'color': 'blue'}]}) == ['v0', 'v1']
+    assert query_keys({'$and': [{'color': 'red'}, {'$eq': 'example'}]}) == ['v0']
+
+    # the same name in both roles in one filter: the outer '$or' takes an array
+    # so it is the operator, the inner one takes an object so it is a key name
+    assert query_keys({'$or': [{'$or': {'$eq': 'example'}}, {'color': 'blue'}]}) == ['v0', 'v1']
+
+    # a malformed logical array is still rejected
+    def expect_error(filter_expr):
+        assert_query_vectors_validation_error(conn, 'filter', filter=filter_expr, **query_args)
+
+    expect_error({'$and': []})
+    expect_error({'$or': []})
+    expect_error({'$or': ['a', 'b']})
+    # and so is an unknown operator, rather than matching nothing
+    expect_error({'color': {'$bogus': 'red'}})
+
+    log.info('test_filter_field_names_that_are_operators: verified operator name handling')
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+@pytest.mark.vector_test
+def test_query_vectors_invalid_filter_field_names():
+    """Test that a filter field name goes through the same validation as any
+    other metadata key name, and that an invalid name is reported as an error
+    rather than as a filter that silently matches nothing."""
     conn = connection()
     bucket_name = gen_bucket_name()
     dimension = 4
@@ -2363,11 +2786,32 @@ def test_put_vectors_dots_in_metadata_field_names():
 
     vectors = [
         {'key': 'v0', 'data': generate_data(dimension, 0),
-         'metadata': json.dumps({'user.name': 'alice'})},
+         'metadata': json.dumps({'color': 'red'})},
     ]
-    assert_put_vectors_validation_error(conn,
-        'vectors[0].metadata.user.name',
-        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    query_args = dict(vectorBucketName=bucket_name, indexName=index_name,
+                      queryVector=query_vector, topK=5)
+
+    def expect_error(filter_expr):
+        assert_query_vectors_validation_error(conn, 'filter', filter=filter_expr, **query_args)
+
+    # reserved for the internal columns of the index
+    for name in ['_key', '_data', '_metadata', '_distance', '_', '_anything']:
+        expect_error({name: 'x'})
+
+    # reserved for addressing into a nested metadata document
+    expect_error({'user.name': 'x'})
+
+    # empty. note that a long name is NOT an error here: only the names declared
+    # at CreateIndex are bounded in length, so a filter may name a longer key
+    expect_error({'': 'x'})
+
+    # the same names nested inside a logical operator
+    expect_error({'$and': [{'color': 'red'}, {'_key': 'x'}]})
+    expect_error({'$or': [{'color': 'red'}, {'user.name': 'x'}]})
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
@@ -3257,8 +3701,29 @@ def test_query_vectors_filter_errors():
     # object value in $eq (JSON field)
     expect_error({'color': {'$eq': {'nested': 'value'}}})
 
+    # the same on the filterable columns, of every type. without a check the
+    # string form of the object would be taken as the literal to compare with
+    expect_error({'genre': {'$eq': {'nested': 'value'}}})
+    expect_error({'year': {'$gt': {'nested': 1}}})
+    expect_error({'popular': {'$eq': {'nested': True}}})
+
+    # array value for a comparison operator, on a column and on a JSON field
+    expect_error({'genre': {'$eq': ['rock', 'jazz']}})
+    expect_error({'color': {'$ne': ['red', 'blue']}})
+
+    # object element in an $in list on a column
+    expect_error({'genre': {'$in': ['rock', {'nested': 'value'}]}})
+
     # implicit $eq with an array value (JSON field)
     expect_error({'color': ['red', 'blue']})
+
+    # field names that could never be a metadata key: a nested path, a name
+    # reserved for the internal fields of the index, and an empty name
+    expect_error({'info.color': 'red'})
+    expect_error({'_key': 'v0'})
+    expect_error({'_metadata': 'x'})
+    expect_error({'_distance': {'$lt': 1}})
+    expect_error({'': 'red'})
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)

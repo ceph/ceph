@@ -9,6 +9,8 @@
 #include "lancedb.h"
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
+#include <arrow/api.h>
+#include <arrow/c/bridge.h>
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -490,6 +492,25 @@ TEST_F(S3VectorFilterTest, DotInFieldNameInsideLogicalRejected) {
   EXPECT_FALSE(errors.empty());
 }
 
+TEST_F(S3VectorFilterTest, UnderscoreFieldNameRejected) {
+  // a metadata key may not contain a '.', so such a field could never be matched
+  auto result = build(R"({"_user": "alice"})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, UnderscoreFieldNameOnColumnRejected) {
+  std::vector<filterable_metadata_key_t> keys = {{"_genre", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"_genre": {"$eq": "rock"}})", keys);
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, UnderscoreFieldNameInsideLogicalRejected) {
+  auto result = build(R"({"$and": [{"color": "red"}, {"_user": "alice"}]})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
 TEST_F(S3VectorFilterTest, NonfilterableKeyRejected) {
   std::vector<std::string> nonfilterable = {"secret"};
   auto result = build(R"({"secret": "value"})", {}, nonfilterable);
@@ -567,15 +588,22 @@ TEST_F(S3VectorFilterTest, InvalidNumberValueRejected) {
 }
 
 TEST_F(S3VectorFilterTest, OrWithObjectValueRejected) {
+  // "$or" here is a field name, since its value is not an array of conditions.
+  // the filter is rejected because an object is not a valid value for "$eq"
   auto result = build(R"({"$or": {"$eq": {"field": "value"}}})");
   EXPECT_FALSE(result.has_value());
   EXPECT_FALSE(errors.empty());
 }
 
-TEST_F(S3VectorFilterTest, OrWithScalarValueRejected) {
+TEST_F(S3VectorFilterTest, OrWithScalarValueIsAFieldName) {
+  // "$or" is a logical operator only when its value is an array of conditions.
+  // with a scalar value it is a metadata key named "$or", matched with implicit
+  // equality, so that such a key remains filterable
   auto result = build(R"({"$or": "value"})");
-  EXPECT_FALSE(result.has_value());
-  EXPECT_FALSE(errors.empty());
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
 }
 
 TEST_F(S3VectorFilterTest, OrWithScalarArrayRejected) {
@@ -590,10 +618,12 @@ TEST_F(S3VectorFilterTest, AndWithObjectValueRejected) {
   EXPECT_FALSE(errors.empty());
 }
 
-TEST_F(S3VectorFilterTest, AndWithScalarValueRejected) {
+TEST_F(S3VectorFilterTest, AndWithScalarValueIsAFieldName) {
   auto result = build(R"({"$and": 42})");
-  EXPECT_FALSE(result.has_value());
-  EXPECT_FALSE(errors.empty());
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
 }
 
 TEST_F(S3VectorFilterTest, InWithObjectValueRejected) {
@@ -712,6 +742,20 @@ TEST_F(S3VectorFilterTest, ObjectValueInJsonInListRejected) {
   EXPECT_FALSE(errors.empty());
 }
 
+TEST_F(S3VectorFilterTest, ObjectValueOnEveryColumnTypeRejected) {
+  // the check comes before the column type is looked at
+  for (const auto type : {FilterableMetadataType::STRING, FilterableMetadataType::NUMBER,
+                          FilterableMetadataType::BOOLEAN}) {
+    const std::vector<filterable_metadata_key_t> keys = {{"f", type, false}};
+    for (const auto op : {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte"}) {
+      auto result = build(fmt::format(R"({{"f": {{"{}": {{"nested": 1}}}}}})", op), keys);
+      EXPECT_FALSE(result.has_value());
+      EXPECT_FALSE(errors.empty());
+    }
+  }
+}
+
+
 // decode a QueryVectors request. "vectorBucketName", "indexName" and "topK"
 // are always supplied, since they  are validated before "queryVector" is decoded
 // and the tests below are about
@@ -760,6 +804,258 @@ TEST(S3VectorDecodeTest, QueryVectorMissingAltogether) {
   JSONParser parser;
   ASSERT_TRUE(parser.parse(json.c_str(), json.size()));
   EXPECT_THROW(req.decode_json(&parser), JSONDecoder::err);
+}
+
+// ---- metadata key name validation ----
+//
+
+TEST(S3VectorKeyNameTest, ValidNames) {
+  for (const auto& name : {"genre", "underscore_is_ok", "my key", " genre ", "my-key",
+                           "1genre", "select", "café", "日本語", "MyKey",
+                           "$eq", "$and", "$or", "'genre'",
+                           "my\"key", "\"genre\""}) {
+    EXPECT_FALSE(validate_metadata_key_name(name).has_value()) << "name: " << name;
+    EXPECT_FALSE(validate_declared_metadata_key_name(name).has_value()) << "name: " << name;
+  }
+}
+
+TEST(S3VectorKeyNameTest, EmptyNameRejected) {
+  EXPECT_TRUE(validate_metadata_key_name("").has_value());
+  EXPECT_TRUE(validate_declared_metadata_key_name("").has_value());
+}
+
+TEST(S3VectorKeyNameTest, LengthValidation) {
+  const auto too_long = std::string(max_metadata_key_name_length + 1, 'k');
+  const auto longest = std::string(max_metadata_key_name_length, 'k');
+  EXPECT_TRUE(validate_declared_metadata_key_name(too_long).has_value());
+  EXPECT_FALSE(validate_metadata_key_name(too_long).has_value());
+  EXPECT_FALSE(validate_declared_metadata_key_name(longest).has_value());
+}
+
+TEST(S3VectorKeyNameTest, UnderscorePrefixRejected) {
+  for (const auto& name : {"_key", "_data", "_metadata", "_distance", "_", "_anything"}) {
+    EXPECT_TRUE(validate_metadata_key_name(name).has_value()) << "name: " << name;
+    EXPECT_TRUE(validate_declared_metadata_key_name(name).has_value()) << "name: " << name;
+  }
+}
+
+TEST(S3VectorKeyNameTest, DotRejected) {
+  EXPECT_TRUE(validate_metadata_key_name("user.name").has_value());
+  EXPECT_TRUE(validate_metadata_key_name(".").has_value());
+  EXPECT_TRUE(validate_declared_metadata_key_name("user.name").has_value());
+  EXPECT_TRUE(validate_declared_metadata_key_name(".").has_value());
+}
+
+// a name holding a backtick is rejected only when declared at CreateIndex,
+// since only a declared key may become a column, and lance fails to write a
+// column whose name holds a backtick anywhere - wrapped, leading, trailing or
+// inside. as a key of a metadata document the name is fine, since that is
+// never a column
+TEST(S3VectorKeyNameTest, BackticksRejectedForDeclaredNamesOnly) {
+  for (const auto& name : {"`genre`", "``", "`my key`", "`a`b`",
+                           "my`key", "`lead", "trail`", "`"}) {
+    EXPECT_TRUE(validate_declared_metadata_key_name(name).has_value()) << "name: " << name;
+    EXPECT_FALSE(validate_metadata_key_name(name).has_value()) << "name: " << name;
+  }
+  // the other quote characters are handled by quoting the column name in the
+  // filter expression, and need no rule
+  for (const auto& name : {"\"genre\"", "'genre'"}) {
+    EXPECT_FALSE(validate_declared_metadata_key_name(name).has_value()) << "name: " << name;
+  }
+}
+
+// ---- column name quoting ----
+
+TEST(S3VectorColumnNameTest, QuoteColumnName) {
+  EXPECT_EQ(quote_column_name("genre"), "\"genre\"");
+  EXPECT_EQ(quote_column_name("Genre"), "\"Genre\"");
+  EXPECT_EQ(quote_column_name("my key"), "\"my key\"");
+  EXPECT_EQ(quote_column_name(" genre "), "\" genre \"");
+  EXPECT_EQ(quote_column_name("`genre`"), "\"`genre`\"");
+  EXPECT_EQ(quote_column_name("'genre'"), "\"'genre'\"");
+  EXPECT_EQ(quote_column_name("ge`nre"), "\"ge`nre\"");
+  EXPECT_EQ(quote_column_name("ge'nre"), "\"ge'nre\"");
+  EXPECT_EQ(quote_column_name("'ge'nre'"), "\"'ge'nre'\"");
+  EXPECT_EQ(quote_column_name("`ge`nre`"), "\"`ge`nre`\"");
+  EXPECT_EQ(quote_column_name(""), "\"\"");
+  // an interior double quote is escaped by doubling it
+  EXPECT_EQ(quote_column_name("my\"key"), "\"my\"\"key\"");
+  EXPECT_EQ(quote_column_name("\"genre\""), "\"\"\"genre\"\"\"");
+}
+
+// evaluate '<column> = "x"' over a single row batch whose only column is named
+// <name> and holds "x". returns true if datafusion resolved the column
+// reference against the schema and the row matched. this is what a filter on a
+// filterable metadata key does at query time, minus the table
+static bool column_filter_matches(const std::string& name, const std::string& expr_name) {
+  auto schema = arrow::schema({arrow::field(name, arrow::utf8())});
+  arrow::StringBuilder builder;
+  EXPECT_TRUE(builder.Append("x").ok());
+  std::shared_ptr<arrow::Array> array;
+  EXPECT_TRUE(builder.Finish(&array).ok());
+  const auto batch = arrow::RecordBatch::Make(schema, 1, {array});
+
+  struct ArrowArray c_array = {};
+  struct ArrowSchema c_schema = {};
+  EXPECT_TRUE(arrow::ExportRecordBatch(*batch, &c_array, &c_schema).ok());
+
+  auto* column = lancedb_expr_column(expr_name.c_str());
+  auto* value = lancedb_expr_literal_string("x");
+  auto* expr = lancedb_expr_binary(column, LANCEDB_BINARY_OP_EQ, value);
+
+  struct ArrowArray* arrays[1] = {&c_array};
+  bool* matches = nullptr;
+  size_t count = 0;
+  char* error_message = nullptr;
+  const auto result = lancedb_json_matches(
+      reinterpret_cast<FFI_ArrowArray**>(arrays),
+      reinterpret_cast<FFI_ArrowSchema*>(&c_schema),
+      1, expr, &matches, &count, &error_message);
+
+  const bool matched = (result == LANCEDB_SUCCESS && count == 1 && matches[0]);
+  lancedb_free_json_matches(matches);
+  lancedb_free_string(error_message);
+  if (c_array.release) c_array.release(&c_array);
+  if (c_schema.release) c_schema.release(&c_schema);
+  return matched;
+}
+
+TEST(S3VectorColumnNameTest, QuotingColumnNames) {
+  // a name that parses as a SQL identifier is normalized: lowercased, stripped
+  // of its surrounding whitespace, or unwrapped when it is quoted with '"' or
+  // '`', which are the identifier quote characters of the dialect
+  const auto names_that_must_be_quoted = {"Genre", "MyKey", " genre ", "\"genre\"",
+                                          "`genre`"};
+  for (const auto& name : names_that_must_be_quoted) {
+    EXPECT_TRUE(column_filter_matches(name, quote_column_name(name))) << "name: " << name;
+    // make sure that quoting is needed
+    EXPECT_FALSE(column_filter_matches(name, name)) << "name: " << name;
+  }
+  // a name that does not parse as an identifier is used as it is. note that a
+  // single quote never delimits an identifier, only a string literal, so a name
+  // wrapped in single quotes belongs here and not above
+  const auto other_names = {"my key", "my\"key", "my'key", "'genre'", "café",
+                            "日本語", "my-key", "1genre", "select", "$or"};
+  for (const auto& name : other_names) {
+    // make sure that quoting does not break names
+    EXPECT_TRUE(column_filter_matches(name, quote_column_name(name))) << "name: " << name;
+    // make sure that quoting is not needed
+    EXPECT_TRUE(column_filter_matches(name, name)) << "name: " << name;
+  }
+}
+
+// ---- metadata keys named after a filter operator ----
+//
+// "$and" and "$or" are logical operators only when their value is an array of
+// conditions. every other name at a field position is a metadata key name, so
+// that a key named after an operator stays filterable
+
+TEST_F(S3VectorFilterTest, EveryOperatorNameWorksAsAFieldName) {
+  for (const auto& name : {"$eq", "$ne", "$gt", "$gte", "$lt", "$lte",
+                           "$in", "$nin", "$exists", "$and", "$or"}) {
+    auto result = build(fmt::format(R"({{"{}": "example"}})", name));
+    ASSERT_TRUE(result.has_value()) << "name: " << name;
+    EXPECT_NE(result->json_expr, nullptr) << "name: " << name;
+    EXPECT_TRUE(errors.empty());
+    free_exprs(*result);
+  }
+}
+
+TEST_F(S3VectorFilterTest, OperatorNameAsAFilterableColumn) {
+  std::vector<filterable_metadata_key_t> keys = {{"$or", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"$or": {"$eq": "example"}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, MixedOperatorAndFieldName) {
+  // the same name in both roles in one filter: the outer "$or" takes an array
+  // so it is the operator, the inner one takes an object so it is a field name
+  auto result = build(R"({"$or": [{"$or": {"$eq": "example"}}, {"color": "red"}]})");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->json_expr, nullptr);
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, SameOperatorAndFieldName) {
+  // outer "$eq" is field name and inner "$eq" is operator
+  auto result = build(R"({"$eq": {"$eq": "example"}})");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->column_expr, nullptr);
+  EXPECT_NE(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, DifferentOperatorAndFieldName) {
+  // "$eq" is the field name and "$ne" is the operator
+  auto result = build(R"({"$eq": {"$ne": "example"}})");
+  ASSERT_TRUE(result.has_value());
+  EXPECT_EQ(result->column_expr, nullptr);
+  EXPECT_NE(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, ObjectValueForAnOperatorRejected) {
+  // the value of an operator (inner "$eq") must be a scalar
+  // in this case it is an object and therefore rejected
+  auto result = build(R"({"$eq": {"$eq": {"$ne": "example"}}})");
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, SameOperatorAndColumnName) {
+  // the same, on a filterable metadata key named "$eq"
+  const std::vector<filterable_metadata_key_t> keys = {{"$eq", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"$eq": {"$eq": "example"}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+
+  // a different operator on the same column
+  result = build(R"({"$eq": {"$ne": "example"}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, ObjectValueForAnOperatorOnColumnRejected) {
+  const std::vector<filterable_metadata_key_t> keys = {{"$eq", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"$eq": {"$eq": {"$ne": "example"}}})", keys);
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, ArrayValueForAnOperatorOnColumnRejected) {
+  const std::vector<filterable_metadata_key_t> keys = {{"$in", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"$in": {"$eq": ["rock", "jazz"]}})", keys);
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
+}
+
+TEST_F(S3VectorFilterTest, ElementInListOnColumn) {
+  // "$in" as the name of a filterable column, with the "$in" operator applied to it
+  const std::vector<filterable_metadata_key_t> keys = {{"$in", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"$in": {"$in": ["rock", "pop"]}})", keys);
+  ASSERT_TRUE(result.has_value());
+  EXPECT_NE(result->column_expr, nullptr);
+  EXPECT_EQ(result->json_expr, nullptr);
+  EXPECT_TRUE(errors.empty());
+  free_exprs(*result);
+}
+
+TEST_F(S3VectorFilterTest, ObjectElementInListOnColumnRejected) {
+  const std::vector<filterable_metadata_key_t> keys = {{"$in", FilterableMetadataType::STRING, false}};
+  auto result = build(R"({"$in": {"$in": ["rock", {"nested": "value"}]}})", keys);
+  EXPECT_FALSE(result.has_value());
+  EXPECT_FALSE(errors.empty());
 }
 
 int main(int argc, char** argv) {
