@@ -2091,6 +2091,91 @@ TEST_CASE("snapshot reads do not add read conflicts", "[fdb]") {
   CHECK(lfdb::key_exists(j, write_key));
  }
 
+ SECTION("selection get") {
+  constexpr auto prefix = "snapshot-get-selection";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  std::vector<string_pair> out;
+  REQUIRE(1 == lfdb::get(snapshot_txn, selector, out, lfdb::read_mode::snapshot));
+
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("functional helpers") {
+  constexpr auto prefix = "snapshot-functional";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  int visited = 0;
+  lfdb::for_each(snapshot_txn, selector,
+                 [&visited](string_pair&&) {
+                  ++visited;
+                 },
+                 lfdb::read_mode::snapshot);
+  REQUIRE(1 == visited);
+
+  const auto values = lfdb::transform(snapshot_txn, selector,
+                                      [](string_pair&& row) {
+                                       return std::move(row.second);
+                                      },
+                                      lfdb::read_mode::snapshot);
+  REQUIRE_THAT(values, Catch::Matchers::Equals(std::vector<std::string>{ "old" }));
+
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("paginated scan") {
+  constexpr auto prefix = "snapshot-page";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  const auto page = lfdb::scan(snapshot_txn, selector, lfdb::page{1},
+                              lfdb::read_mode::snapshot);
+  REQUIRE(1 == page.size());
+
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("managed block scan accepts snapshot mode") {
+  constexpr auto prefix = "snapshot-blocks";
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(3, prefix) };
+
+  lfdb::set(j, make_key(0, prefix), "zero");
+  lfdb::set(j, make_key(1, prefix), "one");
+
+  std::vector<string_pair> rows;
+  for (const auto& block : lfdb::blocks(j, selector, lfdb::read_mode::snapshot)) {
+   std::ranges::copy(block, std::back_inserter(rows));
+  }
+
+  CHECK(2 == rows.size());
+ }
+
  SECTION("key existence") {
   const auto read_key = make_key(0, "snapshot-exists");
   const auto write_key = make_key(1, "snapshot-exists");
