@@ -209,6 +209,52 @@ if (lfdb::key_exists(dbh, "person/jose-capablanca/title")) {
 }
 ```
 
+## Atomic Mutations
+
+Atomic mutations tell FoundationDB to transform a value at commit time on the
+server side, without reading the current value back to the client. They are
+useful for frequently updated counters, flags, and other small raw-byte values.
+See the FoundationDB atomic operations guide:
+https://apple.github.io/foundationdb/developer-guide.html#atomic-operations
+
+```cpp
+// Increment a counter without a read-modify-write round trip:
+lfdb::atomic::add(dbh, "stats/person-count", std::uint64_t{1});
+```
+
+```cpp
+// Group atomic mutations with ordinary writes in the same transaction:
+auto txn = lfdb::make_transaction(dbh);
+
+lfdb::set(txn, "person/grace-hopper/name", "Grace Hopper");
+lfdb::atomic::add(txn, "stats/person-count", std::uint64_t{1});
+lfdb::atomic::bit_or(txn, "stats/person-flags", std::uint64_t{0x01});
+
+if (!lfdb::commit(txn)) {
+  retry_person_update();
+}
+```
+
+Numeric atomic mutations use FoundationDB's little-endian integer parameter
+encoding. The C++ integral type's width becomes the FoundationDB parameter
+width. They operate on raw FDB values, not zpp_bits object encoding:
+
+```cpp
+lfdb::atomic::max(dbh, "stats/high-watermark", std::uint64_t{128});
+lfdb::atomic::min(dbh, "stats/low-watermark", std::uint64_t{4});
+```
+
+Byte-wise atomic mutations operate on raw byte strings:
+
+```cpp
+const std::string_view zero_bytes("\0\0\0\0\0\0\0\0", 8);
+
+lfdb::atomic::byte_min(dbh, "stats/first-name", "Ada");
+lfdb::atomic::byte_max(dbh, "stats/last-name", "Zuse");
+lfdb::atomic::append_if_fits(dbh, "log/tail", "next-record\n");
+lfdb::atomic::compare_and_clear(dbh, "stats/person-count", zero_bytes);
+```
+
 ## Multi-Key Writes
 
 ```cpp
@@ -258,6 +304,7 @@ explicit open/closed boundaries.
 | Situation | Use | Result Shape | Why |
 | --- | --- | --- | --- |
 | Store one key/value pair | `lfdb::set(dbh, key, value)` | `void` | One logical write with automatic transaction handling. |
+| Apply a server-side value mutation | `lfdb::atomic::add(dbh, key, n)` | `void` | Updates counters or flags without a read-modify-write round trip. |
 | Store many key/value pairs already in a container | `lfdb::set(dbh, kvs)` | `void` | Writes the whole range in one managed transaction without spelling out iterators. |
 | Read one exact key | `lfdb::get(dbh, key, value)` | `bool` | Returns `true` only when the key exists and decodes into `value`. |
 | Read one exact key without adding a read conflict | `lfdb::get(dbh, key, value, lfdb::read_mode::snapshot)` | `bool` | Useful for advisory reads where the value is not part of the transaction's correctness condition. |

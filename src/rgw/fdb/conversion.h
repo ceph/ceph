@@ -87,7 +87,7 @@ inline void convert(const std::span<const std::uint8_t>& from, auto& to)
 template <std::invocable<const char *, size_t> OutputFunction>
 inline void convert(const std::span<const std::uint8_t>& in, OutputFunction& write_output_fn)
 {
- write_output_fn((const char *)in.data(), in.size());
+ write_output_fn(reinterpret_cast<const char *>(in.data()), in.size());
 }
 
 } // namespace ceph::libfdb::from
@@ -109,7 +109,7 @@ inline std::string decode_zpp_string_value(const std::span<const std::uint8_t> f
   throw ceph::libfdb::libfdb_exception("unable to decode string value");
  }
 
- const auto data = reinterpret_cast<const char*>(from.data() + size_prefix);
+ const auto data = reinterpret_cast<const char *>(size_prefix + from.data());
 
  return std::string(data, static_cast<std::string::size_type>(size));
 }
@@ -119,7 +119,8 @@ inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
 {
  std::pair<std::string, ValueT> r;
 
- r.first.assign((const char *)kv.key, static_cast<std::string::size_type>(kv.key_length));
+ r.first.assign(reinterpret_cast<const char *>(kv.key),
+                static_cast<std::string::size_type>(kv.key_length));
 
  try 
   {
@@ -137,7 +138,8 @@ template <>
 inline std::pair<std::string, std::string> to_decoded_kv_pair<std::string>(const FDBKeyValue& kv)
 {
  return {
-  std::string((const char *)kv.key, static_cast<std::string::size_type>(kv.key_length)),
+  std::string(reinterpret_cast<const char *>(kv.key),
+              static_cast<std::string::size_type>(kv.key_length)),
   decode_zpp_string_value(std::span<const std::uint8_t>(kv.value, kv.value_length))
  };
 }

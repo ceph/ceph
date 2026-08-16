@@ -112,6 +112,10 @@ inline fdb_error_t do_commit(transaction_handle& txn);
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      std::span<const std::uint8_t> k,
                                      std::span<const std::uint8_t> v);
+inline void transaction_atomic_op(const transaction_handle& txn,
+                                  std::span<const std::uint8_t> k,
+                                  std::span<const std::uint8_t> param,
+                                  FDBMutationType type);
 inline void transaction_clear_key_bytes(const transaction_handle& txn,
                                         std::span<const std::uint8_t> k);
 inline void transaction_clear_range(const transaction_handle& txn,
@@ -327,7 +331,9 @@ struct future_value final
 
 inline auto as_fdb_span(concepts::libfdb_key_view auto key)
 {
- return std::span<const std::uint8_t>((const std::uint8_t *)key.data(), key.size());
+ return std::span<const std::uint8_t>(
+  reinterpret_cast<const std::uint8_t *>(key.data()),
+  std::size(key));
 }
 
 } // namespace detail
@@ -612,8 +618,8 @@ using transaction_options = option_map<FDBTransactionOption>;
 namespace detail {
 
 // Note that these are specific to FDB's needs (see return type, casts):
-inline const std::uint8_t *data_of(const std::vector<std::uint8_t>& xs) { return (const std::uint8_t *)xs.data(); }
-inline const std::uint8_t *data_of(const std::string& xs) { return (const std::uint8_t *)xs.data(); }
+inline const std::uint8_t *data_of(const std::vector<std::uint8_t>& xs) { return xs.data(); }
+inline const std::uint8_t *data_of(const std::string& xs) { return reinterpret_cast<const std::uint8_t *>(xs.data()); }
 inline const std::uint8_t *data_of(const std::int64_t& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
 inline const std::uint8_t *data_of(const option_flag_t&) { return nullptr; }
 
@@ -624,7 +630,7 @@ constexpr int size_of(const std::int64_t) { return sizeof(std::int64_t); }
 constexpr int size_of(const option_flag_t&) { return 0; }
 
 // ...also used:
-inline const std::uint8_t *data_of(std::string_view xs) { return (const std::uint8_t *)xs.data(); }
+inline const std::uint8_t *data_of(std::string_view xs) { return reinterpret_cast<const std::uint8_t *>(xs.data()); }
 constexpr int size_of(std::string_view xs) { return static_cast<int>(xs.size()); }
 
 inline auto as_fdb_option_args(const auto& option)
@@ -834,8 +840,18 @@ class transaction final
  private:
  void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
     fdb_transaction_set(raw_handle(),
-                        (const uint8_t*)k.data(), k.size(),
-                        (const uint8_t*)v.data(), v.size());
+                        k.data(), static_cast<int>(std::size(k)),
+                        v.data(), static_cast<int>(std::size(v)));
+ }
+
+ void atomic_op(std::span<const std::uint8_t> k,
+                std::span<const std::uint8_t> param,
+                const FDBMutationType type)
+ {
+  fdb_transaction_atomic_op(raw_handle(),
+                            k.data(), static_cast<int>(std::size(k)),
+                            param.data(), static_cast<int>(std::size(param)),
+                            type);
  }
 
  void mark_version(const versionstamp& stamp)
@@ -853,8 +869,8 @@ class transaction final
                          const versionstamp& stamp)
  {
   fdb_transaction_atomic_op(raw_handle(),
-                            (const std::uint8_t*)k.data(), k.size(),
-                            (const std::uint8_t*)v.data(), v.size(),
+                            k.data(), static_cast<int>(std::size(k)),
+                            v.data(), static_cast<int>(std::size(v)),
                             MutationKind);
 
   mark_version(stamp);
@@ -881,15 +897,17 @@ class transaction final
 
  void erase(std::span<const std::uint8_t> k) {
     fdb_transaction_clear(raw_handle(),
-                          (const std::uint8_t *)k.data(), k.size());
+                          k.data(), static_cast<int>(std::size(k)));
  }
 
  void erase(const ceph::libfdb::select& key_range) {
     const auto half_open_range = detail::as_half_open_select(key_range);
+    const auto begin = detail::as_fdb_span(half_open_range.begin_key);
+    const auto end = detail::as_fdb_span(half_open_range.end_key);
 
     fdb_transaction_clear_range(raw_handle(),
-        (const uint8_t *)half_open_range.begin_key.data(), half_open_range.begin_key.size(),
-        (const uint8_t *)half_open_range.end_key.data(), half_open_range.end_key.size());
+        begin.data(), static_cast<int>(std::size(begin)),
+        end.data(), static_cast<int>(std::size(end)));
  }
 
  void mark_conflict(const ceph::libfdb::select& key_range,
@@ -909,8 +927,8 @@ class transaction final
   const auto end = detail::as_fdb_span(half_open_range.end_key);
 
   const auto r = fdb_transaction_add_conflict_range(raw_handle(),
-                 begin.data(), std::size(begin),
-                 end.data(), std::size(end),
+                 begin.data(), static_cast<int>(std::size(begin)),
+                 end.data(), static_cast<int>(std::size(end)),
                  type);
 
   if (0 != r) {
@@ -922,7 +940,7 @@ class transaction final
  {
   return watch_handle {
    detail::future_value {
-    fdb_transaction_watch(raw_handle(), key.data(), key.size())
+    fdb_transaction_watch(raw_handle(), key.data(), static_cast<int>(std::size(key)))
    }
   };
  }
@@ -1017,6 +1035,10 @@ class transaction final
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
                                                                    std::span<const std::uint8_t>,
                                                                    std::span<const std::uint8_t>);
+ friend inline void ceph::libfdb::detail::transaction_atomic_op(const transaction_handle&,
+                                                                std::span<const std::uint8_t>,
+                                                                std::span<const std::uint8_t>,
+                                                                FDBMutationType);
  friend inline void ceph::libfdb::detail::transaction_clear_key_bytes(const transaction_handle&,
                                                                       std::span<const std::uint8_t>);
  friend inline void ceph::libfdb::detail::transaction_clear_range(const transaction_handle&,
@@ -1035,6 +1057,14 @@ inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      std::span<const std::uint8_t> v)
 {
  txn->set(k, v);
+}
+
+inline void transaction_atomic_op(const transaction_handle& txn,
+                                  std::span<const std::uint8_t> k,
+                                  std::span<const std::uint8_t> param,
+                                  const FDBMutationType type)
+{
+ txn->atomic_op(k, param, type);
 }
 
 inline void transaction_clear_key_bytes(const transaction_handle& txn,
@@ -1066,7 +1096,7 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
 
  auto fv = detail::block_until_ready(detail::future_value(fdb_transaction_get(
                                     raw_handle(),
-                                    (const uint8_t *)key.data(), key.size(),
+                                    key.data(), static_cast<int>(std::size(key)),
                                     snapshot)));
  auto *future = fv.raw_ptr_or_throw();
  
@@ -1306,7 +1336,8 @@ inline std::optional<select> next_range_after(select key_range, const query_wind
  }
 
  const auto& last_key = window.result_pairs.back();
- auto cursor = std::string_view((const char *)last_key.key, last_key.key_length);
+ auto cursor = std::string_view(reinterpret_cast<const char *>(last_key.key),
+                                last_key.key_length);
 
  if (key_range.options.reverse_order) {
   key_range.end_key = cursor;
@@ -1414,9 +1445,9 @@ inline std::vector<ceph::libfdb::select> as_select_seq(std::span<const FDBKey> x
         | std::views::transform([&parent, xs](const auto i) {
            const auto& fst = xs[i];
            const auto& snd = xs[i + 1];
-           const auto first_key = std::string_view((const char *)fst.key,
+           const auto first_key = std::string_view(reinterpret_cast<const char *>(fst.key),
                                                     static_cast<std::string::size_type>(fst.key_length));
-           const auto second_key = std::string_view((const char *)snd.key,
+           const auto second_key = std::string_view(reinterpret_cast<const char *>(snd.key),
                                                      static_cast<std::string::size_type>(snd.key_length));
 
            ceph::libfdb::select split(first_key, second_key);
@@ -1435,10 +1466,10 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                                                       int iteration,
                                                       const read_mode mode)
 {
-  const auto& begin_key  = selection.begin_key;
-  const auto& end_key    = selection.end_key;
+  const auto begin = detail::as_fdb_span(selection.begin_key);
+  const auto end = detail::as_fdb_span(selection.end_key);
 
-  const auto& options    = selection.options;
+  const auto& options = selection.options;
 
   // The documentation makes this stuff about as clear as mud... read VERY carefully
   // when you fiddle with these:
@@ -1455,11 +1486,13 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
   // the meaning of some of these, it can be hard to deduce from the documentation; Returns an
   // FDBKeyValueArray in the future:
   return future_value(fdb_transaction_get_range(txn.raw_handle(),
-                      (const uint8_t *)begin_key.data(), begin_key.size(),      // the reference-point key
+                      begin.data(),
+                      static_cast<int>(std::size(begin)),                       // the reference-point key
                       begin_or_eq,                                              // begin or eq
                       begin_offset,                                             // begin offset
 
-                      (const uint8_t *)end_key.data(), end_key.size(),          // the end selector key
+                      end.data(),
+                      static_cast<int>(std::size(end)),                         // the end selector key
                       end_or_eq,                                                // end or eq
                       end_offset,                                               // end offset (a shift AFTER end is matched)
 
@@ -1484,12 +1517,14 @@ inline std::vector<ceph::libfdb::select> plan_split_ranges(
 
  auto txn = ceph::libfdb::make_transaction(dbh);
  auto split_selector = ceph::libfdb::detail::as_half_open_select(selector);
+ const auto begin = ceph::libfdb::detail::as_fdb_span(split_selector.begin_key);
+ const auto end = ceph::libfdb::detail::as_fdb_span(split_selector.end_key);
 
  for (bool should_retry = true; should_retry;) {
   auto result_owner = wait_until_ready(future_value(fdb_transaction_get_range_split_points(
                        txn->raw_handle(),
-                       (const std::uint8_t *)split_selector.begin_key.data(), static_cast<int>(split_selector.begin_key.length()),
-                       (const std::uint8_t *)split_selector.end_key.data(), static_cast<int>(split_selector.end_key.length()),
+                       begin.data(), static_cast<int>(std::size(begin)),
+                       end.data(), static_cast<int>(std::size(end)),
                        remote_chunk_size)));
 
   auto split_points = extract_split_points(std::move(result_owner));

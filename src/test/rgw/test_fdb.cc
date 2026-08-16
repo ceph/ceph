@@ -77,6 +77,18 @@ concept can_lfdb_set = requires(Ts&& ...xs) {
  lfdb::set(std::forward<Ts>(xs)...);
 };
 
+template <typename ValueT>
+concept can_atomic_add =
+ requires(lfdb::database_handle dbh, std::string key, ValueT value) {
+  lfdb::atomic::add(dbh, key, value);
+ };
+
+template <typename ValueT>
+concept can_atomic_min =
+ requires(lfdb::database_handle dbh, std::string key, ValueT value) {
+  lfdb::atomic::min(dbh, key, value);
+ };
+
 struct pair_identity final
 {
  const string_pair& operator()(const string_pair& kv) const noexcept
@@ -113,6 +125,10 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
  STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<char(&)[9]>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<const std::string&>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<std::string>);
+
+ STATIC_REQUIRE(can_atomic_add<std::uint64_t>);
+ STATIC_REQUIRE_FALSE(can_atomic_add<bool>);
+ STATIC_REQUIRE_FALSE(can_atomic_min<std::int64_t>);
 }
 
 TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")
@@ -185,6 +201,39 @@ inline void write_raw_fdb_value(lfdb::database_handle dbh,
                      static_cast<int>(std::size(value)));
 
  REQUIRE(lfdb::commit(txn));
+}
+
+inline std::vector<std::uint8_t> read_raw_fdb_value(lfdb::database_handle dbh,
+                                                    std::string_view key)
+{
+ std::vector<std::uint8_t> out;
+
+ REQUIRE(lfdb::get(dbh, key, [&out](std::span<const std::uint8_t> value) {
+  out.assign(std::begin(value), std::end(value));
+ }));
+
+ return out;
+}
+
+inline std::span<const std::uint8_t> raw_bytes(std::string_view value)
+{
+ return {
+  reinterpret_cast<const std::uint8_t *>(value.data()),
+  std::size(value)
+ };
+}
+
+template <std::unsigned_integral ValueT>
+constexpr ValueT decode_little_endian(std::span<const std::uint8_t> bytes)
+{
+ ValueT out = 0;
+
+ for (auto byte : bytes | std::views::reverse) {
+  out <<= 8;
+  out |= static_cast<ValueT>(byte);
+ }
+
+ return out;
 }
 
 inline auto decode_raw_fdb_pairs(std::span<const FDBKeyValue> pairs)
@@ -2294,6 +2343,108 @@ TEST_CASE("explicit conflict ranges", "[fdb]") {
                        Catch::Matchers::MessageMatches(
                         Catch::Matchers::ContainsSubstring(
                          "conflict expression must contain a non-empty range")));
+ }
+}
+
+TEST_CASE("atomic mutations", "[fdb]") {
+ janitor j;
+
+ SECTION("add mutates little-endian integer values") {
+  const auto key = test_key("atomic/add");
+
+  lfdb::atomic::add(j, key, std::uint64_t{5});
+
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::atomic::add(txn, key, std::int64_t{-2});
+  REQUIRE(lfdb::commit(txn));
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(3 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("add does not require a read conflict") {
+  const auto key = test_key("atomic/add/concurrent");
+
+  auto first_txn = lfdb::make_transaction(j);
+  auto second_txn = lfdb::make_transaction(j);
+
+  lfdb::atomic::add(first_txn, key, std::uint64_t{1});
+  lfdb::atomic::add(second_txn, key, std::uint64_t{1});
+
+  CHECK(lfdb::commit(first_txn));
+  CHECK(lfdb::commit(second_txn));
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(2 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("min and max use unsigned little-endian parameters") {
+  const auto key = test_key("atomic/min-max");
+
+  lfdb::atomic::max(j, key, std::uint64_t{10});
+  lfdb::atomic::max(j, key, std::uint64_t{7});
+  lfdb::atomic::max(j, key, std::uint64_t{12});
+  lfdb::atomic::min(j, key, std::uint64_t{20});
+  lfdb::atomic::min(j, key, std::uint64_t{4});
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(4 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("bit operations mutate integer bytes") {
+  const auto key = test_key("atomic/bit");
+
+  lfdb::atomic::bit_or(j, key, std::uint64_t{0x0F});
+  lfdb::atomic::bit_xor(j, key, std::uint64_t{0x03});
+  lfdb::atomic::bit_and(j, key, std::uint64_t{0x0A});
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(0x08 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("byte operations use lexicographic raw values") {
+  const auto key = test_key("atomic/byte-min-max");
+
+  const auto minimum = std::array<std::uint8_t, 1>{'b'};
+  const auto maximum = std::vector<std::uint8_t>{'c'};
+
+  write_raw_fdb_value(j, key, raw_bytes("m"));
+
+  lfdb::atomic::byte_min(j, key, minimum);
+  CHECK(std::vector<std::uint8_t>{'b'} == read_raw_fdb_value(j, key));
+
+  lfdb::atomic::byte_max(j, key, maximum);
+  CHECK(std::vector<std::uint8_t>{'c'} == read_raw_fdb_value(j, key));
+ }
+
+ SECTION("append_if_fits appends raw bytes") {
+  const auto key = test_key("atomic/append-if-fits");
+
+  write_raw_fdb_value(j, key, raw_bytes("cache"));
+  lfdb::atomic::append_if_fits(j, key, "-block");
+
+  CHECK(std::vector<std::uint8_t>{'c', 'a', 'c', 'h', 'e', '-', 'b', 'l', 'o', 'c', 'k'} ==
+        read_raw_fdb_value(j, key));
+ }
+
+ SECTION("compare_and_clear clears only matching raw bytes") {
+  const auto key = test_key("atomic/compare-and-clear");
+
+  write_raw_fdb_value(j, key, raw_bytes("present"));
+  lfdb::atomic::compare_and_clear(j, key, "missing");
+  CHECK(lfdb::key_exists(j, key));
+
+  lfdb::atomic::compare_and_clear(j, key, "present");
+  CHECK_FALSE(lfdb::key_exists(j, key));
  }
 }
 

@@ -386,6 +386,293 @@ inline void set(database_handle dbh,
 
 namespace ceph::libfdb {
 
+// Atomic operations enqueue FoundationDB server-side value mutations:
+namespace atomic {
+
+namespace detail {
+
+template <typename ValueT>
+requires (std::integral<ValueT> && not std::same_as<ValueT, bool>)
+constexpr auto little_endian_bytes(const ValueT value) noexcept
+{
+ using unsigned_t = std::make_unsigned_t<ValueT>;
+
+ std::array<std::uint8_t, sizeof(ValueT)> out {};
+ auto bits = static_cast<unsigned_t>(value);
+
+ for (auto& byte : out) {
+  byte = static_cast<std::uint8_t>(bits);
+  bits >>= 8;
+ }
+
+ return out;
+}
+
+inline auto byte_span(const std::string_view bytes)
+{
+ return std::span<const std::uint8_t>(
+  reinterpret_cast<const std::uint8_t *>(bytes.data()),
+  std::size(bytes));
+}
+
+template <typename FDBBytesT>
+requires (not concepts::stringview_convertible<FDBBytesT>)
+inline auto byte_span(const FDBBytesT& bytes)
+{
+ return std::span<const std::uint8_t>(bytes);
+}
+
+inline constexpr auto integral_param =
+ []<typename ValueT>(const ValueT value)
+ requires requires(ValueT x) { little_endian_bytes(x); }
+ {
+  return little_endian_bytes(value);
+ };
+
+inline constexpr auto byte_param =
+ []<typename FDBBytesT>(const FDBBytesT& value)
+ requires requires(const FDBBytesT& x) { byte_span(x); }
+ {
+  return byte_span(value);
+ };
+
+template <FDBMutationType MutationKind, auto MaterializeParam, typename ParamT>
+requires requires(const ParamT& value) { MaterializeParam(value); }
+inline void atomic_op(transaction_handle txn,
+                      const concepts::libfdb_key auto& k,
+                      const ParamT& param,
+                      const commit_after_op commit_after)
+{
+ return ceph::libfdb::detail::commit_noreplay(txn, commit_after,
+          [key = ceph::libfdb::detail::as_fdb_span(k),
+           value = MaterializeParam(param)](const transaction_handle& active_txn) {
+            return ceph::libfdb::detail::transaction_atomic_op(
+             active_txn, key, std::span<const std::uint8_t>(value), MutationKind);
+          });
+}
+
+template <FDBMutationType MutationKind, auto MaterializeParam, typename ParamT>
+requires requires(const ParamT& value) { MaterializeParam(value); }
+inline void atomic_op(database_handle dbh,
+                      const concepts::libfdb_key auto& k,
+                      const ParamT& param)
+{
+ return ceph::libfdb::detail::in_transaction(dbh,
+          [k, &param](transaction_handle& txn) {
+            return atomic_op<MutationKind, MaterializeParam>(
+             txn, k, param, commit_after_op::no_commit);
+          });
+}
+
+} // namespace detail
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void add(transaction_handle txn,
+                const concepts::libfdb_key auto& k,
+                const ValueT value,
+                const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_ADD, detail::integral_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void add(database_handle dbh,
+                const concepts::libfdb_key auto& k,
+                const ValueT value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_ADD, detail::integral_param>(dbh, k, value);
+}
+
+template <typename ValueT>
+requires (std::unsigned_integral<ValueT> && not std::same_as<ValueT, bool>)
+inline void min(transaction_handle txn,
+                const concepts::libfdb_key auto& k,
+                const ValueT value,
+                const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_MIN, detail::integral_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename ValueT>
+requires (std::unsigned_integral<ValueT> && not std::same_as<ValueT, bool>)
+inline void min(database_handle dbh,
+                const concepts::libfdb_key auto& k,
+                const ValueT value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_MIN, detail::integral_param>(dbh, k, value);
+}
+
+template <typename ValueT>
+requires (std::unsigned_integral<ValueT> && not std::same_as<ValueT, bool>)
+inline void max(transaction_handle txn,
+                const concepts::libfdb_key auto& k,
+                const ValueT value,
+                const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_MAX, detail::integral_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename ValueT>
+requires (std::unsigned_integral<ValueT> && not std::same_as<ValueT, bool>)
+inline void max(database_handle dbh,
+                const concepts::libfdb_key auto& k,
+                const ValueT value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_MAX, detail::integral_param>(dbh, k, value);
+}
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void bit_and(transaction_handle txn,
+                    const concepts::libfdb_key auto& k,
+                    const ValueT value,
+                    const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BIT_AND, detail::integral_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void bit_and(database_handle dbh,
+                    const concepts::libfdb_key auto& k,
+                    const ValueT value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BIT_AND, detail::integral_param>(dbh, k, value);
+}
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void bit_or(transaction_handle txn,
+                   const concepts::libfdb_key auto& k,
+                   const ValueT value,
+                   const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BIT_OR, detail::integral_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void bit_or(database_handle dbh,
+                   const concepts::libfdb_key auto& k,
+                   const ValueT value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BIT_OR, detail::integral_param>(dbh, k, value);
+}
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void bit_xor(transaction_handle txn,
+                    const concepts::libfdb_key auto& k,
+                    const ValueT value,
+                    const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BIT_XOR, detail::integral_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename ValueT>
+requires requires(ValueT value) { detail::little_endian_bytes(value); }
+inline void bit_xor(database_handle dbh,
+                    const concepts::libfdb_key auto& k,
+                    const ValueT value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BIT_XOR, detail::integral_param>(dbh, k, value);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void byte_min(transaction_handle txn,
+                     const concepts::libfdb_key auto& k,
+                     const FDBBytesT& value,
+                     const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BYTE_MIN, detail::byte_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void byte_min(database_handle dbh,
+                     const concepts::libfdb_key auto& k,
+                     const FDBBytesT& value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BYTE_MIN, detail::byte_param>(dbh, k, value);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void byte_max(transaction_handle txn,
+                     const concepts::libfdb_key auto& k,
+                     const FDBBytesT& value,
+                     const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BYTE_MAX, detail::byte_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void byte_max(database_handle dbh,
+                     const concepts::libfdb_key auto& k,
+                     const FDBBytesT& value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_BYTE_MAX, detail::byte_param>(dbh, k, value);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void append_if_fits(transaction_handle txn,
+                           const concepts::libfdb_key auto& k,
+                           const FDBBytesT& value,
+                           const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_APPEND_IF_FITS, detail::byte_param>(
+  txn, k, value, commit_after);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void append_if_fits(database_handle dbh,
+                           const concepts::libfdb_key auto& k,
+                           const FDBBytesT& value)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_APPEND_IF_FITS, detail::byte_param>(dbh, k, value);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void compare_and_clear(transaction_handle txn,
+                              const concepts::libfdb_key auto& k,
+                              const FDBBytesT& expected,
+                              const commit_after_op commit_after = commit_after_op::no_commit)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_COMPARE_AND_CLEAR, detail::byte_param>(
+  txn, k, expected, commit_after);
+}
+
+template <typename FDBBytesT>
+requires requires(const FDBBytesT& value) { detail::byte_span(value); }
+inline void compare_and_clear(database_handle dbh,
+                              const concepts::libfdb_key auto& k,
+                              const FDBBytesT& expected)
+{
+ return detail::atomic_op<FDB_MUTATION_TYPE_COMPARE_AND_CLEAR, detail::byte_param>(
+  dbh, k, expected);
+}
+
+} // namespace atomic
+
+} // namespace ceph::libfdb
+
+namespace ceph::libfdb {
+
 // erase() in libfdb is clear() in FDB parlance:
 inline void erase(ceph::libfdb::transaction_handle txn,
                   const query::expression auto& selection,
