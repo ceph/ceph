@@ -24,6 +24,7 @@
 #include "rgw/rgw_compression_types.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include <fmt/format.h>
 #include "common/ceph_crypto.h"
 #include "global/global_context.h"
 #include "common/async/yield_context.h"
@@ -1110,15 +1111,10 @@ uint64_t rgw_get_max_chunk_size(CRgwDriver* driver_ptr) {
 }
 
 const char* rgw_sal_wrapper_version(void) {
-  static char version[16];
-  static bool initialized = false;
-  if (!initialized) {
-    snprintf(version, sizeof(version), "%d.%d",
-             RGW_SAL_WRAPPER_VERSION_MAJOR,
-             RGW_SAL_WRAPPER_VERSION_MINOR);
-    initialized = true;
-  }
-  return version;
+  static const std::string version = fmt::format("{}.{}",
+                                                 RGW_SAL_WRAPPER_VERSION_MAJOR,
+                                                 RGW_SAL_WRAPPER_VERSION_MINOR);
+  return version.c_str();
 }
 
 } // extern "C"
