@@ -2854,7 +2854,7 @@ SeaStore::Shard::_split_collection(
           cmroot,
           *ctx.transaction,
           cid,
-          bits
+          coll_info_t{static_cast<unsigned>(bits), L_ADDR_NULL}
         ).si_then([this, &ctx, &cmroot] {
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(
@@ -2881,7 +2881,8 @@ SeaStore::Shard::_merge_collection(
 {
   auto cmroot = co_await transaction_manager->read_collection_root(
     *ctx.transaction);
-  co_await collection_manager->update(cmroot, *ctx.transaction, dest_cid, bits)
+  co_await collection_manager->update(cmroot, *ctx.transaction, dest_cid,
+      coll_info_t{static_cast<unsigned>(bits), L_ADDR_NULL})
     .handle_error_interruptible(
       tm_iertr::pass_further{},
       crimson::ct_error::assert_all("unexpected error from update in _merge_collection"));
@@ -2906,7 +2907,7 @@ SeaStore::Shard::_create_collection(
           cmroot,
           *ctx.transaction,
           cid,
-          bits
+          coll_info_t{static_cast<unsigned>(bits), L_ADDR_NULL}
         ).si_then([this, &ctx, &cmroot] {
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(

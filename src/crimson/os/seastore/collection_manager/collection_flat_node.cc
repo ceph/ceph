@@ -18,11 +18,11 @@ void delta_t::replay(coll_map_t &l) const
 {
   switch (op) {
   case op_t::INSERT: {
-    l.insert(coll, bits);
+    l.insert(coll, value);
     break;
   }
   case op_t::UPDATE: {
-    l.update(coll, bits);
+    l.update(coll, value);
     break;
   }
   case op_t::REMOVE: {
@@ -48,8 +48,8 @@ CollectionNode::list()
 {
   logger().debug("CollectionNode:{}, {}", __func__, *this);
   CollectionManager::list_ret_bare list_result;
-  for (auto &[coll, bits] : decoded) {
-    list_result.emplace_back(coll, bits);
+  for (auto &[coll, value] : decoded) {
+    list_result.emplace_back(coll, coll_info_t(value.bits, value.onode_root));
   }
   return list_ret(
     interruptible::ready_future_marker{},
@@ -57,15 +57,15 @@ CollectionNode::list()
 }
 
 CollectionNode::create_ret
-CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
+CollectionNode::create(coll_context_t cc, coll_t coll, coll_value_t value)
 {
   logger().debug("CollectionNode:{}", __func__);
   if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
-    return mut->create(cc, coll, bits);
+    return mut->create(cc, coll, value);
   }
-  logger().debug("CollectionNode::create {} {} {}", coll, bits, *this);
-  auto [iter, inserted] = decoded.insert(coll, bits);
+  logger().debug("CollectionNode::create {} {} {}", coll, value.bits, *this);
+  auto [iter, inserted] = decoded.insert(coll, value);
   assert(inserted);
   if (encoded_sizeof((base_coll_map_t&)decoded) > get_bptr().length()) {
     decoded.erase(iter);
@@ -74,7 +74,7 @@ CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
       create_result_t::OVERFLOW);
   } else {
     if (auto buffer = maybe_get_delta_buffer(); buffer) {
-      buffer->insert(coll, bits);
+      buffer->insert(coll, value);
     }
     copy_to_node();
     return create_ret(
@@ -84,18 +84,18 @@ CollectionNode::create(coll_context_t cc, coll_t coll, unsigned bits)
 }
 
 CollectionNode::update_ret
-CollectionNode::update(coll_context_t cc, coll_t coll, unsigned bits)
+CollectionNode::update(coll_context_t cc, coll_t coll, coll_value_t value)
 {
   logger().debug("trans.{} CollectionNode:{} {} {}",
-    cc.t.get_trans_id(), __func__, coll, bits);
+    cc.t.get_trans_id(), __func__, coll, value.bits);
   if (!is_mutable()) {
     auto mut = cc.tm.get_mutable_extent(cc.t, this)->cast<CollectionNode>();
-    return mut->update(cc, coll, bits);
+    return mut->update(cc, coll, value);
   }
   if (auto buffer = maybe_get_delta_buffer(); buffer) {
-    buffer->update(coll, bits);
+    buffer->update(coll, value);
   }
-  decoded.update(coll, bits);
+  decoded.update(coll, value);
   copy_to_node();
   return seastar::now();
 }
@@ -112,6 +112,11 @@ CollectionNode::remove(coll_context_t cc, coll_t coll)
   if (auto buffer = maybe_get_delta_buffer(); buffer) {
     buffer->remove(coll);
   }
+  // TODO: once retire_root() (see FLTreeOnodeManager::remove_tree()) is
+  // implemented, assert decoded.get(coll).onode_root == L_ADDR_NULL here.
+  // The onode tree root must be retired before its coll_info_t entry is
+  // dropped. remove_tree() currently only erases in-memory tracking, so the
+  // root extent leaks instead.
   decoded.remove(coll);
   copy_to_node();
   return seastar::now();
