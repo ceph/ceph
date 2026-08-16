@@ -24,6 +24,7 @@ futures = "0.3"
 url = "2"
 chrono = "0.4"
 libc = "0.2"
+log = "0.4"
 
 [build-dependencies]
 # For linking to Ceph libraries

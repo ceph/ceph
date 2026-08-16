@@ -112,6 +112,14 @@ impl lance_io::object_store::ObjectStoreProvider for RGWStoreProvider {
             StorageOptions::new(params.storage_options().cloned().unwrap_or_default());
         let download_retry_count = storage_options.download_retry_count();
 
+        // whether listing is ordered is a property of the store, and not a
+        // choice of the caller, so a request for unordered listing is ignored.
+        if params.list_is_lexically_ordered == Some(false) {
+            log::debug!(
+                "ignoring the request for unordered listing: the listing of the RGW store is always ordered"
+            );
+        }
+
         Ok(ObjectStore::new(
             inner,
             base_path,
@@ -122,7 +130,7 @@ impl lance_io::object_store::ObjectStoreProvider for RGWStoreProvider {
             // to guarantee no duplicates or missing entries across pages.
             // RGW's unordered listing is cheaper but markers can skip/duplicate
             // entries across shard boundaries.
-            params.list_is_lexically_ordered.unwrap_or(true),
+            true,
             // Max concurrent I/O ops (64). Can be overridden via LANCE_IO_THREADS env var.
             DEFAULT_CLOUD_IO_PARALLELISM,
             download_retry_count,
