@@ -4534,6 +4534,37 @@ options:
   default: 0
   services:
   - rgw
+- name: rgw_posix_get_iodepth
+  type: uint
+  level: advanced
+  desc: GET data-path queue depth (1 = sequential, 2 = double-buffered read-ahead)
+  long_desc: 1 reads the next chunk only after the previous chunk has been
+    sent to the client (original synchronous loop). 2 prefetches chunk N+1
+    while chunk N is in flight on the network, and uses pread() so the
+    in-flight read does not race on the fd offset. Only 1 and 2 are
+    implemented; this is a QD1/QD2 experiment knob, not a general iodepth.
+  default: 1
+  min: 1
+  max: 2
+  services:
+  - rgw
+- name: rgw_posix_put_iodepth
+  type: uint
+  level: advanced
+  desc: PUT data-path queue depth (1 = sequential, 2 = pipeline one write)
+  long_desc: 1 writes each chunk to disk before reading the next chunk from
+    the client (original synchronous process()). 2 issues the disk write of
+    chunk N on a helper thread (using pwrite() so it does not race on the
+    fd offset) and returns so the next socket read can overlap it. Only 1
+    and 2 are implemented; this is a QD1/QD2 experiment knob, not a general
+    iodepth. Payoff is often smaller than GET on local
+    buffered filesystems (writes are page-cache copies until close/fsync)
+    and larger with O_DIRECT or network/GPFS.
+  default: 1
+  min: 1
+  max: 2
+  services:
+  - rgw
 - name: rgw_posix_direct_io
   type: bool
   level: advanced
@@ -4722,6 +4753,37 @@ options:
     write() call per buffer handed down from the op layer (bounded
     upstream by rgw_max_chunk_size).
   default: 0
+  services:
+  - rgw
+- name: rgw_nsfs_get_iodepth
+  type: uint
+  level: advanced
+  desc: GET data-path queue depth (1 = sequential, 2 = double-buffered read-ahead)
+  long_desc: 1 reads the next chunk only after the previous chunk has been
+    sent to the client (original synchronous loop). 2 prefetches chunk N+1
+    while chunk N is in flight on the network, and uses pread() so the
+    in-flight read does not race on the fd offset. Only 1 and 2 are
+    implemented; this is a QD1/QD2 experiment knob, not a general iodepth.
+  default: 1
+  min: 1
+  max: 2
+  services:
+  - rgw
+- name: rgw_nsfs_put_iodepth
+  type: uint
+  level: advanced
+  desc: PUT data-path queue depth (1 = sequential, 2 = pipeline one write)
+  long_desc: 1 writes each chunk to disk before reading the next chunk from
+    the client (original synchronous process()). 2 issues the disk write of
+    chunk N on a helper thread (using pwrite() so it does not race on the
+    fd offset) and returns so the next socket read can overlap it. Only 1
+    and 2 are implemented; this is a QD1/QD2 experiment knob, not a general
+    iodepth. Payoff is often smaller than GET on local
+    buffered filesystems (writes are page-cache copies until close/fsync)
+    and larger with O_DIRECT or network/GPFS.
+  default: 1
+  min: 1
+  max: 2
   services:
   - rgw
 - name: rgw_nsfs_direct_io

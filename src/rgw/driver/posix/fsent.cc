@@ -594,21 +594,30 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
   }
 
   char* curp = bl.c_str();
+  const bool positioned =
+    ctx->_conf.get_val<uint64_t>("rgw_posix_put_iodepth") >= 2;
+  int64_t woff = ofs;
 
-  ret = lseek(fd, ofs, SEEK_SET);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
-      << ofs << " :" << cpp_strerror(ret) << dendl;
-    if (saved_flags >= 0) {
-      ::fcntl(fd, F_SETFL, saved_flags);
+  if (!positioned) {
+    ret = lseek(fd, ofs, SEEK_SET);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
+        << ofs << " :" << cpp_strerror(ret) << dendl;
+      if (saved_flags >= 0) {
+        ::fcntl(fd, F_SETFL, saved_flags);
+      }
+      return -ret;
     }
-    return -ret;
   }
 
   while (left > 0) {
     int64_t want = (write_chunk_size > 0) ? std::min(left, write_chunk_size) : left;
-    ret = ::write(fd, curp, want);
+    if (positioned) {
+      ret = ::pwrite(fd, curp, want, woff);
+    } else {
+      ret = ::write(fd, curp, want);
+    }
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not write object " << get_name() << ": "
@@ -620,6 +629,7 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     }
 
     curp += ret;
+    woff += ret;
     left -= ret;
   }
 
@@ -667,26 +677,29 @@ int File::read(int64_t ofs, int64_t left, bufferlist& bl,
     return got;
   }
 
-  ret = lseek(fd, ofs, SEEK_SET);
-  if (ret < 0) {
-    ret = errno;
-    ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
-                      << ofs << " :" << cpp_strerror(ret) << dendl;
-    return -ret;
-    }
-
-    bufferptr bp(len);
-    ret = ::read(fd, bp.c_str(), len);
+  bufferptr bp(len);
+  if (ctx->_conf.get_val<uint64_t>("rgw_posix_get_iodepth") >= 2) {
+    ret = ::pread(fd, bp.c_str(), len, ofs);
+  } else {
+    ret = lseek(fd, ofs, SEEK_SET);
     if (ret < 0) {
       ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
-	<< cpp_strerror(ret) << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
+                        << ofs << " :" << cpp_strerror(ret) << dendl;
       return -ret;
     }
+    ret = ::read(fd, bp.c_str(), len);
+  }
+  if (ret < 0) {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not read object " << get_name() << ": "
+      << cpp_strerror(ret) << dendl;
+    return -ret;
+  }
 
-    bl.append(bp, 0, ret);
+  bl.append(bp, 0, ret);
 
-    return ret;
+  return ret;
 }
 
 int File::copy(const DoutPrefixProvider *dpp, optional_yield y,
