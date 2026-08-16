@@ -291,6 +291,7 @@ Configuration
 .. confval:: mgr_initial_modules
 .. confval:: mgr_disabled_modules
 .. confval:: mgr_standby_modules
+.. confval:: mgr_module_shutdown_timeout
 .. confval:: mgr_data
 .. confval:: mgr_tick_period
 .. confval:: mon_mgr_beacon_grace

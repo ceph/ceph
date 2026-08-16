@@ -16,6 +16,7 @@
 
 #include <string>
 #include <map>
+#include <memory>
 
 #include <Python.h>
 
@@ -124,7 +125,9 @@ public:
 
   void start_one(PyModuleRef py_module);
 
-  void shutdown();
+  // Returns false if any module's shutdown() timed out. Those modules
+  // stay running and reference this object, so it must not be destroyed.
+  bool shutdown();
 
   void handle_mgr_map(const MgrMap &mgr_map)
   {
