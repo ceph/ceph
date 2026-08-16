@@ -82,6 +82,12 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
  return txn->commit(); 
 }
 
+// Prepare a transaction for caller-managed replay after a retryable FDB error:
+[[nodiscard]] inline bool prepare_replay(transaction_handle& txn, const fdb_error_t r)
+{
+ return txn->prepare_replay(r);
+}
+
 [[nodiscard]] inline bool commit(transaction_handle& txn,
                                  const versionstamp& stamp)
 {

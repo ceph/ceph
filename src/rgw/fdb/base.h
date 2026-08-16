@@ -136,6 +136,7 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                                                       int iteration,
                                                       ceph::libfdb::read_mode mode = ceph::libfdb::read_mode::serializable);
 [[nodiscard]] inline std::int64_t extract_int64(future_value result_owner);
+inline bool retry_after_error(transaction_handle& txn, fdb_error_t r);
 
 // A generator that produces successive spans for a range:
 inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn,
@@ -809,13 +810,31 @@ class database final
 
 class transaction final
 {
+ enum struct state_t { active, committed };
+
  database_handle dbh;
 
  std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
 
  std::vector<versionstamp> version_stamps;
 
+ state_t state = state_t::active;
+
  private:
+ void require_active(const std::string_view operation) const
+ {
+  if (state_t::active != state || nullptr == raw_handle()) {
+   throw std::invalid_argument(fmt::format("{} requires active transaction", operation));
+  }
+ }
+
+ void require_committed(const std::string_view operation) const
+ {
+  if (state_t::committed != state || nullptr == raw_handle()) {
+   throw std::invalid_argument(fmt::format("{} requires committed transaction", operation));
+  }
+ }
+
  bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
                                         std::invocable<std::span<const std::uint8_t>> auto&& write_output_fn,
                                         read_mode mode);
@@ -836,7 +855,10 @@ class transaction final
  }
 
  public:
- explicit operator bool() const noexcept { return dbh and nullptr != raw_handle(); }
+ explicit operator bool() const noexcept
+ {
+  return dbh and nullptr != raw_handle();
+ }
 
  public:
  FDBTransaction *raw_handle() const noexcept { return txn_handle.get(); }
@@ -968,6 +990,8 @@ class transaction final
 
  [[nodiscard]] std::int64_t committed_version() const
  {
+  require_committed("committed_version()");
+
   std::int64_t version = 0;
 
   if (fdb_error_t r = fdb_transaction_get_committed_version(raw_handle(), &version); 0 != r) {
@@ -995,6 +1019,28 @@ class transaction final
             detail::future_value(fdb_transaction_get_approximate_size(raw_handle()))));
  }
 
+ [[nodiscard]] bool prepare_replay(const fdb_error_t r)
+ {
+  require_active("prepare_replay()");
+
+  if (0 == r) {
+   return false;
+  }
+
+  if (not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, r)) {
+   // Non-retryable errors cannot be repaired by on_error():
+   throw libfdb_exception(r);
+  }
+
+  auto on_error_result = detail::wait_for_on_error(raw_handle(), r);
+
+  if (fdb_error_t on_error_r = detail::get_future_error(on_error_result); 0 != on_error_r) {
+   throw libfdb_exception(on_error_r);
+  }
+
+  return true;
+ }
+
  void set_read_version(const std::int64_t version)
  {
   fdb_transaction_set_read_version(raw_handle(), version);
@@ -1002,7 +1048,10 @@ class transaction final
 
  bool commit();
  bool commit(fdb_error_t *replay_error);
- void destroy() noexcept { txn_handle.reset(); }
+ void destroy() noexcept
+ {
+  txn_handle.reset();
+ }
 
  // As you can see, friends are used extensively to implement the public interface; it would be nice to come up
  // with a strategy for making these "lists" a bit more managable, but for now it's what we have and it allows me ot
@@ -1053,6 +1102,8 @@ class transaction final
  friend inline std::int64_t committed_version(const transaction_handle& txn);
  friend inline std::int64_t read_version(const transaction_handle& txn);
  friend inline std::int64_t approximate_commit_bytes(const transaction_handle& txn);
+ friend inline bool prepare_replay(transaction_handle& txn, fdb_error_t r);
+ friend inline bool ceph::libfdb::detail::retry_after_error(transaction_handle& txn, fdb_error_t r);
  friend inline void set_read_version(const transaction_handle& txn, std::int64_t version);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
@@ -1165,9 +1216,7 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
   *replay_error = 0;
  }
 
- // We don't want to try to vivify for an "empty" commit:
- if (!*this)
-  return false;
+ require_active("commit()");
 
  std::optional<detail::future_value> versionstamp_future;
 
@@ -1203,6 +1252,8 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
   version_stamps.clear();
   return false;
  }
+
+ state = state_t::committed;
 
  if (versionstamp_future) {
   auto ready = detail::block_until_ready(std::move(*versionstamp_future));
@@ -1455,20 +1506,7 @@ inline std::size_t get_value_range_from_transaction(transaction& txn,
 
 inline bool retry_after_error(ceph::libfdb::transaction_handle& txn, const fdb_error_t r)
 {
- if (0 == r) {
-  return false;
- }
-
- if (not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, r)) {
-  // Non-retryable errors cannot be repaired by on_error():
-  throw ceph::libfdb::libfdb_exception(r);
- }
-
- if (fdb_error_t on_error_r = get_future_error(wait_for_on_error(txn->raw_handle(), r)); 0 != on_error_r) {
-  throw ceph::libfdb::libfdb_exception(r);
- }
-
- return true;
+ return txn->prepare_replay(r);
 }
 
 // Convert FDBKey array into something useful:

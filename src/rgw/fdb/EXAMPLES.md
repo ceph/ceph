@@ -1190,6 +1190,29 @@ if (!lfdb::commit(txn)) {
 }
 ```
 
+`prepare_replay()` is the lower-level hook for application-managed replay. Most
+callers should use a transactor instead; use this when the application needs to
+keep its own progress marker before re-running part of a larger operation.
+`commit()` already prepares replay before returning `false`; call
+`prepare_replay()` only for retryable errors that escape before commit.
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+
+try {
+  rebuild_cache_index(txn, marker);
+
+  if (!lfdb::commit(txn)) {
+    retry_from(marker);
+  }
+}
+catch (const lfdb::libfdb_exception& e) {
+  if (lfdb::prepare_replay(txn, e.fdb_error_value)) {
+    retry_from(marker);
+  }
+}
+```
+
 ## Transactors: Replayable Transactions
 
 Transactors are function objects created with `make_transactor()`. Creating a

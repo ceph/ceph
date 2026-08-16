@@ -2638,6 +2638,35 @@ SCENARIO("transactor", "[fdb]")
 {
  janitor j;
 
+ SECTION("prepare_replay handles retryable errors") {
+  constexpr fdb_error_t not_committed = 1020;
+  REQUIRE(0 != fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, not_committed));
+
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK(lfdb::prepare_replay(txn, not_committed));
+ }
+
+ SECTION("prepare_replay rejects non-retryable errors") {
+  constexpr fdb_error_t operation_cancelled = 1101;
+  REQUIRE_FALSE(fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, operation_cancelled));
+
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK_FALSE(lfdb::prepare_replay(txn, 0));
+  CHECK_THROWS_AS(lfdb::prepare_replay(txn, operation_cancelled), lfdb::libfdb_exception);
+ }
+
+ SECTION("successful commit ends ordinary transaction work") {
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::set(txn, test_key("lifecycle"), "value");
+  REQUIRE(lfdb::commit(txn));
+
+  CHECK(0 < lfdb::committed_version(txn));
+  CHECK_THROWS_AS(lfdb::prepare_replay(txn, 1020), std::invalid_argument);
+ }
+
  SECTION("transaction function returns nothing") {
   auto txr = lfdb::make_transactor(j);
   const auto key = test_key("key");
