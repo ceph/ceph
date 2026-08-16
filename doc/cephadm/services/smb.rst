@@ -16,8 +16,8 @@ SMB Service
 Deploying Samba Containers
 ==========================
 
-Cephadm deploys `Samba <http://www.samba.org>`_ servers using container images
-built by the `samba-container project <http://github.com/samba-in-kubernetes/samba-container>`_.
+Cephadm deploys `Samba <https://www.samba.org>`_ servers using container images
+built by the `samba-container project <https://github.com/samba-in-kubernetes/samba-container>`_.
 
 In order to host SMB shares with access to CephFS file systems, deploy
 Samba containers with the following command:

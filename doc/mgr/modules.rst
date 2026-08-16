@@ -456,7 +456,7 @@ be automatically processed. Example:
            raise ErrorResponse.wrap(err)
 
 
-.. _`Rule of Silence`: http://www.linfo.org/rule_of_silence.html
+.. _`Rule of Silence`: https://www.linfo.org/rule_of_silence.html
 
 .. _mgr module dev configuration options:
 

@@ -199,11 +199,11 @@ In addition the ``rgw`` collection has:
 
 .. _Linux Kernel Key Retention Service:  https://www.kernel.org/doc/html/latest/security/keys/core.html
 .. _Amazon SSE-C: https://docs.aws.amazon.com/AmazonS3/latest/dev/ServerSideEncryptionCustomerKeys.html
-.. _Amazon SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
+.. _Amazon SSE-KMS: https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
 .. _Amazon SSE-S3: https://docs.aws.amazon.com/AmazonS3/latest/userguide/UsingServerSideEncryption.html
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
 .. _Vault: https://www.vaultproject.io/docs/
-.. _KMIP: http://www.oasis-open.org/committees/kmip/
+.. _KMIP: https://www.oasis-open.org/committees/kmip/
 .. _PutBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketEncryption.html
 .. _GetBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetBucketEncryption.html
 .. _DeleteBucketEncryption: https://docs.aws.amazon.com/AmazonS3/latest/API/API_DeleteBucketEncryption.html

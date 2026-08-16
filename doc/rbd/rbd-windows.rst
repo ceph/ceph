@@ -91,7 +91,7 @@ The following sample imports an RBD image and boots a Hyper-V VM using it::
     # Feel free to use any other image. This one is convenient to use for
     # testing purposes because it's very small (~15MB) and the login prompt
     # prints the pre-configured password.
-    wget http://download.cirros-cloud.net/0.5.1/cirros-0.5.1-x86_64-disk.img `
+    wget https://download.cirros-cloud.net/0.5.1/cirros-0.5.1-x86_64-disk.img `
          -OutFile cirros-0.5.1-x86_64-disk.img
 
     # We'll need to make sure that the imported images are raw (so no qcow2 or vhdx).

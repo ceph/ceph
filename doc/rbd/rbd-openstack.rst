@@ -211,7 +211,7 @@ Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` sectio
     rbd_store_ceph_conf = /etc/ceph/ceph.conf
     rbd_store_chunk_size = 8
 
-For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: http://docs.openstack.org/.
+For more information about the configuration options available in Glance please refer to the OpenStack Configuration Reference: https://docs.openstack.org/.
 
 Enable copy-on-write cloning of images
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

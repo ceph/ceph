@@ -369,4 +369,4 @@ in the RGW section(s) of the Ceph configuration file.
 References
 ==========
 
-.. [#] http://docs.aws.amazon.com/AmazonS3/latest/dev/ListingKeysHierarchy.html
+.. [#] https://docs.aws.amazon.com/AmazonS3/latest/dev/ListingKeysHierarchy.html

@@ -567,7 +567,7 @@ For example:
 If you receive ``active+clean+inconsistent`` states periodically due to
 clock skew, consider configuring the `NTP
 <https://en.wikipedia.org/wiki/Network_Time_Protocol>`_ daemons on your monitor
-hosts to act as peers. See `The Network Time Protocol <http://www.ntp.org>`_
+hosts to act as peers. See `The Network Time Protocol <https://www.ntp.org>`_
 and Ceph :ref:`Clock Settings <mon-config-ref-clock>` for more information.
 
 

@@ -184,7 +184,7 @@ The output of this will look something like::
    http://objects.dreamhost.com/my-bucket-name/hello.txt
    http://objects.dreamhost.com/my-bucket-name/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
 
-.. _`AWS::SDK`: http://docs.aws.amazon.com/sdkforruby/api/Aws/S3/Client.html
+.. _`AWS::SDK`: https://docs.aws.amazon.com/sdkforruby/api/Aws/S3/Client.html
 
 
 
@@ -359,6 +359,6 @@ The output of this will look something like::
    http://objects.dreamhost.com/my-bucket-name/hello.txt
    http://objects.dreamhost.com/my-bucket-name/secret_plans.txt?Signature=XXXXXXXXXXXXXXXXXXXXXXXXXXX&Expires=1316027075&AWSAccessKeyId=XXXXXXXXXXXXXXXXXXX
 
-.. _`AWS::S3`: http://amazon.rubyforge.org/
-.. _`AWS::S3::Bucket`: http://amazon.rubyforge.org/doc/
+.. _`AWS::S3`: https://rubygems.org/gems/aws-s3
+.. _`AWS::S3::Bucket`: https://www.rubydoc.info/gems/aws-s3
 
