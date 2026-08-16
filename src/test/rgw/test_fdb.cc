@@ -620,6 +620,21 @@ TEST_CASE("transaction versions", "[fdb]") {
  }
 }
 
+TEST_CASE("transaction commit byte estimate", "[fdb]") {
+ janitor dbh;
+ auto txn = lfdb::make_transaction(dbh);
+
+ const auto empty_estimate = lfdb::approximate_commit_bytes(txn);
+
+ lfdb::set(txn, test_key("commit-bytes/a"), "alpha");
+ lfdb::set(txn, test_key("commit-bytes/b"), "bravo");
+
+ const auto populated_estimate = lfdb::approximate_commit_bytes(txn);
+
+ CHECK(0 <= empty_estimate);
+ CHECK(empty_estimate < populated_estimate);
+}
+
 static_assert(not std::default_initializable<lfdb::watch_handle>);
 static_assert(not std::copy_constructible<lfdb::watch_handle>);
 static_assert(std::move_constructible<lfdb::watch_handle>);

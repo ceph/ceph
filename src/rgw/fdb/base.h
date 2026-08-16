@@ -988,6 +988,13 @@ class transaction final
             detail::future_value(fdb_transaction_get_read_version(raw_handle()))));
  }
 
+ [[nodiscard]] std::int64_t approximate_commit_bytes() const
+ {
+  return detail::extract_int64(
+           detail::block_until_ready(
+            detail::future_value(fdb_transaction_get_approximate_size(raw_handle()))));
+ }
+
  void set_read_version(const std::int64_t version)
  {
   fdb_transaction_set_read_version(raw_handle(), version);
@@ -1045,6 +1052,7 @@ class transaction final
  friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
  friend inline std::int64_t committed_version(const transaction_handle& txn);
  friend inline std::int64_t read_version(const transaction_handle& txn);
+ friend inline std::int64_t approximate_commit_bytes(const transaction_handle& txn);
  friend inline void set_read_version(const transaction_handle& txn, std::int64_t version);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);

@@ -1155,6 +1155,24 @@ if (!lfdb::commit(txn)) {
 }
 ```
 
+`approximate_commit_bytes()` asks FoundationDB to estimate the transaction's
+size as if it were committed now. Use it as a batching signal instead of trying
+to recreate FoundationDB's accounting for mutations, range clears, and conflict
+ranges.
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+
+for (const auto& object : objects_to_index) {
+  lfdb::set(txn, object.index_key, object.index_record);
+
+  if (soft_limit < lfdb::approximate_commit_bytes(txn)) {
+    finish_batch(std::move(txn));
+    txn = lfdb::make_transaction(dbh);
+  }
+}
+```
+
 ## Manual Transactions With Options
 
 ```cpp
