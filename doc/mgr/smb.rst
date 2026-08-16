@@ -1172,7 +1172,9 @@ cephfs
         connect to CephFS. ``samba-vfs`` automatically selects the preferred VFS
         based implementation, currently ``samba-vfs/proxied``. This option is
         suitable for the majority of use cases and can be left unspecified for most
-        shares.
+        shares. When a proxied provider is in use, cephadm automatically
+        deploys a ``cephfs-proxy`` sidecar next to each Samba instance;
+        see :ref:`smb-cephfs-proxy`.
     qos
         Optional object. Quality of Service settings for the share. Fields:
         

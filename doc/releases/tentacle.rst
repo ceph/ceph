@@ -856,7 +856,7 @@ Integrated SMB support
   provided by the ``samba-container`` project. The Ceph dashboard can be used
   to configure SMB clusters and shares. A new ``cephfs-proxy`` daemon is
   automatically deployed to improve scalability and memory usage when connecting
-  Samba to CephFS.
+  Samba to CephFS; see :ref:`smb-cephfs-proxy`.
 
 MGR
 

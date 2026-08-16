@@ -348,6 +348,41 @@ exercise for the reader.
    scheme has different performance and security characteristics.
 
 
+.. _smb-cephfs-proxy:
+
+The CephFS Proxy Sidecar
+========================
+
+When a cluster hosts CephFS-backed shares that use the default
+``samba-vfs/proxied`` provider (see the ``provider`` share field in
+:ref:`mgr-smb`), cephadm automatically runs a ``cephfs-proxy``
+container alongside each Samba instance. No operator action is needed
+to deploy it, and it is not a separate orchestrator service: it
+appears as a sidecar of the ``smb`` daemon rather than as its own
+entry.
+
+The sidecar runs the ``libcephfsd`` daemon from the regular Ceph
+container image. Without the proxy, every SMB client connection opens
+its own ``libcephfs`` instance with its own private cache, which can
+consume large amounts of memory on busy servers. The proxy daemon
+holds the real CephFS mounts and shares them among connections with
+identical configuration, allowing a much greater number of
+simultaneous client connections at some cost in performance.
+
+Points useful when troubleshooting:
+
+* The proxy listens on the UNIX socket ``/run/libcephfsd.sock``
+  inside the shared ``/run`` mount of the Samba pod.
+* The daemon binary is ``/usr/sbin/libcephfsd``; its container is
+  named as a ``proxy`` sub-daemon of the parent ``smb`` daemon.
+* The proxy is only deployed when at least one share uses the
+  proxied provider. Shares using ``samba-vfs/classic`` or
+  ``samba-vfs/new`` connect to CephFS directly from the Samba
+  container.
+
+For design details, see the developer documentation in
+``doc/dev/libcephfs_proxy.rst``.
+
 Limitations
 ===========
 
