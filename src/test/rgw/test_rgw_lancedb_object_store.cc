@@ -111,6 +111,7 @@ int main(int argc, char** argv) {
       r = bucket->create(&dpp, params, null_yield);
       if (r < 0 && r != -EEXIST) {
         std::cerr << "ERROR: failed to create test bucket (r=" << r << ")" << std::endl;
+        driver->shutdown();
         DriverManager::close_storage(driver);
         return 1;
       }
@@ -125,6 +126,17 @@ int main(int argc, char** argv) {
   int ret = rgw_lancedb_object_store_run_tests(driver, &dpp,
                                       bucket_name.c_str(), nullptr);
 
+  // cleanup: delete test bucket and all objects in it
+  {
+    rgw_bucket b;
+    b.name = bucket_name;
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    if (driver->load_bucket(&dpp, b, &bucket, null_yield) == 0 && bucket) {
+      bucket->remove(&dpp, true, null_yield);
+    }
+  }
+
+  driver->shutdown();
   DriverManager::close_storage(driver);
   return ret;
 }

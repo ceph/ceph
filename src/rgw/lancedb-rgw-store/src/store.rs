@@ -12,8 +12,8 @@
 //! routing all I/O operations through Ceph's RGW SAL C API.
 
 use crate::ffi::{
-    self, CRgwBucket, CRgwDoutPrefix, CRgwDriver, CRgwObject, OwnedRGWBuffer,
-    OwnedRGWListResult, OwnedRGWObjectMeta,
+    self, CRgwBucket, CRgwDoutPrefix, CRgwDriver, CRgwObject, OwnedRGWBuffer, OwnedRGWListResult,
+    OwnedRGWObjectMeta,
 };
 use async_trait::async_trait;
 use bytes::Bytes;
@@ -68,6 +68,19 @@ impl SendConstPtr {
 }
 
 const DEFAULT_CHUNK_SIZE: u64 = 4 * 1024 * 1024;
+
+/// Extract etag string from a C pointer returned by rgw_put_object, then free it.
+///
+/// # Safety
+/// `ptr` must be null or a valid pointer from `strdup()` (freeable with `libc::free`).
+unsafe fn etag_from_ptr(ptr: *mut c_char) -> Option<String> {
+    if ptr.is_null() {
+        return None;
+    }
+    let s = CStr::from_ptr(ptr).to_string_lossy().into_owned();
+    libc::free(ptr as *mut std::ffi::c_void);
+    Some(s)
+}
 
 /// Convert a string to CString, returning an ObjectStore error on failure.
 fn str_to_cstring(s: &str) -> ObjectStoreResult<CString> {
@@ -151,7 +164,7 @@ impl RGWObjectStore {
 
     /// Convert path to C string key
     fn path_to_cstr(&self, path: &Path) -> ObjectStoreResult<CString> {
-        str_to_cstring(&path.to_string())
+        str_to_cstring(path.as_ref())
     }
 
     fn make_obj(key: &CString) -> CRgwObject {
@@ -218,6 +231,16 @@ impl RGWObjectStore {
                 // ENOTSUP
                 source: format!("{} not supported by RGW backend", op).into(),
             },
+            -2015 => object_store::Error::Precondition {
+                // ERR_PRECONDITION_FAILED
+                path: path.to_string(),
+                source: format!("{} failed: precondition failed", op).into(),
+            },
+            -2016 => object_store::Error::NotModified {
+                // ERR_NOT_MODIFIED
+                path: path.to_string(),
+                source: format!("{} failed: not modified", op).into(),
+            },
             _ => object_store::Error::Generic {
                 store: "rgw",
                 source: format!("{} failed with errno {}", op, errno).into(),
@@ -277,6 +300,7 @@ impl ObjectStore for RGWObjectStore {
                     data: bytes.as_ptr() as *mut u8,
                     len: bytes.len(),
                 };
+                let mut etag_ptr: *mut c_char = std::ptr::null_mut();
                 let result = unsafe {
                     ffi::rgw_put_object(
                         self.driver,
@@ -285,17 +309,18 @@ impl ObjectStore for RGWObjectStore {
                         &rgw_bucket,
                         &obj,
                         &buf,
+                        &mut etag_ptr,
                     )
                 };
 
-                if result == 0 {
-                    Ok(PutResult {
-                        e_tag: None,
-                        version: None,
-                    })
-                } else {
-                    Err(self.errno_to_error(result, location, "put"))
+                if result != 0 {
+                    return Err(self.errno_to_error(result, location, "put"));
                 }
+                let e_tag = unsafe { etag_from_ptr(etag_ptr) };
+                Ok(PutResult {
+                    e_tag,
+                    version: None,
+                })
             }
             PutMode::Create => {
                 let if_nomatch = str_to_cstring("*")?;
@@ -304,6 +329,7 @@ impl ObjectStore for RGWObjectStore {
                     data: bytes.as_ptr() as *mut u8,
                     len: bytes.len(),
                 };
+                let mut etag_ptr: *mut c_char = std::ptr::null_mut();
 
                 let result = unsafe {
                     ffi::rgw_put_object_conditional(
@@ -316,6 +342,7 @@ impl ObjectStore for RGWObjectStore {
                         std::ptr::null(),
                         if_nomatch.as_ptr(),
                         &mut canceled,
+                        &mut etag_ptr,
                     )
                 };
 
@@ -328,8 +355,9 @@ impl ObjectStore for RGWObjectStore {
                         source: "object already exists (conditional create failed)".into(),
                     });
                 }
+                let e_tag = unsafe { etag_from_ptr(etag_ptr) };
                 Ok(PutResult {
-                    e_tag: None,
+                    e_tag,
                     version: None,
                 })
             }
@@ -348,6 +376,7 @@ impl ObjectStore for RGWObjectStore {
                     data: bytes.as_ptr() as *mut u8,
                     len: bytes.len(),
                 };
+                let mut etag_ptr: *mut c_char = std::ptr::null_mut();
 
                 let result = unsafe {
                     ffi::rgw_put_object_conditional(
@@ -360,20 +389,20 @@ impl ObjectStore for RGWObjectStore {
                         if_match.as_ptr(),
                         std::ptr::null(),
                         &mut canceled,
+                        &mut etag_ptr,
                     )
                 };
 
-                if result != 0 {
-                    return Err(self.errno_to_error(result, location, "put (update)"));
-                }
-                if canceled != 0 {
+                if result != 0 || canceled != 0 {
                     return Err(ObjectStoreError::Precondition {
                         path: location.to_string(),
-                        source: "object ETag does not match (conditional update failed)".into(),
+                        source: "conditional update failed (etag mismatch or object not found)"
+                            .into(),
                     });
                 }
+                let e_tag = unsafe { etag_from_ptr(etag_ptr) };
                 Ok(PutResult {
-                    e_tag: None,
+                    e_tag,
                     version: None,
                 })
             }
@@ -401,12 +430,50 @@ impl ObjectStore for RGWObjectStore {
             });
         }
 
+        let has_conditionals = opts.if_match.is_some()
+            || opts.if_none_match.is_some()
+            || opts.if_modified_since.is_some()
+            || opts.if_unmodified_since.is_some();
+
+        let if_match_c = opts
+            .if_match
+            .as_deref()
+            .map(|s| str_to_cstring(s))
+            .transpose()?;
+        let if_nomatch_c = opts
+            .if_none_match
+            .as_deref()
+            .map(|s| str_to_cstring(s))
+            .transpose()?;
+        let if_mod_since = opts.if_modified_since.map(|t| t.timestamp());
+        let if_unmod_since = opts.if_unmodified_since.map(|t| t.timestamp());
+
         let obj_size = meta.size;
 
         // Resolve the byte range to read
         let (range_start, range_end) = match &opts.range {
-            Some(GetRange::Bounded(range)) => (range.start, range.end.min(obj_size)),
-            Some(GetRange::Offset(start)) => (*start, obj_size),
+            Some(GetRange::Bounded(range)) => {
+                if range.start >= obj_size {
+                    return Err(ObjectStoreError::Generic {
+                        store: "rgw",
+                        source: format!(
+                            "range start {} exceeds object size {}",
+                            range.start, obj_size
+                        )
+                        .into(),
+                    });
+                }
+                (range.start, range.end.min(obj_size))
+            }
+            Some(GetRange::Offset(start)) => {
+                if *start >= obj_size {
+                    return Err(ObjectStoreError::Generic {
+                        store: "rgw",
+                        source: format!("offset {} exceeds object size {}", start, obj_size).into(),
+                    });
+                }
+                (*start, obj_size)
+            }
             Some(GetRange::Suffix(len)) => {
                 let start = obj_size.saturating_sub(*len);
                 (start, obj_size)
@@ -414,7 +481,7 @@ impl ObjectStore for RGWObjectStore {
             None => (0, obj_size),
         };
 
-        let total_len = range_end.saturating_sub(range_start);
+        let total_len = range_end - range_start;
 
         if total_len == 0 {
             return Ok(GetResult {
@@ -435,17 +502,42 @@ impl ObjectStore for RGWObjectStore {
 
             let bytes = {
                 let mut buffer = ffi::CRgwBuffer::default();
-                let result = unsafe {
-                    ffi::rgw_get_object(
-                        self.driver,
-                        self.dpp,
-                        std::ptr::null_mut(),
-                        &rgw_bucket,
-                        &obj,
-                        range_start,
-                        total_len,
-                        &mut buffer,
-                    )
+                let result = if has_conditionals {
+                    unsafe {
+                        ffi::rgw_get_object_conditional(
+                            self.driver,
+                            self.dpp,
+                            std::ptr::null_mut(),
+                            &rgw_bucket,
+                            &obj,
+                            range_start,
+                            total_len,
+                            if_match_c.as_ref().map_or(std::ptr::null(), |c| c.as_ptr()),
+                            if_nomatch_c
+                                .as_ref()
+                                .map_or(std::ptr::null(), |c| c.as_ptr()),
+                            if_mod_since
+                                .as_ref()
+                                .map_or(std::ptr::null(), |v| v as *const i64),
+                            if_unmod_since
+                                .as_ref()
+                                .map_or(std::ptr::null(), |v| v as *const i64),
+                            &mut buffer,
+                        )
+                    }
+                } else {
+                    unsafe {
+                        ffi::rgw_get_object(
+                            self.driver,
+                            self.dpp,
+                            std::ptr::null_mut(),
+                            &rgw_bucket,
+                            &obj,
+                            range_start,
+                            total_len,
+                            &mut buffer,
+                        )
+                    }
                 };
                 if result != 0 {
                     return Err(self.errno_to_error(result, location, "get"));
@@ -465,7 +557,7 @@ impl ObjectStore for RGWObjectStore {
         // Uses SendPtr/SendConstPtr because the stream is 'static (outlives &self).
         let bucket_name = self.bucket.clone();
         let tenant_name = self.tenant.clone();
-        let key_str = location.to_string();
+        let key_str: String = location.as_ref().to_string();
         let driver = SendPtr::new(self.driver);
         let dpp = SendConstPtr::new(self.dpp);
         let chunk_size = self.chunk_size;
@@ -599,7 +691,7 @@ impl ObjectStore for RGWObjectStore {
                     let bucket_c = str_to_cstring(&bucket)?;
                     let tenant_c = str_to_cstring(&tenant)?;
                     let rgw_bucket = Self::make_bucket(&bucket_c, &tenant_c);
-                    let key_c = str_to_cstring(&location.to_string())?;
+                    let key_c = str_to_cstring(location.as_ref())?;
                     let obj = CRgwObject::from_key(key_c.as_ptr());
 
                     let result = unsafe {
@@ -632,7 +724,16 @@ impl ObjectStore for RGWObjectStore {
     /// The returned stream owns all its data (see `delete_stream`).
     /// Each page fetches up to 1000 entries via `rgw_list_objects`.
     fn list(&self, prefix: Option<&Path>) -> BoxStream<'static, ObjectStoreResult<ObjectMeta>> {
-        let prefix_str = prefix.map(|p| p.to_string()).unwrap_or_default();
+        let prefix_str = prefix
+            .map(|p| {
+                let s = p.to_string();
+                if s.is_empty() || s.ends_with('/') {
+                    s
+                } else {
+                    format!("{}/", s)
+                }
+            })
+            .unwrap_or_default();
         let bucket = self.bucket.clone();
         let tenant = self.tenant.clone();
         let driver = SendPtr::new(self.driver);
@@ -712,7 +813,8 @@ impl ObjectStore for RGWObjectStore {
                             .map(|e| {
                                 let key = CStr::from_ptr(e.key).to_string_lossy().into_owned();
                                 Ok(ObjectMeta {
-                                    location: Path::from(key),
+                                    location: Path::parse(&key)
+                                        .unwrap_or_else(|_| Path::from(key.as_str())),
                                     last_modified: chrono::DateTime::from_timestamp(
                                         e.last_modified,
                                         0,
@@ -815,11 +917,15 @@ impl ObjectStore for RGWObjectStore {
                         if key.ends_with('/') {
                             let prefix_path = key.trim_end_matches('/');
                             if !prefix_path.is_empty() {
-                                common_prefixes.push(Path::from(prefix_path));
+                                common_prefixes.push(
+                                    Path::parse(prefix_path)
+                                        .unwrap_or_else(|_| Path::from(prefix_path)),
+                                );
                             }
                         } else if !key.is_empty() {
                             objects.push(ObjectMeta {
-                                location: Path::from(key.clone()),
+                                location: Path::parse(&key)
+                                    .unwrap_or_else(|_| Path::from(key.as_str())),
                                 last_modified: chrono::DateTime::from_timestamp(e.last_modified, 0)
                                     .unwrap_or_else(chrono::Utc::now),
                                 size: e.size,
@@ -970,7 +1076,7 @@ impl ObjectStore for RGWObjectStore {
             dpp: self.dpp,
             bucket: self.bucket.clone(),
             tenant: self.tenant.clone(),
-            key: location.to_string(),
+            key: location.as_ref().to_string(),
             upload_id: upload_id_str,
             parts: Arc::new(Mutex::new(Vec::new())),
         }))
