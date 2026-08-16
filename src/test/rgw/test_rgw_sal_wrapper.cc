@@ -18,6 +18,7 @@
 #include <boost/asio/io_context.hpp>
 #include <cstddef>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <numeric>
 #include <string>
@@ -601,9 +602,14 @@ TEST_F(SALWrapperTest, BulkDelete) {
 // --------------- List ---------------
 
 TEST_F(SALWrapperTest, ListObjects) {
+  // write each object with a distinct size so the size reported by list is
+  // meaningful to verify (not all identical).
+  std::map<std::string, uint64_t> expected;  // key -> size
   for (int i = 0; i < 5; i++) {
     std::string key = "test/list/obj-" + std::to_string(i);
-    ASSERT_EQ(0, put_str_tracked(key.c_str(), "data"));
+    std::string data(i + 1, 'x');
+    ASSERT_EQ(0, put_str_tracked(key.c_str(), data));
+    expected[key] = data.size();
   }
 
   CRgwListResult result{};
@@ -611,13 +617,38 @@ TEST_F(SALWrapperTest, ListObjects) {
              "test/list/", nullptr, nullptr, 100, &result));
   EXPECT_GE(result.count, 5u);
 
-  // verify entries have valid keys
+  size_t matched = 0;
   for (size_t i = 0; i < result.count; i++) {
-    EXPECT_NE(result.entries[i].key, nullptr);
-    if (result.entries[i].key) {
-      EXPECT_GT(strlen(result.entries[i].key), 0u);
-    }
+    ASSERT_NE(result.entries[i].key, nullptr);
+    EXPECT_GT(strlen(result.entries[i].key), 0u);
+
+    auto it = expected.find(result.entries[i].key);
+    if (it == expected.end()) continue;  // ignore entries from other tests
+    matched++;
+
+    // size must match exactly what we wrote
+    EXPECT_EQ(it->second, result.entries[i].size)
+        << "size mismatch for " << result.entries[i].key;
+
+    // mtime must be populated with a plausible (non-zero) value
+    EXPECT_GT(result.entries[i].last_modified, 0)
+        << "missing mtime for " << result.entries[i].key;
+
+    // The list entry carries no etag, so cross-check via head that the object
+    // has a valid, non-empty etag and that head agrees with the list on
+    // size and mtime.
+    CRgwObjectMeta meta{};
+    ASSERT_EQ(0, head(result.entries[i].key, &meta));
+    EXPECT_EQ(it->second, meta.size);
+    EXPECT_EQ(result.entries[i].size, meta.size);
+    EXPECT_EQ(result.entries[i].last_modified, meta.last_modified);
+    ASSERT_NE(meta.etag, nullptr);
+    EXPECT_GT(strlen(meta.etag), 0u);
+    rgw_free_object_meta(&meta);
   }
+  // every object we created must appear in the listing
+  EXPECT_EQ(expected.size(), matched);
+
   rgw_free_list_result(&result);
 }
 
@@ -1028,24 +1059,8 @@ TEST_F(SALWrapperTest, MultipartSinglePart) {
 // ===========================================================================
 
 int main(int argc, char** argv) {
-  // require -c <ceph.conf> — the backend (rgw_backend_store) is read from
-  // the same config file the RGW process uses, ensuring no mismatch
-  bool has_conf = false;
-  for (int i = 1; i < argc; i++) {
-    if (std::string(argv[i]) == "-c" && i + 1 < argc) {
-      has_conf = true;
-      break;
-    }
-  }
-  if (!has_conf) {
-    std::cerr << "ERROR: -c <ceph.conf> is required." << std::endl;
-    std::cerr << "       The backend (rgw_backend_store) and other config needed is read from the config file."
-              << std::endl;
-    std::cerr << "Usage: " << argv[0] << " -c <path/to/ceph.conf> [gtest options]"
-              << std::endl;
-    return 1;
-  }
-
+  // ceph.conf is found via -c flag, $CEPH_CONF, or default paths.
+  // When running under teuthology, the default path is used.
   auto args = argv_to_vec(argc, const_cast<const char**>(argv));
 
   auto cct = rgw_global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,

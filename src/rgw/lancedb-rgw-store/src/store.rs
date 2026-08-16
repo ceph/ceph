@@ -438,12 +438,12 @@ impl ObjectStore for RGWObjectStore {
         let if_match_c = opts
             .if_match
             .as_deref()
-            .map(|s| str_to_cstring(s))
+            .map(str_to_cstring)
             .transpose()?;
         let if_nomatch_c = opts
             .if_none_match
             .as_deref()
-            .map(|s| str_to_cstring(s))
+            .map(str_to_cstring)
             .transpose()?;
         let if_mod_since = opts.if_modified_since.map(|t| t.timestamp());
         let if_unmod_since = opts.if_unmodified_since.map(|t| t.timestamp());
@@ -846,7 +846,7 @@ impl ObjectStore for RGWObjectStore {
                 Some((entries, (next_marker, is_done)))
             }
         })
-        .flat_map(|results| stream::iter(results))
+        .flat_map(stream::iter)
         .boxed()
     }
 
@@ -859,9 +859,7 @@ impl ObjectStore for RGWObjectStore {
         let prefix_str = match prefix {
             Some(p) => {
                 let s = p.to_string();
-                if s.is_empty() {
-                    s
-                } else if s.ends_with('/') {
+                if s.is_empty() || s.ends_with('/') {
                     s
                 } else {
                     format!("{}/", s)
