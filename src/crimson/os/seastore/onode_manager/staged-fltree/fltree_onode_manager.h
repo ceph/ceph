@@ -3,6 +3,11 @@
 
 #pragma once
 
+#include <map>
+#include <memory>
+#include <utility>
+
+#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/value.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/tree.h"
@@ -396,42 +401,98 @@ using OnodeTree = Btree<FLTreeOnode>;
 using crimson::common::get_conf;
 
 class FLTreeOnodeManager : public crimson::os::seastore::OnodeManager {
-  OnodeTree tree;
+  TransactionManager &tm;
+  collection_manager::FlatCollectionManager &collection_manager;
 
   uint32_t default_data_reservation = 0;
+
+  // One onode tree per collection, all on the one shared LBA.
+  //
+  // Each tree's root is durable via its collection's coll_info_t (meta is the one
+  // exception, see root_t::meta_onode_root).
+  // In-memory helper to represent the durable tree.
+  std::map<coll_t, std::unique_ptr<OnodeTree>> trees;
+
+  OnodeTree &tree_for(const coll_t &cid) {
+    auto it = trees.find(cid);
+    if (it == trees.end()) {
+      it = trees.emplace_hint(it, cid, std::make_unique<OnodeTree>(
+        NodeExtentManager::create_seastore(tm, cid, collection_manager)));
+    }
+    return *it->second;
+  }
+
+  // Read-only onode ops (contains_onode/get_onode/list_onodes) can race
+  // ahead of their collection's create_collection transaction op.
+  // Check registration ("not found") instead of ever touching the tree.
+  using coll_exists_iertr = base_iertr;
+  using coll_exists_ret = coll_exists_iertr::future<bool>;
+  coll_exists_ret collection_exists(Transaction &t, const coll_t &cid) {
+    if (cid == coll_t::meta()) {
+      return coll_exists_iertr::make_ready_future<bool>(true);
+    }
+    return tm.read_collection_root(t).si_then([this, &t](auto coll_root) {
+      return collection_manager.get_coll_node(coll_root, t);
+    }).handle_error_interruptible(
+      coll_exists_iertr::pass_further{},
+      crimson::ct_error::assert_all(
+        "FLTreeOnodeManager::collection_exists: unexpected error reading "
+        "collection node")
+    ).si_then([cid](auto coll_node) {
+      return coll_node->contains(cid);
+    });
+  }
+
 public:
-  FLTreeOnodeManager(TransactionManager &tm) :
-    tree(NodeExtentManager::create_seastore(tm)),
+  FLTreeOnodeManager(
+    TransactionManager &tm,
+    collection_manager::FlatCollectionManager &collection_manager) :
+    tm(tm), collection_manager(collection_manager),
     default_data_reservation(
       get_conf<uint64_t>("seastore_default_max_object_size"))
   {}
 
   mkfs_ret mkfs(Transaction &t) {
-    return tree.mkfs(t);
+    // meta need no CollectionManager entry, create empty root on mkfs.
+    return tree_for(coll_t::meta()).mkfs(t);
+  }
+
+  create_tree_ret create_tree(Transaction &t, coll_t cid) final {
+    return tree_for(cid).mkfs(t);
+  }
+
+  void remove_tree(coll_t cid) final {
+    trees.erase(cid);
   }
 
   contains_onode_ret contains_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) final;
 
   get_onode_ret get_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) final;
 
   get_or_create_onode_ret get_or_create_onode(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t &hoid) final;
 
   get_or_create_onodes_ret get_or_create_onodes(
     Transaction &trans,
+    const coll_t &cid,
     const std::vector<ghobject_t> &hoids) final;
 
   erase_onode_ret erase_onode(
     Transaction &trans,
+    const coll_t &cid,
     OnodeRef &onode) final;
 
   list_onodes_ret list_onodes(
     Transaction &trans,
+    const coll_t &cid,
     const ghobject_t& start,
     const ghobject_t& end,
     uint64_t limit) final;
