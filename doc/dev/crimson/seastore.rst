@@ -94,7 +94,7 @@ segments as part of ongoing client I/O.
 Metadata Structures
 -------------------
 
-.. Mermaid source of seastore.svg
+.. Mermaid source of seastore_per_coll.svg
 .. flowchart TD
   %% Root
   Root((Root))
@@ -105,9 +105,11 @@ Metadata Structures
   end
   %% Logical
   subgraph Logical["Logically Addressed"]
+    CollNode["CollectionNode"]
+    MetaTree["Meta Onode Tree"]
+    CollNode --> OnodeTree
     OnodeTree["Onode Tree"]
     OnodeN["Onode"]
-    %% Per-Onode structures
     Omap1["OMAP
     B-tree Root
     (LBA)"]
@@ -116,24 +118,26 @@ Metadata Structures
     (LBA)"]
     Extents["Data Extents
     (LBA Range)"]
-    %% Mapping and containment
+
+    %% Onode detail
     OnodeTree -- "map: ghobject_t → Onode" --> OnodeN
     OnodeN --> Omap1
     OnodeN --> Omap2
     OnodeN --> Extents
   end
   %% Top-level links
-  Root --> OnodeTree
+  Root --> MetaTree
+  Root --> CollNode
   Root --> LBABtree
   Root --> BackrefTree
   %% Styling
   classDef logical fill:#e0f7fa,stroke:#333,stroke-width:1px;
   classDef physical fill:#f1f8e9,stroke:#333,stroke-width:1px;
-  class OnodeTree,OnodeN,Omap1,Omap2,Extents logical;
+  class MetaTree,CollNode,CollInfo,OnodeTree,OnodeN,Omap1,Omap2,Extents logical;
   class LBABtree,BackrefTree physical;
 
 
-.. image:: seastore.svg
+.. image:: seastore_per_coll.svg
 
 
 
