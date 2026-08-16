@@ -207,7 +207,6 @@ struct seastore_test_t :
     void remove(
       CTransaction &t) {
       t.remove(cid, oid);
-      t.remove_collection(cid);
     }
 
     void remove(
@@ -894,6 +893,7 @@ TEST_P(seastore_test_t, collection_split)
 	coll_t test_coll2{spg_t{pg_t{17, 0}}};
 	sharded_seastore->create_new_collection(test_coll2).get();
 	CTransaction t;
+	t.create_collection(test_coll2, 5);
 	t.split_collection(test_coll, 5, 5, test_coll2);
 	do_transaction(std::move(t));
       }
