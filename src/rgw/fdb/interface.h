@@ -130,6 +130,11 @@ void prepare_replay(transaction_handle& txn, fdb_error_t error);
  return txn->read_version();
 }
 
+[[nodiscard]] inline std::int64_t approximate_commit_bytes(const transaction_handle& txn)
+{
+ return txn->approximate_commit_bytes();
+}
+
 inline void set_read_version(const transaction_handle& txn, const std::int64_t version)
 {
  txn->set_read_version(version);
