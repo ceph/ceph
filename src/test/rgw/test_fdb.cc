@@ -721,6 +721,18 @@ TEST_CASE("transaction watches", "[rgw][fdb]") {
   CHECK(watch.ready());
  }
 
+ SECTION("throwing stop-token wait preserves cancellation as an exception") {
+  auto watch = lfdb::make_watch(dbh, watch_key);
+  std::stop_source stop;
+
+  REQUIRE_FALSE(watch.ready());
+
+  stop.request_stop();
+
+  CHECK_THROWS_AS(watch.wait(stop.get_token()), lfdb::libfdb_exception);
+  CHECK(watch.ready());
+ }
+
  SECTION("watch can be rearmed after each key change") {
   auto watch = lfdb::make_watch(dbh, watch_key);
 
