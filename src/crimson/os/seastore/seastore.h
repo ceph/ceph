@@ -29,6 +29,7 @@
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
+#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/object_data_handler.h"
 
 namespace crimson::os::seastore {
@@ -317,7 +318,7 @@ public:
             LOG_PREFIX(SeaStoreS::repeat_with_onode);
             SUBDEBUGT(seastore, "{} cid={} oid={} ...",
                       t, tname, ch->get_cid(), oid);
-            return onode_manager->get_onode(t, oid
+            return onode_manager->get_onode(t, ch->get_cid(), oid
             ).si_then([&](auto onode) {
               return seastar::do_with(std::move(onode), [&](auto& onode) {
                 return f(t, *onode);
@@ -667,7 +668,7 @@ public:
 
     std::vector<Device*> secondaries;
     TransactionManagerRef transaction_manager;
-    CollectionManagerRef collection_manager;
+    collection_manager::FlatCollectionManagerRef collection_manager;
     OnodeManagerRef onode_manager;
 
     common::Throttle throttler;

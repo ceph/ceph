@@ -1154,7 +1154,7 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 	    using list_iertr = OnodeManager::list_onodes_iertr;
 	    using repeat_ret = list_iertr::future<seastar::stop_iteration>;
             return trans_intr::repeat(
-              [this, FNAME, &t, &ret, &limit, end,
+              [this, FNAME, &t, &ret, &limit, end, ch,
 	       filter, ranges = get_ranges(ch, start, end, filter)
 	      ]() mutable -> repeat_ret {
 		if (limit == 0 || ranges.empty()) {
@@ -1168,7 +1168,7 @@ SeaStore::Shard::list_objects(CollectionRef ch,
 		ranges.pop_front();
 		DEBUGT("pstart {}, pend {}, limit {} ...", t, pstart, pend, limit);
 		return onode_manager->list_onodes(
-		  t, pstart, pend, limit
+		  t, ch->get_cid(), pstart, pend, limit
 		).si_then([&limit, &ret, pend, &t, last=ranges.empty(), end, FNAME]
 			  (auto &&_ret) mutable {
 		  auto &next_objects = std::get<0>(_ret);
@@ -2083,11 +2083,12 @@ SeaStore::Shard::_do_transaction_step(
     if (!create) {
       DEBUGT("op {}, get oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_onode(*ctx.transaction, oid);
+      fut = onode_manager->get_onode(*ctx.transaction, col->get_cid(), oid);
     } else {
       DEBUGT("op {}, get_or_create oid={} ...",
              *ctx.transaction, (uint32_t)op->op, oid);
-      fut = onode_manager->get_or_create_onode(*ctx.transaction, oid);
+      fut = onode_manager->get_or_create_onode(
+        *ctx.transaction, col->get_cid(), oid);
     }
     fut = std::move(fut).si_then([&ctx, t0](auto onode) {
       ctx.get_onode_time += seastar::lowres_clock::now() - t0;
@@ -2111,7 +2112,8 @@ SeaStore::Shard::_do_transaction_step(
              *ctx.transaction, (uint32_t)op->op, dest_oid);
       //TODO: use when_all_succeed after making onode tree
       //      support parallel extents loading
-      return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
+      return onode_manager->get_or_create_onode(
+        *ctx.transaction, col->get_cid(), dest_oid
       ).si_then([&d_onode](auto dest_onode) {
 	assert(dest_onode);
 	assert(!d_onode);
@@ -2122,7 +2124,8 @@ SeaStore::Shard::_do_transaction_step(
       const ghobject_t& dest_oid = i.get_oid(op->dest_oid);
       DEBUGT("op {}, get_onode dest oid={} ...",
              *ctx.transaction, (uint32_t)op->op, dest_oid);
-      return onode_manager->get_or_create_onode(*ctx.transaction, dest_oid
+      return onode_manager->get_or_create_onode(
+        *ctx.transaction, col->get_cid(), dest_oid
       ).si_then([&d_onode](auto target_onode) {
         d_onode = target_onode;
       });
@@ -2434,7 +2437,7 @@ SeaStore::Shard::_rename(
   d_onode->update_snapset(*ctx.transaction, ss_bl);
   rename_onode_omap_metadata(*ctx.transaction, *onode, *d_onode);
   co_await onode_manager->erase_onode(
-    *ctx.transaction, onode
+    *ctx.transaction, ctx.ch->get_cid(), onode
   ).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(
@@ -2469,7 +2472,8 @@ SeaStore::Shard::_remove(
       });
     });
   }).si_then([this, &ctx, &onode] {
-    return onode_manager->erase_onode(*ctx.transaction, onode);
+    return onode_manager->erase_onode(
+      *ctx.transaction, ctx.ch->get_cid(), onode);
   }).handle_error_interruptible(
     crimson::ct_error::input_output_error::pass_further(),
     crimson::ct_error::assert_all(
@@ -2844,32 +2848,8 @@ SeaStore::Shard::_split_collection(
   const coll_t &cid,
   int bits)
 {
-  return transaction_manager->read_collection_root(
-    *ctx.transaction
-  ).si_then([=, this, &ctx](auto _cmroot) {
-    return seastar::do_with(
-      _cmroot,
-      [=, this, &ctx](auto &cmroot) {
-        return collection_manager->update(
-          cmroot,
-          *ctx.transaction,
-          cid,
-          coll_info_t{static_cast<unsigned>(bits), L_ADDR_NULL}
-        ).si_then([this, &ctx, &cmroot] {
-          if (cmroot.must_update()) {
-            transaction_manager->write_collection_root(
-              *ctx.transaction,
-              cmroot);
-          }
-        });
-      }
-    );
-  }).handle_error_interruptible(
-    tm_iertr::pass_further{},
-    crimson::ct_error::assert_all(
-      "Invalid error in SeaStoreS::_create_collection"
-    )
-  );
+  // POC: split would have to repartition the parent's onodes into the children's trees
+  ceph_abort_msg("PG split not supported with per-collection onode trees (POC)");
 }
 
 SeaStore::Shard::tm_ret
@@ -2879,17 +2859,8 @@ SeaStore::Shard::_merge_collection(
   coll_t dest_cid,
   int bits)
 {
-  auto cmroot = co_await transaction_manager->read_collection_root(
-    *ctx.transaction);
-  co_await collection_manager->update(cmroot, *ctx.transaction, dest_cid,
-      coll_info_t{static_cast<unsigned>(bits), L_ADDR_NULL})
-    .handle_error_interruptible(
-      tm_iertr::pass_further{},
-      crimson::ct_error::assert_all("unexpected error from update in _merge_collection"));
-  co_await collection_manager->remove(cmroot, *ctx.transaction, cid)
-    .handle_error_interruptible(
-      tm_iertr::pass_further{},
-      crimson::ct_error::assert_all("unexpected error from remove in _merge_collection"));
+  // POC: merge would have to fold one collection's onode tree into another
+  ceph_abort_msg("PG merge not supported with per-collection onode trees (POC)");
 }
 
 SeaStore::Shard::tm_ret
@@ -2908,12 +2879,17 @@ SeaStore::Shard::_create_collection(
           *ctx.transaction,
           cid,
           coll_info_t{static_cast<unsigned>(bits), L_ADDR_NULL}
-        ).si_then([this, &ctx, &cmroot] {
+        ).si_then([this, &ctx, &cmroot, cid] {
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(
               *ctx.transaction,
               cmroot);
           }
+          if (cid == coll_t::meta()) {
+            // meta's tree is already created during mkfs_managers()
+            return base_iertr::now();
+          }
+          return onode_manager->create_tree(*ctx.transaction, cid);
         });
       }
     );
@@ -2940,7 +2916,8 @@ SeaStore::Shard::_remove_collection(
           cmroot,
           *ctx.transaction,
           cid
-        ).si_then([this, &ctx, &cmroot] {
+        ).si_then([this, &ctx, &cmroot, cid] {
+          onode_manager->remove_tree(cid);
           // param here denotes whether it already existed, probably error
           if (cmroot.must_update()) {
             transaction_manager->write_collection_root(
@@ -3071,7 +3048,7 @@ void SeaStore::Shard::init_managers()
   collection_manager = std::make_unique<collection_manager::FlatCollectionManager>(
       *transaction_manager);
   onode_manager = std::make_unique<crimson::os::seastore::onode::FLTreeOnodeManager>(
-      *transaction_manager);
+      *transaction_manager, *collection_manager);
 }
 
 double SeaStore::Shard::reset_report_interval() const
