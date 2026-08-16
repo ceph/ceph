@@ -80,12 +80,10 @@ void ActivePyModule::notify(const std::string &notify_type, const std::string &n
       py_module->perfcounter->inc(py_module->l_pym_notify_avg_usec, usec);
     }
   } else {
+    std::string exc_msg = peek_pyerror();
     derr << get_name() << ".notify:" << dendl;
     derr << handle_pyerror(true, get_name(), "ActivePyModule::notify") << dendl;
-    // FIXME: callers can't be expected to handle a python module
-    // that has spontaneously broken, but Mgr() should provide
-    // a hook to unload misbehaving modules when they have an
-    // error somewhere like this
+    py_module->fail(exc_msg);
   }
 }
 
@@ -249,6 +247,11 @@ void ActivePyModule::config_notify()
 					  (char*)NULL);
   if (remoteResult != nullptr) {
     Py_DECREF(remoteResult);
+  } else {
+    std::string exc_msg = peek_pyerror();
+    derr << get_name() << ".config_notify:" << dendl;
+    derr << handle_pyerror(true, get_name(), "ActivePyModule::config_notify") << dendl;
+    py_module->fail(exc_msg);
   }
 }
 
@@ -309,10 +312,12 @@ int ActivePyModule::handle_command(
 
     Py_DECREF(pResult);
   } else {
+    std::string exc_msg = peek_pyerror();
     derr << "module '" << py_module->get_name() << "' command handler "
-            "threw exception: " << peek_pyerror() << dendl;
+            "threw exception: " << exc_msg << dendl;
     *ds << "";
     *ss << handle_pyerror();
+    py_module->fail(exc_msg);
     r = -EINVAL;
   }
 

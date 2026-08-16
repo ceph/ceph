@@ -5,6 +5,12 @@ overrides:
       - Degraded data redundancy
       - objects misplaced
       - Synthetic exception in serve
+      - Synthetic exception in shutdown
+      - Synthetic exception in handle_command
+      - Synthetic exception in notify
+      - Synthetic exception in config_notify
+      - shutdown\(\) timed out
+      - _qa_broken_module
       - influxdb python module not found
       - No InfluxDB server configured
       - Failed to list/create InfluxDB database \(MGR_INFLUX_DB_LIST_FAILED\)
@@ -12,6 +18,7 @@ overrides:
       - Failed to open Telegraf
       - evicting unresponsive client
       - 1 mgr modules have recently crashed \(RECENT_MGR_MODULE_CRASH\)
+      - OSDMAP_FLAGS
 tasks:
   - cephfs_test_runner:
       modules:

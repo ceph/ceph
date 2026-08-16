@@ -16,6 +16,8 @@
 
 #include <string>
 #include <map>
+#include <memory>
+#include <vector>
 
 #include <Python.h>
 
@@ -124,7 +126,7 @@ public:
 
   void start_one(PyModuleRef py_module);
 
-  void shutdown();
+  std::vector<std::unique_ptr<StandbyPyModule>> shutdown();
 
   void handle_mgr_map(const MgrMap &mgr_map)
   {

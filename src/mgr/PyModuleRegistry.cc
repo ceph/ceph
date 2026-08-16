@@ -227,7 +227,10 @@ void PyModuleRegistry::active_start(
   ceph_assert(mgr_map.epoch > 0);
 
   if (standby_modules != nullptr) {
-    standby_modules->shutdown();
+    auto abandoned = standby_modules->shutdown();
+    for (auto &m : abandoned) {
+      leaked_standby_modules.push_back(std::move(m));
+    }
     standby_modules.reset();
   }
 
