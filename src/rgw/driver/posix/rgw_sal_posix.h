@@ -25,6 +25,7 @@
 #include "common/dout.h"
 #include "user_cache.h"
 #include "posixDB.h"
+#include "qd2_pending.h"
 
 class RGWLC;
 
@@ -1109,6 +1110,7 @@ private:
   uint64_t olh_epoch;
   const std::string& unique_tag;
   POSIXObject* obj;
+  QD2PendingWrite pending_write;
 
 public:
   POSIXAtomicWriter(const DoutPrefixProvider *dpp,
@@ -1151,6 +1153,7 @@ private:
   std::unique_ptr<posix::Directory> upload_dir;
   std::unique_ptr<posix::File> part_file;
   file::listing::MultipartCacheKey mp_cache_key;
+  QD2PendingWrite pending_write;
 
 public:
   POSIXMultipartWriter(const DoutPrefixProvider *dpp,
