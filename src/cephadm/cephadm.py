@@ -605,6 +605,9 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     helper_script_path: '/tmp/cryptsetup_action.sh',
                 },
             )
+            logger.info(
+                f'Opening osd.{self.daemon_id} with crypsetup'
+            )
             out, err, ret = call(
                 ctx,
                 cryptsetup_open_container.run_cmd(),
@@ -634,17 +637,31 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
             ],
             volume_mounts={'/dev': '/dev'},
         )
-        out, err, ret = call(
-            ctx,
-            bluestore_tool_container.run_cmd(),
-            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        logger.info(
+            f'Rotating osd.{self.daemon_id} key with ceph-bluestore-tool'
         )
-        if ret:
-            raise Error(
-                'Got error rotating osd keyring using ceph-bluestore-tool\n'
-                f'Out:{out}\n'
-                f'Err:{err}'
+        # The OSD may take some time to shutdown fully and make the device
+        # available for the key rotation
+        for i in [2, 5, 10, 30, 0]:
+            if not i:
+                break
+            out, err, ret = call(
+                ctx,
+                bluestore_tool_container.run_cmd(),
+                verbosity=CallVerbosity.VERBOSE,
             )
+            if ret:
+                if not i:
+                    raise Error(
+                        'Got error rotating osd keyring using ceph-bluestore-tool\n'
+                        f'Out:{out}\n'
+                        f'Err:{err}'
+                    )
+                logger.info(f'Got issue rotating osd keyring using ceph-bluestore-tool:\n{out}\n{err}\nRetrying in {i} seconds')
+                time.sleep(i)
+            else:
+                logger.info(f'Successfully rotated osd.{self.daemon_id} keyring')
+                break
 
         if encrypted:
             cryptsetup_close_container = CephContainer(
@@ -671,9 +688,12 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Out:{out}\n'
                     f'Err:{err}'
                 )
+
+        call(ctx, ['systemctl', 'reset-failed', get_unit_name(self.fsid, 'osd', self.daemon_id)],
+             verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
         call(
             ctx,
-            ['systemctl', 'restart', get_unit_name(self.fsid, 'osd', self.daemon_id)],
+            ['systemctl', 'start', get_unit_name(self.fsid, 'osd', self.daemon_id)],
             verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
         )
 
