@@ -5,3 +5,8 @@ members = [
     "rgw-lancedb",
 ]
 resolver = "2"
+
+# prevent pulling in all debug info for lancedb dependencies
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
