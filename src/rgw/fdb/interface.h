@@ -442,6 +442,66 @@ namespace ceph::libfdb {
 
 namespace detail {
 
+inline void mark_conflict(transaction_handle txn,
+                          const query::expression auto& selection,
+                          const FDBConflictRangeType type)
+{
+ bool marked = false;
+
+ query::for_each_interval(selection, [&](const ceph::libfdb::select& interval) {
+  transaction_mark_conflict_range(txn, interval, type);
+  marked = true;
+ });
+
+ if (not marked) {
+  throw std::invalid_argument("conflict expression must contain a non-empty range");
+ }
+}
+
+} // namespace detail
+
+// Mark explicit conflict ranges when transaction correctness depends on data
+// that was not read or written through the ordinary libfdb operation path:
+inline void mark_conflict_read(transaction_handle txn,
+                               const query::expression auto& selection)
+{
+ return detail::mark_conflict(txn, selection, FDB_CONFLICT_RANGE_TYPE_READ);
+}
+
+inline void mark_conflict_write(transaction_handle txn,
+                                const query::expression auto& selection)
+{
+ return detail::mark_conflict(txn, selection, FDB_CONFLICT_RANGE_TYPE_WRITE);
+}
+
+inline void mark_conflict_read(transaction_handle txn,
+                               const concepts::libfdb_key auto& begin,
+                               const concepts::libfdb_key auto& end)
+{
+ return mark_conflict_read(txn, query::between(begin, end));
+}
+
+inline void mark_conflict_write(transaction_handle txn,
+                                const concepts::libfdb_key auto& begin,
+                                const concepts::libfdb_key auto& end)
+{
+ return mark_conflict_write(txn, query::between(begin, end));
+}
+
+inline void mark_conflict_read(transaction_handle txn,
+                               const concepts::libfdb_key auto& key)
+{
+ return mark_conflict_read(txn, query::singleton(key));
+}
+
+inline void mark_conflict_write(transaction_handle txn,
+                                const concepts::libfdb_key auto& key)
+{
+ return mark_conflict_write(txn, query::singleton(key));
+}
+
+namespace detail {
+
 inline select select_from_initializer_list(std::initializer_list<std::string_view> keys)
 {
  const auto first = std::begin(keys);

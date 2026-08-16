@@ -272,6 +272,7 @@ explicit open/closed boundaries.
 | Select everything under one key prefix | `q::prefix(prefix)` | `lfdb::select` | Handles FDB prefix successor rules without hand-built byte bounds. |
 | Select an explicit half-open key interval | `q::between(begin, end)` | `lfdb::select` | Matches the usual FoundationDB `[begin, end)` range shape. |
 | Combine or subtract selections | `q::intersection()`, `q::set_union()`, `q::difference()` | query expression or selector | Lets the query compiler normalize intervals before execution. |
+| Add an explicit conflict check | `lfdb::mark_conflict_read(txn, query)` | `void` | Records transaction correctness dependencies that ordinary operations did not express. |
 | Run several dependent operations atomically | `lfdb::make_transactor(dbh)` | callable transaction runner | Replays retryable transactions while keeping user code explicit. |
 
 ### Managed Range Reads
@@ -327,6 +328,37 @@ for (const auto& [key, metadata] :
 Snapshot reads are a lower-isolation tool. If a later mutation depends on what
 was read, keep that choice explicit in an ordinary transaction rather than
 hiding it behind a convenience helper.
+
+### Explicit Conflict Ranges
+
+Conflict ranges are key ranges FoundationDB checks to decide whether a
+transaction can still commit safely. Ordinary reads and writes add the usual
+conflict ranges for their keys, but applications sometimes need to express an
+additional dependency. Use `mark_conflict_read()` when this transaction must
+retry if another transaction later writes an overlapping key or range. Use
+`mark_conflict_write()` when this transaction must be treated as a writer for an
+overlapping reader, even if it does not write that exact key itself:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+
+lfdb::mark_conflict_read(txn, "object/index/marker");
+lfdb::set(txn, "object/index/update", "pending");
+
+if (not lfdb::commit(txn)) {
+  retry_update();
+}
+```
+
+The same functions accept exact keys, begin/end ranges, selectors, and query
+expressions. Empty conflict expressions are rejected:
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+
+lfdb::mark_conflict_read(txn, "object/index/a", "object/index/z");
+lfdb::mark_conflict_write(txn, q::prefix("object/cache/tenant-a/"));
+```
 
 ### Prefix Selection
 

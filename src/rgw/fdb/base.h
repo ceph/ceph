@@ -116,6 +116,9 @@ inline void transaction_clear_key_bytes(const transaction_handle& txn,
                                         std::span<const std::uint8_t> k);
 inline void transaction_clear_range(const transaction_handle& txn,
                                     const ceph::libfdb::select& key_range);
+inline void transaction_mark_conflict_range(const transaction_handle& txn,
+                                            const ceph::libfdb::select& key_range,
+                                            FDBConflictRangeType type);
 
 inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
@@ -889,6 +892,32 @@ class transaction final
         (const uint8_t *)half_open_range.end_key.data(), half_open_range.end_key.size());
  }
 
+ void mark_conflict(const ceph::libfdb::select& key_range,
+                    const FDBConflictRangeType type)
+ {
+  const auto half_open_range = detail::as_half_open_select(key_range);
+
+  if (not (half_open_range.begin_key < half_open_range.end_key)) {
+   throw std::invalid_argument("conflict range must be non-empty");
+  }
+
+  if (FDB_CONFLICT_RANGE_TYPE_READ == type) {
+   (void)read_version();
+  }
+
+  const auto begin = detail::as_fdb_span(half_open_range.begin_key);
+  const auto end = detail::as_fdb_span(half_open_range.end_key);
+
+  const auto r = fdb_transaction_add_conflict_range(raw_handle(),
+                 begin.data(), std::size(begin),
+                 end.data(), std::size(end),
+                 type);
+
+  if (0 != r) {
+   throw libfdb_exception(r);
+  }
+ }
+
  [[nodiscard]] watch_handle make_watch(std::span<const std::uint8_t> key)
  {
   return watch_handle {
@@ -991,7 +1020,10 @@ class transaction final
  friend inline void ceph::libfdb::detail::transaction_clear_key_bytes(const transaction_handle&,
                                                                       std::span<const std::uint8_t>);
  friend inline void ceph::libfdb::detail::transaction_clear_range(const transaction_handle&,
-                                                                 const ceph::libfdb::select&);
+                                                                  const ceph::libfdb::select&);
+ friend inline void ceph::libfdb::detail::transaction_mark_conflict_range(const transaction_handle&,
+                                                                          const ceph::libfdb::select&,
+                                                                          FDBConflictRangeType);
 
 };
 
@@ -1015,6 +1047,13 @@ inline void transaction_clear_range(const transaction_handle& txn,
                                     const ceph::libfdb::select& key_range)
 {
  txn->erase(key_range);
+}
+
+inline void transaction_mark_conflict_range(const transaction_handle& txn,
+                                            const ceph::libfdb::select& key_range,
+                                            const FDBConflictRangeType type)
+{
+ txn->mark_conflict(key_range, type);
 }
 
 } // namespace detail

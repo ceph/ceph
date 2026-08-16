@@ -2173,7 +2173,7 @@ TEST_CASE("snapshot reads do not add read conflicts", "[fdb]") {
    std::ranges::copy(block, std::back_inserter(rows));
   }
 
-  CHECK(2 == rows.size());
+  CHECK(2 == std::size(rows));
  }
 
  SECTION("key existence") {
@@ -2188,6 +2188,112 @@ TEST_CASE("snapshot reads do not add read conflicts", "[fdb]") {
   lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
   CHECK(lfdb::commit(snapshot_txn));
   CHECK(lfdb::key_exists(j, write_key));
+ }
+}
+
+TEST_CASE("explicit conflict ranges", "[fdb]") {
+ janitor j;
+
+ SECTION("marked read conflict fails after concurrent write") {
+  const auto guard_key = make_key(0, "conflict-read-key");
+  const auto side_effect_key = make_key(1, "conflict-read-key");
+
+  lfdb::set(j, guard_key, "old");
+
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(txn, guard_key);
+
+  lfdb::set(j, guard_key, "new");
+  lfdb::set(txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("marked write conflict invalidates overlapping read transaction") {
+  const auto guard_key = make_key(0, "conflict-write-key");
+  const auto side_effect_key = make_key(1, "conflict-write-key");
+
+  lfdb::set(j, guard_key, "old");
+
+  auto read_txn = lfdb::make_transaction(j);
+  std::string value;
+
+  REQUIRE(lfdb::get(read_txn, guard_key, value));
+
+  auto write_txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_write(write_txn, guard_key);
+  REQUIRE(lfdb::commit(write_txn));
+
+  lfdb::set(read_txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(read_txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("selector and query overloads normalize to conflict ranges") {
+  constexpr auto prefix = "conflict-selector";
+  const auto begin = make_key(0, prefix);
+  const auto middle = make_key(1, prefix);
+  const auto end = make_key(2, prefix);
+  const auto side_effect_key = make_key(99, prefix);
+
+  lfdb::set(j, middle, "old");
+
+  auto selector_txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(selector_txn, lfdb::select { begin, end });
+  lfdb::set(j, middle, "new");
+  lfdb::set(selector_txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(selector_txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+
+  auto query_txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(query_txn, lfdb::query::prefix(make_key_prefix(prefix)));
+  lfdb::set(j, middle, "newer");
+  lfdb::set(query_txn, side_effect_key, "query-side-effect");
+
+  CHECK_FALSE(lfdb::commit(query_txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("content keys can mark exact-key conflicts") {
+  const auto object = content::keyspace(test_namespace_prefix()) / "conflict" / "object";
+  const auto side_effect_key = make_key(0, "conflict-content");
+
+  lfdb::set(j, object, "old");
+
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(txn, object);
+
+  lfdb::set(j, object, "new");
+  lfdb::set(txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("empty conflict ranges are rejected") {
+  const auto key = make_key(0, "conflict-empty");
+
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK_THROWS_MATCHES(lfdb::mark_conflict_read(txn, lfdb::select { key, key }),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring(
+                         "conflict expression must contain a non-empty range")));
+
+  CHECK_THROWS_MATCHES(lfdb::mark_conflict_write(txn, lfdb::query::prefix(std::string("\xFF", 1))),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring(
+                         "conflict expression must contain a non-empty range")));
  }
 }
 
