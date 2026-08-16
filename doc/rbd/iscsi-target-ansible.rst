@@ -11,8 +11,8 @@ install and configure the Ceph iSCSI gateway for basic operation.
 
 -  A running Ceph Luminous (12.2.x) cluster or newer
 
--  Linux kernel v4.16 (or newer); all currently supported distributions
-   satisfy this requirement
+-  Linux kernel v4.16 (or newer), or Enterprise Linux (EL) 7.5 (or
+   newer), in which the required iSCSI support is backported
 
 -  The ``ceph-iscsi`` package installed on all the iSCSI gateway nodes
 

@@ -67,8 +67,9 @@ To know more about Git and how it works, please, visit https://git-scm.com
 
 Ensure you use a supported kernel that contains the required Ceph iSCSI patches:
 
--  any Linux distribution with a kernel v4.16 or newer; all currently
-   supported distributions satisfy this requirement
+-  any Linux distribution with a kernel v4.16 or newer, or
+-  Enterprise Linux (EL) 7.5 or later, in which ceph-iscsi support is
+   backported
 
 If you are already using a compatible kernel, you can go to next step.
 However, if you are NOT using a compatible kernel then check your distro's
