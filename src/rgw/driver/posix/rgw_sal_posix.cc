@@ -23,6 +23,7 @@
 #include "rgw_multi.h"
 #include "include/scope_guard.h"
 #include "common/Clock.h" // for ceph_clock_now()
+#include "common/async/spawn_throttle.h"
 #include "common/errno.h"
 #include "rgw_lc.h"
 
@@ -3184,30 +3185,79 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
   else
     left = end - ofs + 1;
 
+  /* QD2 read-ahead: while handle_data() yields in the beast frontend's
+   * async_write, spawn the next File::read() on the same executor so the
+   * disk fetch of chunk N+1 overlaps the network send of chunk N.  One
+   * prefetch at a time, in order.  Without a yield_context there is
+   * nothing to overlap with, so the loop stays sequential. */
+  std::optional<ceph::async::spawn_throttle> throttle;
+  if (y && dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_get_iodepth") >= 2) {
+    throttle.emplace(y.get_yield_context(), 1);
+  }
+
+  bufferlist slots[2];
+  int cur = 0;
+  int prefetch_len = 0;
+  bool prefetch_pending = false;
+
+  auto drain_prefetch = [&]() {
+    if (prefetch_pending) {
+      prefetch_pending = false;
+      throttle->wait();
+    }
+  };
+  auto drain_guard = make_scope_guard([&] {
+    if (prefetch_pending) {
+      prefetch_pending = false;
+      try {
+        throttle->wait();
+      } catch (...) {}
+    }
+  });
+
   while (left > 0) {
-    bufferlist bl;
-    int len = source->read(cur_ofs, left, bl, dpp, y);
+    int len;
+    if (prefetch_pending) {
+      drain_prefetch();
+      cur = 1 - cur;
+      len = prefetch_len;
+    } else {
+      slots[cur].clear();
+      len = source->read(cur_ofs, left, slots[cur], dpp, y);
+    }
     if (len < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
+      ldpp_dout(dpp, 0) << " ERROR: could not read " << source->get_name() <<
 	  " ofs: " << cur_ofs << " error: " << cpp_strerror(len) << dendl;
-	return len;
+      drain_prefetch();
+      return len;
     } else if (len == 0) {
       /* Done */
       break;
     }
 
-    /* Read some */
-    int ret = cb->handle_data(bl, 0, len);
-    if (ret < 0) {
-	ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << ": " << ret << dendl;
-	return ret;
-    }
-
     left -= len;
     cur_ofs += len;
+
+    if (left > 0 && throttle) {
+      const int next = 1 - cur;
+      const int64_t pofs = cur_ofs;
+      const int64_t pleft = left;
+      slots[next].clear();
+      throttle->spawn([source = source, dpp, next, pofs, pleft, &slots, &prefetch_len]
+                      (boost::asio::yield_context /* child */) {
+        prefetch_len = source->read(pofs, pleft, slots[next], dpp, null_yield);
+      });
+      prefetch_pending = true;
+    }
+
+    int ret = cb->handle_data(slots[cur], 0, len);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << " ERROR: callback failed on " << source->get_name() << ": " << ret << dendl;
+      drain_prefetch();
+      return ret;
+    }
   }
 
-  /* Doesn't seem to be anything needed from params */
   return 0;
 }
 
@@ -3877,7 +3927,11 @@ int POSIXMultipartWriter::prepare(optional_yield y)
 
 int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
-  return part_file->write(offset, data, dpp, null_yield);
+  bool pipeline = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth") >= 2;
+  return pending_write.process(std::move(data), offset, pipeline,
+      [this](uint64_t ofs, bufferlist& bl) {
+        return part_file->write(ofs, bl, dpp, null_yield);
+      });
 }
 
 int POSIXMultipartWriter::complete(
@@ -3893,7 +3947,10 @@ int POSIXMultipartWriter::complete(
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret;
+  int ret = pending_write.drain();
+  if (ret < 0) {
+    return ret;
+  }
   POSIXUploadPartInfo info;
 
   if (if_match) {
@@ -3969,7 +4026,11 @@ int POSIXAtomicWriter::prepare(optional_yield y)
 
 int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
 {
-  return obj->write(offset, data, dpp, null_yield);
+  bool pipeline = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth") >= 2;
+  return pending_write.process(std::move(data), offset, pipeline,
+      [this](uint64_t ofs, bufferlist& bl) {
+        return obj->write(ofs, bl, dpp, null_yield);
+      });
 }
 
 int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
@@ -3983,7 +4044,10 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret;
+  int ret = pending_write.drain();
+  if (ret < 0) {
+    return ret;
+  }
   uint64_t orig_size = 0;
 
   auto exists = obj->check_exists(dpp);
