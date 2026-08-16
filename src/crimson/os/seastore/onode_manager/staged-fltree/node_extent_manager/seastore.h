@@ -6,6 +6,7 @@
 #include <random>
 
 #include "crimson/os/seastore/logging.h"
+#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_extent_manager.h"
 #include "crimson/os/seastore/onode_manager/staged-fltree/node_delta_recorder.h"
@@ -20,9 +21,17 @@ namespace crimson::os::seastore::onode {
 
 class SeastoreSuper final: public Super {
  public:
+  // meta collection: root lives in root_t::meta_onode_root, no coll_node.
   SeastoreSuper(Transaction& t, RootNodeTracker& tracker,
                 laddr_t root_addr, TransactionManager& tm)
     : Super(t, tracker), root_addr{root_addr}, tm{tm} {}
+  // root lives in that collection's coll_info_t
+  SeastoreSuper(Transaction& t, RootNodeTracker& tracker,
+                laddr_t root_addr, TransactionManager& tm, coll_t cid,
+                collection_manager::CollectionNode::CollectionNodeRef coll_node,
+                unsigned split_bits)
+    : Super(t, tracker), root_addr{root_addr}, tm{tm}, cid{cid},
+      coll_node{std::move(coll_node)}, split_bits{split_bits} {}
   ~SeastoreSuper() override = default;
  protected:
   laddr_t get_root_laddr() const override {
@@ -30,13 +39,26 @@ class SeastoreSuper final: public Super {
   }
   void write_root_laddr(context_t c, laddr_t addr) override {
     LOG_PREFIX(OTree::Seastore);
-    SUBDEBUGT(seastore_onode, "update root {} ...", c.t, addr);
     root_addr = addr;
-    tm.write_onode_root(c.t, addr);
+    if (coll_node) {
+      SUBDEBUGT(seastore_onode, "update coll {} onode root {} ...",
+                c.t, cid, addr);
+      // todo: coll_node already exists so we can avoid chaining the future here.
+      //       switch to get? 
+      std::ignore = coll_node->update(
+        collection_manager::coll_context_t{tm, c.t}, cid,
+        collection_manager::coll_value_t{split_bits, addr});
+    } else {
+      SUBDEBUGT(seastore_onode, "update meta onode root {} ...", c.t, addr);
+      tm.write_meta_onode_root(c.t, addr);
+    }
   }
  private:
   laddr_t root_addr;
   TransactionManager &tm;
+  coll_t cid;
+  collection_manager::CollectionNode::CollectionNodeRef coll_node;
+  unsigned split_bits = 0;
 };
 
 class SeastoreNodeExtent final: public NodeExtent {
@@ -89,8 +111,10 @@ template <bool INJECT_EAGAIN=false>
 class SeastoreNodeExtentManager final: public TransactionManagerHandle {
  public:
   SeastoreNodeExtentManager(
-      TransactionManager &tm, laddr_t min, double p_eagain)
-      : TransactionManagerHandle(tm), addr_min{min}, p_eagain{p_eagain} {
+      TransactionManager &tm, laddr_t min, double p_eagain,
+      coll_t cid, collection_manager::FlatCollectionManager &collection_manager)
+      : TransactionManagerHandle(tm), addr_min{min},
+        cid{cid}, collection_manager{collection_manager}, p_eagain{p_eagain} {
     if constexpr (INJECT_EAGAIN) {
       assert(p_eagain > 0.0 && p_eagain < 1.0);
     } else {
@@ -195,9 +219,26 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return getsuper_iertr::make_ready_future<Super::URef>();
       }
     }
-    return tm.read_onode_root(t).si_then([this, &t, &tracker](auto root_addr) {
-      SUBTRACET(seastore_onode, "got root {}", t, root_addr);
-      return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
+    if (cid == coll_t::meta()) {
+      return tm.read_meta_onode_root(t).si_then(
+          [this, &t, &tracker](auto root_addr) {
+        SUBTRACET(seastore_onode, "meta got root {}", t, root_addr);
+        return Super::URef(new SeastoreSuper(t, tracker, root_addr, tm));
+      });
+    }
+    return tm.read_collection_root(t).si_then(
+        [this, &t](auto coll_root) {
+      return collection_manager.get_coll_node(coll_root, t);
+    }).handle_error_interruptible(
+      getsuper_iertr::pass_further{},
+      crimson::ct_error::assert_all(
+        "SeastoreNodeExtentManager::get_super: unexpected error reading "
+        "collection node")
+    ).si_then([this, &t, &tracker](auto coll_node) {
+      auto &value = coll_node->get_value(cid);
+      SUBTRACET(seastore_onode, "coll {} got root {}", t, cid, value.onode_root);
+      return Super::URef(new SeastoreSuper(
+        t, tracker, value.onode_root, tm, cid, coll_node, value.bits));
     });
   }
 
@@ -213,6 +254,10 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
   static LOG_PREFIX(OTree::Seastore);
 
   const laddr_t addr_min;
+
+  // collection_manager of this cid.
+  const coll_t cid;
+  collection_manager::FlatCollectionManager &collection_manager;
 
   // XXX: conditional members by INJECT_EAGAIN
   bool trigger_eagain() {
