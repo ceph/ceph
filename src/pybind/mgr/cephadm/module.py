@@ -556,6 +556,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
                  'When enabled, cephadm and bash commands are validated and executed via '
                  'the secure invoker wrapper.'
         ),
+        Option(
+            'log_deploy_configuration',
+            type='bool',
+            default=False,
+            desc=(
+                'Whether to log deploy config for daemons cephadm deploys in both the cephadm mgr '
+                'module and cephadm.log on individual hosts. Useful for debugging and developers, '
+                'but these log statements may contain sensitive info such as cephx keys. Only relevant '
+                'when logging at debug level'
+            )
+        )
     ]
     for image in DefaultImages:
         MODULE_OPTIONS.append(Option(image.key, default=image.image_ref, desc=image.desc))
@@ -672,6 +683,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
             self.cephadm_binary_logging_level = 'debug'
+            self.log_deploy_configuration = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()

@@ -3278,8 +3278,9 @@ def command_deploy_from(ctx: CephadmContext) -> None:
     configuration parameters from an input JSON configuration file.
     """
     config_data = read_configuration_source(ctx)
-    logger.debug('Loaded deploy configuration: %r', config_data)
     apply_deploy_config_to_ctx(config_data, ctx)
+    if 'log_deploy_configuration' in ctx and ctx.log_deploy_configuration:
+        logger.debug('Loaded deploy configuration: %r', config_data)
     try:
         _common_deploy(ctx)
     except DaemonStartException:
@@ -5106,6 +5107,15 @@ def _add_deploy_parser_args(
         type=str,
         default=None,
         help='Send signal to daemon'
+    )
+    parser_deploy.add_argument(
+        '--log-deploy-configuration',
+        action='store_true',
+        default=False,
+        help=(
+            'Whether to log deploy config to cephadm.log. Could contain sensitive info '
+            'such as cephx keys. Only relevant at debug level logging.'
+        )
     )
 
 

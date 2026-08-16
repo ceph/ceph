@@ -1584,6 +1584,8 @@ class CephadmServe:
                     daemon_params['send_signal_to_daemon'] = send_signal_to_daemon
                 if self.mgr.allow_ptrace:
                     daemon_params['allow_ptrace'] = True
+                if self.mgr.log_deploy_configuration:
+                    daemon_params['log_deploy_configuration'] = True
 
                 daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
                 init_containers = self._setup_init_containers(daemon_spec, daemon_params)
@@ -1937,7 +1939,8 @@ class CephadmServe:
                 if isinstance(stdin, bytes):
                     self.log.debug('stdin: <binary len %d>', len(stdin))
                 else:
-                    self.log.debug('stdin: %s', stdin)
+                    if self.mgr.log_deploy_configuration:
+                        self.log.debug('stdin: %s', stdin)
 
             # If SSH hardening is enabled, call invoker directly without which python
             if self.mgr.sudo_hardening and self.mgr.invoker_path:
