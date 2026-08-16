@@ -1493,13 +1493,11 @@ auto blocks_selector(ceph::libfdb::database_handle dbh,
   selector.options.result_limit = 4096;
  }
 
- // JFW: Although this is tunable, in my measurement it isn't a large factor so far-- likely 
- // these can move into the select instance itself (this is hard to measure in tests-- N
- // has to be pretty big; I've adjusted chunk_size to where I guesstimate it needs to be,
- // we need real-world experience to tweak this further):
- const auto chunk_size = 4 * 1024 * 1024;
+ // Initial range-work target: measurements so far suggest low sensitivity here,
+ // but large real workloads should drive future tuning.
+ constexpr auto target_bytes = 4 * 1024 * 1024;
 
- auto split_ranges = detail::plan_split_ranges(dbh, selector, chunk_size);
+ auto plan = detail::plan_range_work(dbh, selector, target_bytes);
 
  auto read_blocks = [txr = make_transactor(dbh), mode](this auto& self, ceph::libfdb::select range, const int iteration)
  -> std::generator<AssocT> {
@@ -1524,7 +1522,7 @@ auto blocks_selector(ceph::libfdb::database_handle dbh,
   return read_blocks(std::move(range), 1);
  };
 
- co_yield std::ranges::elements_of(split_ranges
+ co_yield std::ranges::elements_of(plan.ranges
                                  | std::views::transform(expand_range)
                                  | std::views::join);
 }

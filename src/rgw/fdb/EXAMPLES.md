@@ -819,9 +819,10 @@ if (page.has_more) {
 
 ### Block Traversal
 
-`blocks()` is for truly large scans. Given a database handle, it internally
-manages transactions for each planned block/window. Use it when a single
-transaction may get too old or block-at-a-time processing is preferable.
+`blocks()` is for truly large scans. Given a database handle, libfdb internally
+plans the range work and manages transactions for each block/window. Use it
+when a single transaction may get too old, or when the application naturally
+wants to process bounded groups of rows.
 
 ```cpp
 for (const auto& block : lfdb::blocks(dbh, q::prefix("object/metadata/"))) {
@@ -831,8 +832,38 @@ for (const auto& block : lfdb::blocks(dbh, q::prefix("object/metadata/"))) {
 }
 ```
 
+For example, a cache maintenance pass might walk a large object-metadata
+keyspace block-at-a-time and only keep one planned block in memory:
+
+```cpp
+for (const auto& block : lfdb::blocks<object_metadata>(
+       dbh, q::prefix("cache/object/head/"))) {
+  for (const auto& [key, metadata] : block) {
+    if (metadata.expired(cutoff)) {
+      schedule_eviction(key);
+    }
+  }
+}
+```
+
+The same pattern works for export or auditing jobs where progress can be
+recorded between blocks:
+
+```cpp
+std::uint64_t exported = 0;
+
+for (const auto& block : lfdb::blocks<object_metadata>(
+       dbh, q::prefix("tenant/acme/object/"))) {
+  write_export_batch(block);
+  exported += std::size(block);
+  lfdb::set(dbh, "export/acme/progress", exported);
+}
+```
+
 It may also be useful to group flat `scan()` output into discrete groups of N
-items. One way to do that is with a chunk view:
+items. That is different from `blocks()`: the scan has already chosen its
+transaction behavior, and `std::views::chunk()` only changes the shape seen by
+the caller.
 
 ```cpp
 // Stream groups of 100:

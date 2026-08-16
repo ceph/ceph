@@ -123,6 +123,10 @@ inline void transaction_clear_range(const transaction_handle& txn,
 inline void transaction_mark_conflict_range(const transaction_handle& txn,
                                             const ceph::libfdb::select& key_range,
                                             FDBConflictRangeType type);
+inline future_value transaction_get_range_split_points(const transaction_handle& txn,
+                                                       std::span<const std::uint8_t> begin,
+                                                       std::span<const std::uint8_t> end,
+                                                       std::int64_t target_bytes);
 
 inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
@@ -945,6 +949,18 @@ class transaction final
   };
  }
 
+ detail::future_value get_range_split_points(std::span<const std::uint8_t> begin,
+                                             std::span<const std::uint8_t> end,
+                                             const std::int64_t target_bytes)
+ {
+  return detail::future_value {
+   fdb_transaction_get_range_split_points(raw_handle(),
+                                          begin.data(), static_cast<int>(std::size(begin)),
+                                          end.data(), static_cast<int>(std::size(end)),
+                                          target_bytes)
+  };
+ }
+
  bool key_exists(std::string_view k, const read_mode mode)
  {
     return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {}, mode);
@@ -1046,6 +1062,9 @@ class transaction final
  friend inline void ceph::libfdb::detail::transaction_mark_conflict_range(const transaction_handle&,
                                                                           const ceph::libfdb::select&,
                                                                           FDBConflictRangeType);
+ friend inline auto ceph::libfdb::detail::transaction_get_range_split_points(
+  const transaction_handle&, std::span<const std::uint8_t>, std::span<const std::uint8_t>, std::int64_t)
+  -> ceph::libfdb::detail::future_value;
 
 };
 
@@ -1084,6 +1103,14 @@ inline void transaction_mark_conflict_range(const transaction_handle& txn,
                                             const FDBConflictRangeType type)
 {
  txn->mark_conflict(key_range, type);
+}
+
+inline future_value transaction_get_range_split_points(const transaction_handle& txn,
+                                                       std::span<const std::uint8_t> begin,
+                                                       std::span<const std::uint8_t> end,
+                                                       const std::int64_t target_bytes)
+{
+ return txn->get_range_split_points(begin, end, target_bytes);
 }
 
 } // namespace detail
@@ -1271,6 +1298,11 @@ struct split_point_result final
  future_value result_owner;
  std::span<const FDBKey> result_keys;
  fdb_error_t error = 0;
+};
+
+struct range_work_plan final
+{
+ std::vector<ceph::libfdb::select> ranges;
 };
 
 inline query_window extract_result_pairs(future_value result_owner)
@@ -1508,10 +1540,10 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                     ));
 }
 
-inline std::vector<ceph::libfdb::select> plan_split_ranges(
-          ceph::libfdb::database_handle dbh, 
-          ceph::libfdb::select selector, 
-          const std::int64_t remote_chunk_size)
+// Plan internal range work in terms of libfdb selections, not raw FDB split points:
+inline range_work_plan plan_range_work(ceph::libfdb::database_handle dbh,
+                                       ceph::libfdb::select selector,
+                                       const std::int64_t target_bytes)
 {
  using ceph::libfdb::detail::wait_until_ready;
 
@@ -1521,22 +1553,28 @@ inline std::vector<ceph::libfdb::select> plan_split_ranges(
  const auto end = ceph::libfdb::detail::as_fdb_span(split_selector.end_key);
 
  for (bool should_retry = true; should_retry;) {
-  auto result_owner = wait_until_ready(future_value(fdb_transaction_get_range_split_points(
-                       txn->raw_handle(),
-                       begin.data(), static_cast<int>(std::size(begin)),
-                       end.data(), static_cast<int>(std::size(end)),
-                       remote_chunk_size)));
+  auto result_owner = wait_until_ready(
+   transaction_get_range_split_points(txn, begin, end, target_bytes));
 
   auto split_points = extract_split_points(std::move(result_owner));
 
   should_retry = retry_after_error(txn, split_points.error);
 
   if (not should_retry) {
-   return as_select_seq(split_points.result_keys, split_selector);
+   auto ranges = as_select_seq(split_points.result_keys, split_selector);
+   if (ranges.empty()) {
+    ranges.push_back(std::move(selector));
+   }
+
+   return range_work_plan {
+    .ranges = std::move(ranges)
+   };
   }
  }
 
- return {};
+ return range_work_plan {
+  .ranges = {std::move(selector)}
+ };
 }
 
 // Generators (internal guts):
