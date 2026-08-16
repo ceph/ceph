@@ -498,12 +498,13 @@ inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
 template <query::expression SelectionT, string_pair_output OutT>
 inline std::size_t get_value_selection_from_transaction(transaction& txn,
                                                         const SelectionT& selection,
+                                                        const read_mode mode,
                                                         OutT& out)
 {
  std::size_t nread = 0;
 
  query::for_each_interval(selection, [&](const ceph::libfdb::select& interval) {
-  nread += detail::get_value_range_from_transaction(txn, interval, out);
+  nread += detail::get_value_range_from_transaction(txn, interval, mode, out);
  });
 
  return nread;
@@ -512,11 +513,12 @@ inline std::size_t get_value_selection_from_transaction(transaction& txn,
 template <typename OutT, query::expression SelectionT>
 requires concepts::materializable_string_pair_output_range<OutT>
 inline auto materialize_string_pair_selection(transaction& txn,
-                                              const SelectionT& selection)
+                                              const SelectionT& selection,
+                                              const read_mode mode)
  -> materialized_string_pair_output<OutT>
 {
  OutT tmp;
- const auto nread = get_value_selection_from_transaction(txn, selection, tmp);
+ const auto nread = get_value_selection_from_transaction(txn, selection, mode, tmp);
 
  return {
   .values = std::move(tmp),
@@ -533,29 +535,40 @@ inline auto materialize_string_pair_selection(transaction& txn,
 inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        const query::expression auto& selection,
                        concepts::string_pair_output_iterator auto out_iter,
+                       const read_mode mode,
                        const ceph::libfdb::commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [&selection, out_iter](const transaction_handle& active_txn) mutable {
-            return detail::get_value_selection_from_transaction(*active_txn, selection, out_iter);
+          [&selection, out_iter, mode](const transaction_handle& active_txn) mutable {
+            return detail::get_value_selection_from_transaction(*active_txn, selection, mode, out_iter);
           });
 }
 
 inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        const query::expression auto& selection,
-                       concepts::string_pair_output_iterator auto out_iter)
+                       concepts::string_pair_output_iterator auto out_iter,
+                       const ceph::libfdb::commit_after_op commit_after)
 {
- return get(txn, selection, out_iter, commit_after_op::no_commit);
+ return get(txn, selection, out_iter, read_mode::serializable, commit_after);
+}
+
+inline std::size_t get(ceph::libfdb::transaction_handle txn,
+                       const query::expression auto& selection,
+                       concepts::string_pair_output_iterator auto out_iter,
+                       const read_mode mode = read_mode::serializable)
+{
+ return get(txn, selection, out_iter, mode, commit_after_op::no_commit);
 }
 
 inline std::size_t get(ceph::libfdb::database_handle dbh,
                        const query::expression auto& selection,
-                       concepts::string_pair_output_iterator auto out_iter)
+                       concepts::string_pair_output_iterator auto out_iter,
+                       const read_mode mode = read_mode::serializable)
 {
  auto result = detail::in_transaction(dbh,
-          [&selection](transaction_handle& txn) {
+          [&selection, mode](transaction_handle& txn) {
             using out_t = std::vector<std::pair<std::string, std::string>>;
-            return detail::materialize_string_pair_selection<out_t>(*txn, selection);
+            return detail::materialize_string_pair_selection<out_t>(*txn, selection, mode);
           });
 
  std::ranges::move(result.values, out_iter);
@@ -565,30 +578,41 @@ inline std::size_t get(ceph::libfdb::database_handle dbh,
 inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        const query::expression auto& selection,
                        concepts::string_pair_output_range auto& out,
+                       const read_mode mode,
                        const ceph::libfdb::commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [&selection, &out](const transaction_handle& active_txn) {
-            return detail::get_value_selection_from_transaction(*active_txn, selection, out);
+          [&selection, &out, mode](const transaction_handle& active_txn) {
+            return detail::get_value_selection_from_transaction(*active_txn, selection, mode, out);
           });
 }
 
 inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        const query::expression auto& selection,
-                       concepts::string_pair_output_range auto& out)
+                       concepts::string_pair_output_range auto& out,
+                       const ceph::libfdb::commit_after_op commit_after)
 {
- return get(txn, selection, out, commit_after_op::no_commit);
+ return get(txn, selection, out, read_mode::serializable, commit_after);
+}
+
+inline std::size_t get(ceph::libfdb::transaction_handle txn,
+                       const query::expression auto& selection,
+                       concepts::string_pair_output_range auto& out,
+                       const read_mode mode = read_mode::serializable)
+{
+ return get(txn, selection, out, mode, commit_after_op::no_commit);
 }
 
 inline std::size_t get(ceph::libfdb::database_handle dbh,
                        const query::expression auto& selection,
-                       concepts::materializable_string_pair_output_range auto& out)
+                       concepts::materializable_string_pair_output_range auto& out,
+                       const read_mode mode = read_mode::serializable)
 {
  using out_t = std::remove_cvref_t<decltype(out)>;
 
  auto result = detail::in_transaction(dbh,
-          [&selection](transaction_handle& txn) {
-            return detail::materialize_string_pair_selection<out_t>(*txn, selection);
+          [&selection, mode](transaction_handle& txn) {
+            return detail::materialize_string_pair_selection<out_t>(*txn, selection, mode);
           });
 
  detail::publish_string_pair_results(out, std::move(result.values));
@@ -598,23 +622,51 @@ inline std::size_t get(ceph::libfdb::database_handle dbh,
 inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        std::initializer_list<std::string_view> keys,
                        concepts::string_pair_output_range auto& out,
+                       const read_mode mode,
                        const ceph::libfdb::commit_after_op commit_after)
 {
- return get(txn, detail::select_from_initializer_list(keys), out, commit_after);
+ return get(txn, detail::select_from_initializer_list(keys), out, mode, commit_after);
 }
 
 inline std::size_t get(ceph::libfdb::transaction_handle txn,
                        std::initializer_list<std::string_view> keys,
-                       concepts::string_pair_output_range auto& out)
+                       concepts::string_pair_output_range auto& out,
+                       const ceph::libfdb::commit_after_op commit_after)
 {
- return get(txn, keys, out, commit_after_op::no_commit);
+ return get(txn, keys, out, read_mode::serializable, commit_after);
+}
+
+inline std::size_t get(ceph::libfdb::transaction_handle txn,
+                       std::initializer_list<std::string_view> keys,
+                       concepts::string_pair_output_range auto& out,
+                       const read_mode mode = read_mode::serializable)
+{
+ return get(txn, keys, out, mode, commit_after_op::no_commit);
 }
 
 inline std::size_t get(ceph::libfdb::database_handle dbh,
                        std::initializer_list<std::string_view> keys,
-                       concepts::materializable_string_pair_output_range auto& out)
+                       concepts::materializable_string_pair_output_range auto& out,
+                       const read_mode mode = read_mode::serializable)
 {
- return get(dbh, detail::select_from_initializer_list(keys), out);
+ return get(dbh, detail::select_from_initializer_list(keys), out, mode);
+}
+
+template <typename OutputTargetOrFnT>
+requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
+         concepts::decoded_value_sink<OutputTargetOrFnT&&>
+inline bool get(ceph::libfdb::transaction_handle txn,
+                const concepts::libfdb_key auto& key,
+                OutputTargetOrFnT&& output_target_or_fn,
+                const read_mode mode,
+                const commit_after_op commit_after)
+{
+ return detail::commit_noreplay(txn, commit_after,
+          [key = detail::as_fdb_span(key), &output_target_or_fn, mode](const transaction_handle& active_txn) {
+            return active_txn->get(key,
+                                   detail::get_output_for(output_target_or_fn),
+                                   mode);
+          });
 }
 
 template <typename OutputTargetOrFnT>
@@ -625,11 +677,8 @@ inline bool get(ceph::libfdb::transaction_handle txn,
                 OutputTargetOrFnT&& output_target_or_fn,
                 const commit_after_op commit_after)
 {
- return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_fdb_span(key), &output_target_or_fn](const transaction_handle& active_txn) {
-            return active_txn->get(key,
-                                   detail::get_output_for(output_target_or_fn));
-          });
+ return get(txn, key, std::forward<OutputTargetOrFnT>(output_target_or_fn),
+            read_mode::serializable, commit_after);
 }
 
 template <typename OutputTargetOrFnT>
@@ -637,9 +686,11 @@ requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
 inline bool get(ceph::libfdb::transaction_handle txn,
                 const concepts::libfdb_key auto& key,
-                OutputTargetOrFnT&& output_target_or_fn)
+                OutputTargetOrFnT&& output_target_or_fn,
+                const read_mode mode = read_mode::serializable)
 {
- return get(txn, key, std::forward<OutputTargetOrFnT>(output_target_or_fn), commit_after_op::no_commit);
+ return get(txn, key, std::forward<OutputTargetOrFnT>(output_target_or_fn),
+            mode, commit_after_op::no_commit);
 }
 
 template <typename OutputTargetOrFnT>
@@ -647,11 +698,12 @@ requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
 inline bool get(ceph::libfdb::database_handle dbh,
                 const concepts::libfdb_key auto& key,
-                OutputTargetOrFnT&& output_target_or_fn)
+                OutputTargetOrFnT&& output_target_or_fn,
+                const read_mode mode = read_mode::serializable)
 {
  return detail::in_transaction(dbh,
-          [key, &output_target_or_fn](transaction_handle& txn) {
-            return get(txn, key, output_target_or_fn, commit_after_op::no_commit);
+          [key, &output_target_or_fn, mode](transaction_handle& txn) {
+            return get(txn, key, output_target_or_fn, mode, commit_after_op::no_commit);
           });
 }
 
@@ -662,24 +714,36 @@ namespace ceph::libfdb {
 // Does a key exist?
 inline bool key_exists(transaction_handle txn,
                        const concepts::libfdb_key auto& k,
+                       const read_mode mode,
                        const commit_after_op commit_after)
 {
  return detail::commit_noreplay(txn, commit_after,
-          [key = detail::as_libfdb_key_view(k)](const transaction_handle& active_txn) {
-            return active_txn->key_exists(key);
+          [key = detail::as_libfdb_key_view(k), mode](const transaction_handle& active_txn) {
+            return active_txn->key_exists(key, mode);
           });
 }
 
-inline bool key_exists(transaction_handle txn, const concepts::libfdb_key auto& k)
+inline bool key_exists(transaction_handle txn,
+                       const concepts::libfdb_key auto& k,
+                       const commit_after_op commit_after)
 {
- return key_exists(txn, k, commit_after_op::no_commit);
+ return key_exists(txn, k, read_mode::serializable, commit_after);
 }
 
-inline bool key_exists(database_handle dbh, const concepts::libfdb_key auto& k)
+inline bool key_exists(transaction_handle txn,
+                       const concepts::libfdb_key auto& k,
+                       const read_mode mode = read_mode::serializable)
+{
+ return key_exists(txn, k, mode, commit_after_op::no_commit);
+}
+
+inline bool key_exists(database_handle dbh,
+                       const concepts::libfdb_key auto& k,
+                       const read_mode mode = read_mode::serializable)
 {
  return detail::in_transaction(dbh,
-          [k](transaction_handle& txn) {
-            return key_exists(txn, k, commit_after_op::no_commit);
+          [k, mode](transaction_handle& txn) {
+            return key_exists(txn, k, mode, commit_after_op::no_commit);
           });
 }
 
@@ -761,23 +825,6 @@ inline auto intervals(const QueryT& query)
  return out;
 }
 
-template <typename AssocT, typename RangeT>
-inline AssocT collect_range(RangeT&& range)
-{
- return ceph::util::collect_as<AssocT>(std::forward<RangeT>(range));
-}
-
-template <typename ValueT = std::string>
-inline auto scan_selector(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range)
-  -> std::generator<std::pair<std::string, ValueT>>
-{
- auto decoded_pairs = ceph::libfdb::detail::generate_FDB_pairs(*txn, key_range)
-                    | std::views::join
-                    | std::views::transform(ceph::libfdb::detail::to_decoded_kv_pair<ValueT>);
-
- co_yield std::ranges::elements_of(decoded_pairs);
-}
-
 template <typename ValueT, typename BlockRangeT>
 inline auto flatten_blocks(BlockRangeT block_range)
   -> std::generator<std::pair<std::string, ValueT>>
@@ -795,12 +842,17 @@ inline auto flatten_blocks(BlockRangeT block_range)
 // the right default:
 template <typename ValueT = std::string,
           query::expression SelectionT>
-inline auto scan(ceph::libfdb::transaction_handle txn, SelectionT selection)
+inline auto scan(ceph::libfdb::transaction_handle txn,
+                 SelectionT selection,
+                 const read_mode mode = read_mode::serializable)
   -> std::generator<std::pair<std::string, ValueT>>
 {
  for (auto& interval : detail::intervals(selection)) {
-  co_yield std::ranges::elements_of(
-   detail::scan_selector<ValueT>(txn, std::move(interval)));
+  auto decoded_pairs = detail::generate_FDB_pairs(*txn, std::move(interval), mode)
+                     | std::views::join
+                     | std::views::transform(detail::to_decoded_kv_pair<ValueT>);
+
+  co_yield std::ranges::elements_of(decoded_pairs);
  }
 }
 
@@ -808,10 +860,11 @@ inline auto scan(ceph::libfdb::transaction_handle txn, SelectionT selection)
 template <typename ValueT = std::string,
           query::expression SelectionT>
 inline auto pair_generator(ceph::libfdb::transaction_handle txn,
-                           SelectionT selection)
+                           SelectionT selection,
+                           const read_mode mode = read_mode::serializable)
   -> std::generator<std::pair<std::string, ValueT>>
 {
- return scan<ValueT>(txn, std::move(selection));
+ return scan<ValueT>(txn, std::move(selection), mode);
 }
 
 struct page final
@@ -885,9 +938,10 @@ template <typename ValueT = std::string, typename FnT, query::expression Selecti
 requires detail::row_invocable<FnT, ValueT>
 inline void for_each(ceph::libfdb::transaction_handle txn,
                      SelectionT selection,
-                     FnT&& fn)
+                     FnT&& fn,
+                     const read_mode mode = read_mode::serializable)
 {
- for (auto&& row : scan<ValueT>(std::move(txn), std::move(selection))) {
+ for (auto&& row : scan<ValueT>(std::move(txn), std::move(selection), mode)) {
   std::invoke(fn, std::move(row));
  }
 }
@@ -899,11 +953,12 @@ template <typename ValueT = std::string, typename FnT, query::expression Selecti
 requires detail::row_invocable<FnT, ValueT>
 inline void for_each(ceph::libfdb::database_handle dbh,
                      SelectionT selection,
-                     FnT&& fn)
+                     FnT&& fn,
+                     const read_mode mode = read_mode::serializable)
 {
  detail::in_transaction(dbh,
-  [selection = std::move(selection), fn = std::forward<FnT>(fn)](auto& txn) mutable {
-   for_each<ValueT>(txn, selection, fn);
+  [selection = std::move(selection), fn = std::forward<FnT>(fn), mode](auto& txn) mutable {
+   for_each<ValueT>(txn, selection, fn, mode);
   });
 }
 
@@ -917,12 +972,14 @@ requires detail::row_invocable<FnT, ValueT> &&
 inline OutIterT transform(ceph::libfdb::transaction_handle txn,
                           SelectionT selection,
                           FnT&& fn,
-                          OutIterT out)
+                          OutIterT out,
+                          const read_mode mode = read_mode::serializable)
 {
  for_each<ValueT>(std::move(txn), std::move(selection),
                   [&fn, &out](auto&& row) mutable {
                    *out++ = std::invoke(fn, std::move(row));
-                  });
+                  },
+                  mode);
 
  return out;
 }
@@ -932,14 +989,15 @@ requires detail::row_invocable<FnT, ValueT> &&
          concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
 [[nodiscard]] auto transform(ceph::libfdb::transaction_handle txn,
                              SelectionT selection,
-                             FnT&& fn)
+                             FnT&& fn,
+                             const read_mode mode = read_mode::serializable)
 {
  using result_t =
   std::remove_cvref_t<detail::row_transform_result_t<ValueT, FnT>>;
 
  std::vector<result_t> out;
  transform<ValueT>(std::move(txn), std::move(selection),
-                   std::forward<FnT>(fn), std::back_inserter(out));
+                   std::forward<FnT>(fn), std::back_inserter(out), mode);
 
  return out;
 }
@@ -949,11 +1007,12 @@ requires detail::row_invocable<FnT, ValueT> &&
          concepts::storable_invocation_result<detail::row_transform_result_t<ValueT, FnT>>
 [[nodiscard]] auto transform(ceph::libfdb::database_handle dbh,
                              SelectionT selection,
-                             FnT&& fn)
+                             FnT&& fn,
+                             const read_mode mode = read_mode::serializable)
 {
  return detail::in_transaction(dbh,
-  [selection = std::move(selection), fn = std::forward<FnT>(fn)](auto& txn) mutable {
-   return transform<ValueT>(txn, selection, fn);
+  [selection = std::move(selection), fn = std::forward<FnT>(fn), mode](auto& txn) mutable {
+   return transform<ValueT>(txn, selection, fn, mode);
   });
 }
 
@@ -967,10 +1026,11 @@ requires detail::row_invocable<FnT, ValueT> &&
 inline OutIterT transform(ceph::libfdb::database_handle dbh,
                           SelectionT selection,
                           FnT&& fn,
-                          OutIterT out)
+                          OutIterT out,
+                          const read_mode mode = read_mode::serializable)
 {
  auto transformed = transform<ValueT>(dbh, std::move(selection),
-                                      std::forward<FnT>(fn));
+                                      std::forward<FnT>(fn), mode);
 
  for (auto& value : transformed) {
   *out++ = std::move(value);
@@ -1034,16 +1094,17 @@ template <std::ranges::input_range RangeT>
 template <typename ValueT = std::string>
 [[nodiscard]] auto scan(ceph::libfdb::transaction_handle txn,
                         ceph::libfdb::select selector,
-                        page p)
+                        page p,
+                        const read_mode mode = read_mode::serializable)
 {
  using row_type = std::pair<std::string, ValueT>;
 
  if (0 == p.size) {
-  return collect(scan<ValueT>(std::move(txn), std::move(selector)), p);
+  return collect(scan<ValueT>(std::move(txn), std::move(selector), mode), p);
  }
 
  selector.options.result_limit = detail::range_limit_for(p);
- auto window = detail::read_query_window(*txn, selector, 1);
+ auto window = detail::read_query_window(*txn, selector, 1, mode);
 
  page_result<row_type> out;
  out.rows.reserve(p.size);
@@ -1060,10 +1121,11 @@ template <typename ValueT = std::string>
 template <typename ValueT = std::string>
 [[nodiscard]] auto scan(ceph::libfdb::database_handle dbh,
                         ceph::libfdb::select selector,
-                        page p)
+                        page p,
+                        const read_mode mode = read_mode::serializable)
 {
- return make_transactor(dbh)([selector = std::move(selector), p](auto& txn) {
-  return scan<ValueT>(txn, selector, p);
+ return make_transactor(dbh)([selector = std::move(selector), p, mode](auto& txn) {
+  return scan<ValueT>(txn, selector, p, mode);
  });
 }
 
@@ -1075,7 +1137,9 @@ namespace detail {
 
 template <typename ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>>
-auto blocks_selector(ceph::libfdb::database_handle dbh, ceph::libfdb::select selector)
+auto blocks_selector(ceph::libfdb::database_handle dbh,
+                     ceph::libfdb::select selector,
+                     const read_mode mode)
  -> std::generator<AssocT>
 {
  if (0 == selector.options.result_limit) {
@@ -1090,10 +1154,10 @@ auto blocks_selector(ceph::libfdb::database_handle dbh, ceph::libfdb::select sel
 
  auto split_ranges = detail::plan_split_ranges(dbh, selector, chunk_size);
 
- auto read_blocks = [txr = make_transactor(dbh)](this auto& self, ceph::libfdb::select range, const int iteration)
+ auto read_blocks = [txr = make_transactor(dbh), mode](this auto& self, ceph::libfdb::select range, const int iteration)
  -> std::generator<AssocT> {
-  auto read_result = txr([range, iteration](auto& txn) {
-   return detail::materialize_query_window<ValueT, AssocT>(*txn, range, iteration);
+  auto read_result = txr([range, iteration, mode](auto& txn) {
+   return detail::materialize_query_window<ValueT, AssocT>(*txn, range, iteration, mode);
   });
 
   auto next_range = std::move(read_result.next_range);
@@ -1123,12 +1187,14 @@ auto blocks_selector(ceph::libfdb::database_handle dbh, ceph::libfdb::select sel
 template <typename ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
-auto blocks(ceph::libfdb::database_handle dbh, SelectionT selection)
+auto blocks(ceph::libfdb::database_handle dbh,
+            SelectionT selection,
+            const read_mode mode = read_mode::serializable)
  -> std::generator<AssocT>
 {
  for (auto& interval : detail::intervals(selection)) {
   co_yield std::ranges::elements_of(
-   detail::blocks_selector<ValueT, AssocT>(dbh, std::move(interval)));
+   detail::blocks_selector<ValueT, AssocT>(dbh, std::move(interval), mode));
  }
 }
 
@@ -1136,35 +1202,43 @@ auto blocks(ceph::libfdb::database_handle dbh, SelectionT selection)
 template <typename ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
-auto block_generator(ceph::libfdb::database_handle dbh, SelectionT selection)
+auto block_generator(ceph::libfdb::database_handle dbh,
+                     SelectionT selection,
+                     const read_mode mode = read_mode::serializable)
  -> std::generator<AssocT>
 {
- return blocks<ValueT, AssocT>(dbh, std::move(selection));
+ return blocks<ValueT, AssocT>(dbh, std::move(selection), mode);
 }
 
 // Managed scans flatten the blocks() stream into key/value pairs.
 template <typename ValueT = std::string,
           query::expression SelectionT>
-inline auto scan(ceph::libfdb::database_handle dbh, SelectionT selection)
+inline auto scan(ceph::libfdb::database_handle dbh,
+                 SelectionT selection,
+                 const read_mode mode = read_mode::serializable)
   -> std::generator<std::pair<std::string, ValueT>>
 {
- return detail::flatten_blocks<ValueT>(blocks<ValueT>(dbh, std::move(selection)));
+ return detail::flatten_blocks<ValueT>(blocks<ValueT>(dbh, std::move(selection), mode));
 }
 
 template <typename ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
-inline AssocT collect(ceph::libfdb::transaction_handle txn, SelectionT selection)
+inline AssocT collect(ceph::libfdb::transaction_handle txn,
+                      SelectionT selection,
+                      const read_mode mode = read_mode::serializable)
 {
- return detail::collect_range<AssocT>(scan<ValueT>(txn, std::move(selection)));
+ return ceph::util::collect_as<AssocT>(scan<ValueT>(txn, std::move(selection), mode));
 }
 
 template <typename ValueT = std::string,
           typename AssocT = std::vector<std::pair<std::string, ValueT>>,
           query::expression SelectionT>
-inline AssocT collect(ceph::libfdb::database_handle dbh, SelectionT selection)
+inline AssocT collect(ceph::libfdb::database_handle dbh,
+                      SelectionT selection,
+                      const read_mode mode = read_mode::serializable)
 {
- return detail::collect_range<AssocT>(scan<ValueT>(dbh, std::move(selection)));
+ return ceph::util::collect_as<AssocT>(scan<ValueT>(dbh, std::move(selection), mode));
 }
 
 } // namespace ceph::libfdb

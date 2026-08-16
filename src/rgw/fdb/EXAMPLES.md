@@ -259,9 +259,11 @@ explicit open/closed boundaries.
 | Store one key/value pair | `lfdb::set(dbh, key, value)` | `void` | One logical write with automatic transaction handling. |
 | Store many key/value pairs already in a container | `lfdb::set(dbh, kvs)` | `void` | Writes the whole range in one managed transaction without spelling out iterators. |
 | Read one exact key | `lfdb::get(dbh, key, value)` | `bool` | Returns `true` only when the key exists and decodes into `value`. |
+| Read one exact key without adding a read conflict | `lfdb::get(dbh, key, value, lfdb::read_mode::snapshot)` | `bool` | Useful for advisory reads where the value is not part of the transaction's correctness condition. |
 | Read one exact key as bytes | `lfdb::get(dbh, key, callback)` | `bool` | Lets the callback copy or decode the raw value while the FDB buffer is valid. |
 | Read a small range into an existing output | `lfdb::get(dbh, query, out)` | `std::size_t` | Materializes decoded string pairs, publishes them after a successful managed read, and reports how many records were found. |
 | Read a flat stream in an existing transaction | `lfdb::scan(txn, query)` | generator of key/value pairs | Keeps transaction lifetime under caller control. |
+| Read a flat stream without adding read conflicts | `lfdb::scan(txn, query, lfdb::read_mode::snapshot)` | generator of key/value pairs | Leaves specialized read-then-write policy visible at the call site. |
 | Read a flat stream with managed transactions | `lfdb::scan(dbh, query)` | generator of key/value pairs | Hides transaction-window management while preserving streaming syntax. |
 | Read directly into a new container | `lfdb::collect<T>(dbh, query)` | vector of key/value pairs | Best when the caller really wants a fully materialized result. |
 | Read directly into a chosen container type | `lfdb::collect<T, AssocT>(dbh, query)` | `AssocT` | Keeps materialization explicit when the caller wants a map or custom container. |
@@ -290,6 +292,40 @@ const auto nread = lfdb::get(dbh, q::prefix("person/"), people);
 
 For very large reads, prefer `lfdb::blocks()` so work stays block-at-a-time
 instead of collecting one large result before publishing it.
+
+### Snapshot Reads
+
+Snapshot reads do not add read conflict ranges. The FoundationDB developer guide
+describes them here: <https://apple.github.io/foundationdb/developer-guide.html#snapshot-reads>.
+Use them for advisory reads, background maintenance, cleanup discovery, or other
+places where another transaction changing the read keys should not by itself make
+this transaction fail.
+
+```cpp
+object_metadata metadata;
+if (lfdb::get(dbh, "object/catalog/project-a/report.pdf", metadata,
+              lfdb::read_mode::snapshot) &&
+    metadata.expired(cutoff)) {
+  schedule_metadata_refresh(metadata);
+}
+```
+
+The same mode works for range-shaped reads. This is useful when discovering
+best-effort cleanup candidates where stale discoveries are acceptable:
+
+```cpp
+for (const auto& [key, metadata] :
+     lfdb::scan<object_metadata>(txn, q::prefix("object/catalog/project-a/"),
+                                 lfdb::read_mode::snapshot)) {
+  if (metadata.expired(cutoff)) {
+    schedule_metadata_refresh(metadata);
+  }
+}
+```
+
+Snapshot reads are a lower-isolation tool. If a later mutation depends on what
+was read, keep that choice explicit in an ordinary transaction rather than
+hiding it behind a convenience helper.
 
 ### Prefix Selection
 

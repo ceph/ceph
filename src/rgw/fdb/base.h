@@ -84,6 +84,9 @@ class transaction;
 using database_handle = std::shared_ptr<database>;
 using transaction_handle = std::shared_ptr<transaction>;
 
+// Serializable reads add FDB read conflicts; snapshot reads do not:
+enum struct read_mode { serializable, snapshot };
+
 extern transaction_handle make_transaction(database_handle dbh);
 [[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key);
 
@@ -117,17 +120,25 @@ inline void transaction_clear_range(const transaction_handle& txn,
 inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
 inline future_value wait_for_on_error(FDBTransaction* txn, fdb_error_t original_error);
-inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& selection, int iteration);
+inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn,
+                                                      const ceph::libfdb::select& selection,
+                                                      int iteration,
+                                                      ceph::libfdb::read_mode mode = ceph::libfdb::read_mode::serializable);
 [[nodiscard]] inline std::int64_t extract_int64(future_value result_owner);
 
 // A generator that produces successive spans for a range:
-inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn, ceph::libfdb::select key_range);
+inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn,
+                                                                       ceph::libfdb::select key_range,
+                                                                       ceph::libfdb::read_mode mode = ceph::libfdb::read_mode::serializable);
 
 // Stores generated key/value pair results to an iterator and returns the
 // number of pairs emitted:
 template <typename OutIterT>
 requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline std::size_t get_value_range_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& key_range, OutIterT& out_iter);
+inline std::size_t get_value_range_from_transaction(ceph::libfdb::transaction& txn,
+                                                    const ceph::libfdb::select& key_range,
+                                                    ceph::libfdb::read_mode mode,
+                                                    OutIterT& out_iter);
 
 } // namespace ceph::libfdb::detail
 
@@ -793,7 +804,8 @@ class transaction final
 
  private:
  bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
-                                        std::invocable<std::span<const std::uint8_t>> auto&& write_output_fn);
+                                        std::invocable<std::span<const std::uint8_t>> auto&& write_output_fn,
+                                        read_mode mode);
 
  public:
  transaction(database_handle dbh_)
@@ -857,8 +869,11 @@ class transaction final
     k, std::span<const std::uint8_t>(v.encoding_buffer), v.stamp);
  }
 
- bool get(const std::span<const std::uint8_t> k, concepts::value_callback auto&& val_collector) {
-    return get_single_value_from_transaction(k, val_collector);
+ bool get(const std::span<const std::uint8_t> k,
+          concepts::value_callback auto&& val_collector,
+          const read_mode mode)
+ {
+    return get_single_value_from_transaction(k, val_collector, mode);
  }
 
  void erase(std::span<const std::uint8_t> k) {
@@ -883,8 +898,9 @@ class transaction final
   };
  }
 
- bool key_exists(std::string_view k) {
-    return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {});
+ bool key_exists(std::string_view k, const read_mode mode)
+ {
+    return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {}, mode);
  }
 
  [[nodiscard]] std::int64_t committed_version() const
@@ -942,10 +958,20 @@ class transaction final
  friend inline bool get(ceph::libfdb::transaction_handle,
                         const concepts::libfdb_key auto&,
                         OutputTargetOrFnT&&,
+                        read_mode,
+                        const commit_after_op);
+
+ template <typename OutputTargetOrFnT>
+ requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
+          concepts::decoded_value_sink<OutputTargetOrFnT&&>
+ friend inline bool get(ceph::libfdb::transaction_handle,
+                        const concepts::libfdb_key auto&,
+                        OutputTargetOrFnT&&,
                         const commit_after_op);
 
  friend inline bool key_exists(transaction_handle txn,
                                const concepts::libfdb_key auto& k,
+                               read_mode mode,
                                const commit_after_op commit_after);
 
  friend inline bool commit(transaction_handle& txn);
@@ -989,14 +1015,16 @@ inline void transaction_clear_range(const transaction_handle& txn,
 
 } // namespace detail
 
-inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output)
+inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
+                                                                         std::invocable<std::span<const std::uint8_t>> auto&& write_output,
+                                                                         const read_mode mode)
 {
- const fdb_bool_t is_snapshot = false; 
+ const fdb_bool_t snapshot = read_mode::snapshot == mode;
 
  auto fv = detail::block_until_ready(detail::future_value(fdb_transaction_get(
                                     raw_handle(),
                                     (const uint8_t *)key.data(), key.size(),
-                                    is_snapshot)));
+                                    snapshot)));
  auto *future = fv.raw_ptr_or_throw();
  
   fdb_bool_t key_was_found = false;
@@ -1218,10 +1246,13 @@ inline split_point_result extract_split_points(future_value result_owner)
  return value;
 }
 
-inline query_window read_query_window(transaction& txn, const select& key_range, const int iteration)
+inline query_window read_query_window(transaction& txn,
+                                      const select& key_range,
+                                      const int iteration,
+                                      const read_mode mode = read_mode::serializable)
 {
  return extract_result_pairs(await_future_of([&]() {
-  return get_range_future_from_transaction(txn, key_range, iteration);
+  return get_range_future_from_transaction(txn, key_range, iteration, mode);
  }));
 }
 
@@ -1246,18 +1277,6 @@ inline std::optional<select> next_range_after(select key_range, const query_wind
  return key_range;
 }
 
-template <typename ValueT = std::string>
-inline auto decode_pairs(std::span<const FDBKeyValue> pairs)
-{
- return pairs | std::views::transform(to_decoded_kv_pair<ValueT>);
-}
-
-template <typename ValueT, typename AssocT>
-inline AssocT collect_pairs(std::span<const FDBKeyValue> pairs)
-{
- return ceph::util::collect_as<AssocT>(decode_pairs<ValueT>(pairs));
-}
-
 template <typename AssocT>
 struct query_window_result final
 {
@@ -1266,23 +1285,29 @@ struct query_window_result final
 };
 
 template <typename ValueT, typename AssocT>
-inline query_window_result<AssocT> materialize_query_window(transaction& txn, select key_range, const int iteration = 1)
+inline query_window_result<AssocT> materialize_query_window(transaction& txn,
+                                                           select key_range,
+                                                           const int iteration,
+                                                           const read_mode mode)
 {
- auto window = read_query_window(txn, key_range, iteration);
+ auto window = read_query_window(txn, key_range, iteration, mode);
+ auto decoded_pairs =
+  window.result_pairs | std::views::transform(to_decoded_kv_pair<ValueT>);
 
  return {
-  .result_block = collect_pairs<ValueT, AssocT>(window.result_pairs),
+  .result_block = ceph::util::collect_as<AssocT>(decoded_pairs),
   .next_range = next_range_after(std::move(key_range), window)
  };
 }
 
 inline std::size_t for_each_decoded_kv_pair(transaction& txn,
                                             const select& key_range,
+                                            const read_mode mode,
                                             auto&& fn)
 {
  std::size_t nread = 0;
 
- for (const auto& kv : detail::generate_FDB_pairs(txn, key_range) | std::views::join) {
+ for (const auto& kv : detail::generate_FDB_pairs(txn, key_range, mode) | std::views::join) {
   std::invoke(fn, to_decoded_kv_pair<std::string>(kv));
   ++nread;
  }
@@ -1292,9 +1317,12 @@ inline std::size_t for_each_decoded_kv_pair(transaction& txn,
 
 template <typename OutIterT>
 requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline std::size_t get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT& out_iter)
+inline std::size_t get_value_range_from_transaction(transaction& txn,
+                                                    const select& key_range,
+                                                    const read_mode mode,
+                                                    OutIterT& out_iter)
 {
- return for_each_decoded_kv_pair(txn, key_range,
+ return for_each_decoded_kv_pair(txn, key_range, mode,
           [&out_iter](auto&& kv) {
             *out_iter++ = std::forward<decltype(kv)>(kv);
           });
@@ -1302,9 +1330,10 @@ inline std::size_t get_value_range_from_transaction(transaction& txn, const sele
 
 inline std::size_t get_value_range_from_transaction(transaction& txn,
                                                     const select& key_range,
+                                                    const read_mode mode,
                                                     concepts::string_pair_output_range auto& out)
 {
- return for_each_decoded_kv_pair(txn, key_range,
+ return for_each_decoded_kv_pair(txn, key_range, mode,
           [&out](auto&& kv) {
             ceph::util::push_back(out, std::forward<decltype(kv)>(kv));
           });
@@ -1358,7 +1387,10 @@ inline std::vector<ceph::libfdb::select> as_select_seq(std::span<const FDBKey> x
 // Finding a clear example both in the samples and in the documentation is not very easy. The
 // statelessness of FDB requests bleeds into here with basically no hand-holding, but note for instance
 // that the call parameters have to change for subsequent reads.
-inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& selection, int iteration)
+inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn,
+                                                      const ceph::libfdb::select& selection,
+                                                      int iteration,
+                                                      const read_mode mode)
 {
   const auto& begin_key  = selection.begin_key;
   const auto& end_key    = selection.end_key;
@@ -1374,6 +1406,7 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
   const int begin_offset = 1;
   const int end_or_eq = (not continuing_reverse and selection.end_inclusive) ? 1 : 0;
   const int end_offset = 1;
+  const fdb_bool_t snapshot = read_mode::snapshot == mode;
 
   // See validate_and_update_parameters() in fdb_c.cpp (FDB source) if greater clarity is needed on
   // the meaning of some of these, it can be hard to deduce from the documentation; Returns an
@@ -1394,7 +1427,7 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                       iteration,                                                // iteration # (produced side effect)
 
                       // Other options:
-                      0,                                                        // 0 unless this IS a snapshot read
+                      snapshot,                                                 // snapshot reads avoid read-conflict ranges
                       options.reverse_order                                     // should items come in reverse order?
                     ));
 }
@@ -1432,7 +1465,9 @@ inline std::vector<ceph::libfdb::select> plan_split_ranges(
 // The returned memory should be copied immediately as its lifetime will end once the Future is destroyed:
 // (This is pretty much why this is in the "detail" namespace-- we use this to implement the user-facing
 // stuff, it shouldn't really be touched outside.)
-inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(transaction& txn, select key_range)
+inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(transaction& txn,
+                                                                       select key_range,
+                                                                       const read_mode mode)
 {
  // FDB uses iteration for FDB_STREAMING_MODE_ITERATOR (but, other streaming modes
  // just ignore it, per fdb_c's documentation. We do have to keep this state somewhere,
@@ -1440,7 +1475,7 @@ inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(transacti
  int iteration = 1;
 
  for (auto more_available = true; more_available; iteration++) {
-  auto window = read_query_window(txn, key_range, iteration);
+  auto window = read_query_window(txn, key_range, iteration, mode);
   auto next_range = next_range_after(key_range, window);
 
   more_available = next_range.has_value();

@@ -1983,6 +1983,69 @@ TEST_CASE("paged scan", "[fdb]") {
  }
 }
 
+TEST_CASE("snapshot reads do not add read conflicts", "[fdb]") {
+ janitor j;
+
+ SECTION("single-key get") {
+  const auto read_key = make_key(0, "snapshot-single");
+  const auto write_key = make_key(1, "snapshot-single");
+
+  lfdb::set(j, read_key, "old");
+
+  auto serializable_txn = lfdb::make_transaction(j);
+  std::string out;
+  REQUIRE(lfdb::get(serializable_txn, read_key, out));
+  lfdb::set(j, read_key, "new");
+  lfdb::set(serializable_txn, write_key, "side-effect");
+  CHECK_FALSE(lfdb::commit(serializable_txn));
+  CHECK_FALSE(lfdb::key_exists(j, write_key));
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  REQUIRE(lfdb::get(snapshot_txn, read_key, out, lfdb::read_mode::snapshot));
+  lfdb::set(j, read_key, "newer");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("range scan") {
+  constexpr auto prefix = "snapshot-range";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto serializable_txn = lfdb::make_transaction(j);
+  REQUIRE_FALSE(lfdb::collect(serializable_txn, selector).empty());
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(serializable_txn, write_key, "side-effect");
+  CHECK_FALSE(lfdb::commit(serializable_txn));
+  CHECK_FALSE(lfdb::key_exists(j, write_key));
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  REQUIRE_FALSE(lfdb::collect(snapshot_txn, selector, lfdb::read_mode::snapshot).empty());
+  lfdb::set(j, conflict_key, "newer");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("key existence") {
+  const auto read_key = make_key(0, "snapshot-exists");
+  const auto write_key = make_key(1, "snapshot-exists");
+
+  lfdb::set(j, read_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  REQUIRE(lfdb::key_exists(snapshot_txn, read_key, lfdb::read_mode::snapshot));
+  lfdb::set(j, read_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+}
+
 TEST_CASE("generators honor selector endpoints", "[fdb]") {
  janitor j;
 
