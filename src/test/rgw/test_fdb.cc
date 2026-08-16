@@ -352,6 +352,44 @@ TEST_CASE("version stamps", "[fdb]") {
   CHECK(10 == stamp.resolved_bytes().size());
  }
 
+ SECTION("one versionstamp can resolve multiple operations in one transaction") {
+  const auto first_key = test_key("versionstamp/multi/first");
+  const auto second_key = test_key("versionstamp/multi/second");
+  lfdb::versionstamp stamp;
+
+  auto txn = lfdb::make_transaction(dbh);
+  lfdb::set(txn, first_key, lfdb::versioned("", stamp));
+  lfdb::set(txn, second_key, lfdb::versioned("", stamp));
+  REQUIRE(lfdb::commit(txn));
+
+  lfdb::versionstamp first;
+  lfdb::versionstamp second;
+  REQUIRE(lfdb::get(dbh, first_key, first));
+  REQUIRE(lfdb::get(dbh, second_key, second));
+
+  REQUIRE(stamp.is_resolved());
+  CHECK(first.resolved_bytes() == stamp.resolved_bytes());
+  CHECK(second.resolved_bytes() == stamp.resolved_bytes());
+ }
+
+ SECTION("retryable commit failure does not resolve versionstamp") {
+  const auto conflict_key = test_key("versionstamp/conflict/read");
+  const auto output_key = test_key("versionstamp/conflict/output");
+  lfdb::set(dbh, conflict_key, "old");
+
+  auto txn = lfdb::make_transaction(dbh);
+  std::string value;
+  REQUIRE(lfdb::get(txn, conflict_key, value));
+
+  lfdb::versionstamp stamp;
+  lfdb::set(txn, output_key, lfdb::versioned("", stamp));
+
+  lfdb::set(dbh, conflict_key, "new");
+
+  CHECK_FALSE(lfdb::commit(txn));
+  CHECK_FALSE(stamp.is_resolved());
+ }
+
  SECTION("resolved versionstamp cannot be reused for commit") {
   const auto first_key = test_key("versionstamp/reuse/first");
   const auto second_key = test_key("versionstamp/reuse/second");
