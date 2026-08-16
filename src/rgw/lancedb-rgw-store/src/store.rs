@@ -549,6 +549,21 @@ impl ObjectStore for RGWObjectStore {
                 }
 
                 let bytes = OwnedRGWBuffer(buffer).to_bytes();
+                if bytes.is_empty() {
+                    // the object was truncated after its size was read. the
+                    // offset would not advance,
+                    return Some((
+                        Err(object_store::Error::Generic {
+                            store: "rgw",
+                            source: format!(
+                                "read at offset {} returned no data, before the end of the range ({})",
+                                offset, range_end
+                            )
+                            .into(),
+                        }),
+                        range_end,
+                    ));
+                }
                 let next_offset = offset + bytes.len() as u64;
                 Some((Ok(bytes), next_offset))
             }

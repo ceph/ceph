@@ -21,19 +21,15 @@ ninja radosgw
 
 When making changes to this crate during development:
 
+This crate is not built on its own: it is compiled into the `rgw-lancedb`
+umbrella crate, which is built by an ExternalProject of the same name, and
+produces the `librgw_lancedb.a` static library that the RGW is linked with.
+
 ```bash
-# Option 1: Use ninja to rebuild and copy the library
-rm ceph/src/rgw/lancedb-rgw-store
 cd ceph/build
-ninja lancedb-rgw-store
+rm -f src/rgw/rgw-lancedb-prefix/src/rgw-lancedb-stamp/rgw-lancedb-build
+ninja rgw-lancedb
 
-# Option 2: Build with cargo directly (faster iteration)
-cd ceph/src/rgw/lancedb-rgw-store
-cargo build --release
-
-# If using Option 2, ensure the build directory has a symlink to the target:
-# cd ceph/build/lib
-# ln -sf ../../src/lancedb-rgw-store/target/release/liblancedb_rgw_store.so .
 ```
 
 After rebuilding, restart the RGW daemon to pick up the changes.
