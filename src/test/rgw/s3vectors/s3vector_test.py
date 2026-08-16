@@ -1567,23 +1567,75 @@ def test_update_vectors():
 
 @pytest.mark.vector_test
 def test_update_vectors_single_index():
+    """
+    Vectors written concurrently to the same index must not be lost.
+    """
     conn = connection()
     bucket_name = gen_bucket_name()
     _ensure_s3_bucket_for_vector_bucket(bucket_name)
     result = conn.create_vector_bucket(vectorBucketName=bucket_name)
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     num_threads = 10
+    rounds = 3
+    vectors_per_round = 5
     dimension = 128
-    threads = []
     index_name = 'test-index'
-    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                               dataType='float32', dimension=dimension, distanceMetric='euclidean')
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    for i in range(num_threads):
-        t = threading.Thread(target=update_vectors_thread, args=(conn, bucket_name, index_name, dimension, True))
+
+    def vector_key(thread_id, round_id, i):
+        return f't{thread_id}-r{round_id}-vec-{i}'
+
+    # an assertion inside a thread does not fail the test, so the failures are
+    # collected and verified once the threads are done
+    errors = []
+
+    def put_vectors_thread(thread_id):
+        try:
+            # a connection is not shared between the threads
+            thread_conn = connection()
+            for round_id in range(rounds):
+                vectors = [{'key': vector_key(thread_id, round_id, i),
+                            'data': generate_data(dimension, i)}
+                           for i in range(vectors_per_round)]
+                res = thread_conn.put_vectors(vectorBucketName=bucket_name,
+                                              indexName=index_name, vectors=vectors)
+                status = res['ResponseMetadata']['HTTPStatusCode']
+                if status != 200:
+                    errors.append(f'thread {thread_id} round {round_id}: status {status}')
+        except Exception as e:
+            errors.append(f'thread {thread_id}: {e}')
+
+    threads = [threading.Thread(target=put_vectors_thread, args=(i,)) for i in range(num_threads)]
+    for t in threads:
         t.start()
-        threads.append(t)
     for t in threads:
         t.join()
+
+    assert not errors, 'concurrent put_vectors failed: ' + '; '.join(errors)
+
+    expected_keys = {vector_key(t, r, i)
+                     for t in range(num_threads)
+                     for r in range(rounds)
+                     for i in range(vectors_per_round)}
+    listed_keys = set()
+    next_token = None
+    while True:
+        kwargs = dict(vectorBucketName=bucket_name, indexName=index_name, maxResults=500)
+        if next_token:
+            kwargs['nextToken'] = next_token
+        result = conn.list_vectors(**kwargs)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        listed_keys.update(v['key'] for v in result.get('vectors', []))
+        next_token = result.get('nextToken')
+        if not next_token:
+            break
+
+    missing = sorted(expected_keys - listed_keys)
+    assert not missing, \
+        f'{len(missing)} of {len(expected_keys)} vectors were lost by concurrent commits, ' \
+        f'first missing: {missing[:5]}'
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)

@@ -84,7 +84,11 @@ namespace rgw::s3vector {
     return -EIO;
   }
 
-  static constexpr const char* RGW_PROVIDER_SCHEME = "rgw";
+  // the RGW provider is registered under the "s3" scheme, and not under one of
+  // its own. an unknown scheme is committed with the "unsafe" handler,
+  // which overwrites the manifest of a table without any precondition,
+  // so that concurrent writers lose each other's data.
+  static constexpr const char* RGW_PROVIDER_SCHEME = "s3";
 
   // Create a LanceDB session with RGW provider.
   // Returns a new session on success, nullptr on failure.

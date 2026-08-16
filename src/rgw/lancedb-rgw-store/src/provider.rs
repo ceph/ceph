@@ -22,7 +22,7 @@ use object_store::path::Path;
 use std::sync::Arc;
 use url::Url;
 
-/// Provider that creates RGWObjectStore instances for rgw:// URLs
+/// Provider that creates RGWObjectStore instances for s3:// URLs
 ///
 /// This provider routes all object operations through Ceph RGW's native
 /// SAL API instead of the S3 HTTP protocol.
@@ -92,7 +92,7 @@ impl lance_io::object_store::ObjectStoreProvider for RGWStoreProvider {
             format!("{}/", path)
         };
 
-        // Extract tenant from URL query param: rgw://bucket/?tenant=xxx
+        // Extract tenant from URL query param: s3://bucket/?tenant=xxx
         let tenant = base_path
             .query_pairs()
             .find(|(k, _)| k == "tenant")
