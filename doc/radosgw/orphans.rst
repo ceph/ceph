@@ -13,38 +13,13 @@ these RADOS objects may be consuming space on the Ceph cluster without
 being of any use. From the perspective of RGW, we call such RADOS
 objects "orphans".
 
-Orphans Find -- DEPRECATED
---------------------------
-
-The `radosgw-admin` tool has/had three subcommands to help manage
-orphans, however these subcommands are (or will soon be)
-deprecated. These subcommands are:
-
-.. prompt:: bash #
-
-   radosgw-admin orphans find ...
-   radosgw-admin orphans finish ...
-   radosgw-admin orphans list-jobs ...
-
-There are two key problems with these subcommands, however. First,
-these subcommands have not been actively maintained and therefore have
-not tracked RGW as it has evolved in terms of features and updates. As
-a result the confidence that these subcommands can accurately identify
-true orphans is presently low.
-
-Second, these subcommands store intermediate results on the cluster
-itself. This can be problematic when cluster administrators are
-confronting insufficient storage space and want to remove orphans as a
-means of addressing the issue. The intermediate results could strain
-the existing cluster storage capacity even further.
-
-For these reasons "orphans find" has been deprecated.
-
 Orphan List
 -----------
 
-Because "orphans find" has been deprecated, RGW now includes an
-additional tool -- 'rgw-orphan-list'. When run it will list the
+The supported tool for identifying orphans is ``rgw-orphan-list``. It
+replaces the deprecated ``radosgw-admin orphans find`` subcommands,
+which are retained only for reference; see `Orphans Find --
+DEPRECATED`_ below. When run, ``rgw-orphan-list`` will list the
 available pools and prompt the user to enter the name of the data
 pool. At that point the tool will, perhaps after an extended period of
 time, produce a local file containing the RADOS objects from the
@@ -111,3 +86,30 @@ RGW. When larger objects are copied from bucket to bucket, only the
 shared. Those shared objects will contain the marker of the original
 bucket.
 
+
+Orphans Find -- DEPRECATED
+--------------------------
+
+The ``radosgw-admin`` tool has three subcommands that were once used
+to manage orphans. These subcommands are deprecated; use
+``rgw-orphan-list`` instead. The deprecated subcommands are:
+
+.. prompt:: bash #
+
+   radosgw-admin orphans find ...
+   radosgw-admin orphans finish ...
+   radosgw-admin orphans list-jobs ...
+
+There are two key problems with these subcommands. First, they have
+not been actively maintained and therefore have not tracked RGW as it
+has evolved in terms of features and updates. As a result the
+confidence that these subcommands can accurately identify true
+orphans is presently low.
+
+Second, these subcommands store intermediate results on the cluster
+itself. This can be problematic when cluster administrators are
+confronting insufficient storage space and want to remove orphans as
+a means of addressing the issue. The intermediate results could
+strain the existing cluster storage capacity even further.
+
+For these reasons "orphans find" has been deprecated.
