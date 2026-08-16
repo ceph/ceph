@@ -911,6 +911,10 @@ class transaction final
    throw libfdb_exception(r);
   }
 
+  if (0 > version) {
+   throw std::invalid_argument("committed_version() requires committed transaction");
+  }
+
   return version;
  }
 

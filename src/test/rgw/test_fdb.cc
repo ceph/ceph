@@ -528,6 +528,16 @@ TEST_CASE("transaction versions", "[fdb]") {
   CHECK(0 < lfdb::read_version(txn));
  }
 
+ SECTION("committed version is only available after commit") {
+  auto txn = lfdb::make_transaction(dbh);
+
+  CHECK_THROWS_MATCHES(lfdb::committed_version(txn),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring(
+                         "committed_version() requires committed transaction")));
+ }
+
  SECTION("committed version is available after commit") {
   const auto key = test_key("transaction-version/committed");
   auto txn = lfdb::make_transaction(dbh);

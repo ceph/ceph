@@ -126,7 +126,8 @@ Transaction versions let application code connect a successful write to a later
 consistent read. `committed_version()` is available after a successful commit,
 `set_read_version()` pins another transaction to that version, and
 `read_version()` reports the version an active transaction reads from. This is a
-consistency tool, not durable historical storage:
+consistency tool, not durable historical storage. Set the read version before
+performing reads in that transaction:
 
 ```cpp
 auto write_txn = lfdb::make_transaction(dbh);
@@ -1394,4 +1395,4 @@ to avoid a crazy taxonomy explosion.
 | Invalid result at the FoundationDB boundary | `lfdb::libfdb_exception` |
 | Caller uses libfdb after shutdown | `lfdb::libfdb_exception` |
 | Caller passes an impossible selector prefix or invalid versionstamp bytes | `std::invalid_argument` |
-| Caller reads, compares, reuses, or overwrites a versionstamp in the wrong state | `std::invalid_argument` |
+| Caller reads, compares, reuses, or overwrites a versionstamp in the wrong state; or asks for a committed version before commit | `std::invalid_argument` |
