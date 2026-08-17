@@ -1281,6 +1281,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
         }
         ciphers.push_back(c);
       }
+      std::sort(ciphers.begin(), ciphers.end());
       pending_map.auth_allowed_ciphers = std::move(ciphers);
     } else if (name == "auth_preferred_cipher") {
       int c = CryptoManager::get_key_type(value);

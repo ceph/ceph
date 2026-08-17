@@ -272,7 +272,11 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_marked_down_mons, blist);
   encode(auth_epoch, blist);
   encode(auth_service_cipher, blist);
-  encode(auth_allowed_ciphers, blist);
+  {
+    auto v = auth_allowed_ciphers;
+    std::sort(v.begin(), v.end());
+    encode(v, blist);
+  }
   encode(auth_preferred_cipher, blist);
   ENCODE_FINISH(blist);
 }
