@@ -436,6 +436,27 @@ class TestIoctx(object):
         self.ioctx.remove_snap("snap1")
         self.ioctx.remove_object("inhead")
 
+    def test_rollback_snap_nonexistent(self):
+        assert_raises(ObjectNotFound, self.ioctx.rollback_snap, 'no_such_snap')
+
+    def test_rollback_snap_success(self):
+        # Write initial content (A) and create snapshot
+        self.ioctx.write('foo', b'contents_a')
+        self.ioctx.create_snap('snap1')
+        snap = self.ioctx.lookup_snap('snap1')
+        # Overwrite with different content (B)
+        self.ioctx.write('foo', b'contents_b')
+        try:
+            rollback_id = self.ioctx.rollback_snap('snap1')
+            assert isinstance(rollback_id, int)
+            assert rollback_id > 0
+            assert rollback_id > snap.snap_id
+            # Read back and verify content equals snapshot content (A, not B)
+            eq(self.ioctx.read('foo'), b'contents_a')
+        finally:
+            self.ioctx.remove_snap('snap1')
+            self.ioctx.remove_object('foo')
+
     def test_set_omap(self):
         keys = ("1", "2", "3", "4", b"\xff")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04", b"5")
@@ -1370,6 +1391,30 @@ class TestIoCtxSelfManagedSnaps(object):
 
         self.ioctx.remove_self_managed_snap(snap_id_1)
         self.ioctx.remove_self_managed_snap(snap_id_2)
+
+    @pytest.mark.rollback
+    def test_rollback_self_managed_snap_success(self):
+        # Write initial content (A) under snap0 context
+        self.ioctx.set_self_managed_snap_write([])
+        snap_id_0 = self.ioctx.create_self_managed_snap()
+        self.ioctx.set_self_managed_snap_write([snap_id_0])
+        self.ioctx.write('foo', b'contents_a')
+        # Create snap1 so snap0 is captured as a clone, then overwrite with (B)
+        snap_id_1 = self.ioctx.create_self_managed_snap()
+        self.ioctx.set_self_managed_snap_write([snap_id_0, snap_id_1])
+        self.ioctx.write('foo', b'contents_b')
+        try:
+            # Pool-level rollback to snap0 (content A)
+            rollback_id = self.ioctx.rollback_self_managed_snap(snap_id_0)
+            assert isinstance(rollback_id, int)
+            assert rollback_id > 0
+            assert rollback_id > snap_id_0
+            # Read back and verify content equals snapshot content (A, not B)
+            eq(self.ioctx.read('foo'), b'contents_a')
+        finally:
+            self.ioctx.remove_self_managed_snap(snap_id_1)
+            self.ioctx.remove_self_managed_snap(snap_id_0)
+            self.ioctx.remove_object('foo')
 
 class TestCommand(object):
 
