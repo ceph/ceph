@@ -3907,6 +3907,22 @@ public:
 			    OpContextVert<ceph::buffer::list>(c, nullptr));
   }
 
+  void rollback_pool_snap(int64_t pool, std::string_view snapName,
+                          decltype(PoolOp::onfinish)&& onfinish);
+  void rollback_pool_snap(int64_t pool, std::string_view snapName,
+                          Context* c) {
+    rollback_pool_snap(pool, snapName,
+                       OpContextVert<ceph::buffer::list>(c, nullptr));
+  }
+
+  void rollback_selfmanaged_snap(int64_t pool, snapid_t snap,
+                                 decltype(PoolOp::onfinish)&& onfinish);
+  void rollback_selfmanaged_snap(int64_t pool, snapid_t snap,
+                                 Context* c) {
+    rollback_selfmanaged_snap(pool, snap,
+                              OpContextVert<ceph::buffer::list>(c, nullptr));
+  }
+
 
   void create_pool(std::string_view name,
 		   decltype(PoolOp::onfinish)&& onfinish,
