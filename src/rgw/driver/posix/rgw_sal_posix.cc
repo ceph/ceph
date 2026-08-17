@@ -854,11 +854,6 @@ std::unique_ptr<Object> POSIXBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<POSIXObject>(driver, k, this);
 }
 
-int POSIXObject::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
-{
-  return ent->fill_cache(dpp, y, cb, posix::FSEnt::FLAG_NONE);
-}
-
 int POSIXDriver::mint_listing_entry(const std::string &bname,
                                     rgw_bucket_dir_entry &bde) {
     std::unique_ptr<Bucket> b;
@@ -2130,6 +2125,11 @@ int POSIXBucket::rename(const DoutPrefixProvider* dpp, optional_yield y, Object*
   return dir->rename(dpp, y, dst_dir, get_fname());
 }
 
+int POSIXObject::fill_cache(const DoutPrefixProvider *dpp, optional_yield y, fill_cache_cb_t& cb)
+{
+  return ent->fill_cache(dpp, y, cb, posix::FSEnt::FLAG_NONE);
+}
+
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
 				uint32_t flags,
@@ -2842,6 +2842,10 @@ int POSIXObject::make_ent(posix::ObjectType type)
       ent = std::make_unique<posix::VersionedDirectory>(
           get_fname(/*use_version=*/false), static_cast<POSIXBucket *>(bucket)->get_dir(), get_instance(), driver->ctx());
       break;
+    case posix::ObjectType::OBJECT:
+      ent = std::make_unique<posix::ObjectDirectory>(
+          get_fname(/*use_version=*/true), static_cast<POSIXBucket *>(bucket)->get_dir(), driver->ctx());
+      break;
   }
 
   return 0;
@@ -2889,7 +2893,7 @@ int POSIXObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file
       if (versioned()) {
         ret = make_ent(posix::ObjectType::VERSIONED);
       } else {
-        ret = make_ent(posix::ObjectType::FILE);
+        ret = make_ent(posix::ObjectType::OBJECT);
       }
     }
   }
@@ -3888,6 +3892,9 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     mc->remove({bucket->get_name(), mp_obj.meta});
   }
 
+  // Nuke the meta object
+  get_meta_obj()->delete_object(dpp, y, 0, nullptr, nullptr);
+
   to->stat(dpp);
   to->fill_cache( nullptr, null_yield,
       [&](const DoutPrefixProvider *dpp, rgw_bucket_dir_entry &bde) -> int {
@@ -4123,7 +4130,7 @@ int POSIXAtomicWriter::prepare(optional_yield y)
   if (obj->versioned()) {
     ret = obj->make_ent(posix::ObjectType::VERSIONED);
   } else {
-    ret = obj->make_ent(posix::ObjectType::FILE);
+    ret = obj->make_ent(posix::ObjectType::OBJECT);
   }
   if (ret < 0) {
     return ret;
