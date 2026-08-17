@@ -2028,7 +2028,7 @@ int RGWOp::verify_cors_match()
   if (!cors_exist) {
     /* No CORS configuration at all — nothing to enforce. */
     ldpp_dout(this, 20) << "verify_cors_origin: no CORS config, skipping verification" << dendl;
-    return -EACCES;
+    return 0;
   }
 
   const char *req_meth = s->info.method;
