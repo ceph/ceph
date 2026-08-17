@@ -665,7 +665,7 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
   ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::remove called" << dendl;
   RGWObjVersionTracker ot;
 
-  int ret = store->getRados()->delete_vector_bucket(info, get_attrs(), ot, y, dpp);
+  int ret = store->getRados()->delete_vector_bucket(info, ot, y, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove s3vector bucket " <<
       info.bucket.name << dendl;

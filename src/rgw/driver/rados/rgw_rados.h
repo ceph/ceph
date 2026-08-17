@@ -1321,7 +1321,7 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
    */
   int delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp, bool check_empty = true);
 
-  int delete_vector_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp);
+  int delete_vector_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp);
 
   void wakeup_meta_sync_shards(std::set<int>& shard_ids);
 

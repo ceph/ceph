@@ -6497,7 +6497,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
   return 0;
 }
 
-int RGWRados::delete_vector_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp)
+int RGWRados::delete_vector_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& objv_tracker, optional_yield y, const DoutPrefixProvider *dpp)
 {
   ldpp_dout(dpp, 20) << "s3vector --- RGWRados::delete_vector_bucket called" << dendl;
   const rgw_bucket& bucket = bucket_info.bucket;
@@ -6536,23 +6536,13 @@ int RGWRados::delete_vector_bucket(RGWBucketInfo& bucket_info, std::map<std::str
       return r;
   }
 
-  /* if the bucket is not synced we can remove the meta file */
-  if (!svc.zone->is_syncing_bucket_meta()) {
-    r = ctl.vector_bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
-    if (r < 0) {
-      return r;
-    }
-
-  } else {
-    // set 'deleted' flag for multisite replication to handle bucket instance removal
-    // TODO: implement store_delete_bucket_info_flag for vector buckets
-    /*r = store_delete_bucket_info_flag(bucket_info, attrs, y, dpp);
-    if (r < 0) {
-      // no need to treat this as an error
-      ldpp_dout(dpp, 0) << "WARNING: failed to store bucket info flag 'deleted' on bucket: " << bucket.name << " r=" << r << dendl;
-    } else {
-      ldpp_dout(dpp, 20) << "INFO: setting bucket info flag to deleted for bucket: " << bucket.name << dendl;
-    }*/
+  /*
+   * vector buckets are never synced between zones
+   * the meta file could always be removed right away
+   */
+  r = ctl.vector_bucket->remove_bucket_instance_info(bucket, bucket_info, y, dpp);
+  if (r < 0) {
+    return r;
   }
 
   return 0;
