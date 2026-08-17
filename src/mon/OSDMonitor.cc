@@ -7658,9 +7658,7 @@ bool OSDMonitor::try_prune_completed_rollbacks(unsigned &max_prune)
   dout(10) << __func__ << " max_prune " << max_prune << dendl;
 
   unsigned actually_pruned = 0;
-  // TODO(WI-4-a): use mon.mgrstatmon()->get_digest().completed_rollbacks once
-  // PGMapDigest exposes the aggregated field.
-  const mempool::pgmap::map<int64_t, snap_interval_set_t> completed;
+  auto& completed = mon.mgrstatmon()->get_digest().completed_rollbacks;
 
   for (auto& [pool_id, pool_completed] : completed) {
     if (actually_pruned >= max_prune) break;

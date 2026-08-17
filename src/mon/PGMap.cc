@@ -63,7 +63,7 @@ PGMapDigest::~PGMapDigest() noexcept = default;
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 5;
+  uint8_t v = 6;
   ceph_assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
@@ -85,12 +85,13 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(purged_snaps, bl);
   encode(osd_sum_by_class, bl, features);
   encode(pool_pg_unavailable_map, bl);
+  encode(completed_rollbacks, bl);
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(5, p);
+  DECODE_START(6, p);
   ceph_assert(struct_v >= 4);
   decode(num_pg, p);
   decode(num_pg_active, p);
@@ -112,6 +113,9 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(osd_sum_by_class, p);
   if (struct_v >= 5) {
     decode(pool_pg_unavailable_map, p);
+  }
+  if (struct_v >= 6) {
+    decode(completed_rollbacks, p);
   }
   DECODE_FINISH(p);
 }
@@ -189,6 +193,21 @@ void PGMapDigest::dump(ceph::Formatter *f) const
     f->open_object_section("pool");
     f->dump_int("pool", j.first);
     f->open_object_section("purged_snaps");
+    for (auto i = j.second.begin(); i != j.second.end(); ++i) {
+      f->open_object_section("interval");
+      f->dump_stream("start") << i.get_start();
+      f->dump_stream("length") << i.get_len();
+      f->close_section();
+    }
+    f->close_section();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("completed_rollbacks");
+  for (auto& j : completed_rollbacks) {
+    f->open_object_section("pool");
+    f->dump_int("pool", j.first);
+    f->open_object_section("completed_rollbacks");
     for (auto i = j.second.begin(); i != j.second.end(); ++i) {
       f->open_object_section("interval");
       f->dump_stream("start") << i.get_start();
@@ -1533,6 +1552,13 @@ void PGMap::calc_purged_snaps()
   }
 }
 
+void PGMap::calc_completed_rollbacks(
+    mempool::pgmap::map<int64_t, snap_interval_set_t>& ret) const
+{
+  // stub -- full implementation in WI-4-b
+  ret.clear();
+}
+
 void PGMap::calc_osd_sum_by_class(const OSDMap& osdmap)
 {
   osd_sum_by_class.clear();
@@ -1568,6 +1594,7 @@ void PGMap::encode_digest(const OSDMap& osdmap,
   get_rules_avail(osdmap, &avail_space_by_rule);
   calc_osd_sum_by_class(osdmap);
   calc_purged_snaps();
+  calc_completed_rollbacks(completed_rollbacks);
   get_unavailable_pg_in_pool_map(osdmap);
   PGMapDigest::encode(bl, features);
 }
