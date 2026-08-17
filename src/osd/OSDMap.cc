@@ -3518,7 +3518,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9; // when bumping this, be aware of allow_crimson
+    uint8_t target_v = 9; // when bumping this, be aware of new_rollback_snaps 13
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3534,6 +3534,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (allow_crimson) {
       target_v = std::max((uint8_t)12, target_v);
+    }
+    if (!rollback_snaps_queue.empty() || !new_completed_rollbacks.empty()) {
+      target_v = std::max((uint8_t)13, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3595,6 +3598,10 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 12) {
       ::encode(allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(rollback_snaps_queue, bl);
+      encode(new_completed_rollbacks, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3861,7 +3868,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blocklist, bl);
@@ -3949,6 +3956,13 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 12) {
       decode(allow_crimson, bl);
+    }
+    if (struct_v >= 13) {
+      decode(rollback_snaps_queue, bl);
+      decode(new_completed_rollbacks, bl);
+    } else {
+      rollback_snaps_queue.clear();
+      new_completed_rollbacks.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
