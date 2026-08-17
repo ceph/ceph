@@ -211,7 +211,7 @@ struct RGWZoneParams {
     if (struct_v >= 19) {
       decode(vector_pool, bl);
     } else {
-      vector_pool = name + ".rgw..meta.vector";
+      vector_pool = name + ".rgw.meta:vector";
     }
     DECODE_FINISH(bl);
   }
