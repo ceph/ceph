@@ -43,7 +43,7 @@ int RGWSI_SysObj::Obj::ROp::read(const DoutPrefixProvider *dpp,
                    attrs,
 		   raw_attrs,
                    cache_info,
-                   refresh_version, y);
+                   refresh_version, expected_version, y);
 }
 
 int RGWSI_SysObj::Obj::ROp::get_attr(const DoutPrefixProvider *dpp,

@@ -95,7 +95,8 @@ int rgw_get_system_obj(RGWSI_SysObj* svc_sysobj, const rgw_pool& pool,
                        std::map<std::string, bufferlist> *pattrs = nullptr,
                        rgw_cache_entry_info *cache_info = nullptr,
 		       boost::optional<obj_version> refresh_version = boost::none,
-                       bool raw_attrs=false);
+                       bool raw_attrs=false,
+                       boost::optional<obj_version> expected_version = boost::none);
 int rgw_delete_system_obj(const DoutPrefixProvider *dpp,
                           RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const std::string& oid,
                           RGWObjVersionTracker *objv_tracker, optional_yield y);

@@ -54,7 +54,8 @@ protected:
            std::map<std::string, bufferlist> *attrs,
 	   bool raw_attrs,
            rgw_cache_entry_info *cache_info,
-           boost::optional<obj_version>,
+           boost::optional<obj_version> refresh_version,
+           boost::optional<obj_version> expected_version,
            optional_yield y) override;
 
   int get_attr(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, const char *name, bufferlist *dest,

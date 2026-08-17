@@ -44,6 +44,7 @@ public:
       std::map<std::string, bufferlist> *attrs{nullptr};
       bool raw_attrs{false};
       boost::optional<obj_version> refresh_version{boost::none};
+      boost::optional<obj_version> expected_version{boost::none};
       ceph::real_time *lastmod{nullptr};
       uint64_t *obj_size{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
@@ -75,6 +76,12 @@ public:
 
       ROp& set_refresh_version(boost::optional<obj_version>& rf) {
         refresh_version = rf;
+        return *this;
+      }
+
+      /* serve from cache only if the cached version matches this one */
+      ROp& set_expected_version(boost::optional<obj_version> ev) {
+        expected_version = ev;
         return *this;
       }
 
