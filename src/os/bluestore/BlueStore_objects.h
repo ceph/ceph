@@ -51,7 +51,7 @@ namespace bluestore {
 
     void dump(ceph::Formatter* f) const;
     friend std::ostream& operator<<(std::ostream& out, const Blob &b);
-    struct printer : public BlueStore::printer {
+    struct printer : public bluestore::printer {
       const Blob& blob;
       uint16_t mode;
       printer(const Blob& blob, uint16_t mode)
@@ -294,7 +294,7 @@ namespace bluestore {
 
     int get_fragmentation_score();
 
-    struct printer : public BlueStore::printer {
+    struct printer : public bluestore::printer {
       const Onode &onode;
       uint16_t mode;
       uint32_t from = 0;
