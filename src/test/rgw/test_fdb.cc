@@ -699,8 +699,42 @@ TEST_CASE("transaction commit byte estimate", "[fdb]") {
 
  const auto populated_estimate = lfdb::approximate_commit_bytes(txn);
 
- CHECK(0 <= empty_estimate);
- CHECK(empty_estimate < populated_estimate);
+CHECK(0 <= empty_estimate);
+CHECK(empty_estimate < populated_estimate);
+}
+
+TEST_CASE("api and system diagnostics", "[fdb]")
+{
+ SECTION("api namespace reports FDB client facts") {
+  CHECK_FALSE(lfdb::api::client_version().empty());
+  CHECK(730 <= lfdb::api::max_version());
+ }
+
+ SECTION("system namespace rejects invalid database handles") {
+  CHECK_THROWS_AS(lfdb::system::main_thread_busyness({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::client_status_json({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::server_protocol({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::reboot_worker({}, "127.0.0.1:4500", false, 0),
+                  std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::force_recovery_with_data_loss({}, "dc1"),
+                  std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::create_snapshot({}, "snapshot-id", "snapshot-command"),
+                  std::invalid_argument);
+ }
+
+ SECTION("system namespace reports live database diagnostics") {
+  janitor dbh;
+
+  const auto busyness = lfdb::system::main_thread_busyness(dbh);
+  CHECK(0.0 <= busyness);
+
+  const auto protocol = lfdb::system::server_protocol(dbh);
+  CHECK(0 < protocol);
+
+  const auto status = lfdb::system::client_status_json(dbh);
+  CHECK_FALSE(status.empty());
+  CHECK(std::string::npos != status.find("Healthy"));
+ }
 }
 
 TEST_CASE("approximate range size composes with selections", "[fdb][query]")

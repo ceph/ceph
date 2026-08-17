@@ -28,6 +28,7 @@
 #include <span>
 #include <array>
 #include <tuple>
+#include <string>
 #include <vector>
 #include <variant>
 #include <optional>
@@ -142,6 +143,9 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
                                                       int iteration,
                                                       ceph::libfdb::read_mode mode = ceph::libfdb::read_mode::serializable);
 [[nodiscard]] inline std::int64_t extract_int64(future_value result_owner);
+[[nodiscard]] inline std::uint64_t extract_uint64(future_value result_owner);
+[[nodiscard]] inline std::string extract_byte_string(future_value result_owner);
+[[nodiscard]] inline ceph::libfdb::database& database_or_throw(const ceph::libfdb::database_handle& dbh);
 inline bool retry_after_error(transaction_handle& txn, fdb_error_t r);
 
 // A generator that produces successive spans for a range:
@@ -943,10 +947,81 @@ class database final
  public:
  FDBDatabase *raw_handle() const noexcept { return db_handle.get(); }
 
+ [[nodiscard]] double main_thread_busyness() const
+ {
+  return fdb_database_get_main_thread_busyness(raw_handle());
+ }
+
+ [[nodiscard]] std::uint64_t server_protocol(const std::uint64_t expected_version = 0) const
+ {
+  return detail::extract_uint64(
+           detail::block_until_ready(
+            detail::future_value(
+             fdb_database_get_server_protocol(raw_handle(), expected_version))));
+ }
+
+ [[nodiscard]] std::string client_status_json() const
+ {
+  return detail::extract_byte_string(
+           detail::block_until_ready(
+            detail::future_value(fdb_database_get_client_status(raw_handle()))));
+ }
+
+ void reboot_worker(std::string_view address, const bool check, const int duration) const
+ {
+  const auto address_bytes = detail::as_fdb_span(address);
+
+  detail::block_until_ready(
+   detail::future_value(
+    fdb_database_reboot_worker(raw_handle(),
+                               address_bytes.data(),
+                               static_cast<int>(std::size(address_bytes)),
+                               true == check,
+                               duration)));
+ }
+
+ void force_recovery_with_data_loss(std::string_view dcid) const
+ {
+  const auto dcid_bytes = detail::as_fdb_span(dcid);
+
+  detail::block_until_ready(
+   detail::future_value(
+    fdb_database_force_recovery_with_data_loss(raw_handle(),
+                                               dcid_bytes.data(),
+                                               static_cast<int>(std::size(dcid_bytes)))));
+ }
+
+ void create_snapshot(std::string_view uid, std::string_view snap_command) const
+ {
+  const auto uid_bytes = detail::as_fdb_span(uid);
+  const auto snap_command_bytes = detail::as_fdb_span(snap_command);
+
+  detail::block_until_ready(
+   detail::future_value(
+    fdb_database_create_snapshot(raw_handle(),
+                                 uid_bytes.data(),
+                                 static_cast<int>(std::size(uid_bytes)),
+                                 snap_command_bytes.data(),
+                                 static_cast<int>(std::size(snap_command_bytes)))));
+ }
+
  private:
  friend transaction;
 
 };
+
+namespace detail {
+
+[[nodiscard]] inline ceph::libfdb::database& database_or_throw(const ceph::libfdb::database_handle& dbh)
+{
+ if (dbh and *dbh) {
+  return *dbh;
+ }
+
+ throw std::invalid_argument("invalid database handle");
+}
+
+} // namespace detail
 
 class transaction final
 {
@@ -1594,6 +1669,38 @@ inline split_point_result extract_split_points(future_value result_owner)
  }
 
  return value;
+}
+
+[[nodiscard]] inline std::uint64_t extract_uint64(future_value result_owner)
+{
+ std::uint64_t value = 0;
+
+ if (fdb_error_t r = fdb_future_get_uint64(result_owner.raw_ptr_or_throw(), &value); 0 != r) {
+  throw libfdb_exception(r);
+ }
+
+ return value;
+}
+
+[[nodiscard]] inline std::string extract_byte_string(future_value result_owner)
+{
+ const uint8_t *out = nullptr;
+ int out_size = 0;
+
+ if (fdb_error_t r = fdb_future_get_key(result_owner.raw_ptr_or_throw(), &out, &out_size); 0 != r) {
+  throw libfdb_exception(r);
+ }
+
+ if (0 == out_size) {
+  return {};
+ }
+
+ if (nullptr == out) {
+  throw libfdb_exception("invalid byte string result");
+ }
+
+ return std::string(reinterpret_cast<const char *>(out),
+                    static_cast<std::string::size_type>(out_size));
 }
 
 inline query_window read_query_window(transaction& txn,

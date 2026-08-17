@@ -62,6 +62,66 @@ inline database_handle create_database(connection_source source,
  return create_database(std::move(source), dbopts, network_options{});
 }
 
+namespace api {
+
+[[nodiscard]] inline std::string client_version()
+{
+ const auto *version = fdb_get_client_version();
+
+ if (nullptr == version) {
+  throw libfdb_exception("invalid FDB client version");
+ }
+
+ return std::string(version);
+}
+
+[[nodiscard]] inline int max_version() noexcept
+{
+ return fdb_get_max_api_version();
+}
+
+} // namespace api
+
+namespace system {
+
+[[nodiscard]] inline double main_thread_busyness(database_handle dbh)
+{
+ return detail::database_or_throw(dbh).main_thread_busyness();
+}
+
+[[nodiscard]] inline std::string client_status_json(database_handle dbh)
+{
+ return detail::database_or_throw(dbh).client_status_json();
+}
+
+[[nodiscard]] inline std::uint64_t server_protocol(database_handle dbh,
+                                                   const std::uint64_t expected_version = 0)
+{
+ return detail::database_or_throw(dbh).server_protocol(expected_version);
+}
+
+inline void reboot_worker(database_handle dbh,
+                          std::string_view address,
+                          const bool check,
+                          const int duration)
+{
+ detail::database_or_throw(dbh).reboot_worker(address, check, duration);
+}
+
+inline void force_recovery_with_data_loss(database_handle dbh, std::string_view dcid)
+{
+ detail::database_or_throw(dbh).force_recovery_with_data_loss(dcid);
+}
+
+inline void create_snapshot(database_handle dbh,
+                            std::string_view uid,
+                            std::string_view snap_command)
+{
+ detail::database_or_throw(dbh).create_snapshot(uid, snap_command);
+}
+
+} // namespace system
+
 inline transaction_handle make_transaction(database_handle dbh)
 {
  return std::make_shared<transaction>(dbh);
@@ -92,26 +152,9 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
                                          const key_selector& selector,
                                          const read_mode mode = read_mode::serializable)
 {
- auto ready = detail::block_until_ready(
-              detail::transaction_get_key(txn, selector, mode));
-
- const uint8_t *out_key = nullptr;
- int out_key_size = 0;
-
- if (fdb_error_t r = fdb_future_get_key(ready.raw_handle(), &out_key, &out_key_size); 0 != r) {
-  throw libfdb_exception(r);
- }
-
- if (0 == out_key_size) {
-  return {};
- }
-
- if (nullptr == out_key) {
-  throw libfdb_exception("invalid key selector result");
- }
-
- return std::string(reinterpret_cast<const char *>(out_key),
-                    static_cast<std::string::size_type>(out_key_size));
+ return detail::extract_byte_string(
+          detail::block_until_ready(
+           detail::transaction_get_key(txn, selector, mode)));
 }
 
 [[nodiscard]] inline bool commit(transaction_handle& txn,

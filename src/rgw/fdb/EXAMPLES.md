@@ -197,6 +197,45 @@ auto dbh = lfdb::create_database(
   lfdb::connection_source{"description:id@127.0.0.1:4500"});
 ```
 
+## API Namespace
+
+`lfdb::api` reports facts about the FoundationDB client API available to this
+process. These calls do not require a database handle. See the FoundationDB C API
+documentation:
+<https://apple.github.io/foundationdb/api-c.html>.
+
+```cpp
+const auto client = lfdb::api::client_version();
+const auto max_api = lfdb::api::max_version();
+```
+
+## System Namespace
+
+`lfdb::system` contains FoundationDB system-level observations and operational
+surface. Read-only functions report live database/client state. Sharp
+operational functions belong here too, rather than in the core key/value API,
+but they should only be called by code that is explicitly managing a
+FoundationDB deployment. See the FoundationDB C API entries for these database
+functions:
+<https://apple.github.io/foundationdb/api-c.html#c.fdb_database_get_client_status>
+and
+<https://apple.github.io/foundationdb/api-c.html#c.fdb_database_get_main_thread_busyness>.
+
+```cpp
+const auto busyness = lfdb::system::main_thread_busyness(dbh);
+const auto protocol = lfdb::system::server_protocol(dbh);
+const auto status_json = lfdb::system::client_status_json(dbh);
+```
+
+The remaining functions are operational controls, not ordinary application data
+operations:
+
+```cpp
+lfdb::system::reboot_worker(dbh, "127.0.0.1:4500", false, 60);
+lfdb::system::force_recovery_with_data_loss(dbh, "dc1");
+lfdb::system::create_snapshot(dbh, "snapshot-id", "snapshot-command");
+```
+
 ## Single-Key Operations
 
 Single-key `get()` returns whether the key was found.
