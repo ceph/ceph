@@ -99,6 +99,8 @@ void *Finisher::finisher_thread_entry()
       // This way other threads can submit new contexts to complete
       // while we are working.
       in_progress_queue.swap(finisher_queue);
+      in_progress_count.store(in_progress_queue.size(),
+			      std::memory_order_relaxed);
       finisher_running = true;
       ul.unlock();
       ldout(cct, 10) << "finisher_thread doing " << in_progress_queue << dendl;
@@ -115,6 +117,7 @@ void *Finisher::finisher_thread_entry()
       ldout(cct, 10) << "finisher_thread done with " << in_progress_queue
                      << dendl;
       in_progress_queue.clear();
+      in_progress_count.store(0, std::memory_order_relaxed);
       if (logger) {
 	logger->dec(l_finisher_queue_len, count);
 	logger->tinc(l_finisher_complete_lat, ceph_clock_now() - start);

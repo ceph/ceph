@@ -53,7 +53,7 @@ int flush_test()
       << setw(20) << "max_dirty_bh: " << max_dirty_bhs << "\n"
       << setw(20) << "write extent size: " << bl_size << "\n\n";
 
-  ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
+  ObjectCacher obc(g_ceph_context, "test", writeback, NULL, NULL,
 		   max_cache, // max cache size, 1MB
 		   1, // max objects, just one
 		   max_dirty, // max dirty, 512KB

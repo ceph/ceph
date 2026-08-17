@@ -68,6 +68,11 @@ add_executable(unittest_histogram
 add_ceph_unittest(unittest_histogram)
 target_link_libraries(unittest_histogram ceph-common)
 
+add_executable(unittest_reentrant_lock
+  test_reentrant_lock.cc)
+add_ceph_unittest(unittest_reentrant_lock)
+target_link_libraries(unittest_reentrant_lock ceph-common)
+
 # unittest_prioritized_queue
 add_executable(unittest_prioritized_queue
   test_prioritized_queue.cc

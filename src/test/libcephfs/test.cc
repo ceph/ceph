@@ -46,6 +46,8 @@
 #include <thread>
 #include <random>
 #include <regex>
+#include <atomic>
+#include <chrono>
 
 // Darwin or windows fails to define this
 #ifndef O_RSYNC
@@ -5163,4 +5165,315 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_release(cmount);
   ceph_userperm_destroy(perms);
+}
+
+struct FsyncCapStressCtx {
+  struct ceph_ll_io_info io_info;
+  struct iovec iov;
+  std::vector<uint8_t> buf;
+  std::atomic<bool> done{false};
+};
+
+static void fsync_cap_stress_cb(struct ceph_ll_io_info *io_info)
+{
+  auto *ctx = static_cast<FsyncCapStressCtx*>(io_info->priv);
+  ctx->done.store(true, std::memory_order_release);
+}
+
+static void fsync_cap_stress_writer(struct ceph_mount_info *cmount, Fh *fh,
+                                    std::atomic<int> *errors,
+                                    int writer_id, int iterations)
+{
+  static const size_t iosize = 256 * 1024;
+
+  for (int i = 0; i < iterations; ++i) {
+    FsyncCapStressCtx ctx;
+    ctx.buf.assign(iosize, static_cast<uint8_t>(writer_id));
+    ctx.iov.iov_base = ctx.buf.data();
+    ctx.iov.iov_len = iosize;
+    ctx.io_info.callback = fsync_cap_stress_cb;
+    ctx.io_info.priv = &ctx;
+    ctx.io_info.iov = &ctx.iov;
+    ctx.io_info.iovcnt = 1;
+    ctx.io_info.fh = fh;
+    ctx.io_info.write = true;
+    ctx.io_info.fsync = true;
+    ctx.io_info.syncdataonly = false;
+    ctx.io_info.off = static_cast<int64_t>(writer_id) * 1024 * 1024 +
+                      static_cast<int64_t>(i) * static_cast<int64_t>(iosize);
+    ctx.io_info.result = 0;
+    ctx.done.store(false, std::memory_order_release);
+
+    if (ceph_ll_nonblocking_readv_writev(cmount, &ctx.io_info) != 0) {
+      errors->fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(3);
+    while (!ctx.done.load(std::memory_order_acquire)) {
+      if (std::chrono::steady_clock::now() > deadline) {
+        errors->fetch_add(1, std::memory_order_relaxed);
+        break;
+      }
+      std::this_thread::yield();
+    }
+    if (ctx.io_info.result != static_cast<int64_t>(iosize)) {
+      errors->fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+}
+
+static void fsync_cap_stress_setxattr(struct ceph_mount_info *cmount,
+                                      const std::string& path,
+                                      std::atomic<bool> *stop)
+{
+  int seq = 0;
+  while (!stop->load(std::memory_order_acquire)) {
+    std::string key = "user.capstress." + std::to_string(seq++);
+    std::string val = "v" + std::to_string(seq);
+    ceph_setxattr(cmount, path.c_str(), key.c_str(), val.c_str(), val.size(), 0);
+    std::this_thread::sleep_for(std::chrono::milliseconds(10));
+  }
+}
+
+/*
+ * Regression for nonblocking write+fsync stalling in C_nonblocking_fsync_state
+ * when many concurrent fsyncs wait on cap flush (waitfor_caps_pending wakeup),
+ * for heap-aliasing between heap-allocated CWF_fsync_finish and the next
+ * C_nonblocking_fsync_state clobbering the in-flight fsync callback, and for
+ * nonblocking fsync incorrectly waiting on inode-wide FILE_BUFFER refs after
+ * client_oc flush (blocking _fsync does not).
+ */
+TEST(LibCephFS, ConcurrentAsyncWriteFsyncCapFlush) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  UserPerm *perms = NULL;
+  Inode *parent, *inode = NULL;
+  struct ceph_statx stx = {0};
+  struct Fh *fh;
+  char filename[PATH_MAX];
+  std::atomic<int> errors{0};
+  std::atomic<bool> stop_xattr{false};
+
+  const int nwriters = 6;
+  const int iterations = 80;
+  std::thread writers[nwriters];
+  std::thread xattr_thread;
+
+  sprintf(filename, "/fsync_cap_%d", mypid);
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "1"));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  perms = ceph_mount_perms(cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &parent), 0);
+
+  ASSERT_EQ(ceph_ll_create(cmount, parent, filename, 0644,
+                           O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW,
+                           &inode, &fh, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  xattr_thread = std::thread(fsync_cap_stress_setxattr, cmount,
+                             std::string(filename), &stop_xattr);
+
+  for (int i = 0; i < nwriters; ++i) {
+    writers[i] = std::thread(fsync_cap_stress_writer, cmount, fh,
+                             &errors, i, iterations);
+  }
+  for (int i = 0; i < nwriters; ++i) {
+    writers[i].join();
+  }
+
+  stop_xattr.store(true, std::memory_order_release);
+  xattr_thread.join();
+
+  ASSERT_EQ(errors.load(), 0);
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+/*
+ * Regression for put_cap_ref(FILE_CACHE) assert when ll_read races with
+ * flush_set_callback/_flushed during concurrent async write+fsync.
+ */
+static void concurrent_readwrite_reader(struct ceph_mount_info *cmount, Fh *fh,
+                                      std::atomic<int> *errors,
+                                      std::atomic<bool> *stop)
+{
+  static const size_t iosize = 64 * 1024;
+  std::vector<char> buf(iosize);
+  int64_t off = 0;
+
+  while (!stop->load(std::memory_order_acquire)) {
+    int r = ceph_ll_read(cmount, fh, off, iosize, buf.data());
+    if (r < 0) {
+      errors->fetch_add(1, std::memory_order_relaxed);
+    }
+    off = (off + static_cast<int64_t>(iosize)) % (4 * 1024 * 1024);
+    std::this_thread::yield();
+  }
+}
+
+TEST(LibCephFS, ConcurrentReadWriteCapRefs) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  UserPerm *perms = NULL;
+  Inode *parent, *inode = NULL;
+  struct ceph_statx stx = {0};
+  struct Fh *fh;
+  char filename[PATH_MAX];
+  std::atomic<int> errors{0};
+  std::atomic<bool> stop_readers{false};
+
+  const int nwriters = 4;
+  const int nreaders = 4;
+  const int iterations = 60;
+  std::thread writers[nwriters];
+  std::thread readers[nreaders];
+
+  sprintf(filename, "/rdwr_cap_%d", mypid);
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "1"));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  perms = ceph_mount_perms(cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &parent), 0);
+
+  ASSERT_EQ(ceph_ll_create(cmount, parent, filename, 0644,
+                           O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW,
+                           &inode, &fh, &stx, CEPH_STATX_INO, 0, perms), 0);
+
+  for (int i = 0; i < nreaders; ++i) {
+    readers[i] = std::thread(concurrent_readwrite_reader, cmount, fh,
+                               &errors, &stop_readers);
+  }
+  for (int i = 0; i < nwriters; ++i) {
+    writers[i] = std::thread(fsync_cap_stress_writer, cmount, fh,
+                             &errors, i, iterations);
+  }
+  for (int i = 0; i < nwriters; ++i) {
+    writers[i].join();
+  }
+
+  stop_readers.store(true, std::memory_order_release);
+  for (int i = 0; i < nreaders; ++i) {
+    readers[i].join();
+  }
+
+  ASSERT_EQ(errors.load(), 0);
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
+
+struct ODirectAsyncReadCtx {
+  struct ceph_ll_io_info io_info;
+  struct iovec iov;
+  std::vector<uint8_t> buf;
+  std::atomic<bool> done{false};
+};
+
+static void odirect_async_read_cb(struct ceph_ll_io_info *io_info)
+{
+  auto *ctx = static_cast<ODirectAsyncReadCtx*>(io_info->priv);
+  ctx->done.store(true, std::memory_order_release);
+}
+
+static void odirect_async_read_worker(struct ceph_mount_info *cmount, Fh *fh,
+                                      std::atomic<int> *errors,
+                                      int worker_id, int iterations)
+{
+  static const size_t iosize = 4 * 1024 * 1024;
+
+  for (int i = 0; i < iterations; ++i) {
+    ODirectAsyncReadCtx ctx;
+    ctx.buf.assign(iosize, 0);
+    ctx.iov.iov_base = ctx.buf.data();
+    ctx.iov.iov_len = iosize;
+    ctx.io_info.callback = odirect_async_read_cb;
+    ctx.io_info.priv = &ctx;
+    ctx.io_info.iov = &ctx.iov;
+    ctx.io_info.iovcnt = 1;
+    ctx.io_info.fh = fh;
+    ctx.io_info.write = false;
+    ctx.io_info.fsync = false;
+    ctx.io_info.off = (static_cast<int64_t>(worker_id) * 16 * iosize) +
+                      (static_cast<int64_t>(i) * static_cast<int64_t>(iosize));
+    ctx.io_info.result = 0;
+    ctx.done.store(false, std::memory_order_release);
+
+    if (ceph_ll_nonblocking_readv_writev(cmount, &ctx.io_info) != 0) {
+      errors->fetch_add(1, std::memory_order_relaxed);
+      continue;
+    }
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::minutes(2);
+    while (!ctx.done.load(std::memory_order_acquire)) {
+      if (std::chrono::steady_clock::now() > deadline) {
+        errors->fetch_add(1, std::memory_order_relaxed);
+        break;
+      }
+      std::this_thread::yield();
+    }
+    if (ctx.io_info.result < 0) {
+      errors->fetch_add(1, std::memory_order_relaxed);
+    }
+  }
+}
+
+/*
+ * Regression for C_Read_Sync_NonBlocking leaking FILE_RD cap refs on the
+ * O_DIRECT async read path (NFS-Ganesha / fio direct randread).
+ */
+TEST(LibCephFS, ConcurrentODirectAsyncRead) {
+  pid_t mypid = getpid();
+  struct ceph_mount_info *cmount;
+  UserPerm *perms = NULL;
+  Inode *parent, *inode = NULL;
+  struct ceph_statx stx = {0};
+  struct Fh *fh;
+  char filename[PATH_MAX];
+  std::atomic<int> errors{0};
+
+  const int nreaders = 16;
+  const int iterations = 40;
+  std::thread readers[nreaders];
+
+  sprintf(filename, "/odirect_async_%d", mypid);
+
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_set(cmount, "client_oc", "1"));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  perms = ceph_mount_perms(cmount);
+  ASSERT_EQ(ceph_ll_lookup_root(cmount, &parent), 0);
+
+  ASSERT_EQ(ceph_ll_create(cmount, parent, filename, 0644,
+                           O_RDWR | O_CREAT | O_EXCL | O_NOFOLLOW,
+                           &inode, &fh, &stx, CEPH_STATX_INO, 0, perms), 0);
+  ASSERT_EQ(ceph_ll_close(cmount, fh), 0);
+
+  ASSERT_EQ(ceph_ll_open(cmount, inode, O_RDONLY | O_DIRECT | O_NOFOLLOW,
+                         &fh, perms), 0);
+
+  for (int i = 0; i < nreaders; ++i) {
+    readers[i] = std::thread(odirect_async_read_worker, cmount, fh,
+                             &errors, i, iterations);
+  }
+  for (int i = 0; i < nreaders; ++i) {
+    readers[i].join();
+  }
+
+  ASSERT_EQ(errors.load(), 0);
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
 }
