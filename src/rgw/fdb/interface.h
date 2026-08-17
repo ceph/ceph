@@ -519,15 +519,14 @@ inline void set(database_handle dbh,
 
 } // namespace ceph::libfdb
 
-namespace ceph::libfdb {
-
-// Atomic operations enqueue FoundationDB server-side value mutations:
-namespace atomic {
-
-namespace detail {
+namespace ceph::libfdb::detail {
 
 template <typename ValueT>
-requires (std::integral<ValueT> && not std::same_as<ValueT, bool>)
+concept fdb_integer_value =
+ std::integral<ValueT> and
+ not std::same_as<std::remove_cv_t<ValueT>, bool>;
+
+template <fdb_integer_value ValueT>
 constexpr auto little_endian_bytes(const ValueT value) noexcept
 {
  using unsigned_t = std::make_unsigned_t<ValueT>;
@@ -542,6 +541,34 @@ constexpr auto little_endian_bytes(const ValueT value) noexcept
 
  return out;
 }
+
+template <fdb_integer_value ValueT>
+constexpr auto little_endian_integer(const std::span<const std::uint8_t> bytes)
+{
+ if (sizeof(ValueT) < std::size(bytes)) {
+  throw std::invalid_argument {"FoundationDB integer value is too large"};
+ }
+
+ using unsigned_t = std::make_unsigned_t<ValueT>;
+
+ unsigned_t out = 0;
+
+ for (auto byte : bytes | std::views::reverse) {
+  out <<= 8;
+  out |= static_cast<unsigned_t>(byte);
+ }
+
+ return static_cast<ValueT>(out);
+}
+
+} // namespace ceph::libfdb::detail
+
+namespace ceph::libfdb {
+
+// Atomic operations enqueue FoundationDB server-side value mutations:
+namespace atomic {
+
+namespace detail {
 
 inline auto byte_span(const std::string_view bytes)
 {
@@ -559,9 +586,9 @@ inline auto byte_span(const FDBBytesT& bytes)
 
 inline constexpr auto integral_param =
  []<typename ValueT>(const ValueT value)
- requires requires(ValueT x) { little_endian_bytes(x); }
+ requires ceph::libfdb::detail::fdb_integer_value<ValueT>
  {
-  return little_endian_bytes(value);
+  return ceph::libfdb::detail::little_endian_bytes(value);
  };
 
 inline constexpr auto byte_param =
@@ -602,7 +629,7 @@ inline void atomic_op(database_handle dbh,
 } // namespace detail
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void add(transaction_handle txn,
                 const concepts::libfdb_key auto& k,
                 const ValueT value,
@@ -613,7 +640,7 @@ inline void add(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void add(database_handle dbh,
                 const concepts::libfdb_key auto& k,
                 const ValueT value)
@@ -662,7 +689,7 @@ inline void max(database_handle dbh,
 }
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_and(transaction_handle txn,
                     const concepts::libfdb_key auto& k,
                     const ValueT value,
@@ -673,7 +700,7 @@ inline void bit_and(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_and(database_handle dbh,
                     const concepts::libfdb_key auto& k,
                     const ValueT value)
@@ -682,7 +709,7 @@ inline void bit_and(database_handle dbh,
 }
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_or(transaction_handle txn,
                    const concepts::libfdb_key auto& k,
                    const ValueT value,
@@ -693,7 +720,7 @@ inline void bit_or(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_or(database_handle dbh,
                    const concepts::libfdb_key auto& k,
                    const ValueT value)
@@ -702,7 +729,7 @@ inline void bit_or(database_handle dbh,
 }
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_xor(transaction_handle txn,
                     const concepts::libfdb_key auto& k,
                     const ValueT value,
@@ -713,7 +740,7 @@ inline void bit_xor(transaction_handle txn,
 }
 
 template <typename ValueT>
-requires requires(ValueT value) { detail::little_endian_bytes(value); }
+requires ceph::libfdb::detail::fdb_integer_value<ValueT>
 inline void bit_xor(database_handle dbh,
                     const concepts::libfdb_key auto& k,
                     const ValueT value)
@@ -1184,6 +1211,17 @@ inline bool get(ceph::libfdb::database_handle dbh,
           [key, &output_target_or_fn, mode](transaction_handle& txn) {
             return get(txn, key, output_target_or_fn, mode, commit_after_op::no_commit);
           });
+}
+
+// Adapt "out" to FDB's raw little-endian representation used by numeric atomic
+// mutations, bypassing libfdb's ordinary decoding. With get(), a missing key
+// leaves "out" unchanged; a value wider than ValueT throws:
+template <detail::fdb_integer_value ValueT>
+[[nodiscard]] constexpr auto as_fdb_integer(ValueT& out) noexcept
+{
+ return [&out](const std::span<const std::uint8_t> bytes) {
+  out = detail::little_endian_integer<ValueT>(bytes);
+ };
 }
 
 } // namespace ceph::libfdb

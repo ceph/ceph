@@ -100,6 +100,12 @@ concept can_atomic_add =
  };
 
 template <typename ValueT>
+concept can_get_as_fdb_integer =
+ requires(lfdb::database_handle dbh, std::string key, ValueT& value) {
+  { lfdb::get(dbh, key, lfdb::as_fdb_integer(value)) } -> std::same_as<bool>;
+ };
+
+template <typename ValueT>
 concept can_atomic_min =
  requires(lfdb::database_handle dbh, std::string key, ValueT value) {
   lfdb::atomic::min(dbh, key, value);
@@ -251,6 +257,8 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
 
  STATIC_REQUIRE(can_atomic_add<std::uint64_t>);
  STATIC_REQUIRE_FALSE(can_atomic_add<bool>);
+ STATIC_REQUIRE(can_get_as_fdb_integer<std::uint64_t>);
+ STATIC_REQUIRE_FALSE(can_get_as_fdb_integer<bool>);
  STATIC_REQUIRE_FALSE(can_atomic_min<std::int64_t>);
 
  STATIC_REQUIRE(can_lfdb_for_each<decltype([](string_pair&&) {})>);
@@ -2639,6 +2647,25 @@ TEST_CASE("atomic mutations", "[fdb]") {
 
   REQUIRE(sizeof(std::uint64_t) == std::size(value));
   CHECK(3 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("as_fdb_integer decodes FoundationDB integer values") {
+  const auto key = test_key("fdb-integer/get");
+  auto value = std::uint64_t {42};
+
+  CHECK_FALSE(lfdb::get(j, key, lfdb::as_fdb_integer(value)));
+  CHECK(42 == value);
+
+  lfdb::atomic::add(j, key, std::uint64_t{5});
+  CHECK(lfdb::get(j, key, lfdb::as_fdb_integer(value)));
+  CHECK(5 == value);
+
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::atomic::add(txn, key, std::uint64_t{7});
+  REQUIRE(lfdb::commit(txn));
+  CHECK(lfdb::get(j, key, lfdb::as_fdb_integer(value)));
+  CHECK(12 == value);
  }
 
  SECTION("add does not require a read conflict") {
