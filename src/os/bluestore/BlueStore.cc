@@ -15356,6 +15356,20 @@ void BlueStore::_kv_stop()
   dout(10) << __func__ << " stopped" << dendl;
 }
 
+// Drain `from` into the tail of `to`, preserving order.  Steals the
+// whole deque O(1) when `to` is empty (the common case); appends when
+// the consumer is running behind.
+template <typename T>
+static void append_and_clear(std::deque<T>& to, std::deque<T>& from)
+{
+  if (to.empty()) {
+    to.swap(from);
+  } else {
+    to.insert(to.end(), from.begin(), from.end());
+    from.clear();
+  }
+}
+
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -15454,13 +15468,7 @@ void BlueStore::_kv_sync_thread()
 	bdev->flush();
 
         // if we flush then deferred done are now deferred stable
-        if (deferred_stable.empty()) {
-          deferred_stable.swap(deferred_done);
-        } else {
-          deferred_stable.insert(deferred_stable.end(), deferred_done.begin(),
-                                 deferred_done.end());
-          deferred_done.clear();
-        }
+        append_and_clear(deferred_stable, deferred_done);
       }
       auto after_flush = mono_clock::now();
 
@@ -15563,24 +15571,8 @@ void BlueStore::_kv_sync_thread()
 
       {
 	std::unique_lock m{kv_finalize_lock};
-	if (kv_committing_to_finalize.empty()) {
-	  kv_committing_to_finalize.swap(kv_committing);
-	} else {
-	  kv_committing_to_finalize.insert(
-	      kv_committing_to_finalize.end(),
-	      kv_committing.begin(),
-	      kv_committing.end());
-	  kv_committing.clear();
-	}
-	if (deferred_stable_to_finalize.empty()) {
-	  deferred_stable_to_finalize.swap(deferred_stable);
-	} else {
-	  deferred_stable_to_finalize.insert(
-	      deferred_stable_to_finalize.end(),
-	      deferred_stable.begin(),
-	      deferred_stable.end());
-	  deferred_stable.clear();
-	}
+	append_and_clear(kv_committing_to_finalize, kv_committing);
+	append_and_clear(deferred_stable_to_finalize, deferred_stable);
 	if (!kv_finalize_in_progress) {
 	  kv_finalize_in_progress = true;
 	  kv_finalize_cond.notify_one();
