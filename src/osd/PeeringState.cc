@@ -7291,8 +7291,15 @@ PeeringState::Recovered::Recovered(my_context ctx)
   }
 
   if (context< Active >().all_replicas_activated  &&
-      ps->async_recovery_targets.empty())
-    post_event(GoClean());
+      ps->async_recovery_targets.empty()) {
+    if (context< Active >().pool_migration_target_reservation_requested) {
+      post_event(StartTargetPoolMigration(
+        context< Active >().pool_migration_target_reservation_num_bytes,
+        context< Active >().pool_migration_target_reservation_num_objects));
+    } else {
+      post_event(GoClean());
+    }
+  }
 
   psdout(10) << "Recovered::Recovered: exiting Recovered constructor" << dendl;
 }
@@ -7385,7 +7392,10 @@ PeeringState::Active::Active(my_context ctx)
       unique_osd_shard_set(
         pg_shard_t(), // Don't skip the primary
 	context< PeeringMachine >().state->actingset)),
-    all_replicas_activated(false)
+    all_replicas_activated(false),
+    pool_migration_target_reservation_requested(false),
+    pool_migration_target_reservation_num_bytes(0),
+    pool_migration_target_reservation_num_objects(0)
 {
   context< PeeringMachine >().log_enter(state_name);
 
