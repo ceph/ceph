@@ -33,16 +33,16 @@ inline database_handle create_database()
  return std::make_shared<database>();
 }
 
-inline database_handle create_database(const std::filesystem::path dbfile)
+inline database_handle create_database(connection_source source)
 {
- return std::make_shared<database>(dbfile);
+ return std::make_shared<database>(std::move(source), database_options {});
 }
 
-inline database_handle create_database(const std::filesystem::path dbfile,
+inline database_handle create_database(connection_source source,
                                        const database_options& dbopts,
                                        const network_options& netopts)
 {
- return std::make_shared<database>(dbfile, dbopts, netopts);
+ return std::make_shared<database>(std::move(source), dbopts, netopts);
 }
 
 inline database_handle create_database(const database_options& dbopts,
@@ -56,10 +56,10 @@ inline database_handle create_database(const database_options& opts)
  return create_database(opts, network_options{});
 }
 
-inline database_handle create_database(const std::filesystem::path dbfile,
+inline database_handle create_database(connection_source source,
                                        const database_options& dbopts)
 {
- return create_database(dbfile, dbopts, network_options{});
+ return create_database(std::move(source), dbopts, network_options{});
 }
 
 inline transaction_handle make_transaction(database_handle dbh)

@@ -689,6 +689,52 @@ using network_options = option_map<FDBNetworkOption>;
 using database_options = option_map<FDBDatabaseOption>;
 using transaction_options = option_map<FDBTransactionOption>;
 
+// Caller-supplied database sources are tagged so paths and connection strings
+// cannot be confused:
+class connection_source final
+{
+ private:
+ enum class source_kind {
+  cluster_file,
+  connection_string
+ };
+
+ source_kind kind;
+ std::string value;
+
+ public:
+ explicit connection_source(std::filesystem::path path)
+  : kind(source_kind::cluster_file),
+    value(path.string())
+ {
+  if (std::empty(value)) {
+   throw std::invalid_argument("connection_source requires non-empty cluster file path");
+  }
+ }
+
+ explicit connection_source(std::string value_)
+  : kind(source_kind::connection_string),
+    value(std::move(value_))
+ {
+  if (std::empty(value)) {
+   throw std::invalid_argument("connection_source requires non-empty connection string");
+  }
+ }
+
+ explicit connection_source(const std::string_view value_)
+  : connection_source(std::string(value_))
+ {}
+
+ explicit connection_source(const char *value_)
+  : connection_source(value_ ? std::string_view(value_) : std::string_view())
+ {}
+
+ connection_source(std::nullptr_t) = delete;
+
+ private:
+ friend class database;
+};
+
 namespace detail {
 
 // Note that these are specific to FDB's needs (see return type, casts):
@@ -797,6 +843,8 @@ inline void shutdown_fdb()
 class database final
 {
  private:
+ using open_fn_t = fdb_error_t (*)(const char *, FDBDatabase **);
+
  struct database_deleter final
  {
   void operator()(FDBDatabase *db) const noexcept
@@ -807,7 +855,16 @@ class database final
 
  std::unique_ptr<FDBDatabase, database_deleter> db_handle;
 
- static FDBDatabase *create_database_ptr(const std::filesystem::path& cluster_file_path,
+ void apply_database_options(const ceph::libfdb::database_options& db_opts)
+ {
+  detail::apply_options(db_opts,
+             [handle = raw_handle()](auto option_code, auto data, auto size) {
+               return fdb_database_set_option(handle, option_code, data, size);
+             });
+ }
+
+ static FDBDatabase *create_database_ptr(const char *source,
+                                         const open_fn_t open,
                                          const network_options& network_opts) {
     std::call_once(detail::database_system::fdb_was_initialized,
                    detail::database_system::initialize_fdb,
@@ -819,12 +876,28 @@ class database final
 
     FDBDatabase *fdbp = nullptr;
 
-    if (fdb_error_t r = fdb_create_database(cluster_file_path.c_str(), &fdbp); 0 != r) {
+    if (fdb_error_t r = open(source, &fdbp); 0 != r) {
       throw libfdb_exception(r);
     }
     
     return fdbp;
  }
+
+ database(const char *source,
+          const open_fn_t open,
+          const ceph::libfdb::database_options& db_opts,
+          const network_options& network_opts)
+  : db_handle(create_database_ptr(source, open, network_opts))
+ {
+  apply_database_options(db_opts);
+ }
+
+ database(std::string source,
+          const open_fn_t open,
+          const ceph::libfdb::database_options& db_opts,
+          const network_options& network_opts)
+  : database(source.c_str(), open, db_opts, network_opts)
+ {}
 
  FDBTransaction *create_transaction() {
     FDBTransaction *txn_p = nullptr;
@@ -837,33 +910,31 @@ class database final
  }
 
  public:
- database(const std::filesystem::path cluster_file_path, const ceph::libfdb::database_options& db_opts, const network_options& network_opts)
-  : db_handle(create_database_ptr(cluster_file_path, network_opts))
- {
-  detail::apply_options(db_opts,
-             [handle = raw_handle()](auto option_code, auto data, auto size) {
-               return fdb_database_set_option(handle, option_code, data, size);
-             });
- }
+ database(connection_source source,
+          const ceph::libfdb::database_options& db_opts,
+          const network_options& network_opts)
+  : database(std::move(source.value),
+             connection_source::source_kind::cluster_file == source.kind
+              ? fdb_create_database
+              : fdb_create_database_from_connection_string,
+             db_opts,
+             network_opts)
+ {}
 
- database(const std::filesystem::path cluster_file_path, const ceph::libfdb::database_options& db_opts)
-  : database(cluster_file_path, db_opts, {})
+ database(connection_source source, const ceph::libfdb::database_options& db_opts)
+  : database(std::move(source), db_opts, {})
  {}
 
  database(const ceph::libfdb::database_options& db_opts, const ceph::libfdb::network_options& net_opts)
-  : database("", db_opts, net_opts)
+  : database(nullptr, fdb_create_database, db_opts, net_opts)
  {}
 
  database(const ceph::libfdb::database_options& db_opts)
-  : database("", db_opts, {})
- {}
-
- database(const std::filesystem::path cluster_file_path)
-  : database(cluster_file_path, {}, {})
+  : database(db_opts, {})
  {}
 
  database()
-  : database(std::filesystem::path {}, {}, {})
+  : database(database_options {}, network_options {})
  {}
 
  public:

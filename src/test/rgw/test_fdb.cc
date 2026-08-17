@@ -39,6 +39,7 @@
 #include <concepts>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <iterator>
 #include <limits>
 #include <list>
@@ -76,6 +77,21 @@ template <typename ...Ts>
 concept can_lfdb_set = requires(Ts&& ...xs) {
  lfdb::set(std::forward<Ts>(xs)...);
 };
+
+template <typename SourceT>
+concept can_create_database_from = requires(SourceT source) {
+ lfdb::create_database(source);
+};
+
+static_assert(std::constructible_from<lfdb::connection_source, std::filesystem::path>);
+static_assert(std::constructible_from<lfdb::connection_source, std::string_view>);
+static_assert(not std::is_convertible_v<std::filesystem::path, lfdb::connection_source>);
+static_assert(not std::is_convertible_v<std::string_view, lfdb::connection_source>);
+static_assert(not std::constructible_from<lfdb::connection_source, std::nullptr_t>);
+static_assert(not can_create_database_from<std::filesystem::path>);
+static_assert(not can_create_database_from<std::string_view>);
+static_assert(not can_create_database_from<std::string>);
+static_assert(not can_create_database_from<const char *>);
 
 template <typename ValueT>
 concept can_atomic_add =
@@ -2849,7 +2865,8 @@ SCENARIO("options", "[fdb]")
                 { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } },  
                 { { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag } });         
 
-  auto dbh1 = lfdb::create_database("fishing for databass!",             // name
+  auto dbh1 = lfdb::create_database(
+                lfdb::connection_source{std::filesystem::path{"fishing for databass!"}},
                 { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } },      // database options
                 { { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag } }); // network options
  
@@ -2858,9 +2875,12 @@ SCENARIO("options", "[fdb]")
 
  SECTION("create_database()") {
   lfdb::create_database();
-  lfdb::create_database("");
-  lfdb::create_database("", {}, {});
+  lfdb::create_database(lfdb::connection_source{std::filesystem::path{"/dev/null"}});
+  lfdb::create_database(lfdb::connection_source{std::filesystem::path{"/dev/null"}}, {}, {});
   lfdb::create_database(lfdb::database_options {}, lfdb::network_options {});
+
+  CHECK_THROWS_AS(lfdb::connection_source{std::filesystem::path{}}, std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::connection_source{""}, std::invalid_argument);
  }
 
  SECTION("piecemeal construction") {
@@ -2872,7 +2892,7 @@ SCENARIO("options", "[fdb]")
   // The cluster file is in "/etc/foundationdb.fdb.cluster" normally, but we'll point to 
   // nowhere just for fun. The cluster file is the "approved" way to establish a list of
   // addressess, AFAIK, rather than setting the option:
-  lfdb::create_database("/dev/null", {}, netopts);
+  lfdb::create_database(lfdb::connection_source{std::filesystem::path{"/dev/null"}}, {}, netopts);
  }
 }
 

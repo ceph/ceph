@@ -155,6 +155,17 @@ if (lfdb::commit(write_txn)) {
 auto dbh = lfdb::create_database();
 ```
 
+FoundationDB clients can connect through a default cluster file, an explicit
+cluster file path, or the connection string normally stored inside a cluster
+file. libfdb keeps caller-supplied sources explicit: a
+`std::filesystem::path` source opens a cluster file, while a string-like source
+opens a FoundationDB connection string. Use `create_database()` for
+FoundationDB's default cluster-file resolution; explicit source wrappers require
+non-empty inputs. See the
+FoundationDB [cluster file documentation](https://apple.github.io/foundationdb/administration.html#cluster-files)
+and the C API database-opening documentation:
+<https://apple.github.io/foundationdb/api-c.html#database>.
+
 ```cpp
 // Open a database with explicit database and network options. Explicit database
 // options are used as passed. Flag-only options use
@@ -174,7 +185,16 @@ auto dbh = lfdb::create_database(dbopts, netopts);
 
 ```cpp
 // Open a database with an explicit cluster file plus database/network options.
-auto dbh = lfdb::create_database("/path/to/fdb.cluster", dbopts, netopts);
+auto dbh = lfdb::create_database(
+  lfdb::connection_source{std::filesystem::path{"/path/to/fdb.cluster"}},
+  dbopts,
+  netopts);
+```
+
+```cpp
+// Open a database from a FoundationDB connection string.
+auto dbh = lfdb::create_database(
+  lfdb::connection_source{"description:id@127.0.0.1:4500"});
 ```
 
 ## Single-Key Operations
