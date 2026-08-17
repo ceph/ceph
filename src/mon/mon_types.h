@@ -490,6 +490,10 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_QUINCY(    (1ULL << 8));
       constexpr mon_feature_t FEATURE_REEF(    (1ULL << 9));
 
+
+      // Release-independent features
+      constexpr mon_feature_t FEATURE_CEPHX_AUTH_AES256K(   (1ULL << 31));
+
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
 
@@ -510,6 +514,10 @@ namespace ceph {
 	  FEATURE_PINGING |
 	  FEATURE_QUINCY |
 	  FEATURE_REEF |
+
+	  // Release-independent features
+	  FEATURE_CEPHX_AUTH_AES256K |
+
 	  FEATURE_NONE
 	  );
       }
@@ -535,6 +543,10 @@ namespace ceph {
 	  FEATURE_PINGING |
 	  FEATURE_QUINCY |
 	  FEATURE_REEF |
+
+	  // Release-independent features
+	  FEATURE_CEPHX_AUTH_AES256K |
+
 	  FEATURE_NONE
 	  );
       }
@@ -603,6 +615,9 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "quincy";
   } else if (f == FEATURE_REEF) {
     return "reef";
+  // Release-independent features
+  } else if (f == FEATURE_CEPHX_AUTH_AES256K) {
+    return "cephx_auth_aes256k";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -631,6 +646,9 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_QUINCY;
   } else if (n == "reef") {
     return FEATURE_REEF;
+  // Release-independent features
+  } else if (n == "cephx_auth_aes256k") {
+    return FEATURE_CEPHX_AUTH_AES256K;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }
