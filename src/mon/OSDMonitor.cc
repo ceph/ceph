@@ -1541,6 +1541,13 @@ void OSDMonitor::prime_pg_temp(
   }
 }
 
+static std::string make_completed_rollback_epoch_key(epoch_t e)
+{
+  char buf[64];
+  snprintf(buf, sizeof(buf), "completed_rollback_epoch_%08x", e);
+  return buf;
+}
+
 /**
  * @note receiving a transaction in this function gives a fair amount of
  * freedom to the service implementation if it does need it. It shouldn't.
@@ -2115,6 +2122,14 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     string k = make_purged_snap_epoch_key(pending_inc.epoch);
     bufferlist v;
     encode(pending_inc.new_purged_snaps, v);
+    t->put(OSD_SNAP_PREFIX, k, v);
+  }
+  // completed_rollbacks -- persist per-epoch for OSD boot replay
+  if (tmp.require_osd_release >= ceph_release_t::umbrella &&
+      !pending_inc.new_completed_rollbacks.empty()) {
+    string k = make_completed_rollback_epoch_key(pending_inc.epoch);
+    bufferlist v;
+    encode(pending_inc.new_completed_rollbacks, v);
     t->put(OSD_SNAP_PREFIX, k, v);
   }
   for (auto& i : pending_inc.new_purged_snaps) {
