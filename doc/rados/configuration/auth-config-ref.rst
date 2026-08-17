@@ -242,6 +242,12 @@ Time to Live
 .. confval:: auth_mon_ticket_ttl
 .. confval:: auth_service_ticket_ttl
 
+After decrypting a service ticket, the server checks its fields for signs
+of corruption. It rejects unexpected auid values, allow_all, malformed
+capability data, and invalid timestamps.
+
+Ticket creation must be within five minutes of session-key creation,
+since the monitor creates both together.
 
 
 .. _cephx-upgrade:
