@@ -1043,6 +1043,16 @@ public:
   }
 };
 
+/* version the entry left the object at. apply_write() moves write_version
+ * into read_version, so read_version is the one to use */
+static obj_version mdlog_entry_version(const RGWMetadataLogData& log_data)
+{
+  if (!log_data.read_version.empty()) {
+    return log_data.read_version;
+  }
+  return log_data.write_version;
+}
+
 static string full_sync_index_shard_oid(int shard_id)
 {
   return fmt::format("{}.{}", mdlog_sync_full_sync_index_prefix, shard_id);
@@ -1063,14 +1073,18 @@ class RGWReadRemoteMetadataCR : public RGWCoroutine {
   int tries{0};
   int op_ret{0};
 
+  obj_version expected_version;
+
 public:
   RGWReadRemoteMetadataCR(RGWMetaSyncEnv *_sync_env,
                                                       const string& _section, const string& _key, bufferlist *_pbl,
-                                                      const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+                                                      const RGWSyncTraceNodeRef& _tn_parent,
+                                                      const obj_version& _expected_version = obj_version{}) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
                                                       http_op(NULL),
                                                       section(_section),
                                                       key(_key),
-                                                      pbl(_pbl) {
+                                                      pbl(_pbl),
+                                                      expected_version(_expected_version) {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "read_remote_meta",
                                          section + ":" + key);
   }
@@ -1087,10 +1101,20 @@ public:
           url_encode(key, key_encode);
           rgw_http_param_pair pairs[] = { { "key" , key.c_str()},
                                           { NULL, NULL } };
+          param_vec_t params = make_param_list(pairs);
+
+          /* ask the remote for this version, so its stale cache is not
+           * replicated to us. older peers ignore these params */
+          if (!expected_version.tag.empty()) {
+            params.emplace_back(RGW_SYS_PARAM_PREFIX "expected-version-tag",
+                                expected_version.tag);
+            params.emplace_back(RGW_SYS_PARAM_PREFIX "expected-version-ver",
+                                std::to_string(expected_version.ver));
+          }
 
           string p = string("/admin/metadata/") + section + "/" + key_encode;
 
-          http_op = new RGWRESTReadResource(conn, p, pairs, NULL, sync_env->http_manager);
+          http_op = new RGWRESTReadResource(conn, p, params, NULL, sync_env->http_manager);
 
           init_new_io(http_op);
 
@@ -1298,12 +1322,14 @@ public:
 RGWMetaSyncSingleEntryCR::RGWMetaSyncSingleEntryCR(RGWMetaSyncEnv *_sync_env,
 		           const string& _raw_key, const string& _entry_marker,
                            const RGWMDLogStatus& _op_status,
-                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct),
+                           RGWMetaSyncShardMarkerTrack *_marker_tracker, const RGWSyncTraceNodeRef& _tn_parent,
+                           const obj_version& _expected_version) : RGWCoroutine(_sync_env->cct),
                                                       sync_env(_sync_env),
 						      raw_key(_raw_key), entry_marker(_entry_marker),
                                                       op_status(_op_status),
                                                       pos(0), sync_status(0),
-                                                      marker_tracker(_marker_tracker), tries(0) {
+                                                      marker_tracker(_marker_tracker), tries(0),
+                                                      expected_version(_expected_version) {
   error_injection = (sync_env->cct->_conf->rgw_sync_meta_inject_err_probability > 0);
   tn = sync_env->sync_tracer->add_node(_tn_parent, "entry", raw_key);
 }
@@ -1332,7 +1358,8 @@ int RGWMetaSyncSingleEntryCR::operate(const DoutPrefixProvider *dpp) {
         section = raw_key.substr(0, pos);
         key = raw_key.substr(pos + 1);
         tn->log(10, SSTR("fetching remote metadata entry" << (tries == 0 ? "" : " (retry)")));
-        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn));
+        call(new RGWReadRemoteMetadataCR(sync_env, section, key, &md_bl, tn,
+                                         expected_version));
       }
 
       sync_status = retcode;
@@ -1920,7 +1947,8 @@ public:
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
               yield {
-                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn), false);
+                RGWCoroutinesStack *stack = spawn(new RGWMetaSyncSingleEntryCR(sync_env, raw_key, log_iter->id, mdlog_entry.log_data.status, marker_tracker, tn,
+                                                              mdlog_entry_version(mdlog_entry.log_data)), false);
                 ceph_assert(stack);
                 // stack_to_pos holds a reference to the stack
                 stack_to_pos[stack] = log_iter->id;
