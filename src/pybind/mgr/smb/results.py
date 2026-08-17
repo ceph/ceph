@@ -1,4 +1,5 @@
 from typing import (
+    Any,
     Dict,
     Iterable,
     Iterator,
@@ -6,6 +7,8 @@ from typing import (
     Optional,
     Protocol,
     TypedDict,
+    Union,
+    cast,
 )
 
 import errno
@@ -47,6 +50,14 @@ class BaseResult:
         return "resource failed to apply (see response data for details)"
 
 
+class ResourceStatus(TypedDict, total=False):
+    """Valid fields for updates to smb resources."""
+
+    checked: bool
+    state: str
+    additional_results: List[Simplified]
+
+
 class ResourceResult(BaseResult):
     """Result of applying a single smb resource update to the system."""
 
@@ -57,12 +68,27 @@ class ResourceResult(BaseResult):
         src: SMBResource,
         success: bool,
         msg: str = '',
-        status: Optional[Simplified] = None,
+        status: Union[ResourceStatus, Simplified, None] = None,
     ) -> None:
         self.src = src
         self.success = success
         self.msg = msg
         self.status = status
+        self._check_status()
+
+    _allowed_status: Any = ResourceStatus
+
+    def _check_status(self) -> None:
+        """Runtime check that only valid keys are passed via status."""
+        if not self.status:
+            return
+        other_keys = set(self.status) - set(
+            self._allowed_status.__optional_keys__
+        )
+        if other_keys:
+            raise KeyError(
+                f'unknown keys in status: {", ".join(sorted(other_keys))}'
+            )
 
     def to_simplified(self) -> Simplified:
         ds: Simplified = {}
@@ -83,6 +109,33 @@ class ResourceResult(BaseResult):
         )
 
 
+class ResourceErrorStatus(TypedDict, total=False):
+    """Valid fields for ErrorResult status metadata.
+
+    Use these fields to provide structured metadata about error conditions
+    modifying smb resources. We try to constrain the system to known
+    predictable fields so that tools have a chance at parsing results. Errors
+    can be a bit looser than non-error conditions. If error metadata doesn't
+    exist for your condition add it here but do try to reuse whenever possible.
+
+    The type hints are not enforced but you should try to match them to
+    avoid unexpected output.
+    """
+
+    cluster_id: str
+    clusters: List[str]
+    conflicting_share_id: str
+    credential_ref: str
+    existing_auth_mode: str
+    existing_domain_realm: str
+    hint: Dict[str, str]
+    invalid_scope: str
+    known_scopes: List[str]
+    other_cluster_id: str
+    shares: List[str]
+    unknown_id: str
+
+
 class ErrorResult(ResourceResult, Exception):
     """A Result subclass for wrapping an error condition."""
 
@@ -90,9 +143,16 @@ class ErrorResult(ResourceResult, Exception):
         self,
         src: SMBResource,
         msg: str = '',
-        status: Optional[Simplified] = None,
+        status: Union[ResourceErrorStatus, Simplified, None] = None,
     ) -> None:
-        super().__init__(src, success=False, msg=msg, status=status)
+        super().__init__(
+            src,
+            success=False,
+            msg=msg,
+            status=cast(Union[Dict, None], status),
+        )
+
+    _allowed_status: Any = ResourceErrorStatus
 
 
 class InvalidResourceResult(BaseResult):
