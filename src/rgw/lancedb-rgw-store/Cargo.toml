@@ -17,7 +17,7 @@ crate-type = ["cdylib", "staticlib", "rlib"]
 # Cargo.lock — versions are unified automatically.  No pins needed.
 lance-io = { version = "7.0", default-features = false }
 lance-core = { version = "7.0", default-features = false }
-object_store = "0.13"
+object_store = { version = "0.13", features = ["integration"] }
 bytes = "1"
 async-trait = "0.1"
 futures = "0.3"
