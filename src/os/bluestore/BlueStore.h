@@ -2486,7 +2486,6 @@ private:
   bool kv_finalize_stop = false;
   std::deque<TransContext*> kv_queue;             ///< ready, already submitted
   std::deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
-  std::deque<TransContext*> kv_committing;        ///< currently syncing
   std::deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
   bool kv_sync_in_progress = false;
 
