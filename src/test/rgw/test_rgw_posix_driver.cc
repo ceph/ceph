@@ -1592,6 +1592,8 @@ TEST_F(POSIXBucketTest, ObjectWrite)
 {
   sf::path tp{bp / "root" / "bucket" / testname};
   EXPECT_FALSE(sf::exists(tp));
+  sf::path fp{tp / testname};
+  EXPECT_FALSE(sf::exists(fp));
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(rgw_obj_key(testname));
   EXPECT_NE(object.get(), nullptr);
@@ -1636,7 +1638,9 @@ TEST_F(POSIXBucketTest, ObjectWrite)
   EXPECT_EQ(bl, getbl);
 
   EXPECT_TRUE(sf::exists(tp));
-  EXPECT_TRUE(sf::is_regular_file(tp));
+  EXPECT_TRUE(sf::is_directory(tp));
+  EXPECT_TRUE(sf::exists(fp));
+  EXPECT_TRUE(sf::is_regular_file(fp));
 }
 
 class POSIXObjectTest : public POSIXBucketTest {
@@ -2200,16 +2204,17 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   bucket->get_info().flags |= BUCKET_VERSIONED;
   sf::path tp{bp / "root" / "bucket" / testname};
   EXPECT_FALSE(sf::exists(tp));
+  sf::path fp{tp / testname};
+  EXPECT_FALSE(sf::exists(fp));
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(rgw_obj_key(testname));
   EXPECT_NE(object.get(), nullptr);
 
-  object->gen_rand_obj_instance_name();
-  std::string inst_id = object->get_instance();
-
   std::unique_ptr<rgw::sal::Writer> writer = driver->get_atomic_writer(
       env->dpp, null_yield, object.get(), acl_owner, nullptr, 0, testname);
   EXPECT_NE(writer.get(), nullptr);
+
+  std::string inst_id = object->get_instance();
 
   int ret = writer->prepare(null_yield);
   EXPECT_EQ(ret, 0);

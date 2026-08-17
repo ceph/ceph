@@ -1278,8 +1278,14 @@ int ObjectDirectory::stat(const DoutPrefixProvider* dpp, bool force)
   if (ret < 0)
     return ret;
 
-  if (object)
-    return object->stat(dpp, force);
+  if (object) {
+    ret = object->stat(dpp, force);
+    if (ret < 0)
+      return ret;
+    /* Some things come from the file */
+    stx.stx_size = object->get_stx().stx_size;
+    stx.stx_mtime = object->get_stx().stx_mtime;
+  }
 
   return ret;
 }
