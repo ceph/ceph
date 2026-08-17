@@ -286,6 +286,7 @@ if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
     wait_for_image_replay_stopped ${CLUSTER1} ${POOL} ${image}
     wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
     wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
+    wait_for_latest_image_snap_complete ${CLUSTER2} ${POOL}/${image}
     get_newest_complete_mirror_snapshot_id ${CLUSTER2} ${POOL} ${image} demote_snap_id_2
     wait_for_non_primary_snap_present ${CLUSTER1} ${POOL} ${image} ${demote_snap_id_2}
     wait_for_non_primary_snap_not_present ${CLUSTER1} ${POOL} ${image} ${snap_id_2}
@@ -294,6 +295,7 @@ if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
     wait_for_image_replay_started ${CLUSTER2} ${POOL} ${image}
     wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+stopped'
     wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+replaying'
+    wait_for_latest_image_snap_complete ${CLUSTER1} ${POOL}/${image}
     get_newest_complete_mirror_snapshot_id ${CLUSTER1} ${POOL} ${image} snap_id_1
     wait_for_non_primary_snap_present ${CLUSTER2} ${POOL} ${image} ${snap_id_1}
     wait_for_snap_not_present ${CLUSTER2} ${POOL} ${image} ${snap_id_2}
@@ -304,6 +306,7 @@ if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
     wait_for_image_replay_stopped ${CLUSTER2} ${POOL} ${image}
     wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+unknown'
     wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+unknown'
+    wait_for_latest_image_snap_complete ${CLUSTER1} ${POOL}/${image}
     get_newest_complete_mirror_snapshot_id ${CLUSTER1} ${POOL} ${image} demote_snap_id_1
     wait_for_non_primary_snap_present ${CLUSTER2} ${POOL} ${image} ${demote_snap_id_1}
     wait_for_non_primary_snap_not_present ${CLUSTER2} ${POOL} ${image} ${snap_id_1}
@@ -312,6 +315,7 @@ if [ "${RBD_MIRROR_MODE}" = "snapshot" ]; then
     wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
     wait_for_status_in_pool_dir ${CLUSTER2} ${POOL} ${image} 'up+stopped'
     wait_for_status_in_pool_dir ${CLUSTER1} ${POOL} ${image} 'up+replaying'
+    wait_for_latest_image_snap_complete ${CLUSTER2} ${POOL}/${image}
     get_newest_complete_mirror_snapshot_id ${CLUSTER2} ${POOL} ${image} snap_id_2
     wait_for_non_primary_snap_present ${CLUSTER1} ${POOL} ${image} ${snap_id_2}
     wait_for_snap_not_present ${CLUSTER1} ${POOL} ${image} ${snap_id_1}
