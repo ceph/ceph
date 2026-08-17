@@ -251,7 +251,7 @@ if (lfdb::get(dbh, "person/konrad-zuse/name", name)) {
 ```
 
 ```cpp
-// Use a callback when the raw serialized bytes must be copied or decoded
+// Use a void callback when the raw serialized bytes must be copied or decoded
 // immediately. The span is only valid during the callback.
 lfdb::get(dbh, "person/konrad-zuse/name",
           [](std::span<const std::uint8_t> bytes) {
@@ -841,8 +841,9 @@ auto people = lfdb::collect<person_record>(dbh, q::prefix("person/"));
 ```
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
-need a composable generator. Passing a transaction handle keeps the transaction
-boundary explicit:
+need a composable generator. The callback is a row consumer and must return
+`void`; use `transform()` when each row should produce a value. Passing a
+transaction handle keeps the transaction boundary explicit:
 
 ```cpp
 auto txn = lfdb::make_transaction(dbh);
@@ -1628,8 +1629,9 @@ watch_thread.request_stop();
 ```
 
 `watched_loop()` is a gadget for repeated watch handling. Its callback takes
-the watched key as a `std::string_view`. The helper blocks; applications should
-own any thread, executor, shutdown, or callback error policy around it:
+the watched key as a `std::string_view` and returns `void`. The helper blocks;
+applications should own any thread, executor, shutdown, or callback error
+policy around it:
 
 ```cpp
 std::jthread watch_thread {

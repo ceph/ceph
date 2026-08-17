@@ -243,11 +243,12 @@ concept has_merge =
 
 template <typename FnT>
 concept value_callback =
- std::invocable<FnT&, std::span<const std::uint8_t>>;
+ std::invocable<FnT&, std::span<const std::uint8_t>> and
+ std::same_as<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>, void>;
 
 template <typename T>
 concept decoded_value_sink =
- not value_callback<std::remove_reference_t<T>> and
+ not std::invocable<std::remove_reference_t<T>&, std::span<const std::uint8_t>> and
  std::is_lvalue_reference_v<T> and
  not std::is_const_v<std::remove_reference_t<T>> and
  std::is_object_v<std::remove_reference_t<T>>;
@@ -402,7 +403,7 @@ struct future_value final
 
  private:
  void destroy() noexcept { future_ptr.reset(nullptr); }
- 
+
  private:
  friend class ceph::libfdb::transaction;
 };
@@ -794,7 +795,7 @@ inline void initialize_fdb(const network_options& options)
  // of fdb_database_system accomplishes this:
  if (fdb_error_t r = fdb_select_api_version(FDB_API_VERSION); 0 != r)
   throw libfdb_exception(r);
- 
+
  // Zero or more calls to this may now be made:
  apply_options(options, fdb_network_set_option);
  
@@ -1051,7 +1052,7 @@ class transaction final
  }
 
  bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
-                                        std::invocable<std::span<const std::uint8_t>> auto&& write_output_fn,
+                                        concepts::value_callback auto&& write_output_fn,
                                         read_mode mode);
 
  public:
@@ -1436,7 +1437,7 @@ inline future_value transaction_get_key(const transaction_handle& txn,
 } // namespace detail
 
 inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
-                                                                         std::invocable<std::span<const std::uint8_t>> auto&& write_output,
+                                                                         concepts::value_callback auto&& write_output,
                                                                          const read_mode mode)
 {
  const fdb_bool_t snapshot = read_mode::snapshot == mode;
@@ -1447,23 +1448,23 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
                                     snapshot)));
  auto *future = fv.raw_ptr_or_throw();
  
-  fdb_bool_t key_was_found = false;
-  const uint8_t *out_buffer = nullptr;
-  int out_len = 0;
+ fdb_bool_t key_was_found = false;
+ const uint8_t *out_buffer = nullptr;
+ int out_len = 0;
 
-  if (fdb_error_t r = fdb_future_get_value(future, &key_was_found, &out_buffer, &out_len); 0 != r) {
-    throw libfdb_exception(r);
-  }
+ if (fdb_error_t r = fdb_future_get_value(future, &key_was_found, &out_buffer, &out_len); 0 != r) {
+  throw libfdb_exception(r);
+ }
 
-  // No errors, but no value was found:
-  if (0 == key_was_found) {
-    return false;
-  }
+ // No errors, but no value was found:
+ if (0 == key_was_found) {
+  return false;
+ }
  
-  write_output(std::span<const std::uint8_t>(out_buffer, out_len));
+ std::invoke(write_output, std::span<const std::uint8_t>(out_buffer, out_len));
  
-  // The happy path is the simple path:
-  return true; 
+ // The happy path is the simple path:
+ return true;
 }
 
 [[nodiscard]] inline bool ceph::libfdb::transaction::commit()
@@ -1892,29 +1893,25 @@ inline range_work_plan plan_range_work(ceph::libfdb::database_handle dbh,
  const auto begin = ceph::libfdb::detail::as_fdb_span(split_selector.begin_key);
  const auto end = ceph::libfdb::detail::as_fdb_span(split_selector.end_key);
 
- for (bool should_retry = true; should_retry;) {
+ for (;;) {
   auto result_owner = wait_until_ready(
    transaction_get_range_split_points(txn, begin, end, target_bytes));
 
   auto split_points = extract_split_points(std::move(result_owner));
 
-  should_retry = retry_after_error(txn, split_points.error);
-
-  if (not should_retry) {
-   auto ranges = as_select_seq(split_points.result_keys, split_selector);
-   if (ranges.empty()) {
-    ranges.push_back(std::move(selector));
-   }
-
-   return range_work_plan {
-    .ranges = std::move(ranges)
-   };
+  if (retry_after_error(txn, split_points.error)) {
+   continue;
   }
- }
 
- return range_work_plan {
-  .ranges = {std::move(selector)}
- };
+  auto ranges = as_select_seq(split_points.result_keys, split_selector);
+  if (ranges.empty()) {
+   ranges.push_back(std::move(selector));
+  }
+
+  return range_work_plan {
+   .ranges = std::move(ranges)
+  };
+ }
 }
 
 // Generators (internal guts):

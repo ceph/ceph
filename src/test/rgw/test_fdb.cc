@@ -105,6 +105,30 @@ concept can_atomic_min =
   lfdb::atomic::min(dbh, key, value);
  };
 
+template <typename FnT>
+concept can_lfdb_for_each =
+ requires(lfdb::transaction_handle txn, lfdb::select selection, FnT fn) {
+  lfdb::for_each(txn, selection, fn);
+ };
+
+template <typename FnT>
+concept can_lfdb_get_raw_value =
+ requires(lfdb::database_handle dbh, std::string key, FnT fn) {
+  lfdb::get(dbh, key, fn);
+ };
+
+template <typename FnT>
+concept can_lfdb_from_convert_output =
+ requires(std::span<const std::uint8_t> bytes, FnT fn) {
+  lfdb::from::convert(bytes, fn);
+ };
+
+template <typename FnT>
+concept can_lfdb_watched_loop =
+ requires(lfdb::database_handle dbh, std::string key, FnT fn) {
+  lfdb::watched_loop(dbh, key, fn);
+ };
+
 struct pair_identity final
 {
  const string_pair& operator()(const string_pair& kv) const noexcept
@@ -145,6 +169,25 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
  STATIC_REQUIRE(can_atomic_add<std::uint64_t>);
  STATIC_REQUIRE_FALSE(can_atomic_add<bool>);
  STATIC_REQUIRE_FALSE(can_atomic_min<std::int64_t>);
+
+ STATIC_REQUIRE(can_lfdb_for_each<decltype([](string_pair&&) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_for_each<decltype([](string_pair&&) { return 1; })>);
+
+ STATIC_REQUIRE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {})>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {
+  return 1;
+ })>);
+ STATIC_REQUIRE(can_lfdb_get_raw_value<decltype([](std::span<const std::uint8_t>) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_get_raw_value<decltype([](std::span<const std::uint8_t>) {
+  return 1;
+ })>);
+ STATIC_REQUIRE(can_lfdb_from_convert_output<decltype([](const char *, std::size_t) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_from_convert_output<decltype([](const char *, std::size_t) {
+  return 1;
+ })>);
+
+ STATIC_REQUIRE(can_lfdb_watched_loop<decltype([](std::string_view) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_watched_loop<decltype([](std::string_view) { return true; })>);
 }
 
 TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")

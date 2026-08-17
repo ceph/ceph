@@ -73,21 +73,34 @@ non-FDB input sources here (or any non-matching user output sources). Do NOT add
 non-owning targets, lest Antevorda be angered!: */
 namespace ceph::libfdb::from {
 
+namespace detail {
+
+template <typename OutputFunction>
+concept output_function =
+ requires(OutputFunction& write_output_fn, const char *data, std::size_t size) {
+  { std::invoke(write_output_fn, data, size) } -> std::same_as<void>;
+};
+
+} // namespace detail
+
 inline void convert(const std::span<const std::uint8_t>& from, versionstamp& to)
 {
  to.store_result(from);
 }
 
-inline void convert(const std::span<const std::uint8_t>& from, auto& to)
+template <typename ToT>
+requires (!std::invocable<ToT&, const char *, std::size_t>)
+inline void convert(const std::span<const std::uint8_t>& from, ToT& to)
 {
  zpp::bits::in zpp_in(from);
  zpp_in(to).or_throw();
 }
 
-template <std::invocable<const char *, size_t> OutputFunction>
+template <typename OutputFunction>
+requires detail::output_function<OutputFunction>
 inline void convert(const std::span<const std::uint8_t>& in, OutputFunction& write_output_fn)
 {
- write_output_fn(reinterpret_cast<const char *>(in.data()), in.size());
+ std::invoke(write_output_fn, reinterpret_cast<const char *>(in.data()), in.size());
 }
 
 } // namespace ceph::libfdb::from
@@ -122,14 +135,13 @@ inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
  r.first.assign(reinterpret_cast<const char *>(kv.key),
                 static_cast<std::string::size_type>(kv.key_length));
 
- try 
-  {
-     ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
+ try {
+  ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
  }
  catch (const std::system_error& e) {
-     // Decode failures still surface as libfdb operation failures to callers.
-     throw ceph::libfdb::libfdb_exception(e.what());
-  }
+  // Decode failures still surface as libfdb operation failures to callers.
+  throw ceph::libfdb::libfdb_exception(e.what());
+ }
 
  return r;
 }

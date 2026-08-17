@@ -233,6 +233,12 @@ auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
  return value_collector(output_target_or_fn);
 }
 
+template <typename FnT>
+concept string_view_consumer =
+ requires(FnT& fn, std::string_view value) {
+  { std::invoke(fn, value) } -> std::same_as<void>;
+ };
+
 template <supported_transaction_invocation FnT>
 auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>;
 
@@ -267,7 +273,7 @@ namespace ceph::libfdb {
 }
 
 template <typename FnT>
-requires std::invocable<FnT&, std::string_view>
+requires detail::string_view_consumer<FnT>
 void watched_loop(database_handle dbh, std::string_view key, std::stop_token stop_token, FnT&& fn)
 {
  std::string watched_key(key);
@@ -282,7 +288,7 @@ void watched_loop(database_handle dbh, std::string_view key, std::stop_token sto
  * For more complex stop behavior, see make_watch(), ready(), cancel(), and
  * wait_for_event(): */
 template <typename FnT>
-requires std::invocable<FnT&, std::string_view>
+requires detail::string_view_consumer<FnT>
 void watched_loop(database_handle dbh, std::string_view key, FnT&& fn)
 {
  return watched_loop(dbh, key, std::stop_token{}, std::forward<FnT>(fn));
@@ -1372,7 +1378,7 @@ struct page_result final
 
 namespace detail {
 
-inline int range_limit_for(page p)
+constexpr int range_limit_for(page p)
 {
  if (0 == p.size) {
   return 0;
@@ -1391,13 +1397,19 @@ using row_transform_result_t =
 template <typename FnT, typename ValueT>
 concept row_invocable = std::invocable<FnT&, row_t<ValueT>&&>;
 
+template <typename FnT, typename ValueT>
+concept row_consumer =
+ requires(FnT& fn, row_t<ValueT>&& row) {
+  { std::invoke(fn, std::move(row)) } -> std::same_as<void>;
+ };
+
 template <typename PredT, typename ValueT>
 concept row_predicate = std::predicate<PredT&, const row_t<ValueT>&>;
 
 } // namespace detail
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
-requires detail::row_invocable<FnT, ValueT>
+requires detail::row_consumer<FnT, ValueT>
 inline void for_each(ceph::libfdb::transaction_handle txn,
                      SelectionT selection,
                      FnT&& fn,
@@ -1412,7 +1424,7 @@ inline void for_each(ceph::libfdb::transaction_handle txn,
 // Keep callbacks replay-safe; use an explicit transaction for side effects that
 // must not be repeated.
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
-requires detail::row_invocable<FnT, ValueT>
+requires detail::row_consumer<FnT, ValueT>
 inline void for_each(ceph::libfdb::database_handle dbh,
                      SelectionT selection,
                      FnT&& fn,
