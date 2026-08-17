@@ -2488,6 +2488,26 @@ int OSDMap::apply_incremental(const Incremental &inc)
     }
   }
 
+  new_completed_rollbacks = inc.new_completed_rollbacks;
+  for (auto& [pool_id, rb_map] : inc.new_rollback_snaps) {
+    for (auto& [rb_id, rb] : rb_map) {
+      rollback_snaps_queue[pool_id][rb_id] = rb;
+    }
+  }
+  for (auto& [pool_id, completed] : inc.new_completed_rollbacks) {
+    auto q = rollback_snaps_queue.find(pool_id);
+    if (q == rollback_snaps_queue.end()) continue;
+    for (auto i = completed.begin(); i != completed.end(); ++i) {
+      snapid_t rb_id = i.get_start();
+      snapid_t rb_end = i.get_start() + i.get_len();
+      while (rb_id < rb_end) {
+        q->second.erase(rb_id);
+        ++rb_id;
+      }
+    }
+    if (q->second.empty()) rollback_snaps_queue.erase(q);
+  }
+
   if (inc.new_last_up_change != utime_t()) {
     last_up_change = inc.new_last_up_change;
   }
