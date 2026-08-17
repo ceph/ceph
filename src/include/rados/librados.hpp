@@ -1057,6 +1057,19 @@ inline namespace v14_2_0 {
 
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
 
+    /// Initiate a pool-level snapshot rollback (pool-managed snaps).
+    /// Completes in O(1); background work is performed by OSDs.
+    /// @param snapname  name of the existing pool snapshot to restore
+    /// @param rollback_id  [out] allocated rollback ID (for completion polling)
+    /// @returns 0 on success, negative error code on failure
+    int snap_rollback(const std::string& snapname, uint64_t *rollback_id);
+
+    /// Initiate a pool-level snapshot rollback (selfmanaged snaps).
+    /// @param snap_id   the selfmanaged snap ID to restore from
+    /// @param rollback_id  [out] allocated rollback ID (for completion polling)
+    /// @returns 0 on success, negative error code on failure
+    int selfmanaged_snap_rollback(uint64_t snap_id, uint64_t *rollback_id);
+
     // Advisory locking on rados objects.
     int lock_exclusive(const std::string &oid, const std::string &name,
 		       const std::string &cookie,
