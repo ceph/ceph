@@ -27,7 +27,7 @@ export class MultisitePageHelper extends PageHelper {
   pages = pages;
 
   columnIndex = {
-    status: 4
+    status: 2
   };
 
   tableExist() {
