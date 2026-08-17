@@ -129,8 +129,15 @@ public:
   bool get_recovery_read() {
     return rwstate.get_recovery_read();
   }
-  bool get_pool_migration_write() {
-    return rwstate.get_pool_migration_write();
+  bool get_pool_migration_write(std::optional<OpRequestRef>&& op) {
+    if (rwstate.get_pool_migration_write()) {
+      return true;
+    } // else
+    if (op.has_value()) {
+      waiters.emplace_back(*op);
+      rwstate.inc_waiters();
+    }
+    return false;
   }
   bool try_get_read_lock() {
     return rwstate.get_read_lock();
@@ -285,9 +292,10 @@ public:
   /// Get write lock for pool migration
   bool get_pool_migration_write(
     const hobject_t &hoid,
-    ObjectContextRef obc) {
+    ObjectContextRef obc,
+    std::optional<OpRequestRef>&& op) {
     ceph_assert(locks.find(hoid) == locks.end());
-    if (obc->get_pool_migration_write()) {
+    if (obc->get_pool_migration_write(std::move(op))) {
       locks.insert(
 	std::make_pair(
 	  hoid, ObjectLockState(obc, RWState::RWWRITE)));

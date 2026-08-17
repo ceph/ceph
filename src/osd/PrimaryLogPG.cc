@@ -1728,7 +1728,10 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
         // Delete any leftover objects from previous failed migrations
         pg_t source_pg = get_source_pg_from_hash(start_obj);
-        pool_migration_target_delete(source_pg, start_obj);
+        if (!pool_migration_target_delete(source_pg, start_obj, op)) {
+          dout(20) << __func__ << " failed to clean up stale objects on target PG" << dendl;
+          return;
+        }
 
         if (pool_migration_reservations_granted_target) {
           dout(20) << __func__ << " reservations already granted, returning success to source PG" << dendl;
@@ -15810,10 +15813,10 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
   ceph_assert(obc);
   OpContextUPtr ctx = simple_opc_create(obc);
 
-  if (!ctx->lock_manager.get_pool_migration_write(oid, obc)) {
+  if (!ctx->lock_manager.get_pool_migration_write(oid, obc, std::nullopt)) {
     close_op_ctx(ctx.release());
     // Lock acquisition failed - object is already in pending set
-    dout(20) << "pool migration delayed on " << oid
+    dout(20) << __func__ << " pool migration delayed on " << oid
              << "; could not get lock, will retry" << dendl;
     return false;
   }
@@ -15864,7 +15867,9 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
   return true;
 }
 
-void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg, const hobject_t &watermark)
+bool PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
+                                                const hobject_t &watermark,
+                                                OpRequestRef& op)
 {
   dout(20) << __func__ << " deleting objects with watermark >= " << watermark << dendl;
 
@@ -15931,8 +15936,15 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg, const hob
       }
 
       OpContextUPtr ctx = simple_opc_create(obc);
-      ctx->at_version = get_next_version();
 
+      if (!ctx->lock_manager.get_pool_migration_write(obj, obc, op)) {
+        dout(20) << __func__ << " could not get lock on " << obj
+                 << ", op will be retried" << dendl;
+        close_op_ctx(ctx.release());
+        return false;
+      }
+
+      ctx->at_version = get_next_version();
       int ret = _delete_oid(ctx.get(), true, false, true);
       ceph_assert(ret == 0);
       if (obc->obs.oi.is_omap()) {
@@ -15951,6 +15963,7 @@ void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg, const hob
   }
 
   dout(20) << __func__ << " deleted " << deleted << " stale objects" << dendl;
+  return true;
 }
 
 void PrimaryLogPG::handle_pool_migration_quiesce_complete()
