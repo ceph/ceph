@@ -1,4 +1,5 @@
 from typing import (
+    TYPE_CHECKING,
     Any,
     Dict,
     Iterable,
@@ -16,6 +17,9 @@ import errno
 from .proto import Self, Simplified
 from .resources import ConversionOp, SMBResource
 from .utils import one
+
+if TYPE_CHECKING:
+    from .enums import State
 
 _DOMAIN = 'domain'
 
@@ -107,6 +111,20 @@ class ResourceResult(BaseResult):
             msg=self.msg,
             status=self.status,
         )
+
+    @classmethod
+    def processed(cls, src: SMBResource, state: 'State') -> Self:
+        """Return a new ResourceResult for a resource and the state in the
+        store afeter being processed by the mgr module.
+        """
+        return cls(src, success=True, status={'state': state})
+
+    @classmethod
+    def checked(cls, src: SMBResource) -> Self:
+        """Return a new ResourceResult with metadata indicating that the
+        resource has been checked for validity.
+        """
+        return cls(src, success=True, status={'checked': True})
 
 
 class ResourceErrorStatus(TypedDict, total=False):
