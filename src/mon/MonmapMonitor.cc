@@ -1262,6 +1262,11 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
         err = -EINVAL;
         goto reply_no_propose;
       }
+      if (c == pending_map.auth_service_cipher) {
+        err = 0;
+        ss << "already set";
+        goto reply_no_propose;
+      }
       pending_map.auth_service_cipher = c;
     } else if (name == "auth_allowed_ciphers") {
       std::vector<std::string> v;
@@ -1276,11 +1281,21 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
         ciphers.push_back(c);
       }
       std::sort(ciphers.begin(), ciphers.end());
+      if (ciphers == pending_map.auth_allowed_ciphers) {
+        err = 0;
+        ss << "already set";
+        goto reply_no_propose;
+      }
       pending_map.auth_allowed_ciphers = std::move(ciphers);
     } else if (name == "auth_preferred_cipher") {
       int c = CryptoManager::get_key_type(value);
       if (c < 0) {
         err = -EINVAL;
+        goto reply_no_propose;
+      }
+      if (c == pending_map.auth_preferred_cipher) {
+        err = 0;
+        ss << "already set";
         goto reply_no_propose;
       }
       pending_map.auth_preferred_cipher = c;
