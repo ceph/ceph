@@ -444,7 +444,7 @@ protected:
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
   librados::IoCtx logging_pool_ctx;     // .rgw.logging
-  librados::IoCtx vector_pool_ctx;     // .rgw.meta.vector
+  librados::IoCtx vector_pool_ctx;     // .rgw.meta:vector
 
   bool pools_initialized{false};
 
