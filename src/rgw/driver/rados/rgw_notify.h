@@ -4,7 +4,9 @@
 #pragma once
 
 #include <string>
+#include <vector>
 #include "common/ceph_time.h"
+#include "include/utime.h"
 #include "include/common_fwd.h"
 #include "rgw_notify_event_type.h"
 #include "common/async/yield_context.h"
@@ -106,10 +108,21 @@ struct reservation_t {
 
 
 
+// ownership of a single queue shard, taken from the shard's lock
+struct rgw_topic_shard_owner {
+  std::string shard_name;
+  bool owned = false;
+  std::string owner;      // may be empty for a lock taken before the owner
+                          // name was stored in it
+  std::string owner_addr;
+  utime_t expiration;
+};
+
 struct rgw_topic_stats {
   std::size_t queue_reservations; // number of reservations
   uint64_t queue_size;            // in bytes
   uint32_t queue_entries;         // number of entries
+  std::vector<rgw_topic_shard_owner> shard_owners;
 
   void dump(Formatter *f) const;
 };
