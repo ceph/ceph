@@ -1257,6 +1257,13 @@ protected:
     OpContext *ctx,
     const std::vector<pending_op_t>& ops);
 
+  // find_latest_rollback_source() returns the source_snap of the most recent
+  // pending rollback whose rollback_id > obj_seq, or CEPH_NOSNAP if none.
+  static snapid_t find_latest_rollback_source(
+    const OSDMapRef& osdmap,
+    int64_t pool_id,
+    snapid_t obj_seq);
+
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 

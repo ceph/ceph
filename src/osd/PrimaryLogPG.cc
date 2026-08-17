@@ -8984,6 +8984,29 @@ void PrimaryLogPG::emit_rollback_log_entries(
            << " snapset.seq=" << ss.seq << dendl;
 }
 
+snapid_t PrimaryLogPG::find_latest_rollback_source(
+  const OSDMapRef& osdmap,
+  int64_t pool_id,
+  snapid_t obj_seq)
+{
+  auto& rb_queue = osdmap->get_rollback_snaps_queue();
+  auto it = rb_queue.find(pool_id);
+  if (it == rb_queue.end()) {
+    return CEPH_NOSNAP;
+  }
+
+  // Walk the rollback_snaps map in ascending rollback_id order.
+  // The last entry with rollback_id > obj_seq is the most recent pending
+  // rollback and defines the authoritative state of the object.
+  snapid_t latest_source = CEPH_NOSNAP;
+  for (auto& [rb_id, rb_info] : it->second) {
+    if (rb_id > obj_seq) {
+      latest_source = rb_info.source_snap;
+    }
+  }
+  return latest_source;
+}
+
 void PrimaryLogPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
