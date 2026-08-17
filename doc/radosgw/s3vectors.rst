@@ -734,6 +734,13 @@ The response has the following format:
         "nextToken": "<token>"
     }
 
+``nextToken`` is present only if more indexes exist beyond the returned page.
+
+.. note:: When ``prefix`` is used, the indexes are filtered after they are
+   listed, so a page may hold fewer than ``maxResults`` indexes, or none at all,
+   while more matching indexes still exist. Pagination should continue until a
+   response holds no ``nextToken``.
+
 Delete Index
 ````````````
 
