@@ -2637,8 +2637,8 @@ options:
 - name: osd_pool_default_read_ratio
   type: uint
   level: advanced
-  desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
-  long_desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+  desc: Default read ratio (the percent of read I/Os out of all I/Os) for a pool.
+  long_desc: Default read ratio (the percent of read I/Os out of all I/Os) for a pool.
     applicable to replicated pools only. This value is used to improve read balancing
     when OSDs have different weights.
   default: 70
@@ -3335,7 +3335,7 @@ options:
 - name: osd_debug_deep_scrub_sleep
   type: float
   level: dev
-  desc: Inject an expensive sleep during deep scrub IO to make it easier to induce
+  desc: Inject an expensive sleep during deep scrub I/O to make it easier to induce
     preemption
   default: 0
   with_legacy: true
@@ -3635,10 +3635,10 @@ options:
   level: dev
   desc: The block size for index partitions. (0 = rocksdb default)
   default: 4_K
-# osd_*_priority adjust the relative priority of client io, recovery io,
-# snaptrim io, etc
+# osd_*_priority adjust the relative priority of client I/O, recovery I/O,
+# snaptrim I/O, etc
 #
-# osd_*_priority determines the ratio of available io between client and
+# osd_*_priority determines the ratio of available I/O between client and
 # recovery.  Each option may be set between
 # 1..63.
 - name: rocksdb_cf_compact_on_deletion
@@ -3756,7 +3756,7 @@ options:
     related to a pool's ``recovery_priority``.
   default: 5
   with_legacy: true
-# set default cost equal to 20MB io
+# set default cost equal to 20MB I/O
 - name: osd_recovery_cost
   type: size
   level: advanced
@@ -4048,7 +4048,7 @@ options:
   level: dev
   default: false
   with_legacy: true
-# if N>0, then ~ 1/N IOs will complete before we crash on flush
+# if N>0, then ~ 1/N I/Os will complete before we crash on flush
 - name: bdev_inject_crash
   type: int
   level: dev
@@ -4289,7 +4289,7 @@ options:
 - name: bluefs_buffered_io
   type: bool
   level: advanced
-  desc: Enabled buffered IO for BlueFS reads.
+  desc: Enabled buffered I/O for BlueFS reads.
   long_desc: When this option is enabled, BlueFS will in some cases perform buffered
     reads.  This allows the kernel page cache to act as a secondary cache for things
     like RocksDB block reads.  For example, if the RocksDB block cache isn't large
@@ -4419,7 +4419,7 @@ options:
   desc: Fraction of time the BlueFS spillover cleaner spends performing work.
   long_desc: Controls the rate of spillover migration work. After each migration
     step, the cleaner targets to sleep proportionally to the time spent doing work
-    This reduces interference with foreground IO. For example, if a migration step
+    This reduces interference with foreground I/O. For example, if a migration step
     took 10 ms and the ratio is 0.1, the cleaner sleeps for ~90 ms before the next
     step. This results in approximately 10% work time and 90% sleep time.
   default: 0.1
@@ -4729,7 +4729,7 @@ options:
 - name: bluestore_use_optimal_io_size_for_min_alloc_size 
   type: bool
   level: advanced
-  desc: Discover media optimal IO size and use for min_alloc_size. This is useful
+  desc: Discover media optimal I/O size and use for min_alloc_size. This is useful
     when OSDs are created on coarse-IU QLC SSDs or other novel types of underlyinng
     block device. It is a no-op for conventional media.
   default: false
@@ -5561,7 +5561,7 @@ options:
 - name: bluestore_throttle_bytes
   type: size
   level: advanced
-  desc: Maximum bytes in flight before we throttle IO submission
+  desc: Maximum bytes in flight before we throttle I/O submission
   default: 64_M
   flags:
   - runtime
@@ -5569,7 +5569,7 @@ options:
 - name: bluestore_throttle_deferred_bytes
   type: size
   level: advanced
-  desc: Maximum bytes for deferred writes before we throttle IO submission
+  desc: Maximum bytes for deferred writes before we throttle I/O submission
   default: 128_M
   flags:
   - runtime
@@ -5577,7 +5577,7 @@ options:
 - name: bluestore_throttle_cost_per_io
   type: size
   level: advanced
-  desc: Overhead added to transaction cost (in bytes) for each IO
+  desc: Overhead added to transaction cost (in bytes) for each I/O
   default: 0
   flags:
   - runtime
@@ -6007,7 +6007,7 @@ options:
 - name: bdev_ioring_hipri
   type: bool
   level: advanced
-  desc: Enables Linux io_uring API Use polled IO completions
+  desc: Enables Linux io_uring API Use polled I/O completions
   default: false
 - name: bdev_ioring_sqthread_poll
   type: bool
@@ -6096,13 +6096,13 @@ options:
 - name: filestore_wbthrottle_btrfs_ios_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many IOs are written (brtrfs, deprecated)
+  desc: Start flushing (fsyncing) when this many I/Os are written (brtrfs, deprecated)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_ios_hard_limit
   type: uint
   level: advanced
-  desc: Block writes when this many IOs haven't been flushed (fsynced) (btrfs,deprecated)
+  desc: Block writes when this many I/Os haven't been flushed (fsynced) (btrfs,deprecated)
   default: 5000
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_inodes_start_flusher
@@ -6127,13 +6127,13 @@ options:
 - name: filestore_wbthrottle_xfs_ios_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many IOs are written (xfs, deprecated)
+  desc: Start flushing (fsyncing) when this many I/Os are written (xfs, deprecated)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_xfs_ios_hard_limit
   type: uint
   level: advanced
-  desc: Block writes when this many IOs haven't been flushed (fsynced) (xfs, deprecated)
+  desc: Block writes when this many I/Os haven't been flushed (fsynced) (xfs, deprecated)
   default: 5000
   with_legacy: true
 - name: filestore_wbthrottle_xfs_inodes_start_flusher
@@ -6403,7 +6403,7 @@ options:
 - name: filestore_queue_max_ops
   type: uint
   level: advanced
-  desc: Max IO operations in flight (deprecated)
+  desc: Max I/O operations in flight (deprecated)
   default: 50
   with_legacy: true
 - name: filestore_queue_max_bytes
@@ -6652,7 +6652,7 @@ options:
 - name: journal_max_write_entries
   type: int
   level: advanced
-  desc: Max IOs in flight to journal (deprecated)
+  desc: Max I/Os in flight to journal (deprecated)
   fmt_desc: The maximum number of entries the journal will write at
    any one time.
   default: 100

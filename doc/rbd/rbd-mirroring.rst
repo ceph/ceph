@@ -531,7 +531,7 @@ For example::
         $ rbd --cluster site-a mirror pool promote image-pool
 
 .. tip:: Since the primary / non-primary status is per-image, it is possible to
-   have two clusters split the IO load and stage failover / failback.
+   have two clusters split the I/O load and stage failover / failback.
 
 .. note:: Promotion can be forced using the ``--force`` option. Forced
    promotion is needed when the demotion cannot be propagated to the peer

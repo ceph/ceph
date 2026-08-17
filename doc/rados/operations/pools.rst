@@ -836,7 +836,7 @@ Here are the breakdowns of the arguments:
 
 .. describe:: {min_size}
             
-   The minimum number of replicas that must be active for IO operations to be
+   The minimum number of replicas that must be active for I/O operations to be
    serviced.
 
    :Type: Integer

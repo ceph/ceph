@@ -77,27 +77,27 @@ Descriptions of fields
 
 .. describe:: rtio
 
-   total size of read IOs
+   total size of read I/Os
 
 .. describe:: wtio
 
-   total size of write IOs
+   total size of write I/Os
 
 .. describe:: raio
 
-   average size of read IOs
+   average size of read I/Os
 
 .. describe:: waio
 
-   average size of write IOs
+   average size of write I/Os
 
 .. describe:: rsp
 
-   speed of read IOs compared with the last refresh
+   speed of read I/Os compared with the last refresh
 
 .. describe:: wsp
 
-   speed of write IOs compared with the last refresh
+   speed of write I/Os compared with the last refresh
 
 .. describe:: rlatavg
 
