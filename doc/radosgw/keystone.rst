@@ -132,7 +132,7 @@ OpenStack clients with a ``--insecure`` switch) by setting the value of the
 configurable ``rgw keystone verify ssl`` to false.
 
 
-.. _OpenStack Keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
+.. _OpenStack Keystone documentation: https://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
 
 Cross-Project (Tenant) Access
 -----------------------------

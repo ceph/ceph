@@ -717,7 +717,7 @@ Reaching Out for Help
 ---------------------
 
 You can find help on IRC in #ceph and #ceph-devel on OFTC (server
-irc.oftc.net), or at ``dev@ceph.io`` and ``ceph-users@lists.ceph.com``. Make
+irc.oftc.net), or at ``dev@ceph.io`` and ``ceph-users@ceph.io``. Make
 sure that you have prepared your logs and that you have them ready upon
 request.
 
@@ -830,7 +830,7 @@ logs based on that information.
 Contact the upstream Ceph community on the mailing lists or IRC or Slack, or by
 filing a new issue on the `Ceph bug tracker`_.
 
-.. _Ceph bug tracker: http://tracker.ceph.com/projects/ceph/issues/new
+.. _Ceph bug tracker: https://tracker.ceph.com/projects/ceph/issues/new
 
 .. |---|   unicode:: U+2014 .. EM DASH
    :trim:

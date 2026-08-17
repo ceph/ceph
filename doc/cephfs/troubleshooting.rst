@@ -593,5 +593,5 @@ If you are satisfied that you have found a bug, please file it on `the bug
 tracker`. For more general queries, please write to the `ceph-users mailing
 list`.
 
-.. _the bug tracker: http://tracker.ceph.com
-.. _ceph-users mailing list:  http://lists.ceph.com/listinfo.cgi/ceph-users-ceph.com/
+.. _the bug tracker: https://tracker.ceph.com
+.. _ceph-users mailing list:  https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/

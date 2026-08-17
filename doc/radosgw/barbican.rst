@@ -119,5 +119,5 @@ When using API version 3::
 .. _Barbican: https://wiki.openstack.org/wiki/Barbican
 .. _Manage projects, users, and roles: https://docs.openstack.org/admin-guide/cli-manage-projects-users-and-roles.html#create-a-user
 .. _How to Create a Secret: https://developer.openstack.org/api-guide/key-manager/secrets.html#how-to-create-a-secret
-.. _SSE-KMS: http://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
+.. _SSE-KMS: https://docs.aws.amazon.com/AmazonS3/latest/dev/UsingKMSEncryption.html
 .. _How to Set/Replace ACL: https://developer.openstack.org/api-guide/key-manager/acls.html#how-to-set-replace-acl

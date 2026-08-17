@@ -8,7 +8,7 @@ The SHEC plugin is deprecated. Support for this plugin will be removed in
 the Vampire release.
 
 The *shec* plugin encapsulates the `multiple SHEC
-<http://tracker.ceph.com/projects/ceph/wiki/Shingled_Erasure_Code_(SHEC)>`_
+<https://tracker.ceph.com/projects/ceph/wiki/Shingled_Erasure_Code_(SHEC)>`_
 library. It allows Ceph to recover data more efficiently than Reed-Solomon codes.
 
 Create an SHEC profile
