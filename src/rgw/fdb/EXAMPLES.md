@@ -709,6 +709,48 @@ The explicit selector is half-open: the begin key is included and the end key is
 excluded. Use `lfdb::inclusive()` or `lfdb::exclusive()` when the boundary shape
 needs to be different.
 
+### Navigating Stored Keys
+
+Key selectors navigate among keys that actually exist in FoundationDB. They do
+not compute byte-string successors or predecessors. See the FoundationDB
+[key selector guide](https://apple.github.io/foundationdb/developer-guide.html#key-selectors)
+for the underlying model.
+
+Assume the database contains these keys:
+
+`0 1 2 3 4`
+
+| Selector | Meaning | Result for anchor `2` | Result for anchor `2.5` |
+|---|---|---:|---:|
+| `lfdb::lower(key)` | greatest stored key `< key` | `1` | `2` |
+| `lfdb::floor(key)` | greatest stored key `<= key` | `2` | `2` |
+| `lfdb::ceiling(key)` | least stored key `>= key` | `2` | `3` |
+| `lfdb::higher(key)` | least stored key `> key` | `3` | `3` |
+
+```cpp
+auto txn = lfdb::make_transaction(dbh);
+
+auto previous = lfdb::get_key(txn, lfdb::lower("2"));
+auto current_or_previous = lfdb::get_key(txn, lfdb::floor("2"));
+auto current_or_next = lfdb::get_key(txn, lfdb::ceiling("2"));
+auto next = lfdb::get_key(txn, lfdb::higher("2"));
+```
+
+Selectors compose with content keys because content keys compile to ordinary
+FoundationDB keys. The resolved key is still just a key, so use the query
+algebra when you need to test whether it belongs to a content prefix:
+
+```cpp
+const auto objects = fdbc::keyspace("object-cache") / "object" / bucket_id;
+const auto object_b = objects / "b";
+
+const auto candidate = lfdb::get_key(dbh, lfdb::ceiling(object_b));
+
+if (q::contains(fdbc::prefix(objects), candidate)) {
+  load_object(candidate);
+}
+```
+
 ### Scanning A Selection
 
 `scan()` is the ordinary flat key/value traversal interface. With a transaction

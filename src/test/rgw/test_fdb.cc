@@ -146,6 +146,58 @@ TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")
  CHECK(lq::is_empty(lq::prefix(max_keyspace_prefix + "metadata")));
 }
 
+TEST_CASE("key selectors navigate stored keys", "[fdb][query]")
+{
+ janitor j;
+ const auto prefix = make_key_prefix("selector");
+
+ const auto key0 = prefix + "0";
+ const auto key1 = prefix + "1";
+ const auto key2 = prefix + "2";
+ const auto key3 = prefix + "3";
+ const auto key4 = prefix + "4";
+ const auto key2_5 = prefix + "2.5";
+
+ lfdb::set(j, key0, "zero");
+ lfdb::set(j, key1, "one");
+ lfdb::set(j, key2, "two");
+ lfdb::set(j, key3, "three");
+ lfdb::set(j, key4, "four");
+
+ CHECK(key1 == lfdb::get_key(j, lfdb::lower(key2)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::floor(key2)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::ceiling(key2)));
+ CHECK(key3 == lfdb::get_key(j, lfdb::higher(key2)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::ceiling(key2), lfdb::read_mode::snapshot));
+
+ CHECK(key2 == lfdb::get_key(j, lfdb::lower(key2_5)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::floor(key2_5)));
+ CHECK(key3 == lfdb::get_key(j, lfdb::ceiling(key2_5)));
+ CHECK(key3 == lfdb::get_key(j, lfdb::higher(key2_5)));
+}
+
+TEST_CASE("key selectors compose with content keys and query algebra", "[fdb][query][content]")
+{
+ namespace fdbc = ceph::libfdb::layer::content;
+ namespace lq = ceph::libfdb::query;
+
+ janitor j;
+ const auto root = test_key("content-selector");
+ const auto objects = fdbc::keyspace(root) / "objects";
+ const auto object_a = objects / "a";
+ const auto object_c = objects / "c";
+ const auto object_b = objects / "b";
+
+ lfdb::set(j, object_a, "alpha");
+ lfdb::set(j, object_c, "charlie");
+
+ const auto object_range = fdbc::prefix(objects);
+ const auto next_object = lfdb::get_key(j, lfdb::ceiling(object_b));
+
+ CHECK(lq::contains(object_range, next_object));
+ CHECK(std::string(libfdb_key_view(object_c)) == next_object);
+}
+
 struct position_insert_iterator
 {
  using difference_type = std::ptrdiff_t;

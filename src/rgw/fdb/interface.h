@@ -88,6 +88,32 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
  return txn->prepare_replay(r);
 }
 
+[[nodiscard]] inline std::string get_key(transaction_handle txn,
+                                         const key_selector& selector,
+                                         const read_mode mode = read_mode::serializable)
+{
+ auto ready = detail::block_until_ready(
+              detail::transaction_get_key(txn, selector, mode));
+
+ const uint8_t *out_key = nullptr;
+ int out_key_size = 0;
+
+ if (fdb_error_t r = fdb_future_get_key(ready.raw_handle(), &out_key, &out_key_size); 0 != r) {
+  throw libfdb_exception(r);
+ }
+
+ if (0 == out_key_size) {
+  return {};
+ }
+
+ if (nullptr == out_key) {
+  throw libfdb_exception("invalid key selector result");
+ }
+
+ return std::string(reinterpret_cast<const char *>(out_key),
+                    static_cast<std::string::size_type>(out_key_size));
+}
+
 [[nodiscard]] inline bool commit(transaction_handle& txn,
                                  const versionstamp& stamp)
 {
@@ -184,6 +210,16 @@ namespace ceph::libfdb {
  return detail::in_transaction(dbh,
           [key](transaction_handle& txn) {
             return make_watch(txn, key);
+          });
+}
+
+[[nodiscard]] inline std::string get_key(database_handle dbh,
+                                         const key_selector& selector,
+                                         const read_mode mode = read_mode::serializable)
+{
+ return detail::in_transaction(dbh,
+          [selector, mode](transaction_handle& txn) {
+            return get_key(txn, selector, mode);
           });
 }
 

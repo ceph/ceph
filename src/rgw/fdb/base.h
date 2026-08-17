@@ -77,6 +77,7 @@ struct interval;
 using select = query::interval;
 struct versionstamp;
 struct watch_handle;
+class key_selector;
 
 class database;
 class transaction;
@@ -127,6 +128,9 @@ inline future_value transaction_get_range_split_points(const transaction_handle&
                                                        std::span<const std::uint8_t> begin,
                                                        std::span<const std::uint8_t> end,
                                                        std::int64_t target_bytes);
+inline future_value transaction_get_key(const transaction_handle& txn,
+                                        const key_selector& selector,
+                                        read_mode mode);
 
 inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
@@ -255,6 +259,69 @@ concept supported_invocation_result =
 // libfdb_exception represents libfdb operation failures.
 // Caller contract errors use standard exceptions such as std::invalid_argument.
 namespace ceph::libfdb {
+
+/* FoundationDB key selectors navigate among stored keys. Prefer the named
+ * factory functions below; arbitrary offsets are an advanced FDB feature. */
+class key_selector final
+{
+ std::string key;
+
+ bool or_equal;
+ int offset;
+
+ public:
+ key_selector(const key_selector&) = default;
+ key_selector& operator=(const key_selector&) = default;
+ key_selector(key_selector&&) noexcept = default;
+ key_selector& operator=(key_selector&&) noexcept = default;
+
+ private:
+ constexpr key_selector(std::string_view key_,
+                        const bool or_equal_,
+                        const int offset_)
+  : key(key_),
+    or_equal(or_equal_),
+    offset(offset_)
+ {}
+
+ template <concepts::libfdb_key KeyT>
+ friend constexpr key_selector lower(const KeyT& key);
+
+ template <concepts::libfdb_key KeyT>
+ friend constexpr key_selector floor(const KeyT& key);
+
+ template <concepts::libfdb_key KeyT>
+ friend constexpr key_selector ceiling(const KeyT& key);
+
+ template <concepts::libfdb_key KeyT>
+ friend constexpr key_selector higher(const KeyT& key);
+
+ friend class transaction;
+};
+
+template <concepts::libfdb_key KeyT>
+[[nodiscard]] constexpr key_selector lower(const KeyT& key)
+{
+ return key_selector(detail::as_libfdb_key_view(key), false, 0);
+}
+
+template <concepts::libfdb_key KeyT>
+[[nodiscard]] constexpr key_selector floor(const KeyT& key)
+{
+ return key_selector(detail::as_libfdb_key_view(key), true, 0);
+}
+
+template <concepts::libfdb_key KeyT>
+[[nodiscard]] constexpr key_selector ceiling(const KeyT& key)
+{
+ return key_selector(detail::as_libfdb_key_view(key), false, 1);
+}
+
+template <concepts::libfdb_key KeyT>
+[[nodiscard]] constexpr key_selector higher(const KeyT& key)
+{
+ return key_selector(detail::as_libfdb_key_view(key), true, 1);
+}
 
 // Should we commit after the (possibly) mutating operation?
 enum struct commit_after_op { commit, no_commit };
@@ -983,6 +1050,20 @@ class transaction final
   };
  }
 
+ detail::future_value get_key(const key_selector& selector,
+                              const read_mode mode)
+ {
+  const auto key = detail::as_fdb_span(selector.key);
+  const fdb_bool_t snapshot = read_mode::snapshot == mode;
+
+  return detail::future_value {
+   fdb_transaction_get_key(raw_handle(),
+                           key.data(), static_cast<int>(std::size(key)),
+                           selector.or_equal, selector.offset,
+                           snapshot)
+  };
+ }
+
  bool key_exists(std::string_view k, const read_mode mode)
  {
     return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {}, mode);
@@ -1124,6 +1205,9 @@ class transaction final
  friend inline auto ceph::libfdb::detail::transaction_get_range_split_points(
   const transaction_handle&, std::span<const std::uint8_t>, std::span<const std::uint8_t>, std::int64_t)
   -> ceph::libfdb::detail::future_value;
+ friend inline auto ceph::libfdb::detail::transaction_get_key(
+  const transaction_handle&, const key_selector&, read_mode)
+  -> ceph::libfdb::detail::future_value;
 
 };
 
@@ -1170,6 +1254,13 @@ inline future_value transaction_get_range_split_points(const transaction_handle&
                                                        const std::int64_t target_bytes)
 {
  return txn->get_range_split_points(begin, end, target_bytes);
+}
+
+inline future_value transaction_get_key(const transaction_handle& txn,
+                                        const key_selector& selector,
+                                        const read_mode mode)
+{
+ return txn->get_key(selector, mode);
 }
 
 } // namespace detail
@@ -1554,6 +1645,7 @@ inline future_value get_range_future_from_transaction(ceph::libfdb::transaction&
   const bool continuing_forward = not options.reverse_order and 1 < iteration;
   const bool continuing_reverse = options.reverse_order and 1 < iteration;
 
+  // Range bounds lower to the same FDB selector semantics as ceiling()/higher().
   const int begin_or_eq = (continuing_forward or not selection.begin_inclusive) ? 1 : 0;
   const int begin_offset = 1;
   const int end_or_eq = (not continuing_reverse and selection.end_inclusive) ? 1 : 0;
