@@ -486,9 +486,8 @@ class ClusterConfigHandler:
         log.debug('staging resource: %r', resource)
         if create_only:
             if not staging.is_new(resource):
-                return ResourceResult(
+                return ErrorResult(
                     resource,
-                    success=False,
                     msg='a resource with the same ID already exists',
                 )
         try:
