@@ -1896,7 +1896,15 @@ Usage:
             force_delete_data=force_delete_data,
         )
         raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result_str())
+        result = completion.result_str()
+        if service_name.startswith('nfs.'):
+            cluster_id = service_name[len('nfs.'):]
+            result += (
+                f"\n\nWARNING: 'ceph orch rm {service_name}' only removes the NFS service daemon.\n"
+                f"Associated resources (RADOS config objects, exports, ingress service) will NOT be cleaned up.\n"
+                f"Use 'ceph nfs cluster rm {cluster_id}' for full resource cleanup."
+            )
+        return HandleCommandResult(stdout=result)
 
     @OrchestratorCLICommand.Write('orch apply')
     def apply_misc(self,
