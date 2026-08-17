@@ -252,17 +252,17 @@ check_cluster "layout: missing --bucket" 22 'ERROR: bucket not specified' -- buc
 check_cluster "layout: nonexistent bucket (silent exit 2)" 2 "" -- bucket layout --bucket no-such-bucket
 
 # flags before the leaf subcommand. --bucket/--bucket-id/--format fail on the
-# nonexistent bucket (exit 2); --tenant trips the global "no user ID" check
-# (exit 22) before reaching the bucket.
-check_cluster "layout: --bucket before subcommand" 2 "" -- bucket --bucket no-such-bucket layout
-check_cluster "layout: --bucket-id before subcommand" 2 "" -- bucket --bucket-id x layout --bucket no-such-bucket
-check_cluster "layout: --format before subcommand" 2 "" -- bucket --format json layout --bucket no-such-bucket
+# nonexistent bucket (exit 2, no handler message); --tenant trips the global
+# "no user ID" check (exit 22) before reaching the bucket.
+check_cluster "layout: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket layout
+check_cluster "layout: --bucket-id before subcommand (silent exit 2)" 2 "" -- bucket --bucket-id x layout --bucket no-such-bucket
+check_cluster "layout: --format before subcommand (silent exit 2)" 2 "" -- bucket --format json layout --bucket no-such-bucket
 check_cluster "layout: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t layout --bucket no-such-bucket
 
 # the same flag given twice
-check_cluster "layout: duplicate --bucket" 2 "" -- bucket layout --bucket a --bucket no-such-bucket
-check_cluster "layout: duplicate --bucket-id" 2 "" -- bucket layout --bucket-id a --bucket-id b --bucket no-such-bucket
-check_cluster "layout: duplicate --format" 2 "" -- bucket layout --format json --format json --bucket no-such-bucket
+check_cluster "layout: duplicate --bucket (silent exit 2)" 2 "" -- bucket layout --bucket a --bucket no-such-bucket
+check_cluster "layout: duplicate --bucket-id (silent exit 2)" 2 "" -- bucket layout --bucket-id a --bucket-id b --bucket no-such-bucket
+check_cluster "layout: duplicate --format (silent exit 2)" 2 "" -- bucket layout --format json --format json --bucket no-such-bucket
 check_cluster "layout: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket layout --tenant a --tenant b --bucket no-such-bucket
 
 # ============================================================
@@ -296,15 +296,15 @@ check_cluster "chown: nonexistent bucket (exit 2)" 2 'failure: (2) No such file 
 
 # flags before the leaf subcommand; all fail on the nonexistent bucket (exit 2).
 # --uid is supplied, so --tenant does NOT trip the global "no user ID" check here.
-check_cluster "chown: --bucket before subcommand" 2 "" -- bucket --bucket no-such-bucket chown --uid no_such_user
-check_cluster "chown: --uid before subcommand" 2 "" -- bucket --uid no_such_user chown --bucket no-such-bucket
-check_cluster "chown: --marker before subcommand" 2 "" -- bucket --marker m chown --bucket no-such-bucket --uid no_such_user
-check_cluster "chown: --tenant before subcommand" 2 "" -- bucket --tenant t chown --bucket no-such-bucket --uid no_such_user
-check_cluster "chown: --bucket-new-name before subcommand" 2 "" -- bucket --bucket-new-name nn chown --bucket no-such-bucket --uid no_such_user
+check_cluster "chown: --bucket before subcommand" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=no-such-bucket' -- bucket --bucket no-such-bucket chown --uid no_such_user
+check_cluster "chown: --uid before subcommand" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=no-such-bucket' -- bucket --uid no_such_user chown --bucket no-such-bucket
+check_cluster "chown: --marker before subcommand" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=no-such-bucket' -- bucket --marker m chown --bucket no-such-bucket --uid no_such_user
+check_cluster "chown: --tenant before subcommand" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=no-such-bucket' -- bucket --tenant t chown --bucket no-such-bucket --uid no_such_user
+check_cluster "chown: --bucket-new-name before subcommand" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=no-such-bucket' -- bucket --bucket-new-name nn chown --bucket no-such-bucket --uid no_such_user
 
 # the same flag given twice
-check_cluster "chown: duplicate --bucket" 2 "" -- bucket chown --bucket a --bucket no-such-bucket --uid no_such_user
-check_cluster "chown: duplicate --uid" 2 "" -- bucket chown --uid a --uid no_such_user --bucket no-such-bucket
+check_cluster "chown: duplicate --bucket" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=no-such-bucket' -- bucket chown --bucket a --bucket no-such-bucket --uid no_such_user
+check_cluster "chown: duplicate --uid" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=no-such-bucket' -- bucket chown --uid a --uid no_such_user --bucket no-such-bucket
 
 # ============================================================
 echo ""
@@ -371,15 +371,15 @@ check_cluster "logging list: nonexistent bucket (silent exit 2)" 2 "" -- bucket 
 check_cluster "logging flush: nonexistent bucket (silent exit 2)" 2 "" -- bucket logging flush --bucket no-such-bucket
 
 # flags before the leaf subcommand. --bucket/--bucket-id/--format fail on the
-# nonexistent bucket (exit 2); --tenant trips the global "no user ID" check
-# (exit 22) before reaching the bucket.
-check_cluster "logging info: --bucket before subcommand" 2 "" -- bucket --bucket no-such-bucket logging info
-check_cluster "logging info: --bucket-id before subcommand" 2 "" -- bucket --bucket-id x logging info --bucket no-such-bucket
-check_cluster "logging list: --format before subcommand" 2 "" -- bucket --format json logging list --bucket no-such-bucket
+# nonexistent bucket (exit 2, no handler message); --tenant trips the global
+# "no user ID" check (exit 22) before reaching the bucket.
+check_cluster "logging info: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket logging info
+check_cluster "logging info: --bucket-id before subcommand (silent exit 2)" 2 "" -- bucket --bucket-id x logging info --bucket no-such-bucket
+check_cluster "logging list: --format before subcommand (silent exit 2)" 2 "" -- bucket --format json logging list --bucket no-such-bucket
 check_cluster "logging info: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t logging info --bucket no-such-bucket
 
 # the same flag given twice
-check_cluster "logging info: duplicate --bucket" 2 "" -- bucket logging info --bucket a --bucket no-such-bucket
+check_cluster "logging info: duplicate --bucket (silent exit 2)" 2 "" -- bucket logging info --bucket a --bucket no-such-bucket
 check_cluster "logging list: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket logging list --tenant a --tenant b --bucket no-such-bucket
 
 # ============================================================
@@ -412,36 +412,36 @@ check "rewrite: --min-rewrite-stripe-size missing value" 1 'Option --min-rewrite
 # handler-level (cluster): bucket_name.empty() is checked inside the action;
 # a nonexistent bucket fails init_bucket with exit 2
 check_cluster "rewrite: missing --bucket" 22 'ERROR: bucket not specified' -- bucket rewrite
-check_cluster "rewrite: nonexistent bucket (exit 2)" 2 'ERROR: could not init bucket' -- bucket rewrite --bucket no-such-bucket
+check_cluster "rewrite: nonexistent bucket (exit 2)" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket rewrite --bucket no-such-bucket
 
 # the size flags use atoll, so a malformed value is ACCEPTED at parse (not
 # rejected the way a strict integer would be) and quietly becomes 0. We assert
 # acceptance by reaching init_bucket (exit 2), not a parse error (exit 22).
-check_cluster "rewrite: --min-rewrite-size=abc accepted (atoll)" 2 'ERROR: could not init bucket' -- bucket rewrite --bucket no-such-bucket --min-rewrite-size=abc
-check_cluster "rewrite: --max-rewrite-size=abc accepted (atoll)" 2 'ERROR: could not init bucket' -- bucket rewrite --bucket no-such-bucket --max-rewrite-size=abc
-check_cluster "rewrite: --min-rewrite-stripe-size=abc accepted (atoll)" 2 'ERROR: could not init bucket' -- bucket rewrite --bucket no-such-bucket --min-rewrite-stripe-size=abc
+check_cluster "rewrite: --min-rewrite-size=abc accepted (atoll)" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket rewrite --bucket no-such-bucket --min-rewrite-size=abc
+check_cluster "rewrite: --max-rewrite-size=abc accepted (atoll)" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket rewrite --bucket no-such-bucket --max-rewrite-size=abc
+check_cluster "rewrite: --min-rewrite-stripe-size=abc accepted (atoll)" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket rewrite --bucket no-such-bucket --min-rewrite-stripe-size=abc
 
 # flags before the leaf subcommand; all fail on the nonexistent bucket (exit 2).
 # --tenant trips the global "no user ID" check (exit 22) before reaching the bucket.
-check_cluster "rewrite: --bucket before subcommand" 2 "" -- bucket --bucket no-such-bucket rewrite
-check_cluster "rewrite: --bucket-id before subcommand" 2 "" -- bucket --bucket-id x rewrite --bucket no-such-bucket
-check_cluster "rewrite: --format before subcommand" 2 "" -- bucket --format json rewrite --bucket no-such-bucket
-check_cluster "rewrite: --start-date before subcommand" 2 "" -- bucket --start-date 2020-01-01 rewrite --bucket no-such-bucket
-check_cluster "rewrite: --end-date before subcommand" 2 "" -- bucket --end-date 2020-01-01 rewrite --bucket no-such-bucket
-check_cluster "rewrite: --min-rewrite-size before subcommand" 2 "" -- bucket --min-rewrite-size 1 rewrite --bucket no-such-bucket
-check_cluster "rewrite: --max-rewrite-size before subcommand" 2 "" -- bucket --max-rewrite-size 1 rewrite --bucket no-such-bucket
-check_cluster "rewrite: --min-rewrite-stripe-size before subcommand" 2 "" -- bucket --min-rewrite-stripe-size 1 rewrite --bucket no-such-bucket
+check_cluster "rewrite: --bucket before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket no-such-bucket rewrite
+check_cluster "rewrite: --bucket-id before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket-id x rewrite --bucket no-such-bucket
+check_cluster "rewrite: --format before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --format json rewrite --bucket no-such-bucket
+check_cluster "rewrite: --start-date before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --start-date 2020-01-01 rewrite --bucket no-such-bucket
+check_cluster "rewrite: --end-date before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --end-date 2020-01-01 rewrite --bucket no-such-bucket
+check_cluster "rewrite: --min-rewrite-size before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --min-rewrite-size 1 rewrite --bucket no-such-bucket
+check_cluster "rewrite: --max-rewrite-size before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --max-rewrite-size 1 rewrite --bucket no-such-bucket
+check_cluster "rewrite: --min-rewrite-stripe-size before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --min-rewrite-stripe-size 1 rewrite --bucket no-such-bucket
 check_cluster "rewrite: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t rewrite --bucket no-such-bucket
 
 # the same flag given twice
-check_cluster "rewrite: duplicate --bucket" 2 "" -- bucket rewrite --bucket a --bucket no-such-bucket
-check_cluster "rewrite: duplicate --start-date" 2 "" -- bucket rewrite --start-date 2020-01-01 --start-date 2021-01-01 --bucket no-such-bucket
-check_cluster "rewrite: duplicate --min-rewrite-size" 2 "" -- bucket rewrite --min-rewrite-size 1 --min-rewrite-size 2 --bucket no-such-bucket
+check_cluster "rewrite: duplicate --bucket" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket rewrite --bucket a --bucket no-such-bucket
+check_cluster "rewrite: duplicate --start-date" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket rewrite --start-date 2020-01-01 --start-date 2021-01-01 --bucket no-such-bucket
+check_cluster "rewrite: duplicate --min-rewrite-size" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket rewrite --min-rewrite-size 1 --min-rewrite-size 2 --bucket no-such-bucket
 check_cluster "rewrite: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket rewrite --tenant a --tenant b --bucket no-such-bucket
 
 # two or three flags at once: before the subcommand, or before and duplicated
-check_cluster "rewrite: --bucket + --min-rewrite-size before" 2 "" -- bucket --bucket no-such-bucket --min-rewrite-size 1 rewrite
-check_cluster "rewrite: pos + duplicate --bucket" 2 "" -- bucket --bucket a rewrite --bucket no-such-bucket
+check_cluster "rewrite: --bucket + --min-rewrite-size before" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket no-such-bucket --min-rewrite-size 1 rewrite
+check_cluster "rewrite: pos + duplicate --bucket" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket a rewrite --bucket no-such-bucket
 check_cluster "rewrite: --start-date + --end-date + --tenant before" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --start-date 2020-01-01 --end-date 2021-01-01 --tenant t rewrite --bucket no-such-bucket
 
 # ============================================================
@@ -474,31 +474,32 @@ check_cluster "set-min-shards: missing --bucket" 234 'ERROR: bucket not specifie
 check_cluster "set-min-shards: --num-shards not specified" 234 'ERROR: --num-shards not specified' -- bucket set-min-shards --bucket no-such-bucket
 check_cluster "set-min-shards: --num-shards < 1" 234 'ERROR: --num-shards must be at least 1' -- bucket set-min-shards --bucket no-such-bucket --num-shards 0
 # valid args but nonexistent bucket: init_bucket fails (exit 2, no handler message)
-check_cluster "set-min-shards: nonexistent bucket (exit 2)" 2 "" -- bucket set-min-shards --bucket no-such-bucket --num-shards 11
+check_cluster "set-min-shards: nonexistent bucket (silent exit 2)" 2 "" -- bucket set-min-shards --bucket no-such-bucket --num-shards 11
 # The three unrelated-flag cases side by side (identical args, only the flag
 # differs): a binary flag, a value option in =form, and the same option in
 # space form. All three are ignored, so all three exit 2 on the missing bucket.
-check_cluster "set-min-shards: unrelated binary flag --fix accepted (exit 2)" 2 "" -- bucket set-min-shards --fix --bucket no-such-bucket --num-shards 11
-check_cluster "set-min-shards: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" -- bucket set-min-shards --max-entries=5 --bucket no-such-bucket --num-shards 11
-check_cluster "set-min-shards: unrelated --max-entries 5 swallowed (space form, +bucket+num-shards)" 2 "" -- bucket set-min-shards --max-entries 5 --bucket no-such-bucket --num-shards 11
+check_cluster "set-min-shards: unrelated binary flag --fix accepted (silent exit 2)" 2 "" -- bucket set-min-shards --fix --bucket no-such-bucket --num-shards 11
+check_cluster "set-min-shards: unrelated value flag --max-entries=5 (=form, exit 2) (silent exit 2)" 2 "" -- bucket set-min-shards --max-entries=5 --bucket no-such-bucket --num-shards 11
+check_cluster "set-min-shards: unrelated --max-entries 5 swallowed (space form, +bucket+num-shards) (silent exit 2)" 2 "" -- bucket set-min-shards --max-entries 5 --bucket no-such-bucket --num-shards 11
 
 # flags before the leaf subcommand. The value still reaches the command, so with
-# a valid --num-shards and a nonexistent bucket they fail at init_bucket (exit 2).
-# --tenant trips the global "no user ID" check (exit 22).
-check_cluster "set-min-shards: --bucket before subcommand" 2 "" -- bucket --bucket no-such-bucket set-min-shards --num-shards 11
-check_cluster "set-min-shards: -b before subcommand (short)" 2 "" -- bucket -b no-such-bucket set-min-shards --num-shards 11
-check_cluster "set-min-shards: --bucket-id before subcommand" 2 "" -- bucket --bucket-id x set-min-shards --bucket no-such-bucket --num-shards 11
-check_cluster "set-min-shards: --num-shards before subcommand" 2 "" -- bucket --num-shards 11 set-min-shards --bucket no-such-bucket
+# a valid --num-shards and a nonexistent bucket they fail at init_bucket
+# (exit 2, no handler message). --tenant trips the global "no user ID" check
+# (exit 22).
+check_cluster "set-min-shards: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket set-min-shards --num-shards 11
+check_cluster "set-min-shards: -b before subcommand (short) (silent exit 2)" 2 "" -- bucket -b no-such-bucket set-min-shards --num-shards 11
+check_cluster "set-min-shards: --bucket-id before subcommand (silent exit 2)" 2 "" -- bucket --bucket-id x set-min-shards --bucket no-such-bucket --num-shards 11
+check_cluster "set-min-shards: --num-shards before subcommand (silent exit 2)" 2 "" -- bucket --num-shards 11 set-min-shards --bucket no-such-bucket
 check_cluster "set-min-shards: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t set-min-shards --bucket no-such-bucket --num-shards 11
 
 # the same flag given twice
-check_cluster "set-min-shards: duplicate --bucket" 2 "" -- bucket set-min-shards --bucket a --bucket no-such-bucket --num-shards 11
-check_cluster "set-min-shards: duplicate --num-shards" 2 "" -- bucket set-min-shards --bucket no-such-bucket --num-shards 11 --num-shards 12
+check_cluster "set-min-shards: duplicate --bucket (silent exit 2)" 2 "" -- bucket set-min-shards --bucket a --bucket no-such-bucket --num-shards 11
+check_cluster "set-min-shards: duplicate --num-shards (silent exit 2)" 2 "" -- bucket set-min-shards --bucket no-such-bucket --num-shards 11 --num-shards 12
 check_cluster "set-min-shards: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket set-min-shards --tenant a --tenant b --bucket no-such-bucket --num-shards 11
 
 # two or three flags at once: before the subcommand, or before and duplicated
-check_cluster "set-min-shards: --bucket + --num-shards before" 2 "" -- bucket --bucket no-such-bucket --num-shards 11 set-min-shards
-check_cluster "set-min-shards: pos + duplicate --bucket" 2 "" -- bucket --bucket a set-min-shards --bucket no-such-bucket --num-shards 11
+check_cluster "set-min-shards: --bucket + --num-shards before (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket --num-shards 11 set-min-shards
+check_cluster "set-min-shards: pos + duplicate --bucket (silent exit 2)" 2 "" -- bucket --bucket a set-min-shards --bucket no-such-bucket --num-shards 11
 check_cluster "set-min-shards: --bucket + --num-shards + --tenant before" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --bucket no-such-bucket --num-shards 11 --tenant t set-min-shards
 
 # ============================================================
@@ -637,7 +638,7 @@ check "resync: no subcommand" 1 'ERROR: Unknown command' bucket resync
 
 check "resync: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket resync encrypted multipart --fakeflag
 # --max-entries is a real flag that this command does not use; it is parsed and ignored
-check_cluster "resync: unrelated --max-entries 5 swallowed (space form)" 2 "" -- bucket resync encrypted multipart --bucket chk --max-entries 5 --yes-i-really-mean-it
+check_cluster "resync: unrelated --max-entries 5 swallowed (space form) (silent exit 2)" 2 "" -- bucket resync encrypted multipart --bucket chk --max-entries 5 --yes-i-really-mean-it
 
 # missing option value (parse-level, exit 1)
 check "resync: --bucket missing value" 1 'Option --bucket requires an argument.' bucket resync encrypted multipart --bucket
@@ -649,33 +650,33 @@ check "resync: --marker missing value" 1 'Option --marker requires an argument.'
 # success cases live in the integration section (need a bucket that exists).
 check_cluster "resync: bucket not specified" 22 'ERROR: bucket not specified' -- bucket resync encrypted multipart
 # valid args, nonexistent bucket: init_bucket fails (exit 2, no handler message)
-check_cluster "resync: nonexistent bucket (exit 2)" 2 "" -- bucket resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
+check_cluster "resync: nonexistent bucket (silent exit 2)" 2 "" -- bucket resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
 # unrelated flags alongside valid args: a binary flag (--fix) takes 0 values ->
 # accepted; a value option in =form binds -> accepted; both proceed to init_bucket
 # (which fails on the nonexistent bucket, exit 2) rather than being rejected at parse.
-check_cluster "resync: unrelated binary flag --fix accepted (exit 2)" 2 "" -- bucket resync encrypted multipart --fix --bucket no-such-bucket --yes-i-really-mean-it
-check_cluster "resync: unrelated value flag --max-entries=5 (=form, exit 2)" 2 "" -- bucket resync encrypted multipart --max-entries=5 --bucket no-such-bucket --yes-i-really-mean-it
+check_cluster "resync: unrelated binary flag --fix accepted (silent exit 2)" 2 "" -- bucket resync encrypted multipart --fix --bucket no-such-bucket --yes-i-really-mean-it
+check_cluster "resync: unrelated value flag --max-entries=5 (=form, exit 2) (silent exit 2)" 2 "" -- bucket resync encrypted multipart --max-entries=5 --bucket no-such-bucket --yes-i-really-mean-it
 
 # flags before the leaf. The value still reaches the command, so with a
-# nonexistent bucket they fail at init_bucket (exit 2). --tenant trips the
-# global "no user ID" check (exit 22).
-check_cluster "resync: --bucket before subcommand" 2 "" -- bucket --bucket no-such-bucket resync encrypted multipart --yes-i-really-mean-it
-check_cluster "resync: -b before subcommand (short)" 2 "" -- bucket -b no-such-bucket resync encrypted multipart --yes-i-really-mean-it
-check_cluster "resync: --bucket-id before subcommand" 2 "" -- bucket --bucket-id x resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
-check_cluster "resync: --marker before subcommand" 2 "" -- bucket --marker m resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
-check_cluster "resync: --yes-i-really-mean-it before subcommand" 2 "" -- bucket --yes-i-really-mean-it resync encrypted multipart --bucket no-such-bucket
-check_cluster "resync: --format before subcommand" 2 "" -- bucket --format json resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
+# nonexistent bucket they fail at init_bucket (exit 2, no handler message).
+# --tenant trips the global "no user ID" check (exit 22).
+check_cluster "resync: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket resync encrypted multipart --yes-i-really-mean-it
+check_cluster "resync: -b before subcommand (short) (silent exit 2)" 2 "" -- bucket -b no-such-bucket resync encrypted multipart --yes-i-really-mean-it
+check_cluster "resync: --bucket-id before subcommand (silent exit 2)" 2 "" -- bucket --bucket-id x resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
+check_cluster "resync: --marker before subcommand (silent exit 2)" 2 "" -- bucket --marker m resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
+check_cluster "resync: --yes-i-really-mean-it before subcommand (silent exit 2)" 2 "" -- bucket --yes-i-really-mean-it resync encrypted multipart --bucket no-such-bucket
+check_cluster "resync: --format before subcommand (silent exit 2)" 2 "" -- bucket --format json resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
 check_cluster "resync: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
 
 # the same flag given twice
-check_cluster "resync: duplicate --bucket" 2 "" -- bucket resync encrypted multipart --bucket a --bucket no-such-bucket --yes-i-really-mean-it
-check_cluster "resync: duplicate --marker" 2 "" -- bucket resync encrypted multipart --bucket no-such-bucket --marker a --marker b --yes-i-really-mean-it
-check_cluster "resync: duplicate --yes-i-really-mean-it" 2 "" -- bucket resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it --yes-i-really-mean-it
+check_cluster "resync: duplicate --bucket (silent exit 2)" 2 "" -- bucket resync encrypted multipart --bucket a --bucket no-such-bucket --yes-i-really-mean-it
+check_cluster "resync: duplicate --marker (silent exit 2)" 2 "" -- bucket resync encrypted multipart --bucket no-such-bucket --marker a --marker b --yes-i-really-mean-it
+check_cluster "resync: duplicate --yes-i-really-mean-it (silent exit 2)" 2 "" -- bucket resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it --yes-i-really-mean-it
 check_cluster "resync: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket resync encrypted multipart --tenant a --tenant b --bucket no-such-bucket --yes-i-really-mean-it
 
 # two or three flags at once: before the subcommand, or before and duplicated
-check_cluster "resync: --bucket + --marker before" 2 "" -- bucket --bucket no-such-bucket --marker m resync encrypted multipart --yes-i-really-mean-it
-check_cluster "resync: --bucket + --marker + --yes-i-really-mean-it before" 2 "" -- bucket --bucket no-such-bucket --marker m --yes-i-really-mean-it resync encrypted multipart
+check_cluster "resync: --bucket + --marker before (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket --marker m resync encrypted multipart --yes-i-really-mean-it
+check_cluster "resync: --bucket + --marker + --yes-i-really-mean-it before (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket --marker m --yes-i-really-mean-it resync encrypted multipart
 
 # ============================================================
 echo ""
@@ -767,7 +768,7 @@ check_cluster "link: missing both" 22 'failure: (22) Invalid argument: requires 
 # out of position and missing a required flag: the op layer reports the error
 check_cluster "link: --bucket before bucket, missing --uid" 22 'failure: (22) Invalid argument: requires user or account id' -- --bucket mybucket bucket link
 check_cluster "link: --uid before bucket, missing --bucket" 22 'failure: (22) Invalid argument: failed to fetch bucket info for bucket=' -- --uid testuser bucket link
-check_cluster "link: --bucket + --uid before bucket (fails on nonexistent)" 2 "" -- --bucket mybucket --uid testuser bucket link
+check_cluster "link: --bucket + --uid before bucket (fails on nonexistent)" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=mybucket' -- --bucket mybucket --uid testuser bucket link
 
 # stray positional args
 check "link: stray after flags" 1 'Command not found: bucket link strayarg' bucket link --bucket mybucket --uid testuser strayarg
@@ -890,8 +891,8 @@ echo "=== bucket list: flags out of position, and repeated flags (cluster) ==="
 
 # flag before bucket
 # --bucket with nonexistent name: init_bucket fails (exit 2)
-check_cluster "list: --bucket/-b before bucket" 2 'ERROR: could not init bucket' -- --bucket nonexistent_test bucket list
-check_cluster "list: -b (short) before bucket" 2 'ERROR: could not init bucket' -- -b nonexistent_test bucket list
+check_cluster "list: --bucket/-b before bucket" 2 'ERROR: could not init bucket: (2) No such file or directory' -- --bucket nonexistent_test bucket list
+check_cluster "list: -b (short) before bucket" 2 'ERROR: could not init bucket: (2) No such file or directory' -- -b nonexistent_test bucket list
 # --tenant without --uid is rejected (exit 22)
 check_cluster "list: --tenant before bucket" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant mytenant bucket list
 # flags that don't affect success: command succeeds (exit 0)
@@ -900,14 +901,14 @@ check_cluster "list: --max-entries before bucket" 0 "" -- --max-entries 10 bucke
 check_cluster "list: --marker before bucket" 0 "" -- --marker somemarker bucket list
 
 # flag between bucket and list
-check_cluster "list: --bucket between bucket and list" 2 'ERROR: could not init bucket' -- bucket --bucket nonexistent_test list
+check_cluster "list: --bucket between bucket and list" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket nonexistent_test list
 check_cluster "list: --tenant between bucket and list" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant mytenant list
 check_cluster "list: --format between bucket and list" 0 "" -- bucket --format json list
 check_cluster "list: --max-entries between bucket and list" 0 "" -- bucket --max-entries 10 list
 check_cluster "list: --marker between bucket and list" 0 "" -- bucket --marker somemarker list
 
 # the same flag twice
-check_cluster "list: duplicate --bucket same level" 2 'ERROR: could not init bucket' -- bucket list --bucket nonexistent1_test --bucket nonexistent2_test
+check_cluster "list: duplicate --bucket same level" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket list --bucket nonexistent1_test --bucket nonexistent2_test
 check_cluster "list: duplicate --tenant same level" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket list --tenant foo --tenant bar
 check_cluster "list: duplicate --format same level" 0 "" -- bucket list --format json --format xml
 # --uid filters bucket list by owner
@@ -918,7 +919,7 @@ check_cluster "list: --object-version before bucket" 0 "" -- --object-version so
 check_cluster "list: --allow-unordered before bucket" 0 "" -- --allow-unordered bucket list
 
 # out of position and duplicated at once
-check_cluster "list: duplicate --bucket cross level" 2 'ERROR: could not init bucket' -- --bucket nonexistent1_test bucket list --bucket nonexistent2_test
+check_cluster "list: duplicate --bucket cross level" 2 'ERROR: could not init bucket: (2) No such file or directory' -- --bucket nonexistent1_test bucket list --bucket nonexistent2_test
 check_cluster "list: duplicate --tenant cross level" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant foo bucket list --tenant bar
 
 # ============================================================
@@ -926,10 +927,10 @@ echo ""
 echo "=== bucket stats: flags out of position, and repeated flags (cluster) ==="
 # ============================================================
 
-check_cluster "stats: --bucket before bucket" 2 "" -- --bucket nonexistent_test bucket stats
+check_cluster "stats: --bucket before bucket" 2 'failure: (2002) Unknown error 2002' -- --bucket nonexistent_test bucket stats
 check_cluster "stats: --tenant before bucket" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant mytenant bucket stats
-check_cluster "stats: --bucket between bucket and stats" 2 "" -- bucket --bucket nonexistent_test stats
-check_cluster "stats: duplicate --bucket" 2 "" -- bucket stats --bucket nonexistent1_test --bucket nonexistent2_test
+check_cluster "stats: --bucket between bucket and stats" 2 'failure: (2002) Unknown error 2002' -- bucket --bucket nonexistent_test stats
+check_cluster "stats: duplicate --bucket" 2 'failure: (2002) Unknown error 2002' -- bucket stats --bucket nonexistent1_test --bucket nonexistent2_test
 
 # stats-specific flags out of position
 check_cluster "stats: --show-restore-stats before bucket" 0 "" -- --show-restore-stats bucket stats
@@ -946,7 +947,7 @@ check_cluster "stats: duplicate --format" 0 "" -- bucket stats --format json --f
 
 # stats: several flags out of position at once
 check_cluster "stats: --show-restore-stats + --tenant before" 22 "ERROR: --tenant is set, but there's no user ID" -- --show-restore-stats --tenant foo bucket stats
-check_cluster "stats: --bucket + --show-restore-stats before" 2 "" -- --bucket nonexistent_test --show-restore-stats bucket stats
+check_cluster "stats: --bucket + --show-restore-stats before" 2 'failure: (2002) Unknown error 2002' -- --bucket nonexistent_test --show-restore-stats bucket stats
 
 # ============================================================
 echo ""
@@ -955,28 +956,28 @@ echo "=== bucket link: flags out of position, and repeated flags (cluster) ==="
 
 # The flags are correct but out of position. The commands still fail for their
 # own reason (no such bucket/user).
-check_cluster "link: --bucket before bucket (then fails)" 2 "" -- --bucket nonexistent_test bucket link --uid testuser_test
-check_cluster "link: --uid before bucket (then fails)" 2 "" -- --uid testuser_test bucket link --bucket nonexistent_test
-check_cluster "link: duplicate --bucket" 2 "" -- bucket link --bucket foo --bucket nonexistent_test --uid testuser_test
-check_cluster "link: duplicate --uid" 2 "" -- bucket link --uid foo --uid testuser_test --bucket nonexistent_test
+check_cluster "link: --bucket before bucket (then fails)" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- --bucket nonexistent_test bucket link --uid testuser_test
+check_cluster "link: --uid before bucket (then fails)" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- --uid testuser_test bucket link --bucket nonexistent_test
+check_cluster "link: duplicate --bucket" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- bucket link --bucket foo --bucket nonexistent_test --uid testuser_test
+check_cluster "link: duplicate --uid" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- bucket link --uid foo --uid testuser_test --bucket nonexistent_test
 
 # link-specific flags out of position
-check_cluster "link: --bucket-new-name before bucket" 2 "" -- --bucket-new-name newname bucket link --bucket nonexistent_test --uid testuser_test
-check_cluster "link: --bucket-id before bucket" 2 "" -- --bucket-id someid_test bucket link --bucket nonexistent_test --uid testuser_test
-check_cluster "link: --tenant before bucket" 2 "" -- --tenant foo bucket link --bucket nonexistent_test --uid testuser_test
-check_cluster "link: --bucket + --uid + --tenant before" 2 "" -- --bucket nonexistent_test --uid testuser_test --tenant foo bucket link
+check_cluster "link: --bucket-new-name before bucket" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- --bucket-new-name newname bucket link --bucket nonexistent_test --uid testuser_test
+check_cluster "link: --bucket-id before bucket" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- --bucket-id someid_test bucket link --bucket nonexistent_test --uid testuser_test
+check_cluster "link: --tenant before bucket" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- --tenant foo bucket link --bucket nonexistent_test --uid testuser_test
+check_cluster "link: --bucket + --uid + --tenant before" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- --bucket nonexistent_test --uid testuser_test --tenant foo bucket link
 
 # ============================================================
 echo ""
 echo "=== bucket unlink: flags out of position, and repeated flags (cluster) ==="
 # ============================================================
 
-check_cluster "unlink: --bucket before bucket (then fails)" 2 "" -- --bucket nonexistent_test bucket unlink --uid testuser_test
-check_cluster "unlink: --uid before bucket (then fails)" 2 "" -- --uid testuser_test bucket unlink --bucket nonexistent_test
-check_cluster "unlink: duplicate --bucket" 2 "" -- bucket unlink --bucket foo --bucket nonexistent_test --uid testuser_test
-check_cluster "unlink: --tenant before bucket" 2 "" -- --tenant foo bucket unlink --bucket nonexistent_test --uid testuser_test
-check_cluster "unlink: duplicate --uid" 2 "" -- bucket unlink --uid foo --uid testuser_test --bucket nonexistent_test
-check_cluster "unlink: --bucket + --uid before" 2 "" -- --bucket nonexistent_test --uid testuser_test bucket unlink
+check_cluster "unlink: --bucket before bucket (then fails)" 2 'failure: (2) No such file or directory' -- --bucket nonexistent_test bucket unlink --uid testuser_test
+check_cluster "unlink: --uid before bucket (then fails)" 2 'failure: (2) No such file or directory' -- --uid testuser_test bucket unlink --bucket nonexistent_test
+check_cluster "unlink: duplicate --bucket" 2 'failure: (2) No such file or directory' -- bucket unlink --bucket foo --bucket nonexistent_test --uid testuser_test
+check_cluster "unlink: --tenant before bucket" 2 'failure: (2) No such file or directory' -- --tenant foo bucket unlink --bucket nonexistent_test --uid testuser_test
+check_cluster "unlink: duplicate --uid" 2 'failure: (2) No such file or directory' -- bucket unlink --uid foo --uid testuser_test --bucket nonexistent_test
+check_cluster "unlink: --bucket + --uid before" 2 'failure: (2) No such file or directory' -- --bucket nonexistent_test --uid testuser_test bucket unlink
 
 # ============================================================
 echo ""
@@ -1127,11 +1128,11 @@ echo "=== short flags in correct position (cluster) ==="
 # ============================================================
 
 # -b accepted as --bucket, -i accepted as --uid in correct position
-check_cluster "list: -b correct position (nonexistent)" 2 'ERROR: could not init bucket' -- bucket list -b nonexistent_test
-check_cluster "link: -b and -i correct position (nonexistent)" 2 "" -- bucket link -b nonexistent_test -i nonexistent_user_test
-check_cluster "unlink: -b and -i correct position (nonexistent)" 2 "" -- bucket unlink -b nonexistent_test -i nonexistent_user_test
+check_cluster "list: -b correct position (nonexistent)" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket list -b nonexistent_test
+check_cluster "link: -b and -i correct position (nonexistent)" 2 'failure: (2) No such file or directory: failed to fetch bucket info for bucket=nonexistent_test' -- bucket link -b nonexistent_test -i nonexistent_user_test
+check_cluster "unlink: -b and -i correct position (nonexistent)" 2 'failure: (2) No such file or directory' -- bucket unlink -b nonexistent_test -i nonexistent_user_test
 check_cluster "rm: -b correct position (nonexistent)" 0 "" -- bucket rm -b nonexistent_test
-check_cluster "stats: -b correct position (nonexistent)" 2 "" -- bucket stats -b nonexistent_test
+check_cluster "stats: -b correct position (nonexistent)" 2 'failure: (2002) Unknown error 2002' -- bucket stats -b nonexistent_test
 check_cluster "check: -b correct position" 0 "" -- bucket check -b nonexistent_test
 
 # ============================================================
@@ -1358,10 +1359,10 @@ check "list: --fix takes a negative number" 22 'ERROR: invalid flag -5' bucket l
 # a flag that requires a value takes the next token whatever it is
 check_cluster "list: --format takes its value, command follows" 0 "" -- bucket --format json list
 check_cluster "stats: --format takes 'list', 'stats' is the command" 1 'unrecognized format: list' -- bucket --format list stats
-check_cluster "stats: --bucket takes the command word" 2 "" -- bucket --bucket list stats
-check_cluster "list: --bucket takes a lone dash" 2 'ERROR: could not init bucket' -- bucket --bucket - list
+check_cluster "stats: --bucket takes the command word" 2 'failure: (2002) Unknown error 2002' -- bucket --bucket list stats
+check_cluster "list: --bucket takes a lone dash" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket - list
 check "bucket: --bucket takes a lone dash, no command left" 1 'ERROR: Unknown command' bucket --bucket -
-check_cluster "list: --bucket takes --max-entries as its value" 2 'ERROR: could not init bucket' -- bucket list --bucket --max-entries
+check_cluster "list: --bucket takes --max-entries as its value" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket list --bucket --max-entries
 check "list: --max-entries takes --bucket as its value" 22 "ERROR: failed to parse max entries: Expected option value to be integer, got '--bucket'" bucket list --max-entries --bucket
 # a binary flag leaves the following flag alone, so it is the one left short
 check "list: --fix leaves --bucket without a value" 1 'Option --bucket requires an argument.' bucket list --fix --bucket
@@ -1422,17 +1423,17 @@ check_cluster "integration: bucket list (all)" 0 "" -- bucket list
 check_cluster "integration: buckets list (alias)" 0 "" -- buckets list
 
 # bucket list for a nonexistent bucket errors
-check_cluster "integration: bucket list nonexistent" 2 'ERROR: could not init bucket' -- bucket list --bucket nonexistent_test_xyz
+check_cluster "integration: bucket list nonexistent" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket list --bucket nonexistent_test_xyz
 
 # bucket stats with no args lists all bucket stats — always succeeds
 check_cluster "integration: bucket stats (all)" 0 "" -- bucket stats
 
 # bucket stats for a nonexistent bucket
-check_cluster "integration: bucket stats nonexistent" 2 "" -- bucket stats --bucket nonexistent_test_xyz
+check_cluster "integration: bucket stats nonexistent" 2 'failure: (2002) Unknown error 2002' -- bucket stats --bucket nonexistent_test_xyz
 
 # a glued-short-looking token in value position is a value, never rejected
 # (it is taken as a bucket named "-ibanana", which does not exist)
-check_cluster "integration: glued token in value position is a value" 2 "" -- bucket stats --bucket -ibanana
+check_cluster "integration: glued token in value position is a value" 2 'failure: (2002) Unknown error 2002' -- bucket stats --bucket -ibanana
 
 # bucket check with no args runs index check — always succeeds (even with 0 buckets)
 check_cluster "integration: bucket check (all)" 0 "" -- bucket check
@@ -1514,7 +1515,7 @@ if cluster_running; then
       check_cluster "integration: -i=uid captures value" 0 '[' -- bucket list -i="$_test_uid"
       # value position: a token after a value-taking flag is its value, even
       # if it looks like a flag (the handler then fails)
-      check_cluster "integration: flag value may look like a flag" 2 "" -- bucket stats --bucket --max-entries
+      check_cluster "integration: flag value may look like a flag" 2 'failure: (2002) Unknown error 2002' -- bucket stats --bucket --max-entries
       check_cluster "lifecycle: bucket list --allow-unordered" 0 "" -- bucket list --allow-unordered --bucket "$_test_bucket"
       check_cluster "lifecycle: bucket list --format json" 0 "" -- bucket list --format json --bucket "$_test_bucket"
       check_cluster "lifecycle: bucket stats --show-restore-stats" 0 "" -- bucket stats --show-restore-stats --bucket "$_test_bucket"
