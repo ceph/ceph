@@ -1707,7 +1707,7 @@ public:
   void pool_migration_source_start_delete_head(hobject_t oid);
   void pool_migration_source_start_delete(hobject_t oid);
   bool pool_migration_source_delete(hobject_t oid);
-  void pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark);
+  bool pool_migration_target_delete(const pg_t& source_pg, const hobject_t& watermark, OpRequestRef& op);
 
 private:
   int do_scrub_ls(const MOSDOp *op, OSDOp *osd_op);
