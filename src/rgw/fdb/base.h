@@ -210,12 +210,17 @@ concept has_merge =
  };
 
 template <typename FnT>
-concept value_callback =
+concept value_invocable =
  std::invocable<FnT&, std::span<const std::uint8_t>>;
+
+template <typename FnT>
+concept value_callback =
+ value_invocable<FnT> &&
+ std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>>;
 
 template <typename T>
 concept decoded_value_sink =
- not value_callback<std::remove_reference_t<T>> and
+ not value_invocable<std::remove_reference_t<T>> and
  std::is_lvalue_reference_v<T> and
  not std::is_const_v<std::remove_reference_t<T>> and
  std::is_object_v<std::remove_reference_t<T>>;

@@ -104,6 +104,13 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
  STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<char(&)[9]>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<const std::string&>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<std::string>);
+ STATIC_REQUIRE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {})>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {
+  return true;
+ })>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<decltype([](std::span<const std::uint8_t>) {
+  return true;
+ })&>);
 }
 
 TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")
@@ -551,6 +558,11 @@ bool trigger_watch_until(lfdb::database_handle dbh,
 
 TEST_CASE("transaction watches", "[rgw][fdb]") {
  janitor dbh;
+
+ static_assert(lfdb::watch_callback<decltype([](std::string_view) {})>);
+ static_assert(!lfdb::watch_callback<decltype([](std::string_view) {
+  return true;
+ })>);
 
  SECTION("watch fires after committed key change") {
   auto txn = lfdb::make_transaction(dbh);
@@ -1767,6 +1779,11 @@ SCENARIO("transactor", "[fdb]")
 {
  janitor j;
 
+ static_assert(lfdb::detail::result_reporting_transaction_op<decltype([](auto) {})>);
+ static_assert(!lfdb::detail::result_reporting_transaction_op<decltype([](auto) {
+  return 7;
+ })>);
+
  SECTION("transaction function returns nothing") {
   auto txr = lfdb::make_transactor(j);
   const auto key = test_key("key");
@@ -1899,7 +1916,7 @@ SCENARIO("transactor", "[fdb]")
 
   CHECK(result.committed);
   CHECK(result.attempts == 1);
-  CHECK(result.retries == 0);
+  CHECK(result.replay_count == 0);
   CHECK(0 == result.last_error);
  }
 
@@ -1943,7 +1960,7 @@ SCENARIO("transactor", "[fdb]")
 
   CHECK(result.committed);
   CHECK(result.attempts == 2);
-  CHECK(result.retries == 1);
+  CHECK(result.replay_count == 1);
   CHECK(0 != result.last_error);
  }
 
@@ -1970,8 +1987,16 @@ SCENARIO("transactor", "[fdb]")
 
   CHECK_FALSE(result.committed);
   CHECK(result.attempts == 10);
-  CHECK(result.retries == 9);
+  CHECK(result.replay_count == 9);
   CHECK(0 != result.last_error);
+ }
+
+ SECTION("result-reporting transactor rejects invalid database handles") {
+  lfdb::database_handle dbh;
+  auto txr = lfdb::make_transactor(dbh);
+
+  CHECK_THROWS_WITH(txr(lfdb::with_result, [](auto) {}),
+                    "make_transaction() requires database handle");
  }
 
  SECTION("transactor propagates transaction body exceptions") {
