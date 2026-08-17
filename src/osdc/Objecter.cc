@@ -4436,6 +4436,42 @@ void Objecter::delete_selfmanaged_snap(int64_t pool, snapid_t snap,
   pool_op_submit(op);
 }
 
+void Objecter::rollback_pool_snap(int64_t pool, std::string_view snap_name,
+                                  decltype(PoolOp::onfinish)&& onfinish)
+{
+  unique_lock wl(rwlock);
+  ldout(cct, 10) << "rollback_pool_snap; pool: " << pool << "; snap: "
+                 << snap_name << dendl;
+
+  auto op = new PoolOp;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->name = snap_name;
+  op->onfinish = std::move(onfinish);
+  op->pool_op = POOL_OP_ROLLBACK_SNAP;
+  pool_ops[op->tid] = op;
+
+  pool_op_submit(op);
+}
+
+void Objecter::rollback_selfmanaged_snap(int64_t pool, snapid_t snap,
+                                         decltype(PoolOp::onfinish)&& onfinish)
+{
+  unique_lock wl(rwlock);
+  ldout(cct, 10) << "rollback_selfmanaged_snap; pool: " << pool << "; snap: "
+                 << snap << dendl;
+
+  auto op = new PoolOp;
+  op->tid = ++last_tid;
+  op->pool = pool;
+  op->onfinish = std::move(onfinish);
+  op->pool_op = POOL_OP_ROLLBACK_UNMANAGED_SNAP;
+  op->snapid = snap;
+  pool_ops[op->tid] = op;
+
+  pool_op_submit(op);
+}
+
 void Objecter::create_pool(std::string_view name,
 			   decltype(PoolOp::onfinish)&& onfinish,
 			   int crush_rule)
