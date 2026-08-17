@@ -15191,6 +15191,36 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
     }
     return false;
   }
+  case POOL_OP_ROLLBACK_UNMANAGED_SNAP: {
+    if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+      _pool_op_reply(op, -EPERM, osdmap.get_epoch());
+      return true;
+    }
+    if (p->is_pool_snaps_mode()) {
+      _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
+    // snap_seq bound check: snap ID must not exceed current seq
+    if (m->snapid > p->get_snap_seq()) {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+      return true;
+    }
+    // snap must not already be in removed_snaps
+    if (_is_removed_snap(m->pool, m->snapid)) {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+      return true;
+    }
+    // Idempotency: already have a pending rollback for this snap ID?
+    for (auto& [rb_id, rb] : p->rollback_snaps) {
+      if (rb.source_snap == m->snapid) {
+        bufferlist reply_data;
+        encode(rb_id, reply_data);
+        _pool_op_reply(op, 0, osdmap.get_epoch(), &reply_data);
+        return true;
+      }
+    }
+    return false;
+  }
   case POOL_OP_DELETE:
     if (osdmap.lookup_pg_pool_name(m->name.c_str()) >= 0) {
       _pool_op_reply(op, 0, osdmap.get_epoch());
