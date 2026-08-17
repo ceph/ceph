@@ -8841,6 +8841,47 @@ PrimaryLogPG::build_pending_ops(
   return ops;
 }
 
+hobject_t PrimaryLogPG::execute_clone_plan(
+  const hobject_t& soid,
+  const std::vector<pending_op_t>& ops,
+  PGTransaction* t)
+{
+  // head_source tracks which object currently holds the logical head content.
+  // Initially it is the actual head object.
+  hobject_t head_source = soid;
+
+  for (int i = 0; i < (int)ops.size(); ++i) {
+    const auto& op = ops[i];
+
+    if (op.type == pending_op_t::SNAP) {
+      // Clone head_source -> soid@op.id to preserve the logical head content
+      hobject_t dst = soid;
+      dst.snap = op.id;
+      t->clone(dst, head_source);
+      // head_source unchanged: we cloned FROM it, not to it
+
+    } else {
+      // ROLLBACK: clone source snapshot content to head
+      hobject_t src_clone = soid;
+      src_clone.snap = op.source;
+
+      t->clone(soid, src_clone);      // head now holds source content
+      head_source = src_clone;        // future SNAPs clone from here
+
+      // Optimisation: consume any immediately following SNAPs, cloning
+      // directly from the source rather than via the head
+      for (int j = i + 1; j < (int)ops.size() && ops[j].type == pending_op_t::SNAP; ++j) {
+        hobject_t dst = soid;
+        dst.snap = ops[j].id;
+        t->clone(dst, src_clone);
+        ++i;  // consumed
+      }
+    }
+  }
+
+  return head_source;
+}
+
 void PrimaryLogPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
