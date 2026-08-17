@@ -687,6 +687,34 @@ TEST_CASE("transaction commit byte estimate", "[fdb]") {
  CHECK(empty_estimate < populated_estimate);
 }
 
+TEST_CASE("approximate range size composes with selections", "[fdb][query]")
+{
+ namespace fdbc = ceph::libfdb::layer::content;
+ namespace lq = ceph::libfdb::query;
+
+ janitor dbh;
+ const auto prefix = make_key_prefix("range-size");
+ const auto object_root = fdbc::keyspace(test_key("range-size-content")) / "objects";
+
+ for (const auto i : std::views::iota(0, 8)) {
+  lfdb::set(dbh, make_key(i, "range-size"), std::string(1024, 'x'));
+ }
+
+ lfdb::set(dbh, object_root / "a", "alpha");
+ lfdb::set(dbh, object_root / "b", "bravo");
+
+ auto txn = lfdb::make_transaction(dbh);
+ const auto range_estimate = lfdb::approximate_range_size(txn, lq::prefix(prefix));
+ const auto union_estimate =
+  lfdb::approximate_range_size(dbh,
+                               lq::set_union(lq::prefix(prefix),
+                                             fdbc::prefix(object_root)));
+
+ CHECK(0 <= range_estimate);
+ CHECK(0 <= union_estimate);
+ CHECK(0 == lfdb::approximate_range_size(dbh, lfdb::select { prefix, prefix }));
+}
+
 static_assert(not std::default_initializable<lfdb::watch_handle>);
 static_assert(not std::copy_constructible<lfdb::watch_handle>);
 static_assert(std::move_constructible<lfdb::watch_handle>);

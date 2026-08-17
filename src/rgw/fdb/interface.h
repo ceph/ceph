@@ -1232,6 +1232,31 @@ inline auto flatten_blocks(BlockRangeT block_range)
 
 } // namespace detail
 
+template <query::expression SelectionT>
+[[nodiscard]] inline std::int64_t approximate_range_size(transaction_handle txn,
+                                                         SelectionT selection)
+{
+ std::int64_t out = 0;
+
+ for (auto& interval : detail::intervals(std::move(selection))) {
+  out += detail::extract_int64(
+          detail::block_until_ready(
+           detail::transaction_get_estimated_range_size(txn, interval)));
+ }
+
+ return out;
+}
+
+template <query::expression SelectionT>
+[[nodiscard]] inline std::int64_t approximate_range_size(database_handle dbh,
+                                                         SelectionT selection)
+{
+ return detail::in_transaction(dbh,
+          [selection = std::move(selection)](transaction_handle& txn) mutable {
+            return approximate_range_size(txn, std::move(selection));
+          });
+}
+
 // For ordinary range scans inside one explicit transaction, scan() is usually
 // the right default:
 template <typename ValueT = std::string,

@@ -919,6 +919,40 @@ for (const auto& chunk : keys | std::views::chunk(100)) {
 }
 ```
 
+### Estimating Range Size
+
+`approximate_range_size()` asks FoundationDB for an approximate byte size of a
+selection. FoundationDB calculates this from server-side sampling, so it is most
+useful for planning large ranges rather than measuring small ranges exactly. The
+C API documentation notes that estimates over roughly 3 MB can be considered
+accurate enough for many planning purposes:
+<https://apple.github.io/foundationdb/api-c.html#c.fdb_transaction_get_estimated_range_size_bytes>.
+
+```cpp
+const auto object_records =
+  fdbc::keyspace("object-cache") / "object" / bucket_id;
+
+const auto bytes = lfdb::approximate_range_size(dbh, fdbc::prefix(object_records));
+
+if (block_planning_threshold < bytes) {
+  for (const auto& block : lfdb::blocks<object_metadata>(
+         dbh, fdbc::prefix(object_records))) {
+    process_block(block);
+  }
+}
+```
+
+The helper accepts the same selection forms as `scan()` and `blocks()`, so query
+algebra composes normally:
+
+```cpp
+auto visible =
+  q::difference(q::prefix("object/"),
+                q::prefix("object/private/"));
+
+auto bytes = lfdb::approximate_range_size(dbh, visible);
+```
+
 ### Explicit Key Ranges
 
 Use `q::between()` when the selection is not a prefix. The default is the same
