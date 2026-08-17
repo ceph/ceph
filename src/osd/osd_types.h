@@ -6015,6 +6015,10 @@ public:
   epoch_t purged_snaps_last = 0;
   utime_t last_purged_snaps_scrub;
 
+  epoch_t completed_rollbacks_last = 0;  // newest epoch whose new_completed_rollbacks
+                                          // have been recorded in the local SnapMapper
+                                          // (mirrors purged_snaps_last)
+
   epoch_t cluster_osdmap_trim_lower_bound = 0;
 
   void encode(ceph::buffer::list &bl) const;

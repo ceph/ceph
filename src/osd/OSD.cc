@@ -3305,6 +3305,19 @@ will start to track new ops received afterwards.";
     }
   }
 
+  else if (prefix == "reset_completed_rollbacks_last") {
+    lock_guard l(osd_lock);
+    superblock.completed_rollbacks_last = 0;
+    ObjectStore::Transaction t;
+    dout(10) << __func__ << " updating superblock" << dendl;
+    write_superblock(cct, superblock, t);
+    ret = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+    if (ret < 0) {
+      ss << "Error writing superblock: " << cpp_strerror(ret);
+      goto out;
+    }
+  }
+
   else if (prefix == "dump_osd_network") {
     lock_guard l(osd_lock);
     int64_t value = 0;
@@ -4448,6 +4461,11 @@ void OSD::final_init()
     "reset_purged_snaps_last",
     asok_hook,
     "Reset the superblock's purged_snaps_last");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "reset_completed_rollbacks_last",
+    asok_hook,
+    "Reset the superblock's completed_rollbacks_last");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "scrubdebug "						\

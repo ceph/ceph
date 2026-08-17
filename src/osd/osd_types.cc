@@ -6066,7 +6066,7 @@ void OSDSuperblock::GuardedMap::decode(ceph::buffer::list::const_iterator &bl)
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(11, 5, bl);
+  ENCODE_START(12, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
@@ -6083,12 +6083,13 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode(last_purged_snaps_scrub, bl);
   encode(cluster_osdmap_trim_lower_bound, bl);
   mapc.encode(bl);
+  encode(completed_rollbacks_last, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -6133,6 +6134,11 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     insert_osdmap_epochs(oldest_map, newest_map);
   }
+  if (struct_v >= 12) {
+    decode(completed_rollbacks_last, bl);
+  } else {
+    completed_rollbacks_last = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6150,6 +6156,7 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_int("last_epoch_mounted", mounted);
   f->dump_unsigned("purged_snaps_last", purged_snaps_last);
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
+  f->dump_unsigned("completed_rollbacks_last", completed_rollbacks_last);
   f->dump_int("cluster_osdmap_trim_lower_bound",
               cluster_osdmap_trim_lower_bound);
   f->dump_stream("maps") << get_maps();
