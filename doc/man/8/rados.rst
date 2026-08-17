@@ -210,7 +210,7 @@ Generic options
 
 .. option:: -n TYPE.ID, --name TYPE.ID
 
-   Set cephx user name.
+   Set CephX user name.
 
 .. option:: --cluster NAME
 

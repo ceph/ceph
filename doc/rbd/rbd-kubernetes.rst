@@ -14,7 +14,7 @@ platforms has moved to its own chapter:
 - :ref:`csi-deployment` covers deployment, including the recommended
   Ceph-CSI-Operator.
 - :ref:`csi-rbd` covers the Ceph-side preparation for RBD volumes:
-  pools, cephx users, and StorageClass essentials.
+  pools, CephX users, and StorageClass essentials.
 
 CephFS, NFS, and NVMe-oF backends are covered in the same chapter.
 

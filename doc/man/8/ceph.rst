@@ -764,10 +764,10 @@ Usage::
 
 Subcommand ``new`` can be used to create a new OSD or to recreate a previously
 destroyed OSD with a specific *id*. The new OSD will have the specified *uuid*,
-and the command expects a JSON file containing the base64 cephx key for auth
-entity *client.osd.<id>*, as well as optional base64 cephx key for dm-crypt
-lockbox access and a dm-crypt key. Specifying a dm-crypt requires specifying
-the accompanying lockbox cephx key.
+and the command expects a JSON file containing the base64 CephX key for auth
+entity *client.osd.<id>*, as well as optional base64 CephX key for dm-crypt
+lockbox access and a dm-crypt key. Specifying a dm-crypt key requires specifying
+the accompanying lockbox CephX key.
 
 Usage::
 
@@ -1361,7 +1361,7 @@ Usage::
 
     ceph osd rm <ids> [<ids>...]
 
-Subcommand ``destroy`` marks OSD *id* as *destroyed*, removing its cephx
+Subcommand ``destroy`` marks OSD *id* as *destroyed*, removing its CephX
 entity's keys and all of its dm-crypt and daemon-private config key
 entries.
 

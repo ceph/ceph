@@ -31,7 +31,7 @@ Requirements
 
 * Nautilus (14.2.x) or later Ceph release
 
-* Cephx client user (see :doc:`/rados/operations/user-management`) with
+* CephX client user (see :doc:`/rados/operations/user-management`) with
   at least the following capabilities::
 
     mon 'allow r'

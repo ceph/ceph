@@ -222,23 +222,23 @@ The Ceph Storage Cluster handle encapsulates the client configuration, including
 - The `user ID`_ for ``rados_create()`` or user name for ``rados_create2()`` 
   (preferred).
 - The :term:`cephx` authentication key
-- The monitor ID and IP address
+- The Monitor ID and IP address
 - Logging levels
 - Debugging levels
 
 Thus, the first steps in using the cluster from your app are to 1) create
 a cluster handle that your app will use to connect to the storage cluster,
 and then 2) use that handle to connect. To connect to the cluster, the
-app must supply a monitor address, a username and an authentication key
-(cephx is enabled by default).
+app must supply a Monitor address, a username and an authentication key
+(CephX is enabled by default).
 
 .. tip:: Talking to different Ceph Storage Clusters – or to the same cluster 
    with different users – requires different cluster handles.
 
 RADOS provides a number of ways for you to set the required values. For
-the monitor and encryption key settings, an easy way to handle them is to ensure
+the Monitor and encryption key settings, an easy way to handle them is to ensure
 that your Ceph configuration file contains a ``keyring`` path to a keyring file
-and at least one monitor address (e.g., ``mon_host``). For example::
+and at least one Monitor address (e.g., ``mon_host``). For example::
 
 	[global]
 	mon_host = 192.168.1.1

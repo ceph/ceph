@@ -130,7 +130,7 @@ use both the Python bindings and the client command line tools::
 Setup Ceph Client Authentication
 --------------------------------
 
-If you have `cephx authentication`_ enabled, create a new user for Nova/Cinder
+If you have `CephX authentication`_ enabled, create a new user for Nova/Cinder
 and Glance. Execute the following::
 
     ceph auth get-or-create client.glance mon 'profile rbd' osd 'profile rbd pool=images' mgr 'profile rbd pool=images'
@@ -179,13 +179,13 @@ temporary copy of the key::
   Secret 457eb676-33da-42ec-9a8c-9293d545c337 created
   sudo virsh secret-set-value --secret 457eb676-33da-42ec-9a8c-9293d545c337 --base64 $(cat client.cinder.key) && rm client.cinder.key secret.xml
 
-Save the uuid of the secret for configuring ``nova-compute`` later.
+Save the UUID of the secret for configuring ``nova-compute`` later.
 
 .. important:: You don't necessarily need the UUID on all the compute nodes.
    However from a platform consistency perspective, it's better to keep the
    same UUID.
 
-.. _cephx authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
+.. _CephX authentication: ../../rados/configuration/auth-config-ref/#enabling-disabling-cephx
 
 
 Configure OpenStack to use Ceph
@@ -268,7 +268,7 @@ specify the pool name for the block device. On your OpenStack node, edit
     rbd_store_chunk_size = 4
     rados_connect_timeout = -1
 
-If you are using `cephx authentication`_, also configure the user and uuid of
+If you are using `CephX authentication`_, also configure the user and UUID of
 the secret you added to ``libvirt`` as documented earlier::
 
     [ceph]
