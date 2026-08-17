@@ -488,6 +488,67 @@ void librados::IoCtxImpl::aio_selfmanaged_snap_remove(uint64_t snapid,
   objecter->delete_selfmanaged_snap(poolid, snapid, onfinish);
 }
 
+int librados::IoCtxImpl::snap_rollback(const char *snapName,
+                                       uint64_t *rollback_id)
+{
+  ceph::mutex mylock = ceph::make_mutex("IoCtxImpl::snap_rollback::mylock");
+  ceph::condition_variable cond;
+  bool done = false;
+  int reply = 0;
+  ceph::buffer::list reply_bl;
+
+  objecter->rollback_pool_snap(
+    poolid, snapName,
+    [&mylock, &cond, &done, &reply, &reply_bl]
+    (boost::system::error_code ec, ceph::buffer::list bl) {
+      std::lock_guard l{mylock};
+      reply = ceph::from_error_code(ec);
+      reply_bl = std::move(bl);
+      done = true;
+      cond.notify_all();
+    });
+
+  std::unique_lock l{mylock};
+  cond.wait(l, [&done] { return done; });
+
+  if (reply == 0 && rollback_id) {
+    auto iter = reply_bl.cbegin();
+    decode(*rollback_id, iter);
+  }
+  return reply;
+}
+
+int librados::IoCtxImpl::selfmanaged_snap_rollback(uint64_t snap_id,
+                                                   uint64_t *rollback_id)
+{
+  ceph::mutex mylock =
+    ceph::make_mutex("IoCtxImpl::selfmanaged_snap_rollback::mylock");
+  ceph::condition_variable cond;
+  bool done = false;
+  int reply = 0;
+  ceph::buffer::list reply_bl;
+
+  objecter->rollback_selfmanaged_snap(
+    poolid, snapid_t(snap_id),
+    [&mylock, &cond, &done, &reply, &reply_bl]
+    (boost::system::error_code ec, ceph::buffer::list bl) {
+      std::lock_guard l{mylock};
+      reply = ceph::from_error_code(ec);
+      reply_bl = std::move(bl);
+      done = true;
+      cond.notify_all();
+    });
+
+  std::unique_lock l{mylock};
+  cond.wait(l, [&done] { return done; });
+
+  if (reply == 0 && rollback_id) {
+    auto iter = reply_bl.cbegin();
+    decode(*rollback_id, iter);
+  }
+  return reply;
+}
+
 int librados::IoCtxImpl::snap_list(vector<uint64_t> *snaps)
 {
   return objecter->pool_snap_list(poolid, snaps);
