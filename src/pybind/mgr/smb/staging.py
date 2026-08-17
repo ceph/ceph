@@ -156,9 +156,7 @@ class Staging:
         else:
             state = entry.create_or_update(resource)
         log.debug('saved resource: %r; state: %s', resource, state)
-        result = ResourceResult(
-            resource, success=True, status={'state': state}
-        )
+        result = ResourceResult.processed(resource, state)
         return result
 
     def _prune(

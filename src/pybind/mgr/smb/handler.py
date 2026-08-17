@@ -506,9 +506,7 @@ class ClusterConfigHandler:
             log.debug('rejected resource: %r', resource)
             return err
         log.debug('checked resource: %r', resource)
-        result = ResourceResult(
-            resource, success=True, status={'checked': True}
-        )
+        result = ResourceResult.checked(resource)
         return result
 
     def _choose_path_resolver(
