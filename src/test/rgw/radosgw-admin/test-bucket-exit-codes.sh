@@ -184,9 +184,9 @@ check_cluster "list: -b=--hello_world (short flag, glued value taken)" 2 'ERROR:
 # Without --bucket the id is ignored, so the listing runs and its content says
 # nothing about the id; only the exit code carries the result.
 check_cluster "list: --bucket-id=--hello_world (dash, flag-shaped value taken)" 0 "" -- bucket list --bucket-id=--hello_world
-check_cluster "list: --bucket_id=--hello_world (underscore, flag-shaped value taken)" 0 '[]' -- bucket list --bucket_id=--hello_world
+check_cluster "list: --bucket_id=--hello_world (underscore, flag-shaped value taken)" 0 "" -- bucket list --bucket_id=--hello_world
 check_cluster "list: --bucket-id --hello_world (dash, space form, value taken)" 0 "" -- bucket list --bucket-id --hello_world
-check_cluster "list: --bucket_id --hello_world (underscore, space form, value taken)" 0 '[]' -- bucket list --bucket_id --hello_world
+check_cluster "list: --bucket_id --hello_world (underscore, space form, value taken)" 0 "" -- bucket list --bucket_id --hello_world
 
 # an unknown flag is quoted in the error exactly as the user typed it;
 # the flag loop rejects it by name before its value is looked at
@@ -211,7 +211,7 @@ check "list: --max_entries given twice, last value invalid" 22 \
 
 # The two tests above hit the parse-error (failure) path. This one hits the
 # success path: the underscore spelling parses and the command runs
-check_cluster "list: underscore spelling on success path" 0 '[]' -- bucket list --max_entries 100
+check_cluster "list: underscore spelling on success path" 0 "" -- bucket list --max_entries 100
 
 # ============================================================
 echo ""
@@ -554,7 +554,7 @@ check_cluster "object shard: unrelated value flag --max-entries=5 (=form)" 0 '"s
 check_cluster "object shard: --object before subcommand" 0 "" -- bucket --object foo object shard --num-shards 11
 check_cluster "object shard: -o before subcommand (short)" 0 "" -- bucket -o foo object shard --num-shards 11
 check_cluster "object shard: --num-shards before subcommand" 0 "" -- bucket --num-shards 11 object shard --object foo
-check_cluster "object shard: --format before subcommand" 0 "" -- bucket --format xml object shard --object foo --num-shards 11
+check_cluster "object shard: --format before subcommand" 0 '<obj_shard><shard>10</shard></obj_shard>' -- bucket --format xml object shard --object foo --num-shards 11
 
 # the same flag given twice
 check_cluster "object shard: duplicate --object" 0 "" -- bucket object shard --object a --object foo --num-shards 11
@@ -563,7 +563,7 @@ check_cluster "object shard: duplicate --num-shards" 0 "" -- bucket object shard
 # two or three flags at once: before the subcommand, or before and duplicated
 check_cluster "object shard: --object + --num-shards before" 0 "" -- bucket --object foo --num-shards 11 object shard
 check_cluster "object shard: pos + duplicate --object" 0 "" -- bucket --object a object shard --object foo --num-shards 11
-check_cluster "object shard: --object + --num-shards + --format before" 0 "" -- bucket --object foo --num-shards 11 --format xml object shard
+check_cluster "object shard: --object + --num-shards + --format before" 0 '<obj_shard><shard>10</shard></obj_shard>' -- bucket --object foo --num-shards 11 --format xml object shard
 
 # ============================================================
 echo ""
@@ -692,7 +692,7 @@ check "radoslist: stray before bucket" 1 "ERROR: Unrecognized argument: 'foo'" f
 
 check "radoslist: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket radoslist --fakeflag
 # --max-entries is a real flag that this command does not use; it is parsed and ignored
-check_cluster "radoslist: unrelated --max-entries 5 swallowed (space form)" 0 "" -- bucket radoslist --bucket chk --max-entries 5
+check_cluster "radoslist: unrelated --max-entries 5 swallowed (space form)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --max-entries 5
 
 # missing option value (parse-level, exit 1)
 check "radoslist: --bucket missing value" 1 'Option --bucket requires an argument.' bucket radoslist --bucket
@@ -705,40 +705,40 @@ check "radoslist: --rgw-obj-fs missing value" 1 'Option --rgw-obj-fs requires an
 check "radoslist: --max-concurrent-ios non-integer" 22 "ERROR: failed to parse max concurrent ios: Expected option value to be integer, got 'abc'" bucket radoslist --max-concurrent-ios abc
 check "radoslist: --orphan-stale-secs non-integer" 22 "ERROR: failed to parse orphan stale secs: Expected option value to be integer, got 'abc'" bucket radoslist --orphan-stale-secs abc
 # a negative value parses fine and wraps when cast to uint64, so it is accepted
-check_cluster "radoslist: --orphan-stale-secs -5 accepted (negative value wraps)" 0 "" -- bucket radoslist --bucket chk --orphan-stale-secs -5
+check_cluster "radoslist: --orphan-stale-secs -5 accepted (negative value wraps)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --orphan-stale-secs -5
 # --orphan-stale-secs is always read as base 10, like --max-concurrent-ios above.
 # "0x10" is rejected. "08" is accepted as 8, not read as octal.
 check "radoslist: --orphan-stale-secs hex rejected" 22 "ERROR: failed to parse orphan stale secs: Expected option value to be integer, got '0x10'" bucket radoslist --orphan-stale-secs 0x10
-check_cluster "radoslist: --orphan-stale-secs 08 accepted as 8" 0 "" -- bucket radoslist --bucket chk --orphan-stale-secs 08
+check_cluster "radoslist: --orphan-stale-secs 08 accepted as 8" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --orphan-stale-secs 08
 check "radoslist: --orphan-stale-secs out of range" 22 "ERROR: failed to parse orphan stale secs: The option value '99999999999999999999' seems to be invalid" bucket radoslist --orphan-stale-secs 99999999999999999999
 
 # cluster: readonly command, lists rados objects backing the bucket (exit 0).
-check_cluster "radoslist: --bucket (lists, exit 0)" 0 "" -- bucket radoslist --bucket chk
+check_cluster "radoslist: --bucket (lists, exit 0)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk
 # unrelated flags alongside valid args: binary flag (--fix) takes 0 values ->
 # accepted; value option in =form binds -> accepted; both still exit 0.
-check_cluster "radoslist: unrelated binary flag --fix accepted" 0 "" -- bucket radoslist --bucket chk --fix
-check_cluster "radoslist: unrelated value flag --max-entries=5 (=form)" 0 "" -- bucket radoslist --bucket chk --max-entries=5
+check_cluster "radoslist: unrelated binary flag --fix accepted" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --fix
+check_cluster "radoslist: unrelated value flag --max-entries=5 (=form)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --max-entries=5
 
 # flags before the leaf subcommand. The value still reaches the command, so
 # radoslist still runs (exit 0). --tenant trips the global "no user ID" check
 # (exit 22).
-check_cluster "radoslist: --bucket before subcommand" 0 "" -- bucket --bucket chk radoslist
-check_cluster "radoslist: -b before subcommand (short)" 0 "" -- bucket -b chk radoslist
-check_cluster "radoslist: --max-concurrent-ios before subcommand" 0 "" -- bucket --max-concurrent-ios 16 radoslist --bucket chk
-check_cluster "radoslist: --orphan-stale-secs before subcommand" 0 "" -- bucket --orphan-stale-secs 100 radoslist --bucket chk
-check_cluster "radoslist: --rgw-obj-fs before subcommand" 0 "" -- bucket --rgw-obj-fs ":" radoslist --bucket chk
-check_cluster "radoslist: --yes-i-really-mean-it before subcommand" 0 "" -- bucket --yes-i-really-mean-it radoslist --bucket chk
+check_cluster "radoslist: --bucket before subcommand" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --bucket chk radoslist
+check_cluster "radoslist: -b before subcommand (short)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket -b chk radoslist
+check_cluster "radoslist: --max-concurrent-ios before subcommand" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --max-concurrent-ios 16 radoslist --bucket chk
+check_cluster "radoslist: --orphan-stale-secs before subcommand" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --orphan-stale-secs 100 radoslist --bucket chk
+check_cluster "radoslist: --rgw-obj-fs before subcommand" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --rgw-obj-fs ":" radoslist --bucket chk
+check_cluster "radoslist: --yes-i-really-mean-it before subcommand" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --yes-i-really-mean-it radoslist --bucket chk
 check_cluster "radoslist: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t radoslist --bucket chk
 
 # the same flag given twice
-check_cluster "radoslist: duplicate --bucket" 0 "" -- bucket radoslist --bucket a --bucket chk
-check_cluster "radoslist: duplicate --max-concurrent-ios" 0 "" -- bucket radoslist --bucket chk --max-concurrent-ios 8 --max-concurrent-ios 16
-check_cluster "radoslist: duplicate --orphan-stale-secs" 0 "" -- bucket radoslist --bucket chk --orphan-stale-secs 1 --orphan-stale-secs 2
-check_cluster "radoslist: duplicate --rgw-obj-fs" 0 "" -- bucket radoslist --bucket chk --rgw-obj-fs a --rgw-obj-fs b
+check_cluster "radoslist: duplicate --bucket" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket a --bucket chk
+check_cluster "radoslist: duplicate --max-concurrent-ios" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --max-concurrent-ios 8 --max-concurrent-ios 16
+check_cluster "radoslist: duplicate --orphan-stale-secs" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --orphan-stale-secs 1 --orphan-stale-secs 2
+check_cluster "radoslist: duplicate --rgw-obj-fs" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --rgw-obj-fs a --rgw-obj-fs b
 
 # two or three flags at once: before the subcommand, or before and duplicated
-check_cluster "radoslist: --bucket + --max-concurrent-ios before" 0 "" -- bucket --bucket chk --max-concurrent-ios 16 radoslist
-check_cluster "radoslist: --bucket + --max-concurrent-ios + --orphan-stale-secs before" 0 "" -- bucket --bucket chk --max-concurrent-ios 16 --orphan-stale-secs 100 radoslist
+check_cluster "radoslist: --bucket + --max-concurrent-ios before" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --bucket chk --max-concurrent-ios 16 radoslist
+check_cluster "radoslist: --bucket + --max-concurrent-ios + --orphan-stale-secs before" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --bucket chk --max-concurrent-ios 16 --orphan-stale-secs 100 radoslist
 
 # ---- 'bucket rados list' alias: same command via the rados node ----
 # stray + nesting under the 'rados' node
@@ -750,9 +750,9 @@ check "rados: unknown subcommand (banana)" 1 "ERROR: Unrecognized argument: 'ban
 check "rados: no subcommand" 1 'ERROR: Unknown command' bucket rados
 # a bad integer, a flag before the subcommand, a duplicate, and the working case
 check "rados list: --max-concurrent-ios non-integer" 22 "ERROR: failed to parse max concurrent ios: Expected option value to be integer, got 'abc'" bucket rados list --max-concurrent-ios abc
-check_cluster "rados list: --bucket before subcommand" 0 "" -- bucket --bucket chk rados list
-check_cluster "rados list: duplicate --rgw-obj-fs" 0 "" -- bucket rados list --bucket chk --rgw-obj-fs a --rgw-obj-fs b
-check_cluster "rados list: --bucket (lists, exit 0)" 0 "" -- bucket rados list --bucket chk
+check_cluster "rados list: --bucket before subcommand" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket --bucket chk rados list
+check_cluster "rados list: duplicate --rgw-obj-fs" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket rados list --bucket chk --rgw-obj-fs a --rgw-obj-fs b
+check_cluster "rados list: --bucket (lists, exit 0)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket rados list --bucket chk
 
 # ============================================================
 echo ""
@@ -1046,8 +1046,8 @@ check_cluster "gc list --fix=banana (parse-safe)" 0 "" -- gc list --fix=banana
 
 # one "=banana" per binary flag: a non-bool value is accepted and the flag is
 # treated as set. bare, =true and =banana all give the same result.
-check_cluster "list: --allow-unordered=banana" 0 '[]' -- bucket list --allow-unordered=banana
-check_cluster "stats: --show-restore-stats=banana" 0 '[]' -- bucket stats --show-restore-stats=banana
+check_cluster "list: --allow-unordered=banana" 0 "" -- bucket list --allow-unordered=banana
+check_cluster "stats: --show-restore-stats=banana" 0 "" -- bucket stats --show-restore-stats=banana
 check_cluster "check: --remove-bad=banana" 0 "" -- bucket check --remove-bad=banana
 check_cluster "check: --check-objects=banana" 0 "" -- bucket check --check-objects=banana
 # set -> locator path needs a bucket name -> exit 22 (same as bare/=true)
@@ -1464,6 +1464,8 @@ if cluster_running; then
   # Create a test user
   "$RGW_ADMIN" user create --uid "$_test_uid" --display-name "$_test_display" \
     >/dev/null 2>&1
+
+  check_cluster "integration: bucket list --uid (owner with no buckets)" 0 '[]' -- bucket list --uid "$_test_uid"
 
   # Create a bucket via the S3 API using radosgw-admin bucket link on a
   # freshly created bucket. Since bucket creation requires S3 API access,
