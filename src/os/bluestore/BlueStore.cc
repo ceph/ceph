@@ -12467,6 +12467,9 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   int rc = bdev->get_ebd_state(ebd_state);
   if (rc == 0) {
     buf->total += ebd_state.get_physical_total();
+    // data device only: excludes any dedicated db/wal device folded into
+    // total above, so it can be used to derive the OSD's CRUSH weight.
+    buf->data_total = ebd_state.get_physical_total();
 
     // we are limited by both the size of the virtual device and the
     // underlying physical device.
@@ -12475,6 +12478,8 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
     buf->allocated = ebd_state.get_physical_total() - ebd_state.get_physical_avail();;
   } else {
     buf->total += bdev->get_size();
+    // data device only (see above).
+    buf->data_total = bdev->get_size();
   }
   buf->available = bfree;
 

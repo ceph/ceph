@@ -3409,6 +3409,7 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
 bool store_statfs_t::operator==(const store_statfs_t& other) const
 {
   return total == other.total
+    && data_total == other.data_total
     && available == other.available
     && allocated == other.allocated
     && internally_reserved == other.internally_reserved
@@ -3423,6 +3424,7 @@ bool store_statfs_t::operator==(const store_statfs_t& other) const
 void store_statfs_t::dump(Formatter *f) const
 {
   f->dump_int("total", total);
+  f->dump_int("data_total", data_total);
   f->dump_int("available", available);
   f->dump_int("internally_reserved", internally_reserved);
   f->dump_int("allocated", allocated);
@@ -3440,6 +3442,7 @@ ostream& operator<<(ostream& out, const store_statfs_t &s)
       << "store_statfs(0x" << s.available
       << "/0x"  << s.internally_reserved
       << "/0x"  << s.total
+      << ", data_total 0x" << s.data_total
       << ", data 0x" << s.data_stored
       << "/0x"  << s.allocated
       << ", compress 0x" << s.data_compressed
@@ -3458,6 +3461,7 @@ list<store_statfs_t> store_statfs_t::generate_test_instances()
   store_statfs_t a;
   o.push_back(store_statfs_t(a));
   a.total = 234;
+  a.data_total = 200;
   a.available = 123;
   a.internally_reserved = 33;
   a.allocated = 32;

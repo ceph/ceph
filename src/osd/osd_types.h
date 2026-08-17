@@ -2505,6 +2505,9 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r);
 struct store_statfs_t
 {
   uint64_t total = 0;                  ///< Total bytes
+  uint64_t data_total = 0;             ///< Total bytes of the data/block device only
+                                       ///< (excludes any dedicated db/wal device);
+                                       ///< used to derive the OSD's CRUSH weight
   uint64_t available = 0;              ///< Free bytes available
   uint64_t internally_reserved = 0;    ///< Bytes reserved for internal purposes
 
@@ -2524,6 +2527,7 @@ struct store_statfs_t
   void floor(int64_t f) {
 #define FLOOR(x) if (int64_t(x) < f) x = f
     FLOOR(total);
+    FLOOR(data_total);
     FLOOR(available);
     FLOOR(internally_reserved);
     FLOOR(allocated);
@@ -2586,6 +2590,7 @@ struct store_statfs_t
 
   void add(const store_statfs_t& o) {
     total += o.total;
+    data_total += o.data_total;
     available += o.available;
     internally_reserved += o.internally_reserved;
     allocated += o.allocated;
@@ -2598,6 +2603,7 @@ struct store_statfs_t
   }
   void sub(const store_statfs_t& o) {
     total -= o.total;
+    data_total -= o.data_total;
     available -= o.available;
     internally_reserved -= o.internally_reserved;
     allocated -= o.allocated;
@@ -2610,7 +2616,7 @@ struct store_statfs_t
   }
   void dump(ceph::Formatter *f) const;
   DENC(store_statfs_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.total, p);
     denc(v.available, p);
     denc(v.internally_reserved, p);
@@ -2621,6 +2627,13 @@ struct store_statfs_t
     denc(v.data_compressed_original, p);
     denc(v.omap_allocated, p);
     denc(v.internal_metadata, p);
+    if (struct_v >= 2) {
+      denc(v.data_total, p);
+    } else if constexpr (!std::is_const_v<std::remove_reference_t<decltype(v)>>) {
+      // decoding a pre-v2 struct: no dedicated data_total was recorded, so
+      // fall back to the total (matches the historical CRUSH-weight behavior).
+      v.data_total = v.total;
+    }
     DENC_FINISH(p);
   }
   static std::list<store_statfs_t> generate_test_instances();
