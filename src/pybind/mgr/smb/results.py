@@ -160,12 +160,10 @@ class InvalidResourceResult(BaseResult):
         self,
         resource_data: Simplified,
         msg: str = '',
-        status: Optional[Simplified] = None,
     ) -> None:
         self.resource_data = resource_data
         self.success = False
         self.msg = msg
-        self.status = status
 
     def to_simplified(self) -> Simplified:
         ds: Simplified = {}
@@ -173,8 +171,6 @@ class InvalidResourceResult(BaseResult):
         ds['success'] = self.success
         if self.msg:
             ds['msg'] = self.msg
-        if self.status:
-            ds.update(self.status)
         return ds
 
 
