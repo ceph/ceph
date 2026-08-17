@@ -130,6 +130,8 @@ inline future_value transaction_get_range_split_points(const transaction_handle&
                                                        std::span<const std::uint8_t> begin,
                                                        std::span<const std::uint8_t> end,
                                                        std::int64_t target_bytes);
+inline future_value transaction_get_estimated_range_size(const transaction_handle& txn,
+                                                         const ceph::libfdb::select& selection);
 inline future_value transaction_get_key(const transaction_handle& txn,
                                         const key_selector& selector,
                                         read_mode mode);
@@ -1056,6 +1058,19 @@ class transaction final
   };
  }
 
+ detail::future_value get_estimated_range_size(const select& selection)
+ {
+  const auto half_open_range = detail::as_half_open_select(selection);
+  const auto begin = detail::as_fdb_span(half_open_range.begin_key);
+  const auto end = detail::as_fdb_span(half_open_range.end_key);
+
+  return detail::future_value {
+   fdb_transaction_get_estimated_range_size_bytes(raw_handle(),
+                                                  begin.data(), static_cast<int>(std::size(begin)),
+                                                  end.data(), static_cast<int>(std::size(end)))
+  };
+ }
+
  detail::future_value get_key(const key_selector& selector,
                               const read_mode mode)
  {
@@ -1211,6 +1226,9 @@ class transaction final
  friend inline auto ceph::libfdb::detail::transaction_get_range_split_points(
   const transaction_handle&, std::span<const std::uint8_t>, std::span<const std::uint8_t>, std::int64_t)
   -> ceph::libfdb::detail::future_value;
+ friend inline auto ceph::libfdb::detail::transaction_get_estimated_range_size(
+  const transaction_handle&, const ceph::libfdb::select&)
+  -> ceph::libfdb::detail::future_value;
  friend inline auto ceph::libfdb::detail::transaction_get_key(
   const transaction_handle&, const key_selector&, read_mode)
   -> ceph::libfdb::detail::future_value;
@@ -1260,6 +1278,12 @@ inline future_value transaction_get_range_split_points(const transaction_handle&
                                                        const std::int64_t target_bytes)
 {
  return txn->get_range_split_points(begin, end, target_bytes);
+}
+
+inline future_value transaction_get_estimated_range_size(const transaction_handle& txn,
+                                                         const ceph::libfdb::select& selection)
+{
+ return txn->get_estimated_range_size(selection);
 }
 
 inline future_value transaction_get_key(const transaction_handle& txn,
