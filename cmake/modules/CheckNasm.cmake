@@ -18,30 +18,40 @@ macro(check_nasm_support _object_format _support_x64 _support_x64_and_avx2 _supp
       " ${_support_x64})
       set(CMAKE_REQUIRED_QUIET ${save_quiet})
       if(${_support_x64})
+        # nasm removes the file on failure, and we expect failure, so use temp file
+        execute_process(COMMAND mktemp --suffix=.o
+          OUTPUT_VARIABLE nasm_tmp_obj
+          OUTPUT_STRIP_TRAILING_WHITESPACE)
         execute_process(COMMAND nasm -f ${object_format} -i
           ${CMAKE_SOURCE_DIR}/src/isa-l/include/
           ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx2.asm
-          -o /dev/null
+          -o ${nasm_tmp_obj}
           RESULT_VARIABLE rc
           OUTPUT_QUIET
           ERROR_QUIET)
         if(NOT rc)
           set(${_support_x64_and_avx2} TRUE)
         endif()
+        execute_process(COMMAND mktemp --suffix=.o
+          OUTPUT_VARIABLE nasm_tmp_obj
+          OUTPUT_STRIP_TRAILING_WHITESPACE)
         execute_process(COMMAND nasm -D HAVE_AS_KNOWS_AVX512 -f ${object_format}
           -i ${CMAKE_SOURCE_DIR}/src/isa-l/include/
           ${CMAKE_SOURCE_DIR}/src/isa-l/erasure_code/gf_vect_dot_prod_avx512.asm
-          -o /dev/null
+          -o ${nasm_tmp_obj}
           RESULT_VARIABLE rt
           OUTPUT_QUIET
           ERROR_QUIET)
         if(NOT rt)
           set(${_support_x64_and_avx512} TRUE)
         endif()
-	execute_process(COMMAND nasm -D AS_FEATURE_LEVEL=10 -f ${object_format}
+        execute_process(COMMAND mktemp --suffix=.o
+          OUTPUT_VARIABLE nasm_tmp_obj
+          OUTPUT_STRIP_TRAILING_WHITESPACE)
+        execute_process(COMMAND nasm -D AS_FEATURE_LEVEL=10 -f ${object_format}
           -i ${CMAKE_SOURCE_DIR}/src/isa-l/include/
           ${CMAKE_SOURCE_DIR}/src/isa-l/crc/crc32_iscsi_by16_10.asm
-          -o /dev/null
+          -o ${nasm_tmp_obj}
           RESULT_VARIABLE rt
           OUTPUT_QUIET
           ERROR_QUIET)
