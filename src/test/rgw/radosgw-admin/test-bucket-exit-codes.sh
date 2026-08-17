@@ -2,9 +2,9 @@
 # Exit-code tests for radosgw-admin bucket commands
 #
 # Usage:
-#   ./test-radosgw-admin-bucket-exit-codes.sh
-#   RGW_ADMIN=/path/to/radosgw-admin ./test-radosgw-admin-bucket-exit-codes.sh
-#   CEPH_CONF=/path/to/ceph.conf ./test-radosgw-admin-bucket-exit-codes.sh
+#   ./test-bucket-exit-codes.sh
+#   RGW_ADMIN=/path/to/radosgw-admin ./test-bucket-exit-codes.sh
+#   CEPH_CONF=/path/to/ceph.conf ./test-bucket-exit-codes.sh
 #
 # Test types:
 #   check()        - no cluster needed; runs with --no-mon-config
@@ -14,7 +14,7 @@
 # output contains it as a substring.
 #
 # Run from the build directory:
-#   cd /path/to/ceph/build && bash /path/to/test-radosgw-admin-bucket-exit-codes.sh
+#   cd /path/to/ceph/build && bash /path/to/test-bucket-exit-codes.sh
 
 RGW_ADMIN="${RGW_ADMIN:-./bin/radosgw-admin}"
 export CEPH_CONF="${CEPH_CONF:-./ceph.conf}"
