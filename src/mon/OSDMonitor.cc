@@ -5416,7 +5416,17 @@ void OSDMonitor::tick()
     }
   }
 
-  if (try_prune_purged_snaps()) {
+  // combined limit for purged_snaps and completed_rollbacks
+  unsigned max_prune = cct->_conf.get_val<uint64_t>(
+    "mon_max_snap_prune_per_epoch");
+  if (!max_prune) {
+    max_prune = 100000;
+  }
+
+  if (try_prune_purged_snaps(max_prune)) {
+    do_propose = true;
+  }
+  if (try_prune_completed_rollbacks(max_prune)) {
     do_propose = true;
   }
 
@@ -7487,7 +7497,7 @@ void OSDMonitor::insert_purged_snap_update(
   }
 }
 
-bool OSDMonitor::try_prune_purged_snaps()
+bool OSDMonitor::try_prune_purged_snaps(unsigned &max_prune)
 {
   if (!mon.mgrstatmon()->is_readable()) {
     return false;
@@ -7496,11 +7506,6 @@ bool OSDMonitor::try_prune_purged_snaps()
     return false;  // we already pruned for this epoch
   }
 
-  unsigned max_prune = cct->_conf.get_val<uint64_t>(
-    "mon_max_snap_prune_per_epoch");
-  if (!max_prune) {
-    max_prune = 100000;
-  }
   dout(10) << __func__ << " max_prune " << max_prune << dendl;
 
   unsigned actually_pruned = 0;
@@ -7563,6 +7568,60 @@ bool OSDMonitor::try_prune_purged_snaps()
     }
   }
   dout(10) << __func__ << " actually pruned " << actually_pruned << dendl;
+  if (max_prune > actually_pruned) {
+    max_prune -= actually_pruned;
+  } else {
+    max_prune = 0;
+  }
+  return !!actually_pruned;
+}
+
+bool OSDMonitor::try_prune_completed_rollbacks(unsigned &max_prune)
+{
+  if (!mon.mgrstatmon()->is_readable()) {
+    return false;
+  }
+  if (!pending_inc.new_completed_rollbacks.empty()) {
+    return false;  // already pruned for this epoch
+  }
+
+  dout(10) << __func__ << " max_prune " << max_prune << dendl;
+
+  unsigned actually_pruned = 0;
+  // TODO(WI-4-a): use mon.mgrstatmon()->get_digest().completed_rollbacks once
+  // PGMapDigest exposes the aggregated field.
+  const mempool::pgmap::map<int64_t, snap_interval_set_t> completed;
+
+  for (auto& [pool_id, pool_completed] : completed) {
+    if (actually_pruned >= max_prune) break;
+    auto r = osdmap.rollback_snaps_queue.find(pool_id);
+    if (r == osdmap.rollback_snaps_queue.end()) continue;
+
+    snap_interval_set_t to_prune;
+    unsigned maybe_pruned = actually_pruned;
+
+    for (auto& [rb_id, _rb] : r->second) {
+      if (!pool_completed.contains(rb_id)) continue;
+      to_prune.insert(rb_id);
+      ++maybe_pruned;
+      if (maybe_pruned >= max_prune) break;
+    }
+
+    if (!to_prune.empty()) {
+      pending_inc.new_completed_rollbacks[pool_id].swap(to_prune);
+      actually_pruned += pending_inc.new_completed_rollbacks[pool_id].size();
+      dout(10) << __func__ << " pool " << pool_id
+               << " pruning completed rollbacks "
+               << pending_inc.new_completed_rollbacks[pool_id] << dendl;
+    }
+  }
+
+  dout(10) << __func__ << " actually pruned " << actually_pruned << dendl;
+  if (max_prune > actually_pruned) {
+    max_prune -= actually_pruned;
+  } else {
+    max_prune = 0;
+  }
   return !!actually_pruned;
 }
 
