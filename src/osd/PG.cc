@@ -357,6 +357,7 @@ void PG::clear_primary_state()
   projected_log = PGLog::IndexedLog();
 
   snap_trimq.clear();
+  rollback_trimq.clear();
   snap_trimq_repeat.clear();
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();

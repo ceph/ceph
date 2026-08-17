@@ -850,6 +850,8 @@ protected:
 
   // ------------------
   interval_set<snapid_t> snap_trimq;
+  // pending per-PG rollback work
+  std::map<snapid_t, rollback_snap_info_t> rollback_trimq;
   std::set<snapid_t> snap_trimq_repeat;
 
   /* You should not use these items without taking their respective queue locks
