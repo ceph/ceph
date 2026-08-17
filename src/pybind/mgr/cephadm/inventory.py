@@ -1840,7 +1840,11 @@ class NodeProxyCache:
 
     def save(self,
              host: str = '',
-             data: Dict[str, Any] = {}) -> None:
+             data: Optional[Dict[str, Any]] = None) -> None:
+        if data is None:
+            data = {}
+        host = normalize_hostname(host)
+        self.data[host] = data
         self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/data/{host}', json.dumps(data))
 
     def update_oob(self, host: str, host_oob_info: Dict[str, str]) -> None:
