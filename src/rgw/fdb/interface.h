@@ -1457,7 +1457,7 @@ struct page_result final
 
 namespace detail {
 
-inline int range_limit_for(page p)
+constexpr int range_limit_for(page p)
 {
  if (0 == p.size) {
   return 0;
@@ -1476,13 +1476,19 @@ using row_transform_result_t =
 template <typename FnT, typename ValueT>
 concept row_invocable = std::invocable<FnT&, row_t<ValueT>&&>;
 
+template <typename FnT, typename ValueT>
+concept row_consumer =
+ requires(FnT& fn, row_t<ValueT>&& row) {
+  { std::invoke(fn, std::move(row)) } -> std::same_as<void>;
+ };
+
 template <typename PredT, typename ValueT>
 concept row_predicate = std::predicate<PredT&, const row_t<ValueT>&>;
 
 } // namespace detail
 
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
-requires detail::row_invocable<FnT, ValueT>
+requires detail::row_consumer<FnT, ValueT>
 inline void for_each(ceph::libfdb::transaction_handle txn,
                      SelectionT selection,
                      FnT&& fn,
@@ -1497,7 +1503,7 @@ inline void for_each(ceph::libfdb::transaction_handle txn,
 // Keep callbacks replay-safe; use an explicit transaction for side effects that
 // must not be repeated.
 template <typename ValueT = std::string, typename FnT, query::expression SelectionT>
-requires detail::row_invocable<FnT, ValueT>
+requires detail::row_consumer<FnT, ValueT>
 inline void for_each(ceph::libfdb::database_handle dbh,
                      SelectionT selection,
                      FnT&& fn,

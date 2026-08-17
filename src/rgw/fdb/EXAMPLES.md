@@ -855,8 +855,9 @@ auto people = lfdb::collect<person_record>(dbh, q::prefix("person/"));
 ```
 
 Use `for_each()` when the operation is naturally callback-shaped and you do not
-need a composable generator. Passing a transaction handle keeps the transaction
-boundary explicit:
+need a composable generator. The callback is a row consumer and must return
+`void`; use `transform()` when each row should produce a value. Passing a
+transaction handle keeps the transaction boundary explicit:
 
 ```cpp
 auto txn = lfdb::make_transaction(dbh);
