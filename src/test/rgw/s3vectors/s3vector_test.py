@@ -835,30 +835,6 @@ def test_create_index_invalid_filterable_keys():
             'genre', 'year', 'genre'
         ]}, **common)
 
-    # reserved column name: key
-    assert_create_index_validation_error(conn,
-        'metadataConfiguration.filterableMetadataKeys',
-        indexName='reserved-key',
-        metadataConfiguration={'filterableMetadataKeys': [
-            {'name': 'key'}
-        ]}, **common)
-
-    # reserved column name: data
-    assert_create_index_validation_error(conn,
-        'metadataConfiguration.filterableMetadataKeys',
-        indexName='reserved-data',
-        metadataConfiguration={'filterableMetadataKeys': [
-            {'name': 'data'}
-        ]}, **common)
-
-    # reserved column name: metadata
-    assert_create_index_validation_error(conn,
-        'metadataConfiguration.filterableMetadataKeys',
-        indexName='reserved-metadata',
-        metadataConfiguration={'filterableMetadataKeys': [
-            {'name': 'metadata'}
-        ]}, **common)
-
     # filterable key name starting with underscore
     assert_create_index_validation_error(conn,
         'metadataConfiguration.filterableMetadataKeys[0].name',
@@ -866,6 +842,66 @@ def test_create_index_invalid_filterable_keys():
         metadataConfiguration={'filterableMetadataKeys': [
             {'name': '_internal'}
         ]}, **common)
+
+    # the internal columns are all underscore prefixed, so the unprefixed
+    # names are just regular metadata keys
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='underscore-reserved-key',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': '_key'}
+        ]}, **common)
+
+    # non-filterable key name starting with underscore
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys[1]',
+        indexName='underscore-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': [
+            'genre', '_metadata'
+        ]}, **common)
+
+    # filterable key name with a '.'
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='dot-filterable',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'a.b'}
+        ]}, **common)
+
+    # non-filterable key name with a '.'
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys[0]',
+        indexName='dot-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': ['a.b']}, **common)
+
+    # key names longer than 63 characters
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.filterableMetadataKeys[0].name',
+        indexName='long-filterable',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'k'*64}
+        ]}, **common)
+    assert_create_index_validation_error(conn,
+        'metadataConfiguration.nonFilterableMetadataKeys[0]',
+        indexName='long-nonfilterable',
+        metadataConfiguration={'nonFilterableMetadataKeys': ['k'*64]}, **common)
+
+    # exactly 63 characters is allowed
+    result = conn.create_index(indexName='max-length-keys',
+        metadataConfiguration={
+            'nonFilterableMetadataKeys': ['n'*63],
+            'filterableMetadataKeys': [{'name': 'f'*63}]
+        }, **common)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the internal columns are all underscore prefixed, so the unprefixed names
+    # are ordinary metadata keys and are accepted
+    result = conn.create_index(indexName='unreserved-names',
+        metadataConfiguration={
+            'nonFilterableMetadataKeys': ['metadata'],
+            'filterableMetadataKeys': [{'name': 'key'}, {'name': 'data'}]
+        }, **common)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     # overlap between filterable and non-filterable keys
     assert_create_index_validation_error(conn,
@@ -2300,8 +2336,8 @@ def test_put_vectors_null_metadata_value():
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.vector_test
-def test_put_vectors_dots_in_metadata_field_names():
-    """Test that vectors with dots in metadata field names are rejected."""
+def test_put_vectors_invalid_metadata_field_names():
+    """Test that vectors with invalid metadata field names are rejected."""
     conn = connection()
     bucket_name = gen_bucket_name()
     dimension = 4
@@ -2314,6 +2350,7 @@ def test_put_vectors_dots_in_metadata_field_names():
                                dataType='float32', dimension=dimension, distanceMetric='euclidean')
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
+    # field name with a '.'
     vectors = [
         {'key': 'v0', 'data': generate_data(dimension, 0),
          'metadata': json.dumps({'user.name': 'alice'})},
@@ -2321,6 +2358,52 @@ def test_put_vectors_dots_in_metadata_field_names():
     assert_put_vectors_validation_error(conn,
         'vectors[0].metadata.user.name',
         vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # field name starting with an underscore, which is reserved for the
+    # internal fields of the index
+    for name in ['_key', '_data', '_metadata', '_distance', '_anything']:
+        vectors = [
+            {'key': 'v0', 'data': generate_data(dimension, 0),
+             'metadata': json.dumps({name: 'alice'})},
+        ]
+        assert_put_vectors_validation_error(conn,
+            f'vectors[0].metadata.{name}',
+            vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # empty field name
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'': 'alice'})},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata.',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # field name longer than 63 characters
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'k'*64: 'alice'})},
+    ]
+    assert_put_vectors_validation_error(conn,
+        'vectors[0].metadata.' + 'k'*64,
+        vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+
+    # a field name of exactly 63 characters is allowed, and so is a name that
+    # only holds an underscore that is not the first character
+    vectors = [
+        {'key': 'v0', 'data': generate_data(dimension, 0),
+         'metadata': json.dumps({'k'*63: 'alice', 'user_name': 'bob', 'key': 'v0'})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the nested fields are not validated
+    vectors = [
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'info': {'_key': 'x', 'a.b': 'y', 'k'*64: 'z'}})},
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
@@ -3212,6 +3295,16 @@ def test_query_vectors_filter_errors():
 
     # implicit $eq with an array value (JSON field)
     expect_error({'color': ['red', 'blue']})
+
+    # field names that could never be a metadata key: a nested path, a name
+    # reserved for the internal fields of the index, an empty name, and a name
+    # longer than 63 characters
+    expect_error({'info.color': 'red'})
+    expect_error({'_key': 'v0'})
+    expect_error({'_metadata': 'x'})
+    expect_error({'_distance': {'$lt': 1}})
+    expect_error({'': 'red'})
+    expect_error({'k'*64: 'red'})
 
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)

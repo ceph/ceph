@@ -550,6 +550,36 @@ struct validation_error_t {
   std::string message;
 };
 
+// names of the internal columns of the index table. all of them start with an
+// underscore, which is why a metadata key name may not start with one
+inline constexpr const char* key_field = "_key";
+inline constexpr const char* data_field = "_data";
+inline constexpr const char* metadata_field = "_metadata";
+inline constexpr const char* distance_field = "_distance";
+
+// maximum length of a metadata key name. defined by the S3 Vectors API for
+// nonFilterableMetadataKeys, and applied here to any metadata key name
+inline constexpr size_t max_metadata_key_name_length = 63;
+
+// validate the name of a metadata key. returns the reason the name is invalid,
+// or std::nullopt if it is valid. the returned message has no subject, so that
+// the caller could prefix it with the name as it appears in its own context
+inline std::optional<std::string> validate_metadata_key_name(const std::string& name) {
+  if (name.empty()) {
+    return "must not be empty";
+  }
+  if (name.size() > max_metadata_key_name_length) {
+    return fmt::format("length ({}) must not exceed {} characters", name.size(), max_metadata_key_name_length);
+  }
+  if (name.starts_with('_')) {
+    return "must not start with '_'";
+  }
+  if (name.find('.') != std::string::npos) {
+    return "must not contain '.'";
+  }
+  return std::nullopt;
+}
+
 int create_index(const create_index_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
 int create_vector_bucket(const create_vector_bucket_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);
 int delete_index(const delete_index_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);
