@@ -1848,6 +1848,26 @@ extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_selfmanaged_snap_rollback)(
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_selfmanaged_snap_rollback);
 
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_snap_rollback_all)(
+  rados_ioctx_t io,
+  const char *snapname,
+  uint64_t *rollback_id)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->snap_rollback(snapname, rollback_id);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_snap_rollback_all);
+
+extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_selfmanaged_snap_rollback_all)(
+  rados_ioctx_t io,
+  uint64_t snap_id,
+  uint64_t *rollback_id)
+{
+  librados::IoCtxImpl *ctx = (librados::IoCtxImpl *)io;
+  return ctx->selfmanaged_snap_rollback(snap_id, rollback_id);
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_ioctx_selfmanaged_snap_rollback_all);
+
 extern "C" int LIBRADOS_C_API_DEFAULT_F(rados_ioctx_snap_list)(
   rados_ioctx_t io,
   rados_snap_t *snaps,
