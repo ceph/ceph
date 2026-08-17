@@ -617,6 +617,32 @@ private:
   }
 };
 
+// the vector bucket listing is ordered by bucket name, but has no prefix filtering
+// (the "match_prefix" of the underlying omap listing is not exposed by cls_user).
+// the markers are used instead to narrow the listing down to the range of the prefix.
+// both markers are exclusive
+
+// the greatest name that is guaranteed to be smaller than any name with that prefix
+std::string prefix_start_marker(std::string_view prefix) {
+  // a proper prefix of a string is always smaller than the string itself
+  return std::string(prefix.substr(0, prefix.size() - 1));
+}
+
+// the smallest name that is guaranteed to be greater than any name with that prefix.
+// empty if no such name exists, in which case the listing is not bounded from above
+std::string prefix_end_marker(std::string_view prefix) {
+  std::string marker(prefix);
+  while (!marker.empty()) {
+    const auto last = static_cast<unsigned char>(marker.back());
+    if (last != 0xff) {
+      marker.back() = static_cast<char>(last + 1);
+      return marker;
+    }
+    marker.pop_back();
+  }
+  return marker;
+}
+
 class RGWS3VectorListVectorBuckets : public RGWS3VectorBase {
   rgw::s3vector::list_vector_buckets_t configuration;
   rgw::sal::BucketList listing;
@@ -660,11 +686,30 @@ private:
       ldpp_dout(this, 20) << "INFO: executing s3vector ListVectorBuckets with: " << ss.str() << dendl;
     }
 
+    std::string start_marker = configuration.next_token;
+    std::string end_marker;
+    if (!configuration.prefix.empty()) {
+      start_marker = std::max(start_marker, prefix_start_marker(configuration.prefix));
+      end_marker = prefix_end_marker(configuration.prefix);
+    }
+
     op_ret = driver->list_vector_buckets(this, s->owner.id, s->auth.identity->get_tenant(),
-        configuration.next_token, "", configuration.max_results, listing, y);
+        start_marker, end_marker, configuration.max_results, listing, y);
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "ERROR: failed to execute ListVectorBuckets. error: " << op_ret << dendl;
       return;
+    }
+    if (!configuration.prefix.empty()) {
+      // the markers only bound the listing to the range of the prefix, so the
+      // names at the edges of that range still have to be filtered out here
+      // won't be needed once https://tracker.ceph.com/issues/79532 is implemented
+      std::erase_if(listing.buckets, [this](const RGWBucketEnt& bucket) {
+        if (bucket.bucket.name.starts_with(configuration.prefix)) {
+          return false;
+        }
+        ldpp_dout(this, 20) << "INFO: on s3vector listing, vector bucket: " << bucket.bucket.name << " is filtered out" << dendl;
+        return true;
+      });
     }
   }
 
