@@ -1976,6 +1976,9 @@ public:
   void adjust_purged_snaps(
     std::function<void(interval_set<snapid_t> &snaps)> f);
 
+  void adjust_completed_rollbacks(
+    std::function<void(snap_interval_set_t &crs)> f);
+
   /// Updates info.hit_set to hset_history, does not dirty
   void update_hset(const pg_hit_set_history_t &hset_history);
 

@@ -1414,6 +1414,11 @@ public:
   get_new_purged_snaps() const {
     return new_purged_snaps;
   }
+  const mempool::osdmap::map<int64_t,
+    std::map<snapid_t, rollback_snap_info_t>>&
+  get_rollback_snaps_queue() const {
+    return rollback_snaps_queue;
+  }
 
   int64_t lookup_pg_pool_name(std::string_view name) const {
     auto p = name_pool.find(name);

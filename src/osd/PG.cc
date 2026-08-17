@@ -1431,6 +1431,19 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   snap_trimq = snaps;
   release_pg_backoffs();
   projected_last_update = info.last_update;
+
+  // initialize rollback_trimq from OSDMap rollback_snaps_queue
+  rollback_trimq.clear();
+  auto& rb_queue = get_osdmap()->get_rollback_snaps_queue();
+  auto pool_it = rb_queue.find(get_pgid().pgid.pool());
+  if (pool_it != rb_queue.end()) {
+    for (auto& [rb_id, rb_info] : pool_it->second) {
+      if (!info.completed_rollbacks.contains(rb_id)) {
+        rollback_trimq[rb_id] = rb_info;
+      }
+    }
+  }
+  dout(10) << __func__ << " rollback_trimq size " << rollback_trimq.size() << dendl;
 }
 
 void PG::on_replica_activate()
