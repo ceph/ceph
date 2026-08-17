@@ -1555,8 +1555,23 @@ void PGMap::calc_purged_snaps()
 void PGMap::calc_completed_rollbacks(
     mempool::pgmap::map<int64_t, snap_interval_set_t>& ret) const
 {
-  // stub -- full implementation in WI-4-b
-  ret.clear();
+  set<int64_t> unknown;
+  for (auto& i : pg_stat) {
+    if (i.second.state == 0) {
+      unknown.insert(i.first.pool());
+      ret.erase(i.first.pool());
+      continue;
+    } else if (unknown.count(i.first.pool())) {
+      continue;
+    }
+    auto j = ret.find(i.first.pool());
+    if (j == ret.end()) {
+      // seed with first PG
+      ret[i.first.pool()] = i.second.completed_rollbacks;
+    } else {
+      j->second.intersection_of(i.second.completed_rollbacks);
+    }
+  }
 }
 
 void PGMap::calc_osd_sum_by_class(const OSDMap& osdmap)
