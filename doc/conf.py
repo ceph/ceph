@@ -92,7 +92,7 @@ html_css_files = ['css/custom.css']
 
 # general configuration
 templates_path = ['_templates']
-source_suffix = '.rst'
+source_suffix = {'.rst': 'restructuredtext'}
 exclude_patterns = ['**/.#*',
                     '**/*~',
                     'start/quick-common.rst',
