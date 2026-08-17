@@ -1525,6 +1525,11 @@ int AuthMonitor::get_cipher_type(const cmdmap_t& cmdmap, std::ostream& ss) const
     }
     key_string_type = CryptoManager::get_key_type_name(key_type);
   }
+  if (key_type == CEPH_CRYPTO_AES256KRB5 &&
+      !mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+    ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5 keys";
+    return -ENOTSUP;
+  }
   auto&& secure_key_types = CryptoManager::get_secure_key_types();
   if (!secure_key_types.contains(key_type)) {
     if (!cct->_conf.get_val<bool>("mon_auth_allow_insecure_key")) {
@@ -2107,6 +2112,12 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     if (!monmon->is_writeable()) {
       monmon->wait_for_writeable(op, new PaxosService::C_RetryMessage(this, op));
       return false;
+    }
+
+    if (!mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+      ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5";
+      err = -ENOTSUP;
+      goto done;
     }
 
     paxos.plug();
