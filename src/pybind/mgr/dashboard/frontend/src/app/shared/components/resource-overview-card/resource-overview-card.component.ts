@@ -5,12 +5,14 @@ export type OverviewValue = string | number | boolean | null | undefined;
 export interface OverviewField {
   /* Human-readable label shown for the field. */
   label: string;
+  /* Optional helper text shown next to the label. */
+  helperText?: string;
   /* Single value rendered for text/status fields. */
   value?: OverviewValue;
   /* Multiple values rendered when the field uses tag display. */
   values?: OverviewValue[];
   /* Selects how the field value should be presented in the UI. */
-  type?: 'text' | 'status' | 'tags';
+  type?: 'text' | 'status' | 'tags' | 'password';
   /* Visual tone used by status rendering (icon/text styling). */
   status?: 'success' | 'warning' | 'danger' | 'info-circle';
   /* Fallback text shown when the value is empty. */

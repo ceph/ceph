@@ -121,7 +121,9 @@ import { RgwUserAccountsResourceSidebarComponent } from './rgw-user-accounts-res
 import { RgwUserAccountsResourcePageComponent } from './rgw-user-accounts-resource-page/rgw-user-accounts-resource-page.component';
 import { RgwAccountDetailsResolver } from './rgw-user-accounts-resource-page/rgw-account-details.resolver';
 import { RgwAccountDetailsBreadcrumbResolver } from './rgw-user-accounts-resource-page/rgw-account-details-breadcrumb.resolver';
-import { RgwStorageClassDetailsComponent } from './rgw-storage-class-details/rgw-storage-class-details.component';
+import { RgwStorageClassResourceSidebarComponent } from './rgw-storage-class-resource-sidebar/rgw-storage-class-resource-sidebar.component';
+import { RgwStorageClassResourcePageComponent } from './rgw-storage-class-resource-page/rgw-storage-class-resource-page.component';
+import { RgwStorageClassResourceBreadcrumbResolver } from './rgw-storage-class-resource-page/rgw-storage-class-resource-breadcrumb.resolver';
 import { RgwStorageClassFormComponent } from './rgw-storage-class-form/rgw-storage-class-form.component';
 import { RgwBucketTieringFormComponent } from './rgw-bucket-tiering-form/rgw-bucket-tiering-form.component';
 import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw-bucket-lifecycle-list.component';
@@ -246,7 +248,8 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     RgwUserAccountsResourceSidebarComponent,
     RgwUserAccountsResourcePageComponent,
     RgwStorageClassListComponent,
-    RgwStorageClassDetailsComponent,
+    RgwStorageClassResourceSidebarComponent,
+    RgwStorageClassResourcePageComponent,
     RgwStorageClassFormComponent,
     RgwBucketTieringFormComponent,
     RgwBucketLifecycleListComponent,
@@ -527,6 +530,27 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:zonegroup_name/:placement_target/:storage_class`,
         component: RgwStorageClassFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: ':zonegroup_name/:placement_target/:storage_class',
+        component: RgwStorageClassResourceSidebarComponent,
+        data: {
+          breadcrumbs: RgwStorageClassResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: RgwStorageClassResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'policy',
+            component: RgwStorageClassResourcePageComponent,
+            data: { breadcrumbs: 'Policy', section: 'policy' }
+          }
+        ]
       }
     ]
   },
