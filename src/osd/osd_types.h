@@ -1593,6 +1593,9 @@ public:
    */
   interval_set<snapid_t> removed_snaps;
 
+  /// pending rollback operations keyed by rollback_id
+  std::map<snapid_t, rollback_snap_info_t> rollback_snaps;
+
   unsigned pg_num_mask = 0, pgp_num_mask = 0;
 
   std::set<uint64_t> tiers;      ///< pools that are tiers of us

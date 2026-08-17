@@ -1715,6 +1715,13 @@ void pg_pool_t::dump(Formatter *f, const CrushWrapper *crush,
     f->close_section(); // application
   }
   f->close_section(); // application_metadata
+  f->open_array_section("rollback_snaps");
+  for (auto& [k, v] : rollback_snaps) {
+    f->open_object_section("rollback_snap_info");
+    v.dump(f);
+    f->close_section();
+  }
+  f->close_section(); // rollback_snaps
 }
 
 void pg_pool_t::convert_to_pg_shards(const vector<int> &from, set<pg_shard_t>* to) const {
@@ -2024,9 +2031,13 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     return;
   }
 
-  uint8_t v = 33;
+  uint8_t v = 34;
   // NOTE: any new encoding dependencies must be reflected by
   // SIGNIFICANT_FEATURES
+  if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
+    //FIXME: Need SERVER_VAMPIRE here for rados snapshot rollbcak
+    v = 33;
+  }
   if (!HAVE_SIGNIFICANT_FEATURE(features, SERVER_UMBRELLA)) {
     v = 32;
   }
@@ -2159,12 +2170,15 @@ void pg_pool_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(ec_data_shard_count, bl);
     encode(ec_coding_shard_count, bl);
   }
+  if (v >= 34) {
+    encode(rollback_snaps, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(33, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(34, 5, 5, bl);
   decode(type, bl);
   decode(size, bl);
   decode(crush_rule, bl);
@@ -2370,6 +2384,11 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     ec_data_shard_count.reset();
     ec_coding_shard_count.reset();
   }
+  if (struct_v >= 34) {
+    decode(rollback_snaps, bl);
+  } else {
+    rollback_snaps.clear();
+  }
   DECODE_FINISH(bl);
   calc_pg_masks();
   calc_grade_table();
@@ -2482,6 +2501,15 @@ list<pg_pool_t> pg_pool_t::generate_test_instances()
   a.peering_crush_bucket_barrier = 11;
   a.peering_crush_mandatory_member = 12;
   a.peering_crush_bucket_target = 13;
+  o.push_back(pg_pool_t(a));
+
+  // test rollback_snaps
+  {
+    rollback_snap_info_t rsi;
+    rsi.rollback_id = 100;
+    rsi.source_snap = 3;
+    a.rollback_snaps[rsi.rollback_id] = rsi;
+  }
   o.push_back(pg_pool_t(a));
 
   return o;
