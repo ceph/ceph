@@ -48,6 +48,7 @@ set(alien_store_srcs
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueRocksEnv.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_objects.cc
+  ${PROJECT_SOURCE_DIR}/src/os/bluestore/BlueStore_objects_impl.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/simple_bitmap.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/bluestore_types.cc
   ${PROJECT_SOURCE_DIR}/src/os/bluestore/fastbmap_allocator_impl.cc
