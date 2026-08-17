@@ -2502,6 +2502,34 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
 
   dout(25) << __func__ << " oi " << obc->obs.oi << dendl;
 
+  // Rollback read redirect: if a rollback is pending and this is a pure read
+  // of the head object, redirect to the source clone so the client sees the
+  // rolled-back state without waiting for background work to complete.
+  if (op->may_read() && !op->may_write() && !op->may_cache() &&
+      m->get_snapid() == CEPH_NOSNAP &&
+      obc->ssc) {
+    snapid_t obj_seq = obc->ssc->snapset.seq;
+    snapid_t rb_source = find_latest_rollback_source(
+      get_osdmap(), info.pgid.pgid.pool(), obj_seq);
+
+    if (rb_source != CEPH_NOSNAP) {
+      hobject_t redirect_oid = obc->obs.oi.soid;
+      redirect_oid.snap = rb_source;
+
+      ObjectContextRef redirect_obc = get_object_context(redirect_oid, false);
+      if (!redirect_obc || !redirect_obc->obs.exists) {
+        // Object did not exist at the rollback snapshot: treat as ENOENT
+        dout(10) << __func__ << " rollback redirect " << redirect_oid
+                 << " does not exist, returning ENOENT" << dendl;
+        osd->reply_op_error(op, -ENOENT);
+        return;
+      }
+      dout(10) << __func__ << " rollback redirect " << obc->obs.oi.soid
+               << " -> " << redirect_oid << dendl;
+      obc = redirect_obc;
+    }
+  }
+
   OpContext *ctx = new OpContext(op, m->get_reqid(), &m->ops, obc, this);
 
   if (coro_op_in_flight && op == active_coro_op) {
