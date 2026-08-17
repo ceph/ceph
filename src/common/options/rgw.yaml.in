@@ -2118,7 +2118,8 @@ options:
     multisite deployment where zone endpoints such as "https://zone-a.example.com"
     map to several backend RGW nodes, this allows inter-zone traffic to be spread
     across all peers without requiring an external load balancer.
-  default: false
+    Disable it to fall back to plain libcurl behavior.
+  default: true
   services:
   - rgw
   see_also:
