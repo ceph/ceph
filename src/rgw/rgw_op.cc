@@ -1884,20 +1884,24 @@ int RGWOp::read_global_cors()
   string allow_origins, allow_headers, allow_methods, expose_headers;
   int ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
   if (ret < 0 || allow_origins.empty()) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS allow origins found, ret=" << cpp_strerror(ret) << dendl;
+    return 0;
   }
   ret = g_conf().get_val("rgw_gcors_allow_headers", &allow_headers);
   if (ret < 0 || allow_headers.empty()) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS allow headers found, ret=" << cpp_strerror(ret) << dendl;
+    return 0;
   }
   ret = g_conf().get_val("rgw_gcors_allow_methods", &allow_methods);
   if (ret < 0 || allow_methods.empty()) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS allow methods found, ret=" << cpp_strerror(ret) << dendl;
+    return 0;
   }
   g_conf().get_val("rgw_gcors_expose_headers", &expose_headers);
   if (RGWCORSRule::create_rule(allow_origins.c_str(), allow_headers.c_str(), expose_headers.c_str(), allow_methods.c_str(),
                                optional_global_cors) < 0) {
-    return -EINVAL;
+    ldpp_dout(this, 20) << "no global CORS configuration found" << dendl;
+    return 0;
   }
 
   cors_exist = true;
@@ -1953,11 +1957,10 @@ bool RGWOp::generate_cors_headers(string& origin, string& method, string& header
   cors_exist = false;
   origin = orig;
 
-  const int read_global_cors_ret = read_global_cors();
-  const int temp_op_ret = read_bucket_cors();
+  read_global_cors();
+  op_ret = read_bucket_cors();
   if (!cors_exist) {
     ldpp_dout(this, 2) << "No global CORS or bucket CORS configuration set yet" << dendl;
-    op_ret = std::min(temp_op_ret, read_global_cors_ret);
     return false;
   }
 
@@ -7272,8 +7275,8 @@ int RGWOptionsCORS::validate_global_cors_request(RGWCORSRule *global_cors_rule) 
 void RGWOptionsCORS::execute(optional_yield y)
 {
   op_ret = read_bucket_cors();
-  int ret = read_global_cors();
-  if (ret < 0 && op_ret < 0) {
+  read_global_cors();
+  if (!cors_exist) {
       ldpp_dout(this, 2) << "No CORS configuration set yet for this bucket nor globally" << dendl;
       return;
   }
