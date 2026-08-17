@@ -49,7 +49,7 @@ Alternatively, you may use the ``CEPH_ARGS`` environment variable to avoid
 re-entry of the user name and secret.
 
 For details on configuring the Ceph Storage Cluster to use authentication, see
-:ref:`rados-cephx-config-ref`. For details on the architecture of Cephx, see
+:ref:`rados-cephx-config-ref`. For details on the architecture of CephX, see
 :ref:`arch_high_availability_authentication`.
 
 Background
@@ -75,7 +75,7 @@ Ceph has the concept of a ``type`` of user. For purposes of user management,
 the type will always be ``client``. Ceph identifies users in a "period-delimited
 form" that consists of the user type and the user ID: for example,
 ``TYPE.ID``, ``client.admin``, or ``client.user1``. The reason for user typing
-is that the Cephx protocol is used not only by clients but also non-clients,
+is that the CephX protocol is used not only by clients but also non-clients,
 such as Ceph Monitors, OSDs, and Metadata Servers. Distinguishing the user type
 helps to distinguish between client users and other users. This distinction
 streamlines access control, user monitoring, and traceability.

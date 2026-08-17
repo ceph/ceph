@@ -98,7 +98,7 @@ The v2 protocol supports two connection modes:
 * *crc* mode provides:
 
   - a strong initial authentication when the connection is established
-    (with cephx, mutual authentication of both parties with protection
+    (with CephX, mutual authentication of both parties with protection
     from a man-in-the-middle or eavesdropper), and
   - a crc32c integrity check to protect against bit flips due to flaky
     hardware or cosmic rays
@@ -114,7 +114,7 @@ The v2 protocol supports two connection modes:
 * *secure* mode provides:
 
   - a strong initial authentication when the connection is established
-    (with cephx, mutual authentication of both parties with protection
+    (with CephX, mutual authentication of both parties with protection
     from a man-in-the-middle or eavesdropper), and
   - full encryption of all post-authentication traffic, including a
     cryptographic integrity check.

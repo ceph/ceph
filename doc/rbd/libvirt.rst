@@ -111,7 +111,7 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 	log file = /var/log/ceph/qemu-guest-$pid.log
 	admin socket = /var/run/ceph/$cluster-$type.$id.$pid.$cctid.asok
 
-   The ``client.libvirt`` section name should match the cephx user you created
+   The ``client.libvirt`` section name should match the CephX user you created
    above.
    If SELinux or AppArmor is enabled, note that this could prevent the client
    process (qemu via libvirt) from doing some operations, such as writing logs

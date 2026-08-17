@@ -367,7 +367,7 @@ OSDs with the long form procedure, execute the following steps for each OSD.
 
      UUID=$(uuidgen)
 
-#. Generate a cephx key for the OSD. ::
+#. Generate a CephX key for the OSD. ::
 
      OSD_SECRET=$(ceph-authtool --gen-print-key)
 

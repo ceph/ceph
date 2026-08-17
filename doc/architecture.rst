@@ -365,14 +365,14 @@ between the client and the daemon.
 
 This authentication protects only the connections between Ceph clients and Ceph
 daemons. The authentication is not extended beyond the Ceph client. If a user
-accesses the Ceph client from a remote host, cephx authentication will not be
+accesses the Ceph client from a remote host, CephX authentication will not be
 applied to the connection between the user's host and the client host.
 
 See :ref:`rados-cephx-config-ref` for more on configuration details.
 
 See :ref:`user-management` for more on user management.
 
-See :ref:`A Detailed Description of the Cephx Authentication Protocol
+See :ref:`A Detailed Description of the CephX Authentication Protocol
 <cephx_2012_peter>` for more on the distinction between authorization and
 authentication and for a step-by-step explanation of the setup of ``cephx``
 tickets and session keys.

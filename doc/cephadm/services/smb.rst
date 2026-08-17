@@ -215,8 +215,8 @@ bind_addrs
         For example, ``192.168.7.0/24``.
 
 include_ceph_users
-    A list of cephx user (aka entity) names that the Samba containers may use.
-    The cephx keys for each user in the list will automatically be added to
+    A list of CephX user (aka entity) names that the Samba containers may use.
+    The CephX keys for each user in the list will automatically be added to
     the keyring in the container.
 
 cluster_meta_uri
@@ -302,8 +302,8 @@ named ``.smb``. Within the pool there should be a namespace named after the
 constructed like ``rados://.smb/<cluster_id>/<object_name>``. Example:
 ``rados://.smb/tango/config.json``.
 
-The containers are automatically deployed with cephx keys allowing access to
-resources in these pools and namespaces. As long as this scheme is used
+The containers are automatically deployed with CephX keys allowing access to
+resources in these pools and namespaces. As long as this scheme is used,
 no additional configuration to read the object is needed.
 
 To copy a configuration file to a RADOS pool, use the ``rados`` command line
@@ -324,9 +324,9 @@ identify this configuration constructed like
 ``rados:mon-config-key:smb/config/<cluster_id>/<name>``.
 Example: ``rados:mon-config-key:smb/config/tango/config.json``.
 
-The containers are automatically deployed with cephx keys allowing access to
+The containers are automatically deployed with CephX keys allowing access to
 resources with the key-prefix ``smb/config/<cluster_id>/``. As long as this
-scheme is used no additional configuration to read the value is needed.
+scheme is used, no additional configuration to read the value is needed.
 
 To copy a configuration file into the Key/Value store use the ``ceph config-key
 put ...`` tool. For example:

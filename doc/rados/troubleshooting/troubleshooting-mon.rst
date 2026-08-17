@@ -650,7 +650,7 @@ to recover the Monitors:
   done
 
   # rebuild the monitor store from the collected map, if the cluster does not
-  # use cephx authentication, we can skip the following steps to update the
+  # use CephX authentication, we can skip the following steps to update the
   # keyring with the caps, and there is no need to pass the "--keyring" option.
   # i.e. just use "ceph-monstore-tool $ms rebuild" instead
   ceph-authtool /path/to/admin.keyring -n mon. \
