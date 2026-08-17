@@ -9130,6 +9130,53 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     ctx->at_version.version++;
   }
 
+  // JIT rollback: resolve any pending rollbacks for this object before the
+  // client write is applied.  This runs after the regular snapshot clone block
+  // so that if both a normal clone AND a rollback are needed, the normal clone
+  // is captured first (it represents the state at snapc.seq before the rollback
+  // would have been visible -- but in practice they are in the same transaction).
+  {
+    snapid_t obj_seq = ctx->new_snapset.seq;
+    auto& rb_queue = get_osdmap()->get_rollback_snaps_queue();
+    auto pool_it = rb_queue.find(info.pgid.pgid.pool());
+
+    if (pool_it != rb_queue.end()) {
+      auto ops = build_pending_ops(pool.info, obj_seq, snapc.seq);
+
+      if (!ops.empty()) {
+        dout(10) << "make_writeable " << soid
+                 << " JIT rollback: " << ops.size() << " pending ops" << dendl;
+
+        // Transaction 1: emit clone operations
+        execute_clone_plan(soid, ops, ctx->op_t.get());
+
+        // Update SnapSet metadata and write SS_ATTR
+        update_snapset_for_rollback(ctx, ops, pool.info, ctx->op_t.get());
+
+        // Emit CLONE + MODIFY(head) log entries
+        emit_rollback_log_entries(ctx, ops);
+
+        // Track in-flight JIT rollbacks per rollback_id so the background
+        // trimmer waits for JIT work to complete before marking done.
+        for (auto& op : ops) {
+          if (op.type == pending_op_t::ROLLBACK) {
+            jit_rollback_inflight[op.id]++;
+            snapid_t rb_id = op.id;
+            ctx->on_success.push_back([this, rb_id]() {
+              auto it = jit_rollback_inflight.find(rb_id);
+              if (it != jit_rollback_inflight.end()) {
+                if (--(it->second) == 0) {
+                  jit_rollback_inflight.erase(it);
+                  kick_snap_trim();
+                }
+              }
+            });
+          }
+        }
+      }
+    }
+  }
+
   // update most recent clone_overlap and usage stats
   if (ctx->new_snapset.clones.size() > 0) {
     // the clone_overlap is difference of range between head and clones.
