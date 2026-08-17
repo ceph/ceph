@@ -1225,6 +1225,16 @@ protected:
   void execute_ctx(OpContext *ctx);
   void finish_ctx(OpContext *ctx, int log_op_type, int result=0);
   void reply_ctx(OpContext *ctx, int err);
+  struct pending_op_t {
+    enum Type { SNAP, ROLLBACK } type;
+    snapid_t id;      // snap ID or rollback ID
+    snapid_t source;  // for ROLLBACK: the source snapshot; for SNAP: CEPH_NOSNAP
+  };
+  std::vector<pending_op_t> build_pending_ops(
+    const pg_pool_t& pp,
+    snapid_t obj_seq,
+    snapid_t current_seq) const;
+
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 

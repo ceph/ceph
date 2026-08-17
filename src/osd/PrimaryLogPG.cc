@@ -8810,6 +8810,37 @@ void PrimaryLogPG::_make_clone(
   rmattr_maybe_cache(clone_obc, t, SS_ATTR);
 }
 
+std::vector<PrimaryLogPG::pending_op_t>
+PrimaryLogPG::build_pending_ops(
+  const pg_pool_t& pp,
+  snapid_t obj_seq,
+  snapid_t current_seq) const
+{
+  std::vector<pending_op_t> ops;
+
+  // Add SNAP entries: pool-managed snaps with id in (obj_seq, current_seq]
+  for (auto& [snap_id, snap_info] : pp.snaps) {
+    if (snap_id > obj_seq && snap_id <= current_seq) {
+      ops.push_back({pending_op_t::SNAP, snap_id, CEPH_NOSNAP});
+    }
+  }
+
+  // Add ROLLBACK entries: rollback_snaps with rollback_id in (obj_seq, current_seq]
+  for (auto& [rb_id, rb_info] : pp.rollback_snaps) {
+    if (rb_id > obj_seq && rb_id <= current_seq) {
+      ops.push_back({pending_op_t::ROLLBACK, rb_id, rb_info.source_snap});
+    }
+  }
+
+  // Sort by id ascending to maintain historical order
+  std::sort(ops.begin(), ops.end(),
+    [](const pending_op_t& a, const pending_op_t& b) {
+      return a.id < b.id;
+    });
+
+  return ops;
+}
+
 void PrimaryLogPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
