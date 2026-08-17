@@ -1529,6 +1529,36 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
 	     << ", now " << recovery_state.get_info().purged_snaps << dendl;
     ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
   }
+
+  // Handle new rollback snaps: add to rollback_trimq if not already completed
+  {
+    auto& rb_queue = osdmap->get_rollback_snaps_queue();
+    auto rb_new = rb_queue.find(get_pgid().pgid.pool());
+    if (rb_new != rb_queue.end()) {
+      for (auto& [rb_id, rb_info] : rb_new->second) {
+        if (!recovery_state.get_info().completed_rollbacks.contains(rb_id)) {
+          rollback_trimq[rb_id] = rb_info;
+          dout(10) << __func__ << " added rollback " << rb_id
+                   << " (source " << rb_info.source_snap << ") to rollback_trimq"
+                   << dendl;
+        }
+      }
+    }
+  }
+
+  // Handle completed rollbacks: remove from rollback_trimq
+  {
+    auto& new_completed_rollbacks = osdmap->get_new_completed_rollbacks();
+    auto rb_done = new_completed_rollbacks.find(get_pgid().pgid.pool());
+    if (rb_done != new_completed_rollbacks.end()) {
+      for (auto k : rb_done->second) {
+        rollback_trimq.erase(rollback_trimq.lower_bound(k.first),
+                             rollback_trimq.lower_bound(k.first + k.second));
+        dout(10) << __func__ << " completed rollbacks " << k.first
+                 << "+" << k.second << " drained from rollback_trimq" << dendl;
+      }
+    }
+  }
 }
 
 void PG::queue_snap_retrim(snapid_t snap)

@@ -5077,7 +5077,7 @@ void PrimaryLogPG::kick_snap_trim()
   ceph_assert(is_primary());
   if (is_clean() &&
       !state_test(PG_STATE_PREMERGE) &&
-      !snap_trimq.empty()) {
+      (!snap_trimq.empty() || !rollback_trimq.empty())) {
     if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
       dout(10) << __func__ << ": nosnaptrim set, not kicking" << dendl;
     } else {

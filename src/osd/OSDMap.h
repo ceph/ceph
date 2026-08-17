@@ -1419,6 +1419,10 @@ public:
   get_rollback_snaps_queue() const {
     return rollback_snaps_queue;
   }
+  const mempool::osdmap::map<int64_t, snap_interval_set_t>&
+  get_new_completed_rollbacks() const {
+    return new_completed_rollbacks;
+  }
 
   int64_t lookup_pg_pool_name(std::string_view name) const {
     auto p = name_pool.find(name);
