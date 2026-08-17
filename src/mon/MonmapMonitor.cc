@@ -1273,6 +1273,13 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
         ss << "already set";
         goto reply_no_propose;
       }
+      if (c == CEPH_CRYPTO_AES256KRB5) {
+        if (!mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+          ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5";
+          err = -ENOTSUP;
+          goto reply_no_propose;
+        }
+      }
       pending_map.auth_service_cipher = c;
     } else if (name == "auth_allowed_ciphers") {
       std::vector<std::string> v;
@@ -1283,6 +1290,13 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
         if (c < 0) {
           err = -EINVAL;
           goto reply_no_propose;
+        }
+        if (c == CEPH_CRYPTO_AES256KRB5) {
+          if (!mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+            ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5";
+            err = -ENOTSUP;
+            goto reply_no_propose;
+          }
         }
         ciphers.push_back(c);
       }
@@ -1303,6 +1317,13 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
         err = 0;
         ss << "already set";
         goto reply_no_propose;
+      }
+      if (c == CEPH_CRYPTO_AES256KRB5) {
+        if (!mon.get_quorum_mon_features().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+          ss << "all monitors must support FEATURE_CEPHX_AUTH_AES256K to use AES256KRB5";
+          err = -ENOTSUP;
+          goto reply_no_propose;
+        }
       }
       pending_map.auth_preferred_cipher = c;
     } else {
