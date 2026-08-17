@@ -15426,6 +15426,45 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     }
     break;
 
+  case POOL_OP_ROLLBACK_SNAP: {
+    snapid_t source = pp.snap_exists(m->name.c_str());  // returns snapid or 0
+    if (!source) {
+      _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
+      return false;
+    }
+    rollback_snap_info_t rb;
+    rb.source_snap = source;
+    rb.rollback_id = pp.get_snap_seq() + 1;
+
+    pp.snap_seq = rb.rollback_id;
+    pp.set_snap_epoch(pending_inc.epoch);
+    pp.rollback_snaps[rb.rollback_id] = rb;
+
+    pending_inc.new_pools[m->pool] = pp;
+    pending_inc.new_rollback_snaps[m->pool][rb.rollback_id] = rb;
+
+    encode(rb.rollback_id, reply_data);
+    changed = true;
+    break;
+  }
+
+  case POOL_OP_ROLLBACK_UNMANAGED_SNAP: {
+    rollback_snap_info_t rb;
+    rb.source_snap = m->snapid;
+    rb.rollback_id = pp.get_snap_seq() + 1;
+
+    pp.snap_seq = rb.rollback_id;
+    pp.set_snap_epoch(pending_inc.epoch);
+    pp.rollback_snaps[rb.rollback_id] = rb;
+
+    pending_inc.new_pools[m->pool] = pp;
+    pending_inc.new_rollback_snaps[m->pool][rb.rollback_id] = rb;
+
+    encode(rb.rollback_id, reply_data);
+    changed = true;
+    break;
+  }
+
   case POOL_OP_AUID_CHANGE:
     _pool_op_reply(op, -EOPNOTSUPP, osdmap.get_epoch());
     return false;
