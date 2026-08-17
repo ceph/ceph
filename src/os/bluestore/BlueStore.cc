@@ -15383,7 +15383,6 @@ void BlueStore::_kv_sync_thread()
       twait = ceph::make_timespan(0);
       kv_submitted = 0;
     }
-    ceph_assert(kv_committing.empty());
     if (kv_queue.empty() &&
 	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
 	 !deferred_aggressive)) {
@@ -15397,6 +15396,7 @@ void BlueStore::_kv_sync_thread()
 
       dout(20) << __func__ << " wake" << dendl;
     } else {
+      deque<TransContext*> kv_committing;  ///< currently syncing
       deque<TransContext*> kv_submitting;
       deque<DeferredBatch*> deferred_done, deferred_stable;
       uint64_t aios = 0, costs = 0, txcs = 0;
