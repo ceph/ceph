@@ -1351,6 +1351,38 @@ list<pool_snap_info_t> pool_snap_info_t::generate_test_instances()
   return o;
 }
 
+// -- rollback_snap_info_t --
+void rollback_snap_info_t::encode(ceph::buffer::list& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(rollback_id, bl);
+  encode(source_snap, bl);
+  ENCODE_FINISH(bl);
+}
+
+void rollback_snap_info_t::decode(ceph::buffer::list::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(rollback_id, p);
+  decode(source_snap, p);
+  DECODE_FINISH(p);
+}
+
+void rollback_snap_info_t::dump(Formatter *f) const
+{
+  f->dump_unsigned("rollback_id", rollback_id);
+  f->dump_unsigned("source_snap", source_snap);
+}
+
+void rollback_snap_info_t::generate_test_instances(
+  list<rollback_snap_info_t*>& o)
+{
+  o.push_back(new rollback_snap_info_t);
+  o.push_back(new rollback_snap_info_t);
+  o.back()->rollback_id = 2;
+  o.back()->source_snap = 1;
+}
+
 // -- pool_opts_t --
 
 // The order of items in the list is important, therefore,

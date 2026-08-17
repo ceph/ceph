@@ -1096,6 +1096,22 @@ inline std::ostream& operator<<(std::ostream& out, const pool_snap_info_t& si) {
 
 
 /*
+ * rollback_snap_info_t
+ *
+ * Metadata for a single pool-level rollback operation.
+ */
+struct rollback_snap_info_t {
+  snapid_t rollback_id;   // unique ID allocated for this rollback (from snap_seq)
+  snapid_t source_snap;   // the snapshot to restore from
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rollback_snap_info_t*>& o);
+};
+WRITE_CLASS_ENCODER(rollback_snap_info_t)
+
+/*
  * pool_opts_t
  *
  * pool options.
