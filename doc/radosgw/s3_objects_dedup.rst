@@ -7,7 +7,7 @@ Full RGW Object Dedup
 Full RGW object deduplication adds ``radosgw-admin`` commands to deduplicate
 RGW tail RADOS objects and to collect and report statistics.
 
-These operations are also available through the `Admin Ops API <../radosgw/adminops/#dedup>`_
+These operations are also available through the :ref:`Admin Ops API <radosgw-adminops-dedup>`
 under ``/{admin}/dedup``.
 
 
@@ -80,7 +80,7 @@ RGW processes within the same zone spreads the dedup work between them.
 This setting is evaluated at RGW startup. Changing it requires a daemon
 restart.
 
-When running RGW as an NFS-Ganesha gateway (librgw), the dedup thread is
+When running RGW as an NFS-Ganesha gateway (``librgw``), the dedup thread is
 disabled by default. To enable it in NFS mode, also set:
 
 .. confval:: rgw_nfs_run_dedup_threads
@@ -92,10 +92,10 @@ Skipped Objects
 The dedup estimate process skips the following RGW objects:
 
 - Objects smaller than :confval:`rgw_dedup_min_obj_size_for_dedup` (unless they
-  are multipart).
-- Objects with different placement rules.
-- Objects in different RADOS pools.
-- Objects with different RGW storage classes.
+  are multipart)
+- Objects with different placement rules
+- Objects in different RADOS pools
+- Objects with different RGW storage classes
 
 The full dedup process skips all of the above and additionally skips
 **compressed** and **user-encrypted** objects.
@@ -120,8 +120,8 @@ daemons.
 
 The dedup estimate process does not access the object payload
 data, which means that processing time won't be significantly affected by the
-underlying media (SSD/HDD) storing the objects. Best practice places bucket index pools
-on fast storage: SSDs
+underlying media (SSD/HDD) storing the objects. Best practice places bucket
+index pools on fast storage: SSDs
 :ref:`are recommended <hardware-recommendations>` and they are cached heavily
 in memory.
 
@@ -144,8 +144,8 @@ Full Dedup Processing
 The full dedup process begins by constructing a dedup table from the bucket
 indexes in a fashion similar to the estimate process described above.
 
-This table is then scanned linearly to exclude RADOS objects without duplicates,
-leaving only dedup candidates.
+This table is then scanned linearly to exclude RADOS objects without
+duplicates, leaving only dedup candidates.
 
 Next, it iterates through these dedup candidate objects, reading their complete
 information from the object metadata, a per-object RADOS operation. During
@@ -161,7 +161,7 @@ matches. If they are, we proceed with deduplication:
 - Copy the manifest from the source to the target.
 - Remove all tail objects on the target.
 
-Split Head Mode
+Split-Head Mode
 ===============
 
 The dedup code can split a head object into two objects:
