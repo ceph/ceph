@@ -13757,7 +13757,6 @@ hobject_t PrimaryLogPG::next_pool_migration(std::optional<hobject_t> start)
   if (start) {
     current = *start;
   }
-  hobject_t next;
   hobject_t end = pool_migration_info.end;
   auto missing_iter_end = recovery_state.get_pg_log().get_missing().get_items().end();
   map<hobject_t, eversion_t> *sentries = &pool_migration_info.objects;
@@ -13770,8 +13769,10 @@ hobject_t PrimaryLogPG::next_pool_migration(std::optional<hobject_t> start)
     map<hobject_t, eversion_t>::const_iterator current_iter =
       sentries->upper_bound(current);
 
+    bool at_end = false;
     if (current_iter == sentries->end()) {
       current = end;
+      at_end = true;
     } else {
       current = current_iter->first;
     }
@@ -13787,6 +13788,11 @@ hobject_t PrimaryLogPG::next_pool_migration(std::optional<hobject_t> start)
       // on the missing list
       ++missing_iter;
     }
+
+    if (at_end) {
+      break;
+    }
+
     if ((missing_iter != missing_iter_end) &&
         (missing_iter->first == current)) {
       if (!recovery_state.get_missing_loc().is_deleted(missing_iter->first)) {
