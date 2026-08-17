@@ -8941,6 +8941,49 @@ void PrimaryLogPG::update_snapset_for_rollback(
   dout(20) << __func__ << " " << soid << " done, snapset=" << ss << dendl;
 }
 
+void PrimaryLogPG::emit_rollback_log_entries(
+  OpContext *ctx,
+  const std::vector<pending_op_t>& ops)
+{
+  const hobject_t& soid = ctx->obs->oi.soid;
+  SnapSet& ss = ctx->new_snapset;
+
+  // Emit CLONE entries for each new clone (SNAP ops only)
+  for (auto& op : ops) {
+    if (op.type != pending_op_t::SNAP) {
+      continue;
+    }
+    hobject_t coid = soid;
+    coid.snap = op.id;
+
+    // Look up the snap vector we stored in update_snapset_for_rollback()
+    auto it = ss.clone_snaps.find(op.id);
+    ceph_assert(it != ss.clone_snaps.end());
+
+    ctx->log.push_back(pg_log_entry_t(
+      pg_log_entry_t::CLONE, coid, ctx->at_version,
+      ctx->obs->oi.version,
+      ctx->obs->oi.user_version,
+      osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
+    encode(it->second, ctx->log.back().snaps);
+    ctx->at_version.version++;
+
+    dout(10) << __func__ << " CLONE " << coid
+             << " snaps=" << it->second << dendl;
+  }
+
+  // Emit MODIFY entry for the head (SnapSet + OI updated to snapc.seq)
+  ctx->log.push_back(pg_log_entry_t(
+    pg_log_entry_t::MODIFY, soid, ctx->at_version,
+    ctx->obs->oi.version,
+    ctx->obs->oi.user_version,
+    ctx->reqid, ctx->mtime, 0));
+  ctx->at_version.version++;
+
+  dout(10) << __func__ << " MODIFY head " << soid
+           << " snapset.seq=" << ss.seq << dendl;
+}
+
 void PrimaryLogPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;

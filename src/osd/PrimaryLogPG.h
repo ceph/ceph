@@ -1251,6 +1251,12 @@ protected:
     const pg_pool_t& pp,
     PGTransaction* t);
 
+  // emit_rollback_log_entries() appends CLONE entries for each new clone and
+  // a MODIFY entry for the updated head into ctx->log.
+  void emit_rollback_log_entries(
+    OpContext *ctx,
+    const std::vector<pending_op_t>& ops);
+
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 
