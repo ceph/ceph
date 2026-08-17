@@ -337,6 +337,15 @@ class NFSCluster:
                 orchestrator.raise_if_exception(completion)
                 self.delete_config_obj(cluster_id)
                 return
+            # The NFS service may have already been removed via 'ceph orch rm'.
+            # Check if orphaned RADOS config objects remain and clean them up.
+            if self._rados(cluster_id).has_objects():
+                log.warning(
+                    f"NFS cluster '{cluster_id}' not found in orchestrator but RADOS objects "
+                    f"still exist. Cleaning up orphaned objects."
+                )
+                self.delete_config_obj(cluster_id)
+                return
             raise NonFatalError("Cluster does not exist")
         except Exception as e:
             log.exception(f"Failed to delete NFS Cluster {cluster_id}")

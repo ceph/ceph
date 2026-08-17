@@ -87,6 +87,11 @@ class NFSRados:
             for obj in ioctx.list_objects():
                 obj.remove()
 
+    def has_objects(self) -> bool:
+        with self.rados.open_ioctx(self.pool) as ioctx:
+            ioctx.set_namespace(self.namespace)
+            return next(ioctx.list_objects(), None) is not None
+
     def check_config(self, config: str = USER_CONF_PREFIX) -> bool:
         with self.rados.open_ioctx(self.pool) as ioctx:
             ioctx.set_namespace(self.namespace)
