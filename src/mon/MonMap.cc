@@ -268,6 +268,14 @@ void MonMap::encode(ceph::buffer::list& blist, uint64_t con_features) const
   encode(stretch_mode_enabled, blist);
   encode(tiebreaker_mon, blist);
   encode(stretch_marked_down_mons, blist);
+
+  /*
+   * We do not check quorum features here before encoding v10 fields. Older
+   * monitors will safely skip these with compat_v < 10. Furthermore, if the
+   * AES256K feature is actively configured, the INCOMPAT flag is set, strictly
+   * preventing older monitors from joining the quorum and potentially dropping
+   * these fields if they were to become leader.
+   */
   encode(auth_epoch, blist);
   encode(auth_service_cipher, blist);
   {

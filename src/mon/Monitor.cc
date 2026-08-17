@@ -549,6 +549,9 @@ CompatSet Monitor::get_supported_features()
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_QUINCY);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_REEF);
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
+
+  // Release-independent features
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_CEPHX_AUTH_AES256K);
   return compat;
 }
 
@@ -2556,6 +2559,12 @@ void Monitor::apply_monmap_to_compatset_features()
     // this feature should only ever be set if the quorum supports it.
     ceph_assert(HAVE_FEATURE(quorum_con_features, SERVER_SQUID));
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_SQUID);
+  }
+
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(ceph::features::mon::FEATURE_CEPHX_AUTH_AES256K));
+    // this feature should only ever be set if the quorum supports it.
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_CEPHX_AUTH_AES256K);
   }
 
   dout(5) << __func__ << dendl;
