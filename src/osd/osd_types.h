@@ -2414,6 +2414,7 @@ struct pg_stat_t {
   std::vector<int32_t> blocked_by;  ///< osds on which the pg is blocked
 
   interval_set<snapid_t> purged_snaps;  ///< recently removed snaps that we've purged
+  snap_interval_set_t completed_rollbacks; // rollback IDs fully processed by this PG
 
   utime_t last_became_active;
   utime_t last_became_peered;
@@ -3155,6 +3156,7 @@ struct pg_info_t {
   hobject_t last_backfill;     ///< objects >= this and < last_complete may be missing
 
   interval_set<snapid_t> purged_snaps;
+  snap_interval_set_t completed_rollbacks; // rollback IDs fully processed by this PG
 
   std::map<shard_id_t,std::pair<eversion_t, eversion_t>>
     partial_writes_last_complete; ///< last_complete for shards not modified by a partial write
@@ -3176,6 +3178,7 @@ struct pg_info_t {
       l.log_tail == r.log_tail &&
       l.last_backfill == r.last_backfill &&
       l.purged_snaps == r.purged_snaps &&
+      l.completed_rollbacks == r.completed_rollbacks &&
       l.partial_writes_last_complete == r.partial_writes_last_complete &&
       l.partial_writes_last_complete_epoch == r.partial_writes_last_complete_epoch &&
       l.stats == r.stats &&

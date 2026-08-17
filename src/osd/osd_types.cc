@@ -3098,6 +3098,14 @@ void pg_stat_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_array_section("completed_rollbacks");
+  for (auto i = completed_rollbacks.begin(); i != completed_rollbacks.end(); ++i) {
+    f->open_object_section("interval");
+    f->dump_stream("start") << i.get_start();
+    f->dump_stream("length") << i.get_len();
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void pg_stat_t::dump_brief(Formatter *f) const
@@ -3176,7 +3184,7 @@ bool operator==(const pg_scrubbing_status_t& l, const pg_scrubbing_status_t& r)
 
 void pg_stat_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(31, 22, bl);
+  ENCODE_START(32, 22, bl);
   encode(version, bl);
   encode(reported_seq, bl);
   encode(reported_epoch, bl);
@@ -3240,6 +3248,7 @@ void pg_stat_t::encode(ceph::buffer::list &bl) const
   encode(scrub_sched_status.m_ordinal_of_requested_replica, bl);
   encode(scrub_sched_status.m_num_to_reserve, bl);
   encode(last_degraded, bl);
+  encode(completed_rollbacks, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -3248,7 +3257,7 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   bool tmp;
   uint32_t old_state;
-  DECODE_START(31, bl);
+  DECODE_START(32, bl);
   decode(version, bl);
   decode(reported_seq, bl);
   decode(reported_epoch, bl);
@@ -3354,6 +3363,9 @@ void pg_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       decode(last_degraded, bl);
     } else {
       last_degraded = last_clean;
+    }
+    if (struct_v >= 32) {
+      decode(completed_rollbacks, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -3478,7 +3490,8 @@ bool operator==(const pg_stat_t& l, const pg_stat_t& r)
     l.scrub_duration == r.scrub_duration &&
     l.objects_trimmed == r.objects_trimmed &&
     l.snaptrim_duration == r.snaptrim_duration &&
-    l.last_degraded == r.last_degraded;
+    l.last_degraded == r.last_degraded &&
+    l.completed_rollbacks == r.completed_rollbacks;
 }
 
 // -- store_statfs_t --
@@ -3784,7 +3797,7 @@ list<pg_history_t> pg_history_t::generate_test_instances()
 
 void pg_info_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(34, 26, bl);
+  ENCODE_START(35, 26, bl);
   encode(pgid.pgid, bl);
   encode(last_update, bl);
   encode(last_complete, bl);
@@ -3802,12 +3815,13 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_interval_started, bl);
   encode(partial_writes_last_complete, bl);
   encode(partial_writes_last_complete_epoch, bl);
+  encode(completed_rollbacks, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(34, bl);
+  DECODE_START(35, bl);
   decode(pgid.pgid, bl);
   decode(last_update, bl);
   decode(last_complete, bl);
@@ -3842,6 +3856,9 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   if (struct_v >= 34) {
     decode(partial_writes_last_complete_epoch, bl);
   }
+  if (struct_v >= 35) {
+    decode(completed_rollbacks, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3872,6 +3889,14 @@ void pg_info_t::dump(Formatter *f) const
        i != purged_snaps.end();
        ++i) {
     f->open_object_section("purged_snap_interval");
+    f->dump_stream("start") << i.get_start();
+    f->dump_stream("length") << i.get_len();
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("completed_rollbacks");
+  for (auto i = completed_rollbacks.begin(); i != completed_rollbacks.end(); ++i) {
+    f->open_object_section("interval");
     f->dump_stream("start") << i.get_start();
     f->dump_stream("length") << i.get_len();
     f->close_section();
