@@ -60,6 +60,8 @@
 #include "messages/MRoute.h"
 #include "messages/MMonGetPurgedSnaps.h"
 #include "messages/MMonGetPurgedSnapsReply.h"
+#include "messages/MMonGetCompletedRollbacks.h"
+#include "messages/MMonGetCompletedRollbacksReply.h"
 
 #include "msg/Messenger.h"
 
@@ -2804,6 +2806,9 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
   case MSG_MON_GET_PURGED_SNAPS:
     return preprocess_get_purged_snaps(op);
 
+  case MSG_MON_GET_COMPLETED_ROLLBACKS:
+    return preprocess_get_completed_rollbacks(op);
+
   default:
     ceph_abort();
     return false;
@@ -4539,6 +4544,56 @@ bool OSDMonitor::preprocess_get_purged_snaps(MonOpRequestRef op)
 
   auto reply = make_message<MMonGetPurgedSnapsReply>(m->start, epoch);
   reply->purged_snaps.swap(r);
+  mon.send_reply(op, reply.detach());
+
+  return true;
+}
+
+bool OSDMonitor::preprocess_get_completed_rollbacks(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  auto m = op->get_req<MMonGetCompletedRollbacks>();
+  dout(7) << __func__ << " " << *m << dendl;
+
+  map<epoch_t, map<int64_t, snap_interval_set_t>> r;
+
+  string k = make_completed_rollback_epoch_key(m->start);
+  auto it = mon.store->get_iterator(OSD_SNAP_PREFIX);
+  it->upper_bound(k);
+  unsigned long epoch = m->last;
+  while (it->valid()) {
+    if (it->key().find("completed_rollback_epoch_") != 0) {
+      break;
+    }
+    string ik = it->key();
+    int n = sscanf(ik.c_str(), "completed_rollback_epoch_%lx", &epoch);
+    if (n != 1) {
+      derr << __func__ << " unable to parse key '" << it->key() << "'" << dendl;
+    } else if (epoch > m->last) {
+      break;
+    } else {
+      bufferlist bl = it->value();
+      auto p = bl.cbegin();
+      auto &v = r[epoch];
+      try {
+	ceph::decode(v, p);
+      } catch (ceph::buffer::error& e) {
+	derr << __func__ << " unable to parse value for key '" << it->key()
+	     << "': \n";
+	bl.hexdump(*_dout);
+	*_dout << dendl;
+      }
+      n += 4 + v.size() * 16;
+    }
+    if (n > 1048576) {
+      // impose a semi-arbitrary limit to message size
+      break;
+    }
+    it->next();
+  }
+
+  auto reply = make_message<MMonGetCompletedRollbacksReply>(m->start, epoch);
+  reply->completed_rollbacks.swap(r);
   mon.send_reply(op, reply.detach());
 
   return true;

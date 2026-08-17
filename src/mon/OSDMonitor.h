@@ -650,6 +650,7 @@ private:
   bool prepare_remove_snaps(MonOpRequestRef op);
 
   bool preprocess_get_purged_snaps(MonOpRequestRef op);
+  bool preprocess_get_completed_rollbacks(MonOpRequestRef op);
 
   int load_metadata(int osd, std::map<std::string, std::string>& m,
 		    std::ostream *err);
