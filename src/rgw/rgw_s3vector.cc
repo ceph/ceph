@@ -1208,11 +1208,13 @@ namespace rgw::s3vector {
       throw JSONDecoder::err(fmt::format("maxResults must be between 1 and 500, got {}", max_results));
     }
 
-    if (!next_token.empty() && (next_token.length() < 1 || next_token.length() > 512)) {
+    // an empty token means that it was not specified
+    if (next_token.length() > 512) {
       throw JSONDecoder::err(fmt::format("nextToken length must be between 1 and 512, got {}", next_token.length()));
     }
 
-    if (!prefix.empty() && (prefix.length() < 1 || prefix.length() > 63)) {
+    // an empty prefix means that it was not specified
+    if (prefix.length() > 63) {
       throw JSONDecoder::err(fmt::format("prefix length must be between 1 and 63, got {}", prefix.length()));
     }
   }
@@ -1240,7 +1242,9 @@ namespace rgw::s3vector {
       index.dump(f);
     }
     f->close_section();
-    ::encode_json("nextToken", next_token, f);
+    if (!next_token.empty()) {
+      ::encode_json("nextToken", next_token, f);
+    }
     f->close_section();
   }
 
@@ -1255,7 +1259,9 @@ namespace rgw::s3vector {
       lancedb_connection_free(conn);
       return -EIO;
     }
-    if (builder = lancedb_table_names_builder_limit(builder, configuration.max_results); !builder) {
+    // list one index more than requested, so that the existence of a next page is known.
+    // the extra index is not returned, and would be listed again on the next call
+    if (builder = lancedb_table_names_builder_limit(builder, configuration.max_results + 1); !builder) {
       lancedb_connection_free(conn);
       return -EIO;
     }
@@ -1272,14 +1278,15 @@ namespace rgw::s3vector {
       lancedb_connection_free(conn);
       return lancedb_error_to_errno(result);
     }
-    const bool has_prefix = configuration.prefix.empty();
-    ldpp_dout(dpp, 20) << "INFO: s3vector listing: " << configuration.vector_bucket_name << ", found: " << name_count << " indexes" << dendl;
-    for (size_t i = 0; i < name_count; i++) {
+    const bool has_prefix = !configuration.prefix.empty();
+    const size_t listed_count = std::min<size_t>(configuration.max_results, name_count);
+    ldpp_dout(dpp, 20) << "INFO: s3vector listing: " << configuration.vector_bucket_name << ", found: " << listed_count << " indexes" << dendl;
+    for (size_t i = 0; i < listed_count; i++) {
       // TODO: once/if this is resolved: https://github.com/lancedb/lancedb/issues/2895 we can prefix filtering at the builder level
       std::string_view name{table_names[i]};
       if (has_prefix) {
         if (!name.starts_with(configuration.prefix)) {
-          ldpp_dout(dpp, 20) << "INFO: on s3vector listing, index: " << name << " is is filterted out" << dendl;
+          ldpp_dout(dpp, 20) << "INFO: on s3vector listing, index: " << name << " is filtered out" << dendl;
           continue;
         }
       }
@@ -1302,8 +1309,11 @@ namespace rgw::s3vector {
         );
         ldpp_dout(dpp, 20) << "INFO: on s3vector listing, index: " << name << " is added to list" << dendl;
     }
-    if (name_count > 0) {
-      reply.next_token = table_names[name_count-1];
+    if (name_count > listed_count) {
+      // more indexes exist beyond this page. note that the token is the last index
+      // that was listed, and not the last one that was returned, since the indexes
+      // that were filtered out should not be listed again
+      reply.next_token = table_names[listed_count-1];
     }
     lancedb_free_table_names(table_names, name_count);
     lancedb_connection_free(conn);
@@ -1505,11 +1515,13 @@ namespace rgw::s3vector {
       throw JSONDecoder::err(fmt::format("maxResults must be between 1 and 500, got {}", max_results));
     }
 
-    if (!next_token.empty() && (next_token.length() < 1 || next_token.length() > 512)) {
+    // an empty token means that it was not specified
+    if (next_token.length() > 512) {
       throw JSONDecoder::err(fmt::format("nextToken length must be between 1 and 512, got {}", next_token.length()));
     }
 
-    if (!prefix.empty() && (prefix.length() < 1 || prefix.length() > 63)) {
+    // an empty prefix means that it was not specified
+    if (prefix.length() > 63) {
       throw JSONDecoder::err(fmt::format("prefix length must be between 1 and 63, got {}", prefix.length()));
     }
   }
@@ -2314,7 +2326,9 @@ namespace rgw::s3vector {
 
   void list_vectors_reply_t::dump(ceph::Formatter* f) const {
     f->open_object_section("");
-    ::encode_json("nextToken", next_token, f);
+    if (!next_token.empty()) {
+      ::encode_json("nextToken", next_token, f);
+    }
     f->open_array_section("vectors");
     for (const auto& vector : vectors) {
       vector.dump(f);

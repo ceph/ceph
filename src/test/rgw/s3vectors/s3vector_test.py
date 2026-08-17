@@ -530,6 +530,28 @@ def test_list_vector_buckets():
     bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
     assert bucket_name1 in bucket_names
     assert bucket_name2 in bucket_names
+    # list vector buckets with a prefix.
+    # bucket_name3 sorts after the prefix range, and bucket_name4 is named exactly
+    # like the prefix, which is the edge of the range the listing starts from
+    prefix = 'kaboom' + run_prefix
+    bucket_name3 = 'other' + run_prefix + '-1'
+    bucket_name4 = prefix
+    for bucket_name in (bucket_name3, bucket_name4):
+        _ensure_s3_bucket_for_vector_bucket(bucket_name)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.list_vector_buckets(prefix=prefix)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info("list_vector_buckets with prefix result: %s", result)
+    bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+    assert bucket_name1 in bucket_names
+    assert bucket_name2 in bucket_names
+    assert bucket_name4 in bucket_names
+    assert bucket_name3 not in bucket_names
+    # a prefix that matches no bucket returns an empty list
+    result = conn.list_vector_buckets(prefix=prefix + '-no-such-bucket')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectorBuckets']) == 0
     # cleanup
     _delete_all_vector_buckets(conn)
 
@@ -1276,6 +1298,33 @@ def test_list_indexes():
     assert index_name2 in index_names
     for idx in result['indexes']:
         assert idx['creationTime'] > datetime.now(timezone.utc) - timedelta(days=1), "creationTime should be within the last day"
+    # all indexes fit in a single page, so no token should be returned
+    assert 'nextToken' not in result
+    # list indexes with a prefix
+    index_name3 = 'other-index'
+    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name3, dataType='float32', dimension=128, distanceMetric='cosine')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.list_indexes(vectorBucketName=bucket_name, prefix='test-')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    log.info('list_indexes with prefix result: %s', result)
+    index_names = [i['indexName'] for i in result['indexes']]
+    assert index_name1 in index_names
+    assert index_name2 in index_names
+    assert index_name3 not in index_names
+    # paginate over all indexes. the last page should not hold a token
+    all_index_names = []
+    kwargs = {'vectorBucketName': bucket_name, 'maxResults': 2}
+    max_pages = 4  # 3 indexes, 2 per page, and a bound so that a bad token cannot loop forever
+    for _ in range(max_pages):
+        result = conn.list_indexes(**kwargs)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        log.info('list_indexes page result: %s', result)
+        all_index_names += [i['indexName'] for i in result['indexes']]
+        next_token = result.get('nextToken')
+        if not next_token:
+            break
+        kwargs['nextToken'] = next_token
+    assert sorted(all_index_names) == sorted([index_name1, index_name2, index_name3])
     # list indexs from bucket that does not exist
     invalid_bucket_name = bucket_name + '-invalid'
     pytest.raises(conn.exceptions.ClientError, conn.list_indexes, vectorBucketName=invalid_bucket_name)
