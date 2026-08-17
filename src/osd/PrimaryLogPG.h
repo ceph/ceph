@@ -1243,6 +1243,14 @@ protected:
     const std::vector<pending_op_t>& ops,
     PGTransaction* t);
 
+  // update_snapset_for_rollback() updates SnapSet metadata for newly created
+  // clones in ops, advances seq to snapc.seq, and writes SS_ATTR.
+  void update_snapset_for_rollback(
+    OpContext *ctx,
+    const std::vector<pending_op_t>& ops,
+    const pg_pool_t& pp,
+    PGTransaction* t);
+
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 

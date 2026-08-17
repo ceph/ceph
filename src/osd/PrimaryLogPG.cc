@@ -8882,6 +8882,65 @@ hobject_t PrimaryLogPG::execute_clone_plan(
   return head_source;
 }
 
+void PrimaryLogPG::update_snapset_for_rollback(
+  OpContext *ctx,
+  const std::vector<pending_op_t>& ops,
+  const pg_pool_t& pp,
+  PGTransaction* t)
+{
+  const hobject_t& soid = ctx->obs->oi.soid;
+  SnapSet& ss = ctx->new_snapset;
+
+  // For each SNAP op, register the new clone in the SnapSet.
+  // clone_snaps covers all pool snap IDs in (prev_seq, op.id].
+  for (auto& op : ops) {
+    if (op.type != pending_op_t::SNAP) {
+      continue;
+    }
+    snapid_t clone_id = op.id;
+
+    // Compute the snap IDs covered by this clone: all snaps in pp.snaps
+    // in the range (ss.seq, clone_id], descending.
+    std::vector<snapid_t> clone_snaps_vec;
+    for (auto& [snap_id, snap_info] : pp.snaps) {
+      if (snap_id > ss.seq && snap_id <= clone_id) {
+        clone_snaps_vec.push_back(snap_id);
+      }
+    }
+    // Descending order (pp.snaps is ascending; reverse)
+    std::sort(clone_snaps_vec.rbegin(), clone_snaps_vec.rend());
+
+    ss.clones.push_back(clone_id);
+    ss.clone_size[clone_id] = ctx->obs->oi.size;
+    ss.clone_snaps[clone_id] = clone_snaps_vec;
+    ss.clone_overlap[clone_id];
+    if (ctx->obs->oi.size) {
+      ss.clone_overlap[clone_id].insert(0, ctx->obs->oi.size);
+    }
+
+    ctx->delta_stats.num_objects++;
+    ctx->delta_stats.num_object_clones++;
+
+    dout(10) << __func__ << " clone " << clone_id
+             << " snaps=" << clone_snaps_vec << dendl;
+
+    // Advance ss.seq past this clone so next clone's snaps don't overlap
+    ss.seq = clone_id;
+  }
+
+  // Advance seq to the full snapc.seq
+  if (ctx->snapc.seq > ss.seq) {
+    ss.seq = ctx->snapc.seq;
+  }
+
+  // Write SS_ATTR for the head object
+  bufferlist bss;
+  encode(ss, bss);
+  setattr_maybe_cache(ctx->obc, t, SS_ATTR, bss);
+
+  dout(20) << __func__ << " " << soid << " done, snapset=" << ss << dendl;
+}
+
 void PrimaryLogPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
