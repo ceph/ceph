@@ -2281,39 +2281,6 @@ void BlueStore::SharedBlobSet::dump(CephContext *cct)
   }
 }
 
-// Extent
-
-BlueStore::Extent::~Extent() {
-  if (blob) {
-    blob->get_cache()->rm_extent();
-  }
-}
-
-uint32_t BlueStore::Extent::blob_end() const {
-  return blob_start() + blob->get_blob().get_logical_length();
-}
-
-void BlueStore::Extent::dump(Formatter* f) const
-{
-  f->dump_unsigned("logical_offset", logical_offset);
-  f->dump_unsigned("length", length);
-  f->dump_unsigned("blob_offset", blob_offset);
-  f->dump_object("blob", *blob);
-}
-
-ostream& operator<<(ostream& out, const BlueStore::Extent& e)
-{
-  return out << std::hex << "0x" << e.logical_offset << "~" << e.length
-	     << ": 0x" << e.blob_offset << "~" << e.length << std::dec
-	     << " " << *e.blob;
-}
-
-void BlueStore::Extent::assign_blob(const BlobRef& b) {
-  ceph_assert(!blob);
-  blob = b;
-  blob->get_cache()->add_extent();
-}
-
 // OldExtent
 BlueStore::OldExtent* BlueStore::OldExtent::create(CollectionRef c,
 						   uint32_t lo,
