@@ -1,14 +1,15 @@
-import { Component, DestroyRef, inject, Input, OnInit } from '@angular/core';
+import { ChangeDetectorRef, Component, DestroyRef, inject, Input, OnInit } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { FormControl } from '@angular/forms';
-import { forkJoin, Observable, of } from 'rxjs';
-import { catchError, finalize, map, switchMap, take } from 'rxjs/operators';
+import { Observable, of } from 'rxjs';
+import { catchError, map, shareReplay, switchMap, take } from 'rxjs/operators';
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { CephfsDir } from '~/app/shared/models/cephfs-directory-models';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 import { FS_ROOT, FS_ROOT_PATH_SENTINEL, MirroringPathUtils } from '../mirroring-path-utils';
-import { createPathEntry, PathEntry } from '../mirroring-path.model';
+import { PathEntry, PathLevel } from '../mirroring-path.model';
 
 const LS_DEPTH = 1;
 
@@ -24,20 +25,21 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
 
   formGroup!: CdFormGroup;
   paths: PathEntry[] = [];
-  loadingLevels: Record<string, true> = {};
   readonly formatLevelOption = MirroringPathUtils.formatLevelOption;
 
   private trackedPaths = new Set<string>();
   private destroyRef = inject(DestroyRef);
   private cephfsService = inject(CephfsService);
+  private cdr = inject(ChangeDetectorRef);
+  private context$: Observable<number> = of(0);
 
   ngOnInit(): void {
     this.formGroup = new CdFormGroup({
       pathsControl: new FormControl<string[]>([], { nonNullable: true })
     });
-    this.paths = [createPathEntry()];
+    this.context$ = this.buildContext$();
+    this.paths = [this.newPathEntry(0)];
     this.syncFormValue();
-    this.loadInitialData();
   }
 
   get pathsControl(): FormControl<string[]> {
@@ -67,21 +69,16 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     if (!this.canAddAnotherPath) {
       return;
     }
-    this.paths.push(createPathEntry());
-    this.loadLevelOptions(this.paths.length - 1, 0, FS_ROOT);
+    this.paths = [...this.paths, this.newPathEntry(this.paths.length)];
   }
 
   removePath(index: number): void {
-    this.paths.splice(index, 1);
+    this.paths = this.paths.filter((_, pathIndex) => pathIndex !== index);
     this.syncFormValue();
   }
 
   toggleExpand(index: number): void {
     this.paths[index].expanded = !this.paths[index].expanded;
-  }
-
-  isLevelLoading(pathIndex: number, levelIndex: number): boolean {
-    return !!this.loadingLevels[`${pathIndex}:${levelIndex}`];
   }
 
   onLevelChange(pathIndex: number, levelIndex: number, selected: string): void {
@@ -128,7 +125,11 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
       return;
     }
 
-    this.loadLevelOptions(pathIndex, levelIndex + 1, updated.fullPath);
+    this.paths[pathIndex] = {
+      ...updated,
+      levels: [...updated.levels, this.newLevel(updated.fullPath, pathIndex)]
+    };
+    this.syncFormValue();
   }
 
   getSubmitPaths(): { toAdd: string[]; alreadyMirrored: string[] } {
@@ -175,29 +176,69 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     );
   }
 
-  private loadInitialData(): void {
-    if (!this.fsName) {
-      return;
-    }
+  private newPathEntry(pathIndex: number, expanded = true): PathEntry {
+    return {
+      fullPath: '',
+      expanded,
+      levels: [this.newLevel(FS_ROOT, pathIndex)]
+    };
+  }
 
-    this.resolveFsId()
-      .pipe(
-        switchMap((fsId) =>
-          forkJoin([
-            of(fsId),
-            this.cephfsService.listMirrorDirectories(this.fsName).pipe(catchError(() => of([])))
-          ])
-        ),
-        takeUntilDestroyed(this.destroyRef)
-      )
-      .subscribe(([fsId, trackedList]) => {
-        this.trackedPaths = new Set(
-          trackedList.map(MirroringPathUtils.normalizePath).filter(Boolean)
-        );
-        if (fsId) {
-          this.loadLevelOptions(0, 0, FS_ROOT);
+  private newLevel(parentPath: string, pathIndex: number): PathLevel {
+    const level: PathLevel = {
+      selected: '',
+      options: [],
+      loading: true,
+      options$: this.directoryOptions$(parentPath, pathIndex)
+    };
+    level.options$.pipe(takeUntilDestroyed(this.destroyRef)).subscribe((options) => {
+      level.options = options;
+      level.loading = false;
+      this.cdr.markForCheck();
+    });
+    return level;
+  }
+
+  private buildContext$(): Observable<number> {
+    if (!this.fsName) {
+      return of(0);
+    }
+    return this.resolveFsId().pipe(
+      switchMap((fsId) =>
+        this.cephfsService.listMirrorDirectories(this.fsName).pipe(
+          catchError(() => of([] as string[])),
+          map((trackedList) => {
+            this.trackedPaths = new Set(
+              trackedList.map(MirroringPathUtils.normalizePath).filter(Boolean)
+            );
+            if (fsId) {
+              this.fsId = fsId;
+            }
+            return fsId;
+          })
+        )
+      ),
+      takeUntilDestroyed(this.destroyRef),
+      shareReplay({ bufferSize: 1, refCount: true })
+    );
+  }
+
+  private directoryOptions$(parentPath: string, pathIndex: number): Observable<string[]> {
+    if (!this.fsName) {
+      return of([]);
+    }
+    return this.context$.pipe(
+      switchMap((fsId) => {
+        const entry = this.paths[pathIndex];
+        if (!fsId || (entry && MirroringPathUtils.isRootPathEntry(entry))) {
+          return of([] as CephfsDir[]);
         }
-      });
+        return this.cephfsService.lsDir(fsId, parentPath, LS_DEPTH).pipe(catchError(() => of([])));
+      }),
+      map((dirs) => this.toSelectableOptions(dirs, parentPath, pathIndex)),
+      takeUntilDestroyed(this.destroyRef),
+      shareReplay({ bufferSize: 1, refCount: false })
+    );
   }
 
   private resolveFsId(): Observable<number> {
@@ -214,68 +255,18 @@ export class MirroringPathsStepComponent implements OnInit, TearsheetStep {
     );
   }
 
-  private loadLevelOptions(pathIndex: number, levelIndex: number, parentPath: string): void {
-    if (!this.fsId) {
-      return;
-    }
-
-    const entry = this.paths[pathIndex];
-    if (!entry || MirroringPathUtils.isRootPathEntry(entry)) {
-      return;
-    }
-
-    const loadingKey = `${pathIndex}:${levelIndex}`;
-    this.loadingLevels = { ...this.loadingLevels, [loadingKey]: true };
-
-    this.cephfsService
-      .lsDir(this.fsId, parentPath, LS_DEPTH)
-      .pipe(
-        take(1),
-        catchError(() => of([])),
-        finalize(() => {
-          const { [loadingKey]: _, ...rest } = this.loadingLevels;
-          this.loadingLevels = rest;
-        }),
-        takeUntilDestroyed(this.destroyRef)
+  private toSelectableOptions(dirs: CephfsDir[], parentPath: string, pathIndex: number): string[] {
+    const options = dirs
+      .map((dir) => dir.name)
+      .filter((name) =>
+        this.isPathSelectable(MirroringPathUtils.joinPath(parentPath, name), pathIndex)
       )
-      .subscribe((dirs) => {
-        const currentEntry = this.paths[pathIndex];
-        if (!currentEntry || MirroringPathUtils.isRootPathEntry(currentEntry)) {
-          return;
-        }
+      .sort();
 
-        if (
-          levelIndex > 0 &&
-          MirroringPathUtils.buildPathFromLevels(currentEntry.levels, levelIndex) !== parentPath
-        ) {
-          return;
-        }
-
-        const options = dirs
-          .map((dir) => dir.name)
-          .filter((name) =>
-            this.isPathSelectable(MirroringPathUtils.joinPath(parentPath, name), pathIndex)
-          )
-          .sort();
-
-        if (
-          parentPath === FS_ROOT &&
-          levelIndex === 0 &&
-          this.isPathSelectable(FS_ROOT, pathIndex)
-        ) {
-          options.unshift(FS_ROOT_PATH_SENTINEL);
-        }
-
-        const levels = [...currentEntry.levels];
-        if (levelIndex < levels.length) {
-          levels[levelIndex] = { ...levels[levelIndex], options };
-        } else if (options.length) {
-          levels.push({ options, selected: '' });
-        }
-
-        this.paths[pathIndex] = { ...currentEntry, levels };
-        this.syncFormValue();
-      });
+    if (parentPath === FS_ROOT && this.isPathSelectable(FS_ROOT, pathIndex)) {
+      options.unshift(FS_ROOT_PATH_SENTINEL);
+    }
+    return options;
   }
 
   private isPathSelectable(path: string, pathIndex: number): boolean {
