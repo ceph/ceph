@@ -866,7 +866,7 @@ Segment::write_ertr::future<> ZBDSegmentManager::segment_write(
     metadata.block_size);
 }
 
-cache_device_set_t& ZBDSegmentManager::get_cache_devices()
+device_set_t& ZBDSegmentManager::get_cache_devices()
 {
   return metadata.config.cache_devices;
 };
