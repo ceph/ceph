@@ -4005,8 +4005,18 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
     utime_t mtime = m->get_mtime();
     uint64_t size = m->get_size();
     version_t inline_version = m->inline_version;
-    
-    if (((dirty & CEPH_CAP_FILE_WR) && mtime > pi->mtime) ||
+
+    // A write flush normally only moves mtime forward. A stored mtime ahead of
+    // this MDS's clock cannot be a real write time (it came from an explicit
+    // setattr/utimes), so the writer's time may replace it, but only if the
+    // writer has seen the latest time_warp_seq. setattr bumps time_warp_seq, so
+    // a stale flush from before that setattr is still rejected.
+    utime_t now = ceph_clock_now();
+    bool stored_in_future = pi->mtime > now;
+    bool writer_seen_timewarp = ceph_seq_cmp(m->get_time_warp_seq(), pi->time_warp_seq) >= 0;
+    bool futuristic_override = stored_in_future && writer_seen_timewarp;
+
+    if (((dirty & CEPH_CAP_FILE_WR) && (mtime > pi->mtime || futuristic_override)) ||
 	((dirty & CEPH_CAP_FILE_EXCL) && mtime != pi->mtime)) {
       dout(7) << "  mtime " << pi->mtime << " -> " << mtime
 	      << " for " << *in << dendl;
