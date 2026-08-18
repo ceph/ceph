@@ -612,7 +612,7 @@ MAX_DBCLEANUP_RETRIES = 3
 
 def MgrModuleRecoverDB(func: Callable) -> Callable:
     @functools.wraps(func)
-    def check(self: MgrModule, *args: Any, **kwargs: Any) -> Any:
+    def check(self: 'MgrModule', *args: Any, **kwargs: Any) -> Any:
         retries = 0
         while True:
             try:
@@ -1315,6 +1315,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         db.execute(SQL, (version,))
 
+    @MgrModuleRecoverDB
     def set_kv(self, key: str, value: Any) -> None:
         SQL = "INSERT OR REPLACE INTO MgrModuleKV (key, value) VALUES (?, ?);"
 
@@ -1326,6 +1327,7 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             self.db.execute(SQL, (key, value))
 
     @API.expose
+    @MgrModuleRecoverDB
     def get_kv(self, key: str) -> Any:
         SQL = "SELECT value FROM MgrModuleKV WHERE key = ?;"
 
@@ -1425,6 +1427,9 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
             try:
                 return self.db is not None
             except MgrDBNotReady:
+                return False
+            except sqlite3.DatabaseError as e:
+                self.log.warning(f"db not ready: {e}")
                 return False
 
     @property
