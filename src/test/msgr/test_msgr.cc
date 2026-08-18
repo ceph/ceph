@@ -19,6 +19,7 @@
 #include <list>
 #include <memory>
 #include <set>
+#include <gmock/gmock-matchers.h>
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
@@ -26,6 +27,8 @@
 #include <boost/random/binomial_distribution.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
+#include <sstream>
+#include "common/Formatter.h"
 #include <gtest/gtest.h>
 
 #define MSG_POLICY_UNIT_TESTING
@@ -40,6 +43,7 @@
 #include "msg/Message.h"
 #include "msg/Messenger.h"
 #include "msg/msg_types.h"
+#include "msg/async/AsyncMessenger.h"
 
 typedef boost::mt11213b gen_type;
 
@@ -99,7 +103,7 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
 class FakeDispatcher : public Dispatcher {
  public:
   struct Session : public RefCountedObject {
-    atomic<uint64_t> count;
+    std::atomic<uint64_t> count;
     ConnectionRef con;
 
     explicit Session(ConnectionRef c): RefCountedObject(g_ceph_context), count(0), con(c) {
@@ -897,6 +901,122 @@ TEST_P(MessengerTest, ReconnectRaceTest) {
   delete srv_interceptor;
 }
 
+TEST_P(MessengerTest, DumpBasics) {
+  // rudimentary check dump results. see integration test in
+  // qa/workunits/cephtool/test.sh for detailed tests
+  if (std::strstr(GetParam(), "async") == nullptr) {
+    GTEST_SKIP() << "skipping as only async messengers have a messenger dump hook";
+  }
+
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("v2:127.0.0.1");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  auto f = Formatter::create_unique("json");
+  std::ostringstream os;
+
+  server_msgr->get_myaddrs().dump(f.get());
+  f->flush(os);
+  const auto server_addr = os.str();
+
+  ConnectionRef conn = client_msgr->connect_to(server_msgr->get_mytype(),
+					       server_msgr->get_myaddrs());
+  f->reset();
+  os.clear();
+  server_msgr->dump(f.get());
+  f->flush(os);
+  const auto server_dump = os.str();
+  f->reset();
+  os.clear();
+  client_msgr->dump(f.get());
+  f->flush(os);
+  const auto client_dump = os.str();
+
+  ASSERT_THAT(server_dump, ::testing::HasSubstr(server_addr)) << server_dump;
+  ASSERT_THAT(client_dump, ::testing::HasSubstr(server_addr)) << client_dump;
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->shutdown();
+  client_msgr->wait();
+}
+
+TEST(MessengerTest, AdminSocketHookLifecycle) {
+  DummyAuthClientServer dummy_auth(g_ceph_context);
+  Messenger* server_msgr = Messenger::create(
+      g_ceph_context, "async+unix", entity_name_t::OSD(0), "server", getpid());
+  Messenger* client_msgr = Messenger::create(
+      g_ceph_context, "async+unix", entity_name_t::CLIENT(-1), "client",
+      getpid());
+  server_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+  client_msgr->set_default_policy(Messenger::Policy::lossy_client(0));
+  server_msgr->set_auth_client(&dummy_auth);
+  server_msgr->set_auth_server(&dummy_auth);
+  client_msgr->set_auth_client(&dummy_auth);
+  client_msgr->set_auth_server(&dummy_auth);
+  server_msgr->set_require_authorizer(false);
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("v2:127.0.0.1");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  bool create_called = false;
+  bool add_called = false;
+  g_ceph_context->modify_msgr_hook(
+      [&]() -> AdminSocketHook* {
+        create_called = true;
+        return nullptr;
+      },
+      [&](AdminSocketHook* ptr) {
+        ASSERT_FALSE(create_called);
+        add_called = true;
+        if (auto hook = dynamic_cast<AsyncMessengerSocketHook*>(ptr)) {
+          auto msgrs = hook->messengers();
+          ASSERT_EQ(2, msgrs.size());
+          ASSERT_THAT(
+              msgrs, ::testing::UnorderedElementsAre("server", "client"));
+        } else {
+          FAIL() << "invalid type";
+        }
+      });
+  ASSERT_TRUE(add_called);
+
+  client_msgr->shutdown();
+  client_msgr->wait();
+  delete client_msgr;
+
+  g_ceph_context->modify_msgr_hook(
+      [&]() -> AdminSocketHook* {
+        create_called = true;
+        return nullptr;
+      },
+      [&](AdminSocketHook* ptr) {
+        ASSERT_FALSE(create_called);
+        add_called = true;
+        if (auto hook = dynamic_cast<AsyncMessengerSocketHook*>(ptr)) {
+          auto msgrs = hook->messengers();
+          ASSERT_EQ(1, msgrs.size());
+          ASSERT_THAT(msgrs, ::testing::ElementsAre("server"));
+        } else {
+          FAIL() << "invalid type";
+        }
+      });
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+
+  delete server_msgr;
+}
+
 TEST_P(MessengerTest, SimpleTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
@@ -1624,7 +1744,7 @@ class SyntheticDispatcher : public Dispatcher {
   bool got_connect;
   map<ConnectionRef, list<uint64_t> > conn_sent;
   map<uint64_t, bufferlist> sent;
-  atomic<uint64_t> index;
+  std::atomic<uint64_t> index;
   SyntheticWorkload *workload;
 
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):

@@ -243,6 +243,8 @@ private:
 
   bool is_msgr2() const override;
 
+  void dump(Formatter* f, bool tcp_info);
+
   friend class Protocol;
   friend class ProtocolV1;
   friend class ProtocolV2;
