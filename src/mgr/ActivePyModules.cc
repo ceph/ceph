@@ -1792,6 +1792,7 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
       PyFormatter f;
       for (const auto &[hostname, daemon_state] : all) {
         for (const auto &[key, state] : daemon_state) {
+          std::lock_guard l{state->lock};
           f.open_array_section(ceph::to_string(key));
           for (const auto &metric : state->daemon_health_metrics) {
             f.open_object_section(metric.get_type_name());
