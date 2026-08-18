@@ -19,6 +19,7 @@
 #include <optional>
 #include <boost/intrusive_ptr.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
+#include <boost/asio/any_io_executor.hpp>
 
 #include "common/tracer.h"
 #include "rgw_cksum.h"
@@ -64,6 +65,10 @@ namespace rgw {
 namespace rgw::restore {
   class Restore;
   struct RestoreEntry;
+}
+
+namespace ceph::async {
+  class LockClient;
 }
 
 namespace rgw::lua {
@@ -1730,14 +1735,6 @@ public:
 						       const std::string& cookie) = 0;
 };
 
-/** @brief Abstraction of a serializer for Restore
- */
-class RestoreSerializer : public Serializer {
-public:
-  RestoreSerializer() {}
-  virtual ~RestoreSerializer() = default;
-};
-
 /**
  * @brief Abstraction for restore processing
  *
@@ -1767,8 +1764,9 @@ public:
   virtual int trim_entries(const DoutPrefixProvider *dpp, optional_yield y,
 		 	  int index, const std::string_view& marker) = 0;
 
-  /** Get a serializer for restore processing */
-  virtual std::unique_ptr<RestoreSerializer> get_serializer(
+  /** Get a lock client for restore shard processing */
+  virtual std::unique_ptr<ceph::async::LockClient> get_lock_client(
+                                boost::asio::any_io_executor ex,
 		  				const std::string& lock_name,
 						const std::string& oid,
 						const std::string& cookie) = 0;

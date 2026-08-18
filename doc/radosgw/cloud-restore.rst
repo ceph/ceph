@@ -302,6 +302,34 @@ updated with the downloaded data, and its ``HEAD`` object will be modified accor
 
 
 
+Restore Processor Tunables
+--------------------------
+
+Cloud restores are carried out asynchronously by a background processor that
+walks per-shard work queues. Its behavior is governed by the following
+configuration options:
+
+.. confval:: rgw_restore_processor_period
+
+.. confval:: rgw_restore_lock_max_time
+
+.. confval:: rgw_restore_max_objs
+
+.. confval:: rgw_restore_max_concurrent_io
+
+.. confval:: rgw_restore_batch_size
+
+The processor renews the per-shard lock in the background for as long as it is
+draining a shard. Each run attempts every shard once; if a shard still has
+backlog after ``rgw_restore_lock_max_time``, the processor stops it after the
+current batch is safely requeued and trimmed, then unlocks it and moves on to
+the next shard. ``rgw_restore_max_concurrent_io`` overlaps several cloud fetches
+to drain a backlog faster -- keep it modest to avoid overloading or being
+rate-limited by the cloud endpoint -- and larger ``rgw_restore_batch_size``
+values trim (and update FIFO metadata) less often.
+
+
+
 Future Work
 -----------
 
