@@ -1,0 +1,5 @@
+# Enable fast_read for EC pools
+overrides:
+  ceph:
+    pool-config:
+      fast_read: true
