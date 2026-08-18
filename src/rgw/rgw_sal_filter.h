@@ -492,6 +492,18 @@ public:
 
   virtual const std::string& get_compression_type(const rgw_placement_rule& rule) override;
   virtual bool valid_placement(const rgw_placement_rule& rule) override;
+  int load_vector_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                          std::unique_ptr<VectorBucket>* bucket, optional_yield y) override {
+    return next->load_vector_bucket(dpp, b, bucket, y);
+  }
+  int list_vector_buckets(const DoutPrefixProvider* dpp,
+                           const rgw_owner& owner, const std::string& tenant,
+                           const std::string& marker, const std::string& end_marker,
+                           uint64_t max, BucketList& buckets,
+                           optional_yield y) override {
+    return next->list_vector_buckets(dpp, owner, tenant, marker,
+                                     end_marker, max, buckets, y);
+  }
 
   virtual void shutdown(void) override { next->shutdown(); };
 
@@ -555,6 +567,7 @@ public:
                   GroupList& listing) override;
 
   RGWUserInfo& get_info() override { return next->get_info(); }
+  const RGWUserInfo& get_info() const override { return next->get_info(); }
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
   /* Internal to Filters */

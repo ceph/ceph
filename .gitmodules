@@ -88,3 +88,8 @@
 [submodule "src/librdkafka"]
 	path = src/librdkafka
 	url = https://github.com/confluentinc/librdkafka.git
+[submodule "src/lancedb-c"]
+	path = src/lancedb-c
+[submodule "src/rgw/lancedb-c"]
+	path = src/rgw/lancedb-c
+	url = https://github.com/lancedb/lancedb-c.git
