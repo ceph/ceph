@@ -136,7 +136,7 @@ struct btree_test_base :
     ).safe_then([this] {
       return segment_manager->mkfs(
         segment_manager::get_ephemeral_device_config(
-          0, cache_device_set_t{}, true));
+          0, device_set_t{}, true));
     }).safe_then([this] {
       sms.reset(new SegmentManagerGroup());
       journal = journal::make_segmented(0, *this, *this, false);

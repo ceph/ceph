@@ -191,7 +191,7 @@ seastar::future<> TMDriver::mkfs()
 	  0
 	},
         meta,
-        cache_device_set_t()});
+        device_set_t()});
   }).safe_then([this] {
     logger().debug("device mkfs done");
     return device->mount();

@@ -45,7 +45,7 @@ EphemeralSegmentManagerRef create_test_ephemeral(
 
 device_config_t get_ephemeral_device_config(
   device_id_t id,
-  cache_device_set_t cache_devices,
+  device_set_t cache_devices,
   bool is_major_device);
 
 class EphemeralSegment final : public Segment {
@@ -135,7 +135,7 @@ public:
     return device_config->meta;
   }
 
-  cache_device_set_t& get_cache_devices() override {
+  device_set_t& get_cache_devices() override {
     assert(device_config);
     return device_config->cache_devices;
   }

@@ -69,7 +69,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
 	backend_type_t::RANDOM_BLOCK,
 	static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN)},
 	seastore_meta_t{uuid_d()},
-	cache_device_set_t()}
+	device_set_t()}
     ).unsafe_get();
     device->mount().unsafe_get();
     nvdev_test_block_t original_data;
