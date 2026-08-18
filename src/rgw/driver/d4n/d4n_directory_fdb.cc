@@ -1207,6 +1207,17 @@ int FDBBlockDirectory::set_values(const DoutPrefixProvider* dpp,
   }
 
   add_value("deleteMarker", block.deleteMarker);
+
+  if ((ret = check_bool(std::to_string(block.invalid))) != -EINVAL) {
+    block.invalid = (ret != 0);
+  } else {
+    ldpp_dout(dpp, 0)
+      << "BlockDirectory::" << __func__
+      << "() ERROR: Invalid bool value for invalid"
+      << dendl;
+    return -EINVAL;
+  }
+  add_value("invalid", block.invalid);
   add_value("size", block.size);
   add_value("globalWeight", block.globalWeight);
   add_value("objName", block.cacheObj.objName);
@@ -1301,6 +1312,7 @@ int FDBBlockDirectory::populate_block(CacheBlock* block, const std::map<std::str
   block->blockID = std::stoull(kvs.at("blockID"));
   block->version = kvs.at("version");
   block->deleteMarker = (kvs.at("deleteMarker") == "1");
+  block->invalid = (kvs.at("invalid") == "1");
   block->size = std::stoull(kvs.at("size"));
   block->globalWeight = std::stoull(kvs.at("globalWeight"));
   block->cacheObj.objName = kvs.at("objName");
@@ -1480,6 +1492,9 @@ int FDBBlockDirectory::update_field(const DoutPrefixProvider* dpp, optional_yiel
   }
   else if (field == "globalWeight") {
     block->globalWeight = std::stoull(value);
+  }
+  else if (field == "invalid") {
+    block->invalid = (value == "1" || value == "true");
   }
   else if (field == "objName") {
     block->cacheObj.objName = value;
