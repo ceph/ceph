@@ -96,11 +96,11 @@ public:
       co_await data_sm->init().handle_error(
         crimson::ct_error::assert_all("unexpected error"));
     }
-    cache_device_set_t cache_devices;
+    device_set_t cache_devices;
     for (auto &cache_sm : cache_segment_managers) {
       auto cache_dev = segment_manager::get_ephemeral_device_config(
         cache_sm->get_device_id(),
-        cache_device_set_t{},
+        device_set_t{},
         false);
       co_await cache_sm->mkfs(cache_dev).handle_error(
         crimson::ct_error::assert_all("unexpected error"));
@@ -228,11 +228,11 @@ public:
       }
       id++;
     }
-    cache_device_set_t cache_devices;
+    device_set_t cache_devices;
     for (auto &cache_rb : cache_rb_devices) {
       auto cache_dev = get_rbm_ephemeral_device_config(
         cache_rb->get_device_id(),
-        cache_device_set_t{},
+        device_set_t{},
         false);
       co_await cache_rb->mkfs(cache_dev).handle_error(
         crimson::ct_error::assert_all("unexpected error"));

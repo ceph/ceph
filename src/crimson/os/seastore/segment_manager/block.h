@@ -161,7 +161,7 @@ public:
     return superblock.segment_size;
   }
 
-  cache_device_set_t& get_cache_devices() override {
+  device_set_t& get_cache_devices() override {
     return superblock.config.cache_devices;
   }
   // public so tests can bypass segment interface when simpler

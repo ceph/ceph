@@ -800,7 +800,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   DEBUG("mkfs_done does not exist, starting mkfs");
   ceph_assert(!root.empty());
 
-  cache_device_set_t cds;
+  device_set_t cds;
   magic_t magic = (magic_t)std::rand();
   for (auto &dev : cache_devices) {
     auto dtype = dev->get_device_type();

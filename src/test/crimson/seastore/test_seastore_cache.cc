@@ -110,7 +110,7 @@ struct cache_test_t : public seastar_test_suite_t {
     ).safe_then([this] {
       return segment_manager->mkfs(
         segment_manager::get_ephemeral_device_config(
-          0, cache_device_set_t{}, true));
+          0, device_set_t{}, true));
     }).safe_then([this] {
       rewrite_gen_t hot_tier_generations = crimson::common::get_conf<uint64_t>(
 	"seastore_cache_device_generations");
