@@ -16,10 +16,13 @@
 #include "OSDMonitor.h"
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
+#include "Paxos.h"
 #include "mds/cephfs_features.h"
 #include "mds/FSMap.h"
 #include "osd/OSDMap.h"
 #include "common/strtol.h" // for strict_strtoll()
+
+#include <boost/optional.hpp>
 
 using TOPNSPC::common::cmd_getval;
 

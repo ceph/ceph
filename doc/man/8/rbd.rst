@@ -974,7 +974,7 @@ To delete a snapshot::
 
        rbd snap rm mypool/myimage@mysnap
 
-To map an image via the kernel with cephx enabled::
+To map an image via the kernel with CephX enabled::
 
        rbd device map mypool/myimage --id admin --keyfile secretfile
 

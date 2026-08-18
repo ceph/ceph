@@ -1,0 +1,5 @@
+tasks:
+- exec:
+    mon.a:
+      - ceph --log-to-stderr=true --log_to_file=true --debug_ms=5 --debug_auth=30 --debug_monc=30 health detail
+- ceph.healthy:

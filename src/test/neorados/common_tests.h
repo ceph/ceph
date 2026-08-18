@@ -17,6 +17,7 @@
 #include <chrono>
 #include <concepts>
 #include <coroutine>
+#include <cstdlib>
 #include <cstddef>
 #include <exception>
 #include <initializer_list>
@@ -62,6 +63,15 @@
 ///
 /// \return A unique pool name
 std::string get_temp_pool_name(std::string_view prefix = {});
+
+/// \brief Return a builder initialized with the test environment's client ID
+inline neorados::RADOS::Builder create_test_builder() {
+  auto b = neorados::RADOS::Builder{};
+  if (const char* env_id = std::getenv("CEPH_CLIENT_ID")) {
+    b.set_name(env_id);
+  }
+  return b;
+}
 
 /// \brief Create a RADOS pool
 ///
@@ -335,8 +345,8 @@ public:
 
   /// \brief Create RADOS handle and pool for the test
   boost::asio::awaitable<void> CoSetUp() override {
-    rados_ = co_await neorados::RADOS::Builder{}
-      .build(asio_context, boost::asio::use_awaitable);
+    auto b = create_test_builder();
+    rados_ = co_await b.build(asio_context, boost::asio::use_awaitable);
     dpp_ = std::make_unique<DoutPrefix>(rados().cct(), 0, prefix().data());
     pool_.set_pool(co_await create_pool());
     co_return;

@@ -6,3 +6,5 @@ tasks:
     daemons: [osd.4, osd.5, osd.6, osd.7]
     wait-for-healthy: false
     wait-for-osds-up: true
+- sequential: [ignore-auth-warn-pkg]
+- ceph.healthy:

@@ -77,6 +77,11 @@ Options
 
    Specify a keyring for use with ``--mkfs``.
 
+.. option:: --use-mon-keyring
+
+   Use the mon's keyring file as authoritative for the "mon." secret. Normally
+   the key in the mons' auth database is used.
+
 .. option:: --no-config-file
 
     Signal that we don't want to rely on a *ceph.conf*, either user provided

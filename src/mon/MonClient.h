@@ -60,7 +60,8 @@ public:
   MonConnection(CephContext *cct,
 		ConnectionRef conn,
 		uint64_t global_id,
-		AuthRegistry *auth_registry);
+		AuthRegistry *auth_registry,
+                ceph::mutex& m);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
   MonConnection& operator=(MonConnection&&) = default;
@@ -144,6 +145,7 @@ private:
   MessageRef pending_tell_command;
 
   AuthRegistry *auth_registry;
+  ceph::mutex& monc_lock;
 };
 
 
@@ -813,6 +815,7 @@ public:
   md_config_t::config_callback get_config_callback();
 
 private:
+  void _wipe_secrets_and_tickets();
 
   std::map<ceph_tid_t, VersionCompletion> version_requests;
   ceph_tid_t version_req_id;

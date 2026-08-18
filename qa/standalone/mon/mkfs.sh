@@ -80,7 +80,7 @@ function kill_daemons() {
 }
 
 function auth_none() {
-    mon_mkfs --auth-supported=none
+    mon_mkfs --auth_cluster_required=none --auth_service_required=none --auth_client_required=none
 
     ceph-mon \
         --id $MON_ID \
@@ -94,7 +94,7 @@ function auth_none() {
 
     [ ! -f $MON_DIR/keyring ] || return 1
 
-    mon_run --auth-supported=none
+    mon_run --auth_cluster_required=none --auth_service_required=none --auth_client_required=none
 
     timeout $TIMEOUT ceph --mon-host $CEPH_MON mon stat || return 1
 }
@@ -161,13 +161,13 @@ function makedir() {
 
     # an empty directory does not mean the mon exists
     mkdir $MON_DIR
-    mon_mkfs --auth-supported=none 2>&1 | tee $DIR/makedir.log
+    mon_mkfs --auth_cluster_required=none --auth_service_required=none --auth_client_required=none 2>&1 | tee $DIR/makedir.log
     ! grep "$MON_DIR already exists" $DIR/makedir.log || return 1
 }
 
 function idempotent() {
-    mon_mkfs --auth-supported=none
-    mon_mkfs --auth-supported=none 2>&1 | tee $DIR/makedir.log
+    mon_mkfs --auth_cluster_required=none --auth_service_required=none --auth_client_required=none
+    mon_mkfs --auth_cluster_required=none --auth_service_required=none --auth_client_required=none 2>&1 | tee $DIR/makedir.log
     grep "'$MON_DIR' already exists" $DIR/makedir.log > /dev/null || return 1
 }
 

@@ -49,10 +49,12 @@
 #include "LogMonitor.h"
 #include "Monitor.h"
 #include "MonitorDBStore.h"
+#include "MonMap.h"
 
 #include "messages/MMonCommand.h"
 #include "messages/MLog.h"
 #include "messages/MLogAck.h"
+#include "msg/Messenger.h"
 #include "common/Graylog.h"
 #include "common/Journald.h"
 #include "common/errno.h"
