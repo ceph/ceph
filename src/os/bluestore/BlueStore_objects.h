@@ -25,6 +25,18 @@
 #include "bluestore_types.h"
 #include "BlueStore.h"
 
+/*
+ * extent map blob encoding
+ *
+ * we use the low bits of the blobid field to indicate some common scenarios
+ * and spanning vs local ids.  See ExtentMap::{encode,decode}_some().
+ */
+#define BLOBID_FLAG_CONTIGUOUS 0x1  // this extent starts at end of previous
+#define BLOBID_FLAG_ZEROOFFSET 0x2  // blob_offset is 0
+#define BLOBID_FLAG_SAMELENGTH 0x4  // length matches previous extent
+#define BLOBID_FLAG_SPANNING   0x8  // has spanning blob id
+#define BLOBID_SHIFT_BITS        4
+
 namespace bluestore {
 
   /// in-memory blob metadata and associated cached buffers (if any)
@@ -195,6 +207,316 @@ namespace bluestore {
       BlueStore::Collection *coll);
   };
 
+  /// a sharded extent map, mapping offsets to lextents to blobs
+  struct ExtentMap {
+    Onode *onode;
+    BlueStore::extent_map_t extent_map;        ///< map of Extents to Blobs
+    BlueStore::blob_map_t spanning_blob_map;   ///< blobs that span shards
+
+    struct Shard {
+      bluestore_onode_t::shard_info *shard_info = nullptr;
+      unsigned extents = 0;  ///< count extents in this shard
+      bool loaded = false;   ///< true if shard is loaded
+      bool dirty = false;    ///< true if shard is dirty and needs reencoding
+    };
+
+    mempool::bluestore_cache_meta::vector<Shard> shards;    ///< shards
+
+    ceph::buffer::list inline_bl;    ///< cached encoded map, if unsharded; empty=>dirty
+
+    uint32_t needs_reshard_begin = 0;
+    uint32_t needs_reshard_end = 0;
+
+    void scan_shared_blobs(uint64_t start, uint64_t length,
+			   std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
+    Blob* find_mergable_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
+				  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
+    void reblob_extents(uint32_t blob_start, uint32_t blob_end,
+			BlueStore::BlobRef from_blob, BlueStore::BlobRef to_blob);
+    void make_range_shared_maybe_merge(BlueStore::TransContext* txc, BlueStore::OnodeRef& onode,
+				       uint64_t srcoff, uint64_t length);
+
+    void dup(BlueStore* b, BlueStore::TransContext*, BlueStore::CollectionRef&, BlueStore::OnodeRef&, BlueStore::OnodeRef&,
+      uint64_t&, uint64_t&, uint64_t&);
+    void dup_esb(BlueStore* b, BlueStore::TransContext*, BlueStore::CollectionRef&, BlueStore::OnodeRef&, BlueStore::OnodeRef&,
+      uint64_t&, uint64_t&, uint64_t&);
+
+    bool needs_reshard() const {
+      return needs_reshard_end > needs_reshard_begin;
+    }
+    void clear_needs_reshard() {
+      needs_reshard_begin = needs_reshard_end = 0;
+    }
+    void request_reshard(uint32_t begin, uint32_t end) {
+      if (begin < needs_reshard_begin) {
+	needs_reshard_begin = begin;
+      }
+      if (end > needs_reshard_end) {
+	needs_reshard_end = end;
+      }
+    }
+    // signals that there was a modification on range <begin, end)
+    // if this spans over a shard boundary, then shards no longer
+    // can be encoded separately, and reshard run is needed
+    void maybe_reshard(uint32_t begin, uint32_t end) {
+      if (spans_shard(begin, end - begin)) {
+	request_reshard(begin, end);
+      }
+    }
+
+    struct DeleteDisposer {
+      void operator()(Extent *e) { delete e; }
+    };
+
+    ExtentMap(Onode *o, size_t inline_shard_prealloc_size);
+    ~ExtentMap() {
+      extent_map.clear_and_dispose(DeleteDisposer());
+    }
+
+    void clear() {
+      extent_map.clear_and_dispose(DeleteDisposer());
+      shards.clear();
+      inline_bl.clear();
+      clear_needs_reshard();
+    }
+
+    void dump(ceph::Formatter* f) const;
+
+    bool encode_some(
+      uint32_t offset, uint32_t length, ceph::buffer::list& bl, unsigned *pn,
+      bool complain_extent_overlap, //verification; in debug mode assert if extents overlap
+      bool complain_shard_spanning  //verification; in debug mode assert if extent spans shards;
+                                    //must be used only on encode after reshard
+    );
+
+    class ExtentDecoder {
+      uint64_t pos = 0;
+      uint64_t prev_len = 0;
+      uint64_t extent_pos = 0;
+    protected:
+      // Decodes Blob from bitstream.
+      // The returned Blob is then used in \ref consume_blob or \ref consume_spanning_blob
+      virtual BlueStore::BlobRef decode_create_blob(
+        bptr_c_it_t& p,
+        __u8 struct_v,
+        uint64_t* sbid,      // shared blobid, is Blob turns out to be shared blob
+        bool include_ref_map, // only spanning blobs have references stored
+        BlueStore::Collection* c) = 0;
+
+      virtual void consume_blobid(Extent* le,
+                                  bool spanning,
+                                  uint64_t blobid) = 0;
+      virtual void consume_blob(Extent* le,
+                                uint64_t extent_no,
+                                uint64_t sbid,
+                                BlueStore::BlobRef b) = 0;
+      virtual void consume_spanning_blob(uint64_t sbid, BlueStore::BlobRef b) = 0;
+      virtual Extent* get_next_extent() = 0;
+      virtual void add_extent(Extent*) = 0;
+
+      void decode_extent(Extent* le,
+                         __u8 struct_v,
+                         bptr_c_it_t& p,
+                         BlueStore::Collection* c);
+    public:
+      virtual ~ExtentDecoder() {
+      }
+
+      unsigned decode_some(const ceph::buffer::list& bl, BlueStore::Collection* c);
+      void decode_spanning_blobs(bptr_c_it_t& p, BlueStore::Collection* c);
+    };
+
+    class ExtentDecoderFull : public ExtentDecoder {
+      ExtentMap& extent_map;
+      std::vector<BlueStore::BlobRef> blobs;
+      // owns the Extent from get_next_extent() until add_extent() inserts it,
+      // so a throw during decode_extent() can't leak it
+      std::unique_ptr<Extent> pending_extent;
+    protected:
+      BlueStore::BlobRef decode_create_blob(
+        bptr_c_it_t& p,
+        __u8 struct_v,
+        uint64_t* sbid,
+        bool include_ref_map,
+        BlueStore::Collection* c) override;
+
+      void consume_blobid(Extent* le, bool spanning, uint64_t blobid) override;
+      void consume_blob(Extent* le,
+                        uint64_t extent_no,
+                        uint64_t sbid,
+                        BlueStore::BlobRef b) override;
+      void consume_spanning_blob(uint64_t sbid, BlueStore::BlobRef b) override;
+      Extent* get_next_extent() override;
+      void add_extent(Extent* ) override;
+    public:
+      ExtentDecoderFull (ExtentMap& _extent_map) : extent_map(_extent_map) {
+      }
+    };
+
+    unsigned decode_some(ceph::buffer::list& bl);
+
+    void bound_encode_spanning_blobs(size_t& p);
+    void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
+    BlueStore::BlobRef& get_spanning_blob(int id) {
+      auto p = spanning_blob_map.find(id);
+      ceph_assert_decode(p != spanning_blob_map.end());
+      return p->second;
+    }
+
+    void update(
+      KeyValueDB::Transaction t,
+      bool just_after_reshard //true to indicate that update should now respect shard boundaries
+    );                        //as no further resharding will be done
+
+    struct ReshardPlan {
+      std::vector<bluestore_onode_t::shard_info> new_shard_info;
+      unsigned shard_index_begin;
+      unsigned shard_index_end;
+      uint32_t spanning_scan_begin;
+      uint32_t spanning_scan_end;
+    };
+
+    ReshardPlan reshard_decision(uint32_t segment_size);
+
+    void reshard_action(
+      ReshardPlan& plan,
+      KeyValueDB *db,
+      KeyValueDB::Transaction t);
+
+
+    int16_t allocate_spanning_blob_id();
+    void reshard(
+      KeyValueDB *db,
+      KeyValueDB::Transaction t,
+      uint32_t segment_size);
+
+    /// initialize Shards from the onode
+    void init_shards(bool loaded, bool dirty);
+
+    /// return index of shard containing offset
+    /// or -1 if not found
+    int seek_shard(uint32_t offset) {
+      size_t end = shards.size();
+      size_t mid, left = 0;
+      size_t right = end; // one passed the right end
+
+      while (left < right) {
+        mid = left + (right - left) / 2;
+        if (offset >= shards[mid].shard_info->offset) {
+          size_t next = mid + 1;
+          if (next >= end || offset < shards[next].shard_info->offset)
+            return mid;
+          //continue to search forwards
+          left = next;
+        } else {
+          //continue to search backwards
+          right = mid;
+        }
+      }
+
+      return -1; // not found
+    }
+
+    /// check if a range spans a shard
+    bool spans_shard(uint32_t offset, uint32_t length) {
+      if (shards.empty()) {
+	return false;
+      }
+      int s = seek_shard(offset);
+      ceph_assert(s >= 0);
+      if (s == (int)shards.size() - 1) {
+	return false; // last shard
+      }
+      if (offset + length <= shards[s+1].shard_info->offset) {
+	return false;
+      }
+      return true;
+    }
+
+    /// ensure that a range of the map is loaded
+    void fault_range(KeyValueDB *db,
+		     uint32_t offset, uint32_t length);
+    /// ensure that a range of the map is loaded
+    /// return range that is encompassed by affected shards
+    std::pair<uint32_t, uint32_t> fault_range_ex(
+      KeyValueDB *db,
+      uint32_t offset,
+      uint32_t length);
+    void maybe_load_shard(
+      KeyValueDB *db,
+      int begin_shard,
+      int end_shard);
+
+    /// ensure a range of the map is marked dirty
+    void dirty_range(uint32_t offset, uint32_t length);
+
+    /// for seek_lextent test
+    BlueStore::extent_map_t::iterator find(uint64_t offset);
+
+    /// seek to the first lextent including or after offset
+    BlueStore::extent_map_t::iterator seek_lextent(uint64_t offset);
+    BlueStore::extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
+    /// seek to the exactly the extent, or after offset
+    BlueStore::extent_map_t::iterator seek_nextent(uint64_t offset);
+
+    /// split extent
+    BlueStore::extent_map_t::iterator split_at(BlueStore::extent_map_t::iterator p, uint32_t offset);
+    /// if inside extent split it, if not return extent on right
+    BlueStore::extent_map_t::iterator maybe_split_at(uint32_t offset);
+    /// add a new Extent
+    void add(uint32_t lo, uint32_t o, uint32_t l, BlueStore::BlobRef& b) {
+      extent_map.insert(*new Extent(lo, o, l, b));
+    }
+
+    /// remove (and delete) an Extent
+    void rm(BlueStore::extent_map_t::iterator p) {
+      extent_map.erase_and_dispose(p, DeleteDisposer());
+    }
+
+    bool has_any_lextents(uint64_t offset, uint64_t length);
+
+    /// consolidate adjacent lextents in extent_map
+    int compress_extent_map(uint64_t offset, uint64_t length);
+
+    /// punch a logical hole.  add lextents to deref to target list.
+    void punch_hole(BlueStore::CollectionRef &c,
+		    uint64_t offset, uint64_t length,
+		    BlueStore::old_extent_map_t *old_extents);
+
+    /// put new lextent into lextent_map overwriting existing ones if
+    /// any and update references accordingly
+    Extent *set_lextent(BlueStore::CollectionRef &c,
+			uint64_t logical_offset,
+			uint64_t offset, uint64_t length,
+                        BlueStore::BlobRef b,
+			BlueStore::old_extent_map_t *old_extents);
+
+    /// split a blob (and referring extents)
+    BlueStore::BlobRef split_blob(BlueStore::BlobRef lb, uint32_t blob_offset, uint32_t pos);
+
+    /// allocation unit status
+    struct debug_au_state_t {
+      uint64_t disk_offset; //< offset of the data on disk (in bytes)
+      uint32_t disk_length; //< length of the data on disk
+                            //  <offset, offset + length) never crosses AU boundary
+      uint32_t chksum;      //< checksum of the AU
+      uint32_t ref_cnts;    //< how many times AU is shared
+      debug_au_state_t(
+	uint64_t disk_offset, uint32_t disk_length,
+	uint32_t chksum, uint32_t ref_cnts)
+	: disk_offset(disk_offset)
+	, disk_length(disk_length)
+	, chksum(chksum)
+	, ref_cnts(ref_cnts) {}
+    };
+    using debug_au_vector_t = std::vector<debug_au_state_t>;
+    /// Produces a sequence of allocation units representing logical offsets.
+    /// If there is a discontinuity, it is encoded as disk_offset==-1.
+    debug_au_vector_t debug_list_disk_layout();
+
+    friend std::ostream& operator<<(std::ostream& out, const debug_au_vector_t& auv);
+  };
+
   /// an in-memory object
   struct Onode {
     MEMPOOL_CLASS_HELPERS();
@@ -215,7 +537,7 @@ namespace bluestore {
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
     uint16_t prev_spanning_cnt = 0; /// spanning blobs count
-    BlueStore::ExtentMap extent_map;
+    ExtentMap extent_map;
     BlueStore::BufferSpace bc;             ///< buffer cache
 
     // track txc's that have not been committed to kv store (and whose
@@ -236,7 +558,7 @@ namespace bluestore {
     static void decode_raw(
       BlueStore::Onode* on,
       const bufferlist& v,
-      BlueStore::ExtentMap::ExtentDecoder& dencoder,
+      ExtentMap::ExtentDecoder& dencoder,
       bool use_onode_segmentation);
 
     static Onode* create_decode(
