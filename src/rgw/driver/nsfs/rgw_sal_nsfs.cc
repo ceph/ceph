@@ -1189,7 +1189,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     ctx->_conf.get_val<Option::size_t>("rgw_nsfs_write_chunk_size");
   int64_t left = bl.length();
   ssize_t ret;
-  int saved_flags = -1;
 
   ret = fchmod(fd, S_IRUSR|S_IWUSR);
   if(ret < 0) {
@@ -1199,19 +1198,13 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
   }
 
   if (direct_io) {
-    if ((ofs % DIRECT_IO_ALIGN) == 0 && (left % DIRECT_IO_ALIGN) == 0) {
-      /* Whole call is O_DIRECT-safe: write it in one shot, ignoring
-       * rgw_nsfs_write_chunk_size, since splitting it further could
-       * reintroduce a misaligned length. */
-      bl.rebuild_aligned_size_and_memory(DIRECT_IO_ALIGN, DIRECT_IO_ALIGN);
-      write_chunk_size = 0;
-    } else {
-      /* Can't satisfy O_DIRECT alignment for this call (typically the
-       * final, odd-sized chunk of an object) - fall back to buffered I/O
-       * for just this write, restoring O_DIRECT on the fd afterward. */
-      saved_flags = ::fcntl(fd, F_GETFL);
-      ::fcntl(fd, F_SETFL, saved_flags & ~O_DIRECT);
+    /* Never fcntl-off O_DIRECT on a shared fd; pad or RMW instead. */
+    ret = posix_direct_write(fd, ofs, bl, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: File::write posix_direct_write failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
     }
+    return ret;
   }
 
   char* curp = bl.c_str();
@@ -1225,9 +1218,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
         << ofs << " :" << cpp_strerror(ret) << dendl;
-      if (saved_flags >= 0) {
-        ::fcntl(fd, F_SETFL, saved_flags);
-      }
       return -ret;
     }
   }
@@ -1243,19 +1233,12 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not write object " << get_name() << ": "
 	<< cpp_strerror(ret) << dendl;
-      if (saved_flags >= 0) {
-        ::fcntl(fd, F_SETFL, saved_flags);
-      }
       return -ret;
     }
 
     curp += ret;
     woff += ret;
     left -= ret;
-  }
-
-  if (saved_flags >= 0) {
-    ::fcntl(fd, F_SETFL, saved_flags);
   }
 
   return 0;
@@ -5346,6 +5329,17 @@ std::string NSFSObject::gen_temp_fname()
   return temp_fname;
 }
 
+static int nsfs_data_file_fd(nsfs::FSEnt* ent)
+{
+  if (!ent) {
+    return -1;
+  }
+  if (ent->get_type() == ObjectType::FILE) {
+    return ent->get_fd();
+  }
+  return -1;
+}
+
 int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
@@ -5358,13 +5352,44 @@ int NSFSObject::NSFSReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
   else
     left = end - ofs + 1;
 
+  if (posix_try_use_uring(dpp, y, /*nsfs=*/true)) {
+    int fd = nsfs_data_file_fd(source->get_fsent());
+    if (fd >= 0) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_get_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
+      int64_t chunk = dpp->get_cct()->_conf.get_val<Option::size_t>(
+          "rgw_nsfs_read_chunk_size");
+      if (chunk <= 0) {
+        chunk = READ_SIZE;
+      }
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio);
+      int r = win.iterate(cur_ofs, left,
+          [dpp, cb, source = source](bufferlist& bl, int len) {
+            int ret = cb->handle_data(bl, 0, len);
+            if (ret < 0) {
+              ldpp_dout(dpp, 0) << " ERROR: callback failed on "
+                                << source->get_name() << ": " << ret << dendl;
+            }
+            return ret;
+          });
+      if (r < 0) {
+        ldpp_dout(dpp, 1) << "URING: ERROR: NSFSReadOp::iterate failed: "
+                          << cpp_strerror(-r) << " (" << r << ")" << dendl;
+      }
+      return r;
+    }
+  }
+
   /* QD2 read-ahead: while handle_data() yields in the beast frontend's
    * async_write, spawn the next File::read() on the same executor so the
    * disk fetch of chunk N+1 overlaps the network send of chunk N.  One
    * prefetch at a time, in order.  Without a yield_context there is
    * nothing to overlap with, so the loop stays sequential. */
   std::optional<ceph::async::spawn_throttle> throttle;
-  if (y && dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_get_iodepth") >= 2) {
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_get_iodepth"),
+      "rgw_nsfs_get_iodepth");
+  if (y && iodepth >= 2) {
     throttle.emplace(y.get_yield_context(), 1);
   }
 
@@ -6955,7 +6980,26 @@ int NSFSMultipartWriter::prepare(optional_yield y)
 
 int NSFSMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
-  bool pipeline = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth") >= 2;
+  if (posix_try_use_uring(dpp, yield, /*nsfs=*/true) && part_file &&
+      part_file->get_fd() >= 0) {
+    if (!uring_write) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
+      uring_write = std::make_unique<UringWriteWindow>(
+          dpp, yield, part_file->get_fd(), qd, dio);
+      part_file->set_sync_on_close(true);
+    }
+    int r = uring_write->process(std::move(data), offset);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: NSFSMultipartWriter::process failed: "
+                        << cpp_strerror(-r) << " (" << r << ")" << dendl;
+    }
+    return r;
+  }
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth"),
+      "rgw_nsfs_put_iodepth");
+  bool pipeline = iodepth >= 2;
   return pending_write.process(std::move(data), offset, pipeline,
       [this](uint64_t ofs, bufferlist& bl) {
         return part_file->write(ofs, bl, dpp, null_yield);
@@ -6975,9 +7019,19 @@ int NSFSMultipartWriter::complete(
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret = pending_write.drain();
-  if (ret < 0) {
-    return ret;
+  int ret = 0;
+  if (uring_write) {
+    ret = uring_write->drain();
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: NSFSMultipartWriter::complete drain failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
+      return ret;
+    }
+  } else {
+    ret = pending_write.drain();
+    if (ret < 0) {
+      return ret;
+    }
   }
   NSFSUploadPartInfo info;
 
@@ -7062,7 +7116,27 @@ int NSFSAtomicWriter::prepare(optional_yield y)
 
 int NSFSAtomicWriter::process(bufferlist&& data, uint64_t offset)
 {
-  bool pipeline = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth") >= 2;
+  int fd = nsfs_data_file_fd(obj->get_fsent());
+  if (posix_try_use_uring(dpp, yield, /*nsfs=*/true) && fd >= 0) {
+    if (!uring_write) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_nsfs_direct_io");
+      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio);
+      if (obj->get_fsent()) {
+        obj->get_fsent()->set_sync_on_close(true);
+      }
+    }
+    int r = uring_write->process(std::move(data), offset);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: NSFSAtomicWriter::process failed: "
+                        << cpp_strerror(-r) << " (" << r << ")" << dendl;
+    }
+    return r;
+  }
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_nsfs_put_iodepth"),
+      "rgw_nsfs_put_iodepth");
+  bool pipeline = iodepth >= 2;
   return pending_write.process(std::move(data), offset, pipeline,
       [this](uint64_t ofs, bufferlist& bl) {
         return obj->write(ofs, bl, dpp, null_yield);
@@ -7080,9 +7154,19 @@ int NSFSAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret = pending_write.drain();
-  if (ret < 0) {
-    return ret;
+  int ret = 0;
+  if (uring_write) {
+    ret = uring_write->drain();
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: NSFSAtomicWriter::complete drain failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
+      return ret;
+    }
+  } else {
+    ret = pending_write.drain();
+    if (ret < 0) {
+      return ret;
+    }
   }
   uint64_t orig_size = 0;
   auto exists = obj->check_exists(dpp);
