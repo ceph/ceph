@@ -305,9 +305,9 @@ FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
 
 FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(
   Transaction &trans,
-  const coll_t &cid,
-  const ghobject_t& start,
-  const ghobject_t& end,
+  const coll_t cid,
+  const ghobject_t start,
+  const ghobject_t end,
   uint64_t limit)
 {
   LOG_PREFIX(FLTreeOnodeManager::list_onodes);

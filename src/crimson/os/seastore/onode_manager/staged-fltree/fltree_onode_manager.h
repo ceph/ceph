@@ -492,9 +492,9 @@ public:
 
   list_onodes_ret list_onodes(
     Transaction &trans,
-    const coll_t &cid,
-    const ghobject_t& start,
-    const ghobject_t& end,
+    const coll_t cid,
+    const ghobject_t start,
+    const ghobject_t end,
     uint64_t limit) final;
 
   ~FLTreeOnodeManager();
