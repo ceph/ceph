@@ -14,8 +14,36 @@ options:
 - name: osd_numa_auto_affinity
   type: bool
   level: advanced
-  desc: automatically set affinity to numa node when storage and network match
+  desc: automatically set affinity to numa node based on osd_numa_auto_affinity_policy
   default: true
+  see_also:
+  - osd_numa_auto_affinity_policy
+  flags:
+  - startup
+- name: osd_numa_auto_affinity_policy
+  type: str
+  level: advanced
+  desc: policy for automatically setting numa node affinity
+  long_desc: This specifies the policy for automatically setting the OSD's NUMA node affinity
+    when osd_numa_auto_affinity is enabled.
+  fmt_desc:
+    This specifies the policy for automatically setting the OSD's NUMA node affinity when
+    ``osd_numa_auto_affinity`` is enabled. The ``storage`` setting uses the NUMA node
+    shared by all storage devices used by the OSD. The ``public_network`` and ``cluster_network``
+    settings use the NUMA node of the corresponding network interface. The ``network`` setting
+    sets NUMA affinity only when the public and cluster network interfaces are associated with
+    the same NUMA node. The ``all`` setting sets NUMA affinity only when all storage devices
+    and both network interfaces are associated with the same NUMA node.
+    If the NUMA node cannot be determined, or if the required NUMA nodes do not match, no NUMA affinity is set.
+  default: storage
+  see_also:
+  - osd_numa_auto_affinity
+  enum_values:
+  - all
+  - storage
+  - network
+  - public_network
+  - cluster_network
   flags:
   - startup
 - name: osd_numa_node
