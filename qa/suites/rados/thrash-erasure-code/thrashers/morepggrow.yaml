@@ -4,15 +4,12 @@ overrides:
     - but it is still running
     - objects unfound and apparently lost
     - \(POOL_APP_NOT_ENABLED\)
-<<<<<<< HEAD
-=======
     - \(DEPRECATED_EC_PLUGIN\)
     conf:
       osd:
         osd scrub min interval: 60
         osd scrub max interval: 120
         osd max backfills: 9
->>>>>>> 2bd558e177d (qa: small consistency change)
 tasks:
 - thrashosds:
     timeout: 1200
