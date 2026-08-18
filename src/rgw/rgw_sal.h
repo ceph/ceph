@@ -1848,6 +1848,8 @@ public:
   virtual const std::string& get_storage_class() = 0;
   /** Should we retain the head object when transitioning */
   virtual bool retain_head_object() = 0;
+  /** Should we retain versioned objects without creating a delete marker */
+  virtual bool retain_current_version() = 0;
   /** Is read_through allowed */
   virtual bool allow_read_through() = 0;
   /** Get read_through restore_days */

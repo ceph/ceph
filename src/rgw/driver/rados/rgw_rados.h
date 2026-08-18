@@ -1424,6 +1424,10 @@ int restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
 			    optional_yield y,
                             rgw_zone_set *zones_trace = nullptr,
                             bool log_data_change = false);
+  int bucket_index_refresh_instance(const DoutPrefixProvider *dpp,
+                                    RGWBucketInfo& bucket_info,
+                                    const rgw_obj& obj_instance,
+                                    optional_yield y);
   int bucket_index_unlink_instance(const DoutPrefixProvider *dpp,
                                    RGWBucketInfo& bucket_info,
                                    const rgw_obj& obj_instance,

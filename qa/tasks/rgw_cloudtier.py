@@ -84,6 +84,7 @@ class RGWCloudTier(Task):
                 cloud_target_path = client_config.get('cloud_target_path')
                 cloud_target_storage_class = client_config.get('cloud_target_storage_class')
                 cloud_retain_head_object = client_config.get('cloud_retain_head_object')
+                cloud_retain_current_version = client_config.get('cloud_retain_current_version')
                 cloud_allow_read_through = client_config.get('cloud_allow_read_through')
                 cloud_read_through_restore_days = client_config.get('cloud_read_through_restore_days')
                 cloud_target_by_bucket = self._normalize_bool_option(
@@ -114,6 +115,8 @@ class RGWCloudTier(Task):
                     tier_config_params += ",allow_read_through=" + cloud_allow_read_through
                 if (cloud_read_through_restore_days != None):
                     tier_config_params += ",read_through_restore_days=" + cloud_read_through_restore_days
+                if (cloud_retain_current_version != None):
+                    tier_config_params += ",retain_current_version=" + cloud_retain_current_version
                 if (cloud_target_by_bucket != None):
                     tier_config_params += ",target_by_bucket=" + cloud_target_by_bucket
                 if (cloud_target_by_bucket_prefix != None):
