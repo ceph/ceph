@@ -37,6 +37,7 @@ describe('CephfsSetupMirroringComponent', () => {
     cephfsServiceMock.enableMirror.mockReturnValue(of(null));
     cephfsServiceMock.disableMirror.mockReturnValue(of(null));
     cephfsServiceMock.createBootstrapPeer.mockReturnValue(of(null));
+    cephServiceServiceMock.create.mockReturnValue(of(null));
     taskWrapperMock.wrapTaskAroundCall.mockImplementation(({ call }) => call);
 
     await TestBed.configureTestingModule({
@@ -187,6 +188,39 @@ describe('CephfsSetupMirroringComponent', () => {
         })
       );
       expect(component.isSubmitting).toBe(false);
+      expect(emitSpy).toHaveBeenCalledWith({ filesystem: 'myfs' });
+    });
+
+    it('should fail setup when orchestrator create fails and no daemon is present', () => {
+      const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
+      const setErrorsSpy = jest.spyOn(component.setupForm, 'setErrors');
+      cephfsServiceMock.listDaemonStatus.mockReturnValue(of([]));
+      cephServiceServiceMock.create.mockReturnValue(
+        throwError(() => new Error('orchestrator unavailable'))
+      );
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
+
+      component.onSetupMirroring();
+
+      expect(cephfsServiceMock.listDaemonStatus).toHaveBeenCalled();
+      expect(cephServiceServiceMock.create).toHaveBeenCalledWith({ service_type: 'cephfs-mirror' });
+      expect(cephfsServiceMock.enableMirror).not.toHaveBeenCalled();
+      expect(cephfsServiceMock.createBootstrapPeer).not.toHaveBeenCalled();
+      expect(component.isSubmitting).toBe(false);
+      expect(setErrorsSpy).toHaveBeenCalledWith({ cdSubmitButton: true });
+      expect(emitSpy).not.toHaveBeenCalled();
+    });
+
+    it('should skip orchestrator create when a cephfs-mirror daemon is already present', () => {
+      const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
+      cephfsServiceMock.listDaemonStatus.mockReturnValue(of([{ daemon_id: 1, filesystems: [] }]));
+      component.setupForm.setValue({ filesystem: 'myfs', token: CEPHFS_TOKEN });
+
+      component.onSetupMirroring();
+
+      expect(cephServiceServiceMock.create).not.toHaveBeenCalled();
+      expect(cephfsServiceMock.enableMirror).toHaveBeenCalledWith('myfs');
+      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith('myfs', CEPHFS_TOKEN);
       expect(emitSpy).toHaveBeenCalledWith({ filesystem: 'myfs' });
     });
 
