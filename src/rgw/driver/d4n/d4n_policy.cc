@@ -908,7 +908,8 @@ int LFUDAPolicy::delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry
       }
     }
     ll.unlock();
-    if ((ret = cacheDriver->delete_data(dpp, oid_in_cache, y)) == 0) {
+    ret = cacheDriver->delete_data(dpp, oid_in_cache, y);
+    if (ret == 0 || ret == -ENOENT) {
       if (!(ret = erase(dpp, oid_in_cache, y))) {
         ldpp_dout(dpp, 0) << "Failed to delete policy entry for: " << oid_in_cache << ", ret=" << ret << dendl;
         return -EINVAL;
@@ -922,8 +923,19 @@ int LFUDAPolicy::delete_data_blocks(const DoutPrefixProvider* dpp, LFUDAObjEntry
         .version = e->version,
         .size = static_cast<uint64_t>(cur_len),
       };
-      if ((ret = blockDir.del(dpp, y, &blk, std::nullopt)) < 0) {
-        ldpp_dout(dpp, 0) << "Failed to delete block directory entry for: " << oid_in_cache << ", ret=" << ret << dendl;
+      if (blockDir.get(dpp, y, &blk, std::nullopt) == 0) {
+        if (blk.cacheObj.hostsList.size() <= 1) {
+          if ((ret = blockDir.del(dpp, y, &blk, std::nullopt)) < 0) {
+            ldpp_dout(dpp, 0) << "Failed to delete block directory entry for: " << oid_in_cache << ", ret=" << ret << dendl;
+          }
+        } else {
+          std::string local_addr = dpp->get_cct()->_conf->rgw_d4n_local_rgw_address;
+          if (blk.cacheObj.hostsList.contains(local_addr)) {
+            if ((ret = blockDir.remove_host(dpp, y, &blk, local_addr, std::nullopt)) < 0) {
+              ldpp_dout(dpp, 0) << "Failed to remove host from block directory entry for: " << oid_in_cache << ", ret=" << ret << dendl;
+            }
+          }
+        }
       }
     } else {
       ldpp_dout(dpp, 0) << "Failed to delete data block " << oid_in_cache << ", ret=" << ret << dendl;
@@ -952,7 +964,8 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
     if (it != entries_map.end()) {
       ll.unlock();
       //head block exists only for delete markers (and no data blocks)
-      if ((ret = cacheDriver->delete_data(dpp, e->key, y)) == 0) {
+      ret = cacheDriver->delete_data(dpp, e->key, y);
+      if (ret == 0 || ret == -ENOENT) {
         if ((ret = erase(dpp, e->key, y)) < 0) {
           ldpp_dout(dpp, 0) << "Failed to delete head policy entry for: " << e->key << ", ret=" << ret << dendl;
           return ret;
@@ -991,11 +1004,62 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
         e->creationTime += std::chrono::seconds(interval / 2);
         v_it->second[e->creationTime] = e;
       }
-      ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): updated creation time is: " << e->creationTime << dendl;
+      ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
+                         << "() deferring deletion due to active lease"
+                         << " retry_count=" << e->retry_count
+                         << " updated creationTime=" << e->creationTime << dendl;
       l.unlock();
     } else if (ret < 0) {
       ldpp_dout(dpp, 0) << "Failed to delete blocks for: " << e->key << ", ret=" << ret << dendl;
       return ret;
+    } else {
+      // delete_data_blocks succeeded - now clean up tombstoned HEAD blocks if they exist
+      // Check and delete main HEAD block if tombstoned
+      rgw::d4n::CacheBlock head_block {
+        .cacheObj = {
+          .objName = e->obj_key.get_oid(),
+          .bucketName = e->bucket_id,
+        },
+        .blockID = 0,
+        .size = 0,
+      };
+      if (blockDir.get(dpp, y, &head_block, std::nullopt) == 0 && head_block.invalid) {
+        if ((ret = blockDir.del(dpp, y, &head_block, std::nullopt)) < 0) {
+          ldpp_dout(dpp, 0) << "Failed to delete tombstoned HEAD block for: " << e->obj_key.get_oid() << ", ret=" << ret << dendl;
+        }
+      }
+
+      // Check and delete null HEAD block if tombstoned
+      if (e->obj_key.have_null_instance()) {
+        rgw::d4n::CacheBlock null_head {
+          .cacheObj = {
+            .objName = rgw::sal::get_versioned_head_block_name("null", e->obj_key.name),
+            .bucketName = e->bucket_id,
+          },
+          .blockID = 0,
+          .size = 0,
+        };
+        if (blockDir.get(dpp, y, &null_head, std::nullopt) == 0 && null_head.invalid) {
+          if ((ret = blockDir.del(dpp, y, &null_head, std::nullopt)) < 0) {
+            ldpp_dout(dpp, 0) << "Failed to delete tombstoned null HEAD block for: " << e->obj_key.name << ", ret=" << ret << dendl;
+          }
+        }
+      }
+
+      // Check and delete version-specific HEAD block if tombstoned
+      rgw::d4n::CacheBlock ver_head {
+        .cacheObj = {
+          .objName = rgw::sal::get_versioned_head_block_name(e->version, e->obj_key.name),
+          .bucketName = e->bucket_id,
+        },
+        .blockID = 0,
+        .size = 0,
+      };
+      if (blockDir.get(dpp, y, &ver_head, std::nullopt) == 0 && ver_head.invalid) {
+        if ((ret = blockDir.del(dpp, y, &ver_head, std::nullopt)) < 0) {
+          ldpp_dout(dpp, 0) << "Failed to delete tombstoned version-specific HEAD block for: " << e->obj_key.name << ", ret=" << ret << dendl;
+        }
+      }
     }
   }
 	return 0;
