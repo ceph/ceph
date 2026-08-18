@@ -16529,34 +16529,6 @@ void PrimaryLogPG::stop_pool_migration_error(int error_code)
         PeeringState::PoolMigrationStoppedError(error_code))));
 }
 
-void PrimaryLogPG::on_pool_migration_source_starting()
-{
-  dout(10) << __func__
-           << " watermark=" << pool_migration_watermark
-           << " last_started=" << last_pool_migration_started
-           << dendl;
-
-  // Reset the scan cursor to the watermark. When DoPoolMigration is queued
-  // from paths that bypass _on_activate_committed (defer/retry after TooFull
-  // or Revoked, post-recovery, post-backfill, mark_unfound_lost), the cursor
-  // may be ahead of the watermark due to objects that were started but never
-  // durably completed in the previous attempt. The watermark is the only
-  // durable progress marker, so restart scanning from there.
-  if (last_pool_migration_started != pool_migration_watermark) {
-    dout(10) << __func__ << " resetting last_pool_migration_started from "
-             << last_pool_migration_started << " to " << pool_migration_watermark
-             << dendl;
-    last_pool_migration_started = pool_migration_watermark;
-  }
-
-  // Any in-flight tracking from a previous attempt is now stale.
-  // _on_activate_committed clears these on a full re-activation; mirror
-  // that here for the cases where we re-enter migration without re-activating.
-  pool_migrations_in_flight.clear();
-  pool_migration_clones_in_flight.clear();
-  new_pool_migration_interval_in_flight = false;
-}
-
 void PrimaryLogPG::on_pool_migration_source_suspended()
 {
   dout(10) << __func__ << " in_flight=" << pool_migrations_in_flight.size()
