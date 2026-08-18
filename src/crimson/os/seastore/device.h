@@ -58,14 +58,15 @@ struct device_config_t {
     device_id_t id,
     device_type_t d_type,
     backend_type_t b_type,
-    cache_device_set_t sds) {
+    cache_device_set_t sds,
+    magic_t magic) {
     return device_config_t{
              true,
              device_spec_t{
-               (magic_t)std::rand(),
-		d_type,
-                b_type,
-		id},
+               magic,
+               d_type,
+               b_type,
+               id},
              seastore_meta_t{new_osd_fsid},
              sds};
    }

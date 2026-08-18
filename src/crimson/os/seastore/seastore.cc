@@ -801,12 +801,12 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   ceph_assert(!root.empty());
 
   cache_device_set_t cds;
+  magic_t magic = (magic_t)std::rand();
   for (auto &dev : cache_devices) {
     auto dtype = dev->get_device_type();
     auto btype = dev->get_backend_type();
     assert(dtype == device_type_t::SSD ||
       dtype == device_type_t::RANDOM_BLOCK_SSD);
-    magic_t magic = (magic_t)std::rand();
     auto id = dev->get_device_id();
     cds.emplace((device_id_t)id,
                 device_spec_t{magic, dtype, btype, (device_id_t)id});
@@ -823,7 +823,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     DEBUG("creating primary device");
     co_await dev->mkfs(
       device_config_t::create_data(
-        new_osd_fsid, id, d_type, b_type, cds));
+        new_osd_fsid, id, d_type, b_type, cds, magic));
   }
 
   DEBUG("mounting {} cache_devices", cache_devices.size());
