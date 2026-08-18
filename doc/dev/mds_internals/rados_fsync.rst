@@ -121,6 +121,7 @@ We need to build a bunch of internal interfaces for this.
 ------------------
 - Stable mtime.
 - client-side config option enabling us to skip fsync
+- client only enables fsync skip when the MDS supports it
 
 9. Development todo
 -------------------
@@ -128,7 +129,5 @@ We need to build a bunch of internal interfaces for this.
   aren't acknowledged by the MDS. (This covers several bits of metadata and
   scenarios that are otherwise difficult to separate from the caps dirtied by
   a write() call.)
-- implement MDS feature bits shared with the client authorizing it to write
-  out the change_attr to RADOS.
 - Actually write out change_attr to RADOS.
 - Include change_attr param in MClientRequest (for Client::_do_setattr).

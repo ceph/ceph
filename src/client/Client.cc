@@ -405,7 +405,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     objecter_finisher(m->cct),
     m_command_hook(this),
     fscid(0),
-    subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)}
+    subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)},
+    do_rados_fsync(false)
 {
   /* We only use the locale for normalization/case folding. That is unaffected
    * by the locale but required by the API.
@@ -2654,10 +2655,12 @@ void Client::_closed_mds_session(MetaSession *s, int err, bool rejected)
     mds_sessions.erase(s->mds_num);
 }
 
-static void reinit_mds_features(MetaSession *session,
-				const MConstRef<MClientSession>& m) {
+void Client::reinit_mds_features(MetaSession *session,
+                                        const MConstRef<MClientSession>& m) {
   session->mds_features = std::move(m->supported_features);
   session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
+  do_rados_fsync = session->mds_features.test(CEPHFS_FEATURE_RADOS_FSYNC) &&
+    cct->_conf.get_val<bool>("client_fsync_to_rados");
 }
 
 void Client::handle_client_session(const MConstRef<MClientSession>& m)
@@ -13307,7 +13310,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   }
   bool mds_flush = false;
   if (!syncdataonly && in->dirty_caps) {
-    if (cct->_conf->client_fsync_to_rados &&
+    if (do_rados_fsync &&
         in->inline_version == CEPH_INLINE_NONE &&
         !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL)) {
       // we don't need to sync to the MDS when we we can recover
@@ -18948,6 +18951,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_deleg_break_on_open",
     "client_deleg_timeout",
     "client_fscrypt_as",
+    "client_fsync_to_rados",
     "client_inject_write_delay_secs",
     "client_mount_timeout",
     "client_oc_max_dirty",
@@ -19022,6 +19026,15 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_fscrypt_as")) {
     fscrypt_as = cct->_conf.get_val<bool>(
       "client_fscrypt_as");
+  }
+  if (changed.count("client_fsync_to_rados")) {
+    bool rados_fsync = false;
+    if (!mds_sessions.empty()) {
+      rados_fsync = mds_sessions.at(0)->
+        mds_features.test(CEPHFS_FEATURE_RADOS_FSYNC);
+    }
+    do_rados_fsync = rados_fsync &&
+      cct->_conf.get_val<bool>("client_fsync_to_rados");
   }
 }
 

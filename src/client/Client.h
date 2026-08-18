@@ -1092,6 +1092,7 @@ protected:
   void _closed_mds_session(MetaSession *s, int err=0, bool rejected=false);
   bool _any_stale_sessions() const;
   void _kick_stale_sessions();
+  void reinit_mds_features(MetaSession *session, const MConstRef<MClientSession>& m);
   void handle_client_session(const MConstRef<MClientSession>& m);
   void send_reconnect(MetaSession *s);
   void resend_unsafe_requests(MetaSession *s);
@@ -2413,6 +2414,7 @@ private:
   bool client_permissions;
   bool fuse_default_permissions;
   bool respect_subvolume_snapshot_visibility;
+  bool do_rados_fsync;
 
   std::locale m_locale;
 };
