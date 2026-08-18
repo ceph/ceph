@@ -366,6 +366,11 @@ options:
   level: dev
   desc: overwrite the existing data block based on delta if the overwrite size is equal to or less than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
   default: 0
+- name: seastore_data_zero_reservation_chunk_size
+  type: size
+  level: dev
+  desc: On the first write into a zero-reserved (unwritten) region, widen the write to this chunk boundary (rounded down to a multiple of the LBA unit size), zero-pad the extra range, and materialize the whole chunk as one real mapping via a single REMAP. Set to 0 (or <= block size) to disable. For subsequent overwrites within the materialized chunk to stay in-place (delta) instead of re-splitting, also set seastore_data_delta_based_overwrite to at least the typical write size (RBM).
+  default: 65536
 - name: seastore_disable_end_to_end_data_protection 
   type: bool
   level: dev

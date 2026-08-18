@@ -216,8 +216,25 @@ void SeaStore::Shard::register_metrics(store_index_t store_index)
 
   std::pair<txn_stage_t, sm::label_instance> labels_by_stage[] = {
     {txn_stage_t::THROTTLER_WAIT,        sm::label_instance("stage", "throttler_wait")},
+    {txn_stage_t::COLLECTION_BUSY,       sm::label_instance("stage", "collection_busy")},
     {txn_stage_t::BUILD,                 sm::label_instance("stage", "build")},
     {txn_stage_t::BUILD_GET_ONODE,       sm::label_instance("stage", "build_get_onode")},
+    {txn_stage_t::BUILD_UPDATE_ONODE_SIZE, sm::label_instance("stage", "build_update_onode_size")},
+    {txn_stage_t::BUILD_COPY_ON_WRITE,   sm::label_instance("stage", "build_copy_on_write")},
+    {txn_stage_t::BUILD_OBJ_WRITE,       sm::label_instance("stage", "build_obj_write")},
+    {txn_stage_t::BUILD_ODH_RESERVE,     sm::label_instance("stage", "build_odh_reserve")},
+    {txn_stage_t::BUILD_ODH_GET_PIN,     sm::label_instance("stage", "build_odh_get_pin")},
+    {txn_stage_t::BUILD_ODH_GET_PIN_CURSOR, sm::label_instance("stage", "build_odh_get_pin_cursor")},
+    {txn_stage_t::BUILD_ODH_GET_PIN_RESOLVE, sm::label_instance("stage", "build_odh_get_pin_resolve")},
+    {txn_stage_t::BUILD_ODH_OVERWRITE,   sm::label_instance("stage", "build_odh_overwrite")},
+    {txn_stage_t::BUILD_ODH_OVERWRITE_SINGLE, sm::label_instance("stage", "build_odh_overwrite_single")},
+    {txn_stage_t::BUILD_ODH_OVERWRITE_MULTI,  sm::label_instance("stage", "build_odh_overwrite_multi")},
+    {txn_stage_t::BUILD_ODH_SINGLE_PREP,    sm::label_instance("stage", "build_odh_single_prep")},
+    {txn_stage_t::BUILD_ODH_SINGLE_EDGE_READ, sm::label_instance("stage", "build_odh_single_edge_read")},
+    {txn_stage_t::BUILD_ODH_SINGLE_PUNCH,   sm::label_instance("stage", "build_odh_single_punch")},
+    {txn_stage_t::BUILD_ODH_SINGLE_DO_WRITE, sm::label_instance("stage", "build_odh_single_do_write")},
+    {txn_stage_t::BUILD_ODH_MULTI_PUNCH,    sm::label_instance("stage", "build_odh_multi_punch")},
+    {txn_stage_t::BUILD_ODH_DO_WRITE,       sm::label_instance("stage", "build_odh_do_write")},
     {txn_stage_t::SUBMIT_TOTAL,          sm::label_instance("stage", "submit_total")},
     {txn_stage_t::SUBMIT_RESERVE,        sm::label_instance("stage", "submit_reserve")},
     {txn_stage_t::SUBMIT_OOL_WRITE,      sm::label_instance("stage", "submit_ool_write")},
@@ -1801,6 +1818,9 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
     coll.collection_in_flight = true;
     DEBUG("cid={} gate closed, starting dispatch", coll.get_cid());
     std::ignore = dispatch_collection(_ch);
+  } else if (!coll.blocked_since) {
+    // First waiter behind an in-flight batch — start COLLECTION_BUSY.
+    coll.blocked_since = seastar::lowres_clock::now();
   }
   return fut;
 }
@@ -1844,9 +1864,20 @@ seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
   while (!coll.pending_txns.empty()) {
     std::vector<seastar::promise<>> pending_txns_promises;
     auto merged = build_next_batch(coll, pending_txns_promises);
+    seastar::lowres_clock::duration collection_busy{0};
+    if (coll.blocked_since) {
+      collection_busy =
+        seastar::lowres_clock::now() - *coll.blocked_since;
+      coll.blocked_since.reset();
+    }
+    // Leftover waiters (batch boundary) are still blocked on this collection.
+    if (!coll.pending_txns.empty()) {
+      coll.blocked_since = seastar::lowres_clock::now();
+    }
     DEBUG("draining {} txns from cid={}, committing batch ({} ops)",
           pending_txns_promises.size(), coll.get_cid(), merged.get_num_ops());
-    co_await run_one_batch(ch, std::move(merged));
+    co_await run_one_batch(
+      ch, std::move(merged), collection_busy);
     DEBUG("committed batch of {} txns for cid={}",
           pending_txns_promises.size(), coll.get_cid());
     for (auto& p : pending_txns_promises) {
@@ -1855,11 +1886,13 @@ seastar::future<> SeaStore::Shard::dispatch_collection(CollectionRef ch)
   }
   DEBUG("cid={} drained, gate open", coll.get_cid());
   coll.collection_in_flight = false;
+  coll.blocked_since.reset();
 }
 
 seastar::future<> SeaStore::Shard::run_one_batch(
   CollectionRef _ch,
-  ceph::os::Transaction&& _t)
+  ceph::os::Transaction&& _t,
+  seastar::lowres_clock::duration collection_busy)
 {
   LOG_PREFIX(SeaStoreS::run_one_batch);
   ++(shard_stats.pending_io_num);
@@ -1948,7 +1981,10 @@ seastar::future<> SeaStore::Shard::run_one_batch(
   add_conflict_replay_sample(ctx.transaction->get_num_replays());
   {
     auto& pd = ctx.transaction->get_phase_durations();
-    auto total = seastar::lowres_clock::now() - ctx.begin_timestamp;
+    // Include collection_busy so slow/very_slow tiers reflect end-to-end-ish
+    // cost (wait behind prior batch + this batch's build/submit).
+    auto total = (seastar::lowres_clock::now() - ctx.begin_timestamp)
+      + collection_busy;
     auto total_ms = std::chrono::duration_cast<
       std::chrono::duration<double, std::milli>>(total).count();
 
@@ -1956,8 +1992,25 @@ seastar::future<> SeaStore::Shard::run_one_batch(
       std::pair<txn_stage_t, seastar::lowres_clock::duration>, STAGE_MAX>
       stage_samples = {{
         {txn_stage_t::THROTTLER_WAIT,        throttler_wait},
+        {txn_stage_t::COLLECTION_BUSY,       collection_busy},
         {txn_stage_t::BUILD,                 ctx.build_time},
         {txn_stage_t::BUILD_GET_ONODE,       ctx.get_onode_time},
+        {txn_stage_t::BUILD_UPDATE_ONODE_SIZE, ctx.update_onode_size_time},
+        {txn_stage_t::BUILD_COPY_ON_WRITE,   ctx.copy_on_write_time},
+        {txn_stage_t::BUILD_OBJ_WRITE,       ctx.obj_write_time},
+        {txn_stage_t::BUILD_ODH_RESERVE,     ctx.odh_reserve_time},
+        {txn_stage_t::BUILD_ODH_GET_PIN,     ctx.odh_get_pin_time},
+        {txn_stage_t::BUILD_ODH_GET_PIN_CURSOR, ctx.odh_get_pin_cursor_time},
+        {txn_stage_t::BUILD_ODH_GET_PIN_RESOLVE, ctx.odh_get_pin_resolve_time},
+        {txn_stage_t::BUILD_ODH_OVERWRITE,   ctx.odh_overwrite_time},
+        {txn_stage_t::BUILD_ODH_OVERWRITE_SINGLE, ctx.odh_overwrite_single_time},
+        {txn_stage_t::BUILD_ODH_OVERWRITE_MULTI,  ctx.odh_overwrite_multi_time},
+        {txn_stage_t::BUILD_ODH_SINGLE_PREP,    ctx.odh_single_prep_time},
+        {txn_stage_t::BUILD_ODH_SINGLE_EDGE_READ, ctx.odh_single_edge_read_time},
+        {txn_stage_t::BUILD_ODH_SINGLE_PUNCH,   ctx.odh_single_punch_time},
+        {txn_stage_t::BUILD_ODH_SINGLE_DO_WRITE, ctx.odh_single_do_write_time},
+        {txn_stage_t::BUILD_ODH_MULTI_PUNCH,    ctx.odh_multi_punch_time},
+        {txn_stage_t::BUILD_ODH_DO_WRITE,       ctx.odh_do_write_time},
         {txn_stage_t::SUBMIT_TOTAL,          ctx.submit_time},
         {txn_stage_t::SUBMIT_RESERVE,        pd.reserve},
         {txn_stage_t::SUBMIT_OOL_WRITE,      pd.ool_write},
@@ -2512,25 +2565,48 @@ SeaStore::Shard::_write(
   }
   const auto &object_size = onode.get_layout().size;
   if (offset + len > object_size) {
+    auto t0 = seastar::lowres_clock::now();
     onode.update_onode_size(
       *ctx.transaction,
       std::max<uint64_t>(offset + len, object_size));
+    ctx.update_onode_size_time += seastar::lowres_clock::now() - t0;
   }
   return seastar::do_with(
     std::move(_bl),
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &bl, auto &objhandler)
   {
+    auto cow_start = seastar::lowres_clock::now();
     return _maybe_copy_on_write(ctx, onode, objhandler
-    ).si_then([&ctx, &onode, &objhandler, offset, &bl, this] {
+    ).si_then([&ctx, &onode, &objhandler, offset, &bl, this, cow_start] {
+      ctx.copy_on_write_time += seastar::lowres_clock::now() - cow_start;
+      auto write_start = seastar::lowres_clock::now();
       return objhandler.write(
 	ObjectDataHandler::context_t{
 	  *transaction_manager,
 	  *ctx.transaction,
 	  onode,
+	  nullptr,
+	  &ctx.odh_reserve_time,
+	  &ctx.odh_get_pin_time,
+	  &ctx.odh_get_pin_cursor_time,
+	  &ctx.odh_get_pin_resolve_time,
+	  &ctx.odh_overwrite_time,
+	  &ctx.odh_overwrite_single_time,
+	  &ctx.odh_overwrite_multi_time,
+	  &ctx.odh_single_prep_time,
+	  &ctx.odh_single_edge_read_time,
+	  &ctx.odh_single_punch_time,
+	  &ctx.odh_single_do_write_time,
+	  &ctx.odh_multi_punch_time,
+	  &ctx.odh_do_write_time,
 	},
 	offset,
-	bl);
+	bl
+      ).si_then([&ctx, write_start] {
+	ctx.obj_write_time += seastar::lowres_clock::now() - write_start;
+	return ObjectDataHandler::write_iertr::now();
+      });
     });
   });
 }

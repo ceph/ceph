@@ -6,6 +6,8 @@
 #include <iostream>
 #include <limits>
 
+#include <seastar/core/lowres_clock.hh>
+
 #include "include/buffer.h"
 
 #include "test/crimson/seastore/test_block.h" // TODO
@@ -337,13 +339,34 @@ class ObjectDataHandler {
 public:
   ObjectDataHandler(uint32_t mos) : max_object_size(mos),
     delta_based_overwrite_max_extent_size(
-      crimson::common::get_conf<Option::size_t>("seastore_data_delta_based_overwrite")) {}
+      crimson::common::get_conf<Option::size_t>("seastore_data_delta_based_overwrite")),
+    zero_reservation_chunk_size(
+      p2align(
+	static_cast<uint64_t>(
+	  crimson::common::get_conf<Option::size_t>(
+	    "seastore_data_zero_reservation_chunk_size")),
+	static_cast<uint64_t>(laddr_t::UNIT_SIZE))) {}
 
   struct context_t {
     TransactionManager &tm;
     Transaction &t;
     Onode &onode;
     Onode *d_onode = nullptr; // The desination node in case of clone
+    // Optional sinks for ObjectDataHandler::write stage timing
+    // (set from SeaStore::_write). Null => do not record.
+    seastar::lowres_clock::duration *odh_reserve_time = nullptr;
+    seastar::lowres_clock::duration *odh_get_pin_time = nullptr;
+    seastar::lowres_clock::duration *odh_get_pin_cursor_time = nullptr;
+    seastar::lowres_clock::duration *odh_get_pin_resolve_time = nullptr;
+    seastar::lowres_clock::duration *odh_overwrite_time = nullptr;
+    seastar::lowres_clock::duration *odh_overwrite_single_time = nullptr;
+    seastar::lowres_clock::duration *odh_overwrite_multi_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_prep_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_edge_read_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_punch_time = nullptr;
+    seastar::lowres_clock::duration *odh_single_do_write_time = nullptr;
+    seastar::lowres_clock::duration *odh_multi_punch_time = nullptr;
+    seastar::lowres_clock::duration *odh_do_write_time = nullptr;
   };
 
   using touch_iertr = base_iertr;
@@ -513,6 +536,19 @@ private:
     return edge_handle_policy_t::DELTA_BASED_PUNCH;
   }
 
+  // On first write into a zero-reserved region, optionally widen the write to
+  // zero_reservation_chunk_size boundaries (clamped to the containing mapping),
+  // zero-pad the extra range, and materialize one real mapping for the chunk.
+  // Returns true when the range was widened. Subsequent overwrites of that
+  // real mapping take the delta path only when seastore_data_delta_based_overwrite
+  // allows it (typically RBM).
+  bool maybe_widen_zero_reservation_first_touch(
+    context_t ctx,
+    overwrite_range_t &overwrite_range,
+    data_t &data,
+    const LBAMapping &mapping,
+    op_type_t op_type) const;
+
   write_ret delta_based_overwrite(
     context_t ctx,
     extent_len_t offset,
@@ -675,6 +711,9 @@ private:
    */
   const uint32_t max_object_size = 0;
   extent_len_t delta_based_overwrite_max_extent_size = 0; // enable only if rbm is used
+  // chunk granularity for the coarse first-touch materialization of a
+  // zero-reserved region; 0 (or <= block_size) disables the optimization.
+  extent_len_t zero_reservation_chunk_size = 0;
 };
 
 }
