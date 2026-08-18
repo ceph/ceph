@@ -264,6 +264,14 @@ public:
 
   virtual seastar::future<std::string> get_default_device_class() = 0;
 
+  virtual seastar::future<std::string> get_primary_backend_type_name() {
+    return seastar::make_ready_future<std::string>();
+  }
+
+  virtual seastar::future<std::string> get_secondary_backend_type_name() {
+    return seastar::make_ready_future<std::string>();
+  }
+
   /// Run garbage collection on all shards until space ratios are acceptable.
   /// Default implementation is a no-op (for stores that don't need GC).
   virtual seastar::future<> do_gc() { return seastar::now(); }

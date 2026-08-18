@@ -47,7 +47,7 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
   const size_t cur_block_size = (*st).block_size;
   const size_t cur_total_size = (*st).size;
   ceph_assert_always(journal_size > 0 ||
-                     config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
+                     config.spec.dtype == device_type_t::HDD);
   ceph_assert_always(cur_total_size >= journal_size);
   ceph_assert_always(shard_num > 0);
 

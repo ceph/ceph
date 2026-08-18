@@ -375,11 +375,11 @@ public:
       max_data_allocation_size(crimson::common::get_conf<Option::size_t>(
 	  "seastore_max_data_allocation_size")),
       write_through_size(crimson::common::get_conf<Option::size_t>(
-	  "seastore_write_through_size")),
+	  "seastore_lbc_write_through_size")),
       test_workload(crimson::common::get_conf<bool>(
-          "seastore_logical_bucket_cache_test_stress")),
+          "seastore_lbc_test_stress")),
       write_through_probability(crimson::common::get_conf<double>(
-          "seastore_test_workload_write_through_probability"))
+          "seastore_lbc_test_write_through_probability"))
   {
     LOG_PREFIX(ExtentPlacementManager::ExtentPlacementManager);
     devices_by_id.resize(DEVICE_ID_MAX, nullptr);
@@ -915,11 +915,11 @@ private:
         using crimson::common::get_conf;
         eviction_state.init(
           crimson::common::get_conf<double>(
-            "seastore_multiple_tiers_stop_evict_ratio"),
+            "seastore_cold_evict_stop_ratio"),
           crimson::common::get_conf<double>(
-            "seastore_multiple_tiers_default_evict_ratio"),
+            "seastore_cold_evict_start_ratio"),
           crimson::common::get_conf<double>(
-            "seastore_multiple_tiers_fast_evict_ratio"),
+            "seastore_cold_evict_fast_ratio"),
           hot_tier_generations);
 
         pinboard = _pinboard;
@@ -927,20 +927,20 @@ private:
         pinboard->set_background_callback(this);
 
         logical_bucket_demote_size_per_cycle =
-          get_conf<Option::size_t>("seastore_logical_bucket_proceed_size_per_cycle");
+          get_conf<Option::size_t>("seastore_lbc_demote_size_per_cycle");
         logical_bucket = create_logical_bucket(
-          get_conf<Option::size_t>("seastore_logical_bucket_capacity"),
+          get_conf<Option::size_t>("seastore_lbc_index_memory"),
           logical_bucket_demote_size_per_cycle);
         logical_bucket->set_background_callback(this);
       }
       LOG_PREFIX(BackgroundProcess::init);
       test_workload = crimson::common::get_conf<bool>(
-        "seastore_logical_bucket_cache_test_stress");
+        "seastore_lbc_test_stress");
       force_process_half_life = crimson::common::get_conf<uint64_t>(
-        "seastore_test_workload_force_process_background_tasks_period");
+        "seastore_lbc_test_force_background_period");
       force_background_timer.set_callback([this] { wake_half_life(); });
       write_through_probability = crimson::common::get_conf<double>(
-        "seastore_test_workload_write_through_probability");
+        "seastore_lbc_test_write_through_probability");
       SUBINFO(seastore_epm, "crimson test workload supported, enabled: {}", test_workload);
       if (test_workload) {
         set_next_force_process();

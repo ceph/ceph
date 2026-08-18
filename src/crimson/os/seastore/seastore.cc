@@ -388,14 +388,13 @@ seastar::future<uint32_t> SeaStore::start()
   bool is_test = false;
 #endif
   using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_hot_device_type");
+  std::string type = get_conf<std::string>("seastore_primary_device_type");
   device_type_t d_type = string_to_device_type(type);
-  assert(d_type == device_type_t::SSD ||
-         d_type == device_type_t::RANDOM_BLOCK_SSD);
+  assert(d_type == device_type_t::SSD);
 
-  type = get_conf<std::string>("seastore_hot_backend_type");
+  type = get_conf<std::string>("seastore_primary_backend_type");
   auto b_type = string_to_backend_type(type);
-  INFO("main device type: {}, main backend type: {}", d_type, b_type);
+  INFO("primary device type: {}, primary backend type: {}", d_type, b_type);
   ceph_assert(root != "");
   DeviceRef device_obj = co_await Device::make_device(root, d_type, b_type);
   device = std::move(device_obj);
@@ -471,7 +470,7 @@ Device::access_ertr::future<> SeaStore::_mount()
     [[maybe_unused]] magic_t magic = device_entry.second.magic;
     device_type_t dtype = device_entry.second.dtype;
     backend_type_t btype = device_entry.second.btype;
-    auto btype_conf_str = get_conf<std::string>("seastore_cold_backend_type");
+    auto btype_conf_str = get_conf<std::string>("seastore_secondary_backend_type");
     ceph_assert(string_to_backend_type(btype_conf_str) == btype);
     std::string path = fmt::format("{}/block.{}", root, std::to_string(id));
     DeviceRef sec_dev = co_await Device::make_device(path, dtype, btype);
@@ -693,9 +692,9 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     co_return;
   }
   DEBUG("mkfs_done does not exist, starting mkfs");
-  auto dtype_str = get_conf<std::string>("seastore_cold_device_type");
+  auto dtype_str = get_conf<std::string>("seastore_secondary_device_type");
   auto dtype = string_to_device_type(dtype_str);
-  auto btype_str = get_conf<std::string>("seastore_cold_backend_type");
+  auto btype_str = get_conf<std::string>("seastore_secondary_backend_type");
   auto btype = string_to_backend_type(btype_str);
   ceph_assert(!root.empty());
   INFO("secondary device type: {}, secondary backend type: {}", dtype, btype);
@@ -729,7 +728,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   }
 
   if (sds.empty() && crimson::common::get_conf<bool>(
-        "seastore_logical_bucket_cache_test_stress")) {
+        "seastore_lbc_test_stress")) {
     // lbc test workload enabled while no secondary devices indicated, create one
     std::string path = fmt::format("{}/block.1", root);
     co_await seastar::make_directory(path);
@@ -748,10 +747,9 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
   device_id_t id = 0;
   device_type_t d_type = device->get_device_type();
   backend_type_t b_type = device->get_backend_type();
-  assert(d_type == device_type_t::SSD ||
-      d_type == device_type_t::RANDOM_BLOCK_SSD);
+  assert(d_type == device_type_t::SSD);
   assert(b_type != backend_type_t::NONE);
-  if (d_type == device_type_t::RANDOM_BLOCK_SSD) {
+  if (b_type == backend_type_t::RANDOM_BLOCK) {
       id = static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN);
   }
   DEBUG("creating primary device");
@@ -3046,8 +3044,26 @@ SeaStore::read_meta(const std::string& key)
 seastar::future<std::string> SeaStore::get_default_device_class()
 {
   using crimson::common::get_conf;
-  std::string type = get_conf<std::string>("seastore_hot_device_type");
+  std::string type = get_conf<std::string>("seastore_primary_device_type");
   return seastar::make_ready_future<std::string>(type);
+}
+
+seastar::future<std::string> SeaStore::get_primary_backend_type_name()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  ceph_assert(device);
+  return seastar::make_ready_future<std::string>(
+    fmt::format("{}", device->get_backend_type()));
+}
+
+seastar::future<std::string> SeaStore::get_secondary_backend_type_name()
+{
+  ceph_assert(seastar::this_shard_id() == primary_core);
+  if (secondaries.empty()) {
+    return seastar::make_ready_future<std::string>();
+  }
+  return seastar::make_ready_future<std::string>(
+    fmt::format("{}", secondaries.front()->get_backend_type()));
 }
 
 uuid_d SeaStore::Shard::get_fsid() const
