@@ -1003,7 +1003,7 @@ protected:
   // identical - if identical is true, all logs should be identical
   //            if identical is false, all logs should be equivalent
   //            with differences only because of partial writes
-  void verify_logs(bool identical = false)
+  void verify_logs(bool identical = false, bool tails_different = false)
   {
     auto logp = get_ps(acting_primary)->get_pg_log();
     int shard = 0;
@@ -1016,12 +1016,24 @@ protected:
       auto log = get_ps(osd)->get_pg_log();
       // Head and tail should match
       EXPECT_EQ(log.get_head(), logp.get_head());
-      EXPECT_EQ(log.get_tail(), logp.get_tail());
+      if (!tails_different) {
+	EXPECT_EQ(log.get_tail(), logp.get_tail());
+      }
       auto pi = logp.get_log().log.begin();
       auto pe = logp.get_log().log.end();
       auto i = log.get_log().log.begin();
       auto e = log.get_log().log.end();
       while (pi != pe && i != e) {
+	if (tails_different && pi->version <= log.get_tail()) {
+	  // Primary log has older tail
+	  ++pi;
+	  continue;
+	}
+	if (tails_different && i->version <= logp.get_tail()) {
+	  // Log has older tail
+	  ++i;
+	  continue;
+	}
         if (pi->version < i->version && !pi->is_written_shard(shard_id_t(shard))) {
           // Primary may have partial write log entries that this
           // shard does not have because it was not written to
@@ -2191,6 +2203,150 @@ TEST_F(PeeringStateTest, Issue74218) {
   verify_log_state(acting[3], expected2, expected2, expected2, eversion_t());
   verify_logs();
 }
+
+
+// Tests for the fix for https://tracker.ceph.com/issues/79706
+//
+// Code path 1:
+//
+// const eversion_t olast = olog.log.back().version;
+// if (olast == p->version ||
+//    (olast < p->version && p->version <= olog.head)) {
+//   // Normal case - both logs have entry p->version, or olog has
+//   // no entries between p->version and olog.head
+//   consider_adjusting_pwlc(p->version);
+//   ++p;
+// } ...
+TEST_F(PeeringStateTest, Issue79706_test1) {
+  dout(0) << "== Issue79706_test1 ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+
+  // Note: This scenario is cheating a bit with the trim that is
+  // skipping OSD 1 followed by a full write without catching up
+  // with the trim. This is just an easier way to force
+  // the primary to request all the log from OSD 1.
+
+  // v1: full write to all shards (also clears first_write_in_interval)
+  (void)test_append_log_entry();
+  // v2: partial write to shards 0,2,3 only. Trim write v1
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/false, /*do_trim=*/true);
+  // v3: full write to all shards
+  (void)test_append_log_entry();
+  // v4: partial write to shards 0,2,3 only; update_only so no PWLC is
+  // created yet
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/true);
+
+  // To provoke the code path we need a backfilling/recovering shard
+  // This inconjuction with the trim makes PeeringState::GetLog::GetLog on
+  // the primary request more log entries. Swap out OSD 3 for OSD 9
+  modify_up_acting(3, 9);
+  test_create_peering_state(9, 3);
+  test_init(9);
+  test_event_initialize(9);
+
+  // Run peering
+  test_peering();
+
+  EXPECT_TRUE(get_ps(acting_primary)->is_active());
+  EXPECT_TRUE(get_ps(acting_primary)->is_peered());
+  verify_logs(false, true);
+}
+
+// Tests for the fix for https://tracker.ceph.com/issues/79706
+//
+// Code path 2:
+//
+// } else if (olast < p->version) {
+//   // Divergence is before the oldest entry both logs share
+//   consider_adjusting_pwlc(pg_log.get_tail());
+// } ...
+TEST_F(PeeringStateTest, Issue79706_test2) {
+  dout(0) << "== Issue79706_test2 ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+
+  // v1: full write to all shards (also clears first_write_in_interval)
+  (void)test_append_log_entry();
+  // v2: partial write to shards 0,2,3 only; update_only so no PWLC is
+  // created yet. Trim the log.
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/true, /*do_trim=*/true);
+
+  // To provoke the code path we need a backfilling/recovering shard
+  // This makes PeeringState::GetLog::GetLog on the primary request more log entries.
+  // Swap out OSD 3 for OSD 9
+  modify_up_acting(3, 9);
+  test_create_peering_state(9, 3);
+  test_init(9);
+  test_event_initialize(9);
+
+  // Run peering
+  test_peering();
+
+  EXPECT_TRUE(get_ps(acting_primary)->is_active());
+  EXPECT_TRUE(get_ps(acting_primary)->is_peered());
+  verify_logs(false, true);
+}
+
+// Tests for the fix for https://tracker.ceph.com/issues/79706
+//
+// Code path 3:
+//
+// } else {
+//   // Other log is ahead of the primary log - give up
+//   p = pg_log.get_log().log.end();
+// }
+TEST_F(PeeringStateTest, Issue79706_test3) {
+  dout(0) << "== Issue79706_test3 ==" << dendl;
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  test_peering();
+
+  // v1: full write to all shards (also clears first_write_in_interval)
+  (void)test_append_log_entry();
+  // v2: partial write to shards 0,2,3 only. Trim write v1
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+			      /*update_only=*/true, true);
+
+  // vx.3: full write to OSD 1 only — write interrupted before applied
+  // to any other shards - becomes a divergent write
+  (void)test_append_log_entry(shard_id_set(), ss({1}),
+			      /*update_only=*/true);
+  --reqid.tid;
+  new_epoch(true);
+
+  // vy.3: partial write to shards 0,2,3; update_only (no commit, no PWLC),
+  (void)test_append_log_entry(ss({0, 2, 3}), ss({0, 2, 3}),
+                              /*update_only=*/true);
+
+  // To provoke the code path we need a backfilling/recovering shard
+  // This inconjuction with the trim makes PeeringState::GetLog::GetLog on
+  // the primary request more log entries. Swap out OSD 3 for OSD 9
+  modify_up_acting(3, 9);
+  test_create_peering_state(9, 3);
+  test_init(9);
+  test_event_initialize(9);
+
+  // Run peering
+  test_peering();
+
+  // After merge_log rolls back v2 on OSD 1, OSD 1 needs recovery for v3.
+  // verify_logs() is not called here because OSD 1's local pg_log still
+  // contains the divergent v2 entry until data recovery completes; the
+  // primary has correctly identified it as divergent and set OSD 1 to
+  // recover.  We only verify that the PG reached a valid active+peered state.
+  EXPECT_TRUE(get_ps(acting_primary)->is_active());
+  EXPECT_TRUE(get_ps(acting_primary)->is_peered());
+}
+
 
 // ============================================================================
 // Rebuild Stats Perf Counter Tests
