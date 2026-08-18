@@ -31,6 +31,7 @@
 #include "global/global_init.h"
 #include "common/Cond.h"
 #include "common/debug.h"
+#include "common/ceph_releases.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
 #include "common/obj_bencher.h"
@@ -3370,15 +3371,18 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     uint64_t rollback_id = 0;
+    bool selfmanaged_mode = false;
+    uint64_t snap_id = 0;
     ret = rados.pool_is_in_selfmanaged_snaps_mode(pool_name);
     if (ret < 0) {
       cerr << "failed to query pool " << pool_name
            << " for selfmanaged snaps: " << cpp_strerror(ret) << std::endl;
       return 1;
     } else if (ret > 0) {
+      selfmanaged_mode = true;
       // selfmanaged snaps: argument is a numeric snap ID
       char *endptr = nullptr;
-      uint64_t snap_id = strtoull(nargs[1], &endptr, 10);
+      snap_id = strtoull(nargs[1], &endptr, 10);
       if (*endptr || snap_id == 0) {
         cerr << "error: selfmanaged snap ID must be a positive integer" << std::endl;
         return 1;
@@ -3390,9 +3394,27 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
 
     if (ret < 0) {
-      cerr << "error rolling back pool " << pool_name
-           << " to snapshot '" << nargs[1] << "': "
-           << cpp_strerror(ret) << std::endl;
+      if (ret == -EPERM) {
+        int8_t release_raw = 0;
+        rados.get_min_compatible_osd(&release_raw);
+        auto release = static_cast<ceph_release_t>(release_raw);
+        cerr << "error: pool-level snapshot rollback requires all OSDs to be "
+                "running Umbrella or later (require_osd_release is currently "
+             << to_string(release) << ")" << std::endl;
+      } else if (ret == -ENOENT) {
+        if (selfmanaged_mode) {
+          cerr << "error: snap ID " << snap_id
+               << " has already been deleted from pool '" << pool_name << "'"
+               << std::endl;
+        } else {
+          cerr << "error: snapshot '" << nargs[1]
+               << "' does not exist in pool '" << pool_name << "'" << std::endl;
+        }
+      } else {
+        cerr << "error rolling back pool " << pool_name
+             << " to snapshot '" << nargs[1] << "': "
+             << cpp_strerror(ret) << std::endl;
+      }
       return 1;
     }
     cout << "initiated rollback of pool " << pool_name
