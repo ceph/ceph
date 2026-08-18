@@ -92,7 +92,7 @@ html_css_files = ['css/custom.css']
 
 # general configuration
 templates_path = ['_templates']
-source_suffix = '.rst'
+source_suffix = {'.rst': 'restructuredtext'}
 exclude_patterns = ['**/.#*',
                     '**/*~',
                     'start/quick-common.rst',
@@ -133,9 +133,9 @@ extensions = [
     'sphinx.ext.graphviz',
     'sphinx.ext.mathjax',
     'sphinx.ext.todo',
-    'sphinx-prompt',
     'sphinx_autodoc_typehints',
     'sphinx_substitution_extensions',
+    'substitution_prompt',
     'breathe',
     'ceph_commands',
     'ceph_releases',
