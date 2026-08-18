@@ -1,5 +1,7 @@
+import { Observable, of } from 'rxjs';
+
 export interface PathLevel {
-  options: string[];
+  options$: Observable<string[]>;
   selected: string;
 }
 
@@ -12,7 +14,7 @@ export interface PathEntry {
 export function createPathEntry(expanded = true): PathEntry {
   return {
     fullPath: '',
-    levels: [{ options: [], selected: '' }],
+    levels: [{ options$: of([]), selected: '' }],
     expanded
   };
 }
