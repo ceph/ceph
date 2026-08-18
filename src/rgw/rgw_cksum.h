@@ -314,9 +314,15 @@ namespace rgw { namespace cksum {
       return Cksum::FLAG_CKSUM_NONE;
       break;
     case cksum::Type::crc64nvme:
+      /* AWS: CRC64NVME is full-object only for multipart. */
+      return Cksum::FLAG_FULL_OBJECT;
+      break;
     case cksum::Type::crc32:
     case cksum::Type::crc32c:
-      return Cksum::FLAG_FULL_OBJECT;
+      /* AWS CreateMultipartUpload defaults CRC32/CRC32C to COMPOSITE
+       * when x-amz-checksum-type is omitted. Match that so clients that
+       * send only x-amz-checksum-algorithm (e.g. minio-go) validate. */
+      return Cksum::FLAG_COMPOSITE;
       break;
     default:
       break;

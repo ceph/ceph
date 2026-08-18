@@ -835,6 +835,73 @@ TEST(RGWCksum, Combiner1)
   }
 } /* Combiner1 */
 
+TEST(RGWCksum, FlagsOfDefaults)
+{
+  /* AWS CreateMultipartUpload: algorithm-only CRC32/CRC32C → COMPOSITE;
+   * CRC64NVME → FULL_OBJECT; cryptographic digests → COMPOSITE. */
+  ASSERT_EQ(cksum_flags_of(cksum::Type::crc32), Cksum::FLAG_COMPOSITE);
+  ASSERT_EQ(cksum_flags_of(cksum::Type::crc32c), Cksum::FLAG_COMPOSITE);
+  ASSERT_EQ(cksum_flags_of(cksum::Type::crc64nvme), Cksum::FLAG_FULL_OBJECT);
+  ASSERT_EQ(cksum_flags_of(cksum::Type::sha256), Cksum::FLAG_COMPOSITE);
+  ASSERT_EQ(cksum_flags_of(cksum::Type::none), Cksum::FLAG_CKSUM_NONE);
+}
+
+TEST(RGWCksum, CRC32C_CombinerComposite)
+{
+  using std::get;
+
+  auto t = cksum::Type::crc32c;
+  auto cksums = mpu_checksum_helper(t, 0);
+  auto& [cksum1, cksum2, cksum3] = cksums;
+
+  /* FULL_OBJECT (or no type flag): CRC-combine equals whole-object digest */
+  auto full = rgw::cksum::CombinerFactory(t, Cksum::FLAG_FULL_OBJECT);
+  ASSERT_TRUE(full);
+  full->append(cksum1, dolor.length());
+  full->append(cksum2, lorem.length());
+  auto cksum_full = full->final();
+  ASSERT_EQ(cksum3.to_armor(), cksum_full.to_armor());
+  ASSERT_TRUE(cksum_full.flags & Cksum::FLAG_FULL_OBJECT);
+
+  /* COMPOSITE: digest of part checksums — must differ from full-object */
+  auto composite = rgw::cksum::CombinerFactory(t, Cksum::FLAG_COMPOSITE);
+  ASSERT_TRUE(composite);
+  composite->append(cksum1, dolor.length());
+  composite->append(cksum2, lorem.length());
+  auto cksum_comp = composite->final();
+  ASSERT_NE(cksum3.to_armor(), cksum_comp.to_armor());
+  ASSERT_TRUE(cksum_comp.composite());
+
+  /* Default algorithm-only flags match COMPOSITE combiner */
+  auto def_flags = cksum_flags_of(t);
+  ASSERT_EQ(def_flags, Cksum::FLAG_COMPOSITE);
+  auto defcmb = rgw::cksum::CombinerFactory(t, def_flags);
+  defcmb->append(cksum1, dolor.length());
+  defcmb->append(cksum2, lorem.length());
+  ASSERT_EQ(cksum_comp.to_armor(), defcmb->final().to_armor());
+}
+
+TEST(RGWCksum, CRC32_CombinerComposite)
+{
+  using std::get;
+
+  auto t = cksum::Type::crc32;
+  auto cksums = mpu_checksum_helper(t, 0);
+  auto& [cksum1, cksum2, cksum3] = cksums;
+
+  auto full = rgw::cksum::CombinerFactory(t, Cksum::FLAG_FULL_OBJECT);
+  full->append(cksum1, dolor.length());
+  full->append(cksum2, lorem.length());
+  ASSERT_EQ(cksum3.to_armor(), full->final().to_armor());
+
+  auto composite = rgw::cksum::CombinerFactory(t, Cksum::FLAG_COMPOSITE);
+  composite->append(cksum1, dolor.length());
+  composite->append(cksum2, lorem.length());
+  auto cksum_comp = composite->final();
+  ASSERT_NE(cksum3.to_armor(), cksum_comp.to_armor());
+  ASSERT_TRUE(cksum_comp.composite());
+}
+
 using cksum_4tuple
     = std::tuple<rgw::cksum::Cksum, rgw::cksum::Cksum, rgw::cksum::Cksum,
 		 rgw::cksum::Cksum>;
