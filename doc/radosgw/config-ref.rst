@@ -322,7 +322,7 @@ implementation of the *dmclock_client* op queue divides RGW ops into admin, auth
 .. confval:: rgw_dmclock_metadata_wgt
 .. confval:: rgw_dmclock_metadata_lim
 
-.. _Architecture: ../../architecture#data-striping
+.. _Architecture: ../../architecture/ceph-protocol#data-striping
 .. _Pool Configuration: ../../rados/configuration/pool-pg-config-ref/
 .. _Cluster Pools: ../../rados/operations/pools
 .. _Rados cluster handles: ../../rados/api/librados-intro/#step-2-configuring-a-cluster-handle

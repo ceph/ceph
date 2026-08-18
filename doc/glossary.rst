@@ -579,4 +579,4 @@
                 :ref:`Zones<radosgw-zones>`.
 
 .. _https://github.com/ceph: https://github.com/ceph
-.. _Cluster Map: ../architecture#cluster-map   
+.. _Cluster Map: ../architecture/scalability-high-availability#cluster-map   
