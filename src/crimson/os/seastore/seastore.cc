@@ -815,6 +815,13 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     ).handle_error(crimson::ct_error::assert_all("not possible"));
   }
 
+  device_set_t dds;
+  for (auto &dev : data_devices) {
+    device_id_t id = dev->get_device_id();
+    device_type_t dtype = dev->get_device_type();
+    backend_type_t btype = dev->get_backend_type();
+    dds.emplace(id, device_spec_t{magic, dtype, btype, id});
+  }
   for (auto &dev : data_devices) {
     device_id_t id = dev->get_device_id();
     device_type_t d_type = dev->get_device_type();
@@ -823,7 +830,7 @@ Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
     DEBUG("creating primary device");
     co_await dev->mkfs(
       device_config_t::create_data(
-        new_osd_fsid, id, d_type, b_type, cds, magic));
+        new_osd_fsid, id, d_type, b_type, cds, dds, magic));
   }
 
   DEBUG("mounting {} cache_devices", cache_devices.size());
