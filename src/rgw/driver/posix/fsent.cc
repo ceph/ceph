@@ -15,6 +15,7 @@
 
 #include "fsent.h"
 #include "driver/posix/sync_policy.h"
+#include "posix_io_uring.h"
 #include <dirent.h>
 #include "include/random.h"
 
@@ -568,7 +569,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
     ctx->_conf.get_val<Option::size_t>("rgw_posix_write_chunk_size");
   int64_t left = bl.length();
   ssize_t ret;
-  int saved_flags = -1;
 
   ret = fchmod(fd, S_IRUSR|S_IWUSR);
   if(ret < 0) {
@@ -578,19 +578,13 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
   }
 
   if (direct_io) {
-    if ((ofs % DIRECT_IO_ALIGN) == 0 && (left % DIRECT_IO_ALIGN) == 0) {
-      /* Whole call is O_DIRECT-safe: write it in one shot, ignoring
-       * rgw_posix_write_chunk_size, since splitting it further could
-       * reintroduce a misaligned length. */
-      bl.rebuild_aligned_size_and_memory(DIRECT_IO_ALIGN, DIRECT_IO_ALIGN);
-      write_chunk_size = 0;
-    } else {
-      /* Can't satisfy O_DIRECT alignment for this call (typically the
-       * final, odd-sized chunk of an object) - fall back to buffered I/O
-       * for just this write, restoring O_DIRECT on the fd afterward. */
-      saved_flags = ::fcntl(fd, F_GETFL);
-      ::fcntl(fd, F_SETFL, saved_flags & ~O_DIRECT);
+    /* Never fcntl-off O_DIRECT on a shared fd; pad or RMW instead. */
+    ret = posix_direct_write(fd, ofs, bl, dpp);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: File::write posix_direct_write failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
     }
+    return ret;
   }
 
   char* curp = bl.c_str();
@@ -604,9 +598,6 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not seek object " << get_name() << " to "
         << ofs << " :" << cpp_strerror(ret) << dendl;
-      if (saved_flags >= 0) {
-        ::fcntl(fd, F_SETFL, saved_flags);
-      }
       return -ret;
     }
   }
@@ -622,19 +613,12 @@ int File::write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp,
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not write object " << get_name() << ": "
 	<< cpp_strerror(ret) << dendl;
-      if (saved_flags >= 0) {
-        ::fcntl(fd, F_SETFL, saved_flags);
-      }
       return -ret;
     }
 
     curp += ret;
     woff += ret;
     left -= ret;
-  }
-
-  if (saved_flags >= 0) {
-    ::fcntl(fd, F_SETFL, saved_flags);
   }
 
   return 0;

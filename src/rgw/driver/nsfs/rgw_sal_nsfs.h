@@ -28,6 +28,7 @@
 #include "../posix/posixDB.h"
 #include "../posix/user_cache.h"
 #include "../posix/qd2_pending.h"
+#include "../posix/posix_io_uring.h"
 #include "fs_strategy.h"
 
 class RGWLC;
@@ -1338,6 +1339,8 @@ private:
   const std::string& unique_tag;
   NSFSObject* obj;
   QD2PendingWrite pending_write;
+  optional_yield yield;
+  std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
   NSFSAtomicWriter(const DoutPrefixProvider *dpp,
@@ -1354,7 +1357,8 @@ public:
     ptail_placement_rule(_ptail_placement_rule),
     olh_epoch(_olh_epoch),
     unique_tag(_unique_tag),
-    obj(static_cast<NSFSObject*>(_head_obj)) {}
+    obj(static_cast<NSFSObject*>(_head_obj)), yield(y) {}
+
   virtual ~NSFSAtomicWriter() = default;
 
   virtual int prepare(optional_yield y) override;
@@ -1381,6 +1385,8 @@ private:
   std::unique_ptr<nsfs::File> part_file;
   file::listing::MultipartCacheKey mp_cache_key;
   QD2PendingWrite pending_write;
+  optional_yield yield;
+  std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
   NSFSMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1399,8 +1405,8 @@ public:
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
     part_file(std::make_unique<nsfs::File>(nsfs::get_key_fname(_key, false), upload_dir.get(), _driver->ctx())),
-    mp_cache_key(std::move(_mp_cache_key))
-  { upload_dir->open(dpp); }
+    mp_cache_key(std::move(_mp_cache_key)), yield(y) { upload_dir->open(dpp); }
+
   virtual ~NSFSMultipartWriter() = default;
 
   virtual int prepare(optional_yield y) override;

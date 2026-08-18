@@ -26,6 +26,7 @@
 #include "user_cache.h"
 #include "posixDB.h"
 #include "qd2_pending.h"
+#include "posix_io_uring.h"
 
 class RGWLC;
 
@@ -1100,6 +1101,8 @@ private:
   const std::string& unique_tag;
   POSIXObject* obj;
   QD2PendingWrite pending_write;
+  optional_yield yield;
+  std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
   POSIXAtomicWriter(const DoutPrefixProvider *dpp,
@@ -1116,7 +1119,8 @@ public:
     ptail_placement_rule(_ptail_placement_rule),
     olh_epoch(_olh_epoch),
     unique_tag(_unique_tag),
-    obj(static_cast<POSIXObject*>(_head_obj)) {}
+    obj(static_cast<POSIXObject*>(_head_obj)), yield(y) {}
+
   virtual ~POSIXAtomicWriter() = default;
 
   virtual int prepare(optional_yield y) override;
@@ -1143,6 +1147,8 @@ private:
   std::unique_ptr<posix::File> part_file;
   file::listing::MultipartCacheKey mp_cache_key;
   QD2PendingWrite pending_write;
+  optional_yield yield;
+  std::unique_ptr<UringWriteWindow> uring_write;
 
 public:
   POSIXMultipartWriter(const DoutPrefixProvider *dpp,
@@ -1161,8 +1167,8 @@ public:
     part_num(_part_num),
     upload_dir(_shadow_bucket->get_dir()->clone()),
     part_file(std::make_unique<posix::File>(posix::get_key_fname(_key, false), upload_dir.get(), _driver->ctx())),
-    mp_cache_key(std::move(_mp_cache_key))
-  { upload_dir->open(dpp); }
+    mp_cache_key(std::move(_mp_cache_key)), yield(y) { upload_dir->open(dpp); }
+
   virtual ~POSIXMultipartWriter() = default;
 
   virtual int prepare(optional_yield y) override;
