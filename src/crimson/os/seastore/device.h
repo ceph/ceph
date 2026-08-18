@@ -47,12 +47,14 @@ struct device_config_t {
   device_spec_t spec;
   seastore_meta_t meta;
   device_set_t cache_devices;
+  device_set_t data_devices;
   DENC(device_config_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.major_dev, p);
     denc(v.spec, p);
     denc(v.meta, p);
     denc(v.cache_devices, p);
+    denc(v.data_devices, p);
     DENC_FINISH(p);
   }
   static device_config_t create_data(
@@ -61,6 +63,7 @@ struct device_config_t {
     device_type_t d_type,
     backend_type_t b_type,
     device_set_t sds,
+    device_set_t dds,
     magic_t magic) {
     return device_config_t{
              true,
@@ -70,7 +73,8 @@ struct device_config_t {
                b_type,
                id},
              seastore_meta_t{new_osd_fsid},
-             sds};
+             sds,
+             dds};
    }
   static device_config_t create_cache(
     uuid_d new_osd_fsid,
