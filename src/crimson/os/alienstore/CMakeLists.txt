@@ -6,6 +6,7 @@ set_target_properties(alien::cflags PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES $<TARGET_PROPERTY:Seastar::seastar,INTERFACE_INCLUDE_DIRECTORIES>)
 
 set(crimson_alien_common_srcs
+  ${PROJECT_SOURCE_DIR}/src/auth/Crypto.cc
   ${PROJECT_SOURCE_DIR}/src/common/admin_socket.cc
   ${PROJECT_SOURCE_DIR}/src/common/url_escape.cc
   ${PROJECT_SOURCE_DIR}/src/common/blkdev.cc

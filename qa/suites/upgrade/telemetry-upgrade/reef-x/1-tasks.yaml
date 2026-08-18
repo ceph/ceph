@@ -49,6 +49,7 @@ tasks:
 - print: "**** done end telemetry reef..."
 
 - print: "**** done start upgrade sequence..."
+- sequential: [ignore-auth-warn-cephadm]
 - sequential:
     - print: "**** done start upgrade..."
     - cephadm.shell:

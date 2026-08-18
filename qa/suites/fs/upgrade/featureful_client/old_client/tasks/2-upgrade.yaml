@@ -17,6 +17,7 @@ overrides:
         mon warn on osd down out interval zero: false
 
 tasks:
+- sequential: [ignore-auth-warn-pkg]
 - mds_pre_upgrade:
 - print: "**** done mds pre-upgrade sequence"
 - install.upgrade:

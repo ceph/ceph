@@ -23,7 +23,11 @@ std::ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
 		<< " " << ceph_con_mode_name(auth_meta->con_mode)
 		<< " :" << connection->port
                 << " s=" << get_state_name(state) << " pgs=" << peer_global_seq
-                << " cs=" << connect_seq << " l=" << connection->policy.lossy
+                << " gs=" << global_seq << " cs=" << connect_seq
+                << " l=" << connection->policy.lossy
+                << " c_cookie=" << client_cookie
+                << " s_cookie=" << server_cookie
+                << " reconnecting=" << reconnecting
                 << " rev1=" << HAVE_MSGR2_FEATURE(peer_supported_features,
                                                   REVISION_1)
                 << " crypto rx=" << session_stream_handlers.rx.get()
@@ -120,6 +124,21 @@ void ProtocolV2::accept() {
 
 bool ProtocolV2::is_connected() { return can_write; }
 
+void ProtocolV2::shutdown() {
+  if (state == CLOSED) return;
+
+  std::lock_guard<std::mutex> l(connection->write_lock);
+  shutting_down = true;
+
+  // Always defer to the write handler to teardown to avoid deadlocks!
+  connection->center->dispatch_event_external(connection->write_handler);
+}
+
+bool ProtocolV2::sent_queue_empty() const {
+  /* must hold write_lock */
+  return sent.empty();
+}
+
 /*
  * Tears down the message queues, and removes them from the
  * DispatchQueue Must hold write_lock prior to calling.
@@ -127,16 +146,14 @@ bool ProtocolV2::is_connected() { return can_write; }
 void ProtocolV2::discard_out_queue() {
   ldout(cct, 10) << __func__ << " started" << dendl;
 
-  for (auto p = sent.begin(); p != sent.end(); ++p) {
-    ldout(cct, 20) << __func__ << " discard " << *p << dendl;
-    (*p)->put();
+  for (auto& msg : sent) {
+    ldout(cct, 20) << __func__ << " discard " << *msg << dendl;
   }
   sent.clear();
   for (auto& [ prio, entries ] : out_queue) {
     static_cast<void>(prio);
     for (auto& entry : entries) {
       ldout(cct, 20) << __func__ << " discard " << *entry.m << dendl;
-      entry.m->put();
     }
   }
   out_queue.clear();
@@ -197,36 +214,36 @@ void ProtocolV2::requeue_sent() {
 
   auto& rq = out_queue[CEPH_MSG_PRIO_HIGHEST];
   out_seq -= sent.size();
-  while (!sent.empty()) {
-    Message *m = sent.back();
-    sent.pop_back();
+  for (; !sent.empty(); sent.pop_back()) {
+    auto& m = sent.back();
     ldout(cct, 5) << __func__ << " requeueing message m=" << m
                   << " seq=" << m->get_seq() << " type=" << m->get_type() << " "
                   << *m << dendl;
     m->clear_payload();
-    rq.emplace_front(out_queue_entry_t{false, m});
+    rq.emplace_front(out_queue_entry_t{false, std::move(m)});
   }
 }
 
 uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   ldout(cct, 10) << __func__ << " " << seq << dendl;
   std::lock_guard<std::mutex> l(connection->write_lock);
-  if (out_queue.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
+  const auto it = out_queue.find(CEPH_MSG_PRIO_HIGHEST);
+  if (it == out_queue.end()) {
     return seq;
   }
-  auto& rq = out_queue[CEPH_MSG_PRIO_HIGHEST];
+  auto& rq = it->second;
   uint64_t count = out_seq;
-  while (!rq.empty()) {
-    Message* const m = rq.front().m;
-    if (m->get_seq() == 0 || m->get_seq() > seq) break;
+  for (; !rq.empty(); rq.pop_front()) {
+    auto& m = rq.front().m;
+    if (m->get_seq() == 0 || m->get_seq() > seq) {
+      break;
+    }
     ldout(cct, 5) << __func__ << " discarding message m=" << m
                   << " seq=" << m->get_seq() << " ack_seq=" << seq << " "
                   << *m << dendl;
-    m->put();
-    rq.pop_front();
     count++;
   }
-  if (rq.empty()) out_queue.erase(CEPH_MSG_PRIO_HIGHEST);
+  if (rq.empty()) out_queue.erase(it);
   return count;
 }
 
@@ -265,7 +282,7 @@ void ProtocolV2::reset_recv_state() {
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
-  connection->writeCallback.reset();
+  connection->writeCallback = {};
 
   next_tag = static_cast<Tag>(0);
 
@@ -335,10 +352,10 @@ CtPtr ProtocolV2::_fault() {
   // requeue sent items
   requeue_sent();
 
-  if (out_queue.empty() && state >= START_ACCEPT &&
-      state <= SESSION_ACCEPTING && !replacing) {
-    ldout(cct, 2) << __func__ << " with nothing to send and in the half "
-                   << " accept state just closed" << dendl;
+  if (shutting_down || (out_queue.empty() && state >= START_ACCEPT &&
+      state <= SESSION_ACCEPTING && !replacing)) {
+    ldout(cct, 2) << __func__ << " shutting down or with nothing to send and in the half "
+                   << "accept state just closed" << dendl;
     connection->write_lock.unlock();
     stop();
     connection->dispatch_queue->queue_reset(connection);
@@ -413,8 +430,7 @@ CtPtr ProtocolV2::_fault() {
   return nullptr;
 }
 
-void ProtocolV2::prepare_send_message(uint64_t features,
-				      Message *m) {
+void ProtocolV2::prepare_send_message(uint64_t features, const MessageRef& m) {
   ldout(cct, 20) << __func__ << " m=" << *m << dendl;
 
   // associate message with Connection (for benefit of encode_payload)
@@ -425,12 +441,12 @@ void ProtocolV2::prepare_send_message(uint64_t features,
   m->encode(features, 0);
 }
 
-void ProtocolV2::send_message(Message *m) {
+void ProtocolV2::send_message(MessageRef&& m) {
   uint64_t f = connection->get_features();
 
   // TODO: Currently not all messages supports reencode like MOSDMap, so here
   // only let fast dispatch support messages prepare message
-  const bool can_fast_prepare = messenger->ms_can_fast_dispatch(m);
+  const bool can_fast_prepare = messenger->ms_can_fast_dispatch(*m);
   bool is_prepared;
   if (can_fast_prepare && f) {
     prepare_send_message(f, m);
@@ -450,17 +466,13 @@ void ProtocolV2::send_message(Message *m) {
   }
   if (state == CLOSED) {
     ldout(cct, 10) << __func__ << " connection closed."
-                   << " Drop message " << m << dendl;
-    m->put();
+                   << " Drop message " << *m << dendl;
   } else {
-    ldout(cct, 5) << __func__ << " enqueueing message m=" << m
-                  << " type=" << m->get_type() << " " << *m << dendl;
+    ldout(cct, 5) << __func__ << " enqueueing message m=" << *m << dendl;
     m->queue_start = ceph::mono_clock::now();
     m->trace.event("async enqueueing message");
-    out_queue[m->get_priority()].emplace_back(
-      out_queue_entry_t{is_prepared, m});
-    ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
-                   << dendl;
+    auto& oq = out_queue[m->get_priority()];
+    oq.emplace_back(out_queue_entry_t{is_prepared, std::move(m)});
     if (((!replacing && can_write) || state == STANDBY) && !write_in_progress) {
       write_in_progress = true;
       connection->center->dispatch_event_external(connection->write_handler);
@@ -507,20 +519,19 @@ void ProtocolV2::read_event() {
 ProtocolV2::out_queue_entry_t ProtocolV2::_get_next_outgoing() {
   out_queue_entry_t out_entry;
 
-  if (!out_queue.empty()) {
-    auto it = out_queue.rbegin();
+  if (const auto it = out_queue.begin(); it != out_queue.end()) {
     auto& entries = it->second;
     ceph_assert(!entries.empty());
     out_entry = entries.front();
     entries.pop_front();
     if (entries.empty()) {
-      out_queue.erase(it->first);
+      out_queue.erase(it);
     }
   }
   return out_entry;
 }
 
-ssize_t ProtocolV2::write_message(Message *m, bool more) {
+ssize_t ProtocolV2::write_message(const MessageRef& m, bool more) {
   FUNCTRACE(cct);
   ceph_assert(connection->center->in_thread());
   m->set_seq(++out_seq);
@@ -580,7 +591,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
 #endif
-  m->put();
 
   return rc;
 }
@@ -611,22 +621,23 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
   // trim sent list
   static const int max_pending = 128;
   int i = 0;
-  Message *pending[max_pending];
+  std::array<MessageRef, max_pending> pending;
   auto now = ceph::mono_clock::now();
   connection->write_lock.lock();
   while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
-    Message *m = sent.front();
+    auto& m = pending[i++] = std::move(sent.front());
     sent.pop_front();
-    pending[i++] = m;
     ldout(cct, 10) << __func__ << " got ack seq " << seq
                    << " >= " << m->get_seq() << " on " << m << " " << *m
                    << dendl;
   }
+
+  if (unlikely(shutting_down) && sent_queue_empty()) {
+    connection->center->dispatch_event_external(connection->write_handler);
+  }
+
   connection->write_lock.unlock();
   connection->logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
-  for (int k = 0; k < i; k++) {
-    pending[k]->put();
-  }
 }
 
 void ProtocolV2::reset_compression() {
@@ -666,7 +677,7 @@ void ProtocolV2::write_event() {
 	}
       }
 
-      const auto out_entry = _get_next_outgoing();
+      auto out_entry = _get_next_outgoing();
       if (!out_entry.m) {
         break;
       }
@@ -674,7 +685,6 @@ void ProtocolV2::write_event() {
       if (!connection->policy.lossy) {
         // put on sent list
         sent.push_back(out_entry.m);
-        out_entry.m->get();
       }
       more = !out_queue.empty();
       connection->write_lock.unlock();
@@ -763,7 +773,42 @@ void ProtocolV2::write_event() {
 }
 
 bool ProtocolV2::is_queued() {
+  /* must hold write_lock */
   return !out_queue.empty() || connection->is_queued();
+}
+
+void ProtocolV2::dump(Formatter *f) {
+  f->open_object_section("v2");
+  f->dump_string("state", get_state_name(state));
+  if (auth_meta) {
+    f->dump_string("con_mode", ceph_con_mode_name(auth_meta->con_mode));
+  }
+  f->dump_bool("rev1", HAVE_MSGR2_FEATURE(peer_supported_features, REVISION_1));
+  f->dump_unsigned("connect_seq", connect_seq);
+  f->dump_unsigned("peer_global_seq", peer_global_seq);
+
+  f->open_object_section("crypto");
+  f->dump_string(
+      "rx", session_stream_handlers.rx
+                ? session_stream_handlers.rx->cipher_name()
+                : "PLAIN");
+  f->dump_string(
+      "tx", session_stream_handlers.tx
+                ? session_stream_handlers.tx->cipher_name()
+                : "PLAIN");
+  f->close_section();  // crypto
+
+  f->open_object_section("compression");
+  f->dump_string(
+      "rx", session_compression_handlers.rx
+                ? session_compression_handlers.rx->compressor_name()
+                : "UNCOMPRESSED");
+  f->dump_string(
+      "tx", session_compression_handlers.tx
+                ? session_compression_handlers.tx->compressor_name()
+                : "UNCOMPRESSED");
+  f->close_section();  // compression
+  f->close_section();  // v2
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_RXBPTR_TYPE<ProtocolV2> &next,
@@ -1397,16 +1442,32 @@ CtPtr ProtocolV2::handle_message() {
   ceph_msg_footer footer{ceph_le32(0), ceph_le32(0),
 	                 ceph_le32(0), ceph_le64(0), current_header.flags};
 
-  Message *message = decode_message(cct, 0, header, footer,
+  Message* _m = decode_message(cct, 0, header, footer,
       msg_frame.front(),
       msg_frame.middle(),
       msg_frame.data(),
       connection);
-  if (!message) {
+  if (!_m) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
     return _fault();
-  } else {
-    state = READ_MESSAGE_COMPLETE;
+  }
+
+  auto message = ceph::ref_t<Message>(_m, false); /* consume ref */
+  _m = nullptr;
+  state = READ_MESSAGE_COMPLETE;
+
+  if (connection->is_shutdown() || shutting_down) {
+    ldout(cct, 10) << __func__ << " connection is shutdown, dropping incoming " << *message << dendl;
+
+    if (connection->policy.throttler_messages)
+      connection->policy.throttler_messages->put();
+    if (connection->policy.throttler_bytes)
+      connection->policy.throttler_bytes->put(cur_msg_size);
+    connection->dispatch_queue->dispatch_throttle_release(cur_msg_size);
+
+    handle_message_ack(current_header.ack_seq);
+    state = READY;
+    return CONTINUE(read_frame);
   }
 
   INTERCEPT(17);
@@ -1432,7 +1493,6 @@ CtPtr ProtocolV2::handle_message() {
     ldout(cct, 0) << __func__ << " got old message " << message->get_seq()
                   << " <= " << cur_seq << " " << message << " " << *message
                   << ", discarding" << dendl;
-    message->put();
     if (connection->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
         cct->_conf->ms_die_on_old_message) {
       ceph_assert(0 == "old msgs despite reconnect_seq feature");
@@ -1482,7 +1542,6 @@ CtPtr ProtocolV2::handle_message() {
 
   if (connection->is_blackhole()) {
     ldout(cct, 10) << __func__ << " blackhole " << *message << dendl;
-    message->put();
     goto out;
   }
 
@@ -1507,10 +1566,10 @@ CtPtr ProtocolV2::handle_message() {
                     << (ceph_clock_now() + delay_period) << " on " << message
                     << " " << *message << dendl;
     }
-    connection->delay_state->queue(delay_period, message);
-  } else if (messenger->ms_can_fast_dispatch(message)) {
+    connection->delay_state->queue(delay_period, std::move(message));
+  } else if (messenger->ms_can_fast_dispatch(*message)) {
     connection->lock.unlock();
-    connection->dispatch_queue->fast_dispatch(message);
+    connection->dispatch_queue->fast_dispatch(std::move(message));
     connection->recv_start_time = ceph::mono_clock::now();
     connection->logger->tinc(l_msgr_running_fast_dispatch_time,
                              connection->recv_start_time - fast_dispatch_time);
@@ -1522,8 +1581,8 @@ CtPtr ProtocolV2::handle_message() {
       return nullptr;
     }
   } else {
-    connection->dispatch_queue->enqueue(message, message->get_priority(),
-                                        connection->conn_id);
+    auto p = message->get_priority();
+    connection->dispatch_queue->enqueue(std::move(message), p, connection->conn_id);
   }
 
   handle_message_ack(current_header.ack_seq);
@@ -1859,6 +1918,7 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
 }
 
 CtPtr ProtocolV2::finish_client_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   if (HAVE_MSGR2_FEATURE(peer_supported_features, COMPRESSION)) {
     return send_compression_request();
   }
@@ -1867,6 +1927,7 @@ CtPtr ProtocolV2::finish_client_auth() {
 }
 
 CtPtr ProtocolV2::finish_server_auth() {
+  ldout(cct, 20) << __func__ << dendl;
   // server had sent AuthDone and client responded with correct pre-auth
   // signature. 
   // We can start conditioanl msgr protocol
@@ -1883,10 +1944,12 @@ CtPtr ProtocolV2::finish_server_auth() {
 
 CtPtr ProtocolV2::start_session_connect() {
   if (!server_cookie) {
+    ldout(cct, 20) << __func__ << " starting a new session" << dendl;
     ceph_assert(connect_seq == 0);
     state = SESSION_CONNECTING;
     return send_client_ident();
   } else {  // reconnecting to previous session
+    ldout(cct, 20) << __func__ << " reconnecting to session" << dendl;
     state = SESSION_RECONNECTING;
     ceph_assert(connect_seq > 0);
     return send_reconnect();
@@ -2637,11 +2700,40 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     auto wait = WaitFrame::Encode();
     return WRITE(wait, "wait", read_frame);
   }
+  // Detect a peer (client) restart and prefer the new connection.
+  // Rationale:
+  // - The client cookie is regenerated in send_client_ident() on client startup.
+  // - If the existing connection (exproto) has a strictly higher peer_global_seq
+  //   than the incoming one, the peer’s sequence appears to have reset on the new
+  //   connection (exproto->peer_global_seq > peer_global_seq).
+  // - Both sides present non-zero cookies and they differ, which strongly indicates
+  //   a new client instance (exproto->client_cookie != client_cookie).
+  // - We only do this when the existing connection is not in a benign terminal/idle
+  //   state (READY or STANDBY); otherwise we might drop a healthy/idle connection.
+  // Action:
+  // Drop the existing connection in favor of the incoming one, then continue the
+  // handshake on the new connection.
+  if (exproto->peer_global_seq > peer_global_seq &&
+    exproto->client_cookie && client_cookie &&
+    exproto->client_cookie != client_cookie &&
+    exproto->state != READY && exproto->state != STANDBY) {
+    ldout(cct, 1) << __func__ << " client has clearly restarted (ex_peer_global_seq="
+                  << exproto->peer_global_seq << " > peer_global_seq=" << peer_global_seq
+                  << " && cookie changed: client_cookie=" << client_cookie << " != ex_client_cookie="
+                  << exproto->client_cookie << "), "
+                  << "existing connection state is " << get_state_name(exproto->state)
+                  << " (not READY or STANDBY), dropping existing_connection=" << existing
+                  << " in favor of new_connection=" << connection << dendl;
+    existing->protocol->stop();
+    existing->dispatch_queue->queue_reset(existing.get());
+    l.unlock();
+    return send_server_ident();
+  }
 
   if (exproto->peer_global_seq > peer_global_seq) {
-    ldout(cct, 1) << __func__ << " this is a stale connection, peer_global_seq="
-                  << peer_global_seq
-                  << " existing->peer_global_seq=" << exproto->peer_global_seq
+    ldout(cct, 1) << __func__ << " this is a stale connection, ex_peer_global_seq="
+                  << exproto->peer_global_seq
+                  << " > peer_global_seq=" << peer_global_seq
                   << ", stopping this connection." << dendl;
     stop();
     connection->dispatch_queue->queue_reset(connection);
@@ -2666,7 +2758,9 @@ CtPtr ProtocolV2::handle_existing_connection(const AsyncConnectionRef& existing)
     // peer has reseted and we're going to reuse the existing connection
     // by replacing the communication socket
     ldout(cct, 1) << __func__ << " found previous session existing=" << existing
-                  << ", peer must have reseted." << dendl;
+                  << ", ex_client_cookie=" << exproto->client_cookie
+                  << "!= client_cookie=" << client_cookie
+                  << ", peer must have reseted!" << dendl;
     if (connection->policy.resetcheck) {
       exproto->reset_session();
     }
@@ -2883,11 +2977,11 @@ CtPtr ProtocolV2::send_server_ident() {
     flags = flags | CEPH_MSG_CONNECT_LOSSY;
   }
 
-  uint64_t gs = messenger->get_global_seq();
+  global_seq = messenger->get_global_seq();
   auto server_ident = ServerIdentFrame::Encode(
           messenger->get_myaddrs(),
           messenger->get_myname().num(),
-          gs,
+          global_seq,
           connection->policy.features_supported,
           connection->policy.features_required | msgr2_required,
           flags,
@@ -2896,7 +2990,7 @@ CtPtr ProtocolV2::send_server_ident() {
   ldout(cct, 5) << __func__ << " sending identification:"
                 << " addrs=" << messenger->get_myaddrs()
                 << " gid=" << messenger->get_myname().num()
-                << " global_seq=" << gs << " features_supported=" << std::hex
+                << " global_seq=" << global_seq << " features_supported=" << std::hex
                 << connection->policy.features_supported
                 << " features_required="
 		            << (connection->policy.features_required | msgr2_required)

@@ -897,6 +897,7 @@ def ceph_bootstrap(ctx, config):
             args=[
                 'sudo', 'rm', '-f',
                 '/etc/ceph/{}.conf'.format(cluster_name),
+                '/etc/ceph/{}.keyring'.format(cluster_name),
                 '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             ],
             check_status=False,  # rm-cluster above should have cleaned these up
@@ -1379,6 +1380,8 @@ def ceph_iscsi(ctx, config):
 def ceph_clients(ctx, config):
     cluster_name = config['cluster']
 
+    client_key_type = config.get('client_key_type', None)
+
     log.info('Setting up client nodes...')
     clients = ctx.cluster.only(teuthology.is_type('client', cluster_name))
     for remote, roles_for_host in clients.remotes.items():
@@ -1387,18 +1390,22 @@ def ceph_clients(ctx, config):
             name = teuthology.ceph_role(role)
             client_keyring = '/etc/ceph/{0}.{1}.keyring'.format(cluster_name,
                                                                 name)
+
+            args = ['ceph', 'auth', 'get-or-create']
+            if client_key_type is not None:
+                args.append(f'--key-type={client_key_type}')
+            args.extend([
+                name,
+                'mon', 'allow *',
+                'osd', 'allow *',
+                'mds', 'allow *',
+                'mgr', 'allow *',
+            ])
             r = _shell(
                 ctx=ctx,
                 cluster_name=cluster_name,
                 remote=remote,
-                args=[
-                    'ceph', 'auth',
-                    'get-or-create', name,
-                    'mon', 'allow *',
-                    'osd', 'allow *',
-                    'mds', 'allow *',
-                    'mgr', 'allow *',
-                ],
+                args=args,
                 stdout=StringIO(),
             )
             keyring = r.stdout.getvalue()
@@ -1719,14 +1726,17 @@ def distribute_config_and_admin_keyring(ctx, config):
             path='/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
             data=ctx.ceph[cluster_name].admin_keyring,
             sudo=True)
+        keyring = f"/etc/ceph/{cluster_name}.keyring"
+        remote.write_file(
+            path=keyring,
+            data=ctx.ceph[cluster_name].admin_keyring,
+            sudo=True)
+        ctx.ceph[cluster_name].keyring = keyring
     try:
         yield
     finally:
-        ctx.cluster.run(args=[
-            'sudo', 'rm', '-f',
-            '/etc/ceph/{}.conf'.format(cluster_name),
-            '/etc/ceph/{}.client.admin.keyring'.format(cluster_name),
-        ])
+        # ceph_bootstrap cleans up keys/confs
+        pass
 
 
 @contextlib.contextmanager
@@ -1739,6 +1749,83 @@ def crush_setup(ctx, config):
         args=['ceph', 'osd', 'crush', 'tunables', profile])
     yield
 
+
+@contextlib.contextmanager
+def module_setup(ctx, config):
+    cluster_name = config['cluster']
+    remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    modules = config.get('mgr-modules', [])
+    for m in modules:
+        m = str(m)
+        cmd = [
+           'sudo',
+           'ceph',
+           '--cluster',
+           cluster_name,
+           'mgr',
+           'module',
+           'enable',
+           m,
+        ]
+        log.info("enabling module %s", m)
+        _shell(ctx, cluster_name, remote, args=cmd)
+    yield
+
+
+@contextlib.contextmanager
+def conf_setup(ctx, config):
+    cluster_name = config['cluster']
+    remote = ctx.ceph[cluster_name].bootstrap_remote
+
+    client_key_type = config.get('client_key_type', None)
+
+    if client_key_type is not None:
+        if client_key_type in ('aes',):
+            args = ['ceph', 'config', 'set', 'mon', 'mon_auth_allow_insecure_key', 'true']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            args = ['ceph', 'mon', 'set', 'auth_allowed_ciphers', f'{client_key_type},aes256k']
+            _shell(ctx, cluster_name, remote, args=args)
+
+            auth_warnings = [
+                'AUTH_INSECURE_CLIENT_KEY_TYPE',
+                'AUTH_INSECURE_KEYS_ALLOWED',
+                'AUTH_INSECURE_KEYS_CREATABLE',
+            ]
+            for w in auth_warnings:
+                args = ['ceph', 'health', 'mute', w, '--sticky']
+                _shell(ctx, cluster_name, remote, args=args)
+
+
+    configs = config.get('cluster-conf', {})
+    procs = []
+    for section, confs in configs.items():
+        section = str(section)
+        for k, v in confs.items():
+            k = str(k).replace(' ', '_') # pre-pacific compatibility
+            v = str(v)
+            cmd = [
+                'ceph',
+                'config',
+                'set',
+                section,
+                k,
+                v,
+            ]
+            log.info("setting config [%s] %s = %s", section, k, v)
+            procs.append(_shell(ctx, cluster_name, remote, args=cmd, wait=False))
+    log.debug("set %d configs", len(procs))
+    for p in procs:
+        log.debug("waiting for %s", p)
+        p.wait()
+    yield
+
+@contextlib.contextmanager
+def conf_epoch(ctx, config):
+    cm = ctx.managers[config['cluster']]
+    cm.save_conf_epoch()
+    yield
 
 @contextlib.contextmanager
 def create_rbd_pool(ctx, config):
@@ -2231,7 +2318,9 @@ def task(ctx, config):
             lambda: crush_setup(ctx=ctx, config=config),
             lambda: ceph_mons(ctx=ctx, config=config),
             lambda: distribute_config_and_admin_keyring(ctx=ctx, config=config),
+            lambda: module_setup(ctx=ctx, config=config),
             lambda: ceph_mgrs(ctx=ctx, config=config),
+            lambda: conf_setup(ctx=ctx, config=config),
             lambda: ceph_osds(ctx=ctx, config=config),
             lambda: ceph_mdss(ctx=ctx, config=config),
             lambda: cephfs_setup(ctx=ctx, config=config),
@@ -2243,6 +2332,7 @@ def task(ctx, config):
             lambda: ceph_monitoring('grafana', ctx=ctx, config=config),
             lambda: ceph_clients(ctx=ctx, config=config),
             lambda: create_rbd_pool(ctx=ctx, config=config),
+            lambda: conf_epoch(ctx=ctx, config=config),
     ):
         try:
             if config.get('wait-for-healthy', True):

@@ -14,9 +14,15 @@
  *
  */
 
+#include <fmt/core.h>
 #include <unistd.h>
 
+#include "common/ceph_strings.h"
+#include "common/ceph_time.h"
+#include "common/iso_8601.h"
+#include "common/tcp_info.h"
 #include "include/Context.h"
+#include "include/msgr.h"
 #include "include/random.h"
 #include "common/errno.h"
 #include "AsyncMessenger.h"
@@ -145,10 +151,12 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     protocol = std::unique_ptr<Protocol>(new ProtocolV1(this));
   }
   logger->inc(l_msgr_created_connections);
+  ldout(async_msgr->cct, 20) << " con" << dendl;
 }
 
 AsyncConnection::~AsyncConnection()
 {
+  ldout(async_msgr->cct, 20) << " des" << dendl;
   if (recv_buf)
     delete[] recv_buf;
   ceph_assert(!delay_state);
@@ -310,7 +318,7 @@ ssize_t AsyncConnection::write(ceph::buffer::list &bl,
     outgoing_bl.claim_append(bl);
     ssize_t r = _try_send(more);
     if (r > 0) {
-      writeCallback = callback;
+      writeCallback = std::move(callback);
     }
     return r;
 }
@@ -536,9 +544,10 @@ void AsyncConnection::accept(ConnectedSocket socket,
   center->dispatch_event_external(read_handler);
 }
 
-int AsyncConnection::send_message(Message *m)
+int AsyncConnection::send_msg(MessageRef&& m)
 {
   FUNCTRACE(async_msgr->cct);
+
   lgeneric_subdout(async_msgr->cct, ms,
 		   1) << "-- " << async_msgr->get_myaddrs() << " --> "
 		      << get_peer_addrs() << " -- "
@@ -546,10 +555,14 @@ int AsyncConnection::send_message(Message *m)
 		      << this
 		      << dendl;
 
+  if (unlikely(state == STATE_SHUTTING_DOWN)) {
+    ldout(async_msgr->cct, 10) << __func__ << " cannot send as connection is shutdown or closed" << dendl;
+    return -ESHUTDOWN;
+  }
+
   if (is_blackhole()) {
     lgeneric_subdout(async_msgr->cct, ms, 0) << __func__ << ceph_entity_type_name(peer_type)
       << " blackhole " << *m << dendl;
-    m->put();
     return 0;
   }
 
@@ -571,11 +584,10 @@ int AsyncConnection::send_message(Message *m)
     ldout(async_msgr->cct, 20) << __func__ << " " << *m << " local" << dendl;
     std::lock_guard<std::mutex> l(write_lock);
     if (protocol->is_connected()) {
-      dispatch_queue->local_delivery(m, m->get_priority());
+      dispatch_queue->local_delivery(std::move(m), m->get_priority());
     } else {
       ldout(async_msgr->cct, 10) << __func__ << " loopback connection closed."
                                  << " Drop message " << m << dendl;
-      m->put();
     }
     return 0;
   }
@@ -584,7 +596,7 @@ int AsyncConnection::send_message(Message *m)
   // may disturb users
   logger->inc(l_msgr_send_messages);
 
-  protocol->send_message(m);
+  protocol->send_message(std::move(m));
   return 0;
 }
 
@@ -621,7 +633,7 @@ void AsyncConnection::fault()
 }
 
 void AsyncConnection::_stop() {
-  writeCallback.reset();
+  writeCallback = {};
   dispatch_queue->discard_queue(conn_id);
   async_msgr->unregister_conn(this);
   worker->release_worker();
@@ -654,21 +666,22 @@ void AsyncConnection::shutdown_socket() {
 
 void AsyncConnection::DelayedDelivery::do_request(uint64_t id)
 {
-  Message *m = nullptr;
+  MessageRef m;
   {
     std::lock_guard<std::mutex> l(delay_lock);
     register_time_events.erase(id);
     if (stop_dispatch)
-      return ;
+      return;
     if (delay_queue.empty())
-      return ;
-    m = delay_queue.front();
+      return;
+    m = std::move(delay_queue.front());
     delay_queue.pop_front();
   }
-  if (msgr->ms_can_fast_dispatch(m)) {
+  if (msgr->ms_can_fast_dispatch(*m)) {
     dispatch_queue->fast_dispatch(m);
   } else {
-    dispatch_queue->enqueue(m, m->get_priority(), conn_id);
+    auto p = m->get_priority();
+    dispatch_queue->enqueue(std::move(m), p, conn_id);
   }
 }
 
@@ -678,10 +691,11 @@ void AsyncConnection::DelayedDelivery::discard() {
                     [this]() mutable {
                       std::lock_guard<std::mutex> l(delay_lock);
                       while (!delay_queue.empty()) {
-                        Message *m = delay_queue.front();
-                        dispatch_queue->dispatch_throttle_release(
+                        {
+                          auto& m = delay_queue.front();
+                          dispatch_queue->dispatch_throttle_release(
                             m->get_dispatch_throttle_size());
-                        m->put();
+                        }
                         delay_queue.pop_front();
                       }
                       for (auto i : register_time_events)
@@ -697,14 +711,14 @@ void AsyncConnection::DelayedDelivery::flush() {
   center->submit_to(
       center->get_id(), [this] () mutable {
     std::lock_guard<std::mutex> l(delay_lock);
-    while (!delay_queue.empty()) {
-      Message *m = delay_queue.front();
-      if (msgr->ms_can_fast_dispatch(m)) {
+    for (; !delay_queue.empty(); delay_queue.pop_front()) {
+      auto& m = delay_queue.front();
+      if (msgr->ms_can_fast_dispatch(*m)) {
         dispatch_queue->fast_dispatch(m);
       } else {
-        dispatch_queue->enqueue(m, m->get_priority(), conn_id);
+        auto p = m->get_priority();
+        dispatch_queue->enqueue(std::move(m), p, conn_id);
       }
-      delay_queue.pop_front();
     }
     for (auto i : register_time_events)
       center->delete_time_event(i);
@@ -720,8 +734,8 @@ void AsyncConnection::send_keepalive()
 
 void AsyncConnection::mark_down()
 {
-  ldout(async_msgr->cct, 1) << __func__ << dendl;
   std::lock_guard<std::mutex> l(lock);
+  ldout(async_msgr->cct, 1) << __func__ << dendl;
   protocol->stop();
 }
 
@@ -729,6 +743,17 @@ void AsyncConnection::handle_write()
 {
   ldout(async_msgr->cct, 10) << __func__ << dendl;
   protocol->write_event();
+
+  std::lock_guard<std::mutex> l(lock);
+  if (state == STATE_SHUTTING_DOWN) {
+    std::unique_lock<std::mutex> wl(write_lock);
+    if (!protocol->is_queued() && protocol->sent_queue_empty()) {
+      ldout(async_msgr->cct, 10) << __func__ << ": all messages sent and acked, tearing down." << dendl;
+      wl.unlock();
+      protocol->stop();
+      dispatch_queue->queue_reset(this);
+    }
+  }
 }
 
 void AsyncConnection::handle_write_callback() {
@@ -737,8 +762,7 @@ void AsyncConnection::handle_write_callback() {
   recv_start_time = ceph::mono_clock::now();
   write_lock.lock();
   if (writeCallback) {
-    auto callback = *writeCallback;
-    writeCallback.reset();
+    auto callback = std::move(writeCallback);
     write_lock.unlock();
     callback(0);
     return;
@@ -752,6 +776,37 @@ void AsyncConnection::stop(bool queue_reset) {
   protocol->stop();
   lock.unlock();
   if (need_queue_reset) dispatch_queue->queue_reset(this);
+}
+
+void AsyncConnection::shutdown()
+{
+  {
+    std::lock_guard<std::mutex> l(lock);
+    if (state == STATE_CLOSED || state == STATE_SHUTTING_DOWN)
+      return;
+
+    ldout(async_msgr->cct, 10) << __func__ << " gracefully" << dendl;
+    state = STATE_SHUTTING_DOWN;
+    shutdown_start = ceph::coarse_mono_clock::now();
+    protocol->shutdown();
+
+    // Safely re-arm the timer inside the EventCenter's thread to avoid
+    // triggering ceph_assert(in_thread()). Capture a reference to 'this'
+    // so the connection stays alive until the lambda executes.
+    AsyncConnectionRef conn = this;
+    center->submit_to(center->get_id(), [conn]() {
+      std::lock_guard<std::mutex> l(conn->lock);
+      if (conn->state != STATE_SHUTTING_DOWN) return;
+
+      if (conn->last_tick_id) {
+        conn->center->delete_time_event(conn->last_tick_id);
+      }
+
+      uint64_t timeout = (uint64_t)conn->async_msgr->get_shutdown_timeout().count() * 1000ull;
+      conn->last_tick_id = conn->center->create_time_event(timeout, conn->tick_handler);
+    }, /* always_async = */ true);
+  }
+  dispatch_queue->discard_queue(conn_id); /* drop all subsequent messages */
 }
 
 void AsyncConnection::cleanup() {
@@ -781,6 +836,19 @@ void AsyncConnection::tick(uint64_t id)
   ldout(async_msgr->cct, 20) << __func__ << " last_id=" << last_tick_id
                              << " last_active=" << last_active << dendl;
   std::lock_guard<std::mutex> l(lock);
+  if (state == STATE_SHUTTING_DOWN) {
+    auto since = now - shutdown_start;
+    auto timeout = async_msgr->get_shutdown_timeout();
+    if (since >= timeout) {
+      ldout(async_msgr->cct, 1) << __func__ << " shutdown timeout reached, faulting!" << dendl;
+      protocol->fault();
+      return;
+    }
+
+    uint64_t left = std::chrono::duration_cast<std::chrono::microseconds>(timeout - since).count();
+    last_tick_id = center->create_time_event(left, tick_handler);
+    return;
+  }
   last_tick_id = 0;
   if (!is_connected()) {
     if (connect_timeout_us <=
@@ -810,4 +878,62 @@ void AsyncConnection::tick(uint64_t id)
       last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
     }
   }
+}
+
+void AsyncConnection::dump(Formatter *f, bool tcp_info) {
+  std::lock_guard<std::mutex> l(lock);
+
+  f->open_object_section("async_connection");
+  f->dump_string("state", get_state_name(state));
+  f->dump_unsigned("messenger_nonce", async_msgr->get_nonce());
+
+  f->open_object_section("status");
+  f->dump_bool("connected", is_connected());
+  f->dump_bool("loopback", is_loopback);
+  f->close_section();  // status
+
+  if (cs) {
+    f->dump_int("socket_fd", cs.fd());
+    if (!tcp_info || !dump_tcp_info(cs.fd(), f)) {
+      f->dump_null("tcp_info");
+    }
+  } else {
+    f->dump_null("socket_fd");
+    f->dump_null("tcp_info");
+  }
+  f->dump_int("conn_id", conn_id);
+
+  f->open_object_section("peer");
+  f->dump_object("entity_name", get_peer_entity_name());
+  f->dump_string("type", ceph_entity_type_name(get_peer_type()));
+  f->dump_int("id", get_peer_id());
+  f->dump_int("global_id", get_peer_global_id());
+  f->open_object_section("addr");
+  peer_addrs->dump(f);
+  f->close_section();  // addr
+  f->close_section();  // peer
+
+  f->dump_string("last_connect_started_ago",
+                 ceph::timespan_str(ceph::coarse_mono_clock::now() -
+                                    last_connect_started));
+  f->dump_string(
+      "last_active_ago",
+      fmt::format("{}", ceph::timespan_str(ceph::coarse_mono_clock::now() -
+                                           last_active)));
+  f->dump_string("recv_start_time_ago",
+                 fmt::format("{}", ceph::timespan_str(ceph::mono_clock::now() -
+                                                      recv_start_time)));
+  f->dump_unsigned("last_tick_id", last_tick_id);
+  f->dump_object("socket_addr", socket_addr);
+  f->dump_object("target_addr", target_addr);
+  f->dump_int("port", port);
+  f->open_object_section("protocol");
+  if (protocol) {
+    protocol->dump(f);
+  } else {
+    f->dump_null("null");
+  }
+  f->close_section();  // protocol
+  f->dump_int("worker_id", worker ? worker->id : -1);
+  f->close_section();  // async_connection
 }

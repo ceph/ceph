@@ -16,7 +16,7 @@
 #define CEPH_DISPATCHQUEUE_H
 
 #include <atomic>
-#include <map>
+#include <set>
 #include <queue>
 #include <boost/intrusive_ptr.hpp>
 #include "include/ceph_assert.h"
@@ -38,13 +38,16 @@ struct Connection;
  * See Messenger::dispatch_entry for details.
  */
 class DispatchQueue {
+  using ArrivalSet = std::multiset<double>;
+  ArrivalSet marrival;
+
   class QueueItem {
-    int type;
+    int type = -1;
     ConnectionRef con;
     ceph::ref_t<Message> m;
   public:
-    explicit QueueItem(const ceph::ref_t<Message>& m) : type(-1), con(0), m(m) {}
-    QueueItem(int type, Connection *con) : type(type), con(con), m(0) {}
+    explicit QueueItem(ceph::ref_t<Message>&& m) : m(std::move(m)) {}
+    QueueItem(int type, Connection *con) : type(type), con(con) {}
     bool is_code() const {
       return type != -1;
     }
@@ -60,6 +63,13 @@ class DispatchQueue {
       ceph_assert(is_code());
       return con.get();
     }
+
+    /**
+     * An iterator into #marrival.  This field is only initialized if
+     * `!is_code()`.  It is set by add_arrival() and used by
+     * remove_arrival().
+     */
+    ArrivalSet::iterator arrival;
   };
 
   CephContext *cct;
@@ -69,21 +79,11 @@ class DispatchQueue {
 
   PrioritizedQueue<QueueItem, uint64_t> mqueue;
 
-  std::set<std::pair<double, ceph::ref_t<Message>>> marrival;
-  std::map<ceph::ref_t<Message>, decltype(marrival)::iterator> marrival_map;
-  void add_arrival(const ceph::ref_t<Message>& m) {
-    marrival_map.insert(
-      make_pair(
-	m,
-	marrival.insert(std::make_pair(m->get_recv_stamp(), m)).first
-	)
-      );
+  void add_arrival(QueueItem &item) {
+    item.arrival = marrival.insert(item.get_message()->get_recv_stamp());
   }
-  void remove_arrival(const ceph::ref_t<Message>& m) {
-    auto it = marrival_map.find(m);
-    ceph_assert(it != marrival_map.end());
-    marrival.erase(it->second);
-    marrival_map.erase(it);
+  void remove_arrival(QueueItem &item) {
+    marrival.erase(item.arrival);
   }
 
   std::atomic<uint64_t> next_id;
@@ -126,10 +126,7 @@ class DispatchQueue {
   Throttle dispatch_throttler;
 
   bool stop;
-  void local_delivery(const ceph::ref_t<Message>& m, int priority);
-  void local_delivery(Message* m, int priority) {
-    return local_delivery(ceph::ref_t<Message>(m, false), priority); /* consume ref */
-  }
+  void local_delivery(ceph::ref_t<Message>&& m, int priority);
   void run_local_delivery();
 
   double get_max_age(utime_t now) const;
@@ -197,16 +194,13 @@ class DispatchQueue {
     cond.notify_all();
   }
 
-  bool can_fast_dispatch(const ceph::cref_t<Message> &m) const;
+  bool can_fast_dispatch(const Message& m) const;
   void fast_dispatch(const ceph::ref_t<Message>& m);
   void fast_dispatch(Message* m) {
     return fast_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   void fast_preprocess(const ceph::ref_t<Message>& m);
-  void enqueue(const ceph::ref_t<Message>& m, int priority, uint64_t id);
-  void enqueue(Message* m, int priority, uint64_t id) {
-    return enqueue(ceph::ref_t<Message>(m, false), priority, id); /* consume ref */
-  }
+  void enqueue(ceph::ref_t<Message>&& m, int priority, uint64_t id);
   void discard_queue(uint64_t id);
   void discard_local();
   uint64_t get_id() {

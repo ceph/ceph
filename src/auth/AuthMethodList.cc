@@ -12,11 +12,11 @@
  * 
  */
 
-#include <algorithm>
+#include "AuthMethodList.h"
 #include "common/debug.h"
 #include "include/str_list.h"
 
-#include "AuthMethodList.h"
+#include <algorithm> // for std::find()
 
 const static int dout_subsys = ceph_subsys_auth;
 
