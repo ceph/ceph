@@ -1726,21 +1726,18 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
           break;
         }
 
-        // Delete any leftover objects from previous failed migrations
-        pg_t source_pg = get_source_pg_from_hash(start_obj);
-        if (!pool_migration_target_delete(source_pg, start_obj, op)) {
-          dout(20) << __func__ << " failed to clean up stale objects on target PG" << dendl;
-          return;
-        }
-
         if (pool_migration_reservations_granted_target) {
           dout(20) << __func__ << " reservations already granted, returning success to source PG" << dendl;
+          pg_t source_pg = get_source_pg_from_hash(start_obj);
+          pool_migration_target_delete(source_pg, start_obj, op);
           result = 0;
           break;
         }
 
         if (!pending_pool_migration_reservation_ops.empty()) {
           dout(20) << __func__ << " reservations already requested, adding op to the replies list" << dendl;
+          pg_t source_pg = get_source_pg_from_hash(start_obj);
+          pool_migration_target_delete(source_pg, start_obj, op);
           pending_pool_migration_reservation_ops.push_back(op);
           return;
         }
@@ -16564,6 +16561,23 @@ void PrimaryLogPG::on_pool_migration_target_reserved() {
   dout(20) << __func__ << dendl;
 
   ceph_assert(!pending_pool_migration_reservation_ops.empty());
+
+  OpRequestRef& retry_op = pending_pool_migration_reservation_ops.front();
+  const MOSDOp *m = static_cast<const MOSDOp*>(retry_op->get_req());
+  hobject_t start_obj;
+  for (const auto& osd_op : m->ops) {
+    if (osd_op.op.op == CEPH_OSD_OP_PG_POOL_MIGRATION_RESERVE) {
+      auto bp = osd_op.indata.cbegin();
+      decode(start_obj, bp);
+      break;
+    }
+  }
+  pg_t source_pg = get_source_pg_from_hash(start_obj);
+  if (!pool_migration_target_delete(source_pg, start_obj, retry_op)) {
+    dout(20) << __func__ << " failed to clean up stale objects on target PG" << dendl;
+    return;
+  }
+
   int result = 0;
   for (auto& op : pending_pool_migration_reservation_ops) {
     MOSDOp *m = static_cast<MOSDOp*>(op->get_nonconst_req());
