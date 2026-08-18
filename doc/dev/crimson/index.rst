@@ -422,3 +422,5 @@ Code Walkthroughs
    PoseidonStore <poseidonstore>
    PG Merge Synchronization <pgmerging>
    The Logical Address in SeaStore <seastore_laddr>
+   SeaStore write-path benchmark (single host) <seastore-write-path-single-host-benchmark>
+   SeaStore write-path benchmark (replicated pool) <seastore-write-path-replicated-benchmark>
