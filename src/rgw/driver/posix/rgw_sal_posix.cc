@@ -3173,6 +3173,22 @@ std::string POSIXObject::gen_temp_fname()
   return temp_fname;
 }
 
+static int posix_data_file_fd(posix::FSEnt* ent)
+{
+  if (!ent) {
+    return -1;
+  }
+  if (ent->get_type() == posix::ObjectType::FILE) {
+    return ent->get_fd();
+  }
+  if (ent->get_type() == posix::ObjectType::VERSIONED) {
+    auto* vdir = static_cast<posix::VersionedDirectory*>(ent);
+    posix::FSEnt* cur = vdir->get_cur_version_ent();
+    return cur ? cur->get_fd() : -1;
+  }
+  return -1;
+}
+
 int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs,
 					int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
@@ -3185,13 +3201,44 @@ int POSIXObject::POSIXReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
   else
     left = end - ofs + 1;
 
+  if (posix_try_use_uring(dpp, y, /*nsfs=*/false)) {
+    int fd = posix_data_file_fd(source->get_fsent());
+    if (fd >= 0) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_get_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
+      int64_t chunk = dpp->get_cct()->_conf.get_val<Option::size_t>(
+          "rgw_posix_read_chunk_size");
+      if (chunk <= 0) {
+        chunk = READ_SIZE;
+      }
+      UringReadWindow win(dpp, y, fd, qd, chunk, dio);
+      int r = win.iterate(cur_ofs, left,
+          [dpp, cb, source = source](bufferlist& bl, int len) {
+            int ret = cb->handle_data(bl, 0, len);
+            if (ret < 0) {
+              ldpp_dout(dpp, 0) << " ERROR: callback failed on "
+                                << source->get_name() << ": " << ret << dendl;
+            }
+            return ret;
+          });
+      if (r < 0) {
+        ldpp_dout(dpp, 1) << "URING: ERROR: POSIXReadOp::iterate failed: "
+                          << cpp_strerror(-r) << " (" << r << ")" << dendl;
+      }
+      return r;
+    }
+  }
+
   /* QD2 read-ahead: while handle_data() yields in the beast frontend's
    * async_write, spawn the next File::read() on the same executor so the
    * disk fetch of chunk N+1 overlaps the network send of chunk N.  One
    * prefetch at a time, in order.  Without a yield_context there is
    * nothing to overlap with, so the loop stays sequential. */
   std::optional<ceph::async::spawn_throttle> throttle;
-  if (y && dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_get_iodepth") >= 2) {
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_get_iodepth"),
+      "rgw_posix_get_iodepth");
+  if (y && iodepth >= 2) {
     throttle.emplace(y.get_yield_context(), 1);
   }
 
@@ -3926,7 +3973,26 @@ int POSIXMultipartWriter::prepare(optional_yield y)
 
 int POSIXMultipartWriter::process(bufferlist&& data, uint64_t offset)
 {
-  bool pipeline = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth") >= 2;
+  if (posix_try_use_uring(dpp, yield, /*nsfs=*/false) && part_file &&
+      part_file->get_fd() >= 0) {
+    if (!uring_write) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
+      uring_write = std::make_unique<UringWriteWindow>(
+          dpp, yield, part_file->get_fd(), qd, dio);
+      part_file->set_sync_on_close(true);
+    }
+    int r = uring_write->process(std::move(data), offset);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXMultipartWriter::process failed: "
+                        << cpp_strerror(-r) << " (" << r << ")" << dendl;
+    }
+    return r;
+  }
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth"),
+      "rgw_posix_put_iodepth");
+  bool pipeline = iodepth >= 2;
   return pending_write.process(std::move(data), offset, pipeline,
       [this](uint64_t ofs, bufferlist& bl) {
         return part_file->write(ofs, bl, dpp, null_yield);
@@ -3946,9 +4012,19 @@ int POSIXMultipartWriter::complete(
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret = pending_write.drain();
-  if (ret < 0) {
-    return ret;
+  int ret = 0;
+  if (uring_write) {
+    ret = uring_write->drain();
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXMultipartWriter::complete drain failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
+      return ret;
+    }
+  } else {
+    ret = pending_write.drain();
+    if (ret < 0) {
+      return ret;
+    }
   }
   POSIXUploadPartInfo info;
 
@@ -4025,7 +4101,27 @@ int POSIXAtomicWriter::prepare(optional_yield y)
 
 int POSIXAtomicWriter::process(bufferlist&& data, uint64_t offset)
 {
-  bool pipeline = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth") >= 2;
+  int fd = posix_data_file_fd(obj->get_fsent());
+  if (posix_try_use_uring(dpp, yield, /*nsfs=*/false) && fd >= 0) {
+    if (!uring_write) {
+      unsigned qd = dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth");
+      bool dio = dpp->get_cct()->_conf.get_val<bool>("rgw_posix_direct_io");
+      uring_write = std::make_unique<UringWriteWindow>(dpp, yield, fd, qd, dio);
+      if (obj->get_fsent()) {
+        obj->get_fsent()->set_sync_on_close(true);
+      }
+    }
+    int r = uring_write->process(std::move(data), offset);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXAtomicWriter::process failed: "
+                        << cpp_strerror(-r) << " (" << r << ")" << dendl;
+    }
+    return r;
+  }
+  unsigned iodepth = posix_sync_clamp_iodepth(
+      dpp, dpp->get_cct()->_conf.get_val<uint64_t>("rgw_posix_put_iodepth"),
+      "rgw_posix_put_iodepth");
+  bool pipeline = iodepth >= 2;
   return pending_write.process(std::move(data), offset, pipeline,
       [this](uint64_t ofs, bufferlist& bl) {
         return obj->write(ofs, bl, dpp, null_yield);
@@ -4043,9 +4139,19 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
-  int ret = pending_write.drain();
-  if (ret < 0) {
-    return ret;
+  int ret = 0;
+  if (uring_write) {
+    ret = uring_write->drain();
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "URING: ERROR: POSIXAtomicWriter::complete drain failed: "
+                        << cpp_strerror(-ret) << " (" << ret << ")" << dendl;
+      return ret;
+    }
+  } else {
+    ret = pending_write.drain();
+    if (ret < 0) {
+      return ret;
+    }
   }
   uint64_t orig_size = 0;
 
