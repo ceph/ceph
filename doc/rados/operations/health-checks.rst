@@ -1246,8 +1246,11 @@ One (or more) BlueStore OSDs detects read errors on the main device.
 BlueStore has recovered from these errors by retrying disk reads. This alert
 might indicate issues with underlying hardware, issues with the I/O subsystem,
 or something similar. Such issues can cause permanent data
-corruption. Some observations on the root cause of spurious read errors can be
-found here: https://tracker.ceph.com/issues/22464
+corruption. Root-cause investigations of such reports have generally
+pointed at the underlying hardware or kernel I/O path rather than at
+BlueStore itself. A telltale sign is a reported checksum of
+``0x6706be76``, which is the checksum of an all-zero block: it
+indicates that the read returned zeroes instead of the stored data.
 
 This alert does not require an immediate response, but the affected host might
 need additional attention: for example, upgrading the host to the latest
@@ -1278,8 +1281,10 @@ evaluated and possibly removed and replaced.
    read stalled read 0x29f40370000~100000 (buffered) since 63410177.290546s, timeout is 5.000000s
 
 However, this is difficult to spot because there is no discernible warning (a
-health warning or info in ``ceph health detail`` for example). More observations
-can be found here: https://tracker.ceph.com/issues/62500
+health warning or info in ``ceph health detail`` for example). Other
+BlueStore log messages that point at a failing or overloaded drive
+include ``log_latency`` and ``log_latency_fn`` entries reporting slow
+operations with latencies of several seconds.
 
 Also because there can be false positive ``stalled read`` instances, a mechanism
 has been added to increase accuracy. If in the last :confval:`bdev_stalled_read_warn_lifetime`
@@ -2016,7 +2021,11 @@ The above procedure was developed by Eugen Block in September of 2024.
 
 See `Eugen Block's blog post <https://heiterbiswolkig.blogs.nde.ag/2024/09/06/pgs-not-deep-scrubbed-in-time/>`_ for much more detail.
 
-See `Redmine tracker issue #44959 <https://tracker.ceph.com/issues/44959>`_.
+This warning can appear even though every PG has been deep scrubbed
+within the configured interval. That happens when
+:confval:`osd_deep_scrub_interval` has been customized only for OSDs:
+the Monitors and Managers that raise the warning still evaluate it
+against the default interval, which the procedure above corrects.
 
 Second Method
 ~~~~~~~~~~~~~
@@ -2061,7 +2070,11 @@ The above procedure was developed by Eugen Block in September of 2024.
 
 See `Eugen Block's blog post <https://heiterbiswolkig.blogs.nde.ag/2024/09/06/pgs-not-deep-scrubbed-in-time/>`_ for much more detail.
 
-See `Redmine tracker issue #44959 <https://tracker.ceph.com/issues/44959>`_.
+This warning can appear even though every PG has been deep scrubbed
+within the configured interval. That happens when
+:confval:`osd_deep_scrub_interval` has been customized only for OSDs:
+the Monitors and Managers that raise the warning still evaluate it
+against the default interval, which the procedure above corrects.
 
 
 

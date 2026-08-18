@@ -121,8 +121,12 @@ primary PG mappings and can impact read performance (this excludes any data move
 
 .. note::
 
-  Users affected by `#66867 <https://tracker.ceph.com/issues/66867>`_ or `#61948 <https://tracker.ceph.com/issues/61948>`_
-  may find these commands useful when dealing with unexpected ``pg-upmap-primary`` behavior.
+  These commands are useful for cleaning up unexpected
+  ``pg-upmap-primary`` state. For example, on some releases
+  ``pg-upmap-primary`` mappings were retained in the OSD map for pools
+  that had already been deleted, and such stale mappings could crash
+  Monitors with a ``pg_upmap_primaries.empty()`` assertion when an
+  older-format OSD map was encoded.
 
 To remove a specific ``pg-upmap-primary`` mapping, use:
 

@@ -1427,7 +1427,10 @@ manages snapshot crawl and a data synchronization thread pool, which handles con
 transfers. Users can fine-tune these operations using configuration parameters:
 - ``cephfs_mirror_max_concurrent_directory_syncs``: controls the number of concurrent snapshots being crawled.
 - ``cephfs_mirror_max_datasync_threads``: controls the total threads available for data sync.
-For more information, see https://tracker.ceph.com/issues/73452
+
+Separating crawling from data transfer allows snapshot discovery and
+progress reporting to continue even while large file transfers are in
+flight.
 
 
 Snapshot Mirroring Checkpoints

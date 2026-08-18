@@ -119,8 +119,9 @@ tries to remove MDS daemons using the enabled Ceph Manager orchestrator module.
 
 .. note:: After volume deletion, we recommend restarting `ceph-mgr` if a new
    file system is created on the same cluster and the subvolume interface is
-   being used. See https://tracker.ceph.com/issues/49605#note-5 for more
-   details.
+   being used. The restart clears state that Manager modules may still hold
+   for the deleted volume, which can otherwise interfere with subvolume
+   operations on the new file system.
 
 .. note:: If the snap-schedule Ceph Manager module is being used for a volume
    and the volume is deleted, then the snap-schedule Ceph Manager module will
@@ -1172,9 +1173,8 @@ following command.
 Controlling Subvolume Snapshot Visibility
 -----------------------------------------
 
-.. note:: This functionality is currently supported only for FUSE/libcephfs clients.
-          Kernel client support is planned: progress can be tracked at
-          https://tracker.ceph.com/issues/72589.
+.. note:: This functionality is currently supported only for FUSE/libcephfs
+          clients. The kernel client does not yet support it.
 
 Snapshots of a subvolume can be hidden from compatible clients by
 performing two actions:

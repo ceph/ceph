@@ -117,7 +117,12 @@ cascading failures and an impactful thundering herd of data movement. This can
 cause substantial client impact and long recovery times when OSDs return to
 service. If Ceph stops marking OSDs ``out``, some PGs may fail to
 rebalance to surviving OSDs, potentially leading to ``inactive`` PGs.
-See https://tracker.ceph.com/issues/68338 for more information.
+This is particularly relevant for three-availability-zone clusters,
+which are designed to survive the loss of a full zone (a third of the
+hosts): with the default ``mon_osd_min_in_ratio``, the down OSDs are
+never marked ``out``, so PGs stay ``peered`` and I/O stops even though
+the surviving zones have enough capacity to recover. Marking the down
+OSDs ``out`` manually restores service in that situation.
 
 .. _stretch_mode1:
 
@@ -228,8 +233,6 @@ with the CRUSH topology.
       The recommended approach is to use the ``stretch_replicated_rule`` definition shown
       above (with ``take default`` and ``choose firstn 0 type datacenter``), which correctly
       reports ``MAX AVAIL``.
-
-      See https://tracker.ceph.com/issues/56650 for more detail on this workaround.
 
    *The above procedure was developed in May and June of 2024 by Prashant Dhange.*
 
