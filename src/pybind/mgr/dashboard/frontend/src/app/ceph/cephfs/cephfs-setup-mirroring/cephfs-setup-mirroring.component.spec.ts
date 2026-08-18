@@ -36,6 +36,7 @@ describe('CephfsSetupMirroringComponent', () => {
     cephfsServiceMock.enableMirror.mockReturnValue(of(null));
     cephfsServiceMock.disableMirror.mockReturnValue(of(null));
     cephfsServiceMock.createBootstrapPeer.mockReturnValue(of(null));
+    cephServiceServiceMock.create.mockReturnValue(of(null));
     taskWrapperMock.wrapTaskAroundCall.mockImplementation(({ call }) => call);
 
     await TestBed.configureTestingModule({
@@ -119,6 +120,13 @@ describe('CephfsSetupMirroringComponent', () => {
 
       expect(component.filesystems).toEqual([{ id: 5, name: 'fs-5' }]);
     });
+
+    it('should set hasMirrorDaemon when daemon status is non-empty', () => {
+      cephfsServiceMock.listDaemonStatus.mockReturnValue(of([{ daemon_id: 1, filesystems: [] }]));
+      fixture.detectChanges();
+
+      expect(component.hasMirrorDaemon).toBe(true);
+    });
   });
 
   describe('form validation', () => {
@@ -189,6 +197,41 @@ describe('CephfsSetupMirroringComponent', () => {
         })
       );
       expect(component.isSubmitting).toBe(false);
+      expect(emitSpy).toHaveBeenCalledWith({ filesystem: 'myfs' });
+    });
+
+    it('should still enable mirroring and import the peer when orchestrator create fails', () => {
+      const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
+      cephServiceServiceMock.create.mockReturnValue(
+        throwError(() => new Error('orchestrator unavailable'))
+      );
+      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+
+      component.onSetupMirroring();
+
+      expect(cephServiceServiceMock.create).toHaveBeenCalledWith({ service_type: 'cephfs-mirror' });
+      expect(cephfsServiceMock.enableMirror).toHaveBeenCalledWith('myfs');
+      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith(
+        'myfs',
+        'eyJrZXkiOiJ2YWx1ZSJ9'
+      );
+      expect(component.isSubmitting).toBe(false);
+      expect(emitSpy).toHaveBeenCalledWith({ filesystem: 'myfs' });
+    });
+
+    it('should skip orchestrator create when a cephfs-mirror daemon is already present', () => {
+      const emitSpy = jest.spyOn(component.mirroringSetup, 'emit');
+      component.hasMirrorDaemon = true;
+      component.setupForm.setValue({ filesystem: 'myfs', token: 'eyJrZXkiOiJ2YWx1ZSJ9' });
+
+      component.onSetupMirroring();
+
+      expect(cephServiceServiceMock.create).not.toHaveBeenCalled();
+      expect(cephfsServiceMock.enableMirror).toHaveBeenCalledWith('myfs');
+      expect(cephfsServiceMock.createBootstrapPeer).toHaveBeenCalledWith(
+        'myfs',
+        'eyJrZXkiOiJ2YWx1ZSJ9'
+      );
       expect(emitSpy).toHaveBeenCalledWith({ filesystem: 'myfs' });
     });
 

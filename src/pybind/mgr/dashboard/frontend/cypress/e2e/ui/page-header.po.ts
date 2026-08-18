@@ -1,7 +1,7 @@
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
-  cephfsMirroring: { url: '#/cephfs/mirroring', id: 'cd-cephfs-mirroring-error' }
+  cephfsMirroring: { url: '#/cephfs/mirroring', id: 'cd-cephfs-mirroring-list' }
 };
 
 export class PageHeaderPageHelper extends PageHelper {
