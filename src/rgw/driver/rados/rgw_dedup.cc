@@ -76,7 +76,6 @@ using namespace rgw::dedup;
 #include "rgw_dedup_epoch.h"
 #include "rgw_perf_counters.h"
 #include "include/ceph_assert.h"
-#include "include/scope_guard.h"
 
 static constexpr auto dout_subsys = ceph_subsys_rgw_dedup;
 
@@ -2664,54 +2663,55 @@ namespace rgw::dedup {
     int ret = 0;
     std::string section("bucket.instance");
     std::string marker;
-    void *handle = nullptr;
-    ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed meta_list_keys_init: "
-                        << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-
-    auto keys_guard = make_scope_guard(
-      [this, handle] { driver->meta_list_keys_complete(handle); });
+    constexpr int max_keys = 1000;
 
     d_all_buckets_obj_count = 0;
     d_all_buckets_obj_size  = 0;
 
     bool has_more = true;
     while (has_more) {
+      void *handle = nullptr;
+      ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed meta_list_keys_init: "
+                          << cpp_strerror(-ret) << dendl;
+        reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
+        return ret;
+      }
       std::list<std::string> entries;
-      constexpr int max_keys = 1000;
       ret = driver->meta_list_keys_next(dpp, handle, max_keys, entries, &has_more);
       if (ret == 0) {
-        for (auto& entry : entries) {
-          ldpp_dout(dpp, 20) <<__func__ << "::bucket_name=" << entry << dendl;
-          rgw_bucket bucket;
-          ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
-          if (unlikely(ret < 0)) {
-            ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed rgw_bucket_parse_bucket_key: "
-                              << cpp_strerror(-ret) << dendl;
-            reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
-            return ret;
-          }
-          ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
-          if (!d_filter.allow_bucket(bucket.name)) {
-            ldpp_dout(dpp, 10) << __func__ << "::skip bucket (filter): "
-                               << bucket.name << dendl;
-            continue;
-          }
-          ret = read_bucket_stats(bucket, &d_all_buckets_obj_count,
-                                  &d_all_buckets_obj_size);
-          if (unlikely(ret != 0)) {
-            reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
-            return ret;
-          }
-        }
+        marker = driver->meta_get_marker(handle);
       }
-      else {
+      driver->meta_list_keys_complete(handle);
+
+      if (ret != 0) {
         ldpp_dout(dpp, 1) << __func__ << "::ERR: failed driver->meta_list_keys_next()" << dendl;
         reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
         return ret;
+      }
+      for (auto& entry : entries) {
+        ldpp_dout(dpp, 20) <<__func__ << "::bucket_name=" << entry << dendl;
+        rgw_bucket bucket;
+        ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
+        if (unlikely(ret < 0)) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed rgw_bucket_parse_bucket_key: "
+                            << cpp_strerror(-ret) << dendl;
+          reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
+          return ret;
+        }
+        ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+        if (!d_filter.allow_bucket(bucket.name)) {
+          ldpp_dout(dpp, 10) << __func__ << "::skip bucket (filter): "
+                             << bucket.name << dendl;
+          continue;
+        }
+        ret = read_bucket_stats(bucket, &d_all_buckets_obj_count,
+                                &d_all_buckets_obj_size);
+        if (unlikely(ret != 0)) {
+          reset_bucket_counters(&d_all_buckets_obj_count, &d_all_buckets_obj_size);
+          return ret;
+        }
       }
     }
 
@@ -2733,61 +2733,66 @@ namespace rgw::dedup {
     int ret = 0;
     std::string section("bucket.instance");
     std::string marker;
-    void *handle = nullptr;
-    ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed meta_list_keys_init: "
-                        << cpp_strerror(-ret) << dendl;
-      return ret;
-    }
-    auto keys_guard = make_scope_guard(
-      [this, handle] { driver->meta_list_keys_complete(handle); });
+    constexpr int max_keys = 1000;
 
     disk_block_array_t disk_arr(dpp, raw_mem, raw_mem_size, worker_id,
                                 p_worker_stats, num_md5_shards);
     bool has_more = true;
-    // iterate over all buckets
-    while (ret == 0 && has_more) {
-      std::list<std::string> entries;
-      constexpr int max_keys = 1000;
-      ret = driver->meta_list_keys_next(dpp, handle, max_keys, entries, &has_more);
-      if (ret == 0) {
-        ldpp_dout(dpp, 20) <<__func__ << "::entries.size()=" << entries.size() << dendl;
-        for (auto& entry : entries) {
-          ldpp_dout(dpp, 20) <<__func__ << "::bucket_name=" << entry << dendl;
-          rgw_bucket bucket;
-          ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
-          if (unlikely(ret < 0)) {
-            // bad bucket entry, skip to the next one
-            ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed rgw_bucket_parse_bucket_key: "
-                              << cpp_strerror(-ret) << dendl;
-            continue;
-          }
-          ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
-          if (!d_filter.allow_bucket(bucket.name)) {
-            ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id
-                               << "::skip bucket (filter): " << bucket.name << dendl;
-            p_worker_stats->ingress_skip_filtered_bucket++;
-            continue;
-          }
-          ret = ingress_bucket_objects_single_shard(disk_arr, bucket, worker_id,
-                                                    num_work_shards, p_worker_stats);
-          if (unlikely(ret != 0)) {
-            if (d_ctl.should_stop()) {
-              return -ECANCELED;
-            }
-            ldpp_dout(dpp, 1) << __func__ << "::Failed ingress_bucket_objects_single_shard()" << dendl;
-            // skip bad bucket and move on to the next one
-            continue;
-          }
-        }
-      }
-      else {
-        ldpp_dout(dpp, 1) << __func__ << "::failed driver->meta_list_keys_next()" << dendl;
-        // TBD: what can we do here?
+    while (has_more) {
+      if (unlikely(d_ctl.should_stop())) {
+        ret = -ECANCELED;
         break;
       }
+
+      void *handle = nullptr;
+      ret = driver->meta_list_keys_init(dpp, section, marker, &handle);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed meta_list_keys_init: "
+                          << cpp_strerror(-ret) << dendl;
+        break;
+      }
+      std::list<std::string> entries;
+      ret = driver->meta_list_keys_next(dpp, handle, max_keys, entries, &has_more);
+      if (ret == 0) {
+        marker = driver->meta_get_marker(handle);
+      }
+      driver->meta_list_keys_complete(handle);
+
+      if (ret != 0) {
+        ldpp_dout(dpp, 1) << __func__ << "::failed driver->meta_list_keys_next()" << dendl;
+        break;
+      }
+      ldpp_dout(dpp, 20) <<__func__ << "::entries.size()=" << entries.size() << dendl;
+      for (auto& entry : entries) {
+        ldpp_dout(dpp, 20) <<__func__ << "::bucket_name=" << entry << dendl;
+        rgw_bucket bucket;
+        int parse_ret = rgw_bucket_parse_bucket_key(cct, entry, &bucket, nullptr);
+        if (unlikely(parse_ret < 0)) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: Failed rgw_bucket_parse_bucket_key: "
+                            << cpp_strerror(-parse_ret) << dendl;
+          continue;
+        }
+        ldpp_dout(dpp, 20) <<__func__ << "::bucket=" << bucket << dendl;
+        if (!d_filter.allow_bucket(bucket.name)) {
+          ldpp_dout(dpp, 10) << __func__ << "::worker_id=" << worker_id
+                             << "::skip bucket (filter): " << bucket.name << dendl;
+          p_worker_stats->ingress_skip_filtered_bucket++;
+          continue;
+        }
+        int ingress_ret = ingress_bucket_objects_single_shard(disk_arr, bucket, worker_id,
+                                                              num_work_shards, p_worker_stats);
+        if (unlikely(ingress_ret != 0)) {
+          if (d_ctl.should_stop()) {
+            ret = -ECANCELED;
+            has_more = false;   // break from external loop
+            break; // internal loop
+          }
+          ldpp_dout(dpp, 1) << __func__ << "::Failed ingress_bucket_objects_single_shard()" << dendl;
+          continue;
+        }
+      }
     }
+
     ldpp_dout(dpp, 20) <<__func__ << "::flush_output_buffers() worker_id="
                        << worker_id << dendl;
     disk_arr.flush_output_buffers(dpp, d_dedup_cluster_ioctx);
