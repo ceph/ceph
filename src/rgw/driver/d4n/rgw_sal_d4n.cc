@@ -1888,6 +1888,15 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
                            << " acquired lease: resource=" << this->lease_resource << dendl;
       }
     }
+
+    // Check tombstone flag - object is logically deleted, return not found
+    if (block.invalid && !this->is_remote_cache_request()) {
+      ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__
+                         << "(): object tombstoned (invalid), returning not found" << dendl;
+      this->exists_in_cache = false;
+      return false;
+    }
+
     blk = block;
 
     // For remote cache GETs the version was already set from the x-rgw-cache-object-version
@@ -3062,99 +3071,144 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
     // Versioned buckets - this will delete the head object indexed by version-id (even null) and latest en
     if (source->get_bucket()->versioned()) {
-        /* 1. clean objects - no latest head entry as latest entry to be retrieved from backend now
-           hence delete only versioned head object */
-        if (!objDirty) {
-          if (source->have_instance()) {
-            if ((ret = blockDir->del(dpp, y, &block, std::nullopt)) < 0) {
-              ldpp_dout(dpp, 0) << "Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl; 
-              return ret;
-            }
-            if (cache_request) {
-			  if ((ret = source->delete_cache_entry(dpp, get_cache_block_prefix(source, version), y)) < 0) {
-				return ret;
-			  }
-            }
+      /* 1. clean objects - no latest head entry as latest entry to be retrieved from backend now
+          hence delete only versioned head object */
+      if (!objDirty) {
+        if (source->have_instance()) {
+          if ((ret = blockDir->del(dpp, y, &block, std::nullopt)) < 0) {
+            ldpp_dout(dpp, 0) << "Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl; 
+            return ret;
           }
-          /* if versioning is suspended, we might have a latest head entry created from when bucket was non-versioned
-             don't return error as that could already be deleted by set_head_block_dir_entry */
-          if (!source->get_bucket()->versioning_enabled()) {
-            block.cacheObj.objName = objName;
-            if ((ret = blockDir->del(dpp, y, &block, std::nullopt)) < 0) {
-              ldpp_dout(dpp, 0) << "Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-            }
-            if (cache_request) {
-			  if ((ret = source->delete_cache_entry(dpp, head_oid_in_cache, y)) < 0) {
-				return ret;
-			  }
-            }
+        }
+        /* if versioning is suspended, we might have a latest head entry created from when bucket was non-versioned
+            don't return error as that could already be deleted by set_head_block_dir_entry */
+        if (!source->get_bucket()->versioning_enabled()) {
+          block.cacheObj.objName = objName;
+          if ((ret = blockDir->del(dpp, y, &block, std::nullopt)) < 0) {
+            ldpp_dout(dpp, 0) << "Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
           }
-        } else if (objDirty) { //2. dirty objects - 1. add delete marker for simple request 2. delete version if given and correctly promote latest version if needed
-          bool transaction_success = false;
-          //add watch on latest entry, as it can be modified by a put or another del
-          rgw::d4n::CacheBlock latest_block = block;
-          latest_block.cacheObj.objName = objName;
-          int retry = 3;
-          while(retry) {
-            retry--;
-            //get latest entry
-            ret = blockDir->get(dpp, y, &latest_block, std::nullopt);
-            if (ret < 0) {
-              ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get latest entry in block directory for: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
-              return ret;
-            }
-            //simple delete request with no version id - create a delete marker
-            if (block.cacheObj.objName == objName) {
-              /* we are checking for latest_block and not block because latest_block has the most updated value of latest hash entry
-                 if existing latest entry is already a delete marker, do not create a new one and simply return */
-              if (!latest_block.deleteMarker) {
-                ret = source->create_delete_marker(dpp, y);
-                if (ret < 0) {
-                  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to create a delete marker for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-                  //ERR_INTERNAL_ERROR is returned when exec_responses are empty which means the watched key has been modified, hence retry
-                  if (ret == -ERR_INTERNAL_ERROR) {
-                    continue;
-                  } else {
-                    return ret;
-                  }
-                }
-                if (ret >= 0) {
-                  result.delete_marker = true;
-                  result.version_id = source->get_instance();
-                  transaction_success = true;
-                  return 0;
+        }
+      } else if (objDirty) { //2. dirty objects - 1. add delete marker for simple request 2. delete version if given and correctly promote latest version if needed
+        // Lambda: Check if there are active GET leases for a specific version
+        auto check_lease = [&](const std::string& version_to_check) -> bool {
+          auto* lease = source->driver->get_lease();
+          if (!lease) return false;
+          if (!objDirty) return false;
+
+          std::string lease_prefix = rgw::sal::get_lease_resource_prefix(
+            source->get_bucket()->get_bucket_id(),
+            source->get_name(),
+            version_to_check,
+            "GET");
+
+          auto result = lease->any_active(dpp, lease_prefix);
+          if (result.has_error()) {
+            ldpp_dout(dpp, 1) << "D4NFilterObject::" << __func__
+                              << "(): lease check failed with error " << result.error
+                              << " - assuming no active lease" << dendl;
+            return false;
+          }
+          return result.active;
+        };
+
+        // Lambda: Delete or tombstone a block based on lease status
+        auto delete_or_tombstone = [&](rgw::d4n::CacheBlock* blk, const std::string& version_to_check, const char* desc) -> int {
+          bool has_active_lease = check_lease(version_to_check);
+
+          if (has_active_lease && objDirty) {
+            // Tombstone - in-flight GET reading this version
+            ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__
+                               << "(): active GET lease exists for " << desc
+                               << " - tombstoning" << dendl;
+            blk->invalid = true;
+            return blockDir->set(dpp, y, blk, std::nullopt);
+          } else {
+            // Delete - no active lease or clean object
+            return blockDir->del(dpp, y, blk, std::nullopt);
+          }
+        };
+
+        bool transaction_success = false;
+        //add watch on latest entry, as it can be modified by a put or another del
+        rgw::d4n::CacheBlock latest_block = block;
+        latest_block.cacheObj.objName = objName;
+        int retry = 3;
+        while(retry) {
+          retry--;
+          //get latest entry
+          ret = blockDir->get(dpp, y, &latest_block, std::nullopt);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get latest entry in block directory for: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
+            return ret;
+          }
+          //simple delete request with no version id - create a delete marker
+          if (block.cacheObj.objName == objName) {
+            /* we are checking for latest_block and not block because latest_block has the most updated value of latest hash entry
+                if existing latest entry is already a delete marker, do not create a new one and simply return */
+            if (!latest_block.deleteMarker) {
+              ret = source->create_delete_marker(dpp, y);
+              if (ret < 0) {
+                ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to create a delete marker for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+                //ERR_INTERNAL_ERROR is returned when exec_responses are empty which means the watched key has been modified, hence retry
+                if (ret == -ERR_INTERNAL_ERROR) {
+                  continue;
+                } else {
+                  return ret;
                 }
               }
-              transaction_success = true;
-              return 0;
-            } else { //not a simple request, delete version requested
-              //get latest entry ret is 0
-              if (ret == 0) {
-                rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
-                  .objName = objName,
-                  .bucketName = source->get_bucket()->get_bucket_id(),
-                };
-                //check if version to be deleted is the same as latest version
-                if (latest_block.version == block.version) {
-                  std::vector<std::string> members;
-                  std::vector<rgw::d4n::CacheObjectVersion> obj_versions;
-                  //get the second latest version
-                  std::string continuation_token;
-                  ret = objDir->list_versions(dpp, y, source->get_bucket()->get_bucket_id(), objName, "", 2, obj_versions, continuation_token, std::nullopt);
+              if (ret >= 0) {
+                result.delete_marker = true;
+                result.version_id = source->get_instance();
+                transaction_success = true;
+                return 0;
+              }
+            }
+            transaction_success = true;
+            return 0;
+          } else { //not a simple request, delete version requested
+            //get latest entry ret is 0
+            if (ret == 0) {
+              rgw::d4n::CacheObj dir_obj = rgw::d4n::CacheObj{
+                .objName = objName,
+                .bucketName = source->get_bucket()->get_bucket_id(),
+              };
+              //check if version to be deleted is the same as latest version
+              if (latest_block.version == block.version) {
+                std::vector<std::string> members;
+                std::vector<rgw::d4n::CacheObjectVersion> obj_versions;
+                //get the second latest version
+                std::string continuation_token;
+                ret = objDir->list_versions(dpp, y, source->get_bucket()->get_bucket_id(), objName, "", 2, obj_versions, continuation_token, std::nullopt);
+                if (ret < 0) {
+                  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get the second latest version for: " << dir_obj.objName << ", ret=" << ret << dendl;
+                  return ret;
+                }
+                //if there is a second latest version
+                if (obj_versions.size() == 2) {
+                  rgw::d4n::CacheBlock version_block = latest_block;
+                  version_block.cacheObj.objName = get_versioned_head_block_name(obj_versions[1].version, source->get_name());
+                  //get versioned entry
+                  ret = blockDir->get(dpp, y, &version_block, std::nullopt);
                   if (ret < 0) {
-                    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get the second latest version for: " << dir_obj.objName << ", ret=" << ret << dendl;
-                    return ret;
+                    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get the versioned entry for: " << version_block.cacheObj.objName << ", ret=" << ret << dendl;
+                    return 0;
                   }
-                  //if there is a second latest version
-                  if (obj_versions.size() == 2) {
-                    rgw::d4n::CacheBlock version_block = latest_block;
-                    version_block.cacheObj.objName = get_versioned_head_block_name(obj_versions[1].version, source->get_name());
-                    //get versioned entry
-                    ret = blockDir->get(dpp, y, &version_block, std::nullopt);
+                  // Check lease before promoting/modifying latest
+                  bool latest_has_lease = check_lease(latest_block.version);
+
+                  if (latest_has_lease && objDirty) {
+                    // Tombstone latest instead of promoting
+                    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__
+                                       << "(): active GET lease exists on latest - tombstoning instead of promoting"
+                                       << dendl;
+                    latest_block.invalid = true;
+                    ret = blockDir->set(dpp, y, &latest_block, std::nullopt);
                     if (ret < 0) {
-                      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to get the versioned entry for: " << version_block.cacheObj.objName << ", ret=" << ret << dendl;
-                      return 0;
+                      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to tombstone latest entry for: " << latest_block.cacheObj.objName << ", ret=" << ret << dendl;
+                      return ret;
                     }
+                  } else {
+                    // No lease - safe to promote
                     //set versioned entry as the latest entry
                     version_block.cacheObj.objName = latest_block.cacheObj.objName;
                     ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): INFO: promoting latest version entry to version: " << version_block.version << ", ret=" << ret << dendl;
@@ -3163,30 +3217,26 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
                       ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to set new latest entry for: " << version_block.cacheObj.objName << ", ret=" << ret << dendl;
                       return 0;
                     }
-                  } else { // there are no more versions left
-                    //delete latest block entry
-                    ret = blockDir->del(dpp, y, &latest_block, std::nullopt);
-                    if (ret < 0) {
-                      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete latest entry in block directory, when it is the same as version requested, for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-                      return ret;
-                    }
-                    //delete entry from ordered set of objects
-                    ret = bucketDir->remove_object(dpp, y, source->get_bucket()->get_bucket_id(), source->get_name(), std::nullopt);
-                    if (ret < 0) {
-                      ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue remove_object request in bucket directory for: " << source->get_name() << ", ret=" << ret << dendl;
-                      return ret;
-                    }
-					if (cache_request) {
-					  std::string req_oid_in_cache = get_key_in_cache(head_oid_in_cache + "#0#0", std::to_string(0), std::to_string(0));
-					  if ((ret = source->delete_cache_entry(dpp, req_oid_in_cache, y)) < 0) {
-						return ret;
-					  }
-					}
+                  }
+                } else { // there are no more versions left
+                  //delete or tombstone latest block entry
+                  ret = delete_or_tombstone(&latest_block, latest_block.version, "latest entry");
+                  if (ret < 0) {
+                    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete/tombstone latest entry in block directory, when it is the same as version requested, for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+                    return ret;
+                  }
+                  //delete entry from ordered set of objects
+                  ret = bucketDir->remove_object(dpp, y, source->get_bucket()->get_bucket_id(), source->get_name(), std::nullopt);
+                  if (ret < 0) {
+                    ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue remove_object request in bucket directory for: " << source->get_name() << ", ret=" << ret << dendl;
+                    return ret;
+                  }
                   }
                 } //end-if latest_block.version == block.version
-                //delete versioned entry (handles delete markers also)
-                if ((ret = blockDir->del(dpp, y, &block, std::nullopt)) < 0 && ret != -ENOENT) {
-                  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+                //delete or tombstone versioned entry (handles delete markers also)
+                ret = delete_or_tombstone(&block, block.version, "versioned entry");
+                if (ret < 0 && ret != -ENOENT) {
+                  ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete/tombstone head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
                   return ret;
                 }
                 //delete entry from ordered set of versions
@@ -3201,12 +3251,6 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
                   ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to execute exec in block directory: " << "ret= " << ret << dendl;
                   return ret;
                 }
-				if (cache_request) {
-				  std::string req_oid_in_cache = get_key_in_cache(get_cache_block_prefix(source, version), std::to_string(0), std::to_string(0));
-				  if ((ret = source->delete_cache_entry(dpp, req_oid_in_cache, y)) < 0) {
-					return ret;
-				  }
-				}
                 result.delete_marker = block.deleteMarker;
                 result.version_id = version;
                 //success, hence break from loop
@@ -3225,27 +3269,95 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     /* Non-versioned buckets - we will delete the latest entry and the "null" entry
        dirty objects - delete "null" entry from ordered set also */
     if (!source->get_bucket()->versioned()) {
-      //explore redis pipelining to send the two 'DEL' commands together in a single request
-      ret = blockDir->del(dpp, y, &block, std::nullopt);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue delete head object op in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-        return ret;
+      // Check for active GET leases before HEAD deletion
+      bool has_active_lease = false;
+      auto* lease = source->driver->get_lease();
+      if (lease && objDirty) {
+        std::string lease_prefix = rgw::sal::get_lease_resource_prefix(
+          source->get_bucket()->get_bucket_id(),
+          source->get_name(),
+          version,
+          "GET");
+        auto result = lease->any_active(dpp, lease_prefix);
+        if (result.has_error()) {
+          ldpp_dout(dpp, 1) << "D4NFilterObject::" << __func__
+                            << "(): lease check failed with error " << result.error
+                            << " - assuming no active lease" << dendl;
+        } else {
+          has_active_lease = result.active;
+          if (has_active_lease) {
+            ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__
+                               << "(): active GET lease exists - tombstoning dirty object" << dendl;
+          }
+        }
       }
-      if (cache_request) {
-		if ((ret = source->delete_cache_entry(dpp, head_oid_in_cache, y)) < 0) {
-		  return ret;
-		}
-      }
-      //if we get request for latest head entry, delete the null block and vice versa
-      if (block.cacheObj.objName == objName) {
-        block.cacheObj.objName = get_versioned_head_block_name("null", source->get_name());
+
+      // For dirty objects with active leases: tombstone instead of delete
+      // For clean objects or dirty objects without leases: delete immediately
+      if (objDirty && has_active_lease) {
+        // Tombstone dirty objects - keep metadata for in-flight GET operations
+        block.invalid = true;
+        ret = blockDir->set(dpp, y, &block, std::nullopt);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to tombstone head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+          return ret;
+        }
+        // Tombstone null block
+        if (block.cacheObj.objName == objName) {
+          block.cacheObj.objName = get_versioned_head_block_name("null", source->get_name());
+        } else {
+          block.cacheObj.objName = source->get_name();
+        }
+        block.invalid = true;
+        ret = blockDir->set(dpp, y, &block, std::nullopt);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to tombstone null head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+          return ret;
+        }
+        // Tombstone version-specific head block
+        rgw::d4n::CacheBlock ver_head {
+          .cacheObj = {
+            .objName = get_versioned_head_block_name(version, source->get_name()),
+            .bucketName = source->get_bucket()->get_bucket_id(),
+          },
+          .blockID = 0,
+          .size = 0,
+          .invalid = true,
+        };
+        if ((ret = blockDir->set(dpp, y, &ver_head, std::nullopt)) < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to tombstone version-specific head block for: " << source->get_name() << ", ret=" << ret << dendl;
+          return ret;
+        }
       } else {
-        block.cacheObj.objName = source->get_name();
-      }
-      ret = blockDir->del(dpp, y, &block, std::nullopt);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to Queue delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
-        return ret;
+        // No active lease or clean object: delete immediately
+        ret = blockDir->del(dpp, y, &block, std::nullopt);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+          return ret;
+        }
+        // Delete null block
+        if (block.cacheObj.objName == objName) {
+          block.cacheObj.objName = get_versioned_head_block_name("null", source->get_name());
+        } else {
+          block.cacheObj.objName = source->get_name();
+        }
+        ret = blockDir->del(dpp, y, &block, std::nullopt);
+        if (ret < 0) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete head object in block directory for: " << block.cacheObj.objName << ", ret=" << ret << dendl;
+          return ret;
+        }
+        // Delete version-specific head block (for both dirty and clean)
+        rgw::d4n::CacheBlock ver_head {
+          .cacheObj = {
+            .objName = get_versioned_head_block_name(version, source->get_name()),
+            .bucketName = source->get_bucket()->get_bucket_id(),
+          },
+          .blockID = 0,
+          .size = 0,
+        };
+        if ((ret = blockDir->del(dpp, y, &ver_head, std::nullopt)) < 0 && ret != -ENOENT) {
+          ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete version-specific head block for: " << source->get_name() << ", ret=" << ret << dendl;
+        }
       }
       //dirty objects - delete from ordered set of versions and objects
       if (objDirty) {
@@ -3284,55 +3396,35 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     }
     ldpp_dout(dpp, 20) << "D4NFilterObject::" << __func__ << "(): Size of object is: " << size << dendl;
 
-    /* delete data blocks directory entries, when,
-       1. object is clean, bucket is versioned and there is an instance in the request
-       2. object is clean, bucket is non-versioned
-       3. object is dirty - except for delete markers */
-    if ((!objDirty && source->get_bucket()->versioned() && source->have_instance()) ||
-        (!objDirty && !source->get_bucket()->versioned()) ||
-        (objDirty && !block.deleteMarker)) {
+    /* For dirty objects (excluding delete markers): mark local SSD data invalid
+       blockDir data block cleanup is deferred to delete_data_blocks.
+       Clean object data block and blockDir cleanup is owned entirely by the eviction path. */
+    if (!objDirty || (objDirty && !block.deleteMarker)) {
         const off_t lst = size;
         off_t fst = 0;
 
-      while (fst < lst) { // loop through the data blocks
+      while (fst < lst) {
         block.cacheObj.objName = source->get_name();
         off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
         off_t cur_len = cur_size - fst;
         block.blockID = static_cast<uint64_t>(fst);
         block.size = static_cast<uint64_t>(cur_len);
 
-          if ((ret = blockDir->get(dpp, y, &block, std::nullopt)) < 0) {
-            if (ret == -ENOENT) {
-              ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Directory entry for: " << source->get_oid() << " blockid: " << fst << " block size: " << cur_len << " does not exist; continuing" << dendl;
-              fst += cur_len;
-              continue;
-            } else {
-              ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): Failed to retrieve directory entry for: " << source->get_oid() << " blockid: " << fst << " block size: " << cur_len << ", ret=" << ret << dendl;
-              return ret;
-            }
-          }
-
-          if ((ret = blockDir->del(dpp, y, &block, std::nullopt)) == -ENOENT) { 
-            continue;
-          } else if (ret < 0) {
-            ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to delete directory entry for: " << source->get_name() << " blockid: " << fst << " block size: " << cur_len << ", ret=" << ret << dendl;
+	      std::string key = get_key_in_cache(get_cache_block_prefix(source, version), std::to_string(fst), std::to_string(cur_len));
+        bool cache_entry_deleted = false;
+        //inline deletion of data blocks in cache in case of cache request/ low free space
+        if (cache_request || (source->driver->get_cache_driver()->get_free_space(dpp, y) <= dpp->get_cct()->_conf->rgw_d4n_l1_datacache_free_threshold)) {
+          if ((ret = source->delete_cache_entry(dpp, key, y)) < 0) {
             return ret;
           }
-
-	    std::string req_oid_in_cache = get_key_in_cache(get_cache_block_prefix(source, version), std::to_string(block.blockID), std::to_string(block.size));
-		if (cache_request || (source->driver->get_cache_driver()->get_free_space(dpp, y) <= dpp->get_cct()->_conf->rgw_d4n_l1_datacache_free_threshold)) {
-		  if ((ret = source->delete_cache_entry(dpp, req_oid_in_cache, y)) < 0) {
-			return ret;
-		  }
-		}
-          //set invalid flag for dirty data blocks
-          if (objDirty) {
-            std::string key = get_key_in_cache(get_cache_block_prefix(source, version), std::to_string(fst), std::to_string(cur_len));
-            int ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_INVALID, "1", y);
-            if (ret < 0) {
-              ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to set xattr, ret=" << ret << dendl;
-            }
+          cache_entry_deleted = true;
+        }
+        if (!cache_entry_deleted && objDirty) {
+          ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_INVALID, "1", y);
+          if (ret < 0) {
+            ldpp_dout(dpp, 0) << "D4NFilterObject::" << __func__ << "(): Failed to set xattr, ret=" << ret << dendl;
           }
+        }
         fst += cur_len;
       }
     }

@@ -1708,6 +1708,7 @@ int RedisBlockDirectory::set_values(const DoutPrefixProvider* dpp, CacheBlock& b
     return -EINVAL;
   }
   redisValues["deleteMarker"] = std::to_string(block.deleteMarker);
+  redisValues["invalid"] = std::to_string(block.invalid);
   redisValues["size"] = std::to_string(block.size);
   redisValues["globalWeight"] = std::to_string(block.globalWeight);
   redisValues["objName"] = block.cacheObj.objName;
@@ -1927,6 +1928,7 @@ int RedisBlockDirectory::get(const DoutPrefixProvider* dpp, optional_yield y, Ca
     block->blockID = std::stoull(fieldMap.at("blockID"));
     block->version = fieldMap.at("version");
     block->deleteMarker = (std::stoi(fieldMap.at("deleteMarker")) != 0);
+    if (fieldMap.count("invalid")) block->invalid = (std::stoi(fieldMap.at("invalid")) != 0);
     block->size = std::stoull(fieldMap.at("size"));
     block->globalWeight = std::stoull(fieldMap.at("globalWeight"));
     block->cacheObj.objName = fieldMap.at("objName");
@@ -1980,6 +1982,7 @@ int RedisBlockDirectory::get(const DoutPrefixProvider* dpp, optional_yield y, st
     fields.push_back("blockID");
     fields.push_back("version");
     fields.push_back("deleteMarker");
+    fields.push_back("invalid");
     fields.push_back("size");
     fields.push_back("globalWeight");
 
@@ -2037,7 +2040,7 @@ int RedisBlockDirectory::get(const DoutPrefixProvider* dpp, optional_yield y, st
       if (j < num_elements) {
         if (field_key && !field_val) {
           if (element.value == "blockID" || element.value == "version" || element.value == "deleteMarker" ||
-              element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
+              element.value == "invalid" || element.value == "size" || element.value == "globalWeight" || element.value == "objName" ||
               element.value == "bucketName" || element.value == "creationTime" || element.value == "dirty" ||
               element.value == "hosts" || element.value == "etag" || element.value == "objSize" ||
               element.value == "userId" || element.value == "displayName" || element.value == "acl" ||
@@ -2056,6 +2059,8 @@ int RedisBlockDirectory::get(const DoutPrefixProvider* dpp, optional_yield y, st
             block->version = element.value;
           } else if (prev_val == "deleteMarker") {
             block->deleteMarker = (std::stoi(element.value) != 0);
+          } else if (prev_val == "invalid") {
+            block->invalid = (std::stoi(element.value) != 0);
           } else if (prev_val == "size") {
             block->size = std::stoull(element.value);
           } else if (prev_val == "globalWeight") {

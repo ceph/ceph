@@ -96,6 +96,8 @@ inline std::string get_lease_resource_key(const std::string& bucket_id,
                      url_encode(uuid, true));
 }
 
+// Builds a lease resource prefix for checking any active leases on an object version
+// for a specific operation type.
 // Hierarchical format using '/' separator for prefix matching
 // e.g., "bucket/object/version/GET" matches all GETs on that version (wildcard on uuid)
 inline std::string get_lease_resource_prefix(const std::string& bucket_id,
