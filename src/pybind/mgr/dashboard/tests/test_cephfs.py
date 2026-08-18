@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import errno
 import json
+import unittest
 import urllib.parse
 from collections import defaultdict
 
@@ -12,7 +13,10 @@ except ImportError:
 from .. import mgr
 from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus, \
     CephFSSubvolume, CephFSSubvolumeGroups, CephFSSubvolumeSnapshots
-from ..services.cephfs import unmanaged_volume_info
+from ..exceptions import DashboardException
+from ..services.ceph_service import SendCommandError
+from ..services.cephfs import ensure_mirroring_client_caps, \
+    has_mirroring_mds_caps, unmanaged_volume_info
 from ..tests import ControllerTestCase
 
 UNMANAGED_VOLUME_ERROR = (-errno.EINVAL, '', 'failed to getxattr on subvolume metadata')
@@ -56,6 +60,72 @@ class CephFsTest(ControllerTestCase):
         self.assertEqual(mds_versions['bar'], ['foo'])
 
 
+class HasMirroringMdsCapsTest(unittest.TestCase):
+    def test_allow_rwps_fsname(self):
+        self.assertTrue(has_mirroring_mds_caps('allow rwps fsname=myfs', 'myfs'))
+
+    def test_allow_star(self):
+        self.assertTrue(has_mirroring_mds_caps('allow *', 'myfs'))
+
+    def test_allow_rwps_unrestricted(self):
+        self.assertTrue(has_mirroring_mds_caps('allow rwps', 'myfs'))
+
+    def test_allow_r_fsname(self):
+        self.assertFalse(has_mirroring_mds_caps('allow r fsname=myfs', 'myfs'))
+
+    def test_missing_snapshot_flag(self):
+        self.assertFalse(has_mirroring_mds_caps('allow rwp fsname=myfs', 'myfs'))
+
+    def test_missing_pin_flag(self):
+        self.assertFalse(has_mirroring_mds_caps('allow rws fsname=myfs', 'myfs'))
+
+    def test_wrong_fsname(self):
+        self.assertFalse(has_mirroring_mds_caps('allow rwps fsname=otherfs', 'myfs'))
+
+    def test_restricted_path(self):
+        self.assertFalse(has_mirroring_mds_caps('allow rwps fsname=myfs path=/foo',
+                                               'myfs'))
+
+    def test_root_path(self):
+        self.assertTrue(has_mirroring_mds_caps('allow rwps fsname=myfs path=/',
+                                              'myfs'))
+
+    def test_empty_caps(self):
+        self.assertFalse(has_mirroring_mds_caps('', 'myfs'))
+        self.assertFalse(has_mirroring_mds_caps(None, 'myfs'))
+
+    def test_multiple_grants_one_matches(self):
+        caps = 'allow r fsname=otherfs, allow rwps fsname=myfs'
+        self.assertTrue(has_mirroring_mds_caps(caps, 'myfs'))
+
+
+class EnsureMirroringClientCapsTest(unittest.TestCase):
+    @patch('dashboard.services.cephfs.CephService.send_command')
+    def test_missing_user_is_allowed(self, send_command):
+        send_command.side_effect = SendCommandError(
+            'failed to find client.mirror', 'auth get', {}, -errno.ENOENT)
+        ensure_mirroring_client_caps('client.mirror', 'myfs')
+
+    @patch('dashboard.services.cephfs.CephService.send_command')
+    def test_existing_user_with_valid_caps(self, send_command):
+        send_command.return_value = [{
+            'entity': 'client.mirror',
+            'caps': {'mds': 'allow rwps fsname=myfs'}
+        }]
+        ensure_mirroring_client_caps('client.mirror', 'myfs')
+
+    @patch('dashboard.services.cephfs.CephService.send_command')
+    def test_existing_user_with_invalid_caps(self, send_command):
+        send_command.return_value = [{
+            'entity': 'client.admin',
+            'caps': {'mds': 'allow r fsname=myfs'}
+        }]
+        with self.assertRaises(DashboardException) as ctx:
+            ensure_mirroring_client_caps('client.admin', 'myfs')
+        self.assertEqual(str(ctx.exception), 'Invalid capabilities on the MDS')
+        self.assertEqual(ctx.exception.code, 'invalid_mds_caps')
+
+
 class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-methods
 
     @classmethod
@@ -93,7 +163,8 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_peer_list', fs_name)
 
-    def test_token_success(self):
+    @patch('dashboard.controllers.cephfs.ensure_mirroring_client_caps')
+    def test_token_success(self, _ensure_caps):
         fs_name = 'test_fs'
         client_name = 'client.mirror'
         site_name = 'remote-site'
@@ -111,7 +182,8 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_peer_bootstrap_create',
                                            fs_name, client_name, site_name)
 
-    def test_token_error(self):
+    @patch('dashboard.controllers.cephfs.ensure_mirroring_client_caps')
+    def test_token_error(self, _ensure_caps):
         fs_name = 'test_fs'
         client_name = 'client.mirror'
         site_name = 'remote-site'
@@ -129,6 +201,24 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_peer_bootstrap_create',
                                            fs_name, client_name, site_name)
+
+    @patch('dashboard.controllers.cephfs.ensure_mirroring_client_caps')
+    def test_token_invalid_mds_caps(self, ensure_caps):
+        ensure_caps.side_effect = DashboardException(
+            msg='Invalid capabilities on the MDS',
+            code='invalid_mds_caps',
+            component='cephfs.mirror')
+        mgr.remote = Mock()
+
+        self._post('/api/cephfs/mirror/token', {
+            'fs_name': 'test_fs',
+            'client_name': 'client.admin',
+            'site_name': 'remote-site'
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Invalid capabilities on the MDS', response.get('detail', ''))
+        mgr.remote.assert_not_called()
 
     def test_enable_success(self):
         fs_name = 'test_fs'

@@ -11,6 +11,7 @@ import { debounceTime, finalize, map, switchMap, takeUntil, tap } from 'rxjs/ope
 
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { ClusterService } from '~/app/shared/api/cluster.service';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import {
@@ -21,6 +22,7 @@ import {
   VALID_USERNAME_PATTERN
 } from '~/app/shared/models/cephfs.model';
 import { CephAuthUser } from '~/app/shared/models/cluster.model';
+import { hasMirroringMdsCaps } from '../cephfs-utils';
 
 @Component({
   selector: 'cd-cephfs-generate-token',
@@ -62,7 +64,15 @@ export class CephfsGenerateTokenComponent implements OnInit, OnDestroy {
 
   tokenForm = this.fb.group({
     filesystem: ['', Validators.required],
-    username: ['', [Validators.required, this.noClientPrefix, this.validUsername]],
+    username: [
+      '',
+      [
+        Validators.required,
+        this.noClientPrefix,
+        this.validUsername,
+        CdValidators.mirroringMdsCaps(() => this.allClientUsers)
+      ]
+    ],
     sitename: ['', Validators.required]
   });
 
@@ -162,6 +172,7 @@ export class CephfsGenerateTokenComponent implements OnInit, OnDestroy {
           return entity.startsWith(CLIENT_PREFIX);
         });
         this.updateFilteredUsers();
+        this.tokenForm.controls['username'].updateValueAndValidity();
       },
       error: () => {
         this.allClientUsers = [];
@@ -177,10 +188,7 @@ export class CephfsGenerateTokenComponent implements OnInit, OnDestroy {
       return;
     }
     this.filteredUsers = this.allClientUsers
-      .filter((u) => {
-        const mdsCaps = u.caps?.mds || '';
-        return mdsCaps.includes(`fsname=${selectedFs}`);
-      })
+      .filter((u) => hasMirroringMdsCaps(u.caps?.mds, selectedFs))
       .map((u) => String(u.entity || u['user_entity'] || '').slice(CLIENT_PREFIX.length));
   }
 }
