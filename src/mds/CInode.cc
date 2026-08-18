@@ -5927,15 +5927,14 @@ bool CInode::is_under_quarantine() const {
         return true;
       }
     } else if (subvol_ino) {
-      // Subvolume root not in cache — we cannot determine quarantine
-      // state. Return false (not quarantined) rather than fail-closed,
-      // because returning true here would incorrectly block access to
+      // Subvolume root not in cache — return false rather than
+      // fail-closed. Returning true would incorrectly block access to
       // ALL inodes under ANY uncached subvolume (e.g. breaking
       // 'subvolume ls' when only one subvolume is quarantined).
-      // Safety is maintained by: (1) check_access() fetches the
-      // subvolume root when evaluating client requests, (2) the
-      // quarantine cap revocation walk actively reaches all inodes
-      // under the quarantined subtree.
+      // Safety is maintained by check_access() fetching the subvolume
+      // root when evaluating client requests, and by the quarantine
+      // cap revocation walk reaching all inodes under the subtree.
+      return false;
     }
     snaprealm = snaprealm->parent;
   }
