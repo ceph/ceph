@@ -3989,8 +3989,17 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
     utime_t mtime = m->get_mtime();
     uint64_t size = m->get_size();
     version_t inline_version = m->inline_version;
-    
-    if (((dirty & CEPH_CAP_FILE_WR) && mtime > pi->mtime) ||
+
+    /* Allow writes to reset futuristic mtimes that exceed the clock skew threshold.
+     * This overrides stale future timestamps while preserving clock-skew safeguards
+     * against minor backward drift during concurrent writes.
+     */
+    double max_skew = g_conf().get_val<double>("mds_max_clock_skew");
+    utime_t skew_threshold = ceph_clock_now();
+    skew_threshold += max_skew;
+    bool mtime_is_far_future = pi->mtime > skew_threshold;
+
+    if (((dirty & CEPH_CAP_FILE_WR) && (mtime > pi->mtime || mtime_is_far_future)) ||
 	((dirty & CEPH_CAP_FILE_EXCL) && mtime != pi->mtime)) {
       dout(7) << "  mtime " << pi->mtime << " -> " << mtime
 	      << " for " << *in << dendl;

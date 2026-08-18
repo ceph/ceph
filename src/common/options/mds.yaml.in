@@ -1848,3 +1848,15 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_max_clock_skew
+  type: float
+  level: advanced
+  desc: Maximum allowed clock skew before write operations reset futuristic mtime
+  long_desc: If a file's existing mtime exceeds the current MDS clock plus this threshold,
+    incoming write operations under shared capabilities will reset mtime and ctime
+    back to current real time.
+  default: 5
+  services:
+  - mds
+  flags:
+  - runtime
