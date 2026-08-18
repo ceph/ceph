@@ -419,8 +419,6 @@ class MockPeeringListener : public PeeringState::PeeringListener {
     recovery_cancelled = true;
   }
 
-  void on_pool_migration_source_starting() override {}
-
   void on_pool_migration_source_suspended() override {
     pool_migration_source_suspended = true;
   }
