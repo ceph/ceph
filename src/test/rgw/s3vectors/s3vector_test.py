@@ -3252,6 +3252,417 @@ def test_concurrent_rebuild_limit():
         set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
 
 
+@pytest.mark.explain_plan_test
+def test_explain_only_returns_plan_without_results():
+    """explainOnly=True returns only queryPlan, no vectors or distanceMetric."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(10, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=3, explainOnly=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert 'queryPlan' in result, "explainOnly response must contain queryPlan"
+    assert len(result['queryPlan']) > 0, "queryPlan must not be empty"
+    assert len(result.get('vectors', [])) == 0, "explainOnly must not return vectors"
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_returns_plan_with_results():
+    """explainPlan=True returns queryPlan alongside normal query results."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(10, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=3, explainPlan=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert 'queryPlan' in result, "explainPlan response must contain queryPlan"
+    assert len(result['queryPlan']) > 0
+    assert len(result['vectors']) == 3, "explainPlan must also return vectors"
+    assert result['distanceMetric'] == 'euclidean'
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_normal_query_has_no_plan():
+    """Normal query (no explain flags) must not contain queryPlan."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(10, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=3)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert 'queryPlan' not in result, "normal query must not contain queryPlan"
+    assert len(result['vectors']) == 3
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_brute_force_scan():
+    """With few vectors (no vector index built), the plan should show
+    KNNVectorDistance (brute force flat scan) and NOT ANNSubIndex."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 8
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(50, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=5, explainOnly=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    plan = result['queryPlan']
+    log.info('brute force plan:\n%s', plan)
+
+    assert 'KNNVectorDistance' in plan, \
+        "plan should use KNNVectorDistance for brute force scan"
+    assert 'ANNSubIndex' not in plan, \
+        "plan should NOT contain ANNSubIndex when no vector index exists"
+    assert 'ANNIvfPartition' not in plan, \
+        "plan should NOT contain ANNIvfPartition when no vector index exists"
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_vector_index_used():
+    """After building a vector index (500+ vectors), the plan should show
+    ANNSubIndex or ANNIvfPartition instead of KNNVectorDistance."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 32
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    batch_size = 100
+    total_vectors = 500
+    for batch_start in range(0, total_vectors, batch_size):
+        batch_end = min(batch_start + batch_size, total_vectors)
+        vectors = generate_vectors(batch_end - batch_start, dimension)
+        for i, v in enumerate(vectors):
+            v['key'] = f'vec-{batch_start + i}'
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    wait_for_index_rebuild(conn, bucket_name, 'idx')
+
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=5, explainOnly=True)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    plan = result['queryPlan']
+    log.info('indexed plan:\n%s', plan)
+
+    has_ann = 'ANNSubIndex' in plan or 'ANNIvfPartition' in plan
+    assert has_ann, \
+        f"plan should use ANNSubIndex or ANNIvfPartition when vector index exists, got:\n{plan}"
+
+    # cleanup
+    _clean_s3_objects_for_vector_bucket(bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_topk_visible():
+    """The topK parameter should appear in the plan as a GlobalLimitExec fetch value."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(20, dimension)
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+
+    for top_k in [3, 7, 15]:
+        result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+            queryVector=query_vector, topK=top_k, explainOnly=True)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        plan = result['queryPlan']
+        assert f'fetch={top_k}' in plan, \
+            f"plan should contain fetch={top_k} for topK={top_k}, got:\n{plan}"
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_distance_metric():
+    """The distance metric (euclidean vs cosine) should be visible in the plan."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = generate_vectors(10, dimension)
+    query_vector = generate_data(dimension, 0)
+
+    for metric in ['euclidean', 'cosine']:
+        index_name = f'idx-{metric}'
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+            dataType='float32', dimension=dimension, distanceMetric=metric)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+            queryVector=query_vector, topK=3, explainOnly=True)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        plan = result['queryPlan']
+        log.info('plan for metric=%s:\n%s', metric, plan)
+
+        plan_lower = plan.lower()
+        if metric == 'euclidean':
+            assert 'l2' in plan_lower or 'euclidean' in plan_lower, \
+                f"plan for euclidean metric should mention L2 or euclidean, got:\n{plan}"
+        elif metric == 'cosine':
+            assert 'cosine' in plan_lower, \
+                f"plan for cosine metric should mention cosine, got:\n{plan}"
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_prefilter_on_filterable_column():
+    """When a filter on a filterable (schema) column is applied, the plan
+    should show it as a pre-filter: a FilterExec with the column predicate
+    placed BELOW KNNVectorDistance (inside the scan pipeline), and the
+    LanceRead node should contain full_filter with the predicate.
+    JSON metadata filters (non-filterable) are handled at the RGW layer
+    and do NOT appear in the DataFusion plan."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    filterable_keys = [{'name': 'genre'}]
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': filterable_keys})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    vectors = [
+        {'key': f'v{i}', 'data': generate_data(dimension, i),
+         'metadata': json.dumps({'genre': 'rock' if i % 2 == 0 else 'jazz'})}
+        for i in range(10)
+    ]
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    query_vector = generate_data(dimension, 0)
+
+    # without filter — plan has no genre reference
+    result_no_filter = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=5, explainOnly=True)
+    plan_no_filter = result_no_filter['queryPlan']
+    assert 'genre' not in plan_no_filter, \
+        f"plan without filter should not mention genre, got:\n{plan_no_filter}"
+
+    # with filterable column filter — plan should show pre-filter
+    result_with_filter = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=5, filter={'genre': 'rock'}, explainOnly=True)
+    plan_with_filter = result_with_filter['queryPlan']
+    log.info('plan with pre-filter:\n%s', plan_with_filter)
+
+    # the filter predicate should appear in the plan (as FilterExec or in LanceRead full_filter)
+    assert 'genre' in plan_with_filter, \
+        f"pre-filter plan should contain the genre column predicate, got:\n{plan_with_filter}"
+
+    # verify the FilterExec with genre is BELOW KNNVectorDistance (pre-filter position)
+    lines = plan_with_filter.split('\n')
+    knn_line = None
+    genre_filter_line = None
+    for i, line in enumerate(lines):
+        if 'KNNVectorDistance' in line and knn_line is None:
+            knn_line = i
+        if 'genre' in line and 'FilterExec' in line and genre_filter_line is None:
+            genre_filter_line = i
+    if knn_line is not None and genre_filter_line is not None:
+        assert genre_filter_line > knn_line, \
+            f"FilterExec with genre (line {genre_filter_line}) should be below " \
+            f"KNNVectorDistance (line {knn_line}) for pre-filtering"
+
+    # verify LanceRead shows full_filter with the predicate
+    assert 'full_filter=' in plan_with_filter, \
+        f"LanceRead should show full_filter with the predicate, got:\n{plan_with_filter}"
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_hybrid_scan():
+    """After building an index and adding new unindexed rows, the plan should
+    show a hybrid scan pattern (UnionExec or both ANNSubIndex and KNNVectorDistance)."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 32
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # insert 500 vectors and wait for index build
+    batch_size = 100
+    total_vectors = 500
+    for batch_start in range(0, total_vectors, batch_size):
+        batch_end = min(batch_start + batch_size, total_vectors)
+        vectors = generate_vectors(batch_end - batch_start, dimension)
+        for i, v in enumerate(vectors):
+            v['key'] = f'vec-{batch_start + i}'
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    wait_for_index_rebuild(conn, bucket_name, 'idx')
+
+    # add new unindexed rows (below rebuild threshold)
+    new_vectors = generate_vectors(50, dimension)
+    for i, v in enumerate(new_vectors):
+        v['key'] = f'new-{i}'
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=new_vectors)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # verify unindexed rows exist
+    stats = get_index_stats(conn, bucket_name, 'idx')
+    log.info('hybrid scan stats: %s', stats)
+
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=5, explainOnly=True)
+    plan = result['queryPlan']
+    log.info('hybrid scan plan:\n%s', plan)
+
+    has_ann = 'ANNSubIndex' in plan or 'ANNIvfPartition' in plan
+    has_knn = 'KNNVectorDistance' in plan or 'KNNFlat' in plan
+    if stats['numUnindexedRows'] > 0:
+        assert has_ann, \
+            f"hybrid plan should contain ANNSubIndex for indexed fragments, got:\n{plan}"
+        assert has_knn, \
+            f"hybrid plan should contain KNNVectorDistance for unindexed fragments, got:\n{plan}"
+
+    # cleanup
+    _clean_s3_objects_for_vector_bucket(bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
+
+
+@pytest.mark.explain_plan_test
+def test_explain_plan_ivf_nprobes():
+    """After building an IVF index, the plan should show nprobes parameter
+    in the ANNIvfPartition node when a vector index is used."""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 32
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.create_index(vectorBucketName=bucket_name, indexName='idx',
+        dataType='float32', dimension=dimension, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    batch_size = 100
+    total_vectors = 500
+    for batch_start in range(0, total_vectors, batch_size):
+        batch_end = min(batch_start + batch_size, total_vectors)
+        vectors = generate_vectors(batch_end - batch_start, dimension)
+        for i, v in enumerate(vectors):
+            v['key'] = f'vec-{batch_start + i}'
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName='idx', vectors=vectors)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    wait_for_index_rebuild(conn, bucket_name, 'idx')
+
+    query_vector = generate_data(dimension, 42)
+    result = conn.query_vectors(vectorBucketName=bucket_name, indexName='idx',
+        queryVector=query_vector, topK=5, explainOnly=True)
+    plan = result['queryPlan']
+    log.info('IVF plan:\n%s', plan)
+
+    if 'ANNIvfPartition' in plan:
+        assert 'nprobes=' in plan or 'nprobe=' in plan, \
+            f"ANNIvfPartition node should show nprobes parameter, got:\n{plan}"
+
+    # cleanup
+    _clean_s3_objects_for_vector_bucket(bucket_name)
+    _ = _delete_vector_bucket(conn, bucket_name)
+
+
 LOCK_REFRESH_RE = re.compile(
     r's3vectors manager: INFO: refreshed lock for '
     r'(\S+)\.(\S+)')

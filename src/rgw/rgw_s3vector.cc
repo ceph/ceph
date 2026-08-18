@@ -2483,6 +2483,12 @@ namespace rgw::s3vector {
     ::encode_json("returnMetadata", return_metadata, f);
     ::encode_json("topK", top_k, f);
     ::encode_json("postFiltering", post_filtering, f);
+    if (explain_plan) {
+      ::encode_json("explainPlan", explain_plan, f);
+    }
+    if (explain_only) {
+      ::encode_json("explainOnly", explain_only, f);
+    }
     f->close_section();
   }
 
@@ -2494,6 +2500,8 @@ namespace rgw::s3vector {
     JSONDecoder::decode_json("returnMetadata", return_metadata, obj);
     JSONDecoder::decode_json("topK", top_k, obj, true);
     JSONDecoder::decode_json("postFiltering", post_filtering, obj);
+    JSONDecoder::decode_json("explainPlan", explain_plan, obj);
+    JSONDecoder::decode_json("explainOnly", explain_only, obj);
 
     if (top_k < 1) {
       throw JSONDecoder::err(fmt::format("topK must be at least 1, got {}", top_k));
@@ -2507,12 +2515,17 @@ namespace rgw::s3vector {
 
   void query_vectors_reply_t::dump(ceph::Formatter* f) const {
     f->open_object_section("");
-    ::encode_json("distanceMetric", distance_metric_to_string(distance_metric), f);
-    f->open_array_section("vectors");
-    for (const auto& vector : vectors) {
-      vector.dump(f);
+    if (query_plan) {
+      ::encode_json("queryPlan", *query_plan, f);
     }
-    f->close_section();
+    if (!vectors.empty() || !query_plan) {
+      ::encode_json("distanceMetric", distance_metric_to_string(distance_metric), f);
+      f->open_array_section("vectors");
+      for (const auto& vector : vectors) {
+        vector.dump(f);
+      }
+      f->close_section();
+    }
     f->close_section();
   }
 
@@ -2628,6 +2641,29 @@ namespace rgw::s3vector {
       lancedb_table_free(table);
       lancedb_connection_free(conn);
       return lancedb_error_to_errno(result);
+    }
+
+    // get the query plan before execute (explain_plan does NOT consume the query)
+    if (configuration.explain_plan || configuration.explain_only) {
+      char* plan_str = nullptr;
+      if (const LanceDBError result = lancedb_vector_query_explain_plan(query, true, &plan_str, &error_message); result != LANCEDB_SUCCESS) {
+        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to get explain plan for index: " << configuration.index_name << ". error: " << error_message << dendl;
+        lancedb_free_string(error_message);
+        // non-fatal: continue without the plan
+      } else {
+        reply.query_plan = std::string(plan_str);
+        lancedb_free_string(plan_str);
+      }
+    }
+
+    // if explain_only, skip query execution entirely
+    if (configuration.explain_only) {
+      lancedb_vector_query_free(query);
+      lancedb_expr_free(json_filter_expr);
+      reply.distance_metric = get_distance_metric(table, dpp);
+      lancedb_table_free(table);
+      lancedb_connection_free(conn);
+      return 0;
     }
 
     // execute consumes query regardless of success/failure
