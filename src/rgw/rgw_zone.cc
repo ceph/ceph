@@ -80,7 +80,6 @@ void RGWZone::dump(Formatter *f) const
   encode_json("id", id, f);
   encode_json("name", name, f);
   encode_json("endpoints", endpoints, f);
-  encode_json("log_meta", log_meta, f);
   encode_json("log_data", log_data, f);
   encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
   encode_json("read_only", read_only, f);
@@ -99,7 +98,6 @@ void RGWZone::decode_json(JSONObj *obj)
     id = name;
   }
   JSONDecoder::decode_json("endpoints", endpoints, obj);
-  JSONDecoder::decode_json("log_meta", log_meta, obj);
   JSONDecoder::decode_json("log_data", log_data, obj);
   JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
   JSONDecoder::decode_json("read_only", read_only, obj);
