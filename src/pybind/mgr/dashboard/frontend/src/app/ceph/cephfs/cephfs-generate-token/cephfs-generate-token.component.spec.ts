@@ -149,12 +149,13 @@ describe('CephfsGenerateTokenComponent', () => {
     expect(component.tokenGenerated.emit).not.toHaveBeenCalled();
   }));
 
-  it('should filter users by MDS capabilities when a filesystem is selected', fakeAsync(() => {
+  it('should filter users by sufficient MDS capabilities when a filesystem is selected', fakeAsync(() => {
     clusterServiceMock.listUser.mockReturnValue(
       of([
         { entity: 'client.admin', caps: { mds: 'allow *' } },
-        { entity: 'client.mirror-myfs', caps: { mds: 'allow r fsname=myfs' } },
-        { entity: 'client.mirror-other', caps: { mds: 'allow r fsname=otherfs' } }
+        { entity: 'client.mirror-myfs', caps: { mds: 'allow rwps fsname=myfs' } },
+        { entity: 'client.mirror-readonly', caps: { mds: 'allow r fsname=myfs' } },
+        { entity: 'client.mirror-other', caps: { mds: 'allow rwps fsname=otherfs' } }
       ])
     );
 
@@ -164,7 +165,7 @@ describe('CephfsGenerateTokenComponent', () => {
     component.tokenForm.controls['filesystem'].setValue('myfs');
     tick();
 
-    expect(component.filteredUsers).toEqual(['mirror-myfs']);
+    expect(component.filteredUsers).toEqual(['admin', 'mirror-myfs']);
   }));
 
   it('should show no users when no filesystem is selected', fakeAsync(() => {
@@ -182,6 +183,56 @@ describe('CephfsGenerateTokenComponent', () => {
     tick();
 
     expect(component.filteredUsers).toEqual([]);
+  }));
+
+  it('should allow an unknown username so the user can be created', fakeAsync(() => {
+    clusterServiceMock.listUser.mockReturnValue(of([]));
+    component.ngOnInit();
+    tick();
+
+    component.tokenForm.patchValue({
+      filesystem: 'myfs',
+      username: 'new-peer',
+      sitename: 'site-a'
+    });
+
+    expect(component.tokenForm.controls['username'].hasError('invalidMdsCaps')).toBe(false);
+    expect(component.tokenForm.valid).toBe(true);
+  }));
+
+  it('should accept an existing user with mirroring MDS caps', fakeAsync(() => {
+    clusterServiceMock.listUser.mockReturnValue(
+      of([{ entity: 'client.mirror-peer', caps: { mds: 'allow rwps fsname=myfs' } }])
+    );
+    component.ngOnInit();
+    tick();
+
+    component.tokenForm.patchValue({
+      filesystem: 'myfs',
+      username: 'mirror-peer',
+      sitename: 'site-a'
+    });
+
+    expect(component.tokenForm.controls['username'].hasError('invalidMdsCaps')).toBe(false);
+    expect(component.tokenForm.valid).toBe(true);
+  }));
+
+  it('should reject an existing user with insufficient MDS caps', fakeAsync(() => {
+    clusterServiceMock.listUser.mockReturnValue(
+      of([{ entity: 'client.readonly', caps: { mds: 'allow r fsname=myfs' } }])
+    );
+    component.ngOnInit();
+    tick();
+
+    component.tokenForm.patchValue({
+      filesystem: 'myfs',
+      username: 'readonly',
+      sitename: 'site-a'
+    });
+
+    expect(component.tokenForm.controls['username'].hasError('invalidMdsCaps')).toBe(true);
+    component.onGenerateToken();
+    expect(cephfsServiceMock.enableMirror).not.toHaveBeenCalled();
   }));
 
   it('should emit cancelled and reset state on cancel', () => {
