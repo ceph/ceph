@@ -2175,89 +2175,41 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
   }
 }
 
-// SharedBlob
-
-#undef dout_prefix
-#define dout_prefix *_dout << "bluestore.sharedblob(" << this << ") "
-#undef dout_context
-#define dout_context collection->store->cct
-
-void BlueStore::SharedBlob::dump(Formatter* f) const
-{
-  f->dump_bool("loaded", loaded);
-  if (loaded) {
-    persistent->dump(f);
-  } else {
-    f->dump_unsigned("sbid_unloaded", sbid_unloaded);
-  }
-}
-
-ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
-{
-  out << "SharedBlob(" << &sb;
-  
-  if (sb.loaded) {
-    out << " loaded " << *sb.persistent;
-  } else {
-    out << " sbid 0x" << std::hex << sb.sbid_unloaded << std::dec;
-  }
-  return out << ")";
-}
-
-BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
-  : collection(_coll), sbid_unloaded(i)
-{
-  ceph_assert(sbid_unloaded > 0);
-}
-
-BlueStore::SharedBlob::~SharedBlob()
-{
-  if (loaded && persistent) {
-    delete persistent; 
-  }
-}
-
-void BlueStore::SharedBlob::put()
-{
-  if (--nref == 0) {
-    dout(20) << __func__ << " " << this
-	     << " removing self from set " << get_parent()
-	     << dendl;
-  again:
-    auto coll_snap = collection;
-    if (coll_snap) {
-      std::lock_guard l(coll_snap->cache->lock);
-      if (coll_snap != collection) {
-	goto again;
-      }
-      if (!coll_snap->shared_blob_set.remove(this, true)) {
-	// race with lookup
-	return;
-      }
-    }
-    delete this;
-  }
-}
-
-void BlueStore::SharedBlob::get_ref(uint64_t offset, uint32_t length)
-{
-  ceph_assert(persistent);
-  persistent->ref_map.get(offset, length);
-}
-
-void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
-				    PExtentVector *r,
-				    bool *unshare)
-{
-  ceph_assert(persistent);
-  persistent->ref_map.put(offset, length, r,
-    unshare && !*unshare ? unshare : nullptr);
-}
-
 // SharedBlobSet
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.sharedblobset(" << this << ") "
+
+BlueStore::SharedBlobRef BlueStore::SharedBlobSet::lookup(uint64_t sbid) {
+  std::lock_guard l(lock);
+  auto p = sb_map.find(sbid);
+  if (p == sb_map.end() ||
+p->second->nref == 0) {
+    return nullptr;
+  }
+  return p->second;
+}
+
+void BlueStore::SharedBlobSet::add(Collection* coll, SharedBlob *sb) {
+  std::lock_guard l(lock);
+  sb_map[sb->get_sbid()] = sb;
+  sb->collection = coll;
+}
+
+bool BlueStore::SharedBlobSet::remove(SharedBlob *sb, bool verify_nref_is_zero) {
+  std::lock_guard l(lock);
+  ceph_assert(sb->get_parent() == this);
+  if (verify_nref_is_zero && sb->nref != 0) {
+    return false;
+  }
+  // only remove if it still points to us
+  auto p = sb_map.find(sb->get_sbid());
+  if (p != sb_map.end() &&
+       p->second == sb) {
+    sb_map.erase(p);
+  }
+  return true;
+}
 
 template <int LogLevelV = 30>
 void BlueStore::SharedBlobSet::dump(CephContext *cct)

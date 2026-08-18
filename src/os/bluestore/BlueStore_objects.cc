@@ -2931,3 +2931,84 @@ std::ostream& operator<<(std::ostream& out, const bluestore::ExtentMap::debug_au
   return out;
 }
 }
+
+// SharedBlob
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.sharedblob(" << this << ") "
+#undef dout_context
+#define dout_context collection->store->cct
+
+void bluestore::SharedBlob::dump(Formatter* f) const
+{
+  f->dump_bool("loaded", loaded);
+  if (loaded) {
+    persistent->dump(f);
+  } else {
+    f->dump_unsigned("sbid_unloaded", sbid_unloaded);
+  }
+}
+
+namespace bluestore {
+ostream& operator<<(ostream& out, const bluestore::SharedBlob& sb)
+{
+  out << "SharedBlob(" << &sb;
+  
+  if (sb.loaded) {
+    out << " loaded " << *sb.persistent;
+  } else {
+    out << " sbid 0x" << std::hex << sb.sbid_unloaded << std::dec;
+  }
+  return out << ")";
+}
+}
+
+bluestore::SharedBlob::SharedBlob(uint64_t i, BlueStore::Collection *_coll)
+  : collection(_coll), sbid_unloaded(i)
+{
+  ceph_assert(sbid_unloaded > 0);
+}
+
+bluestore::SharedBlob::~SharedBlob()
+{
+  if (loaded && persistent) {
+    delete persistent; 
+  }
+}
+
+void bluestore::SharedBlob::put()
+{
+  if (--nref == 0) {
+    dout(20) << __func__ << " " << this
+	     << " removing self from set " << get_parent()
+	     << dendl;
+  again:
+    auto coll_snap = collection;
+    if (coll_snap) {
+      std::lock_guard l(coll_snap->cache->lock);
+      if (coll_snap != collection) {
+	goto again;
+      }
+      if (!coll_snap->shared_blob_set.remove(this, true)) {
+	// race with lookup
+	return;
+      }
+    }
+    delete this;
+  }
+}
+
+void bluestore::SharedBlob::get_ref(uint64_t offset, uint32_t length)
+{
+  ceph_assert(persistent);
+  persistent->ref_map.get(offset, length);
+}
+
+void bluestore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
+				    PExtentVector *r,
+				    bool *unshare)
+{
+  ceph_assert(persistent);
+  persistent->ref_map.put(offset, length, r,
+    unshare && !*unshare ? unshare : nullptr);
+}
