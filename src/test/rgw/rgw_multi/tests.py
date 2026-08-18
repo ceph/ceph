@@ -7110,3 +7110,84 @@ def test_stale_bucket_owner_after_concurrent_chown():
         for uid in (uid_a, uid_b1, uid_b2):
             master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
                                       check_retcode=False)
+
+def _get_metadata(zone_conn, key):
+    """ read metadata via radosgw-admin, which sees rados rather than a
+    gateway cache """
+    out, _ = zone_conn.zone.cluster.admin(
+        ['metadata', 'get', key] + zone_conn.zone.zone_args(), read_only=True)
+    return json.loads(out)['data']
+
+def test_stale_bucket_owner_after_dropped_cache_notify():
+    """ Integration test for https://tracker.ceph.com/issues/77731
+
+    To simulate dropped notification, metadata is changed with the cache disabled, so the gateways get no
+    invalidation and keep serving the old values. A secondary syncing from
+    them must still get the new ones.
+    """
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    if len(zonegroup_conns.rw_zones) < 2:
+        raise SkipTest('test_stale_bucket_owner_after_dropped_cache_notify requires at least 2 read-write zones')
+
+    master = zonegroup_conns.master_zone
+    secondary = next(z for z in zonegroup_conns.rw_zones if z != master)
+
+    owner = run_prefix + '-drop-a'
+    new_owner = run_prefix + '-drop-b'
+    new_display_name = owner + '-renamed'
+    creds = Credentials(owner + 'AK', owner + 'SK')
+
+    for uid in (owner, new_owner):
+        master.zone.cluster.admin(['user', 'create',
+                                   '--uid', uid, '--display-name', uid,
+                                   '--access-key', uid + 'AK',
+                                   '--secret-key', uid + 'SK'])
+    zonegroup_meta_checkpoint(zonegroup)
+
+    region = zonegroup.name
+    bucket_name = gen_bucket_name()
+    bucket_key = 'bucket:' + bucket_name
+    user_key = 'user:' + owner
+
+    try:
+        get_gateway_connection(master.zone.gateways[0], creds, region).create_bucket(Bucket=bucket_name)
+        zonegroup_meta_checkpoint(zonegroup)
+
+        # cache the pre-change values on every gateway that could serve the
+        # sync request
+        for gw in master.zone.gateways:
+            get_gateway_connection(gw, creds, region).head_bucket(Bucket=bucket_name)
+
+        # disable rgw cache, to simulate dropped notification. RGW cache will serve stale
+        # metadata
+        master.zone.cluster.admin(['bucket', 'link', '--bucket', bucket_name,
+                                   '--uid', new_owner, '--rgw-cache-enabled=false'])
+        master.zone.cluster.admin(['user', 'modify', '--uid', owner,
+                                   '--display-name', new_display_name,
+                                   '--rgw-cache-enabled=false'])
+
+        # catches a change that never landed, so a sync failure is not misread
+        master_owner = _get_metadata(master, bucket_key)['owner']
+        assert master_owner == new_owner, \
+            'chown did not take effect on master: %r expected %r' % (master_owner, new_owner)
+        master_name = _get_metadata(master, user_key)['display_name']
+        assert master_name == new_display_name, \
+            'user modify did not take effect on master: %r expected %r' % (master_name, new_display_name)
+
+        zonegroup_meta_checkpoint(zonegroup)
+
+        second_owner = _get_metadata(secondary, bucket_key)['owner']
+        log.info('master owner=%s secondary owner=%s', master_owner, second_owner)
+        assert second_owner == new_owner, \
+            'secondary replicated a stale owner %r, expected %r' % (second_owner, new_owner)
+
+        second_name = _get_metadata(secondary, user_key)['display_name']
+        log.info('master display_name=%s secondary display_name=%s', master_name, second_name)
+        assert second_name == new_display_name, \
+            'secondary replicated a stale display_name %r, expected %r' % (second_name, new_display_name)
+
+    finally:
+        for uid in (owner, new_owner):
+            master.zone.cluster.admin(['user', 'rm', '--uid', uid, '--purge-data'],
+                                      check_retcode=False)
