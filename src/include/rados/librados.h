@@ -70,7 +70,7 @@ extern "C" {
  * Flags that can be set on a per-op basis via
  * rados_read_op_set_flags() and rados_write_op_set_flags().
  */
-enum {
+enum librados_op_flag {
   // fail a create operation if the object already exists
   LIBRADOS_OP_FLAG_EXCL               =  0x1,
   // allow the transaction to succeed even if the flagged op fails
@@ -99,7 +99,7 @@ enum {
  *
  * @{
  */
-enum {
+enum librados_cmpxattr_op {
 	LIBRADOS_CMPXATTR_OP_EQ  = 1,
 	LIBRADOS_CMPXATTR_OP_NE  = 2,
 	LIBRADOS_CMPXATTR_OP_GT  = 3,
@@ -116,7 +116,7 @@ enum {
  * See librados.hpp for details.
  * @{
  */
-enum {
+enum librados_operation {
   LIBRADOS_OPERATION_NOFLAG             = 0,
   LIBRADOS_OPERATION_BALANCE_READS      = 1,
   LIBRADOS_OPERATION_LOCALIZE_READS     = 2,
@@ -145,7 +145,7 @@ enum {
  * indicating future IO patterns.
  * @{
  */
-enum {
+enum librados_alloc_hint_flag {
   LIBRADOS_ALLOC_HINT_FLAG_SEQUENTIAL_WRITE = 1,
   LIBRADOS_ALLOC_HINT_FLAG_RANDOM_WRITE = 2,
   LIBRADOS_ALLOC_HINT_FLAG_SEQUENTIAL_READ = 4,
