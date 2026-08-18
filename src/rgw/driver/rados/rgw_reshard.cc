@@ -11,6 +11,7 @@
 #include "rgw_reshard.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_perf_counters.h"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "common/Clock.h" // for ceph_clock_now()
@@ -1273,6 +1274,12 @@ int RGWBucketReshard::execute(int num_shards,
   if (ret < 0) {
     return ret;
   }
+
+  auto gen_counters = rgw::bucket_reshard_counters::get_generic();
+  auto bkt_counters = rgw::bucket_reshard_counters::get_for_bucket(bucket_info.bucket.name,
+                                                                   bucket_info.bucket.tenant);
+  gen_counters->inc(l_rgw_bucket_reshard_active, 1);
+
   // TODO: release the lock when purging the old index shards or unsucessful new index shards
   auto unlock = make_scope_guard([this] { reshard_lock.unlock(); });
 
@@ -1301,6 +1308,8 @@ int RGWBucketReshard::execute(int num_shards,
 
   if (ret < 0) {
     cancel_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
+    gen_counters->dec(l_rgw_bucket_reshard_active, 1);
+    bkt_counters->inc(l_rgw_bucket_reshard_failure, 1);
 
     ldpp_dout(dpp, 1) << __func__ << " INFO: reshard of bucket \""
         << bucket_info.bucket.name << "\" canceled due to errors" << dendl;
@@ -1310,8 +1319,13 @@ int RGWBucketReshard::execute(int num_shards,
   auto current_num_shards = rgw::num_shards(bucket_info.layout.current_index);
   ret = commit_reshard(store, bucket_info, bucket_attrs, fault, dpp, y);
   if (ret < 0) {
+    gen_counters->dec(l_rgw_bucket_reshard_active, -1);
+    bkt_counters->inc(l_rgw_bucket_reshard_failure, 1);
     return ret;
   }
+
+  gen_counters->dec(l_rgw_bucket_reshard_active, 1);
+  bkt_counters->inc(l_rgw_bucket_reshard_success, 1);
 
   ldpp_dout(dpp, 1) << __func__ << " INFO: reshard of bucket \"" <<
     bucket_info.bucket.name << "\" from " <<

@@ -300,6 +300,62 @@ std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
 
 } // namespace rgw::lc_counters
 
+
+namespace rgw::bucket_reshard_counters {
+
+ceph::perf_counters::PerfCountersCache *bucket_reshard_counters_cache = nullptr;
+const std::string rgw_bucket_reshard_counters_key = "rgw_bucket_reshard";
+
+void add_bucket_reshard_counters(PerfCountersBuilder *pcb) {
+  pcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
+  pcb->add_u64(l_rgw_bucket_reshard_active, "bucket_reshard_activee",
+               "number of active bucket reshards");
+  pcb->add_u64_counter(l_rgw_bucket_reshard_success, "bucket_reshard_success",
+                       "counter of successful bucket reshard attempts");
+  pcb->add_u64_counter(l_rgw_bucket_reshard_failure, "bucket_reshard_failure",
+                       "counter of failed bucket reshard attempts");
+#if 0 // QUESTION: do we want to do something like this in terms of
+      // how long a bucket resharding takes?
+  pcb->add_u64(l_rgw_lc_per_bucket_start_time, "start_time",
+               "LC processing start timestamp (Unix epoch seconds)");
+#endif
+}
+
+std::shared_ptr<PerfCounters> create_bucket_reshard_counters(const std::string& name,
+                                                             CephContext *cct)
+{
+  PerfCountersBuilder pcb(cct, name,
+                          l_rgw_bucket_reshard_first, l_rgw_bucket_reshard_last);
+  add_bucket_reshard_counters(&pcb);
+  std::shared_ptr<PerfCounters> new_counters(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(new_counters.get());
+  return new_counters;
+}
+
+std::shared_ptr<PerfCounters> get_generic() {
+  if (!bucket_reshard_counters_cache) {
+    return nullptr;
+  }
+  return bucket_reshard_counters_cache->get("");
+}
+
+std::shared_ptr<PerfCounters> get_for_bucket(const std::string& bucket_name,
+                                             const std::string& tenant) {
+  if (!bucket_reshard_counters_cache) {
+    return nullptr;
+  }
+  std::string key = ceph::perf_counters::key_create(rgw_bucket_reshard_counters_key,
+                                                    {{"bucket", bucket_name}});
+  if (!tenant.empty()) {
+    key = ceph::perf_counters::key_insert(key, {{"tenant", tenant}});
+  }
+  return bucket_reshard_counters_cache->get(key);
+}
+
+}; // namespace rgw::bucket_reshard_counters
+
+
 int rgw_perf_start(CephContext *cct)
 {
   frontend_counters_init(cct);
@@ -320,6 +376,17 @@ int rgw_perf_start(CephContext *cct)
   if (lc_counters_cache_enabled) {
     uint64_t target_size = cct->_conf.get_val<uint64_t>("rgw_lc_counters_cache_size");
     rgw::lc_counters::lc_counters_cache = new PerfCountersCache(cct, target_size, rgw::lc_counters::create_lc_counters);
+  }
+
+  bool bucket_reshard_counters_cache_enabled =
+    cct->_conf.get_val<bool>("rgw_bucket_reshard_counters_cache");
+  if (bucket_reshard_counters_cache_enabled) {
+    uint64_t target_size =
+      cct->_conf.get_val<uint64_t>("rgw_bucket_reshard_counters_cache_size");
+    rgw::bucket_reshard_counters::bucket_reshard_counters_cache =
+      new PerfCountersCache(cct,
+                            target_size,
+                            rgw::bucket_reshard_counters::create_bucket_reshard_counters);
   }
 
   global_op_counters_init(cct);
