@@ -75,7 +75,7 @@ The dedup background thread must be enabled on at least one RGW daemon in each
 zone for dedup operations to function. Having the thread enabled on multiple
 RGW processes within the same zone spreads the dedup work between them.
 
-.. confval:: rgw_enable_dedup_threads
+:confval:`rgw_enable_dedup_threads`
 
 This setting is evaluated at RGW startup. Changing it requires a daemon
 restart.

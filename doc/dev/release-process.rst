@@ -104,7 +104,7 @@ no longer match what was tested.
    <https://github.com/ceph/ceph-build/blob/main/ansible/roles/ceph-release/tasks/push.yml>`_
    steps need to be manually run by the "Build Lead" as close to the
    Announcement time as possible. The `ceph-setup
-   <https://jenkins.ceph.com/job/ceph-setup>`_ job will have already created
+   <https://jenkins.ceph.com/job/ceph-setup/>`_ job will have already created
    and pushed the tag to ceph-releases.git. Example using squid, pretending
    19.2.3 is the security release version:
 

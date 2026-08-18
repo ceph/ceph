@@ -41,7 +41,7 @@ Make sure X (and, ideally, X+1) is defined:
 Github Actions
 ~~~~~~~~~~~~~~
 
-- [ ] `.github/workflows/*.yml' add release branch to pull_request_target trigger
+- [ ] ``.github/workflows/*.yml`` add release branch to pull_request_target trigger
 
 Scripts
 ~~~~~~~

@@ -422,3 +422,4 @@ Code Walkthroughs
    PoseidonStore <poseidonstore>
    PG Merge Synchronization <pgmerging>
    The Logical Address in SeaStore <seastore_laddr>
+   The Logical Bucket Cache in SeaStore <seastore_logical_bucket_cache>
