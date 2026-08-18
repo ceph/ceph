@@ -520,6 +520,8 @@ struct query_vectors_t {
   bool return_metadata = false;
   unsigned int top_k;
   bool post_filtering = false;
+  bool explain_plan = false;
+  bool explain_only = false;
 
   void dump(ceph::Formatter* f) const;
   void decode_json(JSONObj* obj);
@@ -535,6 +537,7 @@ struct query_vectors_t {
 struct query_vectors_reply_t {
   DistanceMetric distance_metric;
   std::vector<vector_item_t> vectors;
+  std::optional<std::string> query_plan;
 
   void dump(ceph::Formatter* f) const;
 };
