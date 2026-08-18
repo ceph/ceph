@@ -639,6 +639,59 @@ namespace bluestore {
     o->put();
   }
 
+  /// in-memory shared blob state (incl cached buffers)
+  struct SharedBlob {
+    MEMPOOL_CLASS_HELPERS();
+
+    std::atomic_int nref = {0}; ///< reference count
+    bool loaded = false;
+
+    BlueStore::CollectionRef collection;
+    union {
+      uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
+      bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
+    };
+
+    SharedBlob(BlueStore::Collection *_coll) : collection(_coll), sbid_unloaded(0) {
+    }
+    SharedBlob(uint64_t i, BlueStore::Collection *_coll);
+    ~SharedBlob();
+
+    uint64_t get_sbid() const {
+      return loaded ? persistent->sbid : sbid_unloaded;
+    }
+
+    friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
+    friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
+
+    void dump(ceph::Formatter* f) const;
+    friend std::ostream& operator<<(std::ostream& out, const SharedBlob& sb);
+
+    void get() {
+      ++nref;
+    }
+    void put();
+
+    /// get logical references
+    void get_ref(uint64_t offset, uint32_t length);
+
+    /// put logical references, and get back any released extents
+    void put_ref(uint64_t offset, uint32_t length,
+		 PExtentVector *r, bool *unshare);
+    friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
+      return l.get_sbid() == r.get_sbid();
+    }
+    inline BlueStore::BufferCacheShard* get_cache() {
+      return collection ? collection->cache : nullptr;
+    }
+    inline BlueStore::SharedBlobSet* get_parent() {
+      return collection ? &(collection->shared_blob_set) : nullptr;
+    }
+    inline bool is_loaded() const {
+      return loaded;
+    }
+
+  };
 }
 
 #endif

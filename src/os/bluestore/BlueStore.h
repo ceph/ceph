@@ -81,6 +81,7 @@ namespace bluestore {
   struct printer;
   struct Extent;
   struct ExtentMap;
+  struct SharedBlob;
 }
 
 //#define DEBUG_CACHE
@@ -565,59 +566,7 @@ public:
 
   struct SharedBlobSet;
 
-  /// in-memory shared blob state (incl cached buffers)
-  struct SharedBlob {
-    MEMPOOL_CLASS_HELPERS();
-
-    std::atomic_int nref = {0}; ///< reference count
-    bool loaded = false;
-
-    CollectionRef collection;
-    union {
-      uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
-      bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
-    };
-
-    SharedBlob(Collection *_coll) : collection(_coll), sbid_unloaded(0) {
-    }
-    SharedBlob(uint64_t i, Collection *_coll);
-    ~SharedBlob();
-
-    uint64_t get_sbid() const {
-      return loaded ? persistent->sbid : sbid_unloaded;
-    }
-
-    friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
-    friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
-
-    void dump(ceph::Formatter* f) const;
-    friend std::ostream& operator<<(std::ostream& out, const SharedBlob& sb);
-
-    void get() {
-      ++nref;
-    }
-    void put();
-
-    /// get logical references
-    void get_ref(uint64_t offset, uint32_t length);
-
-    /// put logical references, and get back any released extents
-    void put_ref(uint64_t offset, uint32_t length,
-		 PExtentVector *r, bool *unshare);
-    friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
-      return l.get_sbid() == r.get_sbid();
-    }
-    inline BufferCacheShard* get_cache() {
-      return collection ? collection->cache : nullptr;
-    }
-    inline SharedBlobSet* get_parent() {
-      return collection ? &(collection->shared_blob_set) : nullptr;
-    }
-    inline bool is_loaded() const {
-      return loaded;
-    }
-
-  };
+  using SharedBlob = bluestore::SharedBlob;
   typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
 
   /// a lookup table of SharedBlobs
@@ -629,36 +578,11 @@ public:
     // count
     mempool::bluestore_cache_meta::unordered_map<uint64_t,SharedBlob*> sb_map;
 
-    SharedBlobRef lookup(uint64_t sbid) {
-      std::lock_guard l(lock);
-      auto p = sb_map.find(sbid);
-      if (p == sb_map.end() ||
-	  p->second->nref == 0) {
-        return nullptr;
-      }
-      return p->second;
-    }
+    SharedBlobRef lookup(uint64_t sbid);
 
-    void add(Collection* coll, SharedBlob *sb) {
-      std::lock_guard l(lock);
-      sb_map[sb->get_sbid()] = sb;
-      sb->collection = coll;
-    }
+    void add(Collection* coll, SharedBlob *sb);
 
-    bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
-      std::lock_guard l(lock);
-      ceph_assert(sb->get_parent() == this);
-      if (verify_nref_is_zero && sb->nref != 0) {
-	return false;
-      }
-      // only remove if it still points to us
-      auto p = sb_map.find(sb->get_sbid());
-      if (p != sb_map.end() &&
-	  p->second == sb) {
-	sb_map.erase(p);
-      }
-      return true;
-    }
+    bool remove(SharedBlob *sb, bool verify_nref_is_zero=false);
 
     bool empty() {
       std::lock_guard l(lock);
