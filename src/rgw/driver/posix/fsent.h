@@ -42,6 +42,7 @@ extern const std::string ATTR_PREFIX;
 extern const std::string mp_ns;
 extern const std::string MP_OBJ_PART_PFX;
 extern const std::string MP_OBJ_HEAD_NAME;
+extern const int64_t READ_SIZE;
 
 /* integration w/bucket listing cache */
 using fill_cache_cb_t = file::listing::fill_cache_cb_t;

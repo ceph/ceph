@@ -4556,35 +4556,85 @@ options:
   default: 0
   services:
   - rgw
+- name: rgw_posix_io_engine
+  type: str
+  level: advanced
+  desc: Object data-path IO engine for the posix driver
+  long_desc: sync (default) is the current blocking pread/pwrite path, with
+    get/put iodepth 1 or 2. io_uring submits positioned reads and writes
+    through a per-thread liburing ring and yields the request coroutine
+    until completion. Requires HAVE_LIBURING; if the ring cannot be
+    created the driver falls back to sync. Per-GET buffer use is about
+    rgw_posix_get_iodepth times rgw_posix_read_chunk_size.
+  default: sync
+  services:
+  - rgw
+  enum_values:
+  - sync
+  - io_uring
+- name: rgw_posix_io_uring_queue_depth
+  type: uint
+  level: advanced
+  desc: io_uring SQ/CQ entries per worker thread (posix)
+  long_desc: Ring size, not request iodepth. Must cover request iodepth
+    times concurrent ops on that thread. Rounded up to a power of two.
+    Values below 128 are raised to 128.
+  default: 1024
+  min: 1
+  services:
+  - rgw
+- name: rgw_posix_io_uring_sqpoll
+  type: bool
+  level: advanced
+  desc: Enable IORING_SETUP_SQPOLL for the posix io_uring engine
+  long_desc: Kernel SQ thread polls the submission queue. Requires
+    sufficient privileges; initialization falls back to a non-SQPOLL
+    ring if the kernel rejects it.
+  default: false
+  services:
+  - rgw
+- name: rgw_posix_io_uring_sq_thread_idle_ms
+  type: uint
+  level: advanced
+  desc: SQPOLL thread idle timeout in milliseconds (posix)
+  default: 1000
+  services:
+  - rgw
+- name: rgw_posix_io_uring_single_issuer
+  type: bool
+  level: advanced
+  desc: Enable IORING_SETUP_SINGLE_ISSUER for the posix io_uring engine
+  long_desc: Kernel 6.0+ hint that only this thread submits to the ring.
+    Matches the per-worker thread_local ring. Off by default. Ignored
+    at compile time if liburing headers lack the flag; initialization
+    still falls back if a newer binary hits an older kernel (-EINVAL).
+  default: false
+  services:
+  - rgw
 - name: rgw_posix_get_iodepth
   type: uint
   level: advanced
-  desc: GET data-path queue depth (1 = sequential, 2 = double-buffered read-ahead)
-  long_desc: 1 reads the next chunk only after the previous chunk has been
-    sent to the client (original synchronous loop). 2 prefetches chunk N+1
-    while chunk N is in flight on the network, and uses pread() so the
-    in-flight read does not race on the fd offset. Only 1 and 2 are
-    implemented; this is a QD1/QD2 experiment knob, not a general iodepth.
+  desc: GET data-path queue depth (1-128)
+  long_desc: With rgw_posix_io_engine=sync, 1 is sequential and 2 is
+    double-buffered read-ahead (values above 2 are clamped to 2). With
+    io_uring, this is a real sliding window of outstanding preads (max
+    128). GET handle_data stays in order. Memory per GET is about this
+    value times rgw_posix_read_chunk_size.
   default: 1
   min: 1
-  max: 2
+  max: 128
   services:
   - rgw
 - name: rgw_posix_put_iodepth
   type: uint
   level: advanced
-  desc: PUT data-path queue depth (1 = sequential, 2 = pipeline one write)
-  long_desc: 1 writes each chunk to disk before reading the next chunk from
-    the client (original synchronous process()). 2 issues the disk write of
-    chunk N on a helper thread (using pwrite() so it does not race on the
-    fd offset) and returns so the next socket read can overlap it. Only 1
-    and 2 are implemented; this is a QD1/QD2 experiment knob, not a general
-    iodepth. Payoff is often smaller than GET on local
-    buffered filesystems (writes are page-cache copies until close/fsync)
-    and larger with O_DIRECT or network/GPFS.
+  desc: PUT data-path queue depth (1-128)
+  long_desc: With rgw_posix_io_engine=sync, 1 is sequential and 2 pipelines
+    one pwrite on a helper thread (values above 2 are clamped to 2). With
+    io_uring, this is a sliding window of outstanding pwrites (max 128).
   default: 1
   min: 1
-  max: 2
+  max: 128
   services:
   - rgw
 - name: rgw_posix_direct_io
@@ -4594,12 +4644,12 @@ options:
   long_desc: Experimental. When enabled, object data files (including
     multipart part files) are opened with O_DIRECT. Reads always work -
     arbitrary byte ranges are internally rounded out to a 4096-byte
-    aligned window and sliced back to the requested range. Writes only go
-    direct when both the write offset and the buffer length are already
-    4096-byte aligned; any write call that isn't (typically the final,
-    odd-sized chunk of an object) transparently falls back to buffered
-    I/O for that call only. Assumes a 4096-byte device/filesystem block
-    size - verify on GPFS or other non-local filesystems before enabling.
+    aligned window and sliced back to the requested range. Writes never
+    toggle O_DIRECT on a live fd (that races in-flight I/O). Unaligned
+    writes are padded to 4096 bytes and ftruncate()'d to the logical
+    size; unaligned offsets use an aligned read-modify-write. Assumes a
+    4096-byte device/filesystem block size - verify on GPFS or other
+    non-local filesystems before enabling.
   default: false
   services:
   - rgw
@@ -4777,35 +4827,85 @@ options:
   default: 0
   services:
   - rgw
+- name: rgw_nsfs_io_engine
+  type: str
+  level: advanced
+  desc: Object data-path IO engine for the nsfs driver
+  long_desc: sync (default) is the current blocking pread/pwrite path, with
+    get/put iodepth 1 or 2. io_uring submits positioned reads and writes
+    through a per-thread liburing ring and yields the request coroutine
+    until completion. Requires HAVE_LIBURING; if the ring cannot be
+    created the driver falls back to sync. Per-GET buffer use is about
+    rgw_nsfs_get_iodepth times rgw_nsfs_read_chunk_size.
+  default: sync
+  services:
+  - rgw
+  enum_values:
+  - sync
+  - io_uring
+- name: rgw_nsfs_io_uring_queue_depth
+  type: uint
+  level: advanced
+  desc: io_uring SQ/CQ entries per worker thread (nsfs)
+  long_desc: Ring size, not request iodepth. Must cover request iodepth
+    times concurrent ops on that thread. Rounded up to a power of two.
+    Values below 128 are raised to 128.
+  default: 1024
+  min: 1
+  services:
+  - rgw
+- name: rgw_nsfs_io_uring_sqpoll
+  type: bool
+  level: advanced
+  desc: Enable IORING_SETUP_SQPOLL for the nsfs io_uring engine
+  long_desc: Kernel SQ thread polls the submission queue. Requires
+    sufficient privileges; initialization falls back to a non-SQPOLL
+    ring if the kernel rejects it.
+  default: false
+  services:
+  - rgw
+- name: rgw_nsfs_io_uring_sq_thread_idle_ms
+  type: uint
+  level: advanced
+  desc: SQPOLL thread idle timeout in milliseconds (nsfs)
+  default: 1000
+  services:
+  - rgw
+- name: rgw_nsfs_io_uring_single_issuer
+  type: bool
+  level: advanced
+  desc: Enable IORING_SETUP_SINGLE_ISSUER for the nsfs io_uring engine
+  long_desc: Kernel 6.0+ hint that only this thread submits to the ring.
+    Matches the per-worker thread_local ring. Off by default. Ignored
+    at compile time if liburing headers lack the flag; initialization
+    still falls back if a newer binary hits an older kernel (-EINVAL).
+  default: false
+  services:
+  - rgw
 - name: rgw_nsfs_get_iodepth
   type: uint
   level: advanced
-  desc: GET data-path queue depth (1 = sequential, 2 = double-buffered read-ahead)
-  long_desc: 1 reads the next chunk only after the previous chunk has been
-    sent to the client (original synchronous loop). 2 prefetches chunk N+1
-    while chunk N is in flight on the network, and uses pread() so the
-    in-flight read does not race on the fd offset. Only 1 and 2 are
-    implemented; this is a QD1/QD2 experiment knob, not a general iodepth.
+  desc: GET data-path queue depth (1-128)
+  long_desc: With rgw_nsfs_io_engine=sync, 1 is sequential and 2 is
+    double-buffered read-ahead (values above 2 are clamped to 2). With
+    io_uring, this is a real sliding window of outstanding preads (max
+    128). GET handle_data stays in order. Memory per GET is about this
+    value times rgw_nsfs_read_chunk_size.
   default: 1
   min: 1
-  max: 2
+  max: 128
   services:
   - rgw
 - name: rgw_nsfs_put_iodepth
   type: uint
   level: advanced
-  desc: PUT data-path queue depth (1 = sequential, 2 = pipeline one write)
-  long_desc: 1 writes each chunk to disk before reading the next chunk from
-    the client (original synchronous process()). 2 issues the disk write of
-    chunk N on a helper thread (using pwrite() so it does not race on the
-    fd offset) and returns so the next socket read can overlap it. Only 1
-    and 2 are implemented; this is a QD1/QD2 experiment knob, not a general
-    iodepth. Payoff is often smaller than GET on local
-    buffered filesystems (writes are page-cache copies until close/fsync)
-    and larger with O_DIRECT or network/GPFS.
+  desc: PUT data-path queue depth (1-128)
+  long_desc: With rgw_nsfs_io_engine=sync, 1 is sequential and 2 pipelines
+    one pwrite on a helper thread (values above 2 are clamped to 2). With
+    io_uring, this is a sliding window of outstanding pwrites (max 128).
   default: 1
   min: 1
-  max: 2
+  max: 128
   services:
   - rgw
 - name: rgw_nsfs_direct_io
@@ -4815,12 +4915,12 @@ options:
   long_desc: Experimental. When enabled, object data files (including
     multipart part files) are opened with O_DIRECT. Reads always work -
     arbitrary byte ranges are internally rounded out to a 4096-byte
-    aligned window and sliced back to the requested range. Writes only go
-    direct when both the write offset and the buffer length are already
-    4096-byte aligned; any write call that isn't (typically the final,
-    odd-sized chunk of an object) transparently falls back to buffered
-    I/O for that call only. Assumes a 4096-byte device/filesystem block
-    size - verify on GPFS or other non-local filesystems before enabling.
+    aligned window and sliced back to the requested range. Writes never
+    toggle O_DIRECT on a live fd (that races in-flight I/O). Unaligned
+    writes are padded to 4096 bytes and ftruncate()'d to the logical
+    size; unaligned offsets use an aligned read-modify-write. Assumes a
+    4096-byte device/filesystem block size - verify on GPFS or other
+    non-local filesystems before enabling.
   default: false
   services:
   - rgw
