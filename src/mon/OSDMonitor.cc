@@ -8430,6 +8430,15 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (-1 == pending_inc.new_pool_max)
     pending_inc.new_pool_max = osdmap.pool_max;
   int64_t pool = ++pending_inc.new_pool_max;
+  // Roll back the new pool entry and ID if we return with an error after this
+  // point; dismissed once new_pool_names is set on the success path.
+  bool pool_committed = false;
+  auto abort_guard = make_scope_guard([&] {
+    if (!pool_committed) {
+      pending_inc.new_pools.erase(pool);
+      --pending_inc.new_pool_max;
+    }
+  });
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->create_time = ceph_clock_now();
@@ -8576,6 +8585,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   pending_inc.new_pool_names[pool] = name;
+  pool_committed = true;
   return 0;
 }
 
