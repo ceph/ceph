@@ -1026,6 +1026,96 @@ ObjectDataHandler::punch_multi_mapping_hole(
   co_return mapping;
 }
 
+bool
+ObjectDataHandler::maybe_widen_zero_reservation_first_touch(
+  context_t ctx,
+  overwrite_range_t &overwrite_range,
+  data_t &data,
+  const LBAMapping &mapping,
+  op_type_t op_type) const
+{
+  auto block_size = ctx.tm.get_block_size();
+  if (zero_reservation_chunk_size <= block_size ||
+      op_type != op_type_t::OVERWRITE ||
+      !data.bl.has_value() ||
+      overwrite_range.clonerange_info.has_value() ||
+      !mapping.is_zero_reserved()) {
+    return false;
+  }
+  // get_aligned_laddr / get_roundup_laddr require a multiple of UNIT_SIZE;
+  // the constructor already p2align's the conf value.
+  assert(zero_reservation_chunk_size % laddr_t::UNIT_SIZE == 0);
+
+  // Chunk boundaries around the client write, clamped to the containing
+  // (single) zero-reserved mapping. That range is logically zero, so
+  // widening into it cannot clobber real data.
+  laddr_t chunk_begin =
+    overwrite_range.unaligned_begin.get_aligned_laddr(
+      zero_reservation_chunk_size);
+  laddr_t chunk_end =
+    overwrite_range.unaligned_end.get_roundup_laddr(
+      zero_reservation_chunk_size);
+  laddr_t map_begin = mapping.get_key();
+  laddr_t map_end =
+    (mapping.get_key() + mapping.get_length()).checked_to_laddr();
+  
+  // clamp the chunk boundaries to the mapping boundaries
+  // this is to ensure that the chunk is within the mapping 
+  // and never goes into a neighboring mapping 
+  if (chunk_begin < map_begin) {
+    chunk_begin = map_begin;
+  }
+  if (chunk_end > map_end) {
+    chunk_end = map_end;
+  }
+  // do not widen if the chunk is empty/invalid or the 
+  // chunk is the same as the overwrite range (i.e., no actual widening)
+  if (chunk_begin >= chunk_end ||
+      (chunk_begin == overwrite_range.aligned_begin &&
+       chunk_end == overwrite_range.aligned_end)) {
+    return false;
+  }
+
+  LOG_PREFIX(ObjectDataHandler::maybe_widen_zero_reservation_first_touch);
+  extent_len_t chunk_len =
+    chunk_end.get_byte_distance<extent_len_t>(chunk_begin);
+  extent_len_t head_zeros =
+    overwrite_range.unaligned_begin.get_byte_distance<
+      extent_len_t>(chunk_begin);
+  extent_len_t tail_zeros =
+    chunk_end.get_byte_distance<extent_len_t>(overwrite_range.unaligned_end);
+  DEBUGT("widen {} -> [{}, {}) head_zeros=0x{:x} tail_zeros=0x{:x}",
+    ctx.t, overwrite_range, chunk_begin, chunk_end, head_zeros, tail_zeros);
+
+  bufferlist full_bl;
+  if (head_zeros) {
+    full_bl.append_zero(head_zeros);
+  }
+  full_bl.append(*data.bl);
+  if (tail_zeros) {
+    full_bl.append_zero(tail_zeros);
+  }
+  assert(full_bl.length() == chunk_len);
+
+  // we can reset the head and tail padding here because we have already
+  // read the padding data in the previous steps; everything is already in the full_bl
+  data.headbl.reset();
+  data.tailbl.reset();
+  data.head_padding.reset();
+  data.tail_padding.reset();
+  data.bl = std::move(full_bl);
+  // update the overwrite range to the widened chunk
+  overwrite_range.unaligned_len = chunk_len;
+  overwrite_range.unaligned_begin = laddr_offset_t{chunk_begin};
+  overwrite_range.unaligned_end = laddr_offset_t{chunk_end};
+  overwrite_range.aligned_begin = chunk_begin;
+  overwrite_range.aligned_end = chunk_end;
+  overwrite_range.aligned_len = chunk_len;
+  // assert that the overwrite range is still within the LBAMapping
+  assert(overwrite_range.is_range_in_mapping(mapping));
+  return true;
+}
+
 ObjectDataHandler::write_ret
 ObjectDataHandler::handle_single_mapping_overwrite(
   context_t ctx,
@@ -1116,6 +1206,16 @@ ObjectDataHandler::handle_single_mapping_overwrite(
     }
   case edge_handle_policy_t::REMAP:
     {
+      // First touch of a zero-reserved region: widen to chunk boundary so
+      // one REMAP materializes the whole chunk. Widened range is block
+      // aligned, so the edge-read below is typically a no-op.
+      LOG_PREFIX(ObjectDataHandler::handle_single_mapping_overwrite);
+      bool widened = maybe_widen_zero_reservation_first_touch(
+        ctx, overwrite_range, data, mapping, op_type);
+      if (widened) {
+	DEBUGT("widened zero-reservation first touch -> {}",
+	       ctx.t, overwrite_range);
+      }
       auto fut = base_iertr::now();
       edge_t edge =  edge_t::NONE;
       if (!overwrite_range.is_begin_aligned(ctx.tm.get_block_size())) {
@@ -1137,6 +1237,9 @@ ObjectDataHandler::handle_single_mapping_overwrite(
 	});
       }
       return fut.si_then([ctx, &overwrite_range, mapping] {
+	// After a successful widen, aligned_len follows
+	// seastore_data_zero_reservation_chunk_size (possibly clamped to the
+	// zero mapping); otherwise it stays the original write size.
 	auto punch_start = seastar::lowres_clock::now();
 	return ctx.tm.punch_hole_in_mapping<ObjectDataBlock>(
 	  ctx.t, overwrite_range.aligned_begin,
