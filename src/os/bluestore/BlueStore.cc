@@ -18058,6 +18058,57 @@ void BlueStore::set_allocation_in_simple_bmap(SimpleBitmap* sbmap, uint64_t offs
   sbmap->set(offset >> min_alloc_size_order, length >> min_alloc_size_order);
 }
 
+class BlueStore::ExtentDecoderPartial : public bluestore::ExtentMap::ExtentDecoder {
+  BlueStore& store;
+  read_alloc_stats_t& stats;
+  SimpleBitmap& sbmap;
+  sb_info_space_efficient_map_t& sb_info;
+  uint8_t min_alloc_size_order;
+  Extent extent;
+  ghobject_t oid;
+  volatile_statfs* per_pool_statfs = nullptr;
+  blob_map_t blobs;
+  blob_map_t spanning_blobs;
+  virtual BlobRef decode_create_blob(
+    bptr_c_it_t& p,
+    __u8 struct_v,
+    uint64_t* sbid,
+    bool include_ref_map,
+    Collection* c) override;
+  void _consume_new_blob(bool spanning,
+                          uint64_t extent_no,
+                          uint64_t sbid,
+                          BlobRef b);
+protected:
+  void consume_blobid(Extent*, bool spanning, uint64_t blobid) override;
+  void consume_blob(Extent* le,
+                    uint64_t extent_no,
+                    uint64_t sbid,
+                    BlobRef b) override;
+  void consume_spanning_blob(uint64_t sbid, BlobRef b) override;
+  Extent* get_next_extent() override {
+    ++stats.extent_count;
+    extent = Extent();
+    return &extent;
+  }
+  void add_extent(Extent*) override {
+  }
+public:
+  ExtentDecoderPartial(BlueStore& _store,
+                        read_alloc_stats_t& _stats,
+                        SimpleBitmap& _sbmap,
+                        sb_info_space_efficient_map_t& _sb_info,
+                        uint8_t _min_alloc_size_order)
+    : store(_store), stats(_stats), sbmap(_sbmap), sb_info(_sb_info),
+      min_alloc_size_order(_min_alloc_size_order)
+  {}
+  const ghobject_t& get_oid() const {
+    return oid;
+  }
+  void reset(const ghobject_t _oid,
+    volatile_statfs* _per_pool_statfs);
+};
+
 BlueStore::BlobRef BlueStore::ExtentDecoderPartial::decode_create_blob(
   bptr_c_it_t& p,
   __u8 struct_v,
