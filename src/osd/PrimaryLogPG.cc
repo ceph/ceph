@@ -2731,6 +2731,15 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
       ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
       hobject_t head = m->get_hobj();
 
+      // Balanced/Localized reads can be sent to a replica shard
+      // which cannot test if an object is degarded or backfilling
+      // redirect these requests to the primary
+      if (!is_primary()) {
+        dout(20) << __func__ << " need to redirect to primary" << dendl;
+        osd->reply_op_error(op, -EAGAIN);
+        return cache_result_t::REPLIED_WITH_EAGAIN;
+      }
+
       if (is_degraded_or_backfilling_object(head)) {
 	dout(20) << __func__ << ": " << head << " is degraded, waiting" << dendl;
 	wait_for_degraded_object(head, op);
