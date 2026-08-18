@@ -2,6 +2,15 @@
   align-items: center;
 }
 
-.path-separator {
-  align-self: center;
+.path-definition-row > div {
+  // Default cds-select fills 100% of its parent. Keep the packed path row
+  // content-sized without switching to Carbon's inline select variant.
+  width: max-content;
+  max-width: 100%;
+}
+
+.path-level-select-skeleton {
+  // Packed path rows have no column width, so the bar collapses without a definite size.
+  display: block;
+  inline-size: var(--cds-spacing-13);
 }
