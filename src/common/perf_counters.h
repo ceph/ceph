@@ -258,6 +258,8 @@ public:
   void inc_with_max(int idx, uint64_t v = 1);
   void dec(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
+  /// Atomically raise a U64 counter to at least v (lock-free high-water mark).
+  void set_max(int idx, uint64_t v);
   uint64_t get(int idx) const;
 
   void tset(int idx, utime_t v);

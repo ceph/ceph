@@ -53,6 +53,7 @@
 #endif
 
 #include <fstream>
+#include <atomic>
 #include <locale>
 #include <map>
 #include <memory>
@@ -111,7 +112,9 @@ enum {
   l_c_aio_ops,
   l_c_aio_completions,
   l_c_aio_in_flight,
+  l_c_aio_in_flight_peak,
   l_c_sync_in_flight,
+  l_c_sync_in_flight_peak,
   l_c_osdc_hit,
   l_c_osdc_miss,
   l_c_osdc_dirty,
@@ -1072,6 +1075,39 @@ public:
     if (logger)
       logger->inc(l_c_caps_release);
   }
+  void inc_aio_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto cur = aio_in_flight.fetch_add(1, std::memory_order_relaxed) + 1;
+    logger->inc(l_c_aio_in_flight);
+    // set_max is lock-free so the peak never goes backwards under races.
+    logger->set_max(l_c_aio_in_flight_peak, cur);
+  }
+  void dec_aio_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto prev = aio_in_flight.fetch_sub(1, std::memory_order_relaxed);
+    ceph_assert(prev > 0);
+    logger->dec(l_c_aio_in_flight);
+  }
+  void inc_sync_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto cur = sync_in_flight.fetch_add(1, std::memory_order_relaxed) + 1;
+    logger->inc(l_c_sync_in_flight);
+    logger->set_max(l_c_sync_in_flight_peak, cur);
+  }
+  void dec_sync_in_flight() {
+    if (!logger) {
+      return;
+    }
+    auto prev = sync_in_flight.fetch_sub(1, std::memory_order_relaxed);
+    ceph_assert(prev > 0);
+    logger->dec(l_c_sync_in_flight);
+  }
 
   void inc_opened_files() {
     ++opened_files;
@@ -1124,6 +1160,8 @@ public:
   bool tick_thread_stopped = false;
 
   std::unique_ptr<PerfCounters> logger;
+  std::atomic<uint64_t> aio_in_flight{0};
+  std::atomic<uint64_t> sync_in_flight{0};
   std::unique_ptr<MDSMap> mdsmap;
 #if defined(__linux__)
   std::unique_ptr<FSCrypt> fscrypt;
