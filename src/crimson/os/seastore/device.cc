@@ -33,6 +33,11 @@ std::ostream& operator<<(std::ostream& out, const device_config_t& conf)
     out << device_id_printer_t{k}
         << ": " << v << ", ";
   }
+  out << "), data(";
+  for (const auto& [k, v] : conf.data_devices) {
+    out << device_id_printer_t{k}
+        << ": " << v << ", ";
+  }
   return out << "))";
 }
 

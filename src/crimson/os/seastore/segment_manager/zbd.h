@@ -109,6 +109,7 @@ namespace crimson::os::seastore::segment_manager::zbd {
     };
 
     device_set_t& get_cache_devices() override;
+    device_set_t& get_data_devices() override;
 
     magic_t get_magic() const override;
 

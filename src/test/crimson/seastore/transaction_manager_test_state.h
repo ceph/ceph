@@ -101,15 +101,26 @@ public:
       auto cache_dev = segment_manager::get_ephemeral_device_config(
         cache_sm->get_device_id(),
         device_set_t{},
+        device_set_t{},
         false);
       co_await cache_sm->mkfs(cache_dev).handle_error(
         crimson::ct_error::assert_all("unexpected error"));
       cache_devices.emplace(cache_sm->get_device_id(), cache_dev.spec);
     }
+    device_set_t data_devices;
+    for (auto &data_sm : data_segment_managers) {
+      data_devices.emplace(
+        data_sm->get_device_id(),
+        segment_manager::get_ephemeral_device_spec(
+          data_sm->get_device_id(),
+          false,
+          true));
+    }
     for (auto &data_sm : data_segment_managers) {
       auto data_dev = segment_manager::get_ephemeral_device_config(
         data_sm->get_device_id(),
         cache_devices,
+        data_devices,
         true);
       co_await data_sm->mkfs(data_dev).handle_error(
         crimson::ct_error::assert_all("unexpected error"));
@@ -233,15 +244,23 @@ public:
       auto cache_dev = get_rbm_ephemeral_device_config(
         cache_rb->get_device_id(),
         device_set_t{},
+        device_set_t{},
         false);
       co_await cache_rb->mkfs(cache_dev).handle_error(
         crimson::ct_error::assert_all("unexpected error"));
       cache_devices.emplace(cache_rb->get_device_id(), cache_dev.spec);
     }
+    device_set_t data_devices;
+    for (auto &data_rb : data_rb_devices) {
+      data_devices.emplace(
+        data_rb->get_device_id(),
+        get_rbm_ephemeral_device_spec(data_rb->get_device_id()));
+    }
     for (auto &data_rb : data_rb_devices) {
       auto data_dev = get_rbm_ephemeral_device_config(
         data_rb->get_device_id(),
         cache_devices,
+        data_devices,
         true);
       co_await data_rb->mkfs(data_dev).handle_error(
         crimson::ct_error::assert_all("unexpected error"));

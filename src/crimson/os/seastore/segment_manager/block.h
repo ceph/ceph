@@ -164,6 +164,9 @@ public:
   device_set_t& get_cache_devices() override {
     return superblock.config.cache_devices;
   }
+  device_set_t& get_data_devices() override {
+    return superblock.config.data_devices;
+  }
   // public so tests can bypass segment interface when simpler
   Segment::write_ertr::future<> segment_write(
     paddr_t addr,

@@ -43,9 +43,12 @@ EphemeralSegmentManagerRef create_test_ephemeral(
   device_id_t id,
   device_type_t dtype);
 
+device_spec_t get_ephemeral_device_spec(
+  device_id_t id, bool is_cache, bool is_cold);
 device_config_t get_ephemeral_device_config(
   device_id_t id,
   device_set_t cache_devices,
+  device_set_t data_devices,
   bool is_major_device);
 
 class EphemeralSegment final : public Segment {
@@ -138,6 +141,10 @@ public:
   device_set_t& get_cache_devices() override {
     assert(device_config);
     return device_config->cache_devices;
+  }
+
+  device_set_t& get_data_devices() override {
+    return device_config->data_devices;
   }
 
   magic_t get_magic() const override {
