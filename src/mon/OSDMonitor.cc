@@ -14351,6 +14351,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
+    for(auto& [id, name] : pending_inc.new_pool_names) {
+      if (name == poolstr) {
+        ss << "pool '" << poolstr << "' already exists";
+        err = 0;
+        goto reply_no_propose;
+      }
+    }
+
     std::optional<int64_t> source_pool_id;
     const pg_pool_t *source_pool = nullptr;
     if (!source_pool_name.empty()) {
