@@ -45,6 +45,8 @@ class SeastoreSuper final: public Super {
                 c.t, cid, addr);
       // todo: coll_node already exists so we can avoid chaining the future here.
       //       switch to get? 
+      coll_node = tm.get_mutable_extent(c.t, coll_node)
+        ->cast<collection_manager::CollectionNode>();
       std::ignore = coll_node->update(
         collection_manager::coll_context_t{tm, c.t}, cid,
         collection_manager::coll_value_t{split_bits, addr});
