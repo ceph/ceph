@@ -149,7 +149,7 @@ std::string EntityName::get_valid_types_as_str() {
     if (i > 0) {
       out << ", ";
     }
-    out << STR_TO_ENTITY_TYPE[i].first;
+    out << STR_TO_ENTITY_TYPE[i].second;
   }
   return out.str();
 }
