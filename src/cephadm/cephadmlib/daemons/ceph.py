@@ -339,7 +339,8 @@ class OSD(Ceph):
         osd_lv_data = osd_bluestore_data.get(self.identity.daemon_id, [])
         if not osd_lv_data:
             logger.info(
-                'No lv data found for OSD.%s, checking for raw OSD', self.identity.daemon_id
+                'No lv data found for OSD.%s, checking for raw OSD',
+                self.identity.daemon_id,
             )
             c_v_container = CephContainer(
                 ctx,
@@ -363,8 +364,13 @@ class OSD(Ceph):
             )
             raw_list_data = json.loads(out)
             for osd_data in raw_list_data.values():
-                if str(osd_data.get('osd_id', -1)) == str(self.identity.daemon_id):
-                    logger.info('Found data for osd.%s in raw list', str(self.identity.daemon_id))
+                if str(osd_data.get('osd_id', -1)) == str(
+                    self.identity.daemon_id
+                ):
+                    logger.info(
+                        'Found data for osd.%s in raw list',
+                        str(self.identity.daemon_id),
+                    )
                     # misnomer since this isn't an LV, but it is the path
                     # we need to pass to the bluestore tool
                     lv_path = osd_data.get('device', None)
@@ -476,10 +482,14 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                         f'Out:{out}\n'
                         f'Err:{err}'
                     )
-                logger.info(f'Got issue rotating osd keyring using ceph-bluestore-tool:\n{out}\n{err}\nRetrying in {i} seconds')
+                logger.info(
+                    f'Got issue rotating osd keyring using ceph-bluestore-tool:\n{out}\n{err}\nRetrying in {i} seconds'
+                )
                 time.sleep(i)
             else:
-                logger.info(f'Successfully rotated osd.{self.identity.daemon_id} keyring')
+                logger.info(
+                    f'Successfully rotated osd.{self.identity.daemon_id} keyring'
+                )
                 break
 
         if encrypted:
@@ -508,8 +518,11 @@ echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
                     f'Err:{err}'
                 )
 
-        call(ctx, ['systemctl', 'reset-failed', self.identity.unit_name],
-             verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+        call(
+            ctx,
+            ['systemctl', 'reset-failed', self.identity.unit_name],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
         call(
             ctx,
             ['systemctl', 'start', self.identity.unit_name],
