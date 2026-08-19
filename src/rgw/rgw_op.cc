@@ -3550,6 +3550,9 @@ int RGWListBucket::verify_permission(optional_yield y)
 
   s->env.emplace("s3:max-keys", std::to_string(max));
 
+  // expose rgw's allow-unordered extension to policy evaluation
+  s->env.emplace("rgw:allow-unordered", allow_unordered ? "true" : "false");
+
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
