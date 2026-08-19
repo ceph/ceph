@@ -549,6 +549,69 @@ struct rgw_cls_bucket_update_stats_op
 };
 WRITE_CLASS_ENCODER(rgw_cls_bucket_update_stats_op)
 
+struct rgw_cls_bucket_stats_summary_set_op {
+  rgw_bucket_stats_summary summary;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(summary, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(summary, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bucket_stats_summary_set_op)
+
+struct rgw_cls_bucket_stats_summary_apply_delta_op {
+  std::string bucket_id;
+  ceph::real_time bucket_creation_time;
+  rgw_bucket_dir_stats stats;
+  rgw_bucket_dir_stats dec_stats;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(bucket_id, bl);
+    encode(bucket_creation_time, bl);
+    encode(stats, bl);
+    encode(dec_stats, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(bucket_id, bl);
+    decode(bucket_creation_time, bl);
+    decode(stats, bl);
+    decode(dec_stats, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bucket_stats_summary_apply_delta_op)
+
+struct rgw_cls_bucket_stats_summary_set_generation_op {
+  std::string bucket_id;
+  ceph::real_time bucket_creation_time;
+  uint64_t index_generation = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(bucket_id, bl);
+    encode(bucket_creation_time, bl);
+    encode(index_generation, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(bucket_id, bl);
+    decode(bucket_creation_time, bl);
+    decode(index_generation, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_cls_bucket_stats_summary_set_generation_op)
+
 struct rgw_cls_obj_remove_op {
   std::list<std::string> keep_attr_prefixes;
 
@@ -1830,6 +1893,9 @@ constexpr auto bucket_list = ClsMethod<RdTag, ClassId>(RGW_BUCKET_LIST);
 constexpr auto bucket_check_index = ClsMethod<RdTag, ClassId>(RGW_BUCKET_CHECK_INDEX);
 constexpr auto bucket_rebuild_index = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_REBUILD_INDEX);
 constexpr auto bucket_update_stats = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_UPDATE_STATS);
+constexpr auto bucket_stats_summary_set = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_STATS_SUMMARY_SET);
+constexpr auto bucket_stats_summary_apply_delta = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_STATS_SUMMARY_APPLY_DELTA);
+constexpr auto bucket_stats_summary_set_generation = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_STATS_SUMMARY_SET_GENERATION);
 constexpr auto bucket_prepare_op = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_PREPARE_OP);
 constexpr auto bucket_complete_op = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_COMPLETE_OP);
 constexpr auto bucket_link_olh = ClsMethod<RdWrTag, ClassId>(RGW_BUCKET_LINK_OLH);

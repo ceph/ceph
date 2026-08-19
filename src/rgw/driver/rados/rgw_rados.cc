@@ -10386,6 +10386,53 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
+int RGWRados::read_bucket_stats_summary(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    rgw_bucket_stats_summary* summary,
+    optional_yield y)
+{
+  return svc.bi_rados->read_bucket_stats_summary(dpp, bucket_info, summary, y);
+}
+
+int RGWRados::whole_update_bucket_stats_summary(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    rgw_bucket_stats_summary* summary,
+    optional_yield y)
+{
+  return svc.bi_rados->whole_update_bucket_stats_summary(
+      dpp, bucket_info, summary, y);
+}
+
+int RGWRados::apply_bucket_stats_summary_delta(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    const rgw_bucket_dir_stats& stats,
+    const rgw_bucket_dir_stats& dec_stats,
+    rgw_bucket_stats_summary* summary,
+    optional_yield y)
+{
+  return svc.bi_rados->apply_bucket_stats_summary_delta(
+      dpp, bucket_info, stats, dec_stats, summary, y);
+}
+
+int RGWRados::set_bucket_stats_summary_generation(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    optional_yield y)
+{
+  return svc.bi_rados->set_bucket_stats_summary_generation(dpp, bucket_info, y);
+}
+
+int RGWRados::remove_bucket_stats_summary(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    optional_yield y)
+{
+  return svc.bi_rados->remove_bucket_stats_summary(dpp, bucket_info, y);
+}
+
 class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
   boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb;
   uint32_t pendings;

@@ -25,6 +25,7 @@ using namespace std;
 using rgwrados::shard_io::Result;
 
 static string dir_oid_prefix = ".dir.";
+static string bucket_stats_oid_prefix = ".bucket.stats.";
 
 RGWSI_BucketIndex_RADOS::RGWSI_BucketIndex_RADOS(CephContext *cct) : RGWSI_BucketIndex(cct)
 {
@@ -592,6 +593,212 @@ int RGWSI_BucketIndex_RADOS::read_stats(const DoutPrefixProvider *dpp,
   result->placement_rule = std::move(bucket_info.placement_rule);
 
   return 0;
+}
+
+std::string RGWSI_BucketIndex_RADOS::bucket_stats_summary_oid(
+    std::string_view bucket_id)
+{
+  return bucket_stats_oid_prefix + std::string{bucket_id};
+}
+
+static int open_bucket_stats_summary(const DoutPrefixProvider *dpp,
+                                     RGWSI_BucketIndex_RADOS* svc,
+                                     const RGWBucketInfo& bucket_info,
+                                     librados::IoCtx* index_pool,
+                                     std::string* oid)
+{
+  int r = svc->open_bucket_index(dpp, bucket_info, index_pool, oid);
+  if (r < 0) {
+    return r;
+  }
+  *oid = RGWSI_BucketIndex_RADOS::bucket_stats_summary_oid(
+      bucket_info.bucket.bucket_id);
+  return 0;
+}
+
+static bool matches_bucket(const rgw_bucket_stats_summary& summary,
+                           const RGWBucketInfo& bucket_info)
+{
+  return summary.bucket_id == bucket_info.bucket.bucket_id &&
+      summary.bucket_creation_time == bucket_info.creation_time;
+}
+
+int RGWSI_BucketIndex_RADOS::read_bucket_stats_summary(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    rgw_bucket_stats_summary* summary,
+    optional_yield y)
+{
+  if (!summary) {
+    return -EINVAL;
+  }
+
+  librados::IoCtx index_pool;
+  std::string oid;
+  int r = open_bucket_stats_summary(dpp, this, bucket_info, &index_pool, &oid);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist bl;
+  int op_ret = 0;
+  librados::ObjectReadOperation op;
+  op.omap_get_header(&bl, &op_ret);
+  r = rgw_rados_operate(dpp, index_pool, oid, std::move(op), &bl, y);
+  if (r < 0) {
+    return r;
+  }
+  if (op_ret < 0) {
+    return op_ret;
+  }
+
+  try {
+    auto iter = bl.cbegin();
+    decode(*summary, iter);
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
+  }
+  return matches_bucket(*summary, bucket_info) ? 0 : -ESTALE;
+}
+
+int RGWSI_BucketIndex_RADOS::whole_update_bucket_stats_summary(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    rgw_bucket_stats_summary* summary,
+    optional_yield y)
+{
+  if (!summary) {
+    return -EINVAL;
+  }
+
+  const auto scan_started = ceph::real_clock::now();
+  rgw_bucket_stats_summary next;
+  next.bucket_id = bucket_info.bucket.bucket_id;
+  next.bucket_creation_time = bucket_info.creation_time;
+  next.index_generation = bucket_info.layout.current_index.gen;
+  next.last_full_scan_started = scan_started;
+
+  const auto& index = bucket_info.layout.current_index;
+  if (!is_layout_indexless(index)) {
+    std::vector<rgw_bucket_dir_header> headers;
+    int r = cls_bucket_head(dpp, bucket_info, index, RGW_NO_SHARD,
+                            &headers, nullptr, y);
+    if (r < 0) {
+      return r;
+    }
+    for (const auto& header : headers) {
+      for (const auto& [category, stats] : header.stats) {
+        auto& dest = next.stats[category];
+        dest.total_size += stats.total_size;
+        dest.total_size_rounded += stats.total_size_rounded;
+        dest.num_entries += stats.num_entries;
+        dest.actual_size += stats.actual_size;
+      }
+    }
+  }
+  next.last_full_scan_completed = ceph::real_clock::now();
+  next.last_update = next.last_full_scan_completed;
+
+  librados::IoCtx index_pool;
+  std::string oid;
+  int r = open_bucket_stats_summary(dpp, this, bucket_info, &index_pool, &oid);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  cls_rgw_bucket_stats_summary_set(op, next);
+  r = rgw_rados_operate(dpp, index_pool, oid, std::move(op), y);
+  if (r < 0) {
+    return r;
+  }
+  *summary = std::move(next);
+  return 0;
+}
+
+int RGWSI_BucketIndex_RADOS::apply_bucket_stats_summary_delta(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    const rgw_bucket_dir_stats& stats,
+    const rgw_bucket_dir_stats& dec_stats,
+    rgw_bucket_stats_summary* summary,
+    optional_yield y)
+{
+  if (!summary) {
+    return -EINVAL;
+  }
+
+  librados::IoCtx index_pool;
+  std::string oid;
+  int r = open_bucket_stats_summary(dpp, this, bucket_info, &index_pool, &oid);
+  if (r < 0) {
+    return r;
+  }
+
+  rgw_cls_bucket_stats_summary_apply_delta_op delta;
+  delta.bucket_id = bucket_info.bucket.bucket_id;
+  delta.bucket_creation_time = bucket_info.creation_time;
+  delta.stats = stats;
+  delta.dec_stats = dec_stats;
+
+  bufferlist out;
+  int op_ret = 0;
+  librados::ObjectWriteOperation op;
+  cls_rgw_bucket_stats_summary_apply_delta(op, delta, &out, &op_ret);
+  r = rgw_rados_operate(dpp, index_pool, oid, std::move(op), y);
+  if (r < 0) {
+    return r;
+  }
+  if (op_ret < 0) {
+    return op_ret;
+  }
+  try {
+    auto iter = out.cbegin();
+    decode(*summary, iter);
+  } catch (const ceph::buffer::error&) {
+    return -EIO;
+  }
+  return matches_bucket(*summary, bucket_info) ? 0 : -ESTALE;
+}
+
+int RGWSI_BucketIndex_RADOS::set_bucket_stats_summary_generation(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    optional_yield y)
+{
+  librados::IoCtx index_pool;
+  std::string oid;
+  int r = open_bucket_stats_summary(dpp, this, bucket_info, &index_pool, &oid);
+  if (r < 0) {
+    return r;
+  }
+
+  rgw_cls_bucket_stats_summary_set_generation_op generation;
+  generation.bucket_id = bucket_info.bucket.bucket_id;
+  generation.bucket_creation_time = bucket_info.creation_time;
+  generation.index_generation = bucket_info.layout.current_index.gen;
+
+  librados::ObjectWriteOperation op;
+  cls_rgw_bucket_stats_summary_set_generation(op, generation);
+  return rgw_rados_operate(dpp, index_pool, oid, std::move(op), y);
+}
+
+int RGWSI_BucketIndex_RADOS::remove_bucket_stats_summary(
+    const DoutPrefixProvider* dpp,
+    const RGWBucketInfo& bucket_info,
+    optional_yield y)
+{
+  librados::IoCtx index_pool;
+  std::string oid;
+  int r = open_bucket_stats_summary(dpp, this, bucket_info, &index_pool, &oid);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectWriteOperation op;
+  op.remove();
+  r = rgw_rados_operate(dpp, index_pool, oid, std::move(op), y);
+  return r == -ENOENT ? 0 : r;
 }
 
 struct ReshardStatusReader : rgwrados::shard_io::RadosReader {
