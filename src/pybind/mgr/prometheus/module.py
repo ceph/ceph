@@ -242,7 +242,6 @@ class LRUCacheDict(OrderedDict[K, V]):
 
 class HealthHistory:
     kv_name = 'health_history'
-    titles = "{healthcheck_name:<24}  {first_seen:<20}  {last_seen:<20}  {count:>5}  {active:^6}"
     date_format = "%Y/%m/%d %H:%M:%S"
 
     def __init__(self, mgr: MgrModule):
@@ -339,27 +338,34 @@ class HealthHistory:
             str: Human readable representation of the healthcheck history
         """
         out = []
-
-        if len(self.healthcheck.keys()) == 0:
+        snapshot = self.healthcheck.items()
+        if len(snapshot) == 0:
             out.append("No healthchecks have been recorded")
         else:
-            out.append(self.titles.format(
+            col_width = max(len("Healthcheck Name"),
+                            max(len(k) for k, _ in snapshot))
+            fmt = (f"{{healthcheck_name:<{col_width}}}  {{first_seen:<20}}  "
+                   f"{{last_seen:<20}}  {{count:>5}}  {{active:^6}}")
+            out.append(fmt.format(
                 healthcheck_name="Healthcheck Name",
                 first_seen="First Seen (UTC)",
                 last_seen="Last seen (UTC)",
                 count="Count",
                 active="Active")
             )
-            for k in sorted(self.healthcheck.keys()):
-                check = self.healthcheck[k]
-                out.append(self.titles.format(
+            for k, check in sorted(
+                snapshot,
+                key=lambda item: item[1].last_seen,
+                reverse=True,
+            ):
+                out.append(fmt.format(
                     healthcheck_name=check.name,
                     first_seen=time.strftime(self.date_format, time.localtime(check.first_seen)),
                     last_seen=time.strftime(self.date_format, time.localtime(check.last_seen)),
                     count=check.count,
                     active="Yes" if check.active else "No")
                 )
-            out.extend([f"{len(self.healthcheck)} health check(s) listed", ""])
+            out.extend([f"{len(snapshot)} health check(s) listed", ""])
 
         return "\n".join(out)
 
