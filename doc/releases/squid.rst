@@ -4,6 +4,41 @@ Squid
 
 Squid is the 19th stable release of Ceph.
 
+v19.2.6 Squid
+=============
+
+This is the sixth minor release in the Squid series. We recommend that all users update to this release.
+
+Release Date
+------------
+
+August 19, 2026
+
+Notable Changes
+---------------
+
+* :ref:`CVE-2025-30156` is an authentication bypass in CephX caused by misuse of AES-CBC.
+* :ref:`CVE-2026-39944` shares the unauthenticated-encryption root cause of CVE-2025-30156, but applies it to RGW's STS session tokens resulting in improper verification of a cryptographic signature.
+* :ref:`CVE-2026-50152` is an improper authorization flaw in the Ceph Monitor subscription handler.
+* :ref:`CVE-2026-54330` is a flaw in RGW not properly verifying its SigV4 cryptographic signatures in RGW's SigV4 verifier.
+
+
+Critical Upgrade Steps
+----------------------
+
+* Please review the :ref:`CVE-2025-30156-upgrade-steps` on the :ref:`CVE-2025-30156` documentation.
+* Please review the :ref:`CVE-2026-54330-upgrade-steps` on the :ref:`CVE-2026-54330` documentation.
+* Please review the :ref:`CVE-2026-50152-recommendations` on the :ref:`CVE-2026-50152` documentation.
+
+
+Changelog
+---------
+
+* :ref:`CVE-2026-54330`: RGW SigV4 header injection escalation (5837aa8e60471128dbb672b0ff6f1b1feebe08a7)
+* :ref:`CVE-2026-50152`: Monitor config-key store unauthorized read (f2840d2fd338ab5de2865f0f78684bbf7b888c84)
+* :ref:`CVE-2026-39944`: RGW STS token bit-flip privilege escalation (26b64965de99dfc233fc94ba784eb0f037b23baa)
+* :ref:`CVE-2025-30156`: CephX authentication bypass (26b64965de99dfc233fc94ba784eb0f037b23baa)
+
 v19.2.5 Squid
 =============
 This is the fifth backport release in the Squid series.
