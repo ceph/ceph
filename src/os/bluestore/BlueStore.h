@@ -322,7 +322,7 @@ public:
   Estimator* create_estimator();
 
   typedef boost::intrusive_ptr<Collection> CollectionRef;
-  typedef boost::intrusive_ptr<Onode> OnodeRef;
+  using OnodeRef = bluestore::OnodeRef;
 
   struct AioContext {
     virtual void aio_finish(BlueStore *store) = 0;
@@ -567,7 +567,7 @@ public:
   struct SharedBlobSet;
 
   using SharedBlob = bluestore::SharedBlob;
-  typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
+  using SharedBlobRef = bluestore::SharedBlobRef;
 
   /// a lookup table of SharedBlobs
   struct SharedBlobSet {
@@ -595,8 +595,8 @@ public:
 
   using Blob = bluestore::Blob;
 
-  typedef boost::intrusive_ptr<Blob> BlobRef;
-  typedef mempool::bluestore_cache_meta::map<int,BlobRef> blob_map_t;
+  using BlobRef = bluestore::BlobRef;
+  using blob_map_t = bluestore::blob_map_t;
 
   using ExtentBase = bluestore::ExtentBase;
   using Extent = bluestore::Extent;

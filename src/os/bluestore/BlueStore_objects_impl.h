@@ -49,8 +49,13 @@ namespace bluestore {
     static constexpr uint16_t JUSTID = 2048; // used to suppress printing length, spanning and shared blob
   };
 
+  struct Onode;
+  typedef boost::intrusive_ptr<Onode> OnodeRef;
+  struct SharedBlob;
+  typedef boost::intrusive_ptr<SharedBlob> SharedBlobRef;
   struct Blob;
   typedef boost::intrusive_ptr<Blob> BlobRef;
+  typedef mempool::bluestore_cache_meta::map<int, BlobRef> blob_map_t;
 
   /// a logical extent, pointing to (some portion of) a blob
   typedef boost::intrusive::set_base_hook<boost::intrusive::optimize_size<true> > ExtentBase; //making an alias to avoid build warnings
