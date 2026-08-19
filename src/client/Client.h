@@ -110,6 +110,7 @@ enum {
   l_c_aio_ops,
   l_c_aio_completions,
   l_c_aio_in_flight,
+  l_c_sync_in_flight,
   l_c_osdc_hit,
   l_c_osdc_miss,
   l_c_osdc_dirty,
