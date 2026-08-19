@@ -110,7 +110,7 @@ def task(ctx, config):
             extra_args.append(f'--auth_exit_on_failure={auth_exit_on_failure}')
 
         bench_args = [
-            f'bench',
+            'bench',
             f'--concurrent-ios={concurrency}',
         ]
 
@@ -163,7 +163,7 @@ def task(ctx, config):
         log.info('joining radosbench (timing out after %ss)', timeout)
         try:
             run.wait(radosbench.values(), timeout=timeout)
-        except CommandFailedError as e:
+        except CommandFailedError:
             for p in radosbench.values():
                 if p.exitstatus == expected_rc:
                     pass

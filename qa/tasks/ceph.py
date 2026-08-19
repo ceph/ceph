@@ -1713,8 +1713,6 @@ def key_prune(ctx, config):
     elif isinstance(config, list):
         config = {'keys': config}
 
-    testdir = teuthology.get_testdir(ctx)
-
     cluster_name = config.setdefault('cluster', 'ceph')
     manager = ctx.managers[cluster_name]
 
@@ -1777,7 +1775,6 @@ def key_rotate(ctx, config):
     ]
 
     daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
-    clusters = set()
 
     new_mon_key = None
     for role in daemons:
@@ -1819,7 +1816,6 @@ def key_rotate(ctx, config):
         daemon.restart()
 
     clients = config.get('clients', [])
-    firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
     keyring = ctx.ceph[cluster_name].keyring
     for client in clients:
         if client == 'all':
@@ -2260,7 +2256,6 @@ def task(ctx, config):
 
             # stop logging health to clog during shutdown, or else we generate
             # a bunch of scary messages unrelated to our actual run.
-            firstmon = teuthology.get_first_mon(ctx, config, cluster_name)
             ctx.ceph[cluster_name].admin.run(
                 args=[
                     'sudo',
