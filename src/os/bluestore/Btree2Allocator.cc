@@ -382,8 +382,15 @@ void Btree2Allocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   ceph_assert(size != 0);
 
   auto rt_p = range_tree.lower_bound(start);
-  if ((rt_p == range_tree.end() || rt_p->first > start) && rt_p != range_tree.begin()) {
-    --rt_p;
+  // lower_bound() returns the first range starting at or past 'start', hence
+  // it skips a range which begins before 'start' but reaches into
+  // [start, end). Step back to the preceding range only if it actually does
+  // so - otherwise lower_bound()'s result is already the one we want.
+  if (rt_p != range_tree.begin()) {
+    auto prev_rt_p = std::prev(rt_p);
+    if (prev_rt_p->second > start) {
+      rt_p = prev_rt_p;
+    }
   }
 
   if (rt_p == range_tree.end() || rt_p->first >= end) {
@@ -402,10 +409,61 @@ void Btree2Allocator::_try_remove_from_tree(uint64_t start, uint64_t size,
     cb(start, range_end - start, true);
     start = range_end;
 
+    // _remove_from_tree() returns an iterator to the range it re-inserted,
+    // which for a left-over split is the remainder *below* start. Skip it,
+    // otherwise the loop would process it again and never make progress.
+    while (rt_p != range_tree.end() && rt_p->second <= start) {
+      ++rt_p;
+    }
   } while (rt_p != range_tree.end() && rt_p->first < end && start < end);
   if (start < end) {
     cb(start, end - start, false);
   }
+}
+
+int64_t Btree2Allocator::claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  std::lock_guard l(lock);
+  return _claim_range(offset, length, extents);
+}
+
+int64_t Btree2Allocator::_claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+  ceph_assert(p2aligned(offset, (uint64_t)block_size));
+  ceph_assert(p2aligned(length, (uint64_t)block_size));
+  ceph_assert(offset <= uint64_t(device_size));
+  ceph_assert(length <= uint64_t(device_size) - offset);
+
+  // bluestore_pextent_t::length is 32 bit, so a longer run has to be reported
+  // as several extents. Round down and align - the cap itself is not a
+  // multiple of block_size.
+  constexpr auto cap =
+    std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
+  const uint64_t max_extent_len = p2align(uint64_t(cap), (uint64_t)block_size);
+
+  uint64_t sum = 0;
+  _try_remove_from_tree(offset, length,
+    [&](uint64_t o, uint64_t l, bool found){
+      if (found) {
+        sum += l;
+        while (l > max_extent_len) {
+          extents->emplace_back(o, max_extent_len);
+          o += max_extent_len;
+          l -= max_extent_len;
+        }
+        extents->emplace_back(o, l);
+      }
+  });
+  return sum;
 }
 
 int64_t Btree2Allocator::__allocate(
