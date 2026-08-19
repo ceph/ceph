@@ -9200,7 +9200,9 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
     make_writeable(ctx);
 
   int log_op_type;
-  if (ctx->use_replace_op) {
+  if (ctx->use_replace_op &&
+      HAVE_FEATURE(recovery_state.get_min_upacting_features(),
+                   SERVER_UMBRELLA)) {
     log_op_type = pg_log_entry_t::REPLACE;
   } else {
     log_op_type = ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
