@@ -81,35 +81,37 @@ export class RbdNamespaceListComponent implements OnInit {
   }
 
   refresh() {
-    this.poolService.list(['pool_name', 'type', 'application_metadata']).then((pools: any) => {
-      pools = pools.filter(
-        (pool: any) => this.rbdService.isRBDPool(pool) && pool.type === 'replicated'
-      );
-      const promises: Observable<any>[] = [];
-      pools.forEach((pool: any) => {
-        promises.push(this.rbdService.listNamespaces(pool['pool_name']));
-      });
-      if (promises.length > 0) {
-        forkJoin(promises).subscribe((data: Array<Array<string>>) => {
-          const result: any[] = [];
-          for (let i = 0; i < data.length; i++) {
-            const namespaces = data[i];
-            const pool_name = pools[i]['pool_name'];
-            namespaces.forEach((namespace: any) => {
-              result.push({
-                id: `${pool_name}/${namespace.namespace}`,
-                pool: pool_name,
-                namespace: namespace.namespace,
-                num_images: namespace.num_images
-              });
-            });
-          }
-          this.namespaces = result;
+    this.poolService
+      .list(['pool_name', 'type', 'flags_names', 'application_metadata'])
+      .then((pools: any) => {
+        pools = pools.filter(
+          (pool: any) => this.rbdService.isRBDPool(pool) && this.rbdService.isRBDCapablePool(pool)
+        );
+        const promises: Observable<any>[] = [];
+        pools.forEach((pool: any) => {
+          promises.push(this.rbdService.listNamespaces(pool['pool_name']));
         });
-      } else {
-        this.namespaces = [];
-      }
-    });
+        if (promises.length > 0) {
+          forkJoin(promises).subscribe((data: Array<Array<string>>) => {
+            const result: any[] = [];
+            for (let i = 0; i < data.length; i++) {
+              const namespaces = data[i];
+              const pool_name = pools[i]['pool_name'];
+              namespaces.forEach((namespace: any) => {
+                result.push({
+                  id: `${pool_name}/${namespace.namespace}`,
+                  pool: pool_name,
+                  namespace: namespace.namespace,
+                  num_images: namespace.num_images
+                });
+              });
+            }
+            this.namespaces = result;
+          });
+        } else {
+          this.namespaces = [];
+        }
+      });
   }
 
   updateSelection(selection: CdTableSelection) {
