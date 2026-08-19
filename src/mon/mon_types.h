@@ -541,6 +541,7 @@ namespace ceph {
 
       // Release-independent features
       constexpr mon_feature_t FEATURE_NVMEOF_BEACON_DIFF(   (1ULL << 32));
+      constexpr mon_feature_t FEATURE_KV_RANGE_OPS(   (1ULL << 33));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -568,6 +569,7 @@ namespace ceph {
 
 	  // Release-independent features
 	  FEATURE_NVMEOF_BEACON_DIFF |
+	  FEATURE_KV_RANGE_OPS |
 
 	  FEATURE_NONE
 	  );
@@ -600,6 +602,7 @@ namespace ceph {
 
 	  // Release-independent features
 	  FEATURE_NVMEOF_BEACON_DIFF |
+	  FEATURE_KV_RANGE_OPS |
 
 	  FEATURE_NONE
 	  );
@@ -687,6 +690,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
   // Release-independent features
   } else if (f == FEATURE_NVMEOF_BEACON_DIFF) {
     return "nvmeof_beacon_diff";
+  } else if (f == FEATURE_KV_RANGE_OPS) {
+    return "kv_range_ops";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -724,6 +729,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
   // Release-independent features
   } else if (n == "nvmeof_beacon_diff") {
     return FEATURE_NVMEOF_BEACON_DIFF;
+  } else if (n == "kv_range_ops") {
+    return FEATURE_KV_RANGE_OPS;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }

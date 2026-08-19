@@ -651,6 +651,7 @@ CompatSet Monitor::get_supported_features()
 
   // Release-independent features
   compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
+  compat.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KV_RANGE_OPS);
   return compat;
 }
 
@@ -2740,6 +2741,13 @@ void Monitor::apply_monmap_to_compatset_features()
            ceph::features::mon::FEATURE_NVMEOF_BEACON_DIFF));
     // this feature should only ever be set if the quorum supports it.
     new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_NVMEOF_BEACON_DIFF);
+  }
+
+  if (monmap_features.contains_all(ceph::features::mon::FEATURE_KV_RANGE_OPS)) {
+    ceph_assert(ceph::features::mon::get_persistent().contains_all(
+           ceph::features::mon::FEATURE_KV_RANGE_OPS));
+    // this feature should only ever be set if the quorum supports it.
+    new_features.incompat.insert(CEPH_MON_FEATURE_INCOMPAT_KV_RANGE_OPS);
   }
 
   dout(5) << __func__ << dendl;

@@ -696,12 +696,13 @@ Dispatcher::dispatch_result_t Mgr::ms_dispatch2(const ref_t<Message>& m)
       {
 	auto msg = ref_cast<MKVData>(m);
 	monc->sub_got("kv:"s + msg->prefix, msg->version);
-	if (!msg->data.empty()) {
+	if (!msg->data.empty() || !msg->range_deletes.empty()) {
 	  if (initialized) {
 	    py_module_registry->update_kv_data(
 	      msg->prefix,
 	      msg->incremental,
-	      msg->data
+	      msg->data,
+	      msg->range_deletes
 	      );
 	  } else {
 	    // before we have created the ActivePyModules, we need to
@@ -715,6 +716,14 @@ Dispatcher::dispatch_result_t Mgr::ms_dispatch2(const ref_t<Message>& m)
 	      }
 	    } else {
 	      dout(10) << "incremental update on " << msg->prefix << dendl;
+	    }
+	    for (auto& rd : msg->range_deletes) {
+	      dout(20) << " rm range [" << rd.begin << ", "
+		       << (rd.end.empty() ? "<end>" : rd.end) << ")" << dendl;
+	      pre_init_store.erase(
+		pre_init_store.lower_bound(rd.begin),
+		rd.end.empty() ? pre_init_store.end()
+			       : pre_init_store.lower_bound(rd.end));
 	    }
 	    for (auto& i : msg->data) {
 	      if (i.second) {
