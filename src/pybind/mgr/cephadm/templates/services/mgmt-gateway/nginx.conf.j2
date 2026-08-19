@@ -34,6 +34,14 @@ http {
     }
 {% endif %}
 
+{% if acme_challenge_endpoints %}
+    upstream acme_challenge_servers {
+     {% for ep in acme_challenge_endpoints %}
+     server {{ ep }};
+     {% endfor %}
+    }
+{% endif %}
+
 {% if dashboard_endpoints %}
     upstream dashboard_servers {
      {% for ep in dashboard_endpoints %}

@@ -442,6 +442,8 @@ class CephadmService(metaclass=ABCMeta):
             return self._get_certificates_from_certmgr_store(svc_spec, fqdns, cert_name, key_name, ca_cert_name)
         elif cert_source == CertificateSource.CEPHADM_SIGNED.value:
             return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
+        elif cert_source == CertificateSource.ACME.value:
+            return self._get_acme_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
         else:
             logger.error(f'Invalid cert_source: {cert_source}')
             return EMPTY_TLS_CREDENTIALS
@@ -516,6 +518,45 @@ class CephadmService(metaclass=ABCMeta):
         else:
             logger.error(f'Failed to get cert/key {cert_name} for service {svc_spec.service_name()} host: {host} from the certmgr store.')
             return EMPTY_TLS_CREDENTIALS
+
+    def _get_acme_certificates(
+        self,
+        svc_spec: ServiceSpec,
+        daemon_spec: CephadmDaemonDeploySpec,
+        ips: List[str],
+        fqdns: List[str],
+        custom_sans: List[str],
+    ) -> TLSCredentials:
+        """Return an ACME-managed cert/key if present, else a temporary cephadm cert.
+
+        The HTTP-01 challenge server/routing is introduced separately from the
+        ACME order/finalize client. Until an issued ACME cert is stored by the
+        ACME manager, services still need a usable TLS pair to start, so we use
+        a cephadm-signed temporary certificate as bootstrap material.
+        """
+        service_name = svc_spec.service_name()
+        acme_cert_name = self.mgr.cert_mgr.acme_cert(service_name)
+        acme_key_name = self.mgr.cert_mgr.acme_key(service_name)
+        host = fqdns[0] if fqdns else None
+
+        cert = self.mgr.cert_mgr.get_cert(acme_cert_name, service_name, host)
+        key = self.mgr.cert_mgr.get_key(acme_key_name, service_name, host)
+        if cert and key:
+            return TLSCredentials(cert=cert, key=key)
+
+        if hasattr(self.mgr, 'acme_mgr'):
+            self.mgr.acme_mgr.ensure_certificate(
+                service_name,
+                acme_cert_name,
+                acme_key_name,
+                getattr(svc_spec, 'acme', {}),
+            )
+
+        logger.info(
+            "ACME certificate for service %s is not available yet; using temporary cephadm-signed certificate",
+            service_name,
+        )
+        return self._get_cephadm_signed_certificates(svc_spec, daemon_spec, ips, fqdns, custom_sans)
 
     def _get_cephadm_signed_certificates(
         self,
@@ -628,7 +669,7 @@ class CephadmService(metaclass=ABCMeta):
         # Inline-saved certs/keys are persisted in the certmgr store as user_made=True
         # but editable=False. These should be garbage-collected once the service no
         # longer uses INLINE.
-        if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value):
+        if cert_source in (CertificateSource.REFERENCE.value, CertificateSource.CEPHADM_SIGNED.value, CertificateSource.ACME.value):
             self.mgr.cert_mgr.rm_inline_saved_cert_key_pair(
                 self.cert_name,
                 self.key_name,
@@ -639,8 +680,20 @@ class CephadmService(metaclass=ABCMeta):
 
         # Cephadm-signed certs/keys are stored under cephadm-signed_* entities and
         # should be removed when the service no longer uses CEPHADM_SIGNED.
+        # ACME is a special case: before the first ACME cert is issued we use a
+        # cephadm-signed temporary cert so the gateway can start and expose
+        # HTTP-01 on port 80. Keep that temporary pair until an ACME cert exists.
         if cert_source != CertificateSource.CEPHADM_SIGNED.value:
-            self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host)
+            acme_bootstrap = (
+                cert_source == CertificateSource.ACME.value
+                and not self.mgr.cert_mgr.cert_exists(self.mgr.cert_mgr.acme_cert(svc_name))
+            )
+            if not acme_bootstrap:
+                self.mgr.cert_mgr.try_rm_self_signed_cert_key_pair(svc_name, host)
+
+        if cert_source != CertificateSource.ACME.value and hasattr(self.mgr, 'acme_mgr'):
+            self.mgr.acme_mgr.cleanup_service(svc_name)
+            self.mgr.cert_mgr.rm_acme_cert_key_pair(svc_name)
 
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         self.prepare_certificates(daemon_spec)
