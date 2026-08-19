@@ -35,7 +35,11 @@
 
 #include <boost/endian/conversion.hpp>
 #include <openssl/aes.h>
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
 #include <openssl/core_names.h>
+#else
+#include <openssl/modes.h>
+#endif
 
 #include <array>
 #include <errno.h>
@@ -562,6 +566,7 @@ public:
   CryptoKeyHandler *get_key_handler_ext(const bufferptr& secret, const std::vector<uint32_t>& usages, string& error) override;
 };
 
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
 struct EVPCipherDeleter {
   void operator()(EVP_CIPHER* ptr) const noexcept {
     if (ptr) {
@@ -569,6 +574,7 @@ struct EVPCipherDeleter {
     }
   }
 };
+#endif
 
 struct EVPCipherCtxDeleter {
   void operator()(EVP_CIPHER_CTX* ptr) const noexcept {
@@ -585,7 +591,9 @@ static constexpr const std::size_t AES256KRB5_HASH_LEN{24};
 static constexpr const std::size_t SHA384_LEN{48};
 
 class CryptoAES256KRB5KeyHandler : public CryptoKeyHandler {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
   std::unique_ptr<EVP_CIPHER, EVPCipherDeleter> cipher;
+#endif
 
   struct usage_keys {
     ceph::bufferlist ki;
@@ -735,6 +743,41 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
                          uint32_t usage,
                          unsigned char *ciphertext,
                          int ciphertext_len) const {
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+    /* no CTS support in the 1.1 EVP API; CRYPTO_cts128_encrypt() implements
+     * the same Kerberos CS3 variant as the AES-256-CBC-CTS cipher below */
+    if ((size_t)ciphertext_len < plaintext.length() ||
+        plaintext.length() < AES256KRB5_BLOCK_LEN) {
+      return -EINVAL;
+    }
+    auto *uk = get_usage_keys(usage);
+    if (!uk) {
+      ldout(cct, 0) << "ERROR: usage keys is null, cannot encrypt" << dendl;
+      return -EIO;
+    }
+    AES_KEY aes_key;
+    if (AES_set_encrypt_key(uk->ke_raw, AES256KRB5_KEY_LEN * 8, &aes_key) != 0) {
+      return -EIO;
+    }
+    unsigned char ivec[AES256KRB5_BLOCK_LEN];
+    memcpy(ivec, iv, sizeof(ivec));
+    size_t len;
+    if (plaintext.length() == AES256KRB5_BLOCK_LEN) {
+      /* CRYPTO_cts128_encrypt() rejects a single block, where CS3
+       * degenerates to plain CBC */
+      AES_cbc_encrypt((const unsigned char *)plaintext.c_str(), ciphertext,
+                      AES256KRB5_BLOCK_LEN, &aes_key, ivec, AES_ENCRYPT);
+      len = AES256KRB5_BLOCK_LEN;
+    } else {
+      len = CRYPTO_cts128_encrypt(
+          (const unsigned char *)plaintext.c_str(), ciphertext,
+          plaintext.length(), &aes_key, ivec, (cbc128_f)AES_cbc_encrypt);
+    }
+    if (len != plaintext.length()) {
+      return -EIO;
+    }
+    return (int)len;
+#else
     if (!cipher) {
       return -EINVAL; /* initialization error */
     }
@@ -781,12 +824,40 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
     encrypted_len += len;
 
     return encrypted_len;
+#endif
   }
 
   int decrypt_AES256_CTS(ceph::bufferlist& ciphertext, 
                          const unsigned char* key, const unsigned char* iv, 
                          int iv_size,
                          ceph::bufferptr& plaintext) const {
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+    if (ciphertext.length() < AES256KRB5_BLOCK_LEN) {
+      return -EINVAL;
+    }
+    AES_KEY aes_key;
+    if (AES_set_decrypt_key(key, AES256KRB5_KEY_LEN * 8, &aes_key) != 0) {
+      return -EIO;
+    }
+    unsigned char ivec[AES256KRB5_BLOCK_LEN];
+    memcpy(ivec, iv, sizeof(ivec));
+    size_t len;
+    if (ciphertext.length() == AES256KRB5_BLOCK_LEN) {
+      AES_cbc_encrypt((const unsigned char *)ciphertext.c_str(),
+                      reinterpret_cast<unsigned char *>(plaintext.c_str()),
+                      AES256KRB5_BLOCK_LEN, &aes_key, ivec, AES_DECRYPT);
+      len = AES256KRB5_BLOCK_LEN;
+    } else {
+      len = CRYPTO_cts128_decrypt(
+          (const unsigned char *)ciphertext.c_str(),
+          reinterpret_cast<unsigned char *>(plaintext.c_str()),
+          ciphertext.length(), &aes_key, ivec, (cbc128_f)AES_cbc_encrypt);
+    }
+    if (len != ciphertext.length()) {
+      return -EIO;
+    }
+    return 0;
+#else
     if (!cipher) {
       return -EINVAL; /* initialization error really */
     }
@@ -825,6 +896,7 @@ static void dump_buf(CephContext *cct, string title, const unsigned char *buf, i
     plaintext_len += len;
 
     return 0;
+#endif
   }
 
 public:
@@ -836,11 +908,13 @@ public:
   using CryptoKeyHandler::encrypt;
 
   int init(const ceph::bufferptr& s, const std::vector<uint32_t>& usages, ostringstream& err) {
+#if OPENSSL_VERSION_NUMBER >= 0x30000000L
     cipher.reset(EVP_CIPHER_fetch(NULL, "AES-256-CBC-CTS", NULL));
     if (!cipher) {
       err << "Failed to fetch OpenSSL cipher AES-256-CBC-CTS";
       return -EINVAL;
     }
+#endif
     secret = s;
     if (usages.size() > 0) {
       default_usage = usages[0];
