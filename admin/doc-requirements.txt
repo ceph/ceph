@@ -1,5 +1,4 @@
-# capped below 9 until the RemovedInSphinx90Warning deprecations are cleared
-Sphinx >= 8, < 9
+Sphinx >= 8
 sphinx-ditaa@git+https://github.com/ceph/sphinx-ditaa.git@py3
 funcparserlib@git+https://github.com/vlasovskikh/funcparserlib.git
 breathe >= 4.20.0,!=4.33
