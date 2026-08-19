@@ -11,7 +11,8 @@ import { ActivatedRoute } from '@angular/router';
 @Component({
   selector: 'cd-form-button-panel',
   templateUrl: './form-button-panel.component.html',
-  styleUrls: ['./form-button-panel.component.scss']
+  styleUrls: ['./form-button-panel.component.scss'],
+  standalone: false
 })
 export class FormButtonPanelComponent implements OnInit {
   @ViewChild(SubmitButtonComponent)

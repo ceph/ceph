@@ -26,7 +26,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-submit-button',
   templateUrl: './submit-button.component.html',
-  styleUrls: ['./submit-button.component.scss']
+  styleUrls: ['./submit-button.component.scss'],
+  standalone: false
 })
 export class SubmitButtonComponent implements OnInit {
   @Input()

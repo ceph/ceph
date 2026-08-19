@@ -19,7 +19,7 @@ describe('PwdExpirationNotificationComponent', () => {
   let settingsService: SettingsService;
   let authStorageService: AuthStorageService;
 
-  @Component({ selector: 'cd-fake', template: '' })
+  @Component({ selector: 'cd-fake', template: '', standalone: false })
   class FakeComponent {}
 
   const routes: Routes = [{ path: 'login', component: FakeComponent }];

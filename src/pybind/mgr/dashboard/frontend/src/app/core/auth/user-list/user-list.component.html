@@ -25,8 +25,8 @@
              let-column="data.column"
              let-value="data.value"
              let-row="data.row">
-  <div [class.border-danger]="row.remainingDays < this.expirationDangerAlert"
-       [class.border-warning]="row.remainingDays < this.expirationWarningAlert && row.remainingDays >= this.expirationDangerAlert"
+  <div [class.border-danger]="row.remainingDays < expirationDangerAlert"
+       [class.border-warning]="row.remainingDays < expirationWarningAlert && row.remainingDays >= expirationDangerAlert"
        class="border-margin">
     <div class="warning-content"> {{ value }} </div>
   </div>
@@ -36,11 +36,11 @@
              let-column="data.column"
              let-value="data.value"
              let-row="data.row">
-  <i *ngIf="row.remainingDays < this.expirationWarningAlert"
+  <i *ngIf="row.remainingDays < expirationWarningAlert"
      i18n-title
      title="User's password is about to expire"
-     [class.icon-danger-color]="row.remainingDays < this.expirationDangerAlert"
-     [class.icon-warning-color]="row.remainingDays < this.expirationWarningAlert && row.remainingDays >= this.expirationDangerAlert"
+     [class.icon-danger-color]="row.remainingDays < expirationDangerAlert"
+     [class.icon-warning-color]="row.remainingDays < expirationWarningAlert && row.remainingDays >= expirationDangerAlert"
      class="{{ icons.warning }}"></i>
   <span title="{{ value | cdDate }}">{{ row.remainingTimeWithoutSeconds / 1000 | duration }}</span>
 </ng-template>

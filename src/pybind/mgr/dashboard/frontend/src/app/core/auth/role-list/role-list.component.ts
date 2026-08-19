@@ -28,7 +28,8 @@ const BASE_URL = 'user-management/roles';
   selector: 'cd-role-list',
   templateUrl: './role-list.component.html',
   styleUrls: ['./role-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }],
+  standalone: false
 })
 export class RoleListComponent extends ListWithDetails implements OnInit {
   permission: Permission;

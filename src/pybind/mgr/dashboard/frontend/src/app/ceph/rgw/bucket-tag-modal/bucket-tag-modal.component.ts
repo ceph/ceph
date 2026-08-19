@@ -10,7 +10,8 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 @Component({
   selector: 'cd-bucket-tag-modal',
   templateUrl: './bucket-tag-modal.component.html',
-  styleUrls: ['./bucket-tag-modal.component.scss']
+  styleUrls: ['./bucket-tag-modal.component.scss'],
+  standalone: false
 })
 export class BucketTagModalComponent extends BaseModal {
   @Output()

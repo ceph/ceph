@@ -18,7 +18,8 @@ const HOSTS = 'hosts';
 @Component({
   selector: 'cd-host-form',
   templateUrl: './host-form.component.html',
-  styleUrls: ['./host-form.component.scss']
+  styleUrls: ['./host-form.component.scss'],
+  standalone: false
 })
 export class HostFormComponent extends CdForm implements OnInit {
   open: boolean = false;

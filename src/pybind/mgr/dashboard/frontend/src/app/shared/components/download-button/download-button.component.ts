@@ -6,7 +6,8 @@ import { TextToDownloadService } from '~/app/shared/services/text-to-download.se
 @Component({
   selector: 'cd-download-button',
   templateUrl: './download-button.component.html',
-  styleUrls: ['./download-button.component.scss']
+  styleUrls: ['./download-button.component.scss'],
+  standalone: false
 })
 export class DownloadButtonComponent {
   @Input() objectItem: object;

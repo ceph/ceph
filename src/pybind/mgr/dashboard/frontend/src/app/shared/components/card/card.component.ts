@@ -4,7 +4,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-card',
   templateUrl: './card.component.html',
-  styleUrls: ['./card.component.scss']
+  styleUrls: ['./card.component.scss'],
+  standalone: false
 })
 export class CardComponent {
   icons = Icons;

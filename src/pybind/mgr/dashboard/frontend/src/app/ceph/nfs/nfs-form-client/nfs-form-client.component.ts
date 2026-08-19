@@ -12,7 +12,8 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 @Component({
   selector: 'cd-nfs-form-client',
   templateUrl: './nfs-form-client.component.html',
-  styleUrls: ['./nfs-form-client.component.scss']
+  styleUrls: ['./nfs-form-client.component.scss'],
+  standalone: false
 })
 export class NfsFormClientComponent implements OnInit {
   @Input()

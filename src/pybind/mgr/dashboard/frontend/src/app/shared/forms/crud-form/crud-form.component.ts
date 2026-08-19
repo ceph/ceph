@@ -14,7 +14,8 @@ import { CdTableSelection } from '../../models/cd-table-selection';
 @Component({
   selector: 'cd-crud-form',
   templateUrl: './crud-form.component.html',
-  styleUrls: ['./crud-form.component.scss']
+  styleUrls: ['./crud-form.component.scss'],
+  standalone: false
 })
 export class CrudFormComponent implements OnInit {
   model: any = {};

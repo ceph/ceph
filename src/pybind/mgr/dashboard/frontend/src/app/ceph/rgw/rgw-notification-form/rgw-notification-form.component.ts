@@ -31,7 +31,8 @@ import {
 @Component({
   selector: 'cd-rgw-notification-form',
   templateUrl: './rgw-notification-form.component.html',
-  styleUrls: ['./rgw-notification-form.component.scss']
+  styleUrls: ['./rgw-notification-form.component.scss'],
+  standalone: false
 })
 export class RgwNotificationFormComponent extends CdForm implements OnInit {
   notificationForm: CdFormGroup;

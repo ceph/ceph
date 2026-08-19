@@ -11,7 +11,8 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 @Component({
   selector: 'cd-iscsi-target-image-settings-modal',
   templateUrl: './iscsi-target-image-settings-modal.component.html',
-  styleUrls: ['./iscsi-target-image-settings-modal.component.scss']
+  styleUrls: ['./iscsi-target-image-settings-modal.component.scss'],
+  standalone: false
 })
 export class IscsiTargetImageSettingsModalComponent implements OnInit {
   image: string;

@@ -6,7 +6,8 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 @Component({
   selector: 'cd-iscsi-setting',
   templateUrl: './iscsi-setting.component.html',
-  styleUrls: ['./iscsi-setting.component.scss']
+  styleUrls: ['./iscsi-setting.component.scss'],
+  standalone: false
 })
 export class IscsiSettingComponent implements OnInit {
   @Input()

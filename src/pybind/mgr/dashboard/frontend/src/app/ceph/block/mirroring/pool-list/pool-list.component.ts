@@ -22,7 +22,8 @@ const BASE_URL = '/block/mirroring';
 @Component({
   selector: 'cd-mirroring-pools',
   templateUrl: './pool-list.component.html',
-  styleUrls: ['./pool-list.component.scss']
+  styleUrls: ['./pool-list.component.scss'],
+  standalone: false
 })
 export class PoolListComponent implements OnInit, OnDestroy {
   @ViewChild('healthTmpl', { static: true })

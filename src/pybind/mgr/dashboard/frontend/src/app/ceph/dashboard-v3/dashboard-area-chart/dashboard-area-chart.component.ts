@@ -19,7 +19,8 @@ import 'chartjs-adapter-moment';
 @Component({
   selector: 'cd-dashboard-area-chart',
   templateUrl: './dashboard-area-chart.component.html',
-  styleUrls: ['./dashboard-area-chart.component.scss']
+  styleUrls: ['./dashboard-area-chart.component.scss'],
+  standalone: false
 })
 export class DashboardAreaChartComponent implements OnChanges, AfterViewInit {
   @ViewChild(BaseChartDirective) chart: BaseChartDirective;

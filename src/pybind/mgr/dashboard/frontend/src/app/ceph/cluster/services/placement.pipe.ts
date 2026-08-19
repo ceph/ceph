@@ -3,7 +3,8 @@ import { Pipe, PipeTransform } from '@angular/core';
 import _ from 'lodash';
 
 @Pipe({
-  name: 'placement'
+  name: 'placement',
+  standalone: false
 })
 export class PlacementPipe implements PipeTransform {
   /**

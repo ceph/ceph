@@ -20,7 +20,8 @@ import { DimlessPipe } from '~/app/shared/pipes/dimless.pipe';
 @Component({
   selector: 'cd-health-pie',
   templateUrl: './health-pie.component.html',
-  styleUrls: ['./health-pie.component.scss']
+  styleUrls: ['./health-pie.component.scss'],
+  standalone: false
 })
 export class HealthPieComponent implements OnChanges, OnInit {
   @ViewChild('chartCanvas', { static: true })

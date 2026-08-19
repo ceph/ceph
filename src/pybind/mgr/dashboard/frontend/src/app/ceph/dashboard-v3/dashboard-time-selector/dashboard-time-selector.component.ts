@@ -5,7 +5,8 @@ import moment from 'moment';
 @Component({
   selector: 'cd-dashboard-time-selector',
   templateUrl: './dashboard-time-selector.component.html',
-  styleUrls: ['./dashboard-time-selector.component.scss']
+  styleUrls: ['./dashboard-time-selector.component.scss'],
+  standalone: false
 })
 export class DashboardTimeSelectorComponent {
   @Output()

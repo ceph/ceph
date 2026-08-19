@@ -1,7 +1,8 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'cephReleaseName'
+  name: 'cephReleaseName',
+  standalone: false
 })
 export class CephReleaseNamePipe implements PipeTransform {
   transform(value: any): any {

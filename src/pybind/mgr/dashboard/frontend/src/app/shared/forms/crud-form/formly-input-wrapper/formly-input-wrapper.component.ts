@@ -5,7 +5,8 @@ import { getFieldState } from '../helpers';
 @Component({
   selector: 'cd-formly-input-wrapper',
   templateUrl: './formly-input-wrapper.component.html',
-  styleUrls: ['./formly-input-wrapper.component.scss']
+  styleUrls: ['./formly-input-wrapper.component.scss'],
+  standalone: false
 })
 export class FormlyInputWrapperComponent extends FieldWrapper {
   get helper(): string {

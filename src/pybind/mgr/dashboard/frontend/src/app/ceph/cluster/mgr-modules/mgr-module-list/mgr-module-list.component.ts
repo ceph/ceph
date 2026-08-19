@@ -15,7 +15,8 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 @Component({
   selector: 'cd-mgr-module-list',
   templateUrl: './mgr-module-list.component.html',
-  styleUrls: ['./mgr-module-list.component.scss']
+  styleUrls: ['./mgr-module-list.component.scss'],
+  standalone: false
 })
 export class MgrModuleListComponent extends ListWithDetails {
   @ViewChild(TableComponent, { static: true })

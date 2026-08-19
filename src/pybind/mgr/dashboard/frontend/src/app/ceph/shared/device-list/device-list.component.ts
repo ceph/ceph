@@ -10,7 +10,8 @@ import { CdDevice } from '~/app/shared/models/devices';
 @Component({
   selector: 'cd-device-list',
   templateUrl: './device-list.component.html',
-  styleUrls: ['./device-list.component.scss']
+  styleUrls: ['./device-list.component.scss'],
+  standalone: false
 })
 export class DeviceListComponent implements OnChanges, OnInit {
   @Input()

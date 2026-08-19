@@ -12,7 +12,8 @@ import { RgwZoneTreeNode } from '../rgw-multisite';
 @Component({
   selector: 'cd-rgw-multisite-zone-deletion-form',
   templateUrl: './rgw-multisite-zone-deletion-form.component.html',
-  styleUrls: ['./rgw-multisite-zone-deletion-form.component.scss']
+  styleUrls: ['./rgw-multisite-zone-deletion-form.component.scss'],
+  standalone: false
 })
 export class RgwMultisiteZoneDeletionFormComponent extends CdForm implements OnInit, AfterViewInit {
   zoneData$: any;

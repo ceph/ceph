@@ -41,7 +41,8 @@ const BASE_URL = 'pool';
     TaskListService,
     { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
   ],
-  styleUrls: ['./pool-list.component.scss']
+  styleUrls: ['./pool-list.component.scss'],
+  standalone: false
 })
 export class PoolListComponent extends ListWithDetails implements OnInit {
   @ViewChild(TableComponent)

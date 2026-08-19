@@ -21,7 +21,8 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 @Component({
   selector: 'cd-mirroring',
   templateUrl: './overview.component.html',
-  styleUrls: ['./overview.component.scss']
+  styleUrls: ['./overview.component.scss'],
+  standalone: false
 })
 export class OverviewComponent implements OnInit, OnDestroy {
   rbdmirroringForm: CdFormGroup;

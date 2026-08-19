@@ -10,7 +10,8 @@ import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data
 @Component({
   selector: 'cd-table-performance-counter',
   templateUrl: './table-performance-counter.component.html',
-  styleUrls: ['./table-performance-counter.component.scss']
+  styleUrls: ['./table-performance-counter.component.scss'],
+  standalone: false
 })
 export class TablePerformanceCounterComponent implements OnInit {
   columns: Array<CdTableColumn> = [];

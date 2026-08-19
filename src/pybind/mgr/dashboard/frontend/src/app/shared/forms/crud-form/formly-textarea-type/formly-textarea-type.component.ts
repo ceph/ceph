@@ -5,7 +5,8 @@ import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-js
 @Component({
   selector: 'cd-formly-textarea-type',
   templateUrl: './formly-textarea-type.component.html',
-  styleUrls: ['./formly-textarea-type.component.scss']
+  styleUrls: ['./formly-textarea-type.component.scss'],
+  standalone: false
 })
 export class FormlyTextareaTypeComponent extends FieldType<FieldTypeConfig> {
   @ViewChild('textArea')

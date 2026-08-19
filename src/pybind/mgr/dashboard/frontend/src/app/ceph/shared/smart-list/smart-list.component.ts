@@ -18,7 +18,8 @@ import {
 @Component({
   selector: 'cd-smart-list',
   templateUrl: './smart-list.component.html',
-  styleUrls: ['./smart-list.component.scss']
+  styleUrls: ['./smart-list.component.scss'],
+  standalone: false
 })
 export class SmartListComponent implements OnInit, OnChanges {
   @ViewChild('innerNav')

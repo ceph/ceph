@@ -13,7 +13,8 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 @Component({
   selector: 'cd-osd-scrub-modal',
   templateUrl: './osd-scrub-modal.component.html',
-  styleUrls: ['./osd-scrub-modal.component.scss']
+  styleUrls: ['./osd-scrub-modal.component.scss'],
+  standalone: false
 })
 export class OsdScrubModalComponent implements OnInit {
   deep: boolean;

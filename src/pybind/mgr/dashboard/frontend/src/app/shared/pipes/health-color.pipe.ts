@@ -4,7 +4,8 @@ import { CssHelper } from '~/app/shared/classes/css-helper';
 import { HealthColor } from '~/app/shared/enum/health-color.enum';
 
 @Pipe({
-  name: 'healthColor'
+  name: 'healthColor',
+  standalone: false
 })
 export class HealthColorPipe implements PipeTransform {
   constructor(private cssHelper: CssHelper) {}

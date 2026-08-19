@@ -5,7 +5,8 @@ import { Permissions } from '~/app/shared/models/permissions';
 @Component({
   selector: 'cd-nvmeof-subsystems-details',
   templateUrl: './nvmeof-subsystems-details.component.html',
-  styleUrls: ['./nvmeof-subsystems-details.component.scss']
+  styleUrls: ['./nvmeof-subsystems-details.component.scss'],
+  standalone: false
 })
 export class NvmeofSubsystemsDetailsComponent implements OnChanges {
   @Input()

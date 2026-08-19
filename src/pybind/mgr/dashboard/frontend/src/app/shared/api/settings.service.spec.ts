@@ -41,8 +41,11 @@ describe('SettingsService', () => {
     };
 
     it('should explain the logic of the method', () => {
+      // @ts-ignore
       expect('' || undefined).toBe(undefined);
+      // @ts-ignore
       expect(undefined || '').toBe('');
+      // @ts-ignore
       expect('test' || undefined || '').toBe('test');
     });
 

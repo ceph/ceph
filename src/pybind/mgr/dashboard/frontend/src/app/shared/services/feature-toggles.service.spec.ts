@@ -19,6 +19,7 @@ describe('FeatureTogglesService', () => {
   });
 
   afterEach(() => {
+    httpTesting.match(() => true).forEach((req) => req.flush({}));
     httpTesting.verify();
   });
 

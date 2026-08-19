@@ -55,7 +55,8 @@ formgroup: CdFormGroup;
   templateUrl: './tearsheet.component.html',
   styleUrls: ['./tearsheet.component.scss'],
   changeDetection: ChangeDetectionStrategy.OnPush,
-  encapsulation: ViewEncapsulation.None
+  encapsulation: ViewEncapsulation.None,
+  standalone: false
 })
 export class TearsheetComponent implements OnInit, AfterViewInit, OnDestroy {
   @Input() title!: string;

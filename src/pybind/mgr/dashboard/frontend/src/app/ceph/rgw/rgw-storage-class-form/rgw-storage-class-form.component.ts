@@ -83,7 +83,8 @@ import { BucketTieringUtils } from '../utils/rgw-bucket-tiering';
 @Component({
   selector: 'cd-rgw-storage-class-form',
   templateUrl: './rgw-storage-class-form.component.html',
-  styleUrls: ['./rgw-storage-class-form.component.scss']
+  styleUrls: ['./rgw-storage-class-form.component.scss'],
+  standalone: false
 })
 export class RgwStorageClassFormComponent extends CdForm implements OnInit {
   storageClassForm: CdFormGroup;

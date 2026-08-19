@@ -37,7 +37,8 @@ import { FormControlName } from '@angular/forms';
 
 @Directive({
   // eslint-disable-next-line
-  selector: '.form-group'
+  selector: '.form-group',
+  standalone: false
 })
 export class CdFormGroupDirective {
   @ContentChildren(FormControlName)

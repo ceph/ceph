@@ -10,7 +10,8 @@ import { Icons } from '~/app/shared/enum/icons.enum';
 @Component({
   selector: 'cd-formly-array-type',
   templateUrl: './formly-array-type.component.html',
-  styleUrls: ['./formly-array-type.component.scss']
+  styleUrls: ['./formly-array-type.component.scss'],
+  standalone: false
 })
 export class FormlyArrayTypeComponent extends FieldArrayType implements OnInit {
   icons = Icons;
