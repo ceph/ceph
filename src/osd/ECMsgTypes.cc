@@ -14,6 +14,13 @@
  */
 
 #include "ECMsgTypes.h"
+#include "common/Formatter.h"
+#include "include/encoding_boost_tuple.h"
+#include "include/encoding_list.h"
+#include "include/encoding_map.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_set.h"
+#include "include/encoding_vector.h"
 
 #include "common/ceph_context.h"
 

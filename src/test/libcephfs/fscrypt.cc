@@ -590,10 +590,10 @@ TEST(FSCrypt, LockedListDir) {
       file_path.append(result->d_name);
 
       //check that we can get stat info
-      struct stat st;
-      ceph_stat(cmount, file_path.c_str(), &st);
+      struct ceph_statx stx;
+      ceph_statx(cmount, file_path.c_str(), &stx, CEPH_SETATTR_SIZE, 0);
 
-      ASSERT_EQ(sizeof(fscrypt_key), st.st_size);
+      ASSERT_EQ(sizeof(fscrypt_key), stx.stx_size);
       goto done;
     }
   }

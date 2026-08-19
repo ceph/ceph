@@ -33,14 +33,7 @@ extern "C" {
 
 namespace ceph {
 
-  class Plugin {
-  public:
-    void *library;
-    CephContext *cct;
-
-    explicit Plugin(CephContext *cct) : library(NULL), cct(cct) {}
-    virtual ~Plugin() {}
-  };
+  class Plugin;
 
   class PluginRegistry {
   public:

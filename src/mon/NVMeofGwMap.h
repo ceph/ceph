@@ -16,7 +16,8 @@
 #define MON_NVMEOFGWMAP_H_
 #include <map>
 #include <iostream>
-#include "include/encoding.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 #include "include/utime.h"
 #include "common/debug.h"
 #include "common/Formatter.h"

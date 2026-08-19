@@ -4,8 +4,12 @@
 #include "include/fs_types.h"
 #include "common/Formatter.h"
 #include "include/ceph_features.h"
+#include "include/ceph_fs.h" // for struct ceph_file_layout
+#include "include/ceph_fs_encoder.h"
 #include "common/ceph_json.h"
+#include "include/encoding_string.h"
 #include "include/denc.h"
+#include "include/denc_tuple.h"
 
 #include <iostream>
 
@@ -38,6 +42,11 @@ void dump(const ceph_dir_layout& l, ceph::Formatter *f)
   f->dump_unsigned("unused3", l.dl_unused3);
 }
 
+// file modes
+
+bool file_mode_is_readonly(int mode) {
+  return (mode & CEPH_FILE_MODE_WR) == 0;
+}
 
 // file_layout_t
 

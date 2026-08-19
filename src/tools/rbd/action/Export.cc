@@ -6,8 +6,9 @@
 #include "tools/rbd/Shell.h"
 #include "tools/rbd/Utils.h"
 #include "include/Context.h"
+#include "include/encoding_string.h"
 #include "common/errno.h"
-#include "common/Throttle.h"
+#include "common/OrderedThrottle.h"
 #include "include/encoding.h"
 #include <iostream>
 #include <fcntl.h>

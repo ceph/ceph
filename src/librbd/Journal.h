@@ -9,7 +9,6 @@
 #include "include/interval_set.h"
 #include "include/rados/librados_fwd.hpp"
 #include "common/AsyncOpTracker.h"
-#include "common/Cond.h"
 #include "common/Timer.h"
 #include "common/RefCountedObj.h"
 #include "journal/Future.h"

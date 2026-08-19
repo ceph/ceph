@@ -21,6 +21,7 @@
 
 #include "common/debug.h"
 #include "common/Formatter.h"
+#include "include/encoding_list.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds

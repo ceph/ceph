@@ -1,4 +1,5 @@
 #include "scrub_types.h"
+#include "include/encoding_vector.h"
 
 using std::map;
 

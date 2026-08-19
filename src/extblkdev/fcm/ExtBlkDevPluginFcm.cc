@@ -11,6 +11,7 @@
 #include "common/blkdev.h"
 #include "include/stringify.h"
 #include "include/compat.h"
+#include "include/container_ios.h"
 #include "common/debug.h"
 
 //#define dout_subsys ceph_subsys_context
@@ -41,6 +42,7 @@
 #include <vector>
 #include "common/ceph_context.h"
 #include "common/perf_counters.h"
+#include "common/PluginRegistry.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/perf_counters_collection.h"

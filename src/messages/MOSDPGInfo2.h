@@ -5,6 +5,7 @@
 
 #include "messages/MOSDPeeringOp.h"
 #include "osd/PGPeeringEvent.h"
+#include "include/encoding_optional.h"
 
 class MOSDPGInfo2 final : public MOSDPeeringOp {
 private:

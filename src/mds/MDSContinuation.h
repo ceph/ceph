@@ -14,10 +14,9 @@
  */
  
 #include "common/Continuation.h"
+#include "mds/MDSContext.h" // for MDSIOContextWrapper
 #include "mds/Mutation.h"
 #include "mds/Server.h"
-
-#include "MDSContext.h"
  
 class MDSContinuation : public Continuation {
 protected:

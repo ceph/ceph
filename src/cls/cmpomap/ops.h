@@ -16,6 +16,9 @@
 
 #include "types.h"
 #include "include/encoding.h"
+#include "include/encoding_flat_map.h"
+#include "include/encoding_optional.h"
+#include "include/encoding_string.h"
 #include "include/rados/cls_traits.hpp"
 
 namespace cls::cmpomap {

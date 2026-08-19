@@ -44,15 +44,12 @@ enum {
 
 #include "include/fs_types.h" // for inodeno_t
 #include "include/types.h"
-#include "include/Context.h"
 
-#include "common/Cond.h"
 #include "common/DecayCounter.h"
 #include "common/Thread.h"
 
 #include "LogSegment.h"
 #include "SegmentBoundary.h"
-#include "mdstypes.h"
 #include "LogSegmentRef.h"
 
 #include <atomic>
@@ -62,6 +59,8 @@ enum {
 #include <string>
 #include <vector>
 
+struct EstimatedReplayTime;
+class Context;
 class Journaler;
 class JournalPointer;
 class LogEvent;

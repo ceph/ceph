@@ -10,6 +10,7 @@
 #include "librbd/mirror/snapshot/CreateNonPrimaryRequest.h"
 #include "librbd/mirror/snapshot/Utils.h"
 #include "librbd/mirror/snapshot/WriteImageStateRequest.h"
+#include "include/encoding_vector.h"
 
 namespace librbd {
 

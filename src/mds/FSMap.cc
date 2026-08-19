@@ -18,9 +18,12 @@
 #include <ranges>
 
 #include "FSMap.h"
+#include "common/ceph_time_fmt.h"
 #include "common/debug.h"
 #include "common/StackStringStream.h"
 #include "common/strtol.h" // for strict_strtoll()
+#include "include/container_ios.h"
+#include "include/encoding_set.h"
 
 #ifdef WITH_CRIMSON
 #include "crimson/common/config_proxy.h"
@@ -71,6 +74,12 @@ void ClusterInfo::print(std::ostream& out) const {
       << ", fs_name=" << fs_name << "]" << std::endl;
 }
 
+std::ostream& operator<<(std::ostream& out, const ClusterInfo &cluster_info) {
+  out << "{client_name=" << cluster_info.client_name << ", cluster_name="
+      << cluster_info.cluster_name << ", fs_name=" << cluster_info.fs_name << "}";
+  return out;
+}
+
 void Peer::encode(ceph::buffer::list &bl) const {
   ENCODE_START(1, 1, bl);
   encode(uuid, bl);
@@ -93,6 +102,11 @@ void Peer::dump(ceph::Formatter *f) const {
 
 void Peer::print(std::ostream& out) const {
   out << "[uuid=" << uuid << ", remote=" << remote << "]" << std::endl;
+}
+
+std::ostream& operator<<(std::ostream& out, const Peer &peer) {
+  out << "{uuid=" << peer.uuid << ", remote_cluster=" << peer.remote << "}";
+  return out;
 }
 
 void MirrorInfo::encode(ceph::buffer::list &bl) const {
@@ -129,6 +143,11 @@ std::list<MirrorInfo> MirrorInfo::generate_test_instances() {
 
 void MirrorInfo::print(std::ostream& out) const {
   out << "[peers=" << peers << "]" << std::endl;
+}
+
+std::ostream& operator<<(std::ostream& out, const MirrorInfo &mirror_info) {
+  out << "{peers=" << mirror_info.peers << "}";
+  return out;
 }
 
 void Filesystem::dump(Formatter *f) const

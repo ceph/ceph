@@ -12,6 +12,7 @@
 #include "common/safe_io.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "include/encoding_string.h"
 #include <iostream>
 #include <boost/program_options.hpp>
 

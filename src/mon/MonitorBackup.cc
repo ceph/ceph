@@ -14,6 +14,9 @@
 #include <chrono>
 #include <filesystem>
 
+#include "common/debug.h"
+#include "common/errno.h" // for cpp_strerror()
+#include "include/byte_u_t.h"
 #include "include/util.h"
 #include "mon/MonitorBackup.h"
 #include "mon/Monitor.h"

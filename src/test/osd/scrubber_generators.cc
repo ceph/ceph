@@ -6,6 +6,7 @@
 #include <fmt/ranges.h>
 
 #include "scrubber_test_datasets.h"
+#include "common/hobject_fmt.h"
 
 using namespace ScrubGenerator;
 

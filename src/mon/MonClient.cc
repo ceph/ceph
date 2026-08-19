@@ -28,6 +28,7 @@
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 
+#include "msg/Messenger.h"
 #include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetMap.h"
@@ -52,7 +53,6 @@
 #include "MonClient.h"
 #include "error_code.h"
 #include "MonMap.h"
-#include "mon_types.h" // for ceph::features::mon::*
 
 #include "auth/Auth.h"
 #include "auth/KeyRing.h"
@@ -730,6 +730,10 @@ void MonClient::_finish_auth(int auth_err)
 }
 
 // ---------
+
+entity_addrvec_t MonClient::get_myaddrs() const {
+  return messenger->get_myaddrs();
+}
 
 void MonClient::send_mon_message(MessageRef m)
 {

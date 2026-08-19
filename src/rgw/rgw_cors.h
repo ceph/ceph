@@ -21,6 +21,10 @@
 #include "include/encoding.h" // for WRITE_CLASS_ENCODER()
 #include "include/str_list.h"
 
+#include "include/encoding_list.h"
+#include "include/encoding_set.h"
+#include "include/encoding_string.h"
+
 #define RGW_CORS_GET    0x1
 #define RGW_CORS_PUT    0x2
 #define RGW_CORS_HEAD   0x4

@@ -6,6 +6,8 @@
 #include <fmt/format.h>
 
 #include "common/Formatter.h"
+#include "include/encoding_map.h"
+#include "include/encoding_string.h"
 
 #include <sstream>
 

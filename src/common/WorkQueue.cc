@@ -18,7 +18,7 @@
 #include "common/errno.h"
 #include "common/ceph_time.h"
 
-#include <sstream>
+#include <fmt/format.h>
 
 #define dout_subsys ceph_subsys_tp
 #undef dout_prefix
@@ -90,9 +90,7 @@ void ThreadPool::worker(WorkThread *wt)
   std::unique_lock ul(_lock);
   ldout(cct,10) << "worker start" << dendl;
 
-  std::stringstream ss;
-  ss << name << " thread " << (void *)pthread_self();
-  auto hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
+  auto hb = cct->get_heartbeat_map()->add_worker(fmt::format("{} thread {}", name, (void *)pthread_self()), pthread_self());
 
   while (!_stop) {
 
@@ -296,9 +294,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index, uint32_t
   ceph_assert(wq != NULL);
   ldout(cct,10) << "worker start" << dendl;
 
-  std::stringstream ss;
-  ss << name << " thread " << (void *)pthread_self();
-  auto hb = cct->get_heartbeat_map()->add_worker(ss.str(), pthread_self());
+  auto hb = cct->get_heartbeat_map()->add_worker(fmt::format("{} thread {}", name, (void *)pthread_self()), pthread_self());
   {
       std::lock_guard lck(shardedpool_lock);
       hb_to_thread_index[hb] = thread_index;
