@@ -290,8 +290,7 @@ export class NotificationService {
   private _showQueued() {
     this.queued.forEach((config) => {
       const notification = new CdNotification(config);
-
-      if (!notification.isFinishedTask) {
+      if (!notification.isFinishedTask || notification.type === NotificationType.error) {
         const storedId = this.save(notification);
         notification.id = storedId;
       }
