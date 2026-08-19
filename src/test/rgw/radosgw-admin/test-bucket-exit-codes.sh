@@ -886,6 +886,247 @@ check "check unlinked: --bucket missing value" 1 'Option --bucket requires an ar
 
 # ============================================================
 echo ""
+echo "=== bucket sync (checkpoint/info/status/markers/init/run/disable/enable) ==="
+# ============================================================
+
+# 'bucket sync' is not a command on its own; it needs a subcommand.
+# Missing subcommand or unknown subcommand, both fail.
+check "sync (incomplete command)" 1 'ERROR: Unknown command' bucket sync
+check "sync: unknown subcommand" 1 "ERROR: Unrecognized argument: 'banana'" bucket sync banana
+check "sync: empty subcommand" 1 "ERROR: Unrecognized argument: ''" bucket sync ""
+check "sync: repeated command word" 1 "ERROR: Unrecognized argument: 'sync'" bucket sync sync status
+
+# stray positional args
+check "sync status: stray between sync and status" 1 "ERROR: Unrecognized argument: 'x'" bucket sync x status
+check "sync status: stray between bucket and sync" 1 "ERROR: Unrecognized argument: 'extra'" bucket extra sync status
+check "sync status: stray before bucket" 1 "ERROR: Unrecognized argument: 'foo'" foo bucket sync status
+check "sync status: empty stray word" 1 'Command not found: bucket sync status' bucket sync status ""
+check "sync checkpoint: stray after" 1 'Command not found: bucket sync checkpoint strayarg' bucket sync checkpoint strayarg
+check "sync info: stray after" 1 'Command not found: bucket sync info strayarg' bucket sync info strayarg
+check "sync status: stray after" 1 'Command not found: bucket sync status strayarg' bucket sync status strayarg
+check "sync markers: stray after" 1 'Command not found: bucket sync markers strayarg' bucket sync markers strayarg
+check "sync init: stray after" 1 'Command not found: bucket sync init strayarg' bucket sync init strayarg
+check "sync run: stray after" 1 'Command not found: bucket sync run strayarg' bucket sync run strayarg
+check "sync disable: stray after" 1 'Command not found: bucket sync disable strayarg' bucket sync disable strayarg
+check "sync enable: stray after" 1 'Command not found: bucket sync enable strayarg' bucket sync enable strayarg
+
+# unrecognized flag, on every leaf
+check "sync checkpoint: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync checkpoint --fakeflag
+check "sync info: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync info --fakeflag
+check "sync status: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync status --fakeflag
+check "sync markers: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync markers --fakeflag
+check "sync init: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync init --fakeflag
+check "sync run: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync run --fakeflag
+check "sync disable: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync disable --fakeflag
+check "sync enable: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket sync enable --fakeflag
+
+# missing option value (parse-level, exit 1). Each leaf takes its own set of
+# flags, so each is checked on the leaf that uses it rather than on one leaf
+# standing in for the rest.
+check "sync status: --bucket missing value" 1 'Option --bucket requires an argument.' bucket sync status --bucket
+check "sync status: --bucket-id missing value" 1 'Option --bucket-id requires an argument.' bucket sync status --bucket-id
+check "sync status: --tenant missing value" 1 'Option --tenant requires an argument.' bucket sync status --tenant
+check "sync status: --format missing value" 1 'Option --format requires an argument.' bucket sync status --format
+check "sync status: --source-zone missing value" 1 'Option --source-zone requires an argument.' bucket sync status --source-zone
+check "sync status: --source-bucket missing value" 1 'Option --source-bucket requires an argument.' bucket sync status --source-bucket
+check "sync checkpoint: --bucket missing value" 1 'Option --bucket requires an argument.' bucket sync checkpoint --bucket
+check "sync checkpoint: --source-bucket missing value" 1 'Option --source-bucket requires an argument.' bucket sync checkpoint --source-bucket
+check "sync checkpoint: --timeout-sec missing value" 1 'Option --timeout-sec requires an argument.' bucket sync checkpoint --timeout-sec
+check "sync checkpoint: --retry-delay-ms missing value" 1 'Option --retry-delay-ms requires an argument.' bucket sync checkpoint --retry-delay-ms
+check "sync info: --bucket missing value" 1 'Option --bucket requires an argument.' bucket sync info --bucket
+check "sync info: --bucket-id missing value" 1 'Option --bucket-id requires an argument.' bucket sync info --bucket-id
+check "sync markers: --source-zone missing value" 1 'Option --source-zone requires an argument.' bucket sync markers --source-zone
+check "sync markers: --bucket missing value" 1 'Option --bucket requires an argument.' bucket sync markers --bucket
+check "sync init: --source-bucket missing value" 1 'Option --source-bucket requires an argument.' bucket sync init --source-bucket
+check "sync run: --source-zone missing value" 1 'Option --source-zone requires an argument.' bucket sync run --source-zone
+check "sync disable: --bucket missing value" 1 'Option --bucket requires an argument.' bucket sync disable --bucket
+check "sync disable: --tenant missing value" 1 'Option --tenant requires an argument.' bucket sync disable --tenant
+check "sync enable: --bucket missing value" 1 'Option --bucket requires an argument.' bucket sync enable --bucket
+
+# --extra-info is a binary flag: it takes the next token only when that token is
+# a bool, so anything else is left behind as a stray. init and run are the two
+# leaves that use it, so both are checked.
+check "sync init: --extra-info banana (left as stray)" 1 'Command not found: bucket sync init banana' bucket sync init --extra-info banana
+check "sync run: --extra-info banana (left as stray)" 1 'Command not found: bucket sync run banana' bucket sync run --extra-info banana
+
+# handler-level (cluster). The leaves check different things and in a different
+# order: checkpoint/info/status/disable/enable want a bucket, while
+# markers/init/run want a source zone first and only then a bucket.
+check_cluster "sync checkpoint: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync checkpoint
+check_cluster "sync info: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync info
+check_cluster "sync status: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync status
+check_cluster "sync disable: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync disable
+check_cluster "sync enable: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync enable
+check_cluster "sync markers: missing --source-zone" 22 'ERROR: source zone not specified' -- bucket sync markers
+check_cluster "sync init: missing --source-zone" 22 'ERROR: source zone not specified' -- bucket sync init
+check_cluster "sync run: missing --source-zone" 22 'ERROR: source zone not specified' -- bucket sync run
+# with a source zone, the same three then report the missing bucket
+check_cluster "sync markers: --source-zone but no --bucket" 22 'ERROR: bucket not specified' -- bucket sync markers --source-zone z1
+check_cluster "sync init: --source-zone but no --bucket" 22 'ERROR: bucket not specified' -- bucket sync init --source-zone z1
+check_cluster "sync run: --source-zone but no --bucket" 22 'ERROR: bucket not specified' -- bucket sync run --source-zone z1
+# --extra-info does take a bool, and no stray is reported: the command gets as
+# far as its own missing source zone
+check_cluster "sync init: --extra-info true (bool consumed)" 22 'ERROR: source zone not specified' -- bucket sync init --extra-info true
+# an empty --bucket= value counts as no bucket at all
+check_cluster "sync status: --bucket= empty" 22 'ERROR: bucket not specified' -- bucket sync status --bucket=
+
+# valid args, nonexistent bucket. All eight fail to load the bucket and exit 2,
+# but they report it three different ways: checkpoint/info/status say nothing at
+# all (exit 2, no message), markers/init/run print "could not init
+# bucket", and disable/enable name the bucket they could not read.
+check_cluster "sync checkpoint: nonexistent bucket (silent exit 2)" 2 "" -- bucket sync checkpoint --bucket no-such-bucket
+check_cluster "sync info: nonexistent bucket (silent exit 2)" 2 "" -- bucket sync info --bucket no-such-bucket
+check_cluster "sync status: nonexistent bucket (silent exit 2)" 2 "" -- bucket sync status --bucket no-such-bucket
+check_cluster "sync markers: nonexistent bucket" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket sync markers --source-zone z1 --bucket no-such-bucket
+check_cluster "sync init: nonexistent bucket" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket sync init --source-zone z1 --bucket no-such-bucket
+check_cluster "sync run: nonexistent bucket" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket sync run --source-zone z1 --bucket no-such-bucket
+check_cluster "sync disable: nonexistent bucket" 2 'failed to fetch bucket info for bucket=no-such-bucket' -- bucket sync disable --bucket no-such-bucket
+check_cluster "sync enable: nonexistent bucket" 2 'failed to fetch bucket info for bucket=no-such-bucket' -- bucket sync enable --bucket no-such-bucket
+# --bucket-id is accepted as well, and does not change the outcome
+check_cluster "sync info: with --bucket-id (silent exit 2)" 2 "" -- bucket sync info --bucket no-such-bucket --bucket-id nosuchid
+
+# unrelated flags alongside valid args: a binary flag (--fix) takes 0 values ->
+# accepted; a value option binds in either form -> accepted. None of the three
+# changes the outcome, so all three still fail on the nonexistent bucket.
+check_cluster "sync status: unrelated binary flag --fix accepted (silent exit 2)" 2 "" -- bucket sync status --fix --bucket no-such-bucket
+check_cluster "sync status: unrelated value flag --max-entries=5 (=form) (silent exit 2)" 2 "" -- bucket sync status --max-entries=5 --bucket no-such-bucket
+check_cluster "sync status: unrelated --max-entries 5 swallowed (space form) (silent exit 2)" 2 "" -- bucket sync status --bucket no-such-bucket --max-entries 5
+# --timeout-sec and --retry-delay-ms are read leniently, so a non-numeric value
+# is accepted rather than rejected, and the command still fails on the bucket
+check_cluster "sync checkpoint: --timeout-sec non-integer accepted (silent exit 2)" 2 "" -- bucket sync checkpoint --bucket no-such-bucket --timeout-sec abc
+check_cluster "sync checkpoint: --retry-delay-ms non-integer accepted (silent exit 2)" 2 "" -- bucket sync checkpoint --bucket no-such-bucket --retry-delay-ms abc
+
+# flags before the leaf subcommand. The value still reaches the command, so a
+# nonexistent bucket still fails: status silently (exit 2, no message),
+# markers with its message. --tenant trips the global "no user ID" check
+# (exit 22).
+check_cluster "sync status: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket sync status
+check_cluster "sync status: -b before subcommand (short) (silent exit 2)" 2 "" -- bucket -b no-such-bucket sync status
+check_cluster "sync status: --bucket-id before subcommand (silent exit 2)" 2 "" -- bucket --bucket-id x sync status --bucket no-such-bucket
+check_cluster "sync status: --format before subcommand (silent exit 2)" 2 "" -- bucket --format json sync status --bucket no-such-bucket
+check_cluster "sync markers: --source-zone before subcommand" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --source-zone z1 sync markers --bucket no-such-bucket
+check_cluster "sync status: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t sync status --bucket no-such-bucket
+
+# the same flag given twice
+check_cluster "sync status: duplicate --bucket (silent exit 2)" 2 "" -- bucket sync status --bucket a --bucket no-such-bucket
+check_cluster "sync disable: duplicate --bucket" 2 'failed to fetch bucket info for bucket=no-such-bucket' -- bucket sync disable --bucket a --bucket no-such-bucket
+check_cluster "sync init: duplicate --source-zone" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket sync init --source-zone a --source-zone z1 --bucket no-such-bucket
+check_cluster "sync status: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket sync status --tenant a --tenant b --bucket no-such-bucket
+
+# two flags at once: before the subcommand, or before and duplicated
+check_cluster "sync markers: --source-zone + --bucket before" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --source-zone z1 --bucket no-such-bucket sync markers
+check_cluster "sync status: pos + duplicate --bucket (silent exit 2)" 2 "" -- bucket --bucket a sync status --bucket no-such-bucket
+
+# ============================================================
+echo ""
+echo "=== bucket reshard (+ 'reshard bucket' alias) ==="
+# ============================================================
+# 'bucket reshard' and 'reshard bucket' are two entry points to the same
+# command. The reshard block below is the full coverage; the alias rows repeat
+# every flag on the second spelling, and one row per validation to show it
+# gives the same errors.
+
+# stray positional args
+check "reshard: stray after flags" 1 'Command not found: bucket reshard strayarg' bucket reshard strayarg
+check "reshard: stray before bucket" 1 "ERROR: Unrecognized argument: 'foo'" foo bucket reshard
+check "reshard: stray between bucket and leaf" 1 "ERROR: Unrecognized argument: 'extra'" bucket extra reshard
+check "reshard bucket (alias): stray after flags" 1 'Command not found: reshard bucket strayarg' reshard bucket strayarg
+check "reshard bucket (alias): stray between reshard and bucket" 1 "ERROR: Unrecognized argument: 'extra'" reshard extra bucket
+
+check "reshard: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket reshard --fakeflag
+check "reshard bucket (alias): unrecognized flag" 22 'ERROR: invalid flag --fakeflag' reshard bucket --fakeflag
+
+# missing option value (parse-level, exit 1)
+check "reshard: --bucket missing value" 1 'Option --bucket requires an argument.' bucket reshard --bucket
+check "reshard: --bucket-id missing value" 1 'Option --bucket-id requires an argument.' bucket reshard --bucket-id
+check "reshard: --tenant missing value" 1 'Option --tenant requires an argument.' bucket reshard --tenant
+check "reshard: --num-shards missing value" 1 'Option --num-shards requires an argument.' bucket reshard --num-shards
+check "reshard: --max-entries missing value" 1 'Option --max-entries requires an argument.' bucket reshard --max-entries
+
+# --num-shards and --max-entries are parsed as integers; a non-numeric value is
+# rejected in either form, and an empty value is reported the same way
+check "reshard: --num-shards non-integer" 22 "ERROR: failed to parse num shards: Expected option value to be integer, got 'abc'" bucket reshard --num-shards abc
+check "reshard: --num-shards=abc (=form)" 22 "ERROR: failed to parse num shards: Expected option value to be integer, got 'abc'" bucket reshard --num-shards=abc
+check "reshard: --num-shards empty value" 22 "ERROR: failed to parse num shards: Expected option value to be integer, got ''" bucket reshard --num-shards ""
+check "reshard: --max-entries non-integer" 22 "ERROR: failed to parse max entries: Expected option value to be integer, got 'abc'" bucket reshard --max-entries=abc
+check "reshard bucket (alias): --num-shards=abc" 22 "ERROR: failed to parse num shards: Expected option value to be integer, got 'abc'" reshard bucket --num-shards=abc
+
+# the alias takes the same flags. One row per flag, so a flag that reached only
+# one of the two spellings would show up here rather than pass unnoticed.
+check "reshard bucket (alias): --bucket missing value" 1 'Option --bucket requires an argument.' reshard bucket --bucket
+check "reshard bucket (alias): --bucket-id missing value" 1 'Option --bucket-id requires an argument.' reshard bucket --bucket-id
+check "reshard bucket (alias): --tenant missing value" 1 'Option --tenant requires an argument.' reshard bucket --tenant
+check "reshard bucket (alias): --num-shards missing value" 1 'Option --num-shards requires an argument.' reshard bucket --num-shards
+check "reshard bucket (alias): --max-entries missing value" 1 'Option --max-entries requires an argument.' reshard bucket --max-entries
+check "reshard bucket (alias): --max-entries non-integer" 22 "ERROR: failed to parse max entries: Expected option value to be integer, got 'abc'" reshard bucket --max-entries=abc
+check "reshard bucket (alias): --yes-i-really-mean-it banana (left as stray)" 1 'Command not found: reshard bucket banana' reshard bucket --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it banana
+
+# handler-level (cluster): these validations run after driver init.
+# Order: bucket empty -> num-shards specified -> num-shards <= max -> num-shards
+# >= 0 -> the bucket exists.
+#
+# The exit codes here are 234 and 254 rather than the usual 22 and 2. reshard
+# hands the errno back still negative, and the shell keeps only the low 8 bits:
+#     -EINVAL = -22  ->  234
+#     -ENOENT =  -2  ->  254
+# So the number is different but the error behind it is the same one.
+check_cluster "reshard: missing --bucket" 234 'ERROR: bucket not specified' -- bucket reshard
+check_cluster "reshard: missing --bucket, --num-shards given" 234 'ERROR: bucket not specified' -- bucket reshard --num-shards 4
+check_cluster "reshard: --num-shards not specified" 234 'ERROR: --num-shards not specified' -- bucket reshard --bucket no-such-bucket
+check_cluster "reshard: --num-shards above the maximum" 234 'ERROR: num_shards too high, max value:' -- bucket reshard --bucket no-such-bucket --num-shards 99999999
+check_cluster "reshard: --num-shards negative" 234 'ERROR: num_shards must be non-negative integer' -- bucket reshard --bucket no-such-bucket --num-shards -1
+# valid args but nonexistent bucket: the bucket is not found (-ENOENT)
+check_cluster "reshard: nonexistent bucket" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --num-shards 0 is accepted" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --bucket no-such-bucket --num-shards 0
+check_cluster "reshard bucket (alias): nonexistent bucket" 254 'ERROR: could not init bucket: (2) No such file or directory' -- reshard bucket --bucket no-such-bucket --num-shards 4
+# the alias takes flags out of position and repeated flags the same way
+check_cluster "reshard bucket (alias): --bucket between reshard and bucket" 254 'ERROR: could not init bucket: (2) No such file or directory' -- reshard --bucket no-such-bucket bucket --num-shards 4
+check_cluster "reshard bucket (alias): -b (short)" 254 'ERROR: could not init bucket: (2) No such file or directory' -- reshard bucket -b no-such-bucket --num-shards 4
+check_cluster "reshard bucket (alias): duplicate --bucket" 254 'ERROR: could not init bucket: (2) No such file or directory' -- reshard bucket --bucket a --bucket no-such-bucket --num-shards 4
+check_cluster "reshard bucket (alias): unrelated binary flag --fix accepted" 254 'ERROR: could not init bucket: (2) No such file or directory' -- reshard bucket --fix --bucket no-such-bucket --num-shards 4
+check_cluster "reshard bucket (alias): --yes-i-really-mean-it false (bool consumed)" 254 'ERROR: could not init bucket: (2) No such file or directory' -- reshard bucket --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it false
+# and gives the same errors, in the same order
+check_cluster "reshard bucket (alias): missing --bucket" 234 'ERROR: bucket not specified' -- reshard bucket
+check_cluster "reshard bucket (alias): --num-shards not specified" 234 'ERROR: --num-shards not specified' -- reshard bucket --bucket no-such-bucket
+check_cluster "reshard bucket (alias): --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- reshard bucket --tenant t --bucket no-such-bucket --num-shards 4
+
+# --yes-i-really-mean-it is a binary flag: it takes the next token only when that
+# token is a bool, so a bool is consumed and anything else is left as a stray
+check_cluster "reshard: --yes-i-really-mean-it false (bool consumed)" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it false
+check "reshard: --yes-i-really-mean-it banana (left as stray)" 1 'Command not found: bucket reshard banana' bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it banana
+
+# unrelated flags alongside valid args: a binary flag, a value option in =form,
+# and the same option in space form. All three are ignored, so all three still
+# fail on the nonexistent bucket.
+check_cluster "reshard: unrelated binary flag --fix accepted" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --fix --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: unrelated value flag --max-entries=5 (=form)" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --max-entries=5 --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: unrelated --max-entries 5 swallowed (space form)" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --max-entries 5 --bucket no-such-bucket --num-shards 4
+
+# flags before the leaf subcommand. The value still reaches the command, so with
+# a valid --num-shards, a nonexistent bucket still fails.
+# --tenant trips the global "no user ID" check (exit 22).
+check_cluster "reshard: --bucket before subcommand" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket no-such-bucket reshard --num-shards 4
+check_cluster "reshard: -b before subcommand (short)" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket -b no-such-bucket reshard --num-shards 4
+check_cluster "reshard: --num-shards before subcommand" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --num-shards 4 reshard --bucket no-such-bucket
+check_cluster "reshard: --bucket-id before subcommand" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket-id x reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --yes-i-really-mean-it before subcommand" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --yes-i-really-mean-it reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --format before subcommand" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --format json reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --tenant before subcommand" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --tenant t reshard --bucket no-such-bucket --num-shards 4
+
+# the same flag given twice
+check_cluster "reshard: duplicate --bucket" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --bucket a --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: duplicate --num-shards" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --bucket no-such-bucket --num-shards 2 --num-shards 4
+check_cluster "reshard: duplicate --yes-i-really-mean-it" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket reshard --bucket no-such-bucket --num-shards 4 --yes-i-really-mean-it --yes-i-really-mean-it
+check_cluster "reshard: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket reshard --tenant a --tenant b --bucket no-such-bucket --num-shards 4
+
+# two or three flags at once: before the subcommand, or before and duplicated
+check_cluster "reshard: --bucket + --num-shards before" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket no-such-bucket --num-shards 4 reshard
+check_cluster "reshard: pos + duplicate --bucket" 254 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket a reshard --bucket no-such-bucket --num-shards 4
+check_cluster "reshard: --bucket + --num-shards + --tenant before" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket --bucket no-such-bucket --num-shards 4 --tenant t reshard
+
+
+# ============================================================
+echo ""
 echo "=== bucket list: flags out of position, and repeated flags (cluster) ==="
 # ============================================================
 
@@ -1303,7 +1544,6 @@ check_cluster "list: --access-key '' consumed" 0 "" -- bucket --access-key "" li
 check_cluster "list: --bucket '' lists all buckets" 0 "" -- bucket list --bucket ""
 
 # commands outside the bucket set, and unknown command words
-check_cluster "bucket sync status: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync status
 check_cluster "user info: no --uid or --access-key" 22 'ERROR: --uid or --access-key required' -- user info
 check "unknown command" 1 "ERROR: Unrecognized argument: 'banana'" banana list
 check "unknown command repeated" 1 "ERROR: Unrecognized argument: 'banana'" banana banana list
@@ -1709,6 +1949,39 @@ if cluster_running; then
       check_cluster "integration: bucket check unlinked (named)" 0 "" -- bucket check unlinked --bucket "$_test_bucket"
       check_cluster "lifecycle: bucket check unlinked --fix (named)" 0 "" -- bucket check unlinked --fix --bucket "$_test_bucket"
       check_cluster "lifecycle: bucket check unlinked --dump-keys (named)" 0 "" -- bucket check unlinked --dump-keys --bucket "$_test_bucket"
+
+      # bucket sync on a real bucket. This is a single-zone cluster, so nothing
+      # is replicated: info and checkpoint report that sync is disabled, and the
+      # three leaves that need a source zone fail to resolve the zone name.
+      check_cluster "integration: sync info" 0 'Sync is disabled for bucket bucket-test' -- bucket sync info --bucket "$_test_bucket"
+      check_cluster "integration: sync info -b (short)" 0 'Sync is disabled for bucket bucket-test' -- bucket sync info -b "$_test_bucket"
+      check_cluster "integration: sync status" 0 'current time' -- bucket sync status --bucket "$_test_bucket"
+      check_cluster "integration: sync status --format json" 0 '"bucket":"bucket-test"' -- bucket sync status --bucket "$_test_bucket" --format json
+      check_cluster "integration: sync status --source-zone (unknown zone)" 0 'WARNING: cannot find source zone id for name=z1' -- bucket sync status --bucket "$_test_bucket" --source-zone z1
+      check_cluster "integration: sync checkpoint" 0 'Sync is disabled for bucket bucket-test' -- bucket sync checkpoint --bucket "$_test_bucket"
+      check_cluster "integration: sync checkpoint --timeout-sec --retry-delay-ms" 0 'Sync is disabled for bucket bucket-test' -- bucket sync checkpoint --bucket "$_test_bucket" --timeout-sec 1 --retry-delay-ms 10
+      check_cluster "integration: sync markers (unknown source zone)" 22 'ERROR: sync.init() returned error=-22' -- bucket sync markers --source-zone z1 --bucket "$_test_bucket"
+      check_cluster "integration: sync init (unknown source zone)" 22 'ERROR: sync.init() returned error=-22' -- bucket sync init --source-zone z1 --bucket "$_test_bucket"
+      check_cluster "integration: sync run (unknown source zone)" 22 'ERROR: sync.init() returned error=-22' -- bucket sync run --source-zone z1 --bucket "$_test_bucket"
+      # --source-bucket names a second bucket, which is looked up as well
+      check_cluster "integration: sync init --source-bucket nonexistent" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket sync init --source-zone z1 --source-bucket no-such-bucket --bucket "$_test_bucket"
+      # disable and enable both succeed without printing anything
+      check_cluster "integration: sync disable" 0 "" -- bucket sync disable --bucket "$_test_bucket"
+      check_cluster "integration: sync enable" 0 "" -- bucket sync enable --bucket "$_test_bucket"
+
+      # bucket reshard on a real bucket. Resharding up needs nothing extra;
+      # resharding to the same or fewer shards needs --yes-i-really-mean-it.
+      # The test bucket starts at the default 11 index shards.
+      check_cluster "integration: reshard down without --yes" 234 'num shards is less or equal to current shards count' -- bucket reshard --bucket "$_test_bucket" --num-shards 1
+      check_cluster "integration: reshard up" 0 'bucket name: bucket-test' -- bucket reshard --bucket "$_test_bucket" --num-shards 23
+      check_cluster "integration: reshard down with --yes-i-really-mean-it" 0 'bucket name: bucket-test' -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it
+      check_cluster "integration: reshard bucket (alias)" 0 'bucket name: bucket-test' -- reshard bucket --bucket "$_test_bucket" --num-shards 9
+      check_cluster "integration: reshard -b (short)" 0 'bucket name: bucket-test' -- bucket reshard -b "$_test_bucket" --num-shards 13
+      check_cluster "integration: reshard --max-entries" 0 'bucket name: bucket-test' -- bucket reshard --bucket "$_test_bucket" --num-shards 17 --max-entries 10
+      # --format is accepted but this command reports its progress as plain text
+      # either way, so the output is the same as the rows above
+      check_cluster "integration: reshard --format json (output unchanged)" 0 'bucket name: bucket-test' -- bucket reshard --bucket "$_test_bucket" --num-shards 19 --format json
+      check_cluster "integration: reshard --yes-i-really-mean-it=false (=form)" 234 'num shards is less or equal to current shards count' -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it=false
 
       # bucket rm: remove the test bucket (it's empty, so no --purge-objects needed)
       check_cluster "integration: bucket rm" 0 "" -- bucket rm --bucket "$_test_bucket"
