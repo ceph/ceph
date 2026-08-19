@@ -1596,7 +1596,7 @@ rgw_user
    - Mixed clusters: Configure both ``cephfs_user`` and ``rgw_user``
 
 Examples
-~~~~~~~~
+++++++++
 
 External cluster with CephFS support only:
 

@@ -1462,6 +1462,92 @@ EXPORT {
     def test_cluster_config(self):
         self._do_mock_test(self._do_test_cluster_config)
 
+    def test_is_log_only_config(self):
+        from nfs.cluster import _is_log_only_config
+
+        assert _is_log_only_config("LOG { Default_log_level = FULL_DEBUG; }")
+        assert _is_log_only_config(
+            "LOG { COMPONENTS { FSAL = FULL_DEBUG; NFS4 = FULL_DEBUG; } }")
+
+        assert not _is_log_only_config("EXPORT { Export_Id = 1; }")
+        assert not _is_log_only_config("NFS_CORE_PARAM { some_val = 1; }")
+
+        assert not _is_log_only_config(
+            "LOG { Default_log_level = FULL_DEBUG; } EXPORT { Export_Id = 1; }")
+
+        assert not _is_log_only_config("not valid ganesha config {{{")
+        assert not _is_log_only_config("")
+
+        # GaneshaConfParser does not strip comments; a comment before the
+        # LOG block gets merged into the block name, so the config is not
+        # recognised as LOG-only.  This is the safe fallback (restart).
+        assert not _is_log_only_config(
+            "# Enable debug\nLOG { Default_log_level = FULL_DEBUG; }")
+
+
+    def _do_test_cluster_config_log_only_no_restart(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        log_config = "LOG {\n    Default_log_level = FULL_DEBUG;\n}\n"
+        with mock.patch('nfs.cluster.restart_nfs_service') as mock_restart:
+            cluster.set_nfs_cluster_config(self.cluster_id, log_config)
+            mock_restart.assert_not_called()
+
+    def test_cluster_config_log_only_no_restart(self):
+        self._do_mock_test(self._do_test_cluster_config_log_only_no_restart)
+
+    def _do_test_cluster_config_non_log_restarts(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        export_config = "EXPORT {\n    Export_Id = 100;\n}\n"
+        with mock.patch('nfs.cluster.restart_nfs_service') as mock_restart:
+            cluster.set_nfs_cluster_config(self.cluster_id, export_config)
+            mock_restart.assert_called_once()
+
+    def test_cluster_config_non_log_restarts(self):
+        self._do_mock_test(self._do_test_cluster_config_non_log_restarts)
+
+    def _do_test_cluster_config_mixed_restarts(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        mixed_config = ("LOG {\n    Default_log_level = FULL_DEBUG;\n}\n"
+                        "EXPORT {\n    Export_Id = 100;\n}\n")
+        with mock.patch('nfs.cluster.restart_nfs_service') as mock_restart:
+            cluster.set_nfs_cluster_config(self.cluster_id, mixed_config)
+            mock_restart.assert_called_once()
+
+    def test_cluster_config_mixed_restarts(self):
+        self._do_mock_test(self._do_test_cluster_config_mixed_restarts)
+
+    def _do_test_cluster_config_reset_log_only_no_restart(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        log_config = "LOG {\n    Default_log_level = FULL_DEBUG;\n}\n"
+        cluster.set_nfs_cluster_config(self.cluster_id, log_config)
+        with mock.patch('nfs.cluster.restart_nfs_service') as mock_restart:
+            cluster.reset_nfs_cluster_config(self.cluster_id)
+            mock_restart.assert_not_called()
+
+    def test_cluster_config_reset_log_only_no_restart(self):
+        self._do_mock_test(self._do_test_cluster_config_reset_log_only_no_restart)
+
+    def _do_test_cluster_config_reset_non_log_restarts(self):
+        nfs_mod = Module('nfs', '', '')
+        cluster = NFSCluster(nfs_mod)
+
+        export_config = "EXPORT {\n    Export_Id = 100;\n}\n"
+        cluster.set_nfs_cluster_config(self.cluster_id, export_config)
+        with mock.patch('nfs.cluster.restart_nfs_service') as mock_restart:
+            cluster.reset_nfs_cluster_config(self.cluster_id)
+            mock_restart.assert_called_once()
+
+    def test_cluster_config_reset_non_log_restarts(self):
+        self._do_mock_test(self._do_test_cluster_config_reset_non_log_restarts)
+
     def test_qos_from_dict(self):
         qos = QOS.from_dict(self.qos_cluster_dict, True)
         assert qos.to_dict() == self.qos_cluster_dict

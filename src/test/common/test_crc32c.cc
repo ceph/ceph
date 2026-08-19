@@ -375,3 +375,22 @@ TEST(Crc32c, zeros_performance) {
 
 }
 
+TEST(Crc32c, OmapDigestLengthFieldIsLittleEndian) {
+  // Verify that ceph_crc32c fed a ceph_le32 length produces the same result
+  // as the encode() wire format. This is the invariant that crc32_netstring
+  // must satisfy to match the pre-20.x bufferhash/encode() omap digest path.
+  // Would have caught https://tracker.ceph.com/issues/79104
+  const std::string_view data = "csi.volume.95123f9a-968b-4383-8ddd-c8c6c95e2bac";
+
+  // Method 1: ceph_le32 length prefix (the fix)
+  ceph_le32 le_len{static_cast<uint32_t>(data.length())};
+  uint32_t crc_le = ceph_crc32c(0xFFFFFFFF, (unsigned char*)&le_len, sizeof(le_len));
+  crc_le = ceph_crc32c(crc_le, (unsigned char*)data.data(), data.length());
+
+  // Method 2: encode() into bufferlist (the pre-20.x reference path)
+  bufferlist bl;
+  encode(std::string(data), bl);
+  uint32_t crc_encode = bl.crc32c(0xFFFFFFFF);
+
+  EXPECT_EQ(crc_le, crc_encode);
+}

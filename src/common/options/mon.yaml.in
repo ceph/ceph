@@ -18,16 +18,16 @@ options:
   level: advanced
   desc: the amount of data (in bytes) in a data chunk, per stripe
   fmt_desc: Sets the default size, in bytes, of a chunk of an object
-    stripe for erasure coded pools. Every object of size S
+    stripe for erasure-coded pools. Every object of size S
     will be stored as N stripes, with each data chunk
-    receiving ``stripe unit`` bytes. Each stripe of ``N *
-    stripe unit`` bytes will be encoded/decoded individually. 
+    receiving ``stripe_unit`` bytes. Each stripe of ``N *
+    stripe_unit`` bytes will be encoded/decoded individually.
     A value of 0 causes the code to select either a 4KB or 16KB
-    stripe_unit depending on whether ``allow_ec_optimizations`` 
-    is enabled.  If enabled, ``stripe unit`` is set to 16KB, otherwise it 
+    stripe_unit depending on whether ``allow_ec_optimizations``
+    is enabled.  If enabled, ``stripe_unit`` is set to 16KB, otherwise it
     is set to 4KB. This option can be overridden by the ``stripe_unit``
     setting in an erasure code profile.
-  long_desc: A value of 0 causes the code to select either a 4KB or 16KB stripe_unit 
+  long_desc: A value of 0 causes the code to select either a 4KB or 16KB stripe_unit
     depending on whether allow_ec_optimizations is enabled.
   default: 0
   services:
@@ -37,7 +37,7 @@ options:
   level: advanced
   desc: Create pools by default with FLAG_CRIMSON
   default: false
-  services :
+  services:
   - mon
   flags:
   - runtime
@@ -91,7 +91,7 @@ options:
 - name: mon_nvmeofgw_beacon_grace
   type: secs
   level: advanced
-  desc: Period in seconds from last beacon to monitor marking a  NVMeoF gateway as
+  desc: Period in seconds from last beacon to monitor marking a NVMeoF gateway as
     failed
   default: 7
   services:
@@ -99,15 +99,15 @@ options:
 - name: mon_nvmeofgw_skip_failovers_interval
   type: secs
   level: advanced
-  desc: Period in seconds in which no failovers are performed in GW's pool-group
-    this is equal to max GW redeploy interval
+  desc: Period in seconds in which no failovers are performed in GW's pool-group.
+    This is equal to max GW redeploy interval.
   default: 16
   services:
   - mon
 - name: mon_nvmeofgw_set_group_id_retry
   type: uint
   level: advanced
-  desc: Retry wait time in microsecond for set group id between the monitor client
+  desc: Retry wait time in microseconds for set group ID between the monitor client
     and gateway
   long_desc: The monitor server determines the gateway's group ID. If the monitor client
     receives a monitor group ID assignment before the gateway is fully up during
@@ -123,7 +123,7 @@ options:
 - name: mon_nvmeofgw_delete_grace
   type: secs
   level: advanced
-  desc: Issue NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed 
+  desc: Issue NVMEOF_GATEWAY_DELETING health warning after this amount of time has elapsed
   default: 15_min
   services:
   - mon
@@ -405,7 +405,7 @@ options:
   desc: issue MON_DISK_LOW health warning when mon available space below this percentage
   fmt_desc: Raise ``HEALTH_WARN`` status when the filesystem that houses a
     monitor's data store reports that its available capacity is
-    less than or equal to this percentage .
+    less than or equal to this percentage.
   default: 30
   services:
   - mon
@@ -514,7 +514,7 @@ options:
 - name: mon_elector_ping_divisor
   type: uint
   level: advanced
-  desc: We will send a ping up to this many times per timeout per
+  desc: We will send a ping up to this many times per timeout
   default: 2
   services:
   - mon
@@ -625,7 +625,7 @@ options:
 - name: mon_crush_min_required_version
   type: str
   level: advanced
-  desc: minimum ceph release to use for mon_warn_on_legacy_crush_tunables
+  desc: minimum Ceph release to use for mon_warn_on_legacy_crush_tunables
   fmt_desc: The minimum tunable profile required by the cluster. See
     :ref:`CRUSH map tunables <crush-map-tunables>` for details.
   default: hammer
@@ -742,7 +742,7 @@ options:
   services:
   - mon
   fmt_desc: How often (in commits) to stash a full copy of the PaxosService state.
-    Current this setting only affects ``mds``, ``mon``, ``auth`` and ``mgr``
+    Currently this setting only affects ``mds``, ``mon``, ``auth``, and ``mgr``
     PaxosServices.
   with_legacy: true
 # max paxos iterations before we must first sync the monitor stores
@@ -826,7 +826,7 @@ options:
   type: uint
   level: advanced
   desc: factor by which paxos_service_trim_max will be multiplied to get a new upper
-    bound when trim sizes are high  (0 disables it)
+    bound when trim sizes are high (0 disables it)
   default: 20
   services:
   - mon
@@ -967,7 +967,7 @@ options:
     to model this situation to increase the heartbeat grace period for this OSD so
     that it isn't marked down again.  laggy_probability is an estimated probability
     that the given OSD is down because it is laggy (not actually down), and laggy_interval
-    is an estiate on how long it stays down when it is laggy.
+    is an estimate on how long it stays down when it is laggy.
   fmt_desc: If set to ``true``, Ceph will scale based on laggy estimations.
   default: true
   services:
@@ -981,7 +981,8 @@ options:
   type: bool
   level: advanced
   desc: increase the mon_osd_down_out_interval if an OSD appears to be laggy
-  fmt_desc: If set to ``true``, Ceph will scaled based on laggy estimations.
+  fmt_desc: If set to ``true``, Ceph will scale ``mon_osd_down_out_interval``
+    based on laggy estimations.
   default: true
   services:
   - mon
@@ -1497,7 +1498,7 @@ options:
 - name: nvmeof_mon_client_disconnect_panic
   type: secs
   level: advanced
-  desc: The duration, expressed in seconds, after which the nvmeof gateway
+  desc: The duration, expressed in seconds, after which the NVMeoF gateway
     should trigger a panic if it loses connection to the monitor
   default: 100
   services:
@@ -1505,24 +1506,24 @@ options:
 - name: nvmeof_mon_client_tick_period
   type: secs
   level: advanced
-  desc: Period in seconds of nvmeof gateway beacon messages to monitor
+  desc: Period in seconds of NVMeoF gateway beacon messages to monitor
   default: 1
   services:
   - mon
 - name: enable_availability_tracking
   type: bool
   level: advanced
-  desc: Calculate and store availablity score for each pool in the 
+  desc: Calculate and store availability score for each pool in the
     cluster at regular intervals
   default: false
-  services :
+  services:
   - mon
   flags:
   - runtime
 - name: nvmeof_mon_client_connect_panic
   type: secs
   level: advanced
-  desc: The duration, expressed in seconds, after which the nvmeof gateway
+  desc: The duration, expressed in seconds, after which the NVMeoF gateway
     should trigger a panic if it does not receive the initial map from the monitor
   default: 30
   services:
@@ -1532,15 +1533,15 @@ options:
   desc: Time (in seconds) to wait before emitting a MON_NETSPLIT
     health warning.
   default: 9
-  services :
+  services:
   - mon
 - name: pool_availability_update_interval
   type: float
   level: advanced
-  desc: Update data availability score at this interval. By default the interval 
-    is same as paxos_propose_interval configuration.  
+  desc: Update data availability score at this interval. By default the interval
+    is the same as paxos_propose_interval.
   default: 1
-  services :
+  services:
   - mon
   flags:
   - runtime

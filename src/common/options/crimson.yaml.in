@@ -8,10 +8,10 @@ options:
 - name: crimson_cpu_set
   type: str
   level: advanced
-  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format per OSD with pinning.
-  long_desc: CPU cores on which seastar reactor threads will run in cpuset(7) format per OSD with pinning.
-             overrides crimson_cpu_num.
-             smp::count is deduced from this option
+  desc: CPU cores on which Seastar reactor threads will run in cpuset(7) format per OSD with pinning.
+  long_desc: CPU cores on which Seastar reactor threads will run in cpuset(7) format per OSD with pinning.
+             Overrides crimson_cpu_num.
+             smp::count is deduced from this option.
   flags:
   - startup
 
@@ -19,9 +19,9 @@ options:
   type: uint
   level: advanced
   default: 0
-  desc: The number of CPUs to use for serving seastar reactors per OSD without CPU pinning.
-  long_desc: The number of CPUs to use for serving seastar reactors per OSD without CPU pinning.
-             overridden if crimson_cpu_set is set.
+  desc: The number of CPUs to use for serving Seastar reactors per OSD without CPU pinning.
+  long_desc: The number of CPUs to use for serving Seastar reactors per OSD without CPU pinning.
+             Overridden if crimson_cpu_set is set.
              smp::count is deduced from this option.
   flags:
   - startup
@@ -31,9 +31,9 @@ options:
   type: size
   level: advanced
   default: 0
-  desc: Total memory to use for the seastar allocator per OSD.
-  long_desc: Total memory to use for the seastar allocator per OSD.
-             Maps to seastar's --memory flag. 0 means use seastar's default
+  desc: Total memory to use for the Seastar allocator per OSD.
+  long_desc: Total memory to use for the Seastar allocator per OSD.
+             Maps to Seastar's --memory flag. 0 means use Seastar's default
              (all available memory minus a reserve).
   flags:
   - startup
@@ -48,11 +48,11 @@ options:
   - io_uring
   - linux-aio
   - epoll
-  desc: Select which Seastar's internal reactor implementation
+  desc: Select which Seastar's internal reactor implementation to use
   long_desc: Controls which asynchronous I/O engine the Seastar reactor will use
              during OSD startup. Different backends have different
              performance characteristics and require different kernel capabilities.
-             Note, If none is non is selected, let seastar choose.
+             Note, if none is selected, let Seastar choose.
 
   flags:
   - startup
@@ -63,7 +63,7 @@ options:
   default: 0.5
   desc: The maximum time (ms) Seastar reactors will wait between polls.
   long_desc: The maximum time (ms) Seastar reactors will wait between polls.
-             Shorter time between pools will result in larger CPU utilization.
+             Shorter time between polls will result in larger CPU utilization.
   flags:
   - startup
 
@@ -82,7 +82,7 @@ options:
   level: advanced
   default: 0
   desc: The maximum time (ms) Seastar's reactor I/O operations must take.
-        If not set(0 mean not set), defaults to 1.5 * crimson_reactor_task_quota_ms
+        If not set (0 means not set), defaults to 1.5 * crimson_reactor_task_quota_ms
   long_desc: The maximum time (ms) Seastar's reactor I/O operations must take.
              If not set, defaults to 1.5 * crimson_reactor_task_quota_ms.
              Increasing this value will allow more I/O requests to be dispatched concurrently.
@@ -99,7 +99,7 @@ options:
 - name: crimson_osd_scheduler_concurrency
   type: uint
   level: advanced
-  desc: The maximum number concurrent I/O operations, 0 for unlimited
+  desc: The maximum number of concurrent I/O operations, 0 for unlimited
   default: 0
 
 - name: crimson_osd_stat_interval
@@ -112,7 +112,7 @@ options:
   type: bool
   level: advanced
   default: false
-  desc: Let the seastar reactor poll continuously without sleeping at the expense of 100% cpu usage.
+  desc: Let the Seastar reactor poll continuously without sleeping at the expense of 100% CPU usage.
   flags:
   - startup
 
@@ -123,9 +123,9 @@ options:
   min: 1
   max: 65535
   desc: Maximum buffer fragments to batch in a single outgoing network write
-  long_desc: Limits how many buffer::ptr entries are batched into one seastar
+  long_desc: Limits how many buffer::ptr entries are batched into one Seastar
              packet during the outgoing message sweep. Prevents overflow of the
-             seastar packet fragment counter (uint16_t).
+             Seastar packet fragment counter (uint16_t).
 
 - name: crimson_allow_pg_split
   type: bool
@@ -143,7 +143,7 @@ options:
 - name: crimson_bluestore_num_threads
   type: uint
   level: advanced
-  desc: The number of POSIX threads alienized to seastar for serving Bluestore
+  desc: The number of POSIX threads alienized to Seastar for serving BlueStore
   default: 6
   flags:
   - startup
@@ -151,7 +151,7 @@ options:
 - name: crimson_bluestore_cpu_set
   type: str
   level: advanced
-  desc: CPU cores on which POSIX threads alienized to seastar will run in cpuset(7) format
+  desc: CPU cores on which POSIX threads alienized to Seastar will run in cpuset(7) format
   flags:
   - startup
 - name: seastore_logical_bucket_cache_test_stress
@@ -204,13 +204,13 @@ options:
 - name: seastore_default_max_object_size
   type: uint
   level: dev
-  desc: default logical address space reservation for seastore objects' data
+  desc: default logical address space reservation for SeaStore objects' data
   default: 16777216
 # TODO: implement sub-extent checksum and deprecate this configuration.
 - name: seastore_full_integrity_check
   type: bool
   level: dev
-  desc: Whether seastore need to fully check the integrity of each extent,
+  desc: Whether SeaStore needs to fully check the integrity of each extent,
         non-full integrity check means the integrity check might be skipped
         during extent remapping for better performance, disable with caution
   default: false
@@ -229,7 +229,7 @@ options:
 - name: seastore_cachepin_type
   type: str
   level: dev
-  desc: The cache replacement algorithm used by extent pinboard in seastore. (LRU/2Q)
+  desc: The cache replacement algorithm used by extent pinboard in SeaStore. (LRU/2Q)
   default: LRU
   enum_values:
   - LRU
@@ -250,7 +250,7 @@ options:
 - name: seastore_max_concurrent_transactions
   type: uint
   level: advanced
-  desc: maximum concurrent transactions that seastore allows (per reactor)
+  desc: maximum concurrent transactions that SeaStore allows (per reactor)
   default: 128
 - name: seastore_hot_device_type
   type: str
@@ -296,7 +296,7 @@ options:
 - name: seastore_multiple_tiers_stop_evict_ratio
   type: float
   level: advanced
-  desc: When the used ratio of main tier is less than this value, then stop evict cold data to the cold tier.
+  desc: When the used ratio of main tier is less than this value, then stop evicting cold data to the cold tier.
   default: 0.5
 - name: seastore_multiple_tiers_default_evict_ratio
   type: float
@@ -356,7 +356,7 @@ options:
   long_desc: Higher is more conservative (override fires less often, the
              configured formula's age weighting is preserved more
              aggressively). Lower is more aggressive (override fires more
-             often, behaviour converges toward pure greedy). The default
+             often, behavior converges toward pure greedy). The default
              (2.0) captures the random-write failure regime while staying
              clear of normal-operation fluctuations.
   default: 2.0
@@ -364,13 +364,15 @@ options:
 - name: seastore_data_delta_based_overwrite
   type: size
   level: dev
-  desc: overwrite the existing data block based on delta if the overwrite size is equal to or less than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
+  desc: Overwrite the existing data block based on delta if the overwrite size
+        is equal to or less than the value, otherwise do overwrite based on
+        remapping, set to 0 to enforce the remap-based overwrite.
   default: 0
-- name: seastore_disable_end_to_end_data_protection 
+- name: seastore_disable_end_to_end_data_protection
   type: bool
   level: dev
-  desc: When false, upon mkfs, try to discover whether the nvme device supports
-        internal checksum feature without using sever CPU then enable if available,
+  desc: When false, upon mkfs, try to discover whether the NVMe device supports
+        internal checksum feature without using server CPU and enable if available,
         set to true to disable unconditionally.
   default: true
 - name: seastore_require_partition_count_match_reactor_count

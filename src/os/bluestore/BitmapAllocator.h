@@ -49,6 +49,11 @@ public:
   {
     foreach_internal(notify);
   }
+  uint64_t get_free_extents(
+    uint64_t range_begin,
+    uint64_t range_end,
+    size_t max_count,
+    free_extent_vector_t* out) override;
   double get_fragmentation() override
   {
     return get_fragmentation_internal();
