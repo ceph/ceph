@@ -19,7 +19,7 @@
 RGW_ADMIN="${RGW_ADMIN:-./bin/radosgw-admin}"
 export CEPH_CONF="${CEPH_CONF:-./ceph.conf}"
 # Route dout/derr log lines off stderr so async cluster logs (e.g. "ERROR:
-# obj.oid is empty") can't interleave mid-line with the cerr messages we grep.
+# obj.oid is empty") can't interleave mid-line with the error messages these tests match.
 # rgw_global_init consumes --log-to-stderr before the flag loop runs.
 export CEPH_ARGS="--log-to-stderr=false${CEPH_ARGS:+ ${CEPH_ARGS}}"
 PASS=0
@@ -202,9 +202,6 @@ check "list: underscore --bucket_id repeated, --max_entries invalid" 22 \
   'ERROR: failed to parse max entries' \
   bucket list --bucket_id x --bucket_id y --max_entries banana
 
-# the '=' form accepts the underscore spelling too
-check "list: --max_entries= form, underscore spelling" 22 "ERROR: failed to parse max entries: Expected option value to be integer, got 'banana'" bucket list --max_entries=banana
-
 check "list: --max_entries given twice, last value invalid" 22 \
   'ERROR: failed to parse max entries' \
   bucket list --max_entries 1 --max_entries banana
@@ -252,7 +249,7 @@ check_cluster "layout: missing --bucket" 22 'ERROR: bucket not specified' -- buc
 check_cluster "layout: nonexistent bucket (silent exit 2)" 2 "" -- bucket layout --bucket no-such-bucket
 
 # flags before the leaf subcommand. --bucket/--bucket-id/--format fail on the
-# nonexistent bucket (exit 2, no handler message); --tenant trips the global
+# nonexistent bucket (exit 2, no message); --tenant trips the global
 # "no user ID" check (exit 22) before reaching the bucket.
 check_cluster "layout: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket layout
 check_cluster "layout: --bucket-id before subcommand (silent exit 2)" 2 "" -- bucket --bucket-id x layout --bucket no-such-bucket
@@ -371,7 +368,7 @@ check_cluster "logging list: nonexistent bucket (silent exit 2)" 2 "" -- bucket 
 check_cluster "logging flush: nonexistent bucket (silent exit 2)" 2 "" -- bucket logging flush --bucket no-such-bucket
 
 # flags before the leaf subcommand. --bucket/--bucket-id/--format fail on the
-# nonexistent bucket (exit 2, no handler message); --tenant trips the global
+# nonexistent bucket (exit 2, no message); --tenant trips the global
 # "no user ID" check (exit 22) before reaching the bucket.
 check_cluster "logging info: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket logging info
 check_cluster "logging info: --bucket-id before subcommand (silent exit 2)" 2 "" -- bucket --bucket-id x logging info --bucket no-such-bucket
@@ -395,8 +392,7 @@ check "rewrite: stray between bucket and rewrite" 1 "ERROR: Unrecognized argumen
 check "rewrite: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket rewrite --fakeflag
 
 # missing option value (parse-level, exit 1). The size flags behave like any
-# other text option here; the date flags report the canonical name even when
-# the alias is used.
+# other text option here; the date flags name whichever spelling was used.
 check "rewrite: --bucket missing value" 1 'Option --bucket requires an argument.' bucket rewrite --bucket
 check "rewrite: --bucket-id missing value" 1 'Option --bucket-id requires an argument.' bucket rewrite --bucket-id
 check "rewrite: --tenant missing value" 1 'Option --tenant requires an argument.' bucket rewrite --tenant
@@ -473,7 +469,7 @@ check "set-min-shards: --num-shards non-integer" 22 "ERROR: failed to parse num 
 check_cluster "set-min-shards: missing --bucket" 234 'ERROR: bucket not specified' -- bucket set-min-shards --num-shards 11
 check_cluster "set-min-shards: --num-shards not specified" 234 'ERROR: --num-shards not specified' -- bucket set-min-shards --bucket no-such-bucket
 check_cluster "set-min-shards: --num-shards < 1" 234 'ERROR: --num-shards must be at least 1' -- bucket set-min-shards --bucket no-such-bucket --num-shards 0
-# valid args but nonexistent bucket: init_bucket fails (exit 2, no handler message)
+# valid args but nonexistent bucket: init_bucket fails (exit 2, no message)
 check_cluster "set-min-shards: nonexistent bucket (silent exit 2)" 2 "" -- bucket set-min-shards --bucket no-such-bucket --num-shards 11
 # The three unrelated-flag cases side by side (identical args, only the flag
 # differs): a binary flag, a value option in =form, and the same option in
@@ -484,7 +480,7 @@ check_cluster "set-min-shards: unrelated --max-entries 5 swallowed (space form, 
 
 # flags before the leaf subcommand. The value still reaches the command, so with
 # a valid --num-shards and a nonexistent bucket they fail at init_bucket
-# (exit 2, no handler message). --tenant trips the global "no user ID" check
+# (exit 2, no message). --tenant trips the global "no user ID" check
 # (exit 22).
 check_cluster "set-min-shards: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket set-min-shards --num-shards 11
 check_cluster "set-min-shards: -b before subcommand (short) (silent exit 2)" 2 "" -- bucket -b no-such-bucket set-min-shards --num-shards 11
@@ -646,10 +642,14 @@ check "resync: --bucket-id missing value" 1 'Option --bucket-id requires an argu
 check "resync: --tenant missing value" 1 'Option --tenant requires an argument.' bucket resync encrypted multipart --tenant
 check "resync: --marker missing value" 1 'Option --marker requires an argument.' bucket resync encrypted multipart --marker
 
+# in the space form the binary flag takes no value, so a non-bool word is left
+# on the line and read as a command word
+check "resync: --yes-i-really-mean-it banana (space form, non-bool)" 1 'Command not found: bucket resync encrypted multipart banana' bucket resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it banana
+
 # handler-level (cluster). empty bucket -> EINVAL (exit 22). Real-bucket EPERM and
 # success cases live in the integration section (need a bucket that exists).
 check_cluster "resync: bucket not specified" 22 'ERROR: bucket not specified' -- bucket resync encrypted multipart
-# valid args, nonexistent bucket: init_bucket fails (exit 2, no handler message)
+# valid args, nonexistent bucket: init_bucket fails (exit 2, no message)
 check_cluster "resync: nonexistent bucket (silent exit 2)" 2 "" -- bucket resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it
 # unrelated flags alongside valid args: a binary flag (--fix) takes 0 values ->
 # accepted; a value option in =form binds -> accepted; both proceed to init_bucket
@@ -658,7 +658,7 @@ check_cluster "resync: unrelated binary flag --fix accepted (silent exit 2)" 2 "
 check_cluster "resync: unrelated value flag --max-entries=5 (=form, exit 2) (silent exit 2)" 2 "" -- bucket resync encrypted multipart --max-entries=5 --bucket no-such-bucket --yes-i-really-mean-it
 
 # flags before the leaf. The value still reaches the command, so with a
-# nonexistent bucket they fail at init_bucket (exit 2, no handler message).
+# nonexistent bucket they fail at init_bucket (exit 2, no message).
 # --tenant trips the global "no user ID" check (exit 22).
 check_cluster "resync: --bucket before subcommand (silent exit 2)" 2 "" -- bucket --bucket no-such-bucket resync encrypted multipart --yes-i-really-mean-it
 check_cluster "resync: -b before subcommand (short) (silent exit 2)" 2 "" -- bucket -b no-such-bucket resync encrypted multipart --yes-i-really-mean-it
@@ -707,9 +707,9 @@ check "radoslist: --orphan-stale-secs non-integer" 22 "ERROR: failed to parse or
 # a negative value parses fine and wraps when cast to uint64, so it is accepted
 check_cluster "radoslist: --orphan-stale-secs -5 accepted (negative value wraps)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --orphan-stale-secs -5
 # --orphan-stale-secs is always read as base 10, like --max-concurrent-ios above.
-# "0x10" is rejected. "08" is accepted as 8, not read as octal.
+# "0x10" is rejected; "08" is accepted, which octal would not be.
 check "radoslist: --orphan-stale-secs hex rejected" 22 "ERROR: failed to parse orphan stale secs: Expected option value to be integer, got '0x10'" bucket radoslist --orphan-stale-secs 0x10
-check_cluster "radoslist: --orphan-stale-secs 08 accepted as 8" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --orphan-stale-secs 08
+check_cluster "radoslist: --orphan-stale-secs 08 accepted (not octal)" 0 'WARNING: bucket chk does not exist; could it have been deleted very recently?' -- bucket radoslist --bucket chk --orphan-stale-secs 08
 check "radoslist: --orphan-stale-secs out of range" 22 "ERROR: failed to parse orphan stale secs: The option value '99999999999999999999' seems to be invalid" bucket radoslist --orphan-stale-secs 99999999999999999999
 
 # cluster: readonly command, lists rados objects backing the bucket (exit 0).
@@ -908,9 +908,9 @@ check_cluster "list: --max-entries between bucket and list" 0 "" -- bucket --max
 check_cluster "list: --marker between bucket and list" 0 "" -- bucket --marker somemarker list
 
 # the same flag twice
-check_cluster "list: duplicate --bucket same level" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket list --bucket nonexistent1_test --bucket nonexistent2_test
-check_cluster "list: duplicate --tenant same level" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket list --tenant foo --tenant bar
-check_cluster "list: duplicate --format same level" 0 "" -- bucket list --format json --format xml
+check_cluster "list: duplicate --bucket, both after the command" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket list --bucket nonexistent1_test --bucket nonexistent2_test
+check_cluster "list: duplicate --tenant, both after the command" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket list --tenant foo --tenant bar
+check_cluster "list: duplicate --format, both after the command" 0 "" -- bucket list --format json --format xml
 # --uid filters bucket list by owner
 # an unknown user gives -ENOENT, so the exit code is 254
 check_cluster "list: --uid before bucket" 254 'ERROR: could not find user' -- --uid testuser_test bucket list
@@ -919,8 +919,8 @@ check_cluster "list: --object-version before bucket" 0 "" -- --object-version so
 check_cluster "list: --allow-unordered before bucket" 0 "" -- --allow-unordered bucket list
 
 # out of position and duplicated at once
-check_cluster "list: duplicate --bucket cross level" 2 'ERROR: could not init bucket: (2) No such file or directory' -- --bucket nonexistent1_test bucket list --bucket nonexistent2_test
-check_cluster "list: duplicate --tenant cross level" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant foo bucket list --tenant bar
+check_cluster "list: duplicate --bucket, one before the command" 2 'ERROR: could not init bucket: (2) No such file or directory' -- --bucket nonexistent1_test bucket list --bucket nonexistent2_test
+check_cluster "list: duplicate --tenant, one before the command" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant foo bucket list --tenant bar
 
 # ============================================================
 echo ""
@@ -1015,7 +1015,7 @@ check_cluster "check: --bucket between bucket and check" 0 "" -- bucket --bucket
 check_cluster "check: --fix between bucket and check" 0 "" -- bucket --fix check
 check_cluster "check: duplicate --bucket" 0 "" -- bucket check --bucket nonexistent1_test --bucket nonexistent2_test
 check_cluster "check: duplicate --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- bucket check --tenant foo --tenant bar
-check_cluster "check: duplicate --bucket cross level" 0 "" -- --bucket nonexistent1_test bucket check --bucket nonexistent2_test
+check_cluster "check: duplicate --bucket, one before the command" 0 "" -- --bucket nonexistent1_test bucket check --bucket nonexistent2_test
 
 # check-specific flags out of position
 check_cluster "check: --remove-bad before bucket" 0 "" -- --remove-bad bucket check
@@ -1061,7 +1061,6 @@ check_cluster "rm: --yes-i-really-mean-it=banana" 0 "" -- bucket rm --yes-i-real
 # check: several flags out of position at once
 check_cluster "check: --fix + --remove-bad before" 0 "" -- --fix --remove-bad bucket check
 check_cluster "check: --fix + --remove-bad + --tenant before" 22 "ERROR: --tenant is set, but there's no user ID" -- --fix --remove-bad --tenant foo bucket check
-check_cluster "check: pos + duplicate --bucket" 0 "" -- --bucket nonexistent1_test bucket check --bucket nonexistent2_test
 
 # check flags before the subcommand: accepted, the command runs normally
 check_cluster "check: --check-objects before bucket" 0 "" -- --check-objects bucket check
@@ -1170,7 +1169,7 @@ check_cluster "functional: bucket check unlinked --fix" 0 "" -- bucket check unl
 check_cluster "functional: bucket check unlinked --dump-keys" 0 "" -- bucket check unlinked --dump-keys
 check_cluster "functional: bucket check unlinked --hide-progress" 0 "" -- bucket check unlinked --hide-progress
 # --dump-keys/--hide-progress take no value, so a =value suffix is rejected as
-# an unknown flag -- unlike the binary flags above, which accept it.
+# an unknown flag - unlike the binary flags above, which accept it.
 check "check olh: --dump-keys=banana (rejected)" 22 'ERROR: invalid flag --dump-keys=banana' bucket check olh --dump-keys=banana
 check "check olh: --hide-progress=banana (rejected)" 22 'ERROR: invalid flag --hide-progress=banana' bucket check olh --hide-progress=banana
 check "check unlinked: --dump-keys=banana (rejected)" 22 'ERROR: invalid flag --dump-keys=banana' bucket check unlinked --dump-keys=banana
@@ -1286,10 +1285,10 @@ check "list: -uid=u1 rejected" 22 'ERROR: invalid flag -uid=u1' bucket list -uid
 check "list: stray word after --uid value" 1 'Command not found: bucket list extra' bucket list --uid u1 extra
 check "list: stray word after --uid= value" 1 'Command not found: bucket list extra' bucket list --uid=u1 extra
 check "list: repeated command word" 1 'Command not found: bucket list list' bucket list list
-check "list: repeated top-level command word" 1 "ERROR: Unrecognized argument: 'bucket'" bucket bucket list
-check "list: top-level command word repeated twice" 1 "ERROR: Unrecognized argument: 'bucket'" bucket bucket bucket list
-check "list: repeated top-level command word (alias first)" 1 "ERROR: Unrecognized argument: 'bucket'" buckets bucket list
-check "list: top-level command word after the command" 1 'Command not found: bucket list bucket list' bucket list bucket list
+check "list: 'bucket' repeated" 1 "ERROR: Unrecognized argument: 'bucket'" bucket bucket list
+check "list: 'bucket' repeated twice" 1 "ERROR: Unrecognized argument: 'bucket'" bucket bucket bucket list
+check "list: 'bucket' repeated, alias first" 1 "ERROR: Unrecognized argument: 'bucket'" buckets bucket list
+check "list: 'bucket' repeated after the command" 1 'Command not found: bucket list bucket list' bucket list bucket list
 check "logging list: repeated command word" 1 "ERROR: Unrecognized argument: 'logging'" bucket logging logging list
 check "list: empty stray word" 1 'Command not found: bucket list' bucket list ""
 
@@ -1319,42 +1318,46 @@ check_cluster "reshard list: --bucket name" 0 "" -- reshard list --bucket name
 echo ""
 echo "=== which token a flag takes as its value ==="
 # ============================================================
-# A binary flag takes the next token only when it is exactly true, 1, false or
-# 0; otherwise it erases the flag alone and the token stays on the line, where
-# it is reported.
+# In the space form a binary flag takes the next token only when it is exactly
+# true, 1, false or 0; otherwise it erases the flag alone and the token stays on
+# the line, where it is used as a command word if it can be, and reported if not.
 
 # a command word is never taken as a binary flag's value
 check_cluster "list: --fix before the command" 0 "" -- bucket --fix list
+check_cluster "check: --fix before the command" 0 "" -- bucket --fix check --bucket demo
 check_cluster "list: --fix before any command word" 0 "" -- --fix bucket list
 check_cluster "list: --fix before the command, bool value" 0 "" -- bucket --fix true list
 check_cluster "list: --allow-unordered before the command" 0 "" -- bucket --allow-unordered list
 check_cluster "list: --allow-unordered, bool value" 0 "" -- bucket --allow-unordered true list
-check_cluster "list: --fix=banana before the command" 0 "" -- bucket --fix=banana list
 check_cluster "list: --fix with a bool after the command" 0 "" -- bucket list --fix true
+# in the '=' form a binary flag's value belongs to the token, so it is always
+# consumed; a value that is not true/1/false/0 is accepted and nothing is left
+# behind
+check_cluster "list: --fix=banana before the command" 0 "" -- bucket --fix=banana list
 
 # a non-bool word is left on the line, so it is reported as a stray
-check "list: --fix takes a word before the command" 1 "ERROR: Unrecognized argument: 'banana'" bucket --fix banana list
-check "list: --allow-unordered takes a word" 1 "ERROR: Unrecognized argument: 'banana'" bucket --allow-unordered banana list
-check "list: --fix takes a word after the command" 1 'Command not found: bucket list banana' bucket list --fix banana
-check "check: --fix takes a word" 1 "ERROR: Unrecognized argument: 'banana'" bucket check --fix banana
-# 'list' is still available as a command word here, so --fix does not take it
-# and the second one has no level left to match
+check "list: --fix before the command leaves banana as a stray argument" 1 "ERROR: Unrecognized argument: 'banana'" bucket --fix banana list
+check "list: --allow-unordered leaves banana as a stray argument" 1 "ERROR: Unrecognized argument: 'banana'" bucket --allow-unordered banana list
+check "list: --fix after the command leaves banana as a stray" 1 'Command not found: bucket list banana' bucket list --fix banana
+check "check: --fix leaves banana as a stray argument" 1 "ERROR: Unrecognized argument: 'banana'" bucket check --fix banana
+# --fix takes no value wherever it sits, so the repeated 'list' stays on the
+# line and is reported there
 check "bucket: --fix before the command, 'list' repeated" 1 'Command not found: bucket list list' bucket --fix list list
-# here 'bucket' has already matched its one subcommand, so 'list' no longer
-# reads as a command word and --fix takes it
-check "list: --fix takes a repeated command word" 1 'Command not found: bucket list list' bucket list --fix list
-check "check: --fix takes 'list'" 1 "ERROR: Unrecognized argument: 'list'" bucket check --fix list
+check "list: --fix leaves a repeated command word 'list' as a stray" 1 'Command not found: bucket list list' bucket list --fix list
+check "check: --fix leaves 'list' as a stray argument" 1 "ERROR: Unrecognized argument: 'list'" bucket check --fix list
 
-# flag-shaped tokens are not taken as a value; the loop rejects them by name
+# --fix and --allow-unordered take no value, so a flag-shaped token is left on
+# the line and rejected by name
 check "list: --fix does not take a long flag" 22 'ERROR: invalid flag --banana' bucket list --fix --banana
 check "list: --fix does not take a short flag" 22 'ERROR: invalid flag -x' bucket list --fix -x
-# a lone dash is left on the line and rejected as an invalid flag
-check "list: --fix takes a lone dash" 22 'ERROR: invalid flag -' bucket list --fix -
-check "check: --fix takes a lone dash" 22 'ERROR: invalid flag -' bucket check --fix -
-check "bucket: --fix takes a lone dash before the command" 22 'ERROR: invalid flag -' bucket --fix - list
-check "bucket: --allow-unordered takes a lone dash" 22 'ERROR: invalid flag -' bucket --allow-unordered - list
-check "list: --allow-unordered takes a lone dash" 22 'ERROR: invalid flag -' bucket list --allow-unordered -
-check "list: --fix takes a negative number" 22 'ERROR: invalid flag -5' bucket list --fix -5
+# a lone dash after a binary flag is left on the line and rejected as an invalid
+# flag
+check "list: --fix leaves a lone dash" 22 'ERROR: invalid flag -' bucket list --fix -
+check "check: --fix leaves a lone dash" 22 'ERROR: invalid flag -' bucket check --fix -
+check "bucket: --fix leaves a lone dash before the command" 22 'ERROR: invalid flag -' bucket --fix - list
+check "bucket: --allow-unordered leaves a lone dash" 22 'ERROR: invalid flag -' bucket --allow-unordered - list
+check "list: --allow-unordered leaves a lone dash" 22 'ERROR: invalid flag -' bucket list --allow-unordered -
+check "list: --fix leaves a negative number" 22 'ERROR: invalid flag -5' bucket list --fix -5
 
 # a flag that requires a value takes the next token whatever it is
 check_cluster "list: --format takes its value, command follows" 0 "" -- bucket --format json list
@@ -1377,16 +1380,7 @@ check_cluster "stats: --categories takes 'list', 'stats' survives" 0 "" -- bucke
 
 # with no command word at all, only the flag loop runs
 check "unknown flag with no command" 22 'ERROR: invalid flag --banana' --banana
-check "--fix takes a lone dash with no command" 22 'ERROR: invalid flag -' --fix -
-
-# --fix and --allow-unordered take no value, so the next word is left on the line
-check "list: --fix leaves banana as a command word" 1 'Command not found: bucket list banana' bucket list --fix banana
-check "list: --allow-unordered leaves banana as a stray argument" 1 "ERROR: Unrecognized argument: 'banana'" bucket --allow-unordered banana list
-check "bucket: --bucket is unrelated when no command matched" 1 'ERROR: Unknown command' bucket --bucket -
-check_cluster "check: --fix before the command" 0 "" -- bucket --fix check --bucket demo
-# the token after the flag is left on the line and reported there
-check "check: --fix leaves banana as a stray argument" 1 "ERROR: Unrecognized argument: 'banana'" bucket check --fix banana
-check "list: --fix leaves a lone dash" 22 'ERROR: invalid flag -' bucket list --fix -
+check "--fix leaves a lone dash with no command" 22 'ERROR: invalid flag -' --fix -
 
 # ============================================================
 echo ""
@@ -1397,8 +1391,8 @@ echo "=== two errors on one line ==="
 
 check "bucket: unknown flag and no subcommand" 22 'ERROR: invalid flag --banana' bucket --banana
 check "bucket: lone dash and no subcommand" 22 'ERROR: invalid flag -' bucket -
-check "bucket: --fix takes a dash and no subcommand" 22 'ERROR: invalid flag -' bucket --fix -
-check "bucket: --allow-unordered takes a dash, no subcommand" 22 'ERROR: invalid flag -' bucket --allow-unordered -
+check "bucket: --fix leaves a dash and no subcommand" 22 'ERROR: invalid flag -' bucket --fix -
+check "bucket: --allow-unordered leaves a dash, no subcommand" 22 'ERROR: invalid flag -' bucket --allow-unordered -
 check "list: unknown flag and --bucket without a value" 22 'ERROR: invalid flag --banana' bucket list --banana --bucket
 
 # each of those errors on its own. Removing a token is not enough to isolate a
@@ -1608,6 +1602,10 @@ if cluster_running; then
       check_cluster "integration: resync without --yes (EPERM)" 1 'This command is only necessary for replicated buckets.' -- bucket resync encrypted multipart --bucket "$_test_bucket"
       check_cluster "integration: resync --yes-i-really-mean-it (success)" 0 '"bucket_id"' -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it
       check_cluster "integration: resync --yes-i-really-mean-it=false (=form -> EPERM)" 1 'This command is only necessary' -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=false
+      check_cluster "integration: resync --yes-i-really-mean-it false (space form -> EPERM)" 1 'This command is only necessary' -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it false
+      # a value that is not true/1/false/0 still leaves the flag set, so =banana
+      # runs the repair where =false refuses it
+      check_cluster "integration: resync --yes-i-really-mean-it=banana (=form, non-bool)" 0 '"bucket_id"' -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=banana
 
       # bucket radoslist: read-only, lists the rados objects backing the bucket
       # (exit 0). Exercises both entry points (radoslist + 'rados list' alias),
@@ -1667,11 +1665,11 @@ if cluster_running; then
       check_cluster "lifecycle: bucket rm --purge-objects (empty bucket)" 0 "" -- bucket rm --purge-objects --bucket "$_test_bucket"
     else
       echo "SKIP [integration: lifecycle tests]: could not get credentials for test user"
-      SKIP=$((SKIP+39))
+      SKIP=$((SKIP+41))
     fi
   else
     echo "SKIP [integration: lifecycle tests]: aws CLI not available (needed to create test bucket)"
-    SKIP=$((SKIP+34))
+    SKIP=$((SKIP+36))
   fi
 
   # Cleanup: remove the test user
