@@ -39,6 +39,60 @@
 
 namespace bluestore {
 
+  /// in-memory shared blob state (incl cached buffers)
+  struct SharedBlob {
+    MEMPOOL_CLASS_HELPERS();
+
+    std::atomic_int nref = {0}; ///< reference count
+    bool loaded = false;
+
+    BlueStore::CollectionRef collection;
+    union {
+      uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
+      bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
+    };
+
+    SharedBlob(BlueStore::Collection *_coll) : collection(_coll), sbid_unloaded(0) {
+    }
+    SharedBlob(uint64_t i, BlueStore::Collection *_coll);
+    ~SharedBlob();
+
+    uint64_t get_sbid() const {
+      return loaded ? persistent->sbid : sbid_unloaded;
+    }
+
+    friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
+    friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
+
+    void dump(ceph::Formatter* f) const;
+    friend std::ostream& operator<<(std::ostream& out, const SharedBlob& sb);
+
+    void get() {
+      ++nref;
+    }
+    void put();
+
+    /// get logical references
+    void get_ref(uint64_t offset, uint32_t length);
+
+    /// put logical references, and get back any released extents
+    void put_ref(uint64_t offset, uint32_t length,
+		 PExtentVector *r, bool *unshare);
+    friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
+      return l.get_sbid() == r.get_sbid();
+    }
+    inline BlueStore::BufferCacheShard* get_cache() {
+      return collection ? collection->cache : nullptr;
+    }
+    inline BlueStore::SharedBlobSet* get_parent() {
+      return collection ? &(collection->shared_blob_set) : nullptr;
+    }
+    inline bool is_loaded() const {
+      return loaded;
+    }
+
+  };
+
   /// in-memory blob metadata and associated cached buffers (if any)
   struct Blob {
     MEMPOOL_CLASS_HELPERS();
@@ -48,10 +102,16 @@ namespace bluestore {
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
     BlueStore::CollectionRef collection;
 
-    void set_shared_blob(BlueStore::SharedBlobRef sb);
+    void set_shared_blob(SharedBlobRef sb) {
+      ceph_assert((bool)sb);
+      ceph_assert(!shared_blob);
+      ceph_assert(sb->collection = collection);
+      shared_blob = sb;
+      ceph_assert(get_cache());
+    }
     Blob(BlueStore::CollectionRef collection) : collection(collection) {}
   private:
-    BlueStore::SharedBlobRef shared_blob;      ///< shared blob state (if any)
+    SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
     /// refs from this shard.  ephemeral if id<0, persisted if spanning.
     bluestore_blob_use_tracker_t used_in_blob;
@@ -80,11 +140,11 @@ namespace bluestore {
       return used_in_blob;
     }
 
-    const BlueStore::SharedBlobRef& get_shared_blob() const {
+    const SharedBlobRef& get_shared_blob() const {
       return shared_blob;
     }
 
-    BlueStore::SharedBlobRef& get_dirty_shared_blob() {
+    SharedBlobRef& get_dirty_shared_blob() {
       return shared_blob;
     }
 
@@ -163,9 +223,15 @@ namespace bluestore {
       if (--nref == 0)
 	delete this;
     }
-    bool is_shared_loaded() const;
-    BlueStore::BufferCacheShard* get_cache();
-    uint64_t get_sbid() const;
+    bool is_shared_loaded() const {
+      return shared_blob && shared_blob->is_loaded();
+    }
+    inline BlueStore::BufferCacheShard* get_cache() {
+      return collection ? collection->cache : nullptr;
+    }
+    uint64_t get_sbid() const {
+      return shared_blob ? shared_blob->get_sbid() : 0;
+    }
     BlueStore::CollectionRef get_collection() const {
       return collection;
     }
@@ -204,14 +270,36 @@ namespace bluestore {
       uint64_t struct_v,
       uint64_t* sbid,
       bool include_ref_map,
-      BlueStore::Collection *coll);
+      BlueStore::Collection *coll) {
+      if constexpr (decode_csum)
+        blob.decode<true>(p, struct_v);
+      else
+        blob.decode<false>(p, struct_v);
+      if (blob.is_shared()) {
+        denc(*sbid, p);
+      }
+      if (include_ref_map) {
+        if (struct_v > 1) {
+          used_in_blob.decode(p);
+        } else {
+          used_in_blob.clear();
+          bluestore_extent_ref_map_t legacy_ref_map;
+          legacy_ref_map.decode(p);
+          if (coll) {
+            for (const auto& r : legacy_ref_map.ref_map) {
+              get_ref(coll, r.first, r.second.refs * r.second.length);
+            }
+          }
+        }
+      }
+    }
   };
 
   /// a sharded extent map, mapping offsets to lextents to blobs
   struct ExtentMap {
     Onode *onode;
     BlueStore::extent_map_t extent_map;        ///< map of Extents to Blobs
-    BlueStore::blob_map_t spanning_blob_map;   ///< blobs that span shards
+    blob_map_t spanning_blob_map;   ///< blobs that span shards
 
     struct Shard {
       bluestore_onode_t::shard_info *shard_info = nullptr;
@@ -232,13 +320,13 @@ namespace bluestore {
     Blob* find_mergable_companion(Blob* blob_to_dissolve, uint32_t blob_start, uint32_t& blob_width,
 				  std::multimap<uint64_t /*blob_start*/, Blob*>& candidates);
     void reblob_extents(uint32_t blob_start, uint32_t blob_end,
-			BlueStore::BlobRef from_blob, BlueStore::BlobRef to_blob);
-    void make_range_shared_maybe_merge(BlueStore::TransContext* txc, BlueStore::OnodeRef& onode,
+			BlobRef from_blob, BlobRef to_blob);
+    void make_range_shared_maybe_merge(BlueStore::TransContext* txc, OnodeRef& onode,
 				       uint64_t srcoff, uint64_t length);
 
-    void dup(BlueStore* b, BlueStore::TransContext*, BlueStore::CollectionRef&, BlueStore::OnodeRef&, BlueStore::OnodeRef&,
+    void dup(BlueStore* b, BlueStore::TransContext*, BlueStore::CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
-    void dup_esb(BlueStore* b, BlueStore::TransContext*, BlueStore::CollectionRef&, BlueStore::OnodeRef&, BlueStore::OnodeRef&,
+    void dup_esb(BlueStore* b, BlueStore::TransContext*, BlueStore::CollectionRef&, OnodeRef&, OnodeRef&,
       uint64_t&, uint64_t&, uint64_t&);
 
     bool needs_reshard() const {
@@ -296,7 +384,7 @@ namespace bluestore {
     protected:
       // Decodes Blob from bitstream.
       // The returned Blob is then used in \ref consume_blob or \ref consume_spanning_blob
-      virtual BlueStore::BlobRef decode_create_blob(
+      virtual BlobRef decode_create_blob(
         bptr_c_it_t& p,
         __u8 struct_v,
         uint64_t* sbid,      // shared blobid, is Blob turns out to be shared blob
@@ -309,8 +397,8 @@ namespace bluestore {
       virtual void consume_blob(Extent* le,
                                 uint64_t extent_no,
                                 uint64_t sbid,
-                                BlueStore::BlobRef b) = 0;
-      virtual void consume_spanning_blob(uint64_t sbid, BlueStore::BlobRef b) = 0;
+                                BlobRef b) = 0;
+      virtual void consume_spanning_blob(uint64_t sbid, BlobRef b) = 0;
       virtual Extent* get_next_extent() = 0;
       virtual void add_extent(Extent*) = 0;
 
@@ -328,12 +416,12 @@ namespace bluestore {
 
     class ExtentDecoderFull : public ExtentDecoder {
       ExtentMap& extent_map;
-      std::vector<BlueStore::BlobRef> blobs;
+      std::vector<BlobRef> blobs;
       // owns the Extent from get_next_extent() until add_extent() inserts it,
       // so a throw during decode_extent() can't leak it
       std::unique_ptr<Extent> pending_extent;
     protected:
-      BlueStore::BlobRef decode_create_blob(
+      BlobRef decode_create_blob(
         bptr_c_it_t& p,
         __u8 struct_v,
         uint64_t* sbid,
@@ -344,8 +432,8 @@ namespace bluestore {
       void consume_blob(Extent* le,
                         uint64_t extent_no,
                         uint64_t sbid,
-                        BlueStore::BlobRef b) override;
-      void consume_spanning_blob(uint64_t sbid, BlueStore::BlobRef b) override;
+                        BlobRef b) override;
+      void consume_spanning_blob(uint64_t sbid, BlobRef b) override;
       Extent* get_next_extent() override;
       void add_extent(Extent* ) override;
     public:
@@ -357,7 +445,7 @@ namespace bluestore {
 
     void bound_encode_spanning_blobs(size_t& p);
     void encode_spanning_blobs(ceph::buffer::list::contiguous_appender& p);
-    BlueStore::BlobRef& get_spanning_blob(int id) {
+    BlobRef& get_spanning_blob(int id) {
       auto p = spanning_blob_map.find(id);
       ceph_assert_decode(p != spanning_blob_map.end());
       return p->second;
@@ -367,6 +455,7 @@ namespace bluestore {
       KeyValueDB::Transaction t,
       bool just_after_reshard //true to indicate that update should now respect shard boundaries
     );                        //as no further resharding will be done
+    decltype(bluestore::Blob::id) allocate_spanning_blob_id();
 
     struct ReshardPlan {
       std::vector<bluestore_onode_t::shard_info> new_shard_info;
@@ -383,8 +472,6 @@ namespace bluestore {
       KeyValueDB *db,
       KeyValueDB::Transaction t);
 
-
-    int16_t allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
       KeyValueDB::Transaction t,
@@ -464,7 +551,7 @@ namespace bluestore {
     /// if inside extent split it, if not return extent on right
     BlueStore::extent_map_t::iterator maybe_split_at(uint32_t offset);
     /// add a new Extent
-    void add(uint32_t lo, uint32_t o, uint32_t l, BlueStore::BlobRef& b) {
+    void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
       extent_map.insert(*new Extent(lo, o, l, b));
     }
 
@@ -488,11 +575,11 @@ namespace bluestore {
     Extent *set_lextent(BlueStore::CollectionRef &c,
 			uint64_t logical_offset,
 			uint64_t offset, uint64_t length,
-                        BlueStore::BlobRef b,
+                        BlobRef b,
 			BlueStore::old_extent_map_t *old_extents);
 
     /// split a blob (and referring extents)
-    BlueStore::BlobRef split_blob(BlueStore::BlobRef lb, uint32_t blob_offset, uint32_t pos);
+    BlobRef split_blob(BlobRef lb, uint32_t blob_offset, uint32_t pos);
 
     /// allocation unit status
     struct debug_au_state_t {
@@ -550,10 +637,36 @@ namespace bluestore {
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
     Onode(BlueStore::Collection *c, const ghobject_t& o,
-	    const mempool::bluestore_cache_meta::string& k);
-    Onode(CephContext* cct);
+	  const mempool::bluestore_cache_meta::string& k)
+      : c(c),
+	oid(o),
+	key(k),
+	exists(false),
+        cached(false),
+	extent_map(this,
+	  c->store->cct->_conf->
+	    bluestore_extent_map_inline_shard_prealloc_size),
+	bc(*this) {
+    }
+    Onode(CephContext* cct)
+      : c(nullptr),
+        exists(false),
+        cached(false),
+        extent_map(this,
+	  cct->_conf->
+	    bluestore_extent_map_inline_shard_prealloc_size),
+	bc(*this) {
+    }
 
-    ~Onode();
+    ~Onode() {
+      if (c) {
+        std::lock_guard l(c->cache->lock);
+        bc._clear(c->cache);
+        if (prev_spanning_cnt > 0) {
+          c->store->logger->dec(l_bluestore_spanning_blobs, prev_spanning_cnt);
+        }
+      }
+    }
 
     static void decode_raw(
       BlueStore::Onode* on,
@@ -638,60 +751,6 @@ namespace bluestore {
   static inline void intrusive_ptr_release(bluestore::Onode *o) {
     o->put();
   }
-
-  /// in-memory shared blob state (incl cached buffers)
-  struct SharedBlob {
-    MEMPOOL_CLASS_HELPERS();
-
-    std::atomic_int nref = {0}; ///< reference count
-    bool loaded = false;
-
-    BlueStore::CollectionRef collection;
-    union {
-      uint64_t sbid_unloaded;              ///< sbid if persistent isn't loaded
-      bluestore_shared_blob_t *persistent; ///< persistent part of the shared blob if any
-    };
-
-    SharedBlob(BlueStore::Collection *_coll) : collection(_coll), sbid_unloaded(0) {
-    }
-    SharedBlob(uint64_t i, BlueStore::Collection *_coll);
-    ~SharedBlob();
-
-    uint64_t get_sbid() const {
-      return loaded ? persistent->sbid : sbid_unloaded;
-    }
-
-    friend void intrusive_ptr_add_ref(SharedBlob *b) { b->get(); }
-    friend void intrusive_ptr_release(SharedBlob *b) { b->put(); }
-
-    void dump(ceph::Formatter* f) const;
-    friend std::ostream& operator<<(std::ostream& out, const SharedBlob& sb);
-
-    void get() {
-      ++nref;
-    }
-    void put();
-
-    /// get logical references
-    void get_ref(uint64_t offset, uint32_t length);
-
-    /// put logical references, and get back any released extents
-    void put_ref(uint64_t offset, uint32_t length,
-		 PExtentVector *r, bool *unshare);
-    friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
-      return l.get_sbid() == r.get_sbid();
-    }
-    inline BlueStore::BufferCacheShard* get_cache() {
-      return collection ? collection->cache : nullptr;
-    }
-    inline BlueStore::SharedBlobSet* get_parent() {
-      return collection ? &(collection->shared_blob_set) : nullptr;
-    }
-    inline bool is_loaded() const {
-      return loaded;
-    }
-
-  };
 }
 
 #endif
