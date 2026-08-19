@@ -64,7 +64,7 @@ public:
                 ceph::mutex& m);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
-  MonConnection& operator=(MonConnection&&) = default;
+  MonConnection& operator=(MonConnection&&) = delete;
   MonConnection(const MonConnection& rhs) = delete;
   MonConnection& operator=(const MonConnection&) = delete;
   int handle_auth(MAuthReply *m,
