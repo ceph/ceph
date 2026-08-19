@@ -1250,7 +1250,6 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (auto it = osdmap->get_pools().begin();
        it != osdmap->get_pools().end(); ++it)
     pool_full_map[it->first] = _osdmap_pool_full(it->second);
-  pool_migration_watermarks.clear();
 
   list<LingerOp*> need_resend_linger;
   map<ceph_tid_t, Op*> need_resend;
@@ -1365,6 +1364,12 @@ void Objecter::handle_osd_map(MOSDMap *m)
       }
     }
   }
+
+  // discard pool migration watermarks for PGs that have finished migrating
+  std::erase_if(pool_migration_watermarks, [&](const auto& item) {
+    auto const& [pg, watermark] = item;
+    return !(osdmap->get_pg_pool(pg.pool())->is_pg_migrating(pg));
+  });
 
   // make sure need_resend targets reflect latest map
   for (auto p = need_resend.begin(); p != need_resend.end(); ) {
