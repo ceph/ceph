@@ -33,7 +33,9 @@ def task(ctx, config):
           m: 1
           crush-failure-domain: osd
         cleanup: false (defaults to true)
-        type: <write|seq|rand> (defaults to write)
+        type: <write|seq|rand|rollback> (defaults to write)
+        rollback_snap: <snapshot> (to be used with runtype `rollback`)
+        skip_write: skip write for seq|rand|rollback run type (defaults to `false`)
     example:
 
     tasks:
@@ -51,6 +53,7 @@ def task(ctx, config):
     testdir = teuthology.get_testdir(ctx)
     manager = ctx.managers['ceph']
     runtype = config.get('type', 'write')
+    skip_write = config.get('skip_write', False)
 
     create_pool = config.get('create_pool', True)
     for role in config.get(
@@ -75,6 +78,10 @@ def task(ctx, config):
         if config.get('write-omap', False):
             write_to_omap = ['--write-omap']
             log.info('omap writes')
+        rollback_snap = []
+        snap = config.get('rollback_snap', None)
+        if snap:
+            rollback_snap = ['--snap', snap]
 
         pool = config.get('pool', 'data')
         if create_pool:
@@ -91,7 +98,7 @@ def task(ctx, config):
             objectsize = ['--object-size', str(osize)]
         size = ['-b', str(config.get('size', 65536))]
         # If doing a reading run then populate data
-        if runtype != "write":
+        if runtype != "write" and not skip_write:
             proc = remote.run(
                 args=[
                     "/bin/sh", "-c",
@@ -110,6 +117,7 @@ def task(ctx, config):
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             wait=True
             )
+        if runtype != "write":
             size = []
             objectsize = []
 
@@ -126,7 +134,7 @@ def task(ctx, config):
                           + size + objectsize +
                           ['-p' , pool,
                           'bench', str(config.get('time', 360)), runtype,
-                          ] + write_to_omap + cleanup).format(tdir=testdir),
+                          ] + write_to_omap + rollback_snap + cleanup).format(tdir=testdir),
                 ],
             logger=log.getChild('radosbench.{id}'.format(id=id_)),
             stdin=run.PIPE,
