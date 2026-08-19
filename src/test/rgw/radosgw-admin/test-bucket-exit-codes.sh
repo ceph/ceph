@@ -1378,6 +1378,18 @@ check_cluster "list: --categories after the command" 0 "" -- bucket list --categ
 check "bucket: --categories takes the command word" 1 'ERROR: Unknown command' bucket --categories list
 check_cluster "stats: --categories takes 'list', 'stats' survives" 0 "" -- bucket --categories list stats
 
+# a flag the loop does not know still takes the next token as its value, even
+# when that token is flag-shaped. --access-key is checked and fails; nothing
+# checks --secret-key, so the same line runs to completion.
+check_cluster "list: --access-key takes a bare word as its value" 22 'user.init failed' -- bucket list --access-key banana
+check_cluster "list: --secret-key takes a bare word as its value" 0 "" -- bucket list --secret-key banana
+check_cluster "list: --access-key takes --bucket as its value" 22 'user.init failed' -- bucket list --access-key --bucket
+check_cluster "list: --secret-key takes --bucket as its value" 0 "" -- bucket list --secret-key --bucket
+check_cluster "stats: --access-key takes --bucket as its value" 22 'user.init failed' -- bucket stats --access-key --bucket
+check_cluster "stats: --secret-key takes --bucket as its value" 0 "" -- bucket stats --secret-key --bucket
+check "list: --access-key takes --bucket, 'demo' is left as a command word" 1 'Command not found: bucket list demo' bucket list --access-key --bucket demo
+check "list: --secret-key takes --bucket, 'demo' is left as a command word" 1 'Command not found: bucket list demo' bucket list --secret-key --bucket demo
+
 # with no command word at all, only the flag loop runs
 check "unknown flag with no command" 22 'ERROR: invalid flag --banana' --banana
 check "--fix leaves a lone dash with no command" 22 'ERROR: invalid flag -' --fix -
@@ -1404,6 +1416,59 @@ check "bucket: lone dash before the command word" 22 'ERROR: invalid flag -' buc
 check "list: lone dash after the command" 22 'ERROR: invalid flag -' bucket list -
 check "list: unknown flag on a complete command" 22 'ERROR: invalid flag --banana' bucket list --banana
 check "list: --bucket without a value" 1 'Option --bucket requires an argument.' bucket list --bucket
+
+# ============================================================
+echo ""
+echo "=== 'bucket' as an ordinary word ==="
+# ============================================================
+# Besides naming the bucket commands, the word 'bucket' names a legacy command,
+# names a metadata section, and can be any flag's value. These rows pin that it
+# is treated as an ordinary word in each of those positions. Most are paired
+# with the same line using a different word, and the two results match.
+
+# 'reshard bucket' is the alias form of 'bucket reshard'; both reach the same handler
+check_cluster "reshard bucket: missing --bucket" 234 'ERROR: bucket not specified' -- reshard bucket
+check_cluster "bucket reshard: missing --bucket" 234 'ERROR: bucket not specified' -- bucket reshard
+# --num-shards is checked after the bucket name, so this one got into the handler
+check_cluster "reshard bucket: --num-shards not specified" 234 'ERROR: --num-shards not specified' -- reshard bucket --bucket demo
+
+# 'bucket' as a metadata section name. Every verb that takes a bare section
+# name reaches its handler with it. 'metadata put' is left out on purpose: it
+# reads stdin, so a row for it would block the suite.
+check_cluster "metadata list bucket" 0 "" -- metadata list bucket
+check_cluster "metadata list bucket, json format" 0 "" -- metadata list bucket --format json
+check_cluster "metadata get bucket" 22 "ERROR: can't get key" -- metadata get bucket
+check_cluster "metadata rm bucket" 22 "ERROR: can't remove key" -- metadata rm bucket
+check_cluster "metadata list bucket.instance" 0 "" -- metadata list bucket.instance
+check_cluster "metadata list user" 0 "" -- metadata list user
+
+# 'bucket' as a flag's value, on commands outside the bucket family
+check_cluster "user info: --access-key bucket" 22 'user.init failed' -- user info --access-key bucket
+check_cluster "user info: --access-key banana" 22 'user.init failed' -- user info --access-key banana
+check_cluster "period get: --period bucket" 2 'failed to load period' -- period get --period bucket
+check_cluster "period get: --period banana" 2 'failed to load period' -- period get --period banana
+check_cluster "user create: --display-name bucket" 22 'could not create user' -- user create --display-name bucket
+check_cluster "user create: --display-name banana" 22 'could not create user' -- user create --display-name banana
+# the same shape on a command that SUCCEEDS: the word is taken as the value and
+# the command still runs to completion
+check_cluster "gc list: --period bucket" 0 "" -- gc list --period bucket
+check_cluster "gc list: --period banana" 0 "" -- gc list --period banana
+
+# 'bucket' as a flag's value on the bucket commands themselves, before and
+# after the command words
+check_cluster "list: --access-key bucket" 22 'user.init failed' -- bucket list --access-key bucket
+check_cluster "stats: --access-key bucket" 22 'user.init failed' -- bucket stats --access-key bucket
+check_cluster "list: --access-key bucket before the command words" 22 'user.init failed' -- --access-key bucket bucket list
+check_cluster "list: --access-key script before the command words" 22 'user.init failed' -- --access-key script bucket list
+check "bucket: --access-key bucket, no subcommand" 1 'ERROR: Unknown command' bucket --access-key bucket
+
+# a flag the loop does know takes the word as its value first
+check_cluster "user info: --bucket bucket" 22 'ERROR: --uid or --access-key required' -- user info --bucket bucket
+check_cluster "metadata list: --bucket bucket" 0 "" -- metadata list --bucket bucket
+check_cluster "user info: --uid bucket" 22 'could not fetch user info' -- user info --uid bucket
+
+# a global flag before the command words
+check_cluster "metadata list bucket: --tenant before the command" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant t metadata list bucket
 
 # ============================================================
 echo ""
