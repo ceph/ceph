@@ -702,6 +702,9 @@ void Client::_finish_init()
     plb.add_u64_counter(l_c_aio_ops, "aio_ops", "Total async IO operations");
     plb.add_u64_counter(l_c_aio_completions, "aio_completions", "Total async IO completions");
     plb.add_u64(l_c_aio_in_flight, "aio_in_flight", "Async IO operations in flight");
+    plb.add_u64_counter(l_c_aio_in_flight_peak, "aio_in_flight_peak", "Peak async IO operations in flight");
+    plb.add_u64(l_c_sync_in_flight, "sync_in_flight", "Sync IO operations in flight");
+    plb.add_u64_counter(l_c_sync_in_flight_peak, "sync_in_flight_peak", "Peak sync IO operations in flight");
     plb.add_u64_counter(l_c_osdc_hit, "osdc_hit", "OSDC cache hits");
     plb.add_u64_counter(l_c_osdc_miss, "osdc_miss", "OSDC cache misses");
     plb.add_u64(l_c_osdc_dirty, "osdc_dirty", "OSDC dirty buffer size");
@@ -11669,6 +11672,9 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
+  if (logger) {
+    inc_sync_in_flight();
+  }
 
   tout(cct) << "read" << std::endl;
   tout(cct) << fd << std::endl;
@@ -11677,11 +11683,19 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
 
   std::unique_lock lock(client_lock);
   Fh *f = get_filehandle(fd);
-  if (!f)
+  if (!f) {
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
+  }
 #if defined(__linux__) && defined(O_PATH)
-  if (f->flags & O_PATH)
+  if (f->flags & O_PATH) {
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
+  }
 #endif
   bufferlist bl;
 #if defined(__linux__)
@@ -11702,6 +11716,9 @@ int Client::read(int fd, char *buf, loff_t size, loff_t offset)
     lock.unlock();
     bl.begin().copy(bl.length(), buf);
     r = bl.length();
+  }
+  if (logger) {
+    dec_sync_in_flight();
   }
   return r;
 }
@@ -11746,6 +11763,8 @@ void Client::C_Read_Finisher::finish_io(int r)
     clnt->unlock_fh_pos(f);
   }
 
+  clnt->logger->inc(l_c_aio_completions);
+  clnt->dec_aio_in_flight();
   onfinish->complete(r);
   delete this;
 }
@@ -11980,6 +11999,11 @@ retry:
                        have, movepos, f, in, f->pos, offset, size));
 
     crf_iofinish->CRF = crf.get();
+    // Track aio here so both the ObjectCacher path and C_Read_Sync_NonBlocking
+    // (used by ceph_ll_nonblocking_readv_writev when client_oc is off / no Fc)
+    // update aio_in_flight / aio_in_flight_peak.
+    logger->inc(l_c_aio_ops);
+    inc_aio_in_flight();
   }
 
   // There are three cases to be handled at this point:
@@ -12169,9 +12193,8 @@ void Client::C_Read_Async_Finisher::finish(int r)
   if (r != 0)
     clnt->do_readahead(f, in, off, len);
 
+  // aio_in_flight is tracked by C_Read_Finisher when used from _read.
   onfinish->complete(r);
-  clnt->logger->inc(l_c_aio_completions);
-  clnt->logger->dec(l_c_aio_in_flight);
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
@@ -12210,6 +12233,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   get_cap_ref(in, CEPH_CAP_FILE_CACHE);
 
   if (onfinish != nullptr) {
+    // aio_in_flight is incremented by _read when it creates C_Read_Finisher.
     io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in, bl,
                                               f->pos, off, len,
 #if defined(__linux__)
@@ -12240,10 +12264,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     return 0;
   }
 
-  if (onfinish != nullptr) {
-    logger->inc(l_c_aio_ops);
-    logger->inc(l_c_aio_in_flight);
-  }
   auto target_len = std::min(len, effective_size - off);
   
   ldout(cct, 10) << " min_bytes=" << f->readahead.get_min_readahead_size()
@@ -12463,6 +12483,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
   if (!mref_reader.is_state_satisfied())
     return -ENOTCONN;
+  if (logger) {
+    inc_sync_in_flight();
+  }
 
   tout(cct) << "write" << std::endl;
   tout(cct) << fd << std::endl;
@@ -12471,11 +12494,19 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
 
   std::scoped_lock lock(client_lock);
   Fh *fh = get_filehandle(fd);
-  if (!fh)
+  if (!fh) {
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
+  }
 #if defined(__linux__) && defined(O_PATH)
-  if (fh->flags & O_PATH)
+  if (fh->flags & O_PATH) {
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
+  }
 #endif
 #if defined(__linux__)
   /* We can't return bytes written larger than INT_MAX, clamp size to
@@ -12493,6 +12524,9 @@ int Client::write(int fd, const char *buf, loff_t size, loff_t offset)
   bl.append(buf, size);
   int r = _write(fh, offset, size, std::move(bl));
   ldout(cct, 3) << "write(" << fd << ", \"...\", " << size << ", " << offset << ") = " << r << dendl;
+  if (logger) {
+    dec_sync_in_flight();
+  }
   return r;
 }
 
@@ -12589,12 +12623,23 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
     tout(cct) << fd << std::endl;
     tout(cct) << offset << std::endl;
 
+    if (onfinish == nullptr && logger) {
+      inc_sync_in_flight();
+    }
     std::scoped_lock cl(client_lock);
     Fh *fh = get_filehandle(fd);
-    if (!fh)
+    if (!fh) {
+      if (onfinish == nullptr && logger) {
+        dec_sync_in_flight();
+      }
       return -EBADF;
-    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
-                                  onfinish, blp);
+    }
+    auto r = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
+                                    onfinish, blp);
+    if (onfinish == nullptr && logger) {
+      dec_sync_in_flight();
+    }
+    return r;
 }
 
 int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
@@ -12748,7 +12793,7 @@ bool Client::C_Write_Finisher::try_complete()
       clnt->logger->tinc(l_c_fscrypt_wr_lat, mono_clock_now() - start);
     }
     clnt->logger->inc(l_c_aio_completions);
-    clnt->logger->dec(l_c_aio_in_flight);
+    clnt->dec_aio_in_flight();
     onfinish = nullptr;
     return true;
   }
@@ -13224,7 +13269,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
     cwf_iofinish->CWF = cwf.get();
       logger->inc(l_c_aio_ops);
-      logger->inc(l_c_aio_in_flight);
+      inc_aio_in_flight();
   }
 
   if (cct->_conf->client_oc &&
@@ -17548,6 +17593,9 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   if (!mref_reader.is_state_satisfied()) {
     return -ENOTCONN;
   }
+  if (logger) {
+    inc_sync_in_flight();
+  }
 
 #if defined(__linux__)
   /* We can't return bytes written larger than INT_MAX, clamp size to
@@ -17565,6 +17613,9 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
   }
 
@@ -17577,6 +17628,9 @@ int Client::ll_read(Fh *fh, loff_t off, loff_t len, bufferlist *bl)
   int r = _read(fh, off, len, bl);
   ldout(cct, 3) << "ll_read " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
+  if (logger) {
+    dec_sync_in_flight();
+  }
   return r;
 }
 
@@ -17703,6 +17757,9 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   if (!mref_reader.is_state_satisfied()) {
     return -ENOTCONN;
   }
+  if (logger) {
+    inc_sync_in_flight();
+  }
 
 #if defined(__linux__)
   /* We can't return bytes written larger than INT_MAX, clamp size to
@@ -17719,6 +17776,9 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   std::scoped_lock lock(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
   }
 
@@ -17734,6 +17794,9 @@ int Client::ll_write(Fh *fh, loff_t off, loff_t len, const char *data)
   int r = _write(fh, off, len, std::move(bl));
   ldout(cct, 3) << "ll_write " << fh << " " << off << "~" << len << " = " << r
 		<< dendl;
+  if (logger) {
+    dec_sync_in_flight();
+  }
   return r;
 }
 
@@ -17743,13 +17806,23 @@ int64_t Client::ll_writev(struct Fh *fh, const struct iovec *iov, int iovcnt, in
   if (!mref_reader.is_state_satisfied()) {
     return -ENOTCONN;
   }
+  if (logger) {
+    inc_sync_in_flight();
+  }
 
   std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
   }
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, true, true);
+  auto r = _preadv_pwritev_locked(fh, iov, iovcnt, off, true, true);
+  if (logger) {
+    dec_sync_in_flight();
+  }
+  return r;
 }
 
 int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int64_t off)
@@ -17758,13 +17831,23 @@ int64_t Client::ll_readv(struct Fh *fh, const struct iovec *iov, int iovcnt, int
   if (!mref_reader.is_state_satisfied()) {
     return -ENOTCONN;
   }
+  if (logger) {
+    inc_sync_in_flight();
+  }
 
   std::scoped_lock cl(client_lock);
   if (fh == NULL || !_ll_fh_exists(fh)) {
     ldout(cct, 3) << "(fh)" << fh << " is invalid" << dendl;
+    if (logger) {
+      dec_sync_in_flight();
+    }
     return -EBADF;
   }
-  return _preadv_pwritev_locked(fh, iov, iovcnt, off, false, true);
+  auto r = _preadv_pwritev_locked(fh, iov, iovcnt, off, false, true);
+  if (logger) {
+    dec_sync_in_flight();
+  }
+  return r;
 }
 
 int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
@@ -17773,6 +17856,9 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   bool do_fsync, bool syncdataonly)
 {
     int64_t retval = -1;
+    if (onfinish == nullptr && logger) {
+      inc_sync_in_flight();
+    }
 
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied()) {
@@ -17782,6 +17868,9 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
         /* async call should always return zero to caller and allow the
         caller to wait on callback for the actual errno. */
         retval = 0;
+      }
+      if (onfinish == nullptr && logger) {
+        dec_sync_in_flight();
       }
       return retval;
     }
@@ -17800,6 +17889,9 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
         onfinish->complete(retval);
         cl.lock();
         retval = 0;
+      }
+      if (onfinish == nullptr && logger) {
+        dec_sync_in_flight();
       }
       return retval;
     }
@@ -17831,6 +17923,9 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
         caller to wait on callback for the actual errno/retval. */
         retval = 0;
       }
+    }
+    if (onfinish == nullptr && logger) {
+      dec_sync_in_flight();
     }
     return retval;
 }
