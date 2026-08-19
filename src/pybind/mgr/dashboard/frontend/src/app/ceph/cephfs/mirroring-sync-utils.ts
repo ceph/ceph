@@ -39,9 +39,8 @@ export class MirroringSyncUtils {
           hasBytesSynced = true;
         }
 
-        // sync_time_stamp is a wall-clock Unix epoch (number or "<epoch>s" string).
-        const syncTime = parseFloat(String(snap.sync_time_stamp ?? ''));
-        if (syncTime >= latestSyncTime) {
+        const syncTime = MirroringSyncUtils.parseSyncTimeStamp(snap.sync_time_stamp);
+        if (syncTime !== null && syncTime >= latestSyncTime) {
           latestSyncTime = syncTime;
           latestSnapName = snap.name ?? '';
           latestSyncPath = dirPath;
@@ -58,6 +57,31 @@ export class MirroringSyncUtils {
         syncedAt: latestSyncTime || null
       }
     };
+  }
+
+  static parseSyncTimeStamp(value: number | string | undefined | null): number | null {
+    if (value === undefined || value === null || value === '') {
+      return null;
+    }
+    if (typeof value === 'number') {
+      return Number.isFinite(value) && value > 0 ? value : null;
+    }
+
+    const str = String(value).trim();
+    if (!str) {
+      return null;
+    }
+
+    if (str.includes('T')) {
+      const ms = Date.parse(str.replace(/([+-]\d{2})(\d{2})$/, '$1:$2'));
+      if (!Number.isFinite(ms)) {
+        return null;
+      }
+      return ms / 1000;
+    }
+
+    const epoch = parseFloat(str);
+    return Number.isFinite(epoch) && epoch > 0 ? epoch : null;
   }
 
   static parseSyncBytes(value: number | string | undefined | null): number | null {

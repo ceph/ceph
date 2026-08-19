@@ -64,9 +64,8 @@ describe('CephfsMirroringFsOverviewComponent', () => {
             last_synced_snap: {
               name: 'snap1',
               sync_bytes: '1.00 KiB',
-              sync_time_stamp: '1786358053.364396s'
-            },
-            metrics_updated_at: 1_700_000_000
+              sync_time_stamp: '2026-08-12T13:32:21.383628+0000'
+            }
           }
         }
       },
@@ -148,7 +147,7 @@ describe('CephfsMirroringFsOverviewComponent', () => {
     expect(fsData?.sync.bytesSynced).toBe('1 KiB');
     expect(fsData?.sync.path).toBe('/dir1');
     expect(fsData?.sync.snapName).toBe('snap1');
-    expect(fsData?.sync.syncedAt).toBe(1786358053.364396);
+    expect(fsData?.sync.syncedAt).toBe(1786541541.383);
   });
 
   it('should refresh overview data on interval tick', async () => {

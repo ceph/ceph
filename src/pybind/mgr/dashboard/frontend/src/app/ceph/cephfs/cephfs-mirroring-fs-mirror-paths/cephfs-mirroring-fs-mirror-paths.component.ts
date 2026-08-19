@@ -34,6 +34,7 @@ import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { RelativeDatePipe } from '~/app/shared/pipes/relative-date.pipe';
+import { MirroringSyncUtils } from '../mirroring-sync-utils';
 
 type SnapshotReplicationStatus = 'in-progress' | 'replicated' | 'pending' | 'failed';
 type SyncStatus = 'syncing' | 'idle' | 'failed' | 'completed';
@@ -442,6 +443,9 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
 
     const syncStatus = (peerInfo.state ?? 'idle') as SyncStatus;
     const snapshots = this.buildSnapshotList(peerInfo, syncStatus);
+    const lastSyncedAt = MirroringSyncUtils.parseSyncTimeStamp(
+      peerInfo.last_synced_snap?.sync_time_stamp
+    );
 
     return {
       path,
@@ -453,11 +457,7 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       currentSyncMode: currentSnap?.['sync-mode'],
       lastSyncedSnapshot: peerInfo.last_synced_snap?.name ?? '-',
       lastSyncedTime:
-        peerInfo.last_synced_snap?.sync_time_stamp != null
-          ? this.relativeDatePipe.transform(
-              parseFloat(String(peerInfo.last_synced_snap.sync_time_stamp))
-            )
-          : undefined,
+        lastSyncedAt != null ? this.relativeDatePipe.transform(lastSyncedAt) : undefined,
       snapshotCount: peerInfo.snaps_synced ?? 0,
       pendingSnapshotCount: snapshots.filter(
         (snapshot) => snapshot.status === 'in-progress' || snapshot.status === 'pending'
