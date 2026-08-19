@@ -1849,6 +1849,261 @@ async fn test_lifecycle_expiration_header_head() {
     assert!(check_lifecycle_expiration_header(response.expiration(), now, "rule1", 1));
 }
 
+/// Versioning-suspended bucket with a current Expiration rule:
+/// x-amz-expiration must still appear on HEAD and GET (per AWS spec,
+/// the header is returned whenever the object matches an Expiration
+/// rule, regardless of versioning state).
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_lifecycle_expiration_header_versioning_suspended() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    let now = chrono::Utc::now();
+
+    // enable then suspend versioning
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+    check_configure_versioning_retry(&client, &bucket_name, "Suspended", "Suspended").await;
+
+    let rules = vec![LifecycleRule::builder()
+        .id("expire-current")
+        .filter(LifecycleRuleFilter::builder().prefix("").build())
+        .expiration(aws_sdk_s3::types::LifecycleExpiration::builder().days(1).build())
+        .status(ExpirationStatus::Enabled)
+        .build()
+        .unwrap()];
+
+    let lc = aws_sdk_s3::types::BucketLifecycleConfiguration::builder()
+        .set_rules(Some(rules))
+        .build()
+        .unwrap();
+
+    client
+        .put_bucket_lifecycle_configuration()
+        .bucket(&bucket_name)
+        .lifecycle_configuration(lc)
+        .send()
+        .await
+        .unwrap();
+
+    let key = "testobj";
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from_static(b"data"))
+        .send()
+        .await
+        .unwrap();
+
+    // HEAD without versionId
+    let head = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        check_lifecycle_expiration_header(head.expiration(), now, "expire-current", 1),
+        "HEAD on versioning-suspended bucket should return x-amz-expiration, got: {:?}",
+        head.expiration()
+    );
+
+    // GET without versionId
+    let get = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        check_lifecycle_expiration_header(get.expiration(), now, "expire-current", 1),
+        "GET on versioning-suspended bucket should return x-amz-expiration, got: {:?}",
+        get.expiration()
+    );
+}
+
+/// Versioned bucket with a current-version Expiration rule: the
+/// x-amz-expiration header must appear on plain HEAD and GET (no
+/// versionId), must appear on PUT, and must be absent when the
+/// request includes a versionId.
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_lifecycle_expiration_header_versioned_current() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    let now = chrono::Utc::now();
+
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let rules = vec![LifecycleRule::builder()
+        .id("expire-current")
+        .filter(LifecycleRuleFilter::builder().prefix("").build())
+        .expiration(aws_sdk_s3::types::LifecycleExpiration::builder().days(1).build())
+        .status(ExpirationStatus::Enabled)
+        .build()
+        .unwrap()];
+
+    let lc = aws_sdk_s3::types::BucketLifecycleConfiguration::builder()
+        .set_rules(Some(rules))
+        .build()
+        .unwrap();
+
+    client
+        .put_bucket_lifecycle_configuration()
+        .bucket(&bucket_name)
+        .lifecycle_configuration(lc)
+        .send()
+        .await
+        .unwrap();
+
+    let key = "testobj";
+    let put_resp = client
+        .put_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .body(ByteStream::from_static(b"data"))
+        .send()
+        .await
+        .unwrap();
+    let version_id = put_resp.version_id().unwrap().to_string();
+
+    // HEAD without versionId — must have x-amz-expiration
+    let head = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        check_lifecycle_expiration_header(head.expiration(), now, "expire-current", 1),
+        "HEAD (no versionId) on versioned bucket should return x-amz-expiration, got: {:?}",
+        head.expiration()
+    );
+
+    // GET without versionId — must have x-amz-expiration
+    let get = client
+        .get_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        check_lifecycle_expiration_header(get.expiration(), now, "expire-current", 1),
+        "GET (no versionId) on versioned bucket should return x-amz-expiration, got: {:?}",
+        get.expiration()
+    );
+
+    // HEAD with versionId — must NOT have x-amz-expiration
+    let head_ver = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key(key)
+        .version_id(&version_id)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        head_ver.expiration().is_none(),
+        "HEAD with versionId should not return x-amz-expiration, got: {:?}",
+        head_ver.expiration()
+    );
+}
+
+/// Versioned bucket with BOTH Expiration and NoncurrentVersionExpiration:
+/// HEAD of the current version (no versionId) should get x-amz-expiration
+/// from the Expiration rule, not the NoncurrentVersionExpiration rule.
+#[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
+#[tokio::test]
+async fn test_lifecycle_expiration_header_versioned_combined() {
+    let _guard = s3_tests_rs::fixtures::TestGuard::setup();
+    let client = get_client();
+    let bucket_name = get_new_bucket(Some(&client)).await;
+    let now = chrono::Utc::now();
+
+    check_configure_versioning_retry(&client, &bucket_name, "Enabled", "Enabled").await;
+
+    let rules = vec![LifecycleRule::builder()
+        .id("combined-rule")
+        .filter(LifecycleRuleFilter::builder().prefix("").build())
+        .expiration(aws_sdk_s3::types::LifecycleExpiration::builder().days(7).build())
+        .noncurrent_version_expiration(
+            NoncurrentVersionExpiration::builder()
+                .noncurrent_days(30)
+                .build(),
+        )
+        .status(ExpirationStatus::Enabled)
+        .build()
+        .unwrap()];
+
+    let lc = aws_sdk_s3::types::BucketLifecycleConfiguration::builder()
+        .set_rules(Some(rules))
+        .build()
+        .unwrap();
+
+    client
+        .put_bucket_lifecycle_configuration()
+        .bucket(&bucket_name)
+        .lifecycle_configuration(lc)
+        .send()
+        .await
+        .unwrap();
+
+    // upload two versions
+    client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("obj")
+        .body(ByteStream::from_static(b"v1"))
+        .send()
+        .await
+        .unwrap();
+    let v2 = client
+        .put_object()
+        .bucket(&bucket_name)
+        .key("obj")
+        .body(ByteStream::from_static(b"v2"))
+        .send()
+        .await
+        .unwrap();
+    let version_id = v2.version_id().unwrap().to_string();
+
+    // HEAD current version (no versionId) — must get x-amz-expiration
+    // with the Expiration rule (Days=7), not the NoncurrentVersionExpiration
+    let head = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key("obj")
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        check_lifecycle_expiration_header(head.expiration(), now, "combined-rule", 7),
+        "HEAD current version should get x-amz-expiration from Expiration rule (7 days), got: {:?}",
+        head.expiration()
+    );
+
+    // HEAD with versionId — must NOT have x-amz-expiration
+    let head_ver = client
+        .head_object()
+        .bucket(&bucket_name)
+        .key("obj")
+        .version_id(&version_id)
+        .send()
+        .await
+        .unwrap();
+    assert!(
+        head_ver.expiration().is_none(),
+        "HEAD with versionId should not return x-amz-expiration, got: {:?}",
+        head_ver.expiration()
+    );
+}
+
 #[cfg_attr(feature = "fails_on_dbstore", ignore = "fails on dbstore")]
 #[tokio::test]
 async fn test_lifecycle_noncurrent_expiration_header_not_on_current() {
