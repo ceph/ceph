@@ -16,19 +16,29 @@ SET_SUBSYS(seastore_device);
 
 namespace crimson::os::seastore {
 
+device_spec_t get_rbm_ephemeral_device_spec(
+  device_id_t id)
+{
+  magic_t magic = 0xfffa;
+  return device_spec_t{
+    magic,
+    device_type_t::RANDOM_BLOCK_EPHEMERAL,
+    backend_type_t::RANDOM_BLOCK,
+    id};
+}
+
 device_config_t get_rbm_ephemeral_device_config(
   device_id_t id,
   device_set_t cache_devices,
+  device_set_t data_devices,
   bool is_major_device)
 {
-  magic_t magic = 0xfffa;
-  auto type = device_type_t::RANDOM_BLOCK_EPHEMERAL;
-
   seastore_meta_t meta = {};
   return {is_major_device,
-          device_spec_t{magic, type, backend_type_t::RANDOM_BLOCK, id},
+          get_rbm_ephemeral_device_spec(id),
           meta,
-          cache_devices};
+          cache_devices,
+          data_devices};
 }
 
 paddr_t BlockRBManager::alloc_extent(size_t size)

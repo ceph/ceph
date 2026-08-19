@@ -33,26 +33,38 @@ EphemeralSegmentManagerRef create_test_ephemeral(
     new EphemeralSegmentManager(id, dtype, DEFAULT_TEST_EPHEMERAL));
 }
 
+device_spec_t get_ephemeral_device_spec(
+  device_id_t id,
+  bool is_cache,
+  bool is_cold)
+{
+  magic_t magic = 0xabcd;
+  return device_spec_t{
+    magic,
+    is_cache
+      ? device_type_t::EPHEMERAL_MAIN
+      : (is_cold
+         ? device_type_t::EPHEMERAL_COLD
+         : device_type_t::EPHEMERAL_MAIN),
+    backend_type_t::SEGMENTED,
+    id};
+}
+
 device_config_t get_ephemeral_device_config(
   device_id_t id,
   device_set_t cache_devices,
+  device_set_t data_devices,
   bool is_major_device)
 {
-  magic_t magic = 0xabcd;
   seastore_meta_t meta = {};
-  device_type_t dtype = device_type_t::EPHEMERAL_MAIN;
-  if (!cache_devices.empty()) {
-    dtype = device_type_t::EPHEMERAL_COLD;
-  }
   return {is_major_device,
-          device_spec_t{
-            magic,
-            dtype,
-	    backend_type_t::SEGMENTED,
-            id
-          },
+          get_ephemeral_device_spec(
+            id,
+            !is_major_device,
+            is_major_device && !cache_devices.empty()),
           meta,
-          cache_devices};
+          cache_devices,
+          data_devices};
 }
 
 EphemeralSegment::EphemeralSegment(
