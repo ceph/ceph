@@ -134,12 +134,17 @@ The command also reports, for each queue shard of the topic, the radosgw that
 currently owns it and the time at which that ownership expires. A shard that is
 not owned by any radosgw is reported without an owner.
 
-Dump (in JSON format) all pending bucket notifications of a persistent topic
+Dump (in JSON format) the pending bucket notifications of a persistent topic
 by running the following command:
 
 .. prompt:: bash #
 
-   radosgw-admin topic dump --topic={topic-name} [--tenant={tenant}] [--max-entries={max-entries}]
+   radosgw-admin topic dump --topic={topic-name} [--tenant={tenant}] [--max-entries={max-entries}] [--marker={marker}]
+
+At most ``max-entries`` notifications are returned. If more are pending, the
+result has ``truncated`` set to ``true`` and holds the ``marker`` from which the
+next command should continue. If ``max-entries`` is not given, all pending
+notifications are dumped.
 
 
 Notification Performance Statistics
