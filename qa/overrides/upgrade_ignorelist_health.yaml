@@ -26,3 +26,4 @@ overrides:
       - have.*want.*more
       - fs .* is degraded
       - is offline because no MDS is active for it
+      - all OSDs are running umbrella
