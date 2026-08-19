@@ -38,9 +38,11 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_MANIFEST "POSIX-Manifest"
 #define RGW_POSIX_ATTR_VERSION "POSIX-version"
+#define RGW_POSIX_ATTR_VERSION_ID "version_id"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
+static const std::string NULL_VERSION_ID = "null";
 
 struct POSIXOwner {
   rgw_user user;
@@ -107,6 +109,99 @@ static inline std::string gen_rand_instance_name()
 
   return buf;
 }
+
+
+/* Versions */
+
+
+static std::string to_base36(uint64_t v)
+{
+  if (v == 0) return "0";
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  std::string result;
+  while (v > 0) {
+    result.insert(result.begin(), digits[v % 36]);
+    v /= 36;
+  }
+  return result;
+}
+
+static bool from_base36(const std::string& s, uint64_t& out)
+{
+  out = 0;
+  for (char c : s) {
+    uint64_t d;
+    if (c >= '0' && c <= '9') {
+      d = c - '0';
+    } else if (c >= 'a' && c <= 'z') {
+      d = 10 + (c - 'a');
+    } else {
+      return false;
+    }
+    out = out * 36 + d;
+  }
+  return true;
+}
+
+static uint64_t statx_mtime_ns(const struct statx& stx)
+{
+  return (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+       + stx.stx_mtime.tv_nsec;
+}
+
+static std::string posix_version_id_from_statx(const struct statx& stx)
+{
+  return "mtime-" + to_base36(statx_mtime_ns(stx))
+       + "-ino-" + to_base36(stx.stx_ino);
+}
+
+struct posix_version_info {
+  uint64_t mtime_ns{0};
+  uint64_t ino{0};
+};
+
+#if 0
+static bool posix_parse_version_id(const std::string& version_id,
+                                   posix_version_info& info)
+{
+  if (version_id == NULL_VERSION_ID) {
+    info = {};
+    return true;
+  }
+  static const std::string mtime_pfx = "mtime-";
+  static const std::string ino_pfx = "-ino-";
+  if (version_id.compare(0, mtime_pfx.size(), mtime_pfx) != 0) {
+    return false;
+  }
+  auto ino_pos = version_id.find(ino_pfx, mtime_pfx.size());
+  if (ino_pos == std::string::npos) {
+    return false;
+  }
+  std::string mtime_str = version_id.substr(mtime_pfx.size(),
+                                            ino_pos - mtime_pfx.size());
+  std::string ino_str = version_id.substr(ino_pos + ino_pfx.size());
+  return from_base36(mtime_str, info.mtime_ns) &&
+         from_base36(ino_str, info.ino);
+}
+
+static bool is_null_version_fd(int fd)
+{
+  char buf[256];
+  std::string vid_xattr = ATTR_PREFIX + RGW_POSIX_ATTR_VERSION_ID;
+  ssize_t len = ::fgetxattr(fd, vid_xattr.c_str(), buf, sizeof(buf));
+  if (len <= 0) {
+    return true;
+  }
+  return std::string_view(buf, len) == NULL_VERSION_ID;
+}
+#endif
+/* version entry name within .versions/: <leaf>_<version_id> */
+static inline std::string posix_ver_entry(const std::string& leaf,
+                                         const std::string& vid)
+{
+  return leaf + "_" + vid;
+}
+
 
 static inline std::string bucket_fname(std::string name, std::optional<std::string>& ns)
 {
@@ -532,6 +627,7 @@ int File::create(const DoutPrefixProvider *dpp, bool* existed, bool temp_file)
 
 int File::open(const DoutPrefixProvider* dpp)
 {
+  ldpp_dout(dpp, 0) << "NITHYA: File::open() " << get_name() << dendl;
   if (fd >= 0) {
     return 0;
   }
@@ -733,17 +829,22 @@ int File::remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_ch
   return 0;
 }
 
-int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::string temp_fname)
+int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::string tgt_fname)
 {
   if (fd < 0) {
     return 0;
   }
 
+/*
+  std::string tmp_name = ".tmp_link_" +
+  std::to_string(getpid()) + "_" + gen_rand_instance_name();
+
+*/
   char temp_file_path[PATH_MAX];
   // Only works on Linux - Non-portable
   snprintf(temp_file_path, PATH_MAX,  "/proc/self/fd/%d", fd);
 
-  int ret = linkat(AT_FDCWD, temp_file_path, parent->get_fd(), temp_fname.c_str(), AT_SYMLINK_FOLLOW);
+  int ret = linkat(AT_FDCWD, temp_file_path, parent->get_fd(), tgt_fname.c_str(), AT_SYMLINK_FOLLOW);
   if(ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: linkat for temp file could not finish: "
@@ -751,13 +852,15 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return -ret;
   }
 
-  ret = renameat(parent->get_fd(), temp_fname.c_str(), parent->get_fd(), get_name().c_str());
+  ret = renameat(parent->get_fd(), tgt_fname.c_str(), parent->get_fd(), get_name().c_str());
   if(ret < 0) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: renameat for object could not finish: "
 	<< cpp_strerror(ret) << dendl;
     return -ret;
   }
+
+//  fname = tgt_fname;
 
   /* note that open() and stat() return already sign-reversed result codes */
   ret = open(dpp);
@@ -766,7 +869,7 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return ret;
   }
 
-  ret = stat(dpp);
+  ret = stat(dpp, true);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
@@ -774,6 +877,16 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
 
   return 0;
 }
+
+/*
+int File::rename(const DoutPrefixProvider* dpp, Directory* dst_dir, const std::string& new_name)
+{
+  
+
+  return 0;
+}
+*/
+
 
 bool Directory::file_exists(std::string& name)
 {
@@ -1367,6 +1480,7 @@ int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
 
 int VersionedDirectory::open(const DoutPrefixProvider* dpp)
 {
+  ldpp_dout(dpp, 0) << "NITHYA: VersionedDirectory::open() " << get_name() << dendl;
   if (fd > 0) {
     return 0;
   }
@@ -1391,6 +1505,7 @@ int VersionedDirectory::open(const DoutPrefixProvider* dpp)
 
 int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
 {
+    ldpp_dout(dpp, 0) << "NITHYA: VersionedDirectory::create() " << get_name() << ", temp_file=" << temp_file << dendl;
   int ret = mkdirat(parent->get_fd(), fname.c_str(), S_IRWXU);
   if (ret < 0) {
     ret = errno;
@@ -1602,14 +1717,33 @@ int VersionedDirectory::read(int64_t ofs, int64_t left, bufferlist &bl,
 }
 
 int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y,
-                              std::string temp_fname)
+                                       std::string temp_fname)
 {
+  ldpp_dout(dpp, 0) << "NITHYA: VersionedDirectory::link_temp_file() " << get_name() << dendl;
   if (!cur_version)
     return -EINVAL;
-  int ret = cur_version->link_temp_file(dpp, y, temp_fname);
+
+  // Get the mtime+inode info for the temp file via its fd
+
+  struct statx stx;
+  int ret = statx(cur_version->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret == 0) {
+    std::string ver_id = posix_version_id_from_statx (stx);
+    rgw_obj_key key = decode_obj_key(get_name());
+    key.instance = ver_id;
+    std::string versioned_fname = get_key_fname(key, true);
+    cur_version->set_name(versioned_fname);
+  ldpp_dout(dpp, 0) << "NITHYA: VersionedDirectory::link_temp_file() updated_name :" << cur_version->get_name() << dendl;
+  } else {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not stat temp file for" << get_name() << ": "
+                      << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+  ret = cur_version->link_temp_file(dpp, y, temp_fname);
   if (ret < 0)
     return ret;
-
   return set_cur_version_ent(dpp, cur_version.get());
 }
 
@@ -1691,7 +1825,7 @@ int VersionedDirectory::copy(const DoutPrefixProvider *dpp, optional_yield y,
 int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
                                           optional_yield y,
                                           std::unique_ptr<File>& marker,
-                                          const std::string &name)
+                                          std::string &name)
 {
   // Create as temporary file first
   int ret = marker->create(dpp, /*existed=*/nullptr, /*temp_file=*/true);
@@ -1727,7 +1861,19 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     // removing the temporary files before returning failure
     marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
+  } 
+  struct statx stx;
+  ret = statx(marker->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret < 0) {
+    return ret;
   }
+  std::string ver_id = posix_version_id_from_statx (stx);
+  rgw_obj_key key = decode_obj_key(get_name());
+  key.instance = ver_id;
+  std::string versioned_fname = get_key_fname(key, true);
+  marker->set_name(versioned_fname);
+  ldpp_dout(dpp, 0) << "NITHYA: VersionedDirectory::add_delete_marker() updated_name :" << marker->get_name() << dendl;
 
   // Link temp file to final name atomically
   ret = marker->link_temp_file(dpp, y, name);
@@ -1736,7 +1882,26 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
   }
+#if 0
+  // Hack
+  struct statx f_stx = marker->get_stx();
+  std::string ver_id = posix_version_id_from_statx (f_stx);
+  rgw_obj_key key = decode_obj_key(get_name());
+  key.instance = ver_id;
+  std::string versioned_fname = get_key_fname(key, true);
 
+  auto parent_fd = marker->get_parent()->get_fd();
+  ret = renameat2(parent_fd, marker->get_name().c_str(), parent_fd,
+                  versioned_fname.c_str(), 0);
+
+  if (ret < 0) {
+    return ret;
+  }
+#endif
+
+  if (instance_id.empty()){
+    instance_id = ver_id;
+  }
   return 0;
 }
 
@@ -1767,14 +1932,14 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     key.instance = gen_rand_instance_name();
     tgtname = get_key_fname(key, /*use_version=*/true);
 
-    result->delete_marker = true;
-    result->version_id = key.instance;
 
     f = std::make_unique<File>(tgtname, this, ctx);
     ret = add_delete_marker(dpp, y, f, tgtname);
     if (ret < 0) {
       return ret;
     }
+    result->delete_marker = true;
+    result->version_id = instance_id;
 
     newlink = true;
     ret = set_cur_version_ent(dpp, f.get());
@@ -3773,6 +3938,7 @@ std::unique_ptr<Object::DeleteOp> POSIXObject::get_delete_op()
 
 int POSIXObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file)
 {
+  ldpp_dout(dpp, 0) << "NITHYA: POSIXObject::open() " << get_name() << dendl;
   int ret{0};
 
   if (!ent) {
@@ -3805,6 +3971,8 @@ int POSIXObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file
 
 int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
 {
+  ldpp_dout(dpp, 0) << "NITHYA: POSIXObject::link_temp_file() " << get_name() << dendl;
+
   std::string temp_fname = gen_temp_fname();
   int ret = ent->link_temp_file(dpp, y, temp_fname);
   if (ret < 0)
@@ -4471,6 +4639,19 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     }
   }
 
+  // If versioned, update the version id in the POSIXObject to the mtime+inode
+  // so the directory will be renamed to the correct name.
+
+  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
+  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
+
+  if (sb->versioned()) {
+    auto *shadow_dir = shadow->get_dir();
+    ret = shadow_dir->stat(dpp, true);
+    struct statx f_stx = shadow_dir->get_stx();
+    std::string ver_id = posix_version_id_from_statx (f_stx);
+    to->set_instance_id(ver_id);
+  }
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
@@ -4479,8 +4660,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
-  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
   if (sb->versioned()) {
     ret = to->set_cur_version(dpp);
     if (ret < 0) {
@@ -4693,6 +4872,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const req_context& rctx,
                        uint32_t flags)
 {
+  ldpp_dout(dpp, 0) << "NITHYA: POSIXAtomicWriter::complete " << obj->get_name() << dendl;
   int ret;
   uint64_t orig_size = 0;
   auto exists = obj->check_exists(dpp);
@@ -4751,6 +4931,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     return ret;
   }
 
+  ldpp_dout(dpp, 0) << "NITHYA: POSIXAtomicWriter::complete - calling link_temp_file" << dendl;
   ret = obj->link_temp_file(rctx.dpp, rctx.y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;

@@ -129,6 +129,7 @@ public:
 
   int get_fd() { return fd; };
   std::string& get_name() { return fname; }
+  void set_name(std::string& name) { fname = name; }
   Directory* get_parent() { return parent; }
   bool exists() { return exist; }
   struct statx& get_stx() { return stx; }
@@ -180,6 +181,7 @@ public:
   std::unique_ptr<File> clone() {
     return std::make_unique<File>(*this);
   }
+//  int rename(const DoutPrefixProvider* dpp, Directory* dst_dir, const std::string& new_name);
 };
 
 class Directory : public FSEnt {
@@ -339,7 +341,7 @@ public:
   std::string get_new_instance();
   int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
   int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
-  int add_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, std::unique_ptr<File>& marker, const std::string &name);
+  int add_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, std::unique_ptr<File>& marker, std::string &name);
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
   int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
   virtual std::unique_ptr<FSEnt> clone_base() override {
@@ -1162,6 +1164,7 @@ public:
   int make_ent(ObjectType type);
   bool versioned() { return bucket->versioned(); }
   DeleteResult get_result() {return del_result;}
+  void set_instance_id(const std::string& instance) { state.obj.key.set_instance(instance); };
 
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
