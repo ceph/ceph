@@ -65,11 +65,14 @@ tasks:
 - ceph.healthy:
 
 - print: "**** upgrading first half of cluster, with stress ****"
+- sequential: [ignore-auth-warn-cephadm]
 - parallel:
     - first-half-tasks
     - first-half-sequence
 - print: "**** done upgrading first half of cluster ****"
 
+# cephadm unsets the mutes
+- sequential: [ignore-auth-warn-cephadm]
 - ceph.healthy:
 
 - print: "**** applying stress + thrashing to mixed-version cluster ****"
@@ -84,6 +87,8 @@ tasks:
     - second-half-tasks
     - second-half-sequence
 
+# cephadm unsets the mutes
+- sequential: [ignore-auth-warn-cephadm]
 - ceph.healthy:
 
 

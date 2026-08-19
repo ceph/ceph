@@ -18,6 +18,8 @@
 #include "CephxProtocol.h"
 #include "CephxKeyServer.h"
 #include <errno.h>
+#include <sstream>
+#include <shared_mutex>
 
 #include "include/random.h"
 #include "common/Clock.h" // for ceph_clock_now()
@@ -31,10 +33,23 @@
 using std::dec;
 using std::hex;
 using std::vector;
+using namespace std::literals;
 
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
+
+CephxServiceHandler::CephxServiceHandler(CephContext *cct_, KeyServer *ks)
+  : AuthServiceHandler(cct_)
+  , key_server(ks)
+{
+}
+
+bool CephxServiceHandler::cipher_is_allowed(int cipher)
+{
+  std::shared_lock rl(lock);
+  return key_server->is_cipher_allowed(cipher);
+}
 
 int CephxServiceHandler::do_start_session(
   bool is_new_global_id,
@@ -178,6 +193,23 @@ int CephxServiceHandler::handle_request(
 	break;
       }
 
+      if (!cipher_is_allowed(eauth.key.get_type())) {
+	ldout(cct, 20) << __func__
+                       << " authentication failed due to unallowed cipher type: "
+                       << CryptoManager::get_key_type_name(eauth.key.get_type()) << dendl;
+        ldout(cct, 30);
+          std::shared_lock rl(lock);
+          auto ciphers = key_server->get_ciphers_allowed();
+          dout_prefix << __func__
+                      << ": ciphers are:";
+          for (auto& cipher : ciphers) {
+            dout_prefix << " " << CryptoManager::get_key_type_name(cipher);
+          }
+        dout_prefix << dendl;
+        ret = -EACCES;
+        break;
+      }
+
       if (!server_challenge) {
 	ret = -EACCES;
 	break;
@@ -244,7 +276,7 @@ int CephxServiceHandler::handle_request(
       info.ticket.init_timestamps(ceph_clock_now(), ttl);
       info.validity.set_from_double(ttl);
 
-      key_server->generate_secret(session_key);
+      key_server->generate_secret(session_key, eauth.key.get_type());
 
       info.session_key = session_key;
       if (psession_key) {
@@ -286,7 +318,7 @@ int CephxServiceHandler::handle_request(
 				       connection_secret_required_len);
 	    }
 	    std::string err;
-	    if (encode_encrypt(cct, *pconnection_secret, session_key, cbl,
+	    if (encode_encrypt(cct, *pconnection_secret, session_key, CEPHX_KEY_USAGE_AUTH_CONNECTION_SECRET, cbl,
 			       err)) {
 	      lderr(cct) << __func__ << " failed to encrypt connection secret, "
 			 << err << dendl;
@@ -309,6 +341,7 @@ int CephxServiceHandler::handle_request(
 	      key_server->build_session_auth_info(
 		service_id,
 		info.ticket,
+                eauth.key.get_type(),
 		svc_info);
 	      info_vec.push_back(svc_info);
 	    }
@@ -371,6 +404,7 @@ int CephxServiceHandler::handle_request(
           int r = key_server->build_session_auth_info(
 	    service_id,
 	    auth_ticket_info.ticket,  // parent ticket (client's auth ticket)
+            auth_ticket_info.session_key.get_type(), /* keep the same encryption type as in the session key */
 	    info);
 	  // tolerate missing MGR rotating key for the purposes of upgrades.
           if (r < 0) {

@@ -276,9 +276,8 @@ void NVMeofGwMon::encode_pending(MonitorDBStore::TransactionRef t)
   put_last_committed(t, pending_map.epoch);
 
   //health
-  health_check_map_t checks;
+  auto& checks = get_health_checks_pending_writeable();
   pending_map.get_health_checks(&checks);
-  encode_health(checks, t);
 }
 
 void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
@@ -293,7 +292,6 @@ void NVMeofGwMon::update_from_paxos(bool *need_bootstrap)
     bufferlist bl;
     int err = get_version(version, bl);
     ceph_assert(err == 0);
-    load_health();
 
     auto p = bl.cbegin();
     map.decode(p);

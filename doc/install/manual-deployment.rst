@@ -1,3 +1,5 @@
+.. _manual-deployment:
+
 ===================
  Manual Deployment
 ===================
@@ -75,6 +77,9 @@ a number of things:
   secret key. You must generate a keyring with a monitor secret and provide
   it when bootstrapping the initial monitor(s).
 
+* **Configure Cephx**: The monmap will use the most secure defaults but
+  you may want to relax the choice in ciphers to support legacy clients.
+
 - **Administrator Keyring**: To use the ``ceph`` CLI tools, you must have
   a ``client.admin`` user. So you must generate the admin user and keyring,
   and you must also add the ``client.admin`` user to the monitor keyring.
@@ -93,172 +98,236 @@ Ceph configuration file makes it easier to maintain your cluster.
 The procedure is as follows:
 
 
-#. Log in to the initial monitor node(s)::
+#. Log in to the initial monitor node(s):
 
-	ssh {hostname}
+   .. code:: bash
 
-   For example::
+	     ssh {hostname}
 
-	ssh mon-node1
+   For example:
+
+   .. code:: bash
+
+	     ssh mon-node1
 
 
 #. Ensure you have a directory for the Ceph configuration file. By default,
    Ceph uses ``/etc/ceph``. When you install ``ceph``, the installer will
-   create the ``/etc/ceph`` directory automatically. ::
+   create the ``/etc/ceph`` directory automatically.
 
-	ls /etc/ceph
+   .. code:: bash
+
+	     ls /etc/ceph
 
 
 #. Create a Ceph configuration file. By default, Ceph uses
    ``ceph.conf``, where ``ceph`` reflects the cluster name. Add a line
-   containing "[global]" to the configuration file. ::
+   containing "[global]" to the configuration file.
 
-	sudo vim /etc/ceph/ceph.conf
+   .. code:: bash
 
-
-#. Generate a unique ID (i.e., ``fsid``) for your cluster. ::
-
-	uuidgen
+	     sudo vim /etc/ceph/ceph.conf
 
 
-#. Add the unique ID to your Ceph configuration file. ::
+#. Generate a unique ID (i.e., ``fsid``) for your cluster.
 
-	fsid = {UUID}
+   .. code:: bash
 
-   For example::
-
-	fsid = a7f64266-0894-4f1e-a635-d0aeaca0e993
+	     uuidgen
 
 
-#. Add the initial monitor(s) to your Ceph configuration file. ::
+#. Add the unique ID to your Ceph configuration file.
 
-	mon_initial_members = {hostname}[,{hostname}]
+   .. code::
 
-   For example::
+	     fsid = {UUID}
 
-	mon_initial_members = mon-node1
+   For example:
+
+   .. code::
+
+	     fsid = a7f64266-0894-4f1e-a635-d0aeaca0e993
+
+
+#. Add the initial monitor(s) to your Ceph configuration file.
+
+   .. code::
+
+	     mon_initial_members = {hostname}[,{hostname}]
+
+   For example:
+
+   .. code::
+
+	     mon_initial_members = mon-node1
 
 
 #. Add the IP address(es) of the initial monitor(s) to your Ceph configuration
-   file and save the file. ::
+   file and save the file.
 
-	mon_host = {ip-address}[,{ip-address}]
+   .. code::
 
-   For example::
+	     mon_host = {ip-address}[,{ip-address}]
 
-	mon_host = 192.168.0.1
+   For example
 
-   **Note:** You may use IPv6 addresses instead of IPv4 addresses, but
-   you must set ``ms_bind_ipv6`` to ``true``. See `Network Configuration
-   Reference`_ for details about network configuration.
+   .. code::
 
-#. Create a keyring for your cluster and generate a monitor secret key. ::
+	     mon_host = 192.168.0.1
 
-	sudo ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon. --cap mon 'allow *'
+   .. note:: You may use IPv6 addresses instead of IPv4 addresses, but you must set ``ms_bind_ipv6`` to ``true``. See `Network Configuration Reference`_ for details about network configuration.
 
+#. Create a keyring for your cluster and generate a monitor secret key.
+
+   .. code:: bash
+
+	     sudo ceph-authtool --create-keyring /tmp/ceph.mon.keyring --gen-key -n mon.
+
+   .. note:: The ``mon.`` credential does not require any capabilities. All Monitors share this single key.
 
 #. Generate an administrator keyring, generate a ``client.admin`` user and add
-   the user to the keyring. ::
+   the user to the keyring.
 
-	sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
+   .. code:: bash
+
+	     sudo ceph-authtool --create-keyring /etc/ceph/ceph.client.admin.keyring --gen-key -n client.admin --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *' --cap mgr 'allow *'
 
 #. Generate a bootstrap-osd keyring, generate a ``client.bootstrap-osd`` user and add
-   the user to the keyring. ::
+   the user to the keyring.
 
-	sudo ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd' --cap mgr 'allow r'
+   .. code:: bash
 
-#. Add the generated keys to the ``ceph.mon.keyring``. ::
+	     sudo ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd' --cap mgr 'allow r'
 
-	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
-	sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
+#. Add the generated keys to the ``ceph.mon.keyring``.
 
-#. Change the owner for ``ceph.mon.keyring``. ::
+   .. code:: bash
 
-	sudo chown ceph:ceph /tmp/ceph.mon.keyring
+	     sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /etc/ceph/ceph.client.admin.keyring
+	     sudo ceph-authtool /tmp/ceph.mon.keyring --import-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring
+
+#. Change the owner for ``ceph.mon.keyring``.
+
+   .. code:: bash
+
+	     sudo chown ceph:ceph /tmp/ceph.mon.keyring
+
+#. Configure CephX for cluster
+
+   .. note:: This step can also be done after cluster creation.
+
+   If you need to support legacy clients authenticating with the cluster, you will want to allow older insecure ciphers:
+
+   .. code:: bash
+
+       AUTH_SETTINGS="--auth-allowed-ciphers=aes,aes256k"
+
+   If you also want new keys to use the legacy (and insecure) ``aes`` cipher by default:
+
+   .. code:: bash
+
+       AUTH_SETTINGS="$AUTH_SETTINGS --auth-preferred-cipher=aes"
+
+   The service cipher type can also be configured but this should generally not need to be done unless an older version of a service daemon needs to run in the cluster:
+
+   .. code:: bash
+
+       AUTH_SETTINGS="$AUTH_SETTINGS --auth-service-cipher=aes"
+
+   .. note:: Clients do not and cannot decrypt the service cipher.
 
 #. Generate a monitor map using the hostname(s), host IP address(es) and the FSID.
-   Save it as ``/tmp/monmap``::
+   Save it as ``/tmp/monmap``:
 
-	monmaptool --create --add {hostname} {ip-address} --fsid {uuid} /tmp/monmap
+   .. code:: bash
 
-   For example::
+	     monmaptool --create $AUTH_SETTINGS --add {hostname} {ip-address} --fsid {uuid} /tmp/monmap
 
-	monmaptool --create --add mon-node1 192.168.0.1 --fsid a7f64266-0894-4f1e-a635-d0aeaca0e993 /tmp/monmap
+   For example:
+
+   .. code:: bash
+
+	     monmaptool --create $AUTH_SETTINGS --add mon-node1 192.168.0.1 --fsid a7f64266-0894-4f1e-a635-d0aeaca0e993 /tmp/monmap
 
 
-#. Create a default data directory (or directories) on the monitor host(s). ::
+#. Create a default data directory (or directories) on the monitor host(s).
 
-	sudo mkdir /var/lib/ceph/mon/{cluster-name}-{hostname}
+   .. code:: bash
 
-   For example::
+	     sudo mkdir /var/lib/ceph/mon/{cluster-name}-{hostname}
 
-	sudo -u ceph mkdir /var/lib/ceph/mon/ceph-mon-node1
+   For example:
+
+   .. code:: bash
+
+	     sudo -u ceph mkdir /var/lib/ceph/mon/ceph-mon-node1
 
    See `Monitor Config Reference - Data`_ for details.
 
-#. Populate the monitor daemon(s) with the monitor map and keyring. ::
+#. Populate the monitor daemon(s) with the monitor map and keyring.
 
-	sudo -u ceph ceph-mon [--cluster {cluster-name}] --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+   .. code:: bash
 
-   For example::
+	     sudo -u ceph ceph-mon [--cluster {cluster-name}] --mkfs -i {hostname} --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
-	sudo -u ceph ceph-mon --mkfs -i mon-node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
+   For example:
 
+   .. code:: bash
 
-#. Consider settings for a Ceph configuration file. Common settings include
-   the following::
+	     sudo -u ceph ceph-mon --mkfs -i mon-node1 --monmap /tmp/monmap --keyring /tmp/ceph.mon.keyring
 
-	[global]
-	fsid = {cluster-id}
-	mon_initial_members = {hostname}[, {hostname}]
-	mon_host = {ip-address}[, {ip-address}]
-	public_network = {network}[, {network}]
-	cluster_network = {network}[, {network}]
-	auth_cluster required = cephx
-	auth_service required = cephx
-	auth_client required = cephx
-	osd_pool_default_size = {n}  # Write an object n times.
-	osd_pool_default_min_size = {n} # Allow writing n copies in a degraded state.
-	osd_pool_default_pg_num = {n}
-	osd_crush_chooseleaf_type = {n}
+#. Consider minimal settings for a Ceph configuration file. Common settings include
+   the following:
+
+   .. code::
+
+	     [global]
+	     fsid = {cluster-id}
+	     mon_initial_members = {hostname}[, {hostname}]
+	     mon_host = {ip-address}[, {ip-address}]
+	     public_network = {network}[, {network}]
+	     cluster_network = {network}[, {network}]
 
    In the foregoing example, the ``[global]`` section of the configuration might
-   look like this::
+   look like this:
 
-	[global]
-	fsid = a7f64266-0894-4f1e-a635-d0aeaca0e993
-	mon_initial_members = mon-node1
-	mon_host = 192.168.0.1
-	public_network = 192.168.0.0/24
-	auth_cluster_required = cephx
-	auth_service_required = cephx
-	auth_client_required = cephx
-	osd_pool_default_size = 3
-	osd_pool_default_min_size = 2
-	osd_pool_default_pg_num = 333
-	osd_crush_chooseleaf_type = 1
+   .. code::
 
+	     [global]
+	     fsid = a7f64266-0894-4f1e-a635-d0aeaca0e993
+	     mon_initial_members = mon-node1
+	     mon_host = 192.168.0.1
+	     public_network = 192.168.0.0/24
 
-#. Start the monitor(s).
+   .. note:: Your preference as an operator should be to effect configuration changes through the ``ceph config`` API rather than in the ``ceph.conf`` file. See also :ref:`configuring-ceph-api`.
 
-   Start the service with systemd::
+#. Start the monitor(s) with systemd.
 
-	sudo systemctl start ceph-mon@mon-node1
+   .. code:: bash
+
+	     sudo systemctl start ceph-mon@mon-node1
 
 #. Ensure to open firewall ports for ceph-mon.
 
-   Open the ports with firewalld::
+   Open the ports with firewalld:
+
+   .. code:: bash
    
-        sudo firewall-cmd --zone=public --add-service=ceph-mon
-	sudo firewall-cmd --zone=public --add-service=ceph-mon --permanent
+       sudo firewall-cmd --zone=public --add-service=ceph-mon
+       sudo firewall-cmd --zone=public --add-service=ceph-mon --permanent
 
-#. Verify that the monitor is running. ::
 
-	sudo ceph -s
+#. Verify that the monitor is running.
+
+   .. code:: bash
+
+	      sudo ceph -s
 
    You should see output that the monitor you started is up and running, and
    you should see a health error indicating that placement groups are stuck
-   inactive. It should look something like this::
+   inactive. It should look something like this:
+
+   ::
 
       cluster:
         id:     a7f64266-0894-4f1e-a635-d0aeaca0e993
@@ -276,8 +345,9 @@ The procedure is as follows:
         pgs:
 
 
-   **Note:** Once you add OSDs and start them, the placement group health errors
-   should disappear. See `Adding OSDs`_ for details.
+   .. note:: Once you add OSDs and start them, any placement group health errors should disappear. See `Adding OSDs`_ for details.
+
+   .. warning:: If you have enabled legacy cipher types then the Monitors may raise health warnings. You may mute (see :ref:`rados-monitoring-muting-health-checks`) the warnings. See the warning descriptions in :ref:`health-checks` for more information on the different warnings.
 
 Manager daemon configuration
 ============================
@@ -427,40 +497,7 @@ OSDs with the long form procedure, execute the following steps for each OSD.
 Adding MDS
 ==========
 
-In the below instructions, ``{id}`` is an arbitrary name, such as the hostname of the machine.
-
-#. Create the mds data directory.::
-
-	mkdir -p /var/lib/ceph/mds/{cluster-name}-{id}
-
-#. Create a keyring.::
-
-	ceph-authtool --create-keyring /var/lib/ceph/mds/{cluster-name}-{id}/keyring --gen-key -n mds.{id}
-
-#. Import the keyring and set caps.::
-
-	ceph auth add mds.{id} osd "allow rwx" mds "allow *" mon "allow profile mds" -i /var/lib/ceph/mds/{cluster}-{id}/keyring
-
-#. Add to ceph.conf.::
-
-	[mds.{id}]
-	host = {id}
-
-#. Start the daemon the manual way.::
-
-	ceph-mds --cluster {cluster-name} -i {id} -m {mon-hostname}:{mon-port} [-f]
-
-#. Start the daemon the right way (using ceph.conf entry).::
-
-	service ceph start
-
-#. If starting the daemon fails with this error::
-
-	mds.-1.0 ERROR: failed to authenticate: (22) Invalid argument
-
-   Then make sure you do not have a keyring set in ceph.conf in the global section; move it to the client section; or add a keyring setting specific to this mds daemon. And verify that you see the same key in the mds data directory and ``ceph auth get mds.{id}`` output.
-
-#. Now you are ready to `create a Ceph file system`_.
+Please see the section on manual deployment in :ref:`manual-mds`.
 
 Manually Installing RADOSGW
 ===========================
@@ -537,4 +574,3 @@ To add (or remove) additional Ceph OSD Daemons, see `Add/Remove OSDs`_.
 .. _Add/Remove OSDs: ../../rados/operations/add-or-rm-osds
 .. _Network Configuration Reference: ../../rados/configuration/network-config-ref
 .. _Monitor Config Reference - Data: ../../rados/configuration/mon-config-ref#data
-.. _create a Ceph file system: ../../cephfs/createfs
