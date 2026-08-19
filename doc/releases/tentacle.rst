@@ -4,6 +4,42 @@ Tentacle
 
 Tentacle is the 20th stable release of Ceph.
 
+v20.2.4 Tentacle
+================
+
+This is the fourth minor release in the Tentacle series. We recommend that all users update to this release.
+
+Release Date
+------------
+
+August 19, 2026
+
+Notable Changes
+---------------
+
+* :ref:`CVE-2025-30156` is an authentication bypass in CephX caused by misuse of AES-CBC.
+* :ref:`CVE-2026-39944` shares the unauthenticated-encryption root cause of CVE-2025-30156, but applies it to RGW's STS session tokens resulting in improper verification of a cryptographic signature.
+* :ref:`CVE-2026-50152` is an improper authorization flaw in the Ceph Monitor subscription handler.
+* :ref:`CVE-2026-54330` is a flaw in RGW not properly verifying its SigV4 cryptographic signatures in RGW's SigV4 verifier.
+
+
+Critical Upgrade Steps
+----------------------
+
+* Please review the :ref:`CVE-2025-30156-upgrade-steps` on the :ref:`CVE-2025-30156` documentation.
+* Please review the :ref:`CVE-2026-54330-upgrade-steps` on the :ref:`CVE-2026-54330` documentation.
+* Please review the :ref:`CVE-2026-50152-recommendations` on the :ref:`CVE-2026-50152` documentation.
+
+
+Changelog
+---------
+
+* :ref:`CVE-2026-54330`: RGW SigV4 header injection escalation (5978c866d4a0812fbb024745c4f1e79aaecd6c6a)
+* :ref:`CVE-2026-50152`: Monitor config-key store unauthorized read (d971bb2b6199f70b1708a20a63fa944ee7a94727)
+* :ref:`CVE-2026-39944`: RGW STS token bit-flip privilege escalation (8ad1f32c954b663e12ab551b5e983e9aadfd1e55)
+* :ref:`CVE-2025-30156`: CephX authentication bypass (8ad1f32c954b663e12ab551b5e983e9aadfd1e55)
+
+
 v20.2.3 Tentacle
 ================
 
