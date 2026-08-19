@@ -6511,7 +6511,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
   const std::string_view& signedheaders,
   const bool using_qs) const
 {
-  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+  return rgw::auth::s3::get_v4_canonical_headers(cct, info, signedheaders,
                                                  using_qs, false);
 }
 
@@ -6929,7 +6929,7 @@ AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
   const std::string_view& signedheaders,
   const bool using_qs) const
 {
-  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+  return rgw::auth::s3::get_v4_canonical_headers(cct, info, signedheaders,
                                                  using_qs, true);
 }
 
