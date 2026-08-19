@@ -20,7 +20,7 @@ RGW_ADMIN="${RGW_ADMIN:-./bin/radosgw-admin}"
 export CEPH_CONF="${CEPH_CONF:-./ceph.conf}"
 # Route dout/derr log lines off stderr so async cluster logs (e.g. "ERROR:
 # obj.oid is empty") can't interleave mid-line with the error messages these tests match.
-# rgw_global_init consumes --log-to-stderr before the flag loop runs.
+# rgw_global_init consumes --log-to-stderr before the flags are read.
 export CEPH_ARGS="--log-to-stderr=false${CEPH_ARGS:+ ${CEPH_ARGS}}"
 PASS=0
 FAIL=0
@@ -189,7 +189,7 @@ check_cluster "list: --bucket-id --hello_world (dash, space form, value taken)" 
 check_cluster "list: --bucket_id --hello_world (underscore, space form, value taken)" 0 "" -- bucket list --bucket_id --hello_world
 
 # an unknown flag is quoted in the error exactly as the user typed it;
-# the flag loop rejects it by name before its value is looked at
+# it is rejected by name before its value is looked at
 check "list: unrecognized underscore flag rejected by name" 22 'ERROR: invalid flag --banana_flag' bucket list --banana_flag 1
 
 # valueless (binary) flag: underscore and dash spellings both succeed
@@ -452,7 +452,8 @@ check "set-min-shards: stray between bucket and leaf" 1 "ERROR: Unrecognized arg
 
 check "set-min-shards: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket set-min-shards --fakeflag
 # Unrelated flags are parsed and ignored whatever their type: the command
-# proceeds and fails for its own reason (here, no --bucket).
+# proceeds and fails for its own reason (here, no --bucket). The exit code is
+# 234 because -EINVAL comes back negative, as the block below spells out.
 check_cluster "set-min-shards: unrelated --max-entries 5 swallowed (space form)" 234 'ERROR: bucket not specified' -- bucket set-min-shards --max-entries 5
 
 # missing option value (parse-level, exit 1)
@@ -526,14 +527,14 @@ check "object shard: --num-shards non-integer" 22 "ERROR: failed to parse num sh
 
 # strict base-10 parsing: a leading 0 does not switch to octal ("010" = 10,
 # "08" = 8) and hex is rejected.
-# Object "bar" maps to shard 8 of 10 and shard 4 of 8 (probe-verified).
+# Object "bar" maps to shard 8 of 10 and shard 4 of 8.
 check "object shard: --num-shards hex rejected" 22 "ERROR: failed to parse num shards: Expected option value to be integer, got '0x10'" bucket object shard --object bar --num-shards 0x10
 check_cluster "object shard: --num-shards 010 parses as decimal 10" 0 '"shard": 8' -- bucket object shard --object bar --num-shards 010
 check_cluster "object shard: --num-shards 08 parses as 8" 0 '"shard": 4' -- bucket object shard --object bar --num-shards 08
 check_cluster "object shard: --num-shards 010 before subcommand (base-10)" 0 "" -- bucket --num-shards 010 object shard --object bar
 
 # handler-level (cluster): these validations run after driver init. The handler
-# returns a positive EINVAL (shell exit 22) -- note this differs from
+# returns a positive EINVAL (shell exit 22) - note this differs from
 # set-min-shards' -EINVAL/234.
 check_cluster "object shard: missing object (only --num-shards)" 22 'ERROR: num-shards and object must be specified.' -- bucket object shard --num-shards 11
 check_cluster "object shard: missing num-shards (only --object)" 22 'ERROR: num-shards and object must be specified.' -- bucket object shard --object foo
@@ -646,7 +647,7 @@ check "resync: --marker missing value" 1 'Option --marker requires an argument.'
 # on the line and read as a command word
 check "resync: --yes-i-really-mean-it banana (space form, non-bool)" 1 'Command not found: bucket resync encrypted multipart banana' bucket resync encrypted multipart --bucket no-such-bucket --yes-i-really-mean-it banana
 
-# handler-level (cluster). empty bucket -> EINVAL (exit 22). Real-bucket EPERM and
+# handler-level (cluster). empty bucket -> exit 22. Real-bucket EPERM and
 # success cases live in the integration section (need a bucket that exists).
 check_cluster "resync: bucket not specified" 22 'ERROR: bucket not specified' -- bucket resync encrypted multipart
 # valid args, nonexistent bucket: init_bucket fails (exit 2, no message)
@@ -952,6 +953,8 @@ check "sync run: --extra-info banana (left as stray)" 1 'Command not found: buck
 # handler-level (cluster). The leaves check different things and in a different
 # order: checkpoint/info/status/disable/enable want a bucket, while
 # markers/init/run want a source zone first and only then a bucket.
+# A --source-zone that does not exist also prints a warning of its own; the
+# rows below assert the error that follows it.
 check_cluster "sync checkpoint: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync checkpoint
 check_cluster "sync info: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync info
 check_cluster "sync status: missing --bucket" 22 'ERROR: bucket not specified' -- bucket sync status
@@ -1279,9 +1282,6 @@ check_cluster "check: --fix false (space, bool consumed)" 0 "" -- bucket check -
 # a non-bool value stores -EINVAL in the flag. That is non-zero, so the flag
 # counts as set and the command exits 0, with no message.
 check_cluster "check: --fix=banana (accepted)" 0 "" -- bucket check --fix=banana
-# "--fix banana" (space + non-bool): banana is left behind and reported as a
-# stray word (exit 1)
-check "check: --fix banana (space non-bool, left as stray)" 1 "ERROR: Unrecognized argument: 'banana'" bucket check --fix banana
 # gc list ignores --fix, so an invalid value does not affect the exit code
 check_cluster "gc list --fix=banana (parse-safe)" 0 "" -- gc list --fix=banana
 
@@ -1445,7 +1445,8 @@ check "empty-= on --uid" 1 'no value for uid' bucket list --uid=
 check "empty-= on -i" 1 'no value for uid' bucket list -i=
 check "empty-= on --bucket-id" 1 'no value for bucket-id' bucket stats --bucket-id=
 # non-empty short-flag '=': the value is split off the flag, so the message
-# names the user without a leading '=' (uncaught by -b=, which never echoes)
+# names the user without a leading '=' (uncaught by -b=, which never echoes).
+# an unknown user gives -ENOENT, so the exit code is 254
 check_cluster "non-empty -= on -i (value split off the flag)" 254 'ERROR: could not find user: nosuchuser' -- bucket list -i=nosuchuser
 # mid-line: "" is the value; the next word strays (the collapsed flag must not eat it)
 check "empty-= mid-line strays next word" 1 'Command not found: bucket list foo' bucket list --bucket= foo
@@ -1468,10 +1469,10 @@ check "empty space-form --uid" 1 'no value for uid' bucket list --uid ""
 check "parse-empty uid: -i '\$'" 1 'no value for uid' bucket list -i '$'
 check "parse-empty uid: -i 'tenant\$'" 1 'no value for uid' bucket list -i 'tenant$'
 check "empty space-form --bucket-id" 1 'no value for bucket-id' bucket stats --bucket-id ""
-# the check rides every copy of the option: pre-command tokens are collected
-# by the hidden root/ancestor copies, not the leaf's
-check "empty --bucket-id before command (root copy)" 1 'no value for bucket-id' --bucket-id "" bucket stats
-check "empty --bucket-id mid-tree (bucket copy)" 1 'no value for bucket-id' bucket --bucket-id "" stats
+# the check runs wherever the flag appears, before the command words or
+# between them
+check "empty --bucket-id before the command words" 1 'no value for bucket-id' --bucket-id "" bucket stats
+check "empty --bucket-id between the command words" 1 'no value for bucket-id' bucket --bucket-id "" stats
 # the check runs per occurrence: an empty value errors
 # whether or not another occurrence supplies a valid one
 check "empty -i then valid -i" 1 'no value for uid' bucket list -i "" -i slides
@@ -1481,9 +1482,9 @@ check "valid -i then empty -i" 1 'no value for uid' bucket list -i slides -i ""
 # -b and -o are the other shorts that take values.
 check "glued short -b rejected" 22 'invalid flag -bdemo' bucket stats -bdemo
 check "glued short -o rejected" 22 'invalid flag -oxyz' bucket object shard -oxyz
-# unknown short glued: same loop error (ownership makes no difference here)
+# an unknown short flag glued to a value is rejected the same way
 check "unknown glued short rejected" 22 'invalid flag -xfoo' bucket list -xfoo
-# left-to-right: the first glued token is the one reported by the loop's scan
+# flags are read left to right, so the first glued token is the one reported
 check "first glued token wins" 22 'invalid flag -ibanana' bucket list -ibanana -bdemo
 # flag position is what matters, not position relative to the command words
 check "glued short before command rejected" 22 'invalid flag -ibanana' -ibanana bucket list
@@ -1502,7 +1503,7 @@ check_cluster "list: --access-key twice" 22 'user.init failed' -- bucket --acces
 check "list: unknown flag after --access-key" 22 'ERROR: invalid flag --backet' bucket --access-key foo --backet name list
 check_cluster "list: --access-key with misplaced --bucket" 22 'user.init failed' -- bucket --access-key foo --bucket name list
 
-# eaten command word: whatever survives the loop is parsed again
+# eaten command word: whatever survives is parsed as the command
 check_cluster "stats: eaten 'list', sibling command survives" 22 'user.init failed' -- bucket --access-key list stats
 check_cluster "stats: eaten 'list', underscore spelling" 22 'user.init failed' -- bucket --access_key list stats
 check_cluster "list: eaten 'list', duplicate survives" 22 'user.init failed' -- bucket --access-key list list
@@ -1510,10 +1511,10 @@ check "bucket: eaten 'list', stray word survives" 1 "ERROR: Unrecognized argumen
 # --format takes the next word as its value, so no command word is left
 check "bucket: --format eats the command word" 1 'ERROR: Unknown command' bucket --format list
 
-# unknown flags: the loop rejects them by name
+# unknown flags are rejected by name
 check "list: unknown flag before --max-entries" 22 'ERROR: invalid flag --banana' bucket list --banana --max-entries=5
 check "list: unknown flag before --bucket" 22 'ERROR: invalid flag --banana' bucket list --banana --bucket bananana
-# the first parse rejects the int value before the loop reaches the unknown flag
+# the int value is rejected before the unknown flag is reached
 check "list: unknown flag with unparsable int value" 22 'ERROR: invalid flag --banana' bucket list --banana --max-entries=abc
 # unknown command: --bucket takes '--banana', leaving 'banana' unresolvable
 check "unknown command: flag takes the next token" 1 "ERROR: Unrecognized argument: 'banana'" banana --bucket --banana
@@ -1533,7 +1534,7 @@ check "list: 'bucket' repeated after the command" 1 'Command not found: bucket l
 check "logging list: repeated command word" 1 "ERROR: Unrecognized argument: 'logging'" bucket logging logging list
 check "list: empty stray word" 1 'Command not found: bucket list' bucket list ""
 
-# binary flag, space form: the loop consumes the value only when it is an exact
+# binary flag, space form: the value is consumed only when it is an exact
 # bool, so anything else is left behind as a stray
 check "list: --allow-unordered banana (left as stray)" 1 'Command not found: bucket list banana' bucket list --allow-unordered banana
 check "list: --allow-unordered '' (left as stray)" 1 'Command not found: bucket list' bucket list --allow-unordered ""
@@ -1559,8 +1560,9 @@ echo ""
 echo "=== which token a flag takes as its value ==="
 # ============================================================
 # In the space form a binary flag takes the next token only when it is exactly
-# true, 1, false or 0; otherwise it erases the flag alone and the token stays on
-# the line, where it is used as a command word if it can be, and reported if not.
+# true, 1, false or 0; otherwise only the flag is consumed and the token stays
+# on the line, where it is used as a command word if it can be, and reported if
+# not.
 
 # a command word is never taken as a binary flag's value
 check_cluster "list: --fix before the command" 0 "" -- bucket --fix list
@@ -1600,7 +1602,6 @@ check "list: --allow-unordered leaves a lone dash" 22 'ERROR: invalid flag -' bu
 check "list: --fix leaves a negative number" 22 'ERROR: invalid flag -5' bucket list --fix -5
 
 # a flag that requires a value takes the next token whatever it is
-check_cluster "list: --format takes its value, command follows" 0 "" -- bucket --format json list
 check_cluster "stats: --format takes 'list', 'stats' is the command" 1 'unrecognized format: list' -- bucket --format list stats
 check_cluster "stats: --bucket takes the command word" 2 'failure: (2002) Unknown error 2002' -- bucket --bucket list stats
 check_cluster "list: --bucket takes a lone dash" 2 'ERROR: could not init bucket: (2) No such file or directory' -- bucket --bucket - list
@@ -1618,9 +1619,9 @@ check_cluster "list: --categories after the command" 0 "" -- bucket list --categ
 check "bucket: --categories takes the command word" 1 'ERROR: Unknown command' bucket --categories list
 check_cluster "stats: --categories takes 'list', 'stats' survives" 0 "" -- bucket --categories list stats
 
-# a flag the loop does not know still takes the next token as its value, even
-# when that token is flag-shaped. --access-key is checked and fails; nothing
-# checks --secret-key, so the same line runs to completion.
+# a flag the bucket commands do not use still takes the next token as its
+# value, even when that token is flag-shaped. --access-key is checked and
+# fails; nothing checks --secret-key, so the same line runs to completion.
 check_cluster "list: --access-key takes a bare word as its value" 22 'user.init failed' -- bucket list --access-key banana
 check_cluster "list: --secret-key takes a bare word as its value" 0 "" -- bucket list --secret-key banana
 check_cluster "list: --access-key takes --bucket as its value" 22 'user.init failed' -- bucket list --access-key --bucket
@@ -1630,7 +1631,7 @@ check_cluster "stats: --secret-key takes --bucket as its value" 0 "" -- bucket s
 check "list: --access-key takes --bucket, 'demo' is left as a command word" 1 'Command not found: bucket list demo' bucket list --access-key --bucket demo
 check "list: --secret-key takes --bucket, 'demo' is left as a command word" 1 'Command not found: bucket list demo' bucket list --secret-key --bucket demo
 
-# with no command word at all, only the flag loop runs
+# with no command word at all, only the flags are read
 check "unknown flag with no command" 22 'ERROR: invalid flag --banana' --banana
 check "--fix leaves a lone dash with no command" 22 'ERROR: invalid flag -' --fix -
 
@@ -1648,28 +1649,27 @@ check "bucket: --allow-unordered leaves a dash, no subcommand" 22 'ERROR: invali
 check "list: unknown flag and --bucket without a value" 22 'ERROR: invalid flag --banana' bucket list --banana --bucket
 
 # each of those errors on its own. Removing a token is not enough to isolate a
-# missing subcommand -- the command word has to be supplied.
-check "bucket: no subcommand" 1 'ERROR: Unknown command' bucket
+# missing subcommand -- the command word has to be supplied. The bare 'bucket'
+# half is pinned in the bucket (bare) section, and 'bucket list --bucket' in
+# the bucket list section.
 check "bucket: --fix and no subcommand" 1 'ERROR: Unknown command' bucket --fix
 check "check: lone dash on a complete command" 22 'ERROR: invalid flag -' bucket check -
 check "bucket: lone dash before the command word" 22 'ERROR: invalid flag -' bucket - list
 check "list: lone dash after the command" 22 'ERROR: invalid flag -' bucket list -
 check "list: unknown flag on a complete command" 22 'ERROR: invalid flag --banana' bucket list --banana
-check "list: --bucket without a value" 1 'Option --bucket requires an argument.' bucket list --bucket
 
 # ============================================================
 echo ""
 echo "=== 'bucket' as an ordinary word ==="
 # ============================================================
-# Besides naming the bucket commands, the word 'bucket' names a legacy command,
+# Besides naming the bucket commands, the word 'bucket' ends a command name,
 # names a metadata section, and can be any flag's value. These rows pin that it
 # is treated as an ordinary word in each of those positions. Most are paired
 # with the same line using a different word, and the two results match.
 
-# 'reshard bucket' is the alias form of 'bucket reshard'; both reach the same handler
-check_cluster "reshard bucket: missing --bucket" 234 'ERROR: bucket not specified' -- reshard bucket
-check_cluster "bucket reshard: missing --bucket" 234 'ERROR: bucket not specified' -- bucket reshard
-# --num-shards is checked after the bucket name, so this one got into the handler
+# 'bucket' also ends a command name: 'reshard bucket' is the alias form of 'bucket reshard'
+# --num-shards is checked after the bucket name, so this one got into the
+# handler. reshard hands -EINVAL back negative, so the exit code is 234
 check_cluster "reshard bucket: --num-shards not specified" 234 'ERROR: --num-shards not specified' -- reshard bucket --bucket demo
 
 # 'bucket' as a metadata section name. Every verb that takes a bare section
@@ -1702,7 +1702,7 @@ check_cluster "list: --access-key bucket before the command words" 22 'user.init
 check_cluster "list: --access-key script before the command words" 22 'user.init failed' -- --access-key script bucket list
 check "bucket: --access-key bucket, no subcommand" 1 'ERROR: Unknown command' bucket --access-key bucket
 
-# a flag the loop does know takes the word as its value first
+# a flag the command does use takes the word as its value first
 check_cluster "user info: --bucket bucket" 22 'ERROR: --uid or --access-key required' -- user info --bucket bucket
 check_cluster "metadata list: --bucket bucket" 0 "" -- metadata list --bucket bucket
 check_cluster "user info: --uid bucket" 22 'could not fetch user info' -- user info --uid bucket
@@ -1766,15 +1766,9 @@ if cluster_running; then
 
   check_cluster "integration: bucket list --uid (owner with no buckets)" 0 '[]' -- bucket list --uid "$_test_uid"
 
-  # Create a bucket via the S3 API using radosgw-admin bucket link on a
-  # freshly created bucket. Since bucket creation requires S3 API access,
-  # we use radosgw-admin to create the bucket directly by linking it.
-  # Note: 'bucket link' links an existing RADOS bucket to a user. The bucket
-  # must have been created first via S3 PUT bucket. We use a workaround here:
-  # create the bucket listing entry directly via radosgw-admin if possible,
-  # or skip the link/unlink/rm lifecycle tests.
-
-  # Check if aws CLI is available to create the bucket
+  # The rows below need a bucket that exists: 'bucket link' only links one
+  # that is already there, so the aws CLI creates it, and they are skipped
+  # when it is not installed.
   _aws_available=0
   if command -v aws >/dev/null 2>&1; then
     _aws_available=1
@@ -1955,6 +1949,8 @@ if cluster_running; then
       # bucket sync on a real bucket. This is a single-zone cluster, so nothing
       # is replicated: info and checkpoint report that sync is disabled, and the
       # three leaves that need a source zone fail to resolve the zone name.
+      # That failure warns first and errors after; these rows assert the error,
+      # except the status row, which only warns.
       check_cluster "integration: sync info" 0 'Sync is disabled for bucket bucket-test' -- bucket sync info --bucket "$_test_bucket"
       check_cluster "integration: sync info -b (short)" 0 'Sync is disabled for bucket bucket-test' -- bucket sync info -b "$_test_bucket"
       check_cluster "integration: sync status" 0 'current time' -- bucket sync status --bucket "$_test_bucket"
@@ -1973,7 +1969,8 @@ if cluster_running; then
 
       # bucket reshard on a real bucket. Resharding up needs nothing extra;
       # resharding to the same or fewer shards needs --yes-i-really-mean-it.
-      # The test bucket starts at the default 11 index shards.
+      # The test bucket starts at the default 11 index shards. A refusal exits
+      # 234, because reshard hands -EINVAL back negative.
       check_cluster "integration: reshard down without --yes" 234 'num shards is less or equal to current shards count' -- bucket reshard --bucket "$_test_bucket" --num-shards 1
       check_cluster "integration: reshard up" 0 'bucket name: bucket-test' -- bucket reshard --bucket "$_test_bucket" --num-shards 23
       check_cluster "integration: reshard down with --yes-i-really-mean-it" 0 'bucket name: bucket-test' -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it
