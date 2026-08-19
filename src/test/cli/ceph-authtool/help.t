@@ -11,6 +11,7 @@
                                   existing keyringfile
     -g, --gen-key                 will generate a new secret key for the
                                   specified entityname
+    -t, --key-type KEY_TYPE       set the key-type
     --gen-print-key               will generate a new secret key without set it
                                   to the keyringfile, prints the secret to stdout
     --import-keyring FILE         will import the content of a given keyring
