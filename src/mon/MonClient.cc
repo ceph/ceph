@@ -545,12 +545,11 @@ void MonClient::shutdown()
   monc_lock.lock();
   stopping = true;
   while (!version_requests.empty()) {
+    auto tid = version_requests.begin()->first;
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
-		   << version_requests.begin()->first << dendl;
-    asio::post(service.get_executor(),
-               asio::append(std::move(version_requests.begin()->second),
-                            make_error_code(monc_errc::shutting_down), 0, 0));
-    version_requests.erase(version_requests.begin());
+		   << tid << dendl;
+    _finish_version_request(
+      tid, make_error_code(monc_errc::shutting_down));
   }
   while (!mon_commands.empty()) {
     auto tid = mon_commands.begin()->first;
@@ -778,12 +777,11 @@ void MonClient::_reopen_session(int rank)
 
   // throw out version check requests
   while (!version_requests.empty()) {
+    auto tid = version_requests.begin()->first;
     ldout(cct, 20) << __func__ << " canceling and discarding version request "
-		   << version_requests.begin()->first << dendl;
-    asio::post(service.get_executor(),
-               asio::append(std::move(version_requests.begin()->second),
-                            make_error_code(monc_errc::session_reset), 0, 0));
-    version_requests.erase(version_requests.begin());
+		   << tid << dendl;
+    _finish_version_request(
+      tid, make_error_code(monc_errc::session_reset));
   }
 
   for (auto& c : pending_cons) {
@@ -1492,6 +1490,57 @@ void MonClient::_finish_command(MonCommand *r, bs::error_code ret,
 
 // ---------
 
+bool MonClient::_arm_version_request_timeout(
+  ceph_tid_t tid, std::optional<ceph::mono_time> deadline)
+{
+  ceph_assert(ceph_mutex_is_locked(monc_lock));
+  if (!deadline) {
+    return true;
+  }
+  if (*deadline <= ceph::mono_clock::now()) {
+    _finish_version_request(tid, make_error_code(monc_errc::timed_out));
+    return false;
+  }
+
+  auto iter = version_requests.find(tid);
+  ceph_assert(iter != version_requests.end());
+  iter->second.timeout_event = timer.add_event_at(
+    *deadline,
+    make_lambda_context(
+      [this, tid](int) { _handle_version_request_timeout(tid); }));
+  return true;
+}
+
+void MonClient::_finish_version_request(
+  ceph_tid_t tid, bs::error_code ec, version_t newest, version_t oldest)
+{
+  ceph_assert(ceph_mutex_is_locked(monc_lock));
+  auto iter = version_requests.find(tid);
+  if (iter == version_requests.end()) {
+    return;
+  }
+
+  if (iter->second.timeout_event) {
+    timer.cancel_event(iter->second.timeout_event);
+  }
+  auto onfinish = std::move(iter->second.onfinish);
+  version_requests.erase(iter);
+  asio::post(service.get_executor(),
+	     asio::append(std::move(onfinish), ec, newest, oldest));
+}
+
+void MonClient::_handle_version_request_timeout(ceph_tid_t tid)
+{
+  ceph_assert(ceph_mutex_is_locked(monc_lock));
+  auto iter = version_requests.find(tid);
+  if (iter == version_requests.end()) {
+    return;
+  }
+
+  iter->second.timeout_event = nullptr;
+  _finish_version_request(tid, make_error_code(monc_errc::timed_out));
+}
+
 void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 {
   ceph_assert(ceph_mutex_is_locked(monc_lock));
@@ -1500,13 +1549,10 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
     ldout(cct, 0) << __func__ << " version request with handle " << m->handle
 		  << " not found" << dendl;
   } else {
-    auto req = std::move(iter->second);
     ldout(cct, 10) << __func__ << " finishing " << iter->first << " version "
 		   << m->version << dendl;
-    version_requests.erase(iter);
-    asio::post(service.get_executor(),
-	       asio::append(std::move(req), bs::error_code(),
-			    m->version, m->oldest_version));
+    _finish_version_request(
+      m->handle, bs::error_code(), m->version, m->oldest_version);
   }
   m->put();
 }

@@ -19,6 +19,7 @@
 #include <list>
 #include <map>
 #include <memory>
+#include <optional>
 #include <set>
 #include <string>
 #include <vector>
@@ -712,18 +713,29 @@ public:
    */
   template<typename CompletionToken>
   auto get_version(std::string&& map, CompletionToken&& token) {
+    return get_version(std::move(map), std::nullopt,
+		       std::forward<CompletionToken>(token));
+  }
+
+  template<typename CompletionToken>
+  auto get_version(std::string&& map,
+		   std::optional<ceph::mono_time> deadline,
+		   CompletionToken&& token) {
     namespace asio = boost::asio;
     auto consigned = asio::consign(
       std::forward<CompletionToken>(token), asio::make_work_guard(
 	asio::get_associated_executor(token, service.get_executor())));
     return asio::async_initiate<decltype(consigned), VersionSig>(
-      [this, map = std::move(map)](auto handler) mutable {
+      [this, map = std::move(map), deadline](auto handler) mutable {
 	std::scoped_lock l(monc_lock);
 	auto m = ceph::make_message<MMonGetVersion>();
 	m->what = std::move(map);
 	m->handle = ++version_req_id;
-	version_requests.emplace(m->handle, std::move(handler));
-	_send_mon_message(m);
+	version_requests.emplace(
+	  m->handle, VersionRequest{std::move(handler)});
+	if (_arm_version_request_timeout(m->handle, deadline)) {
+	  _send_mon_message(m);
+	}
       }, consigned);
   }
 
@@ -745,9 +757,22 @@ public:
   md_config_t::config_callback get_config_callback();
 
 private:
+  friend class MonClientLatestOsdmapTimeoutTest;
 
-  std::map<ceph_tid_t, VersionCompletion> version_requests;
+
+  struct VersionRequest {
+    VersionCompletion onfinish;
+    Context* timeout_event = nullptr;
+  };
+
+  std::map<ceph_tid_t, VersionRequest> version_requests;
   ceph_tid_t version_req_id;
+  bool _arm_version_request_timeout(
+    ceph_tid_t tid, std::optional<ceph::mono_time> deadline);
+  void _finish_version_request(
+    ceph_tid_t tid, boost::system::error_code ec,
+    version_t newest = 0, version_t oldest = 0);
+  void _handle_version_request_timeout(ceph_tid_t tid);
   void handle_get_version_reply(MMonGetVersionReply* m);
   md_config_t::config_callback config_cb;
   std::function<void(void)> config_notify_cb;
