@@ -53,8 +53,9 @@ Ordinary delta update
 
 Each RGW process keeps an in-memory accumulator for every bucket it mutates.
 It records the statistics delta for each successful bucket mutation.  At a
-configured interval, or when the accumulated delta exceeds a configured
-threshold, the process submits the delta to the summary object.
+configured interval, the process submits the accumulated delta to the summary
+object.  The initial implementation uses ``rgw_bucket_quota_ttl`` as this
+interval.
 
 The operation must be implemented as one server-side atomic operation, for
 example a CLS method with the following semantics::
