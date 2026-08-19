@@ -589,6 +589,28 @@ SeaStore::mount_ertr::future<> SeaStore::test_mount()
   INFO("done");
 }
 
+void SeaStore::Shard::validate_devices() {
+  magic_t magic = primary_device->get_magic();
+  auto &cache_dev_specs = data_devices.front()->get_cache_devices();
+  ceph_assert(cache_devices.size() == cache_dev_specs.size());
+  std::set<device_id_t> cid_set;
+  for (auto &dev : cache_devices) {
+    ceph_assert(magic == dev->get_magic());
+    ceph_assert(cache_dev_specs.count(dev->get_device_id()) > 0);
+    cid_set.emplace(dev->get_device_id());
+  }
+  ceph_assert(cid_set.size() == cache_devices.size());
+  std::set<device_id_t> id_set;
+  for (auto &dev : data_devices) {
+    ceph_assert(magic == dev->get_magic());
+    auto &dev_specs = dev->get_data_devices();
+    ceph_assert(data_devices.size() == dev_specs.size());
+    ceph_assert(dev_specs.count(dev->get_device_id()) > 0);
+    id_set.emplace(dev->get_device_id());
+  }
+  ceph_assert(id_set.size() == data_devices.size());
+}
+
 Device::access_ertr::future<> SeaStore::_mount()
 {
   LOG_PREFIX(SeaStore::mount);
@@ -628,13 +650,14 @@ Device::access_ertr::future<> SeaStore::_mount()
 
 seastar::future<> SeaStore::Shard::mount_managers()
 {
-  if(!store_active) {
-    return seastar::now();
-  }
   LOG_PREFIX(SeaStore::mount_managers);
+  if(!store_active) {
+    co_return;
+  }
   INFO("start");
+  validate_devices();
   init_managers();
-  return transaction_manager->mount(
+  co_await transaction_manager->mount(
   ).handle_error(
     crimson::ct_error::assert_all(
       "Invalid error in mount_managers"

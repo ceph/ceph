@@ -123,6 +123,9 @@ public:
   device_set_t& get_cache_devices() final {
     return super.config.cache_devices;
   }
+  device_set_t& get_data_devices() final {
+    return super.config.data_devices;
+  }
   std::size_t get_available_size() const { return super.total_size; }
   extent_len_t get_block_size() const { return super.block_size; }
 

@@ -871,6 +871,11 @@ device_set_t& ZBDSegmentManager::get_cache_devices()
   return metadata.config.cache_devices;
 };
 
+device_set_t& ZBDSegmentManager::get_data_devices()
+{
+  return metadata.config.data_devices;
+}
+
 magic_t ZBDSegmentManager::get_magic() const
 {
   return metadata.config.spec.magic;

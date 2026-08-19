@@ -249,6 +249,7 @@ public:
       return store_active;
     }
   private:
+    void validate_devices();
     struct internal_context_t {
       CollectionRef ch;
       ceph::os::Transaction ext_transaction;
@@ -692,6 +693,7 @@ public:
   seastar::future<> stop() override;
 
   Device::access_ertr::future<> _mount();
+
 
   // FuturizedStore::mount_ertr/mkfs_ertr only supports a stateful_ec
   // to keep the interface intact, convert to stateful_ec.

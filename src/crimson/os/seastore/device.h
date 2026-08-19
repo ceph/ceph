@@ -373,6 +373,8 @@ public:
 
   virtual device_set_t& get_cache_devices() = 0;
 
+  virtual device_set_t& get_data_devices() = 0;
+
   virtual bool is_end_to_end_data_protection() const {
     return false;
   }
