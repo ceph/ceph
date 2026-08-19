@@ -1780,6 +1780,8 @@ if cluster_running; then
     _aws_available=1
   fi
 
+  # Nothing in this block runs unless the aws CLI and the credentials are there.
+  # The SKIP lines below stand in for all of its rows, so update them together.
   if [ "$_aws_available" = "1" ]; then
     # Get credentials for the test user
     _access_key=$("$RGW_ADMIN" user info --uid "$_test_uid" 2>/dev/null | \
@@ -2003,11 +2005,11 @@ if cluster_running; then
       check_cluster "lifecycle: bucket rm --purge-objects (empty bucket)" 0 "" -- bucket rm --purge-objects --bucket "$_test_bucket"
     else
       echo "SKIP [integration: lifecycle tests]: could not get credentials for test user"
-      SKIP=$((SKIP+41))
+      SKIP=$((SKIP+94))
     fi
   else
     echo "SKIP [integration: lifecycle tests]: aws CLI not available (needed to create test bucket)"
-    SKIP=$((SKIP+36))
+    SKIP=$((SKIP+94))
   fi
 
   # Cleanup: remove the test user
