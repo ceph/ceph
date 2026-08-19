@@ -32,6 +32,9 @@ tasks:
       - Monitor daemon marked osd
       - Behind on trimming
       - Manager daemon
+      - AUTH_INSECURE_CLIENT_KEY_TYPE
+      - AUTH_INSECURE_KEYS_CREATABLE
+      - AUTH_INSECURE_KEYS_ALLOWED
     conf:
       global:
         mon warn on pool no app: false

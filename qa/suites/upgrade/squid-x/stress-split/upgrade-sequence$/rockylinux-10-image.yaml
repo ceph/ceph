@@ -1,5 +1,5 @@
-
 first-half-sequence:
+- sequential: [ignore-auth-warn-cephadm]
 - cephadm.shell:
     env: [sha1]
     mon.a:
@@ -33,26 +33,23 @@ first-half-sequence:
       # upgrade 4 of the 8 OSDs
       - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1-rockylinux-10 --daemon-types osd --limit 4
       - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+- sequential: [ignore-auth-warn-cephadm]
 
 
 #################
 
 second-half-sequence:
-  sequential:
-    - cephadm.shell:
-        env: [sha1]
-        mon.a:
-          - sleep 60
-
-          - echo wait for upgrade to complete
-          # upgrade whatever is left
-          - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1-rockylinux-10
-          - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
-
-          - echo upgrade complete
-          - ceph orch ps
-          - ceph versions
-          - ceph versions | jq -e '.overall | length == 1'
-          - ceph versions | jq -e '.overall | keys' | grep $sha1
-
-
+- cephadm.shell:
+    env: [sha1]
+    mon.a:
+      - sleep 60
+      - echo wait for upgrade to complete
+      # upgrade whatever is left
+      - ceph orch upgrade start --image quay.ceph.io/ceph-ci/ceph:$sha1-rockylinux-10
+      - while ceph orch upgrade status | jq '.in_progress' | grep true && ! ceph orch upgrade status | jq '.message' | grep Error ; do ceph orch ps ; ceph versions ; ceph orch upgrade status ; sleep 30 ; done
+      - echo upgrade complete
+      - ceph orch ps
+      - ceph versions
+      - ceph versions | jq -e '.overall | length == 1'
+      - ceph versions | jq -e '.overall | keys' | grep $sha1
+- sequential: [ignore-auth-warn-cephadm]

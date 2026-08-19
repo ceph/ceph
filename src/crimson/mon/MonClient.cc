@@ -53,6 +53,18 @@ namespace crimson::mon {
 
 using crimson::common::local_conf;
 
+/* Used by both Client and Connection. */
+static int handle_auth_failure()
+{
+  int ecode =
+    crimson::common::local_conf().get_val<int64_t>("auth_exit_on_failure");
+  if (ecode >= 0) {
+    logger().info("{}: exiting with {}", __func__, ecode);
+    _exit(ecode);
+  }
+  return -EACCES;
+}
+
 class Connection : public seastar::enable_shared_from_this<Connection> {
 public:
   Connection(const AuthRegistry& auth_registry,
@@ -83,6 +95,7 @@ public:
   bool is_my_peer(const entity_addr_t& addr) const;
   AuthAuthorizer* get_authorizer(entity_type_t peer) const;
   KeyStore& get_keys();
+  void _wipe_secrets_and_tickets();
   seastar::future<> renew_tickets();
   seastar::future<> renew_rotating_keyring();
 
@@ -151,11 +164,18 @@ seastar::future<> Connection::renew_tickets()
   }
 }
 
+void Connection::_wipe_secrets_and_tickets() {
+  logger().info("{}: wiping rotating secrets and invalidating tickets", __func__);
+  rotating_keyring->wipe();
+  auth->invalidate_all_tickets();
+}
+
 seastar::future<> Connection::renew_rotating_keyring()
 {
+  auto&& conf = crimson::common::local_conf();
+  auto const service_ticket_ttl = conf.get_val<double>("auth_service_ticket_ttl");
+  auto ttl = std::chrono::seconds{static_cast<long>(service_ticket_ttl)};
   auto now = clock_t::now();
-  auto ttl = std::chrono::seconds{
-    static_cast<long>(crimson::common::local_conf()->auth_service_ticket_ttl)};
   auto cutoff = utime_t{now - std::min(std::chrono::seconds{30}, ttl / 4)};
   if (!rotating_keyring->need_new_secrets(cutoff)) {
     logger().debug("renew_rotating_keyring secrets are up-to-date "
@@ -445,6 +465,8 @@ seastar::future<> Client::start() {
         std::chrono::duration<double>(
           local_conf().get_val<double>("mon_client_ping_interval")));
     timer.arm_periodic(interval);
+    // TODO: register rotate-key and wipe-rotating-secrets
+    //       asock commands
   });
 }
 
@@ -463,14 +485,22 @@ seastar::future<> Client::load_keyring()
   }
 }
 
+seastar::future<> Client::_check_auth_tickets()
+{
+  return seastar::when_all_succeed(
+    active_con->renew_tickets(),
+    active_con->renew_rotating_keyring()).then_unpack([] {
+      logger().info("_check_auth_tickets: renewed tickets");
+  });
+}
+
 void Client::tick()
 {
   gates.dispatch_in_background(__func__, *this, [this] {
     if (active_con) {
       return seastar::when_all_succeed(wait_for_send_log(),
                                        active_con->get_conn()->send_keepalive(),
-                                       active_con->renew_tickets(),
-                                       active_con->renew_rotating_keyring()).discard_result();
+                                       _check_auth_tickets()).discard_result();
     } else {
       assert(is_hunting());
       logger().info("{} continuing the hunt", __func__);
@@ -604,12 +634,12 @@ int Client::handle_auth_request(crimson::net::Connection &conn,
                                 ceph::bufferlist *reply)
 {
   if (payload.length() == 0) {
-    return -EACCES;
+    return handle_auth_failure();
   }
   auth_meta.auth_mode = payload[0];
   if (auth_meta.auth_mode < AUTH_MODE_AUTHORIZER ||
       auth_meta.auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
-    return -EACCES;
+    return handle_auth_failure();
   }
   AuthAuthorizeHandler* ah = get_auth_authorize_handler(conn.get_peer_type(),
                                                         auth_method);
@@ -652,7 +682,7 @@ int Client::handle_auth_request(crimson::net::Connection &conn,
     return 0;
   } else {
     logger().info("bad authorizer on {}", conn);
-    return -EACCES;
+    return handle_auth_failure();
   }
 }
 
@@ -744,7 +774,7 @@ int Client::handle_auth_done(crimson::net::Connection &conn,
     auto p = bl.begin();
     if (!auth_meta.authorizer->verify_reply(p, &auth_meta.connection_secret)) {
       logger().error("failed verifying authorizer reply");
-      return -EACCES;
+      return handle_auth_failure();
     }
     auth_meta.session_key = auth_meta.authorizer->session_key;
     return 0;
@@ -775,13 +805,15 @@ int Client::handle_auth_bad_method(crimson::net::Connection &conn,
     // huh...
     logger().info("hmm, they didn't like {} result {}",
                   old_auth_method, cpp_strerror(result));
-    return -EACCES;
+    return handle_auth_failure();
   }
 }
 
 seastar::future<> Client::handle_monmap(crimson::net::Connection &conn,
                                         Ref<MMonMap> m)
 {
+  const auto old_auth_epoch = monmap.auth_epoch;
+
   monmap.decode(m->monmapbl);
   const auto peer_addr = conn.get_peer_addr();
   auto cur_mon = monmap.get_name(peer_addr);
@@ -789,26 +821,24 @@ seastar::future<> Client::handle_monmap(crimson::net::Connection &conn,
                  monmap.epoch, cur_mon, monmap.get_rank(cur_mon));
   sub.got("monmap", monmap.get_epoch());
 
-  if (monmap.get_addr_name(peer_addr, cur_mon)) {
-    if (active_con) {
-      logger().info("handle_monmap: renewing tickets");
-      return seastar::when_all_succeed(
-	active_con->renew_tickets(),
-	active_con->renew_rotating_keyring()).then_unpack([] {
-	  logger().info("handle_mon_map: renewed tickets");
-	});
-    } else {
-      return seastar::now();
-    }
-  } else {
+  if (monmap.get_addr_name(peer_addr, cur_mon) == false) {
     logger().warn("mon.{} went away", cur_mon);
-    return reopen_session(-1).then([this](bool opened) {
-      if (opened) {
-        return on_session_opened();
-      } else {
-        return seastar::now();
-      }
-    });
+    bool opened = co_await reopen_session(-1);
+    if (opened) {
+      co_await on_session_opened();
+    }
+  }
+
+  if (old_auth_epoch < monmap.auth_epoch) {
+    logger().warn("mon.{} auth epoch has changed: "
+                  "invalidating tickets and rotating secrets", cur_mon);
+    co_await _wipe_secrets_and_tickets();
+  }
+
+  // TODO: we can probably renew tickets only if the session was reopened
+  if (active_con) {
+    logger().info("handle_monmap: renewing tickets");
+    co_await _check_auth_tickets();
   }
 }
 
@@ -825,9 +855,7 @@ seastar::future<> Client::handle_auth_reply(crimson::net::Connection &conn,
     return (*found)->handle_auth_reply(m);
   } else if (active_con) {
     return active_con->handle_auth_reply(m).then([this] {
-      return seastar::when_all_succeed(
-        active_con->renew_rotating_keyring(),
-        active_con->renew_tickets()).discard_result();
+      return _check_auth_tickets();
     });
   } else {
     logger().error("unknown auth reply from {}", conn.get_peer_addr());
@@ -946,6 +974,16 @@ seastar::future<> Client::authenticate()
     }
   });
 }
+
+seastar::future<> Client::_wipe_secrets_and_tickets()
+{
+  logger().info("{} wiping rotating secrets and invalidating tickets", __func__);
+  if (active_con) {
+    active_con->_wipe_secrets_and_tickets();
+  }
+  return _check_auth_tickets();
+}
+
 
 seastar::future<> Client::stop()
 {

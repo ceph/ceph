@@ -16,6 +16,7 @@
 #include "messages/MMgrBeacon.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrDigest.h"
+#include "messages/MMonCommand.h"
 
 #include "include/stringify.h"
 #include "mgr/MgrContext.h"
@@ -23,6 +24,8 @@
 #include "OSDMonitor.h"
 #include "ConfigMonitor.h"
 #include "HealthMonitor.h"
+#include "Monitor.h"
+#include "Paxos.h"
 
 #include "common/TextTable.h"
 #include "include/stringify.h"
@@ -183,7 +186,6 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 
     ever_had_active_mgr = get_value("ever_had_active_mgr");
 
-    load_health();
 
     if (map.available) {
       first_seen_inactive = utime_t();
@@ -346,7 +348,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   pending_metadata.clear();
   pending_metadata_rm.clear();
 
-  health_check_map_t next;
+  auto& next = get_health_checks_pending_writeable();
   if (pending_map.active_gid == 0) {
     auto level = should_warn_about_mgr_down();
     if (level != HEALTH_OK) {
@@ -358,7 +360,6 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   } else {
     put_value(t, "ever_had_active_mgr", 1);
   }
-  encode_health(next, t);
 
   if (pending_command_descs.size()) {
     dout(4) << __func__ << " encoding " << pending_command_descs.size()

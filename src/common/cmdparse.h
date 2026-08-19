@@ -135,6 +135,23 @@ T cmd_getval_cast_or(const cmdmap_t& cmdmap, std::string_view k, T defval)
   }
 }
 
+template <typename T, typename V>
+void cmd_getval_or(const cmdmap_t& cmdmap, std::string_view k,
+                   V& val, const V& defval)
+{
+  auto found = cmdmap.find(k);
+  if (found == cmdmap.end()) {
+    val = T(defval);
+  } else {
+    try {
+      val = boost::get<T>(cmdmap.find(k)->second);
+    } catch (boost::bad_get&) {
+      throw bad_cmd_get(k, cmdmap);
+    }
+  }
+}
+
+
 template <typename T>
 void
 cmd_putval(CephContext *cct, cmdmap_t& cmdmap, std::string_view k, const T& val)

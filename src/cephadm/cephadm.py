@@ -179,6 +179,7 @@ from cephadmlib.daemons import (
     Keepalived,
     Monitoring,
     NFSGanesha,
+    OSD,
     SMB,
     SNMPGateway,
     MgmtGateway,
@@ -620,8 +621,28 @@ def create_daemon_dirs(
 
     if keyring:
         keyring_path = os.path.join(data_dir, 'keyring')
+        config_json = fetch_configs(ctx)
+        key_path_exists = False
+        key_path_content = 'N/A'
+        try:
+            key_path_exists = os.path.exists(keyring_path)
+            key_path_content = open(keyring_path, 'r').read()
+        except Exception:
+            pass
+        update_bluestore_label_osd_keyring = False
+        if (
+            ident.daemon_type == 'osd'
+            and key_path_exists
+            and key_path_content != keyring
+        ):
+            # need to update keyring with ceph-bluestore-tool
+            update_bluestore_label_osd_keyring = True
         with write_new(keyring_path, owner=(uid, gid)) as f:
             f.write(keyring)
+        if update_bluestore_label_osd_keyring:
+            osd_daemon_form = OSD.create(ctx, ident)
+            # osd_daemon_form = OSD.init(ctx, ctx.fsid, ident.daemon_id)
+            osd_daemon_form.rotate_osd_lv_keyring(ctx, keyring_path)
 
     if daemon_type in Monitoring.components.keys():
         config_json = fetch_configs(ctx)
@@ -4504,6 +4525,11 @@ def _add_deploy_parser_args(
         action='append',
         default=[],
         help='Additional entrypoint arguments to apply to deamon'
+    )
+    parser_deploy.add_argument(
+        '--osd-dm-crypt-key',
+        default=None,
+        help="dm-crypt key for OSD, needed for deployment if OSD's cephx keyring has been rotated"
     )
 
 

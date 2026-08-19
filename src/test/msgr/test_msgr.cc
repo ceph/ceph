@@ -79,9 +79,10 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     dummy_auth.auth_registry.refresh_config();
   }
   void SetUp() override {
-    lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
-    server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
-    client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid());
+    std::string msgr_type = GetParam();
+    lderr(g_ceph_context) << __func__ << " start set up " << msgr_type << dendl;
+    server_msgr = Messenger::create(g_ceph_context, msgr_type, entity_name_t::OSD(0), "server", getpid());
+    client_msgr = Messenger::create(g_ceph_context, msgr_type, entity_name_t::CLIENT(-1), "client", getpid());
     server_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0));
     server_msgr->set_auth_client(&dummy_auth);
@@ -114,6 +115,7 @@ class FakeDispatcher : public Dispatcher {
   ceph::mutex lock = ceph::make_mutex("FakeDispatcher::lock");
   ceph::condition_variable cond;
   bool is_server;
+  bool fast;
   bool got_new;
   bool got_remote_reset;
   bool got_connect;
@@ -121,11 +123,11 @@ class FakeDispatcher : public Dispatcher {
   entity_addrvec_t last_accept;
   ConnectionRef *last_accept_con_ptr = nullptr;
 
-  explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context),
-                          is_server(s), got_new(false), got_remote_reset(false),
+  explicit FakeDispatcher(bool s, bool f=true): Dispatcher(g_ceph_context),
+                          is_server(s), fast(f), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {
   }
-  bool ms_can_fast_dispatch_any() const override { return true; }
+  bool ms_can_fast_dispatch_any() const override { return fast; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
     case CEPH_MSG_PING:
@@ -2144,6 +2146,307 @@ bool SyntheticDispatcher::ms_handle_reset(Connection *con) {
   return true;
 }
 
+class ShutdownMessengerTest : public MessengerTest {};
+
+TEST_P(ShutdownMessengerTest, ShutdownLosslessTest) {
+  const char* proto_prefix = "v2:";
+  
+  FakeDispatcher cli_dispatcher(false, false), srv_dispatcher(true, false);
+  auto srv_interceptor = std::make_unique<TestInterceptor>();
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, Messenger::Policy::lossless_peer_reuse(0));
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, Messenger::Policy::lossless_peer_reuse(0));
+  server_msgr->interceptor = srv_interceptor.get();
+
+  entity_addr_t bind_addr;
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3300");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3301");
+  client_msgr->bind(bind_addr);
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef c2s = client_msgr->connect_to(server_msgr->get_mytype(), server_msgr->get_myaddrs());
+
+  srv_interceptor->breakpoint(Interceptor::STEP::HANDLE_MESSAGE);
+  c2s->send_message(new MPing());
+
+  Connection *s2c_accepter = srv_interceptor->wait(Interceptor::STEP::HANDLE_MESSAGE);
+  (void)s2c_accepter;
+
+  c2s->shutdown();
+  usleep(100000);
+
+  ASSERT_TRUE(c2s->is_connected());
+
+  srv_interceptor->proceed(Interceptor::STEP::HANDLE_MESSAGE, Interceptor::ACTION::CONTINUE);
+
+  CHECK_AND_WAIT_TRUE(!c2s->is_connected());
+  ASSERT_FALSE(c2s->is_connected());
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->shutdown();
+  client_msgr->wait();
+}
+
+TEST_P(ShutdownMessengerTest, ShutdownLossyTest) {
+  const char* proto_prefix = "v2:";
+  
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  auto srv_interceptor = std::make_unique<TestInterceptor>();
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, Messenger::Policy::stateless_server(0));
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, Messenger::Policy::lossy_client(0));
+  server_msgr->interceptor = srv_interceptor.get();
+
+  entity_addr_t bind_addr;
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3300");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3301");
+  client_msgr->bind(bind_addr);
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef c2s = client_msgr->connect_to(server_msgr->get_mytype(), server_msgr->get_myaddrs());
+
+  srv_interceptor->breakpoint(Interceptor::STEP::HANDLE_MESSAGE);
+  c2s->send_message(new MPing());
+
+  Connection *s2c_accepter = srv_interceptor->wait(Interceptor::STEP::HANDLE_MESSAGE);
+  (void)s2c_accepter;
+
+  c2s->shutdown();
+  
+  CHECK_AND_WAIT_TRUE(!c2s->is_connected());
+  ASSERT_FALSE(c2s->is_connected());
+
+  srv_interceptor->proceed(Interceptor::STEP::HANDLE_MESSAGE, Interceptor::ACTION::CONTINUE);
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->shutdown();
+  client_msgr->wait();
+}
+
+TEST_P(ShutdownMessengerTest, ShutdownTimeoutTest) {
+  const char* proto_prefix = "v2:";
+  
+  /* update shutdown timeout, recreate client/server */
+  g_ceph_context->_conf.set_val("ms_shutdown_timeout", "200");
+
+  std::string msgr_type = GetParam();
+  server_msgr->shutdown();
+  server_msgr->wait();
+  delete server_msgr;
+  client_msgr->shutdown();
+  client_msgr->wait();
+  delete client_msgr;
+
+  server_msgr = Messenger::create(g_ceph_context, msgr_type, entity_name_t::OSD(0), "server", getpid());
+  client_msgr = Messenger::create(g_ceph_context, msgr_type, entity_name_t::CLIENT(-1), "client", getpid());
+  server_msgr->set_auth_client(&dummy_auth);
+  server_msgr->set_auth_server(&dummy_auth);
+  client_msgr->set_auth_client(&dummy_auth);
+  client_msgr->set_auth_server(&dummy_auth);
+  server_msgr->set_require_authorizer(false);
+
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  auto srv_interceptor = std::make_unique<TestInterceptor>();
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, Messenger::Policy::lossless_peer_reuse(0));
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, Messenger::Policy::lossless_peer_reuse(0));
+  server_msgr->interceptor = srv_interceptor.get();
+
+  entity_addr_t bind_addr;
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3300");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3301");
+  client_msgr->bind(bind_addr);
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef c2s = client_msgr->connect_to(server_msgr->get_mytype(), server_msgr->get_myaddrs());
+
+  srv_interceptor->breakpoint(Interceptor::STEP::HANDLE_MESSAGE);
+  c2s->send_message(new MPing());
+
+  Connection *s2c_accepter = srv_interceptor->wait(Interceptor::STEP::HANDLE_MESSAGE);
+  (void)s2c_accepter;
+
+  c2s->shutdown();
+  
+  ASSERT_TRUE(c2s->is_connected());
+
+  CHECK_AND_WAIT_TRUE(!c2s->is_connected());
+  ASSERT_FALSE(c2s->is_connected());
+
+  srv_interceptor->proceed(Interceptor::STEP::HANDLE_MESSAGE, Interceptor::ACTION::CONTINUE);
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->shutdown();
+  client_msgr->wait();
+  g_ceph_context->_conf.set_val("ms_shutdown_timeout", "120000");
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ProtocolTests,
+    ShutdownMessengerTest,
+    ::testing::Values("async+posix")
+);
+
+class ShutdownMessengerTestV1 : public MessengerTest {};
+
+TEST_P(ShutdownMessengerTestV1, ShutdownLosslessTest) {
+  const char* proto_prefix = "v1:";
+
+  FakeDispatcher cli_dispatcher(false, false), srv_dispatcher(true, false);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, Messenger::Policy::lossless_peer_reuse(0));
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, Messenger::Policy::lossless_peer_reuse(0));
+
+  entity_addr_t bind_addr;
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3300");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3301");
+  client_msgr->bind(bind_addr);
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef c2s = client_msgr->connect_to(server_msgr->get_mytype(), server_msgr->get_myaddrs());
+
+  c2s->send_message(new MPing());
+
+  {
+    std::unique_lock l{srv_dispatcher.lock};
+    srv_dispatcher.cond.wait(l, [&] { return srv_dispatcher.got_new; });
+    srv_dispatcher.got_new = false;
+  }
+
+  c2s->shutdown();
+
+  CHECK_AND_WAIT_TRUE(!c2s->is_connected());
+  ASSERT_FALSE(c2s->is_connected());
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->shutdown();
+  client_msgr->wait();
+}
+
+TEST_P(ShutdownMessengerTestV1, ShutdownLossyTest) {
+  const char* proto_prefix = "v1:";
+
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, Messenger::Policy::stateless_server(0));
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, Messenger::Policy::lossy_client(0));
+
+  entity_addr_t bind_addr;
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3300");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3301");
+  client_msgr->bind(bind_addr);
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef c2s = client_msgr->connect_to(server_msgr->get_mytype(), server_msgr->get_myaddrs());
+
+  c2s->send_message(new MPing());
+
+  {
+    std::unique_lock l{srv_dispatcher.lock};
+    srv_dispatcher.cond.wait(l, [&] { return srv_dispatcher.got_new; });
+    srv_dispatcher.got_new = false;
+  }
+
+  c2s->shutdown();
+
+  CHECK_AND_WAIT_TRUE(!c2s->is_connected());
+  ASSERT_FALSE(c2s->is_connected());
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->shutdown();
+  client_msgr->wait();
+}
+
+TEST_P(ShutdownMessengerTestV1, ShutdownTimeoutTest) {
+  const char* proto_prefix = "v1:";
+
+  /* update shutdown timeout, recreate client/server */
+  g_ceph_context->_conf.set_val("ms_shutdown_timeout", "200");
+
+  std::string msgr_type = GetParam();
+  server_msgr->shutdown();
+  server_msgr->wait();
+  delete server_msgr;
+  client_msgr->shutdown();
+  client_msgr->wait();
+  delete client_msgr;
+
+  server_msgr = Messenger::create(g_ceph_context, msgr_type, entity_name_t::OSD(0), "server", getpid());
+  client_msgr = Messenger::create(g_ceph_context, msgr_type, entity_name_t::CLIENT(-1), "client", getpid());
+  server_msgr->set_auth_client(&dummy_auth);
+  server_msgr->set_auth_server(&dummy_auth);
+  client_msgr->set_auth_client(&dummy_auth);
+  client_msgr->set_auth_server(&dummy_auth);
+  server_msgr->set_require_authorizer(false);
+
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, Messenger::Policy::lossless_peer_reuse(0));
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, Messenger::Policy::lossless_peer_reuse(0));
+
+  entity_addr_t bind_addr;
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3300");
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  bind_addr.parse(std::string(proto_prefix) + "127.0.0.1:3301");
+  client_msgr->bind(bind_addr);
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef c2s = client_msgr->connect_to(server_msgr->get_mytype(), server_msgr->get_myaddrs());
+
+  c2s->send_message(new MPing());
+
+  {
+    std::unique_lock l{srv_dispatcher.lock};
+    srv_dispatcher.cond.wait(l, [&] { return srv_dispatcher.got_new; });
+    srv_dispatcher.got_new = false;
+  }
+
+  c2s->shutdown();
+
+  CHECK_AND_WAIT_TRUE(!c2s->is_connected());
+  ASSERT_FALSE(c2s->is_connected());
+
+  server_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->shutdown();
+  client_msgr->wait();
+  g_ceph_context->_conf.set_val("ms_shutdown_timeout", "120000");
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    ProtocolTestsV1,
+    ShutdownMessengerTestV1,
+    ::testing::Values("async+posix")
+);
+
 TEST_P(MessengerTest, SyntheticStressTest) {
   SyntheticWorkload test_msg(8, 32, GetParam(), 100,
                              Messenger::Policy::stateful_server(0),
@@ -2450,7 +2753,7 @@ class MarkdownDispatcher : public Dispatcher {
 
 // Markdown with external lock
 TEST_P(MessengerTest, MarkdownTest) {
-  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid());
+  Messenger *server_msgr2 = Messenger::create(g_ceph_context, GetParam(), entity_name_t::OSD(0), "server", getpid());
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
   DummyAuthClientServer dummy_auth(g_ceph_context);
   dummy_auth.auth_registry.refresh_config();
@@ -2512,9 +2815,7 @@ TEST_P(MessengerTest, MarkdownTest) {
 INSTANTIATE_TEST_SUITE_P(
   Messenger,
   MessengerTest,
-  ::testing::Values(
-    "async+posix"
-  )
+  ::testing::Values("async+posix")
 );
 
 int main(int argc, char **argv) {
