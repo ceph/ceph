@@ -100,7 +100,7 @@ tasks:
     timeout: 15m
     clients:
       client.0:
-        - [ctdb_healthy]
+        - [default, ctdb_healthy, hosts_access, users_groups_access]
 
 # Test a different host in the cluster
 - template.exec:
