@@ -1,3 +1,8 @@
+* ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
+  re-execs under GNU bash >= 4 when the system bash is too old, and honors a
+  ``$GETOPT`` environment override so GNU getopt can be selected
+  (``brew install bash gnu-getopt``).
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
