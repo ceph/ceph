@@ -66,10 +66,6 @@ public:
 		AuthRegistry *auth_registry,
                 ceph::mutex& m);
   ~MonConnection();
-  MonConnection(MonConnection&& rhs) = default;
-  MonConnection& operator=(MonConnection&&) = default;
-  MonConnection(const MonConnection& rhs) = delete;
-  MonConnection& operator=(const MonConnection&) = delete;
   int handle_auth(MAuthReply *m,
 		  const EntityName& entity_name,
 		  uint32_t want_keys,
