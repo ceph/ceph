@@ -47,8 +47,7 @@
 #include "crush/CrushLocation.h"
 
 class AdminSocket;
-class CryptoHandler;
-class CryptoRandom;
+class AdminSocketHook;
 class MonMap;
 
 namespace ceph::common {
@@ -224,7 +223,9 @@ public:
   /**
    * get a crypto handler
    */
-  CryptoHandler *get_crypto_handler(int type);
+  CryptoManager *get_crypto_manager() {
+    return _crypto_mgr.get();
+  }
 
   CryptoRandom* random() const { return _crypto_random.get(); }
 
@@ -366,9 +367,8 @@ private:
   std::vector<ForkWatcher*> _fork_watchers;
 
   // crypto
-  CryptoHandler *_crypto_none;
-  CryptoHandler *_crypto_aes;
   std::unique_ptr<CryptoRandom> _crypto_random;
+  std::unique_ptr<CryptoManager> _crypto_mgr;
 
   // experimental
   CephContextObs *_cct_obs;
@@ -379,8 +379,13 @@ private:
 #ifdef CEPH_DEBUG_MUTEX
   md_config_obs_t *_lockdep_obs;
 #endif
+
+  std::unique_ptr<AdminSocketHook> _msgr_hook;
+  ceph::mutex _msgr_hook_lock = ceph::make_mutex("CephContext::msgr_hook");
 public:
   TOPNSPC::crush::CrushLocation crush_location;
+  void modify_msgr_hook(std::function<AdminSocketHook*(void)> create,
+			std::function<void(AdminSocketHook*)> add);
 private:
 
   enum {

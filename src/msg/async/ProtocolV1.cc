@@ -21,8 +21,8 @@ std::ostream &ProtocolV1::_conn_prefix(std::ostream *_dout) {
 		<< " conn("
                 << connection << " " << this
                 << " :" << connection->port << " s=" << get_state_name(state)
-                << " pgs=" << peer_global_seq << " cs=" << connect_seq
-                << " l=" << connection->policy.lossy << ").";
+                << " pgs=" << peer_global_seq << " gs=" << global_seq
+                << " cs=" << connect_seq << " l=" << connection->policy.lossy << ").";
 }
 
 #define WRITE(B, C) write(CONTINUATION(C), B)
@@ -61,28 +61,16 @@ static void alloc_aligned_buffer(ceph::buffer::list &data, unsigned len, unsigne
  **/
 
 ProtocolV1::ProtocolV1(AsyncConnection *connection)
-    : Protocol(1, connection),
-      temp_buffer(nullptr),
-      can_write(WriteStatus::NOWRITE),
-      keepalive(false),
-      connect_seq(0),
-      peer_global_seq(0),
-      msg_left(0),
-      cur_msg_size(0),
-      replacing(false),
-      is_reset_from_peer(false),
-      once_ready(false),
-      state(NONE),
-      global_seq(0),
-      wait_for_seq(false) {
-  temp_buffer = new char[4096];
+    : Protocol(1, connection)
+{
+  ldout(cct, 5) << "con" << dendl;
 }
 
-ProtocolV1::~ProtocolV1() {
+ProtocolV1::~ProtocolV1()
+{
+  ldout(cct, 5) << "des" << dendl;
   ceph_assert(out_q.empty());
   ceph_assert(sent.empty());
-
-  delete[] temp_buffer;
 }
 
 void ProtocolV1::connect() {
@@ -90,9 +78,8 @@ void ProtocolV1::connect() {
 
   // reset connect state variables
   authorizer_buf.clear();
-  // FIPS zeroization audit 20191115: these memsets are not security related.
-  memset(&connect_msg, 0, sizeof(connect_msg));
-  memset(&connect_reply, 0, sizeof(connect_reply));
+  connect_msg = {};
+  connect_reply = {};
 
   global_seq = messenger->get_global_seq();
 }
@@ -101,6 +88,20 @@ void ProtocolV1::accept() { this->state = START_ACCEPT; }
 
 bool ProtocolV1::is_connected() {
   return can_write.load() == WriteStatus::CANWRITE;
+}
+
+void ProtocolV1::shutdown() {
+  std::lock_guard<std::mutex> l(connection->write_lock);
+  if (can_write.load() == WriteStatus::CLOSED)
+    return;
+  shutting_down = true;
+  // trigger write_event to send remaining messages or finalize shutdown
+  connection->center->dispatch_event_external(connection->write_handler);
+}
+
+bool ProtocolV1::sent_queue_empty() const {
+  /* must hold write_lock */
+  return sent.empty();
 }
 
 void ProtocolV1::stop() {
@@ -146,10 +147,10 @@ void ProtocolV1::fault() {
   // requeue sent items
   requeue_sent();
 
-  if (!once_ready && out_q.empty() && state >= START_ACCEPT &&
-      state <= ACCEPTING_WAIT_CONNECT_MSG_AUTH && !replacing) {
-    ldout(cct, 10) << __func__ << " with nothing to send and in the half "
-                   << " accept state just closed" << dendl;
+  if (shutting_down || (!once_ready && out_q.empty() && state >= START_ACCEPT &&
+      state <= ACCEPTING_WAIT_CONNECT_MSG_AUTH && !replacing)) {
+    ldout(cct, 10) << __func__ << " shutting down or with nothing to send and in the half "
+                   << "accept state just closed" << dendl;
     connection->write_lock.unlock();
     stop();
     connection->dispatch_queue->queue_reset(connection);
@@ -210,13 +211,13 @@ void ProtocolV1::fault() {
   }
 }
 
-void ProtocolV1::send_message(Message *m) {
+void ProtocolV1::send_message(MessageRef&& m) {
   ceph::buffer::list bl;
   uint64_t f = connection->get_features();
 
   // TODO: Currently not all messages supports reencode like MOSDMap, so here
   // only let fast dispatch support messages prepare message
-  bool can_fast_prepare = messenger->ms_can_fast_dispatch(m);
+  bool can_fast_prepare = messenger->ms_can_fast_dispatch(*m);
   bool is_prepared = false;
   if (can_fast_prepare && f) {
     prepare_send_message(f, m, bl);
@@ -236,14 +237,11 @@ void ProtocolV1::send_message(Message *m) {
   if (can_write == WriteStatus::CLOSED) {
     ldout(cct, 10) << __func__ << " connection closed."
                    << " Drop message " << m << dendl;
-    m->put();
   } else {
+    ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << *m << dendl;
     m->queue_start = ceph::mono_clock::now();
     m->trace.event("async enqueueing message");
-    out_q[m->get_priority()].emplace_back(out_q_entry_t{
-      std::move(bl), m, is_prepared});
-    ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
-                   << dendl;
+    out_q[m->get_priority()].emplace_back(out_q_entry_t{std::move(bl), std::move(m), is_prepared});
     if (can_write != WriteStatus::REPLACING && !write_in_progress) {
       write_in_progress = true;
       connection->center->dispatch_event_external(connection->write_handler);
@@ -251,7 +249,7 @@ void ProtocolV1::send_message(Message *m) {
   }
 }
 
-void ProtocolV1::prepare_send_message(uint64_t features, Message *m,
+void ProtocolV1::prepare_send_message(uint64_t features, const MessageRef& m,
                                       ceph::buffer::list &bl) {
   ldout(cct, 20) << __func__ << " m " << *m << dendl;
 
@@ -326,7 +324,7 @@ void ProtocolV1::write_event() {
       }
 
       const out_q_entry_t out_entry = _get_next_outgoing();
-      Message *m = out_entry.m;
+      auto& m = out_entry.m;
       ceph::buffer::list data = out_entry.bl;
 
       if (!m) {
@@ -336,7 +334,6 @@ void ProtocolV1::write_event() {
       if (!connection->policy.lossy) {
         // put on sent list
         sent.push_back(m);
-        m->get();
       }
       more = !out_q.empty();
       connection->write_lock.unlock();
@@ -423,6 +420,17 @@ bool ProtocolV1::is_queued() {
   return !out_q.empty() || connection->is_queued();
 }
 
+void ProtocolV1::dump(Formatter* f) {
+  f->open_object_section("v1");
+  f->dump_string("state", get_state_name(state));
+  f->dump_unsigned("connect_seq", connect_seq);
+  f->dump_unsigned("peer_global_seq", peer_global_seq);
+  if (auth_meta) {
+    f->dump_string("con_mode", ceph_con_mode_name(auth_meta->con_mode));
+  }
+  f->close_section();  // v1
+}
+
 void ProtocolV1::run_continuation(CtPtr pcontinuation) {
   if (pcontinuation) {
     CONTINUATION_RUN(*pcontinuation);
@@ -432,7 +440,8 @@ void ProtocolV1::run_continuation(CtPtr pcontinuation) {
 CtPtr ProtocolV1::read(CONTINUATION_RX_TYPE<ProtocolV1> &next,
                        int len, char *buffer) {
   if (!buffer) {
-    buffer = temp_buffer;
+    /* FIXME: why not len = sizeof temp_buffer??? */
+    buffer = temp_buffer.data();
   }
   ssize_t r = connection->read(len, buffer,
                                [&next, this](char *buffer, int r) {
@@ -606,21 +615,22 @@ CtPtr ProtocolV1::handle_tag_ack(char *buffer, int r) {
   static const int max_pending = 128;
   int i = 0;
   auto now = ceph::mono_clock::now();
-  Message *pending[max_pending];
+  std::array<MessageRef, max_pending> pending;
   connection->write_lock.lock();
   while (!sent.empty() && sent.front()->get_seq() <= seq && i < max_pending) {
-    Message *m = sent.front();
+    auto& m = pending[i++] = std::move(sent.front());
     sent.pop_front();
-    pending[i++] = m;
     ldout(cct, 10) << __func__ << " got ack seq " << seq
                    << " >= " << m->get_seq() << " on " << m << " " << *m
                    << dendl;
   }
+
+  if (unlikely(shutting_down) && sent_queue_empty()) {
+    connection->center->dispatch_event_external(connection->write_handler);
+  }
+
   connection->write_lock.unlock();
   connection->logger->tinc(l_msgr_handle_ack_lat, ceph::mono_clock::now() - now);
-  for (int k = 0; k < i; k++) {
-    pending[k]->put();
-  }
 
   return CONTINUE(wait_message);
 }
@@ -819,7 +829,7 @@ CtPtr ProtocolV1::read_message_data_prepare() {
 #if 0
     // rx_buffers is broken by design... see
     //  http://tracker.ceph.com/issues/22480
-    map<ceph_tid_t, pair<ceph::buffer::list, int> >::iterator p =
+    const auto p =
         connection->rx_buffers.find(current_header.tid);
     if (p != connection->rx_buffers.end()) {
       ldout(cct, 10) << __func__ << " seleting rx buffer v " << p->second.second
@@ -930,12 +940,27 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
   ldout(cct, 20) << __func__ << " got " << front.length() << " + "
                  << middle.length() << " + " << data.length() << " byte message"
                  << dendl;
-  Message *message = decode_message(cct, messenger->crcflags, current_header,
+
+  if (shutting_down || connection->is_shutdown()) {
+    ldout(cct, 10) << __func__ << " shutting down, dropping incoming message" << dendl;
+    if (connection->policy.throttler_messages)
+      connection->policy.throttler_messages->put();
+    if (connection->policy.throttler_bytes)
+      connection->policy.throttler_bytes->put(cur_msg_size);
+    connection->dispatch_queue->dispatch_throttle_release(cur_msg_size);
+    state = OPENED;
+    return CONTINUE(wait_message);
+  }
+
+  Message *_message = decode_message(cct, messenger->crcflags, current_header,
                                     footer, front, middle, data, connection);
-  if (!message) {
+  if (!_message) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
     return _fault();
   }
+
+  auto message = ceph::ref_t<Message>(_message, false); /* consume ref */
+  _message = nullptr;
 
   //
   //  Check the signature if one should be present.  A zero return indicates
@@ -945,9 +970,8 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
   if (session_security.get() == NULL) {
     ldout(cct, 10) << __func__ << " no session security set" << dendl;
   } else {
-    if (session_security->check_message_signature(message)) {
+    if (session_security->check_message_signature(message.get())) {
       ldout(cct, 0) << __func__ << " Signature check failed" << dendl;
-      message->put();
       return _fault();
     }
   }
@@ -972,7 +996,6 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
     ldout(cct, 0) << __func__ << " got old message " << message->get_seq()
                   << " <= " << cur_seq << " " << message << " " << *message
                   << ", discarding" << dendl;
-    message->put();
     if (connection->has_feature(CEPH_FEATURE_RECONNECT_SEQ) &&
         cct->_conf->ms_die_on_old_message) {
       ceph_assert(0 == "old msgs despite reconnect_seq feature");
@@ -1021,7 +1044,6 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
   if (connection->is_blackhole()) {
     ldout(cct, 10) << __func__ << " blackhole " << *message << dendl;
-    message->put();
     goto out;
   }
 
@@ -1043,8 +1065,8 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                     << (ceph_clock_now() + delay_period) << " on " << message
                     << " " << *message << dendl;
     }
-    connection->delay_state->queue(delay_period, message);
-  } else if (messenger->ms_can_fast_dispatch(message)) {
+    connection->delay_state->queue(delay_period, std::move(message));
+  } else if (messenger->ms_can_fast_dispatch(*message)) {
     connection->lock.unlock();
     connection->dispatch_queue->fast_dispatch(message);
     connection->recv_start_time = ceph::mono_clock::now();
@@ -1052,8 +1074,8 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                              connection->recv_start_time - fast_dispatch_time);
     connection->lock.lock();
   } else {
-    connection->dispatch_queue->enqueue(message, message->get_priority(),
-                                        connection->conn_id);
+    auto p = message->get_priority();
+    connection->dispatch_queue->enqueue(std::move(message), p, connection->conn_id);
   }
 
  out:
@@ -1108,7 +1130,7 @@ void ProtocolV1::randomize_out_seq() {
   }
 }
 
-ssize_t ProtocolV1::write_message(Message *m, ceph::buffer::list &bl, bool more) {
+ssize_t ProtocolV1::write_message(const MessageRef& m, ceph::buffer::list &bl, bool more) {
   FUNCTRACE(cct);
   ceph_assert(connection->center->in_thread());
   m->set_seq(++out_seq);
@@ -1129,7 +1151,7 @@ ssize_t ProtocolV1::write_message(Message *m, ceph::buffer::list &bl, bool more)
   if (session_security.get() == NULL) {
     ldout(cct, 20) << __func__ << " no session security" << dendl;
   } else {
-    if (session_security->sign_message(m)) {
+    if (session_security->sign_message(m.get())) {
       ldout(cct, 20) << __func__ << " failed to sign m=" << m
                      << "): sig = " << footer.sig << dendl;
     } else {
@@ -1193,7 +1215,6 @@ ssize_t ProtocolV1::write_message(Message *m, ceph::buffer::list &bl, bool more)
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE_WITH_MSG(m, "SEND_MSG_OSD_OPREPLY_END", false);
 #endif
-  m->put();
 
   return rc;
 }
@@ -1204,37 +1225,35 @@ void ProtocolV1::requeue_sent() {
     return;
   }
 
-  list<out_q_entry_t> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  auto &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
   out_seq -= sent.size();
-  while (!sent.empty()) {
-    Message *m = sent.back();
-    sent.pop_back();
+  for (; !sent.empty(); sent.pop_back()) {
+    auto& m = sent.back();
     ldout(cct, 10) << __func__ << " " << *m << " for resend "
                    << " (" << m->get_seq() << ")" << dendl;
     m->clear_payload();
-    rq.push_front(out_q_entry_t{ceph::buffer::list(), m, false});
+    rq.push_front(out_q_entry_t{ceph::buffer::list(), std::move(m), false});
   }
 }
 
 uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
   ldout(cct, 10) << __func__ << " " << seq << dendl;
   std::lock_guard<std::mutex> l(connection->write_lock);
-  if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
+  const auto it = out_q.find(CEPH_MSG_PRIO_HIGHEST);
+  if (it == out_q.end()) {
     return seq;
   }
-  list<out_q_entry_t> &rq = out_q[CEPH_MSG_PRIO_HIGHEST];
+  auto &rq = it->second;
   uint64_t count = out_seq;
-  while (!rq.empty()) {
-    Message* const m = rq.front().m;
+  for (; !rq.empty(); rq.pop_front()) {
+    auto& m = rq.front().m;
     if (m->get_seq() == 0 || m->get_seq() > seq) break;
     ldout(cct, 10) << __func__ << " " << *(m) << " for resend seq "
                    << m->get_seq() << " <= " << seq << ", discarding"
                    << dendl;
-    m->put();
-    rq.pop_front();
     count++;
   }
-  if (rq.empty()) out_q.erase(CEPH_MSG_PRIO_HIGHEST);
+  if (rq.empty()) out_q.erase(it);
   return count;
 }
 
@@ -1245,18 +1264,13 @@ uint64_t ProtocolV1::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
 void ProtocolV1::discard_out_queue() {
   ldout(cct, 10) << __func__ << " started" << dendl;
 
-  for (list<Message *>::iterator p = sent.begin(); p != sent.end(); ++p) {
-    ldout(cct, 20) << __func__ << " discard " << *p << dendl;
-    (*p)->put();
+  for (const auto& msg : sent) {
+    ldout(cct, 20) << __func__ << " discard " << msg << dendl;
   }
   sent.clear();
-  for (map<int, list<out_q_entry_t>>::iterator p =
-           out_q.begin();
-       p != out_q.end(); ++p) {
-    for (list<out_q_entry_t>::iterator r = p->second.begin();
-         r != p->second.end(); ++r) {
-      ldout(cct, 20) << __func__ << " discard " << r->m << dendl;
-      r->m->put();
+  for ([[maybe_unused]] auto& [ prio, entries ] : out_q) {
+    for (auto& entry : entries) {
+      ldout(cct, 20) << __func__ << " discard " << entry.m << dendl;
     }
   }
   out_q.clear();
@@ -1295,7 +1309,7 @@ void ProtocolV1::reset_recv_state()
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
-  connection->writeCallback.reset();
+  connection->writeCallback = {};
 
   if (state > THROTTLE_MESSAGE && state <= READ_FOOTER_AND_DISPATCH &&
       connection->policy.throttler_messages) {
@@ -1327,14 +1341,14 @@ void ProtocolV1::reset_recv_state()
 
 ProtocolV1::out_q_entry_t ProtocolV1::_get_next_outgoing() {
   out_q_entry_t out_entry;
-  if (!out_q.empty()) {
-    map<int, list<out_q_entry_t>>::reverse_iterator it =
-        out_q.rbegin();
-    ceph_assert(!it->second.empty());
-    list<out_q_entry_t>::iterator p = it->second.begin();
-    out_entry = *p;
-    it->second.erase(p);
-    if (it->second.empty()) out_q.erase(it->first);
+  if (auto it = out_q.begin(); it != out_q.end()) {
+    auto& q = it->second;
+    ceph_assert(!q.empty());
+    out_entry = std::move(q.front());
+    q.pop_front();
+    if (q.empty()) {
+      out_q.erase(it);
+    }
   }
   return out_entry;
 }
@@ -1571,8 +1585,7 @@ CtPtr ProtocolV1::handle_connect_message_write(int r) {
 CtPtr ProtocolV1::wait_connect_reply() {
   ldout(cct, 20) << __func__ << dendl;
 
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&connect_reply, 0, sizeof(connect_reply));
+  connect_reply = {};
   return READ(sizeof(connect_reply), handle_connect_reply_1);
 }
 
@@ -1922,8 +1935,7 @@ CtPtr ProtocolV1::handle_client_banner(char *buffer, int r) {
 CtPtr ProtocolV1::wait_connect_message() {
   ldout(cct, 20) << __func__ << dendl;
 
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&connect_msg, 0, sizeof(connect_msg));
+  connect_msg = {};
   return READ(sizeof(connect_msg), handle_connect_message_1);
 }
 
@@ -1987,8 +1999,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   ceph_msg_connect_reply reply;
   ceph::buffer::list authorizer_reply;
 
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&reply, 0, sizeof(reply));
+  reply = {};
   reply.protocol_version =
       messenger->get_proto_version(connection->peer_type, false);
 
@@ -2615,8 +2626,7 @@ CtPtr ProtocolV1::server_ready() {
 		 << dendl;
 
   ldout(cct, 20) << __func__ << " accept done" << dendl;
-  // FIPS zeroization audit 20191115: this memset is not security related.
-  memset(&connect_msg, 0, sizeof(connect_msg));
+  connect_msg = {};
 
   if (connection->delay_state) {
     ceph_assert(connection->delay_state->ready());

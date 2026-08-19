@@ -2,8 +2,23 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "msg/Connection.h"
+#include "msg/Message.h"
 #include "msg/Messenger.h"
 
+Connection::~Connection() = default;
+
+int Connection::send_message(Message* _m) {
+  auto m = ceph::ref_t<Message>(_m, false); /* consume ref */
+  return send_msg(std::move(m));
+}
+
+int Connection::send_message2(const MessageRef& m) {
+  return send_msg(MessageRef(m));
+}
+
+int Connection::send_message2(MessageRef&& m) {
+  return send_msg(std::move(m));
+}
 
 bool Connection::is_blackhole() const {
   auto& conf = msgr->cct->_conf;

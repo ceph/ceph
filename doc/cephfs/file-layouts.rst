@@ -271,7 +271,7 @@ Before you can use a pool with CephFS you have to add it to the Metadata Servers
     $ ceph fs ls  # Pool should now show up
     .... data pools: [cephfs_data cephfs_data_ssd ]
 
-Make sure that your cephx keys allows the client to access this new pool.
+Make sure that your CephX keys allows the client to access this new pool.
 
 You can then update the layout on a directory in CephFS to use the pool you added:
 

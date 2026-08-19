@@ -18,7 +18,10 @@
 #include "FSCommands.h"
 #include "MDSMonitor.h"
 #include "MgrStatMonitor.h"
+#include "Paxos.h"
 #include "mds/cephfs_features.h"
+
+#include <boost/optional.hpp>
 
 using TOPNSPC::common::cmd_getval;
 

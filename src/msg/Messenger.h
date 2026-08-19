@@ -28,6 +28,7 @@
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
+#include "common/Formatter.h"
 #include "common/Throttle.h"
 #include "include/Context.h"
 #include "include/types.h"
@@ -90,7 +91,11 @@ struct Interceptor {
 
 #endif
 
-class Messenger {
+class Messenger: public md_config_obs_t {
+public:
+  const char** get_tracked_conf_keys() const noexcept final;
+  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
+
 private:
   struct PriorityDispatcher {
     using priority_t = Dispatcher::priority_t;
@@ -168,7 +173,7 @@ public:
    * or use the create() function.
    */
   Messenger(CephContext *cct_, entity_name_t w);
-  virtual ~Messenger() {}
+  virtual ~Messenger();
 
   /**
    * create a new messenger
@@ -238,6 +243,9 @@ public:
     return my_addrs->as_legacy_addr();
   }
 
+  auto get_shutdown_timeout() const {
+    return shutdown_timeout;
+  }
 
   /**
    * std::set messenger's instance
@@ -297,13 +305,13 @@ public:
    * Get the number of Messages which the Messenger has received
    * but not yet dispatched.
    */
-  virtual int get_dispatch_queue_len() = 0;
+  virtual int get_dispatch_queue_len() const = 0;
 
   /**
    * Get age of oldest undelivered message
    * (0 if the queue is empty)
    */
-  virtual double get_dispatch_queue_max_age(utime_t now) = 0;
+  virtual double get_dispatch_queue_max_age(utime_t now) const = 0;
 
   /**
    * @} // Accessors
@@ -521,6 +529,10 @@ public:
    * @} // Startup/Shutdown
    */
 
+  virtual void dump(
+      Formatter* f, std::function<bool(const std::string&)> filter =
+                        [](const std::string&) { return true; }) const = 0;
+
   /**
    * @defgroup Messaging
    * @{
@@ -691,7 +703,7 @@ public:
    *
    * @param m The Message we are testing.
    */
-  bool ms_can_fast_dispatch(const ceph::cref_t<Message>& m) {
+  bool ms_can_fast_dispatch(const Message& m) {
     for ([[maybe_unused]] const auto& [priority, dispatcher] : fast_dispatchers) {
       if (dispatcher->ms_can_fast_dispatch2(m)) {
         return true;
@@ -709,7 +721,7 @@ public:
   void ms_fast_dispatch(const ceph::ref_t<Message> &m) {
     m->set_dispatch_stamp(ceph_clock_now());
     for ([[maybe_unused]] const auto& [priority, dispatcher] : fast_dispatchers) {
-      if (dispatcher->ms_can_fast_dispatch2(m)) {
+      if (dispatcher->ms_can_fast_dispatch2(*m)) {
         dispatcher->ms_fast_dispatch2(m);
         return;
       }
@@ -750,9 +762,6 @@ public:
     lsubdout(cct, ms, 0) << "ms_deliver_dispatch: unhandled message " << m << " " << *m << " from "
 			 << m->get_source_inst() << dendl;
     ceph_assert(!cct->_conf->ms_die_on_unhandled_msg);
-  }
-  void ms_deliver_dispatch(Message *m) {
-    return ms_deliver_dispatch(ceph::ref_t<Message>(m, false)); /* consume ref */
   }
   /**
    * Notify each Dispatcher of a new Connection. Call
@@ -854,6 +863,9 @@ public:
   /**
    * @} // Dispatcher Interfacing
    */
+
+private:
+  std::chrono::milliseconds shutdown_timeout;
 };
 
 
