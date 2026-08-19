@@ -285,6 +285,9 @@ class Pool(RESTController):
         if flags and 'ec_overwrites' in flags:
             CephService.send_command('mon', 'osd pool set', pool=pool, var='allow_ec_overwrites',
                                      val='true')
+        if flags and 'ec_optimizations' in flags:
+            CephService.send_command('mon', 'osd pool set', pool=pool,
+                                     var='allow_ec_optimizations', val='true')
         if application_metadata is not None:
             def set_app(app_metadata, set_app_what):
                 for app in app_metadata:

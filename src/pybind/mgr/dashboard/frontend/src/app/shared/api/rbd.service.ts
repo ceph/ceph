@@ -27,9 +27,10 @@ export class RbdService extends ApiClient {
   }
 
   isRBDCapablePool(pool: any): boolean {
+    const flags = pool.flags_names || '';
     return (
       pool.type === 'replicated' ||
-      (pool.type === 'erasure' && (pool.flags_names || '').includes('supports_omap'))
+      (pool.type === 'erasure' && flags.includes('supports_omap') && flags.includes('ec_overwrites'))
     );
   }
 
