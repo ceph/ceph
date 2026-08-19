@@ -100,6 +100,18 @@ CollectionNode::update(coll_context_t cc, coll_t coll, coll_value_t value)
   return seastar::now();
 }
 
+void CollectionNode::update_value(coll_context_t cc, coll_t coll, coll_value_t value)
+{
+  logger().debug("trans.{} CollectionNode:{} {} {}",
+    cc.t.get_trans_id(), __func__, coll, value.bits);
+  ceph_assert(is_mutable());
+  if (auto buffer = maybe_get_delta_buffer(); buffer) {
+    buffer->update(coll, value);
+  }
+  decoded.update(coll, value);
+  copy_to_node();
+}
+
 CollectionNode::remove_ret
 CollectionNode::remove(coll_context_t cc, coll_t coll)
 {

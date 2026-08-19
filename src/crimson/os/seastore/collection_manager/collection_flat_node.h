@@ -159,6 +159,9 @@ struct CollectionNode : LogicalChildNode {
   using update_ret = CollectionManager::update_ret;
   update_ret update(coll_context_t cc, coll_t coll, coll_value_t value);
 
+  void update_value(coll_context_t cc, coll_t coll, coll_value_t value);
+
+
   void on_clean_read() final {
     bufferlist bl;
     bl.append(get_bptr());

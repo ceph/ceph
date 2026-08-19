@@ -43,11 +43,9 @@ class SeastoreSuper final: public Super {
     if (coll_node) {
       SUBDEBUGT(seastore_onode, "update coll {} onode root {} ...",
                 c.t, cid, addr);
-      // todo: coll_node already exists so we can avoid chaining the future here.
-      //       switch to get? 
       coll_node = tm.get_mutable_extent(c.t, coll_node)
         ->cast<collection_manager::CollectionNode>();
-      std::ignore = coll_node->update(
+      coll_node->update_value(
         collection_manager::coll_context_t{tm, c.t}, cid,
         collection_manager::coll_value_t{split_bits, addr});
     } else {
