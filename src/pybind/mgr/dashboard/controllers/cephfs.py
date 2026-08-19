@@ -14,8 +14,8 @@ from ..exceptions import DashboardException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
-from ..services.cephfs import get_subvolumegroup_path, \
-    is_unmanaged_volume_entry, unmanaged_volume_info
+from ..services.cephfs import ensure_mirroring_client_caps, \
+    get_subvolumegroup_path, is_unmanaged_volume_entry, unmanaged_volume_info
 from ..services.exception import handle_cephfs_error
 from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
@@ -1470,6 +1470,7 @@ class CephFSMirror(RESTController):
     @Endpoint('POST')
     @CreatePermission
     def token(self, fs_name: str, client_name: str, site_name: str):
+        ensure_mirroring_client_caps(client_name, fs_name)
         error_code, out, err = mgr.remote(
             'mirroring', 'snapshot_mirror_peer_bootstrap_create', fs_name, client_name, site_name)
         if error_code != 0:
