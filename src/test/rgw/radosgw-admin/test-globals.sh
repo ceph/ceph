@@ -13,7 +13,8 @@
 RGW_ADMIN="${RGW_ADMIN:-./bin/radosgw-admin}"
 export CEPH_CONF="${CEPH_CONF:-./ceph.conf}"
 # Keep ceph log lines off stderr so they cannot interleave with the messages
-# the tests grep. rgw_global_init consumes --log-to-stderr before the flag loop runs.
+# these tests match. rgw_global_init consumes --log-to-stderr before the flags
+# are read.
 export CEPH_ARGS="--log-to-stderr=false${CEPH_ARGS:+ ${CEPH_ARGS}}"
 PASS=0
 FAIL=0
@@ -89,8 +90,8 @@ check_cluster() {
 }
 
 # ============================================================
-# ceph global flags are consumed by rgw_global_init before radosgw-admin walks
-# its own flags, so they never reach that loop.
+# ceph global flags are consumed by rgw_global_init before radosgw-admin reads
+# its own flags, so they never reach them.
 #
 # ceph strips these on two paths. --cluster and --no-config-file are read first,
 # because they decide which ceph.conf to read, or whether to read one at all.
@@ -99,12 +100,11 @@ check_cluster() {
 # with the global placed both before and after the command.
 #
 # A consumed global lets the command run, so these rows need a cluster.
-# object shard prints the shard number for the object, here "shard": 10.
-# bucket list repeats the same flags on a second command and prints [].
-# Each shows the command reached its handler.
+# object shard prints the shard number for the object, here "shard": 10, which
+# shows the command reached its handler.
 # ============================================================
 echo ""
-echo "=== ceph globals stripped before the flag loop (with cluster) ==="
+echo "=== ceph globals stripped before radosgw-admin's own flags (with cluster) ==="
 check_cluster "global --cluster (space) stripped"                 0 '"shard": 10' -- \
   bucket object shard --object foo --num-shards 11 --cluster ceph
 check_cluster "global --cluster=ceph (= form) stripped"           0 '"shard": 10' -- \
@@ -123,10 +123,14 @@ check_cluster "global --debug-rgw=5 (= form) stripped"            0 '"shard": 10
   bucket object shard --object foo --num-shards 11 --debug-rgw=5
 check_cluster "global --rgw-zone default before command stripped" 0 '"shard": 10' -- \
   --rgw-zone default bucket object shard --object foo --num-shards 11
-check_cluster "global --rgw-zone default (space) on bucket list"        0 '[]' -- bucket list --rgw-zone default
-check_cluster "global --rgw-zone=default (= form) on bucket list"       0 '[]' -- bucket list --rgw-zone=default
-check_cluster "global --debug-rgw 5 (space) on bucket list"             0 '[]' -- bucket list --debug-rgw 5
-check_cluster "global --rgw-zone default before command on bucket list" 0 '[]' -- --rgw-zone default bucket list
+
+# the same globals again on a second command, so the stripping is not specific
+# to one command. bucket list prints a listing; the rows assert its opening
+# bracket, not the contents, which are the cluster's.
+check_cluster "global --rgw-zone default (space) on bucket list"        0 '[' -- bucket list --rgw-zone default
+check_cluster "global --rgw-zone=default (= form) on bucket list"       0 '[' -- bucket list --rgw-zone=default
+check_cluster "global --debug-rgw 5 (space) on bucket list"             0 '[' -- bucket list --debug-rgw 5
+check_cluster "global --rgw-zone default before command on bucket list" 0 '[' -- --rgw-zone default bucket list
 
 # ============================================================
 # These rows pair a global with an unknown flag. The error names the unknown flag,
