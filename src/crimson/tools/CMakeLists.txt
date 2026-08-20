@@ -25,6 +25,13 @@ target_link_libraries(perf-async-msgr ceph-common global ${ALLOC_LIBS})
 add_executable(perf-staged-fltree perf_staged_fltree.cc)
 if(WITH_TESTS)
 target_link_libraries(perf-staged-fltree crimson-seastore crimson::gtest)
+if(USING_MOLD_LINKER)
+  # mold resolves archives as a single group and extracts
+  # libcrimson-gtest.a(gtest_seastar.cc.o), whose main() collides with this
+  # tool's own; -z muldefs keeps the first definition (the tool's main),
+  # matching what BFD's lazy archive extraction produced
+  target_link_options(perf-staged-fltree PRIVATE -Wl,-z,muldefs)
+endif()
 else()
 target_link_libraries(perf-staged-fltree crimson-seastore)
 endif()
