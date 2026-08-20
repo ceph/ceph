@@ -4700,6 +4700,18 @@ options:
   default: 128
   services:
   - rgw
+- name: rgw_cuobj_osd_passthrough
+  type: bool
+  level: advanced
+  desc: Serve S3-over-RDMA GETs by forwarding the client RDMA token to the OSDs
+    (CEPH_OSD_OP_READ_RDMA) so object data is written directly from the OSDs
+    into client memory, bypassing the radosgw data path entirely; requires OSDs
+    built with WITH_OSD_CUOBJ and osd_cuobj_enabled, and falls back to the
+    staged RDMA path (or plain HTTP) when a stripe cannot be pushed. Only plain
+    objects qualify - compressed or encrypted objects always use the fallback.
+  default: false
+  services:
+  - rgw
 - name: rgw_topic_persistency_time_to_live
   type: uint
   level: advanced

@@ -89,6 +89,7 @@
 #ifdef WITH_RADOSGW_CUOBJ
 #include "rgw_cuobj.h"
 #endif
+#include "common/rdma_token.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -2575,6 +2576,15 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
+  if (rdma_mode == RdmaMode::PASSTHROUGH && bl_len > 0) {
+    // the store streamed data instead of honoring the passthrough
+    // contract (rgw_sal.h) - e.g. a SAL store or filter that predates
+    // params.rdma_token. Reject it before any HTTP bytes are committed
+    // so execute() transparently restarts in a fallback mode.
+    ldpp_dout(this, 4) << "rdma passthrough: store returned inline data, "
+                       << "falling back" << dendl;
+    return -EOPNOTSUPP;
+  }
   /* garbage collection related handling:
    * defer_gc disabled for https://tracker.ceph.com/issues/47866 */
   return send_response_data(bl, bl_ofs, bl_len);
@@ -2598,6 +2608,13 @@ bool RGWGetObj::prefetch_data()
 {
   /* HEAD request, stop prefetch*/
   if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
+    return false;
+  }
+
+  /* when the OSDs may push data straight into client memory, inline
+   * head data staged in RGW memory would defeat the passthrough */
+  if (s->info.env->exists("HTTP_X_AMZ_RDMA_TOKEN") &&
+      s->cct->_conf.get_val<bool>("rgw_cuobj_osd_passthrough")) {
     return false;
   }
 
@@ -2653,6 +2670,45 @@ static bool rgw_calc_aead_obj_size(const DoutPrefixProvider* dpp,
     return true;
   }
   return rgw_get_aead_decrypted_size(dpp, attrs, encrypted_size, out_size);
+}
+
+void RGWGetObj::select_rdma_mode(bool plain_chain)
+{
+  rdma_mode = RdmaMode::NONE;
+  if (rdma_token.empty() || !get_data || get_type() != RGW_OP_GET_OBJ) {
+    return;
+  }
+  if (plain_chain &&
+      s->cct->_conf.get_val<bool>("rgw_cuobj_osd_passthrough")) {
+    // the whole response must fit the client's registered window for
+    // per-stripe scatter writes to be valid
+    auto window = ceph::rdma::parse_rdma_token(rdma_token);
+    if (window && total_len <= window->size) {
+      rdma_mode = RdmaMode::PASSTHROUGH;
+      return;
+    }
+    ldpp_dout(this, 4) << "rdma passthrough not eligible: "
+                       << (window ? "response larger than client window"
+                                  : "malformed token") << dendl;
+  }
+#ifdef WITH_RADOSGW_CUOBJ
+  if (auto* cuobj = RGWCuObjServer::get_instance();
+      cuobj && cuobj->is_available()) {
+    // reserve the staging buffer up front: once the response headers
+    // are out there is no way left to signal a staging failure
+    if (!rdma_buf) {
+      rdma_buf = cuobj->acquire_buffer(total_len);
+      rdma_buf_offset = 0;
+    }
+    if (rdma_buf) {
+      rdma_mode = RdmaMode::STAGED;
+      return;
+    }
+    ldpp_dout(this, 1) << "rgw_cuobj: no staging buffer for " << total_len
+                       << " bytes, serving the body over HTTP" << dendl;
+  }
+#endif
+  // otherwise NONE: data goes over HTTP with x-amz-rdma-reply: 501
 }
 
 void RGWGetObj::execute(optional_yield y)
@@ -2914,6 +2970,7 @@ void RGWGetObj::execute(optional_yield y)
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
 
+  select_rdma_mode(filter == (RGWGetObj_Filter*)&cb);
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
@@ -2926,7 +2983,26 @@ void RGWGetObj::execute(optional_yield y)
 
   rgw::op_counters::inc(counters, l_rgw_op_get_obj_b, end-ofs);
 
+  if (rdma_mode == RdmaMode::PASSTHROUGH) {
+    read_op->params.rdma_token = rdma_token;
+    read_op->params.rdma_bytes = &rdma_bytes;
+  }
+
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
+
+  if (op_ret == -EOPNOTSUPP && rdma_mode == RdmaMode::PASSTHROUGH) {
+    // an OSD (or the store) cannot push directly - old OSDs, EC pools,
+    // cuObject absent or disabled. no HTTP bytes are committed yet and
+    // rewriting any partially written client ranges is safe, so restart
+    // the whole GET in staged (or plain HTTP) mode.
+    ldpp_dout(this, 4) << "rdma passthrough unsupported, restarting GET "
+                       << "in fallback mode" << dendl;
+    read_op->params.rdma_token.clear();
+    read_op->params.rdma_bytes = nullptr;
+    rdma_bytes = 0;
+    select_rdma_mode(false);
+    op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
+  }
 
   if (op_ret >= 0)
     op_ret = filter->flush();
@@ -2935,6 +3011,16 @@ void RGWGetObj::execute(optional_yield y)
 
   if (op_ret < 0) {
     goto done_err;
+  }
+
+  if (rdma_mode == RdmaMode::PASSTHROUGH) {
+    if (rdma_bytes != total_len) {
+      ldpp_dout(this, 0) << "ERROR: rdma passthrough delivered " << rdma_bytes
+                         << " of " << total_len << " bytes" << dendl;
+      op_ret = -EIO;
+      goto done_err;
+    }
+    s->rdma_bytes_transferred = rdma_bytes;
   }
 
   op_ret = send_response_data(bl, 0, 0);

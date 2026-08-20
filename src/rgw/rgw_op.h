@@ -467,6 +467,25 @@ protected:
   // Used by decrypt filter for range clamping. For non-AEAD modes, equals s->obj_size.
   off_t encrypted_obj_size{0};
 
+  // S3-over-RDMA (cuObject): how object data reaches the client
+  enum class RdmaMode {
+    NONE,        ///< HTTP body (x-amz-rdma-reply: 501 when a token was sent)
+    STAGED,      ///< staged in RGW memory, one RDMA_WRITE from the local cuObjServer
+    PASSTHROUGH, ///< OSDs RDMA-write stripes directly (CEPH_OSD_OP_READ_RDMA)
+  };
+  std::string rdma_token;  ///< x-amz-rdma-token header, empty if absent
+  RdmaMode rdma_mode = RdmaMode::NONE;
+  uint64_t rdma_bytes = 0; ///< bytes delivered out of band (passthrough)
+  /// staged-mode buffer (an RGWCuObjServer::RDMABufEntry*), reserved at
+  /// mode-selection time because staging failures cannot be signalled
+  /// once response headers are out
+  void* rdma_buf = nullptr;
+  size_t rdma_buf_offset = 0;
+
+  /// pick rdma_mode for this request; plain_chain is true when no data
+  /// filter (compression, encryption, lua, flight) is engaged
+  void select_rdma_mode(bool plain_chain);
+
   int init_common();
 public:
   RGWGetObj() {

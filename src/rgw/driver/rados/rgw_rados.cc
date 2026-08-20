@@ -8645,7 +8645,33 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
   return bl.length();
 }
 
+int get_obj_data::flush_rdma(rgw::AioResultList&& results) {
+  int r = rgw::check_for_errors(results);
+  if (r < 0) {
+    return r;
+  }
+  // the OSDs already wrote the data into client memory; completions
+  // carry only byte counts, so there is no ordering to enforce and the
+  // client callback never sees data
+  while (!results.empty()) {
+    auto& e = results.front();
+    try {
+      uint64_t pushed = 0;
+      auto p = e.data.cbegin();
+      decode(pushed, p);
+      rdma_bytes += pushed;
+    } catch (const buffer::error&) {
+      return -EIO;
+    }
+    results.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+  }
+  return 0;
+}
+
 int get_obj_data::flush(rgw::AioResultList&& results) {
+  if (rdma) {
+    return flush_rdma(std::move(results));
+  }
   int r = rgw::check_for_errors(results);
   if (r < 0) {
     return r;
@@ -8710,6 +8736,14 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     // coverity[check_after_deref:SUPPRESS]
     if (astate &&
         obj_ofs < astate->data.length()) {
+      if (d->rdma) {
+        // inline head data would have to be served from RGW memory,
+        // breaking the passthrough contract; the caller disables
+        // prefetch when a token is present, so fall back instead
+        ldpp_dout(dpp, 4) << "rdma passthrough: unexpected inline head data, "
+                          << "falling back" << dendl;
+        return -EOPNOTSUPP;
+      }
       unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
 
       r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
@@ -8734,7 +8768,16 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
   }
 
   ldpp_dout(dpp, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
-  op.read(read_ofs, len, nullptr, nullptr);
+  if (d->rdma) {
+    // the OSD RDMA-writes the stripe into the client window at the
+    // stripe's logical offset within the requested range; only the
+    // byte count comes back (decoded from AioResult::data in
+    // flush_rdma, since out-params cannot outlive this frame)
+    op.read_rdma(read_ofs, len, d->rdma_token,
+                 uint64_t(obj_ofs) - d->rdma_range_start, nullptr, nullptr);
+  } else {
+    op.read(read_ofs, len, nullptr, nullptr);
+  }
 
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
@@ -8755,6 +8798,19 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
+  if (!params.rdma_token.empty()) {
+    if (store->get_use_datacache()) {
+      // d3n substitutes cached stripe sources, which is incompatible
+      // with OSD-direct delivery; make the caller fall back
+      ldpp_dout(dpp, 4) << "rdma passthrough unsupported with d3n datacache"
+                        << dendl;
+      return -EOPNOTSUPP;
+    }
+    data.rdma = true;
+    data.rdma_token = params.rdma_token;
+    data.rdma_range_start = ofs;
+  }
+
   if (state.obj.empty()) {
     state.obj = source->get_obj();
   }
@@ -8767,7 +8823,14 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     return r;
   }
 
-  return data.drain();
+  r = data.drain();
+  if (r < 0) {
+    return r;
+  }
+  if (data.rdma && params.rdma_bytes) {
+    *params.rdma_bytes = data.rdma_bytes;
+  }
+  return 0;
 }
 
 int RGWRados::iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,

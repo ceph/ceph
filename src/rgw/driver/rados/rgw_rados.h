@@ -796,6 +796,9 @@ public:
         int* part_num = nullptr;
         std::optional<int> parts_count;
         RGWObjVersionTracker *objv_tracker = nullptr;
+        // OSD-direct RDMA passthrough; see rgw::sal::Object::ReadOp
+        std::string rdma_token;
+        uint64_t *rdma_bytes = nullptr;
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
 		   target_obj(nullptr), epoch(nullptr)
@@ -1780,7 +1783,16 @@ struct get_obj_data {
   D3nGetObjData d3n_get_data;
   std::atomic_bool d3n_bypass_cache_write{false};
 
+  // OSD-direct RDMA passthrough (CEPH_OSD_OP_READ_RDMA): stripes are
+  // written straight into client memory by the OSDs; completions carry
+  // byte counts instead of data and delivery order is irrelevant
+  bool rdma = false;
+  std::string rdma_token;
+  uint64_t rdma_range_start = 0; // logical offset of the range start
+  uint64_t rdma_bytes = 0;       // bytes the OSDs report having pushed
+
   int flush(rgw::AioResultList&& results);
+  int flush_rdma(rgw::AioResultList&& results);
 
   void cancel() {
     // wait for all completions to drain and ignore the results
