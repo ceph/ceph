@@ -18,14 +18,38 @@ public:
   int read_permissions(RGWOp*, optional_yield) override { return 0; }
 };
 
+class RGWHandler_VectorBucketSession : public RGWHandler_Auth_S3 {
+protected: 
+  RGWOp* op_get() override;
+  RGWOp* op_delete() override;
+
+public:
+  using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
+  ~RGWHandler_VectorBucketSession() override = default;
+
+  int read_permissions(RGWOp*, optional_yield) override { return 0; }
+};
+
 class RGWRESTMgr_VectorBucket : public RGWRESTMgr {
 public:
-  RGWRESTMgr_VectorBucket() = default;
+  RGWRESTMgr_VectorBucket();
   ~RGWRESTMgr_VectorBucket() override = default;
 
   RGWHandler_REST* get_handler(rgw::sal::Driver*, req_state*,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string&) override {
     return new RGWHandler_VectorBucket(auth_registry);
+  }
+};
+
+class RGWRESTMgr_VectorBucketSession : public RGWRESTMgr {
+public: 
+  RGWRESTMgr_VectorBucketSession() = default;
+  ~RGWRESTMgr_VectorBucketSession() override = default;
+
+  RGWHandler_REST* get_handler(rgw::sal::Driver*, req_state*,
+                               const rgw::auth::StrategyRegistry& auth_registry,
+                               const std::string&) override {
+    return new RGWHandler_VectorBucketSession(auth_registry);
   }
 };

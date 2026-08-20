@@ -19,14 +19,16 @@
 #include <future>
 #include <string>
 #include <unordered_map>
+#include <vector>
 #include "rgw_sal.h"
 #include "rgw_s3vector.h"
-#include "lancedb.h"
-#include "rgw_s3vector.h"
+#include "rgw_s3vector_background.h"
 
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::s3vector {
+
+int lancedb_error_to_errno(LanceDBError err);
 
 class Manager : public DoutPrefixProvider {
 public:
@@ -146,29 +148,36 @@ private:
     }
   }
 
-  std::chrono::seconds get_session_inactive_timeout() const {
-    const auto configured_timeout = cct->_conf.get_val<uint64_t>(
-      "rgw_s3vector_session_inactive_timeout");
-    return std::chrono::seconds(configured_timeout == 0 ? 3600 : configured_timeout);
-  }
-
-  std::chrono::seconds get_session_cleanup_interval() const {
-    const auto half_timeout = get_session_inactive_timeout() / 2;
-    return std::max(std::chrono::seconds(1), half_timeout); // cleanup interval is max of 1s and half of the inactive timeout
-  }
-
-  void remove_inactive_sessions() {
+  void remove_inactive_sessions(std::chrono::seconds timeout) {
     const auto now = ceph::coarse_real_clock::now();
-    const auto timeout = get_session_inactive_timeout();
-    std::unique_lock l(sessions_mutex);
-    for (auto it = sessions.begin(); it != sessions.end(); ) {
+    std::vector<std::string> buckets_to_remove;
+    {
+      std::shared_lock l(sessions_mutex);
+      buckets_to_remove.reserve(sessions.size());
+      for (const auto& [bucket_name, entry] : sessions) {
+        const auto count = entry.last_used.load();
+        const auto last_used =
+            ceph::coarse_real_time(ceph::coarse_real_clock::duration(count));
+        if (now - last_used > timeout) {
+          buckets_to_remove.push_back(bucket_name);
+        }
+      }
+    }
+
+    for (const auto& bucket_name : buckets_to_remove) {
+      std::unique_lock l(sessions_mutex);
+      auto it = sessions.find(bucket_name);
+      if (it == sessions.end()) {
+        continue;
+      }
+
       const auto count = it->second.last_used.load();
-      const auto last_used = ceph::coarse_real_time(ceph::coarse_real_clock::duration(count));
+      const auto last_used =
+          ceph::coarse_real_time(ceph::coarse_real_clock::duration(count));
       if (now - last_used > timeout) {
-        ldpp_dout(this, 20) << "INFO: removing inactive session for bucket: " << it->first << dendl;
-        it = sessions.erase(it);
-      } else {
-        ++it;
+        ldpp_dout(this, 20) << "INFO: removing inactive session for bucket: "
+                            << bucket_name << dendl;
+        sessions.erase(it);
       }
     }
   }
@@ -267,7 +276,11 @@ private:
               }
               ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
 
-              sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
+              auto it = sessions.find(table_name.first);
+              ceph_assert(it != sessions.end());
+              it->second.session = SessionPtr(session, LanceDBSessionDeleter());
+              it->second.last_used.store(
+                  ceph::coarse_real_clock::now().time_since_epoch().count());
               return;
             }
           case message_t::Op::SESSION_DELETE:
@@ -307,10 +320,15 @@ private:
         tw.async_wait(yield);
       }
 
+      const auto session_inactive_timeout = std::chrono::seconds(
+          cct->_conf.get_val<uint64_t>("rgw_s3vector_session_inactive_timeout"));
       const auto now = ceph::coarse_real_clock::now();
-      if (now - last_session_cleanup >= get_session_cleanup_interval()) {
+      const auto session_cleanup_interval = std::max(
+          std::chrono::seconds(1), session_inactive_timeout / 2);
+      if (session_inactive_timeout.count() > 0 &&
+          now - last_session_cleanup >= session_cleanup_interval) {
         ldpp_dout(this, 20) << "INFO: starting session cleanup..." <<  dendl;
-        remove_inactive_sessions();
+        remove_inactive_sessions(session_inactive_timeout);
         last_session_cleanup = now;
       }
 
@@ -564,4 +582,3 @@ int get_metadata_cache_stats(const DoutPrefixProvider* dpp, const std::string& b
 }
 
 } // namespace rgw::s3vector
-

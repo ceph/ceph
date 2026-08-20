@@ -2766,6 +2766,7 @@ void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
 {
   mgr->register_resource("user", new RGWRESTMgr_User);
   mgr->register_resource("bucket", new RGWRESTMgr_Bucket);
+  /* Registering resource for /admin/vectorbucket*/
   mgr->register_resource("vectorbucket", new RGWRESTMgr_VectorBucket);
   /*Registering resource for /admin/metadata */
   mgr->register_resource("metadata", new RGWRESTMgr_Metadata);

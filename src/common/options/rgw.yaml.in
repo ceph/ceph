@@ -5032,11 +5032,10 @@ options:
   desc: Inactivity timeout in seconds for each vector bucket session
   long_desc: Sets the inactivity timeout in seconds for each vector bucket
     session. Sessions inactive longer than this timeout are evicted by the
-    background manager. A value of `0` uses the default timeout of 3600
-    seconds.
+    background manager. A value of `0` disables inactivity-based eviction.
   fmt_desc: The inactivity timeout in seconds for each vector bucket session.
-    Set to `0` to use the default timeout of 3600 seconds.
-  default: 0
+    Set to `0` to disable inactivity-based eviction.
+  default: 3600
   services:
   - rgw
   with_legacy: true
