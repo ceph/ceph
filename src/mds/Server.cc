@@ -7459,9 +7459,6 @@ public:
 
     if (newi->is_file()) {
       get_mds()->locker->share_inode_max_size(newi);
-    } else if (newi->is_dir()) {
-      // We do this now so that the linkages on the new directory are stable.
-      newi->maybe_ephemeral_rand();
     }
 
     // hit pop

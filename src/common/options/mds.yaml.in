@@ -668,6 +668,24 @@ options:
   type: float
   level: advanced
   desc: multiple of max_mds for splitting and distributing directory
+  see_also:
+  -  mds_export_ephemeral_frag_factor
+  default: 2
+  services:
+  - mds
+  min: 1
+  max: 100
+  flags:
+  - runtime
+- name: mds_export_ephemeral_frag_factor
+  type: float
+  level: advanced
+  desc: Factor to multiply max_mds by to determine target dirfrag count for ephemeral pinning
+  long_desc: Factor multiplied by max_mds (the number of active MDS ranks) to calculate
+    the minimum target directory fragment count for directories configured with ephemeral
+    pinning (distributed or random). The MDS pre-splits directories until the fragment bit
+    depth provides at least (max_mds * mds_export_ephemeral_frag_factor) fragments, ensuring
+    subtrees are partitioned deeply enough to balance metadata load evenly across ranks.
   default: 2
   services:
   - mds

@@ -522,7 +522,9 @@ void CInode::pop_and_dirty_projected_inode(LogSegmentRef const& ls, const Mutati
   bool pool_updated = get_inode()->layout.pool_id != front.inode->layout.pool_id;
   bool pin_updated = (get_inode()->export_pin != front.inode->export_pin) ||
 		     (get_inode()->get_ephemeral_distributed_pin() !=
-		      front.inode->get_ephemeral_distributed_pin());
+		      front.inode->get_ephemeral_distributed_pin()) ||
+                     (get_inode()->export_ephemeral_random_pin !=
+                      front.inode->export_ephemeral_random_pin);
 
   reset_inode(std::move(front.inode));
   if (front.xattrs != get_xattrs())
@@ -5541,25 +5543,27 @@ void CInode::queue_export_pin(mds_rank_t export_pin)
   mds_rank_t target;
   if (export_pin >= 0)
     target = export_pin;
-  else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
-    target = mdcache->hash_into_rank_bucket(ino());
   else
     target = MDS_RANK_NONE;
 
-  unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
+  unsigned min_frag_bits = mdcache->get_ephemeral_frag_bits();
   bool queue = false;
   for (auto& p : dirfrags) {
     CDir *dir = p.second;
     if (!dir->is_auth())
       continue;
 
-    if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
+    if (export_pin == MDS_RANK_EPHEMERAL_DIST || export_pin == MDS_RANK_EPHEMERAL_RAND) {
       if (dir->get_frag().bits() < min_frag_bits) {
 	// needs split
 	queue = true;
 	break;
       }
-      target = mdcache->hash_into_rank_bucket(ino(), dir->get_frag());
+      if (export_pin == MDS_RANK_EPHEMERAL_DIST || should_random_pin_frag(dir->get_frag())) {
+        target = mdcache->hash_into_rank_bucket(ino(), dir->get_frag());
+      } else {
+        target = MDS_RANK_NONE;
+      }
     }
 
     if (target != MDS_RANK_NONE) {
@@ -5644,43 +5648,22 @@ void CInode::clear_ephemeral_pin(bool dist, bool rand)
   }
 }
 
-void CInode::maybe_ephemeral_rand(double threshold)
+bool CInode::should_random_pin_frag(frag_t fg) const
 {
-  if (!mdcache->get_export_ephemeral_random_config()) {
-    dout(15) << __func__ << " config false: cannot ephemeral random pin " << *this << dendl;
-    clear_ephemeral_pin(false, true);
-    return;
-  } else if (!is_dir() || !is_normal()) {
-    dout(15) << __func__ << " !dir or !normal: cannot ephemeral random pin " << *this << dendl;
-    clear_ephemeral_pin(false, true);
-    return;
-  } else if (get_inode()->nlink == 0) {
-    dout(15) << __func__ << " unlinked directory: cannot ephemeral random pin " << *this << dendl;
-    clear_ephemeral_pin(false, true);
-    return;
-  } else if (state_test(CInode::STATE_RANDEPHEMERALPIN)) {
-    dout(10) << __func__ << " already ephemeral random pinned: requeueing " << *this << dendl;
-    queue_export_pin(MDS_RANK_EPHEMERAL_RAND);
-    return;
-  }
+  double threshold = get_inode()->export_ephemeral_random_pin;
+  if (threshold <= 0.0)
+    return false;
+  if (threshold >= 1.0)
+    return true;
 
-  /* not precomputed? */
-  if (threshold < 0.0) {
-    threshold = get_ephemeral_rand();
-  }
-  if (threshold <= 0.0) {
-    return;
-  }
-  double n = ceph::util::generate_random_number(0.0, 1.0);
+  // Combine inode number and fragment into a 64-bit pseudo-random hash
+  uint64_t h = rjhash64(ino());
+  h = rjhash64(h + rjhash64(fg.value()));
 
-  dout(15) << __func__ << " rand " << n << " <?= " << threshold
-           << " " << *this << dendl;
+  // Normalize uint64_t hash to [0.0, 1.0)
+  double normalized_val = (double)(h >> 11) * (1.0 / 9007199254740992.0); // 53-bit precision
 
-  if (n <= threshold) {
-    dout(10) << __func__ << " randomly export pinning " << *this << dendl;
-    set_ephemeral_pin(false, true);
-    queue_export_pin(MDS_RANK_EPHEMERAL_RAND);
-  }
+  return normalized_val < threshold;
 }
 
 void CInode::setxattr_ephemeral_rand(double probability)
@@ -5724,7 +5707,6 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
    * N.B. inodes not yet linked into a dir (i.e. anonymous inodes) will not
    * have a parent yet.
    */
-  mds_rank_t r_target = MDS_RANK_NONE;
   const CInode *in = this;
   const CDir *dir = nullptr;
   while (true) {
@@ -5738,24 +5720,30 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
       break;
     }
 
+    mds_rank_t epin;
     if (in->get_inode()->export_pin >= 0) {
-      return in->get_inode()->export_pin;
+      epin = in->get_inode()->export_pin;
+      dout(20) << __func__ << ": epin=" << epin << dendl;
+      return epin;
     } else if (in->get_inode()->get_ephemeral_distributed_pin() &&
 	       mdcache->get_export_ephemeral_distributed_config()) {
-      if (in != this)
-	return mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
+      if (in != this) {
+        epin = mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
+        dout(20) << __func__ << ": epin=" << epin << dendl;
+        return epin;
+      }
       return MDS_RANK_EPHEMERAL_DIST;
-    } else if (r_target != MDS_RANK_NONE && in->get_inode()->export_ephemeral_random_pin > 0.0) {
-      return r_target;
-    } else if (r_target == MDS_RANK_NONE && in->is_ephemeral_rand() &&
-	       mdcache->get_export_ephemeral_random_config()) {
-      /* If a parent overrides a grandparent ephemeral pin policy with an export pin, we use that export pin instead. */
-      if (!inherit)
-	return MDS_RANK_EPHEMERAL_RAND;
-      if (in == this)
-	r_target = MDS_RANK_EPHEMERAL_RAND;
-      else
-	r_target = mdcache->hash_into_rank_bucket(in->ino());
+    } else if (in->get_inode()->export_ephemeral_random_pin > 0.0 &&
+               mdcache->get_export_ephemeral_random_config()) {
+      if (in != this && dir) {
+        if (in->should_random_pin_frag(dir->get_frag())) {
+          epin = mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
+          dout(20) << __func__ << ": epin=" << epin << dendl;
+          return epin;
+        }
+        return MDS_RANK_NONE;
+      }
+      return MDS_RANK_EPHEMERAL_RAND;
     }
 
     if (!inherit)
