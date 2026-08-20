@@ -59,7 +59,8 @@ Upgrade Software
 ================
 
 As new versions of Ceph become available, you may upgrade your cluster to
-take advantage of new functionality. Read the release notes of the new
+take advantage of new functionality, as well as bug fixes and performance
+and security enhancements. Read the release notes of the new
 version before you upgrade your cluster: they document the required
 upgrade sequence and any release-specific steps. See the :ref:`releases
 index <ceph-releases-general>` for the release notes, and
