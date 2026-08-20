@@ -359,6 +359,123 @@ check "remove: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
 
 # ============================================================
 echo ""
+echo "=== script-package (add/rm/list/reload) ==="
+# ============================================================
+# 'script-package' is a command word of its own, with four subcommands. It
+# takes two flags: --package takes a value, --allow-compilation is a binary
+# flag. 'list' and 'reload' take no arguments of their own.
+# The rows that reach a handler are compiled in only when ceph is built with
+# WITH_RADOSGW_LUA_PACKAGES. That is the cmake default. A build without it
+# answers exit 1 'not permitted' instead, and those rows fail there.
+
+# 'script-package' is not a command on its own; it needs a subcommand.
+check "script-package (incomplete command)" 1 'ERROR: Unknown command' script-package
+check "script-package: unknown subcommand" 1 "ERROR: Unrecognized argument: 'banana'" script-package banana
+check "script-package: empty subcommand" 1 "ERROR: Unrecognized argument: ''" script-package ""
+check "script-package: repeated command word" 1 "ERROR: Unrecognized argument: 'script-package'" script-package script-package list
+
+# stray positional args
+check "script-package: stray between the command words" 1 "ERROR: Unrecognized argument: 'extra'" script-package extra list
+check "script-package: stray before the command" 1 "ERROR: Unrecognized argument: 'foo'" foo script-package list
+check "script-package list: empty stray word" 1 'Command not found: script-package list' script-package list ""
+check "script-package add: stray after" 1 'Command not found: script-package add strayarg' script-package add strayarg
+check "script-package rm: stray after" 1 'Command not found: script-package rm strayarg' script-package rm strayarg
+check "script-package list: stray after" 1 'Command not found: script-package list strayarg' script-package list strayarg
+check "script-package reload: stray after" 1 'Command not found: script-package reload strayarg' script-package reload strayarg
+
+# unrecognized flag, on every subcommand
+check "script-package add: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' script-package add --fakeflag
+check "script-package rm: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' script-package rm --fakeflag
+check "script-package list: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' script-package list --fakeflag
+check "script-package reload: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' script-package reload --fakeflag
+
+# missing option value (parse-level, exit 1). --package is the only value
+# option these commands take.
+check "script-package add: --package missing value" 1 'Option --package requires an argument.' script-package add --package
+check "script-package rm: --package missing value" 1 'Option --package requires an argument.' script-package rm --package
+
+# --allow-compilation is a binary flag: it takes the next token only when that
+# token is a bool, so anything else is left behind as a stray.
+check "script-package add: --allow-compilation banana (left as stray)" 1 'Command not found: script-package add banana' script-package add --allow-compilation banana
+
+# handler-level (cluster). 'add' and 'rm' both want a package name first;
+# 'list' and 'reload' have nothing to validate and run straight away.
+check_cluster "script-package add: missing --package" 22 'ERROR: Lua package name was not provided' -- script-package add
+check_cluster "script-package rm: missing --package" 22 'ERROR: Lua package name was not provided' -- script-package rm
+check_cluster "script-package list" 0 "" -- script-package list
+check_cluster "script-package reload" 0 "" -- script-package reload
+
+# a package name that is not installed. 'add' fails to add it; 'rm' removes
+# nothing and still succeeds.
+check_cluster "script-package add: nonexistent package" 22 'ERROR: failed to add Lua package' -- script-package add --package no-such-package
+check_cluster "script-package rm: nonexistent package" 0 "" -- script-package rm --package no-such-package
+check_cluster "script-package add: --package=no-such-package (=form)" 22 'ERROR: failed to add Lua package' -- script-package add --package=no-such-package
+# an empty package name is still a name, so it is not reported as missing.
+# The add is attempted and fails instead.
+check_cluster "script-package add: --package empty" 1 'ERROR: failed to add Lua package' -- script-package add --package ""
+check_cluster "script-package rm: --package empty" 0 "" -- script-package rm --package ""
+
+# --allow-compilation does take a bool, and no stray is reported: the add is
+# attempted and fails.
+check_cluster "script-package add: --allow-compilation with no value" 22 'ERROR: failed to add Lua package' -- script-package add --allow-compilation --package no-such-package
+check_cluster "script-package add: --allow-compilation true (bool consumed)" 22 'ERROR: failed to add Lua package' -- script-package add --allow-compilation true --package no-such-package
+check_cluster "script-package add: --allow-compilation false (bool consumed)" 22 'ERROR: failed to add Lua package' -- script-package add --allow-compilation false --package no-such-package
+check_cluster "script-package add: --allow-compilation=true (=form)" 22 'ERROR: failed to add Lua package' -- script-package add --allow-compilation=true --package no-such-package
+
+# unrelated flags alongside valid args: a binary flag takes 0 values, and a
+# value option binds in either form. None of them changes the outcome.
+check_cluster "script-package add: unrelated binary flag --fix accepted" 22 'ERROR: failed to add Lua package' -- script-package add --fix --package no-such-package
+check_cluster "script-package add: unrelated value flag --max-entries=5 (=form)" 22 'ERROR: failed to add Lua package' -- script-package add --max-entries=5 --package no-such-package
+check_cluster "script-package add: unrelated --max-entries 5 swallowed (space form)" 22 'ERROR: failed to add Lua package' -- script-package add --max-entries 5 --package no-such-package
+check_cluster "script-package list: unrelated --max-entries 5 swallowed" 0 "" -- script-package list --max-entries 5
+check_cluster "script-package reload: --package accepted and ignored" 0 "" -- script-package reload --package no-such-package
+
+# flags between script-package and its subcommand. The value still reaches the
+# outcome is the same as when the flag comes last.
+# --tenant trips the global "no user ID" check.
+check_cluster "script-package add: --package before add" 22 'ERROR: failed to add Lua package' -- script-package --package no-such-package add
+check_cluster "script-package rm: --package before rm" 0 "" -- script-package --package no-such-package rm
+check_cluster "script-package add: --allow-compilation before add" 22 'ERROR: failed to add Lua package' -- script-package --allow-compilation add --package no-such-package
+check_cluster "script-package list: --format before list" 0 "" -- script-package --format json list
+check_cluster "script-package list: --tenant before list" 22 "ERROR: --tenant is set, but there's no user ID" -- script-package --tenant t list
+
+# the same flag given twice. The message names the package it tried to add,
+# so this row shows the second value is the one that is used.
+check_cluster "script-package add: duplicate --package (last wins)" 22 'ERROR: failed to add Lua package:  no-such-package' -- script-package add --package a --package no-such-package
+check_cluster "script-package rm: duplicate --package" 0 "" -- script-package rm --package a --package no-such-package
+check_cluster "script-package add: duplicate --allow-compilation" 22 'ERROR: failed to add Lua package' -- script-package add --allow-compilation --allow-compilation --package no-such-package
+
+# --tenant and --format in their ordinary position
+check_cluster "script-package list: --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- script-package list --tenant t
+check_cluster "script-package add: --tenant" 22 "ERROR: --tenant is set, but there's no user ID" -- script-package add --package no-such-package --tenant t
+check_cluster "script-package list: --format json" 0 "" -- script-package list --format json
+
+
+# ============================================================
+echo ""
+echo "=== script-package and script are separate commands ==="
+# ============================================================
+# 'script-package' is one word, not 'script' followed by 'package', and neither
+# command's subcommands work under the other. These rows pin that.
+
+# only the exact word names the command
+check "script package: two words is not the command" 1 "ERROR: Unrecognized argument: 'package'" script package list
+check "script-packages: not the command" 1 "ERROR: Unrecognized argument: 'script-packages'" script-packages list
+check "scriptpackage: not the command" 1 "ERROR: Unrecognized argument: 'scriptpackage'" scriptpackage list
+
+# a subcommand of one command is not a subcommand of the other
+check "script-package get: not a script-package subcommand" 1 "ERROR: Unrecognized argument: 'get'" script-package get
+check "script-package put: not a script-package subcommand" 1 "ERROR: Unrecognized argument: 'put'" script-package put
+
+# each command's flags are accepted on the other and then ignored, so it
+# behaves exactly as it does without them
+check_cluster "script-package list: --context accepted and ignored" 0 "" -- script-package list --context prerequest
+check_cluster "script-package list: --infile accepted and ignored" 0 "" -- script-package list --infile /no/such/file
+check_cluster "script-package add: --context accepted and ignored" 22 'ERROR: failed to add Lua package' -- script-package add --context prerequest --package no-such-package
+check_cluster "script get: --package accepted and ignored" 0 'no script exists for context: prerequest' -- script get --context prerequest --package no-such-package
+
+# ============================================================
+echo ""
 echo "=== integration: put/get/rm full cycle ==="
 # ============================================================
 # Each row builds on the one before it: put a script, read it back, remove it,
