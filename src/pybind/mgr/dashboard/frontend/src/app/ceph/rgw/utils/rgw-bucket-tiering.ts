@@ -9,6 +9,14 @@ import {
   Zone
 } from '../models/rgw-storage-class.model';
 
+type MappedTierTarget = Omit<Partial<StorageClassDetails>, 'host_style'> & {
+  zonegroup_name: string;
+  placement_target: string;
+  storage_class: string;
+  tier_type: string;
+  host_style?: string | boolean;
+};
+
 export class BucketTieringUtils {
   static mapTierTypeDisplay(tierType: string): string {
     switch (tierType?.toLowerCase()) {
@@ -23,7 +31,7 @@ export class BucketTieringUtils {
     }
   }
 
-  static filterAndMapTierTargets(zonegroupData: ZoneGroupDetails) {
+  static filterAndMapTierTargets(zonegroupData: ZoneGroupDetails): MappedTierTarget[] {
     return zonegroupData.zonegroups.flatMap((zoneGroup: ZoneGroup) =>
       zoneGroup.placement_targets.flatMap((target: Target) => {
         const storage_class = new Set<string>(
@@ -32,7 +40,7 @@ export class BucketTieringUtils {
         const tierTargetDetails = (target.tier_targets || []).map((tierTarget: TierTarget) =>
           this.getTierTargets(tierTarget, zoneGroup.name, target.name)
         );
-        const localStorageClasses = (target.storage_classes || [])
+        const localStorageClasses: MappedTierTarget[] = (target.storage_classes || [])
           .filter((storageClass) => storageClass !== 'STANDARD' && !storage_class.has(storageClass))
           .map((storageClass) => ({
             zonegroup_name: zoneGroup.name,
@@ -46,7 +54,11 @@ export class BucketTieringUtils {
     );
   }
 
-  private static getTierTargets(tierTarget: TierTarget, zoneGroup: string, targetName: string) {
+  private static getTierTargets(
+    tierTarget: TierTarget,
+    zoneGroup: string,
+    targetName: string
+  ): MappedTierTarget {
     const val = tierTarget.val;
     const tierType = val.tier_type;
     const commonProps = {
@@ -62,7 +74,8 @@ export class BucketTieringUtils {
       restore_storage_class: val.restore_storage_class,
       read_through_restore_days: val.read_through_restore_days,
       acls: val.s3.acl_mappings,
-      ...val.s3
+      ...val.s3,
+      target_storage_class: val.s3?.target_storage_class ?? ''
     };
 
     if (!tierType || tierType === TIER_TYPE.LOCAL) {
