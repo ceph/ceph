@@ -2010,6 +2010,12 @@ bool D4NFilterObject::check_head_exists_in_cache_get_oid(const DoutPrefixProvide
   int ret;
   //if the block corresponding to head object does not exist in directory, implies it is not cached
   if ((ret = blockDir->get(dpp, &block, y)) == 0) {
+    if (this->is_remote_cache_request()) {
+      if (block.version != get_object_version()) {
+        ldpp_dout(dpp, 10) << "D4NFilterObject:: " << __func__ << "(): Error: Version mismatch" << dendl;
+        return -EINVAL;
+      }
+    }
     blk = block;
 
     std::string version;
@@ -2453,6 +2459,15 @@ int D4NFilterObject::D4NFilterReadOp::flush(const DoutPrefixProvider* dpp, rgw::
           } else {
             write_to_local_cache = false;
           }
+          // TODO: Add DIRTY attr as well
+          bufferlist bl_val;
+          if (source->have_instance()) {
+            bl_val.append(source->get_instance());
+            attrs[RGW_CACHE_ATTR_VERSION_ID] = std::move(bl_val);
+          }
+          bl_val.clear();
+          bl_val.append(source->get_key().ns);
+          attrs[RGW_CACHE_ATTR_OBJECT_NS] = std::move(bl_val);
         } else { // for copy object
           bl_val.append("1");
           attrs[RGW_CACHE_ATTR_DIRTY] = std::move(bl_val);
@@ -2657,6 +2672,11 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
           if (hostsListSize > 0) { /* Remote copy */
             ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Block with oid=" << oid_in_cache << " found in remote cache." << dendl;
             auto& user = source->get_bucket()->get_owner();
+            std::string instance_id = "";
+            if (source->have_instance()) {
+              instance_id = source->get_instance(); 
+              ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: populating remote op instance ID with " << instance_id << dendl;
+            }
             std::string remote_addr = *(block.cacheObj.hostsList.begin());
             if (!dpp->get_cct()->_conf->rgw_d4n_remote_async_get) {
               ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: remote_addr: " << remote_addr << dendl;
@@ -2668,7 +2688,9 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
                   version,
                   block.cacheObj.dirty,
                   std::get<rgw_user>(user),
-                  remote_addr
+                  remote_addr,
+                  block.cacheObj.size,
+                  instance_id
                 };
               std::unique_ptr<rgw::d4n::RemoteCacheGetOp> remote_get = std::make_unique<rgw::d4n::RemoteCacheGetOp>(source->driver, op);
               auto completed = remote_get->send_and_complete_request(dpp, aio.get(), cost, id, y);
@@ -2707,6 +2729,8 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
                 driver = source->driver,
                 aio_shared = aio,
                 dirty = block.cacheObj.dirty,
+                objSize = block.cacheObj.size,
+                instance_id = instance_id,
                 this]
                 (boost::asio::yield_context yield) mutable {
                 optional_yield y(yield);
@@ -2731,7 +2755,9 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
                       version,
                       dirty,
                       usr,
-                      remote_addr
+                      remote_addr,
+                      objSize,
+                      instance_id
                     };
                   std::unique_ptr<rgw::d4n::RemoteCacheGetOp> remote_get = std::make_unique<rgw::d4n::RemoteCacheGetOp>(driver, op);
                   task_result->result_list = remote_get->send_and_complete_request(dpp_local.get(), aio_shared.get(), cost, id, y);
@@ -3441,9 +3467,6 @@ int D4NFilterWriter::prepare(optional_yield y)
   } else {
     //for non-versioned buckets or version suspended buckets, we need to delete the older dirty blocks of the object from the cache as dirty blocks do not get evicted
     if (!object->get_bucket()->versioned() || (object->get_bucket()->versioned() && !object->get_bucket()->versioning_enabled())) {
-      if (object->get_bucket()->versioned() && !object->get_bucket()->versioning_enabled()) {
-        object->set_instance("null");
-      }
       rgw::d4n::CacheBlock block;
       rgw::sal::Attrs attrs;
       if (object->check_head_exists_in_cache_get_oid(dpp, prev_oid_in_cache, attrs, block, y)) {
