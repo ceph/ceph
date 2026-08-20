@@ -41,6 +41,7 @@ void RadosTestPPBase::ensure_log_committed(const char* oid, uint64_t offset, uin
 }
 
 TEST_P(LibRadosSplitOpPP, BigRead) {
+  SKIP_IF_CRIMSON();
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
   uint64_t min_split_size = std::stoull(min_split_size_str);
@@ -72,6 +73,7 @@ TEST_P(LibRadosSplitOpPP, BigRead) {
 }
 
 TEST_P(LibRadosSplitOpPP, ReadTwoShards) {
+  SKIP_IF_CRIMSON();
   // Read the osd_min_split_replica_read_size config value
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
@@ -141,6 +143,7 @@ TEST_P(LibRadosSplitOpPP, ReadTwoShards) {
 }
 
 TEST_P(LibRadosSplitOpPP, StatBeforeRead) {
+  SKIP_IF_CRIMSON();
   // Read the osd_min_split_replica_read_size config value
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
@@ -197,6 +200,7 @@ TEST_P(LibRadosSplitOpPP, StatBeforeRead) {
 }
 
 TEST_P(LibRadosSplitOpPP, GetXattrBeforeRead) {
+  SKIP_IF_CRIMSON();
   // Read the osd_min_split_replica_read_size config value
   std::string min_split_size_str;
   ASSERT_EQ(0, cluster.conf_get("osd_min_split_replica_read_size", min_split_size_str));
