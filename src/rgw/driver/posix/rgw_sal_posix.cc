@@ -66,11 +66,13 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
 #define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
 #define RGW_POSIX_ATTR_VERSION "POSIX-version"
+#define RGW_POSIX_ATTR_VERSION_ID "version_id"
 #define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
 #define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "POSIX-Multipart-Total-Size"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
+static const std::string NULL_VERSION_ID = "null";
 
 /*
  * Object ownership is stored in RGW_ATTR_ACL (the standard ACL policy
@@ -118,6 +120,160 @@ static inline std::string gen_rand_instance_name()
 
   return buf;
 }
+
+/* Versions */
+// TODO : Move these to  a separate file
+
+static std::string to_base36(uint64_t v)
+{
+  if (v == 0) return "0";
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  std::string result;
+  while (v > 0) {
+    result.insert(result.begin(), digits[v % 36]);
+    v /= 36;
+  }
+  return result;
+}
+
+static bool from_base36(const std::string& s, uint64_t& out)
+{
+  out = 0;
+  for (char c : s) {
+    uint64_t d;
+    if (c >= '0' && c <= '9') {
+      d = c - '0';
+    } else if (c >= 'a' && c <= 'z') {
+      d = 10 + (c - 'a');
+    } else {
+      return false;
+    }
+    out = out * 36 + d;
+  }
+  return true;
+}
+
+static uint64_t statx_mtime_ns(const struct statx& stx)
+{
+  return (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+       + stx.stx_mtime.tv_nsec;
+}
+
+static std::string posix_version_id_from_statx(const struct statx& stx)
+{
+  return "mtime-" + to_base36(statx_mtime_ns(stx))
+       + "-ino-" + to_base36(stx.stx_ino);
+}
+
+struct posix_version_info {
+  uint64_t mtime_ns{0};
+  uint64_t ino{0};
+};
+
+static bool posix_parse_version_id(const std::string& version_id,
+                                   posix_version_info& info)
+{
+  if (version_id == NULL_VERSION_ID) {
+    info = {};
+    return true;
+  }
+  static const std::string mtime_pfx = "mtime-";
+  static const std::string ino_pfx = "-ino-";
+  if (version_id.compare(0, mtime_pfx.size(), mtime_pfx) != 0) {
+    return false;
+  }
+  auto ino_pos = version_id.find(ino_pfx, mtime_pfx.size());
+  if (ino_pos == std::string::npos) {
+    return false;
+  }
+  std::string mtime_str = version_id.substr(mtime_pfx.size(),
+                                            ino_pos - mtime_pfx.size());
+  std::string ino_str = version_id.substr(ino_pos + ino_pfx.size());
+  return from_base36(mtime_str, info.mtime_ns) &&
+         from_base36(ino_str, info.ino);
+}
+
+
+static bool is_null_version_fd(int fd)
+{
+  char buf[256];
+  std::string vid_xattr = ATTR_PREFIX + RGW_POSIX_ATTR_VERSION_ID;
+  ssize_t len = ::fgetxattr(fd, vid_xattr.c_str(), buf, sizeof(buf));
+  if (len <= 0) {
+    return true;
+  }
+  return std::string_view(buf, len) == NULL_VERSION_ID;
+}
+
+
+/* LMDB comparator for versioned bucket listing.
+ * Key format: name \0 instance.
+ * Sort: name ascending, then instance descending (newest version first).
+ * Instance is "mtime-{base36}-ino-{base36}" — we extract and compare
+ * the mtime numerically for correct ordering regardless of base36 width. */
+static int posix_lmdb_cmp(const MDB_val *a, const MDB_val *b)
+{
+  std::string_view sa(static_cast<const char*>(a->mv_data), a->mv_size);
+  std::string_view sb(static_cast<const char*>(b->mv_data), b->mv_size);
+
+  auto sep_a = sa.find('\0');
+  auto sep_b = sb.find('\0');
+  std::string_view name_a = sa.substr(0, sep_a);
+  std::string_view name_b = sb.substr(0, sep_b);
+
+  int cmp = name_a.compare(name_b);
+  if (cmp != 0) {
+    return cmp;
+  }
+
+  /* same name — compare instances in reverse (newest first) */
+  std::string_view inst_a = (sep_a != std::string_view::npos)
+    ? sa.substr(sep_a + 1) : std::string_view{};
+  std::string_view inst_b = (sep_b != std::string_view::npos)
+    ? sb.substr(sep_b + 1) : std::string_view{};
+
+  /* empty instance (non-versioned) sorts before any version */
+  if (inst_a.empty() && inst_b.empty()) { return 0; }
+  if (inst_a.empty()) { return -1; }
+  if (inst_b.empty()) { return 1; }
+
+  /* extract mtime from "mtime-{base36}-ino-{base36}" */
+  auto extract_mtime = [](std::string_view inst) -> uint64_t {
+    static constexpr std::string_view pfx = "mtime-";
+    static constexpr std::string_view sep = "-ino-";
+    if (inst.substr(0, pfx.size()) != pfx) {
+      return 0;
+    }
+    auto ino_pos = inst.find(sep, pfx.size());
+    if (ino_pos == std::string_view::npos) {
+      return 0;
+    }
+    uint64_t val = 0;
+    for (size_t i = pfx.size(); i < ino_pos; ++i) {
+      char c = inst[i];
+      uint64_t d;
+      if (c >= '0' && c <= '9') { d = c - '0'; }
+      else if (c >= 'a' && c <= 'z') { d = 10 + (c - 'a'); }
+      else { return 0; }
+      val = val * 36 + d;
+    }
+    return val;
+  };
+
+  uint64_t mt_a = extract_mtime(inst_a);
+  uint64_t mt_b = extract_mtime(inst_b);
+
+  /* descending: larger mtime sorts first */
+  if (mt_a > mt_b) { return -1; }
+  if (mt_a < mt_b) { return 1; }
+
+  /* same mtime — compare full instance for determinism */
+  return inst_b.compare(inst_a);
+}
+
+
+/* versions ends */
+
 
 static inline std::string bucket_fname(std::string name, std::optional<std::string>& ns)
 {
@@ -842,7 +998,7 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return ret;
   }
 
-  ret = stat(dpp);
+  ret = stat(dpp, true);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
@@ -1682,7 +1838,27 @@ int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_y
 {
   if (!cur_version)
     return -EINVAL;
-  int ret = cur_version->link_temp_file(dpp, y, temp_fname);
+
+  // Get the mtime+inode info for the temp file via its fd
+
+  struct statx stx;
+  int ret = statx(cur_version->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret == 0) {
+    std::string ver_id = posix_version_id_from_statx (stx);
+    rgw_obj_key key = decode_obj_key(get_name());
+    key.instance = ver_id;
+    std::string versioned_fname = get_key_fname(key, true);
+    cur_version->set_name(versioned_fname);
+  ldpp_dout(dpp, 0) << "NITHYA: VersionedDirectory::link_temp_file() updated_name :" << cur_version->get_name() << dendl;
+  } else {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not stat temp file for" << get_name() << ": "
+                      << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  ret = cur_version->link_temp_file(dpp, y, temp_fname);
   if (ret < 0)
     return ret;
 
@@ -1804,6 +1980,19 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
   }
+  struct statx stx;
+  ret = statx(marker->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret < 0) {
+    return ret;
+  }
+  std::string ver_id = posix_version_id_from_statx (stx);
+  rgw_obj_key key = decode_obj_key(get_name());
+  key.instance = ver_id;
+  std::string versioned_fname = get_key_fname(key, true);
+  marker->set_name(versioned_fname);
+  ldpp_dout(dpp, 0) << "NITHYA: VersionedDirectory::add_delete_marker() updated_name :" << marker->get_name() << dendl;
+
 
   // Link temp file to final name atomically
   ret = marker->link_temp_file(dpp, y, name);
@@ -1813,6 +2002,9 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     return ret;
   }
 
+  if (instance_id.empty()){
+    instance_id = ver_id;
+  }
   return 0;
 }
 
@@ -1843,15 +2035,16 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     key.instance = gen_rand_instance_name();
     tgtname = get_key_fname(key, /*use_version=*/true);
 
-    result->delete_marker = true;
-    result->version_id = key.instance;
 
     f = std::make_unique<File>(tgtname, this, ctx);
     ret = add_delete_marker(dpp, y, f, tgtname);
     if (ret < 0) {
       return ret;
     }
-
+    if (result) {
+      result->delete_marker = true;
+      result->version_id = instance_id;
+    }
     newlink = true;
     ret = set_cur_version_ent(dpp, f.get());
     if (ret < 0) {
@@ -1878,12 +2071,16 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       }
       bufferlist bl;
       if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-       result->delete_marker = true;
+        if (result) {
+          result->delete_marker = true;
+        }
       }
       ret = f->remove(dpp, y, /*delete_children=*/true, result);
       if (ret < 0)
        return ret;
-      result->version_id = instance_id;
+      if (result) {
+        result->version_id = instance_id;
+      }
     } else {
       return ret;
     }
@@ -3392,6 +3589,12 @@ void POSIXDriver::meta_list_keys_complete(void* handle)
     delete h;
   }
   return;
+}
+
+
+MDB_cmp_func* POSIXBucket::lmdb_cmp()
+{
+  return posix_lmdb_cmp;
 }
 
 int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
@@ -5431,6 +5634,21 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // save shadow name before rename changes info.bucket.name
   std::string shadow_cache_name = shadow->get_name();
 
+
+  // If versioned, update the version id in the POSIXObject to the mtime+inode
+  // so the directory will be renamed to the correct name.
+
+  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
+  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
+
+  if (sb->versioned()) {
+    auto *shadow_dir = shadow->get_dir();
+    ret = shadow_dir->stat(dpp, true);
+    struct statx f_stx = shadow_dir->get_stx();
+    std::string ver_id = posix_version_id_from_statx (f_stx);
+    to->set_instance_id(ver_id);
+  }
+
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
@@ -5439,8 +5657,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
-  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
   if (sb->versioned()) {
     ret = to->set_cur_version(dpp);
     if (ret < 0) {

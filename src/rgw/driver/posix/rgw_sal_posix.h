@@ -136,6 +136,7 @@ public:
 
   int get_fd() { return fd; };
   std::string& get_name() { return fname; }
+  void set_name(const std::string& name) { fname = name; }
   Directory* get_parent() { return parent; }
   bool exists() { return exist; }
   struct statx& get_stx() { return stx; }
@@ -1046,7 +1047,7 @@ public:
   /* enumerate all entries by callback, in any order */
   int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, posix::fill_cache_cb_t& cb);
 
-  static MDB_cmp_func* lmdb_cmp() { return nullptr; }
+  static MDB_cmp_func* lmdb_cmp();
 
 private:
   int write_attrs(const DoutPrefixProvider *dpp, optional_yield y);
@@ -1220,6 +1221,7 @@ public:
   int make_ent(posix::ObjectType type);
   bool versioned() { return bucket->versioned(); }
   DeleteResult get_result() {return del_result;}
+  void set_instance_id(const std::string& instance) { state.obj.key.set_instance(instance); };
 
 protected:
   int read(int64_t ofs, int64_t end, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
