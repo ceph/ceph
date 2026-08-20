@@ -214,7 +214,7 @@
             class="cds--type-heading-03 tile-title"
             i18n
           >
-            Daemon Versions
+            Service instance versions
           </h4>
           <div>
             <cd-table
@@ -270,7 +270,7 @@
           <div
             [cdsTip]="
               (healthData.mgr_map | mgrSummary)?.total <= 1
-                ? 'To upgrade, you need minimum 2 mgr daemons.'
+                ? 'To upgrade, you need minimum 2 mgr service instances.'
                 : ''
             "
             i18n-cdsTip
@@ -324,7 +324,7 @@
 <ng-template #warningIcon>
   <cd-icon
     type="warning"
-    title="To upgrade, you need minimum 2 mgr daemons."
+    title="To upgrade, you need minimum 2 mgr service instances."
   >
   </cd-icon>
 </ng-template>

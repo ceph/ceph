@@ -1,6 +1,8 @@
 import enum
 import errno
 import json
+import os
+import shutil
 from typing import List, Set, Optional, Iterator, cast, Dict, Any, Union, Sequence, Mapping, Tuple
 import re
 import datetime
@@ -209,7 +211,6 @@ class ServiceAction(enum.Enum):
     restart = 'restart'
     redeploy = 'redeploy'
     reconfig = 'reconfig'
-    rotate_key = 'rotate-key'
 
 
 class DaemonAction(enum.Enum):
@@ -217,7 +218,6 @@ class DaemonAction(enum.Enum):
     stop = 'stop'
     restart = 'restart'
     reconfig = 'reconfig'
-    rotate_key = 'rotate-key'
 
 
 class IngressType(enum.Enum):
@@ -1820,7 +1820,7 @@ Usage:
 
     @OrchestratorCLICommand.Write('orch daemon')
     def _daemon_action(self, action: DaemonAction, name: str, force: bool = False) -> HandleCommandResult:
-        """Start, stop, restart, redeploy, reconfig, or rotate-key for a specific daemon"""
+        """Start, stop, restart, redeploy or reconfig for a specific daemon"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
         completion = self.daemon_action(action.value, name, force=force)
@@ -2228,8 +2228,9 @@ Usage:
             nvmeof_pool_helper = NvmeofMetadataPoolHelper(self)
             nvmeof_pool_helper.create_pool_if_needed()
 
+        cleanpool = pool.lstrip('.')
         spec = NvmeofServiceSpec(
-            service_id=f'{pool}.{group}' if group else pool,
+            service_id=f'{cleanpool}.{group}' if group else cleanpool,
             pool=pool,
             group=group,
             placement=PlacementSpec.from_string(placement),
@@ -2606,6 +2607,76 @@ Usage:
             assert False
         except OrchestratorError as e:
             assert e.args == ('hello, world',)
+
+        self._self_test_no_crash_dump_for_not_implemented_error()
+
+    def _self_test_no_crash_dump_for_not_implemented_error(self) -> None:
+        """
+        Regression test for https://tracker.ceph.com/issues/79106:
+        dispatch_remote() must not generate a crash dump for
+        NotImplementedError, since that's the documented way a module
+        signals an optional method isn't implemented, not a fault. A
+        genuine exception (the RuntimeError control case below) must
+        still be recorded.
+        """
+        crash_dir = cast(str, self.get_ceph_option('crash_dir'))
+
+        def crash_dir_entries() -> Set[str]:
+            try:
+                return set(os.listdir(crash_dir))
+            except FileNotFoundError:
+                return set()
+
+        def new_entries_from_selftest(before: Set[str], method: str) -> Set[str]:
+            # self_test() runs live inside ceph-mgr alongside every other
+            # always-on module, so crash_dir is shared: don't assume every
+            # entry that showed up since 'before' is ours. Only count/clean
+            # up entries whose crash metadata actually names this call, so
+            # an unrelated module crashing elsewhere during this window is
+            # neither mistaken for a test failure nor swept up and deleted.
+            matches = set()
+            for name in crash_dir_entries() - before:
+                try:
+                    with open(os.path.join(crash_dir, name, 'meta')) as f:
+                        meta = json.load(f)
+                except (OSError, ValueError):
+                    continue
+                if (meta.get('mgr_module') == 'selftest'
+                        and method in meta.get('mgr_module_caller', '')):
+                    matches.add(name)
+            return matches
+
+        before = crash_dir_entries()
+
+        # self.remote() converts *any* exception raised by the callee into
+        # a RuntimeError (see MgrModule.remote()'s docstring), so the
+        # NotImplementedError doesn't survive as its own type here -- the
+        # signal we actually care about is whether it produced a crash dump.
+        try:
+            self.remote('selftest', 'remote_raise_not_implemented_error')
+            assert False, 'exception not raised'
+        except RuntimeError:
+            pass
+        not_implemented_dumps = new_entries_from_selftest(
+            before, 'remote_raise_not_implemented_error')
+        assert not not_implemented_dumps, (
+            f'NotImplementedError from dispatch_remote() generated a crash '
+            f'dump: {not_implemented_dumps}')
+
+        try:
+            self.remote('selftest', 'remote_raise_runtime_error')
+            assert False, 'exception not raised'
+        except RuntimeError:
+            pass
+        runtime_error_dumps = new_entries_from_selftest(
+            before, 'remote_raise_runtime_error')
+        assert runtime_error_dumps, (
+            'RuntimeError from dispatch_remote() unexpectedly did not '
+            'generate a crash dump (control case failed)')
+
+        # Don't leave synthetic crash dumps lying around.
+        for name in runtime_error_dumps:
+            shutil.rmtree(os.path.join(crash_dir, name), ignore_errors=True)
 
     @staticmethod
     def _upgrade_check_image_name(image: Optional[str], ceph_version: Optional[str]) -> None:

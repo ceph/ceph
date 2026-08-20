@@ -552,10 +552,41 @@ class CephadmServe:
                     'CEPHADM_STRAY_DAEMON', f'{len(daemon_detail)} stray daemon(s) not managed by cephadm', len(daemon_detail), daemon_detail)
             self.mgr.last_stray_daemon_check = datetime_now()
 
+    def _resolve_rgw_smb_daemon_name(self, daemon_id: str) -> str:
+        """
+        Resolve rgw-smb daemon to its corresponding smb service name.
+        """
+        # Metadata ID format: "smb.rgw.cluster.<cluster_name>"
+        # Prefix constant from _cephx_rgw_entity in smb/handler.py
+        smb_metadata_prefix = 'smb.rgw.cluster.'
+
+        metadata = self.mgr.get_metadata('rgw-smb', daemon_id, {})
+        assert metadata is not None
+
+        metadata_id = metadata.get('id', '')
+        if not metadata_id.startswith(smb_metadata_prefix):
+            return f'rgw-smb.{daemon_id}'
+        # Extract cluster name from metadata ID
+        cluster_name = metadata_id[len(smb_metadata_prefix):]
+        # Find matching SMB daemon in cache by cluster name
+        for smb_daemon in self.mgr.cache.get_daemons_by_type('smb'):
+            service_name = smb_daemon.service_name()
+            # Match service name pattern: "smb.<cluster_name>"
+            if service_name == f'smb.{cluster_name}':
+                return f'smb.{smb_daemon.daemon_id}'
+
+        # Fallback if no match found
+        self.log.debug("Failed to extract cluster name from rgw-smb metadata: %s", metadata_id)
+        return f'rgw-smb.{daemon_id}'
+
     def _service_reference_name(self, service_type: str, daemon_id: str) -> str:
-        if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs']:
+        if service_type not in ['rbd-mirror', 'cephfs-mirror', 'rgw', 'rgw-nfs', 'rgw-smb']:
             name = f'{service_type}.{daemon_id}'
             return name
+
+        # Handle rgw-smb: RGW frontend daemons for SMB protocol
+        if service_type == 'rgw-smb':
+            return self._resolve_rgw_smb_daemon_name(daemon_id)
 
         metadata = self.mgr.get_metadata(service_type, daemon_id, {})
         assert metadata is not None
@@ -1544,6 +1575,15 @@ class CephadmServe:
                     if not osd_uuid:
                         raise OrchestratorError('osd.%s not in osdmap' % daemon_spec.daemon_id)
                     daemon_params['osd_fsid'] = osd_uuid
+                    # we may need a dm-crypt key to rotate this OSD's keyring
+                    # if it is encrypted. If it is not encrypted, no such
+                    # key will exist
+                    rc, ckg_out, ckg_err = self.mgr.mon_command({
+                        'prefix': 'config-key get',
+                        'key': f'dm-crypt/osd/{osd_uuid}/luks',
+                    })
+                    if not rc and ckg_out:
+                        daemon_params['osd_dm_crypt_key'] = ckg_out
 
                 if reconfig:
                     daemon_params['reconfig'] = True
@@ -1553,6 +1593,8 @@ class CephadmServe:
                     daemon_params['send_signal_to_daemon'] = send_signal_to_daemon
                 if self.mgr.allow_ptrace:
                     daemon_params['allow_ptrace'] = True
+                if self.mgr.log_deploy_configuration:
+                    daemon_params['log_deploy_configuration'] = True
 
                 daemon_spec, extra_container_args, extra_entrypoint_args = self._setup_extra_deployment_args(daemon_spec, daemon_params)
                 init_containers = self._setup_init_containers(daemon_spec, daemon_params)
@@ -1906,7 +1948,8 @@ class CephadmServe:
                 if isinstance(stdin, bytes):
                     self.log.debug('stdin: <binary len %d>', len(stdin))
                 else:
-                    self.log.debug('stdin: %s', stdin)
+                    if self.mgr.log_deploy_configuration:
+                        self.log.debug('stdin: %s', stdin)
 
             # If SSH hardening is enabled, call invoker directly without which python
             if self.mgr.sudo_hardening and self.mgr.invoker_path:
@@ -2112,8 +2155,12 @@ def _ceph_service_next_action(
         return action
 
     if mgr.last_monmap and mgr.last_monmap > last_config:
-        logger.info('Reconfiguring %s (monmap changed)...', name)
-        return 'reconfig'
+        if mgr.upgrade.upgrade_state is not None and not mgr.upgrade.upgrade_state.paused:
+            logger.debug('Skipping reconfig of %s for monmap change (upgrade in progress)' % name)
+        else:
+            logger.info('Reconfiguring %s (monmap changed)...' % name)
+            return 'reconfig'
+
     if mgr.extra_ceph_conf_is_newer(last_config):
         logger.info('Reconfiguring %s (extra config changed)...', name)
         return 'reconfig'

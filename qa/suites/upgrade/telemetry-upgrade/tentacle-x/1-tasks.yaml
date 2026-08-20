@@ -63,6 +63,7 @@ tasks:
 - print: "**** done end telemetry tentacle..."
 
 - print: "**** done start upgrade sequence..."
+- sequential: [ignore-auth-warn-cephadm]
 - sequential:
     - print: "**** done start upgrade..."
     - cephadm.shell:

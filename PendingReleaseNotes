@@ -16,6 +16,12 @@
   to throttle client metadata requests (e.g., create, mkdir, lookup, and so on) to
   subvolumes, where each subvolume QoS is shared among multiple client sessions at
   that time.
+* MON: Each monitor now reports four new perf counters covering its data
+  directory: ``data_disk_total_bytes``, ``data_disk_avail_bytes``,
+  ``data_disk_avail_percent``, and ``db_total_bytes`` (estimated on-disk size
+  of the key/value store). They surface automatically as ``ceph_mon_*``
+  Prometheus metrics via the ``prometheus`` mgr module and ``ceph-exporter``,
+  enabling trending of mon DB growth and filesystem free space.
 
 * librados/neorados: The C++ APIs for executing Ceph Class (CLS) methods
   have undergone a breaking change to enforce compile-time type safety, replacing
@@ -61,6 +67,10 @@
   both --marker and --object-version options together (e.g., ``--marker=obj1 --object-version=abc123``).
   This enables proper pagination through versioned bucket listings without duplicates or
   infinite loops. For non-versioned buckets, use only --marker as before (backward compatible).
+* RGW: ``radosgw-admin bucket suspend`` and ``bucket unsuspend`` can suspend an
+  individual bucket without suspending its owner. S3 requests against a suspended
+  bucket fail with ``403 BucketSuspended``. The ``suspended`` field is now included
+  in ``radosgw-admin bucket stats`` output.
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
   - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
   - Added the `openssl_conf` configuration option for loading specified providers as default providers.
@@ -74,7 +84,15 @@
   Benchmarks showed that the lower thread count improves throughput and reduces latency
   on NVMe and HDD based environments. Users with specific workload requirements can
   tune this value; see also ``rgw_max_concurrent_requests``.
+* RGW: This release contains a fix for CVE-2026-54330. We now reject
+  Sigv4 requests with `host` and `x-amz-` headers not included in the
+  signed subset. Unfortunately, the REST client used in multisite was
+  generating such improperly signed requests.
 
+  If you are running multisite, you must set the
+  ``rgw_sigv4_insecure`` option to true before you begin to
+  upgrade. After all clusters are upgraded, set the option to
+  ``false`` again.
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
   with health status, capacity, performance metrics, and quick-access links. All the
@@ -157,6 +175,19 @@
   This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
   It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 * RGW: Add SSE-KMS secrets cache
+
+>=21.0.0
+
+* CephX: a new key type ``aes256k`` has been introduced to address
+  vulnerabilities in the existing encryption schemes. It is necessary to
+  perform an upgrade of all CephX keys used by daemons or clients. Please see
+  :ref:`cephx-upgrade` for more information.
+* The ``auth_supported`` config has been removed.
+* The monitor map includes new settings relating to CephX: auth_service_cipher,
+  auth_allowed_ciphers, and auth_preferred_cipher. These are used to control
+  which CephX key types may be used in the cluster.
+* A new --key-type argument has been introduced for all commands which produce CephX keys. This includes monitor commands as well as Ceph cluster bootstrap commands like ceph-authtool and monmaptool.
+* The ``mon.`` credential is now authoritatively stored in the Monitor "auth" database. The monitor keyring file is only used as a fallback. The ``ceph-mon`` command now includes a --use-mon-keyring switch for recovery if the ``mon.`` key in the auth database is lost.
 
 * RADOS: Stretch mode can now be entered even if the two dividing buckets differ
   in weight by a small fraction (default 0.1). This is tunable via
@@ -971,9 +1002,9 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   undergone significant usability and design improvements to address the slow
   backfill issue. Some important changes are:
   * The 'balanced' profile is set as the default mClock profile because it
-    represents a compromise between prioritizing client IO or recovery IO. Users
-    can then choose either the 'high_client_ops' profile to prioritize client IO
-    or the 'high_recovery_ops' profile to prioritize recovery IO.
+    represents a compromise between prioritizing client I/O or recovery I/O. Users
+    can then choose either the 'high_client_ops' profile to prioritize client I/O
+    or the 'high_recovery_ops' profile to prioritize recovery I/O.
   * QoS parameters like reservation and limit are now specified in terms of a
     fraction (range: 0.0 to 1.0) of the OSD's IOPS capacity.
   * The cost parameters (osd_mclock_cost_per_io_usec_* and
@@ -1069,7 +1100,7 @@ Relevant tracker: https://tracker.ceph.com/issues/61599
 * mon: add NVMe-oF gateway monitor and HA
   This PR adds high availability support for the nvmeof Ceph service. High availability
 means that even in the case that a certain GW is down, there will be another available
-path for the initiator to be able to continue the IO through another GW.
+path for the initiator to be able to continue the I/O through another GW.
 It is also adding 2 new mon commands, to notify monitor about the gateway creation/deletion:
   - nvme-gw create
   - nvme-gw delete
@@ -1098,3 +1129,13 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   until they complete or abort.
 
   Relevant tracker: https://tracker.ceph.com/issues/77509
+
+* RGW: The new ``rgw_topic_ownership_update_period`` option sets how often a
+  radosgw refreshes the persistent topic queue list. The ownership (failover)
+  timeout of a persistent topic queue is three times this value, so lowering it
+  speeds up failover of persistent topics between gateways. Setting it too low
+  may cause false-positive failures. Changing it affects the ownership of an
+  existing persistent topic queue only on its next renewal. It defaults to 30
+  seconds, which matches the previously hardcoded behaviour.
+
+  Relevant tracker: https://tracker.ceph.com/issues/78727

@@ -25,4 +25,5 @@ export class SidebarLayoutComponent {
   @Input() headerTags: string[] = [];
   @Input() headerActions: ResourceHeaderAction[] = [];
   @Input() showHeaderBreadcrumbs = true;
+  @Input() showSidebar: boolean = true;
 }

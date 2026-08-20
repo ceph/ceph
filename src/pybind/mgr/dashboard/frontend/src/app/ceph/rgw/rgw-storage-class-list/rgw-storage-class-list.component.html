@@ -13,8 +13,6 @@
   identifier="uniqueId"
   [forceIdentifier]="true"
   selectionType="single"
-  [hasDetails]="true"
-  (setExpandedRow)="setExpandedRow($event)"
   (updateSelection)="updateSelection($event)"
   [autoReload]="false"
 >
@@ -27,9 +25,4 @@
     >
     </cd-table-actions>
   </div>
-  <cd-rgw-storage-class-details
-    *cdTableDetail
-    [selection]="expandedRow"
-  >
-  </cd-rgw-storage-class-details>
 </cd-table>

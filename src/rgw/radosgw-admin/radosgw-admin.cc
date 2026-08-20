@@ -68,11 +68,15 @@ extern "C" {
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sync.h"
+#endif
 #include "rgw_trim_bilog.h"
 #include "rgw_trim_datalog.h"
 #include "rgw_trim_mdlog.h"
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_data_sync.h"
+#endif
 #include "rgw_rest_conn.h"
 #include "rgw_realm_watcher.h"
 #include "rgw_role.h"
@@ -188,6 +192,8 @@ void usage()
   cout << "  bucket link                      link bucket to specified user\n";
   cout << "  bucket unlink                    unlink bucket from specified user\n";
   cout << "  bucket stats                     returns bucket statistics\n";
+  cout << "  bucket suspend                   suspend a bucket\n";
+  cout << "  bucket unsuspend                 unsuspend a bucket\n";
   cout << "  bucket rm                        remove bucket\n";
   cout << "  bucket check                     check bucket index by verifying size and object count stats\n";
   cout << "  bucket check olh                 check for olh index entries and objects that are pending removal\n";
@@ -746,6 +752,8 @@ enum class OPT {
 #endif
   BUCKET_LAYOUT,
   BUCKET_STATS,
+  BUCKET_SUSPEND,
+  BUCKET_UNSUSPEND,
 #ifdef WITH_RADOSGW_RADOS
   BUCKET_CHECK,
   BUCKET_CHECK_OLH,
@@ -1032,6 +1040,8 @@ static SimpleCmd::Commands all_cmds = {
 #endif
   { "bucket layout", OPT::BUCKET_LAYOUT },
   { "bucket stats", OPT::BUCKET_STATS },
+  { "bucket suspend", OPT::BUCKET_SUSPEND },
+  { "bucket unsuspend", OPT::BUCKET_UNSUSPEND },
 #ifdef WITH_RADOSGW_RADOS
   { "bucket check", OPT::BUCKET_CHECK },
   { "bucket check olh", OPT::BUCKET_CHECK_OLH },
@@ -2019,6 +2029,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 }
 #endif
 
+#ifdef WITH_RADOSGW_RADOS
 /// search for a matching zone/zonegroup id and return a connection if found
 static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver,
                                                     const RGWZoneGroup& zonegroup,
@@ -2053,6 +2064,7 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver
   }
   return conn;
 }
+#endif // WITH_RADOSGW_RADOS
 
 // we expect a very small response
 static constexpr size_t MAX_REST_RESPONSE = 128 * 1024;
@@ -2171,6 +2183,7 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
   boost::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
   if (!remote.empty()) {
+#ifdef WITH_RADOSGW_RADOS
     conn = get_remote_conn(static_cast<rgw::sal::RadosStore*>(driver), period.get_map(), remote);
     if (!conn) {
       cerr << "failed to find a zone or zonegroup for remote "
@@ -2178,6 +2191,11 @@ static int commit_period(rgw::sal::ConfigStore* cfgstore,
       return -ENOENT;
     }
     remote_conn = &*conn;
+#else
+    cerr << "ERROR: sending the period to a remote zone by id (--remote) "
+        "requires the RADOS backend; use --url instead" << std::endl;
+    return -ENOTSUP;
+#endif
   }
 
   // push period to the master with an empty period id
@@ -3402,10 +3420,12 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return -EINVAL;
   }
 
+#ifdef WITH_RADOSGW_RADOS
   if (num_shards > (int)static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards()) {
     cerr << "ERROR: num_shards too high, max value: " << static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_max_bucket_shards() << std::endl;
     return -EINVAL;
   }
+#endif
 
   if (num_shards < 0) {
     cerr << "ERROR: num_shards must be non-negative integer" << std::endl;
@@ -5800,6 +5820,7 @@ int main(int argc, const char **argv)
         // validate --tier-type if specified
         const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
           auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
           if (!sync_mgr->get_module(*ptier_type, nullptr)) {
             ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -5807,6 +5828,10 @@ int main(int argc, const char **argv)
                 << sync_mgr->get_registered_module_names() << dendl;
             return EINVAL;
           }
+#else
+          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+          return EINVAL;
+#endif
         }
 
         if (enable_features.empty()) { // enable all features by default
@@ -6473,6 +6498,7 @@ int main(int argc, const char **argv)
           // validate --tier-type if specified
           const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
           if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
             auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
             if (!sync_mgr->get_module(*ptier_type, nullptr)) {
               ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -6480,6 +6506,10 @@ int main(int argc, const char **argv)
                   << sync_mgr->get_registered_module_names() << dendl;
               return EINVAL;
             }
+#else
+            ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+            return EINVAL;
+#endif
           }
 
           if (enable_features.empty()) { // enable all features by default
@@ -6753,6 +6783,7 @@ int main(int argc, const char **argv)
         // validate --tier-type if specified
         const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
         if (ptier_type) {
+#ifdef WITH_RADOSGW_RADOS
           auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
           if (!sync_mgr->get_module(*ptier_type, nullptr)) {
             ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
@@ -6760,6 +6791,10 @@ int main(int argc, const char **argv)
                 << sync_mgr->get_registered_module_names() << dendl;
             return EINVAL;
           }
+#else
+          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
+          return EINVAL;
+#endif
         }
 
         if (enable_features.empty()) { // enable all features by default
@@ -7029,7 +7064,9 @@ int main(int argc, const char **argv)
 #ifdef WITH_RADOSGW_RADOS
                                         OPT::BUCKET_LINK, OPT::BUCKET_UNLINK,
 #endif
-                                        OPT::BUCKET_CHOWN, 
+                                        OPT::BUCKET_CHOWN,
+                                        OPT::BUCKET_SUSPEND,
+                                        OPT::BUCKET_UNSUSPEND,
 #ifdef WITH_RADOSGW_RADOS
                                         OPT::METADATA_PUT,
                                         OPT::METADATA_RM,
@@ -8123,6 +8160,7 @@ int main(int argc, const char **argv)
       return EINVAL;
     }
 
+    bucket_op.account_id = account_id;
     bucket_op.set_bucket_name(bucket_name);
     bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
@@ -8641,7 +8679,10 @@ next:
     }
 
     const int max_shards = rgw::num_shards(index);
-    if (max_entries < 0) {
+
+    if (max_entries_specified) {
+      max_entries = std::max(1, max_entries); // sanity
+    } else {
       max_entries = 1000;
     }
 
@@ -8652,8 +8693,11 @@ next:
     formatter->open_array_section("entries");
 
     auto rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
+    int64_t entry_count = 0; // track number of entries displayed
+    bool done = false;       // true once reached max_entries
+
     int i = (specified_shard_id ? shard_id : 0);
-    for (; i < max_shards; i++) {
+    for (; i < max_shards && !done; i++) {
       ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": starting shard=" <<
 	i << dendl;
       marker.clear();
@@ -8681,6 +8725,14 @@ next:
 	for (const auto& entry : entries) {
           encode_json("entry", entry, formatter.get());
           marker = entry.idx;
+
+          if (++entry_count >= max_entries) {
+            done = true;
+            ldpp_dout(dpp(), 20) << "INFO: " << __func__ <<
+              ": bi_list() stopped outputting entries after " << entry_count <<
+              " entries given that max_entries=" << max_entries << dendl;
+            break;
+          }
         }
         formatter->flush(cout);
 
@@ -8688,14 +8740,14 @@ next:
 	  ": bi_list() returned without error; entries.size()=" <<
 	  entries.size() << ", is_truncated=" << is_truncated <<
 	  ", next_marker=" << marker << dendl;
-      } while (is_truncated);
+      } while (is_truncated && !done);
 
       formatter->flush(cout);
 
       if (specified_shard_id) {
         break;
       }
-    }
+    } // shard loop
     ldpp_dout(dpp(), 20) << "INFO: " << __func__ << ": done" << dendl;
 
     formatter->close_section();
@@ -10803,6 +10855,26 @@ next:
     }
   }
 
+  if ((opt_cmd == OPT::BUCKET_SUSPEND) || (opt_cmd == OPT::BUCKET_UNSUSPEND)) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    std::vector<rgw_bucket> buckets;
+    buckets.push_back(bucket->get_key());
+    const bool enabled = (opt_cmd == OPT::BUCKET_UNSUSPEND);
+    ret = driver->set_buckets_enabled(dpp(), buckets, enabled, null_yield);
+    if (ret < 0) {
+      cerr << "failed to " << (enabled ? "unsuspend" : "suspend")
+           << " bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+  }
+
   if (opt_cmd == OPT::BUCKET_SYNC_INFO) {
     if (bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
@@ -11790,7 +11862,11 @@ next:
         op_state.quota_max_objects = std::max<int64_t>(-1, max_objects);
       }
       if (have_max_size) {
-        op_state.quota_max_size = std::max<int64_t>(-1, rgw_rounded_kb(max_size) * 1024);
+        if (max_size < 0) {
+          op_state.quota_max_size = -1;
+        } else {
+          op_state.quota_max_size = rgw_rounded_kb(max_size) * 1024;
+        }
       }
 
       std::string err_msg;

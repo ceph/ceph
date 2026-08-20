@@ -16,15 +16,15 @@ Locations
 
 These mirrors are available on the following locations:
 
-- **EU: Netherlands**: http://eu.ceph.com/
-- **AU: Australia**: http://au.ceph.com/
+- **EU: Netherlands**: https://eu.ceph.com/
+- **AU: Australia**: https://au.ceph.com/
 - **SE: Sweden**: http://se.ceph.com/
 - **DE: Germany**: http://de.ceph.com/
 - **FR: France**: http://fr.ceph.com/
-- **UK: UK**: http://uk.ceph.com
-- **US-Mid-West: Chicago**: http://mirrors.gigenet.com/ceph/
+- **UK: UK**: https://uk.ceph.com
+- **US-Mid-West: Chicago**: https://mirrors.gigenet.com/ceph/
 - **US-West: US West Coast**: http://us-west.ceph.com/
-- **CN: China**: http://mirrors.ustc.edu.cn/ceph/
+- **CN: China**: https://mirrors.ustc.edu.cn/ceph/
 
 You can replace all ``download.ceph.com`` URLs with any of the mirrors,
 for example:

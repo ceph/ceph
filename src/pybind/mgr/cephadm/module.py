@@ -17,6 +17,7 @@ from threading import Event
 
 from ceph.deployment.service_spec import PrometheusSpec
 from cephadm.cert_mgr import CertMgr
+from .utils import get_default_ssh_config
 from cephadm.tlsobject_store import TLSObjectScope, TLSObjectException
 
 import string
@@ -102,11 +103,12 @@ from .inventory import (
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
-    cephadmNoImage, SpecialHostLabels
+    cephadmNoImage, SpecialHostLabels, is_fips_enabled
 from .configchecks import CephadmConfigChecks
 from .offline_watcher import OfflineHostWatcher
 from .tuned_profiles import TunedProfileUtils
 from .ceph_volume import CephVolume
+from .version_tracker import VersionTracker
 
 try:
     import asyncssh
@@ -160,6 +162,7 @@ def host_exists(hostname_position: int = 1) -> Callable:
 
 class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
     CLICommand = CephadmCLICommand
+
     _STORE_HOST_PREFIX = "host"
 
     instance = None
@@ -200,7 +203,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Option(
             'facts_cache_timeout',
             type='secs',
-            default=1 * 60,
+            default=10 * 60,
             desc='Seconds for which to cache host facts data',
         ),
         Option(
@@ -682,6 +685,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             self.certificate_check_debug_mode = False
             self.certificate_check_period = 0
             self.cephadm_binary_logging_level = 'debug'
+            self.log_deploy_configuration = False
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -702,6 +706,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         self.ssh._reconfig_ssh()
 
         CephadmOrchestrator.instance = self
+
+        self.version_tracker = VersionTracker(self)
 
         self.upgrade = CephadmUpgrade(self)
 
@@ -1398,7 +1404,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         ssh_config = self.get_store("ssh_config")
         if ssh_config:
             return HandleCommandResult(stdout=ssh_config)
-        return HandleCommandResult(stdout=DEFAULT_SSH_CONFIG)
+        return HandleCommandResult(stdout=get_default_ssh_config())
 
     @CephadmCLICommand.Write('cephadm generate-key')
     def _generate_key(self) -> Tuple[int, str, str]:
@@ -1406,16 +1412,31 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
         Generate a cluster SSH key (if not present)
         """
         if not self.ssh_pub or not self.ssh_key:
-            self.log.info('Generating ssh key...')
+            fips_enabled = is_fips_enabled()
+            key_type = 'rsa' if fips_enabled else 'ed25519'
+            self.log.info(
+                'Generating %s ssh key%s...',
+                key_type,
+                ' for FIPS mode' if fips_enabled else '',
+            )
             tmp_dir = TemporaryDirectory()
             path = tmp_dir.name + '/key'
+            args = [
+                '/usr/bin/ssh-keygen',
+                '-t', key_type,
+            ]
+
+            if fips_enabled:
+                args.extend(['-b', '4096'])
+
+            args.extend([
+                '-C', 'ceph-%s' % self._cluster_fsid,
+                '-N', '',
+                '-f', path,
+            ])
+
             try:
-                subprocess.check_call([
-                    '/usr/bin/ssh-keygen',
-                    '-C', 'ceph-%s' % self._cluster_fsid,
-                    '-N', '',
-                    '-f', path
-                ])
+                subprocess.check_call(args)
                 with open(path, 'r') as f:
                     secret = f.read()
                 with open(path + '.pub', 'r') as f:
@@ -2238,7 +2259,20 @@ Then run the following:
         :param host: host name
         """
         HostSpec.validate(spec)
-        ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        # Drop the cached SSH connection when re-adding a host with a new
+        # address. Otherwise check-host may reuse the old connection and
+        # validate the wrong machine.
+        addr_changed = spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr
+        if addr_changed:
+            self.ssh.reset_con(spec.hostname)
+        try:
+            ip_addr = self._check_valid_addr(spec.hostname, spec.addr)
+        except Exception:
+            # Validation failed. Clear the connection we just created to the
+            # wrong address so future operations use a fresh connection.
+            if addr_changed:
+                self.ssh.reset_con(spec.hostname)
+            raise
         if spec.addr == spec.hostname and ip_addr:
             spec.addr = ip_addr
 
@@ -2466,6 +2500,9 @@ Then run the following:
     @handle_orch_error
     def update_host_addr(self, host: str, addr: str) -> str:
         host = normalize_hostname(host)
+        # Drop the cached connection before validating so check-host
+        # runs on the new address, not the old one.
+        self.ssh.reset_con(host)
         self._check_valid_addr(host, addr)
         self.inventory.set_addr(host, addr)
         self.ssh.reset_con(host)
@@ -3042,6 +3079,26 @@ Then run the following:
                 result.append(dd)
         return result
 
+    def _unmanaged_noop_note(self, service_name: str) -> Optional[str]:
+        """Warn when an orch action is scheduled but deferred by unmanaged.
+
+        Returns a note only when a matching service spec exists with
+        ``unmanaged=True``. That matches serve.py behavior: scheduled daemon
+        actions and reconciliation are skipped for those specs.
+
+        Intentionally returns None for daemons whose service name is not in
+        the spec store (notably adopted OSDs under the bare ``osd`` service).
+        Those are still acted on by explicit ``ceph orch daemon ...`` commands.
+        """
+        spec = self.spec_store.all_specs.get(service_name)
+        if not spec or not spec.unmanaged:
+            return None
+        return (
+            f'NOTE: {service_name} is unmanaged. The operation will take effect'
+            f' only when the service becomes managed'
+            f' (e.g. `ceph orch set-managed {service_name}`).'
+        )
+
     def perform_service_action(self, action: str, service_name: str) -> List[str]:
         dds: List[DaemonDescription] = self.cache.get_daemons_by_service(service_name)
         if not dds:
@@ -3061,7 +3118,24 @@ Then run the following:
         if action == 'stop' and service_name.split('.')[0].lower() in ['mgr', 'mon', 'osd']:
             return [f'Stopping entire {service_name} service is prohibited.']
 
-        return self.perform_service_action(action, service_name)
+        results = self.perform_service_action(action, service_name)
+        note = self._unmanaged_noop_note(service_name)
+        if note:
+            results.append(note)
+        return results
+
+    def key_rotate(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        rc, out, err = self.mon_command({
+            'prefix': 'auth rotate',
+            'entity': daemon_spec.entity_name(),
+            'format': 'json',
+            'key_type': utils.ROTATION_CIPHER
+        })
+        if rc:
+            raise OrchestratorError(
+                f'Failed to rotate daemon key for {daemon_spec.entity_name()}.\n'
+                f'Rc: {rc}\nOut: {out}\nErr: {err}'
+            )
 
     def _rotate_daemon_key(self, daemon_spec: CephadmDaemonDeploySpec) -> str:
         self.log.info(f'Rotating authentication key for {daemon_spec.name()}')
@@ -3155,7 +3229,7 @@ Then run the following:
             return ''  # unreachable
 
         if action == 'rotate-key':
-            return self._rotate_daemon_key(daemon_spec)
+            raise OrchestratorError('rotate-key is not supported in this release')
 
         if action == 'redeploy' or action == 'reconfig' or (action == 'restart' and self._mon_public_network_changed(daemon_spec)):
             if action == 'restart':
@@ -3236,11 +3310,13 @@ Then run the following:
                 raise OrchestratorError(f'Unable to {action} daemon {d.name()}: {r.stderr} \nNote: Warnings can be bypassed with the --force flag')
 
         if action == 'rotate-key':
-            if d.daemon_type not in ['mgr', 'osd', 'mds',
-                                     'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi']:
-                raise OrchestratorError(
-                    f'key rotation not supported for {d.daemon_type}'
-                )
+            # TODO: add this commented section back once this command is fixed
+            # if d.daemon_type not in ['mgr', 'osd', 'mds',
+            #                          'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi']:
+            #     raise OrchestratorError(
+            #         f'key rotation not supported for {d.daemon_type}'
+            #     )
+            raise OrchestratorError(f'key rotation by orchestrator not supported in this release (for {d.name()})')
 
         # Track user-initiated stop/start actions
         if action == 'stop':
@@ -3253,7 +3329,11 @@ Then run the following:
         self._daemon_action_set_image(action, image, d.daemon_type, d.daemon_id)
 
         self.log.info(f'Schedule {action} daemon {daemon_name}')
-        return self._schedule_daemon_action(daemon_name, action)
+        msg = self._schedule_daemon_action(daemon_name, action)
+        note = self._unmanaged_noop_note(d.service_name())
+        if note:
+            msg += f'\n{note}'
+        return msg
 
     def daemon_is_self(self, daemon_type: str, daemon_id: str) -> bool:
         return daemon_type == 'mgr' and daemon_id == self.get_mgr_id()
@@ -3354,15 +3434,6 @@ Then run the following:
                     msg += f'\thost {h}: {" ".join([f"osd.{id}" for id in ls])}'
                 raise OrchestratorError(
                     f'If {service_name} is removed then the following OSDs will remain, --force to proceed anyway\n{msg}')
-        elif service_name.startswith('nfs.'):
-            # check if its using old node id style and remove from mon store
-            nfs_services = self.get_store('nfs_services_with_old_nodeid')
-            if nfs_services:
-                nfs_services = nfs_services.split(',')
-                if service_name in nfs_services:
-                    nfs_services.remove(service_name)
-                    val = ','.join(nfs_services) if nfs_services else None
-                    self.set_store('nfs_services_with_old_nodeid', val)
 
         spec = self.spec_store[service_name].spec
         CephadmServe(self)._remove_service_config(spec)
@@ -4633,7 +4704,18 @@ Then run the following:
             spec.service_name(), spec.placement.pretty_str()))
         self.spec_store.save(spec)
         self._kick_serve_loop()
-        return f"Scheduled {spec.service_name()} update...{cert_warning}"
+        msg = f"Scheduled {spec.service_name()} update...{cert_warning}"
+        if spec.unmanaged:
+            # Spec is stored, but reconciliation/_check_daemons will no-op until
+            # the service is managed again. Do not special-case OSDs here: an
+            # unmanaged drive-group apply also creates no OSDs.
+            msg += (
+                f'\nNOTE: {spec.service_name()} is unmanaged. The spec has been'
+                f' saved but daemon changes will take effect only when the'
+                f' service becomes managed'
+                f' (e.g. `ceph orch set-managed {spec.service_name()}`).'
+            )
+        return msg
 
     @handle_orch_error
     def apply(
@@ -5117,3 +5199,20 @@ Then run the following:
     def trigger_connect_dashboard_rgw(self) -> None:
         self.need_connect_dashboard_rgw = True
         self.event.set()
+
+    @CephadmCLICommand.Read('cephadm get-cluster-version-history')
+    def do_get_cluster_version_history(self, show_config: Optional[bool] = False) -> HandleCommandResult:
+        '''
+        Shows all previous and current cluster versions ordered chronologically
+        '''
+        out = self.version_tracker.get_cluster_version_history(show_config)
+        return HandleCommandResult(stdout=out)
+
+    @CephadmCLICommand.Write('cephadm remove-cluster-version-history')
+    def do_remove_cluster_version_history(self, all: Optional[bool] = False, before: Optional[str] = None, after: Optional[str] = None) -> HandleCommandResult:
+        '''
+        Delete cluster versions stored in history
+        '''
+        err, msg = self.version_tracker.remove_cluster_version_history(all, before, after)
+        kwargs = {'stderr': msg} if err else {'stdout': msg}
+        return HandleCommandResult(retval=err, **kwargs)

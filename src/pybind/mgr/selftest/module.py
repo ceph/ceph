@@ -446,6 +446,23 @@ class Module(MgrModule):
             return orchestrator.OrchResult(result=None, exception=ZeroDivisionError('hello, world'))
         assert False, repr(what)
 
+    def remote_raise_not_implemented_error(self) -> None:
+        """
+        Called via self.remote() to verify that dispatch_remote() does not
+        generate a crash dump for NotImplementedError: it is the documented
+        way a module signals that it doesn't implement an optional method,
+        not a fault. See https://tracker.ceph.com/issues/79106.
+        """
+        raise NotImplementedError('selftest: intentional NotImplementedError')
+
+    def remote_raise_runtime_error(self) -> None:
+        """
+        Called via self.remote() as a negative control for
+        remote_raise_not_implemented_error(): a genuine exception must
+        still generate a crash dump.
+        """
+        raise RuntimeError('selftest: intentional RuntimeError')
+
     def shutdown(self) -> None:
         self._workload = Workload.SHUTDOWN
         self._event.set()

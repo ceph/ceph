@@ -3,6 +3,7 @@
 
 #include "common/Clock.h" // for ceph_clock_now()
 #include "common/JSONFormatter.h"
+#include "common/errno.h"
 #include "include/function2.hpp"
 #include "rgw_acl_s3.h"
 #include "rgw_tag_s3.h"
@@ -28,7 +29,9 @@
 
 #include "cls/user/cls_user_types.h"
 
+#ifdef WITH_RADOSGW_RADOS
 #include "rgw_sal_rados.h"
+#endif
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -261,10 +264,45 @@ bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw:
   return false;
 }
 
+static int load_account_name(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             rgw::sal::Driver* driver,
+                             const rgw_account_id& id,
+                             std::string& name)
+{
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  int r = driver->load_account_by_id(dpp, y, id, info, attrs, objv);
+  if (r < 0) {
+    return r;
+  }
+  name = std::move(info.name);
+  return 0;
+}
+
 int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker,
                      optional_yield y, const DoutPrefixProvider *dpp, std::string *err_msg)
 {
-  return rgw_chown_bucket_and_objects(driver, bucket.get(), user.get(), marker, err_msg, dpp, y);
+  rgw_owner new_owner;
+  std::string new_owner_name;
+
+  if (!op_state.account_id.empty()) {
+    new_owner = op_state.account_id;
+    int r = load_account_name(dpp, y, driver, op_state.account_id, new_owner_name);
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to load account");
+      return r;
+    }
+  } else if (!user->get_info().account_id.empty()) {
+    set_err_msg(err_msg, "account users cannot own buckets. use --account-id instead");
+    return -EINVAL;
+  } else {
+    new_owner = user->get_id();
+    new_owner_name = user->get_display_name();
+  }
+
+  return rgw_chown_bucket_and_objects(driver, bucket.get(), new_owner, new_owner_name, marker, err_msg, dpp, y);
 }
 
 int RGWBucket::set_quota(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg)
@@ -1650,6 +1688,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   logrecord_ut.gmtime(formatter->dump_stream("judge_reshard_lock_time"));
   formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
   formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
+  formatter->dump_bool("suspended", bucket_info.bucket_suspended());
   ::encode_json("owner", bucket_info.owner, formatter);
 
   if (has_index) {

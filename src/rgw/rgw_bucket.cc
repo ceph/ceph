@@ -132,13 +132,13 @@ int rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
 }
 
 int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
-				 rgw::sal::User* new_user,
+				 const rgw_owner& new_owner,
+				 const std::string& new_owner_name,
 				 const std::string& marker, std::string *err_msg,
 				 const DoutPrefixProvider *dpp, optional_yield y)
 {
   /* Chown on the bucket */
-  int ret = bucket->chown(dpp, new_user->get_id(), new_user->get_display_name(),
-                          y);
+  int ret = bucket->chown(dpp, new_owner, new_owner_name, y);
   if (ret < 0) {
     set_err_msg(err_msg, "Failed to change bucket ownership: " + cpp_strerror(-ret));
     return ret;
@@ -179,7 +179,7 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
     for (const auto& obj : results.objs) {
       std::unique_ptr<rgw::sal::Object> r_obj = bucket->get_object(obj.key);
 
-      ret = r_obj->chown(*new_user, dpp, y);
+      ret = r_obj->chown(dpp, new_owner, new_owner_name, y);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "ERROR: chown failed on " << r_obj << " :" << cpp_strerror(-ret) << dendl;
           return ret;

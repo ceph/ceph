@@ -66,16 +66,12 @@ tasks:
       - "{{ctx.samba_client_container_cmd|join(' ')}} smbclient -U user1%t3stP4ss1 //{{'host.a'|role_to_remote|attr('ip_address')}}/share2 -c ls"
 
 # verify CTDB is healthy, cluster well formed
-- template.exec:
-    host.a:
-      - "{{ctx.cephadm}} ls --no-detail  | {{ctx.cephadm}} shell jq -r 'map(select(.name | startswith(\"smb.modusr1\")))[-1].name' > /tmp/svcname"
-      - "{{ctx.cephadm}} enter -n $(cat /tmp/svcname) ctdb status > /tmp/ctdb_status"
-      - cat /tmp/ctdb_status
-      - grep 'pnn:0 .*OK' /tmp/ctdb_status
-      - grep 'pnn:1 .*OK' /tmp/ctdb_status
-      - grep 'pnn:2 .*OK' /tmp/ctdb_status
-      - grep 'Number of nodes:3' /tmp/ctdb_status
-      - rm -rf /tmp/svcname /tmp/ctdb_status
+- smb.workunit:
+    admin_node: host.a
+    timeout: 15m
+    clients:
+      client.0:
+        - [ctdb_healthy]
 
 # Test the assigned VIP
 - template.exec:

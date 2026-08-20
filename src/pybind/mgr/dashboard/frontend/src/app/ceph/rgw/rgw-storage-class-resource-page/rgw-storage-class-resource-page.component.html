@@ -1,0 +1,49 @@
+@if (storageClassName) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Storage class details"
+        [columns]="4"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+    }
+    @case ('policy') {
+      <section class="storage-class-resource-section">
+        <h2
+          class="storage-class-resource-section__title cds--type-heading-03"
+          i18n
+        >
+          ACLs
+        </h2>
+        <p
+          class="storage-class-resource-section__description cds--type-body-compact-01"
+          i18n
+        >
+          View the access control list (ACL) policies associated with this storage class
+        </p>
+        @if (aclLoading) {
+          <cds-skeleton-text
+            [lines]="6"
+            [minLineWidth]="120"
+            [maxLineWidth]="360"
+          >
+          </cds-skeleton-text>
+        } @else {
+          <cd-table-key-value
+            [data]="aclKeyValueData"
+            [autoReload]="false"
+          >
+          </cd-table-key-value>
+        }
+      </section>
+    }
+  }
+} @else {
+  <cd-alert-panel
+    type="error"
+    i18n
+    >No storage class found.</cd-alert-panel
+  >
+}

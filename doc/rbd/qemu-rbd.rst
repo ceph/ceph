@@ -211,8 +211,8 @@ are explicitly set in the Ceph configuration file).
    in the Ceph configuration file, your Ceph settings override the QEMU cache
    settings.
 
-.. _QEMU Open Source Processor Emulator: http://wiki.qemu.org/Main_Page
-.. _QEMU Manual: http://wiki.qemu.org/Manual
+.. _QEMU Open Source Processor Emulator: https://wiki.qemu.org/Main_Page
+.. _QEMU Manual: https://wiki.qemu.org/Manual
 .. _RBD Cache: ../rbd-config-ref/
 .. _Snapshots: ../rbd-snapshot/
 .. _Installation: ../../install

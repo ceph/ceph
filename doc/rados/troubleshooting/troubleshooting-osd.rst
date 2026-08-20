@@ -1014,7 +1014,7 @@ being marked ``out`` (regardless of the current value of
 
 .. _subscribe to the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
-.. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
-.. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@lists.ceph.com
+.. _subscribe to the ceph-users email list: mailto:ceph-users-join@ceph.io
+.. _unsubscribe from the ceph-users email list: mailto:ceph-users-leave@ceph.io
 .. _OS recommendations: ../../../start/os-recommendations
 .. _ceph-devel: ceph-devel@vger.kernel.org

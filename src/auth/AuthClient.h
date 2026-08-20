@@ -7,10 +7,10 @@
 #include <string>
 #include <vector>
 #include "include/buffer_fwd.h"
+#include "include/common_fwd.h"
 
 class AuthConnectionMeta;
 class Connection;
-class CryptoKey;
 
 class AuthClient {
 public:

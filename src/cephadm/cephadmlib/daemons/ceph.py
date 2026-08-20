@@ -1,5 +1,7 @@
 import logging
 import os
+import json
+import time
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -19,13 +21,15 @@ from ..constants import (
 from ..context import CephadmContext
 from ..deployment_utils import to_deployment_container
 from ..exceptions import Error
-from ..call_wrappers import call_throws
+from ..call_wrappers import call, call_throws, CallVerbosity
 from ..file_utils import (
     make_run_dir,
     pathify,
     populate_files,
     makedirs,
+    read_file,
     recursive_chown,
+    write_new,
 )
 from ..data_utils import dict_get
 from ..host_facts import HostFacts
@@ -324,9 +328,11 @@ class OSD(Ceph):
         ctx: CephadmContext,
         ident: DaemonIdentity,
         osd_fsid: Optional[str] = None,
+        osd_dm_crypt_key: Optional[str] = None,
     ) -> None:
         super().__init__(ctx, ident)
         self._osd_fsid = osd_fsid
+        self._osd_dm_crypt_key: str = osd_dm_crypt_key or ''
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'OSD':
@@ -335,7 +341,8 @@ class OSD(Ceph):
             logger.info(
                 'Creating an OSD daemon form without an OSD FSID value'
             )
-        return cls(ctx, ident, osd_fsid)
+        osd_dm_crypt_key = getattr(ctx, 'osd_dm_crypt_key', None)
+        return cls(ctx, ident, osd_fsid, osd_dm_crypt_key)
 
     @staticmethod
     def get_sysctl_settings() -> List[str]:
@@ -360,6 +367,250 @@ class OSD(Ceph):
         ):
             return '/usr/bin/ceph-osd-crimson'
         return '/usr/bin/ceph-osd'
+
+    def rotate_osd_lv_keyring(
+        self, ctx: CephadmContext, keyring_path: str
+    ) -> None:
+        keyring_content = read_file([keyring_path])
+        if not keyring_content or keyring_content == 'Unknown':
+            raise Error(
+                f'Failed to find OSD keyring content at expected path: {keyring_path}'
+            )
+        actual_keyring = keyring_content
+        # if our keyring is the full thing with sections and caps, we don't want that
+        # just the actual keyring itself
+        try:
+            actual_keyring = (
+                keyring_content.split('key =', 1)[1]
+                .split('caps', 1)[0]
+                .strip()
+            )
+        except IndexError:
+            logger.error(
+                f'Failed to parse keyring from {keyring_content} for rotation of key for osd.{self.identity.daemon_id}'
+            )
+        c_v_container = CephContainer(
+            ctx,
+            image=ctx.image,
+            privileged=True,
+            entrypoint='ceph-volume',
+            args=[
+                'lvm',
+                'list',
+                str(self.identity.daemon_id),
+                '--format',
+                'json',
+            ],
+            volume_mounts=get_ceph_mounts_for_type(
+                ctx, ctx.fsid, 'ceph-volume'
+            ),
+        )
+        out, err, ret = call(
+            ctx,
+            c_v_container.run_cmd(),
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        if ret:
+            raise Error(
+                f'Got error using ceph-volume lvm list to get lv path for osd.{self.identity.daemon_id}\n'
+                f'Out:{out}\n'
+                f'Err:{err}'
+            )
+        osd_bluestore_data = json.loads(out)
+        lv_path = ''
+        encrypted = False
+        osd_lv_data = osd_bluestore_data.get(self.identity.daemon_id, [])
+        if not osd_lv_data:
+            logger.info(
+                'No lv data found for OSD.%s, checking for raw OSD',
+                self.identity.daemon_id,
+            )
+            c_v_container = CephContainer(
+                ctx,
+                image=ctx.image,
+                privileged=True,
+                entrypoint='ceph-volume',
+                args=[
+                    'raw',
+                    'list',
+                    '--format',
+                    'json',
+                ],
+                volume_mounts=get_ceph_mounts_for_type(
+                    ctx, ctx.fsid, 'ceph-volume'
+                ),
+            )
+            out, err, ret = call(
+                ctx,
+                c_v_container.run_cmd(),
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+            raw_list_data = json.loads(out)
+            for osd_data in raw_list_data.values():
+                if str(osd_data.get('osd_id', -1)) == str(
+                    self.identity.daemon_id
+                ):
+                    logger.info(
+                        'Found data for osd.%s in raw list',
+                        str(self.identity.daemon_id),
+                    )
+                    # misnomer since this isn't an LV, but it is the path
+                    # we need to pass to the bluestore tool
+                    lv_path = osd_data.get('device', None)
+        if osd_lv_data:
+            for dev in osd_lv_data:
+                if dev.get('type') == 'block':
+                    lv_path = dev.get('lv_path', '')
+                    encrypted = (
+                        dev.get('tags', {}).get('ceph.encrypted', '0') == '1'
+                    )
+        if not lv_path:
+            raise Error(
+                f'Failed to find lv path for osd with id "{self.identity.daemon_id}". Key not rotated using ceph-bluestore-tool'
+            )
+        if encrypted and not self._osd_dm_crypt_key:
+            raise Error(
+                f'Cannot rotate keyring for encrypted osd with id "{self.identity.daemon_id}" without dm-crypt key.'
+                'Key not rotated using ceph-bluestore-tool'
+            )
+        dev_path = lv_path
+
+        # OSD must be stopped to make changes to bluestore labels
+        logger.info(
+            f'Stopping osd.{self.identity.daemon_id} to update osd_key bluestore label'
+        )
+        call(
+            ctx,
+            [ctx.container_engine.path, 'stop', self.identity.container_name],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+
+        if encrypted:
+            dev_path = f'/dev/mapper/tmp_open_osd_{self._osd_fsid}'
+            cryptsetup_action = """#!/bin/bash
+DM_CRYPT_KEY=%s
+LV_PATH=%s
+DEV_NAME=%s
+
+echo "$DM_CRYPT_KEY" | cryptsetup luksOpen $LV_PATH $DEV_NAME
+""" % (
+                self._osd_dm_crypt_key,
+                lv_path,
+                dev_path.split('/')[-1],
+            )
+            helper_script_path = (
+                f'/tmp/cephadm-osd-{self.identity.daemon_id}-rotate-helper.sh'
+            )
+            with write_new(helper_script_path, perms=0o700) as f:
+                f.write(cryptsetup_action)
+            cryptsetup_open_container = CephContainer(
+                ctx,
+                image=ctx.image,
+                privileged=True,
+                entrypoint='/tmp/cryptsetup_action.sh',
+                volume_mounts={
+                    '/dev': '/dev',
+                    helper_script_path: '/tmp/cryptsetup_action.sh',
+                },
+            )
+            logger.info(
+                f'Opening osd.{self.identity.daemon_id} with crypsetup'
+            )
+            out, err, ret = call(
+                ctx,
+                cryptsetup_open_container.run_cmd(),
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+            os.remove(helper_script_path)
+            if ret:
+                raise Error(
+                    'Got error rotating osd keyring while using cryptsetup tool\n'
+                    f'Out:{out}\n'
+                    f'Err:{err}'
+                )
+
+        bluestore_tool_container = CephContainer(
+            ctx,
+            image=ctx.image,
+            privileged=True,
+            entrypoint='ceph-bluestore-tool',
+            args=[
+                '--dev',
+                dev_path,
+                'set-label-key',
+                '-k',
+                'osd_key',
+                '-v',
+                actual_keyring,
+            ],
+            volume_mounts={'/dev': '/dev'},
+        )
+        logger.info(
+            f'Rotating osd.{self.identity.daemon_id} key with ceph-bluestore-tool'
+        )
+        # The OSD may take some time to shutdown fully and make the device
+        # available for the key rotation
+        for i in [2, 5, 10, 30, 0]:
+            if not i:
+                break
+            out, err, ret = call(
+                ctx,
+                bluestore_tool_container.run_cmd(),
+                verbosity=CallVerbosity.VERBOSE,
+            )
+            if ret:
+                if not i:
+                    raise Error(
+                        'Got error rotating osd keyring using ceph-bluestore-tool\n'
+                        f'Out:{out}\n'
+                        f'Err:{err}'
+                    )
+                logger.info(
+                    f'Got issue rotating osd keyring using ceph-bluestore-tool:\n{out}\n{err}\nRetrying in {i} seconds'
+                )
+                time.sleep(i)
+            else:
+                logger.info(
+                    f'Successfully rotated osd.{self.identity.daemon_id} keyring'
+                )
+                break
+
+        if encrypted:
+            cryptsetup_close_container = CephContainer(
+                ctx,
+                image=ctx.image,
+                privileged=True,
+                entrypoint='cryptsetup',
+                args=[
+                    'luksClose',
+                    dev_path,
+                ],
+                volume_mounts={
+                    '/dev': '/dev',
+                },
+            )
+            out, err, ret = call(
+                ctx,
+                cryptsetup_close_container.run_cmd(),
+                verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+            )
+            if ret:
+                raise Error(
+                    'Got error rotating osd keyring while using cryptsetup tool\n'
+                    f'Out:{out}\n'
+                    f'Err:{err}'
+                )
+
+        call(
+            ctx,
+            ['systemctl', 'reset-failed', self.identity.unit_name],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        call(
+            ctx,
+            ['systemctl', 'start', self.identity.unit_name],
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
 
 
 @register_daemon_form

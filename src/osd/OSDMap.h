@@ -1766,7 +1766,7 @@ public:
 
   bool have_pg_upmaps(pg_t pg) const {
     return pg_upmap.count(pg) ||
-      pg_upmap_items.count(pg);
+      pg_upmap_items.count(pg) || pg_upmap_primaries.count(pg);
   }
 
   bool check_full(const std::set<pg_shard_t> &missing_on) const {

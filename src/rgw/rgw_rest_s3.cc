@@ -3097,7 +3097,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     bufferlist* manifest_bl)
 {
   static constexpr bool copy_source = true;
-  rgw_crypt_src_identity src_identity{copy_source_bucket_info.bucket.bucket_id, copy_source_bucket_name, copy_source_object_name};
+  rgw_crypt_src_identity src_identity{copy_source_bucket_info.bucket.marker, copy_source_bucket_name, copy_source_object_name};
   // part_num=0 for copy source (full object read)
   return ::get_decrypt_filter(filter, cb, s, attrs, manifest_bl, nullptr, copy_source,
                               0, 0, &src_identity);
@@ -6511,7 +6511,7 @@ AWSGeneralAbstractor::get_v4_canonical_headers(
   const std::string_view& signedheaders,
   const bool using_qs) const
 {
-  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+  return rgw::auth::s3::get_v4_canonical_headers(cct, info, signedheaders,
                                                  using_qs, false);
 }
 
@@ -6929,7 +6929,7 @@ AWSGeneralBoto2Abstractor::get_v4_canonical_headers(
   const std::string_view& signedheaders,
   const bool using_qs) const
 {
-  return rgw::auth::s3::get_v4_canonical_headers(info, signedheaders,
+  return rgw::auth::s3::get_v4_canonical_headers(cct, info, signedheaders,
                                                  using_qs, true);
 }
 
@@ -7352,24 +7352,14 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
     return -EINVAL;
   }
 
-  auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
-  if (! cryptohandler) {
-    return -EINVAL;
-  }
-  string secret_s = cct->_conf->rgw_sts_key;
-  if (secret_s.empty()) {
+  if (cct->_conf->rgw_sts_key.empty()) {
     ldpp_dout(dpp, 1) << "ERROR: rgw sts key not set" << dendl;
     return -EINVAL;
   }
-  buffer::ptr secret(secret_s.c_str(), secret_s.length());
-  int ret = 0;
-  if (ret = cryptohandler->validate_secret(secret); ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: Invalid secret key" << dendl;
-    return -EINVAL;
-  }
   string error;
-  std::unique_ptr<CryptoKeyHandler> keyhandler(cryptohandler->get_key_handler(secret, error));
+  auto keyhandler = STS::secret_to_handler(cct, cct->_conf->rgw_sts_key, error);
   if (! keyhandler) {
+    ldpp_dout(dpp, 0) << "Invalid rgw sts key; " << error << dendl;
     return -EINVAL;
   }
   error.clear();
@@ -7378,7 +7368,7 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
   buffer::list en_input, dec_output;
   en_input = buffer::list::static_from_string(decodedSessionToken);
 
-  ret = keyhandler->decrypt(en_input, dec_output, &error);
+  int ret = keyhandler->decrypt_ext(cct, 14, en_input, dec_output, &error);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;

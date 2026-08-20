@@ -209,6 +209,6 @@ radosgw would fetch the secret from::
 
   pykmip-mybucketkey
 
-.. _KMIP: http://www.oasis-open.org/committees/kmip/
+.. _KMIP: https://www.oasis-open.org/committees/kmip/
 .. _SKLM: https://www.ibm.com/products/ibm-security-key-lifecycle-manager
 .. _PyKMIP: https://pykmip.readthedocs.io/en/latest/

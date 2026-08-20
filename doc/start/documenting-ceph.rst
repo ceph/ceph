@@ -361,67 +361,33 @@ For Fedora distributions, run the following commands:
 
 .. prompt:: bash $
 
-   sudo yum install gcc python-devel python-pip libxml2-devel libxslt-devel doxygen graphviz ant
-   sudo pip install html2text
-   sudo yum install python-jinja2 python-pygments python-docutils python-sphinx
-   sudo yum install jericho-html ditaa
+   sudo dnf install gcc python3-devel python3-pip libxml2-devel libxslt-devel doxygen graphviz ant ditaa
+   sudo dnf install python3-sphinx
 
 For CentOS/RHEL distributions, it is recommended to enable the ``epel`` (Extra
 Packages for Enterprise Linux) repository, because it provides extra packages
-not available in the default repository. To install ``epel``, run the following
-command:
+not available in the default repository. To install ``epel``, run the
+following command:
 
 .. prompt:: bash $
 
-   sudo yum install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
+   sudo dnf install epel-release
 
-For CentOS/RHEL distributions, run the following commands:
-
-.. prompt:: bash $
-
-   sudo yum install gcc python-devel python-pip libxml2-devel libxslt-devel doxygen graphviz ant
-   sudo pip install html2text
-
-For CentOS/RHEL distributions, the remaining Python packages are not available
-in the default repositories or  the ``epel`` repositories. Use
-http://rpmfind.net/ to find the packages. Then download them from a mirror and
-install them. For example:
+For CentOS/RHEL distributions, run the following command:
 
 .. prompt:: bash $
 
-    wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-jinja2-2.7.2-2.el7.noarch.rpm
-    sudo yum install python-jinja2-2.7.2-2.el7.noarch.rpm
-    wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-pygments-1.4-9.el7.noarch.rpm
-    sudo yum install python-pygments-1.4-9.el7.noarch.rpm
-    wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-docutils-0.11-0.2.20130715svn7687.el7.noarch.rpm
-    sudo yum install python-docutils-0.11-0.2.20130715svn7687.el7.noarch.rpm
-    wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-sphinx-1.1.3-11.el7.noarch.rpm
-    sudo yum install python-sphinx-1.1.3-11.el7.noarch.rpm
+   sudo dnf install gcc python3-devel python3-pip libxml2-devel libxslt-devel doxygen graphviz ant
 
-Ceph documentation makes extensive use of `ditaa`_, which is not built for
-CentOS/RHEL. If you make changes to ``ditaa`` diagrams, you must install
-``ditaa`` to verify that they render properly before you commit your changes.
-You may retrieve compatible required packages for CentOS/RHEL distributions and
-install them manually. To run ``ditaa`` on CentOS/RHEL, following dependencies
-are required:
+The Python packages used to build the documentation, such as Sphinx,
+do not need to be installed system-wide: the ``admin/build-doc``
+script installs them into a Python virtual environment automatically.
 
-- jericho-html
-- jai-imageio-core
-- batik
-
-Use http://rpmfind.net/ to find compatible ``ditaa`` and its dependencies.
-Then download them from a mirror and install them. For example:
-
-.. prompt:: bash $
-
-    wget http://rpmfind.net/linux/fedora/linux/releases/22/Everything/x86_64/os/Packages/j/jericho-html-3.3-4.fc22.noarch.rpm
-    sudo yum install jericho-html-3.3-4.fc22.noarch.rpm
-    wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/jai-imageio-core-1.2-0.14.20100217cvs.el7.noarch.rpm
-    sudo yum install jai-imageio-core-1.2-0.14.20100217cvs.el7.noarch.rpm
-    wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/batik-1.8-0.12.svn1230816.el7.noarch.rpm
-    sudo yum install batik-1.8-0.12.svn1230816.el7.noarch.rpm
-    wget http://rpmfind.net/linux/fedora/linux/releases/22/Everything/x86_64/os/Packages/d/ditaa-0.9-13.r74.fc21.noarch.rpm
-    sudo yum install ditaa-0.9-13.r74.fc21.noarch.rpm
+Ceph documentation makes extensive use of `ditaa`_. If you make
+changes to ``ditaa`` diagrams, install the ``ditaa`` package from your
+distribution's repositories (on CentOS/RHEL it is available from
+``epel``) to verify that the diagrams render properly before you
+commit your changes.
 
 After you have installed these packages, build the documentation by following
 the steps in `Build the Source`_.

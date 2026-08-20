@@ -82,7 +82,10 @@ extern rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, boost::asio::io_co
 
 #ifdef WITH_RADOSGW_RADOS
 extern std::optional<neorados::RADOS>
-make_neorados(CephContext* cct, boost::asio::io_context& io_context);
+make_neorados(
+    CephContext* cct,
+    boost::asio::io_context& io_context,
+    std::optional<std::string> objecter_admin_socket_name);
 #endif
 
 rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider* dpp,
@@ -137,7 +140,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #ifdef WITH_RADOSGW_RADOS
   else if (cfg.store_name.compare("d3n") == 0) {
-    auto neorados = make_neorados(cct, io_context);
+    auto neorados = make_neorados(cct, io_context, "RadosStore");
     if (!neorados) {
       return nullptr;
     }

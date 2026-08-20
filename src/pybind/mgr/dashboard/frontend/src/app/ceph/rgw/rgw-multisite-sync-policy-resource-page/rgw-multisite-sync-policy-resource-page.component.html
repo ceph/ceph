@@ -1,0 +1,149 @@
+@if (hasPolicyGroup) {
+  @switch (section) {
+    @case ('overview') {
+      <cd-resource-overview-card
+        i18n-title
+        title="Sync policy details"
+        [columns]="4"
+        [fields]="overviewFields"
+      >
+      </cd-resource-overview-card>
+    }
+    @case ('symmetrical-flows') {
+      <h2
+        class="multisite-sync-policy-section__title cds--type-heading-03"
+        i18n
+      >
+        Symmetrical Flows
+      </h2>
+      <p
+        class="multisite-sync-policy-section__description cds--type-body-compact-01"
+        i18n
+      >
+        Define symmetrical data flow, in which multiple zones sync data from each other.
+      </p>
+      <cd-table
+        #table
+        [autoReload]="false"
+        [data]="symmetricalFlowData"
+        [columns]="symmetricalFlowCols"
+        columnMode="flex"
+        selectionType="multiClick"
+        [searchableObjects]="true"
+        [hasDetails]="false"
+        [serverSide]="false"
+        [count]="0"
+        [maxLimit]="25"
+        [toolHeader]="true"
+        (updateSelection)="updateSelection($event, flowType.symmetrical)"
+        (fetchData)="loadData($event)"
+      >
+        <div class="table-actions">
+          <cd-table-actions
+            [permission]="permission"
+            [selection]="symFlowSelection"
+            class="btn-group"
+            [tableActions]="symFlowTableActions"
+          >
+          </cd-table-actions>
+        </div>
+      </cd-table>
+    }
+    @case ('directional-flows') {
+      <h2
+        class="multisite-sync-policy-section__title cds--type-heading-03"
+        i18n
+      >
+        Directional Flows
+      </h2>
+      <p
+        class="multisite-sync-policy-section__description cds--type-body-compact-01"
+        i18n
+      >
+        Define directional data flow, in which the data moves in one way, from one zone to another.
+      </p>
+      <cd-table
+        #table
+        [autoReload]="false"
+        [data]="directionalFlowData"
+        [columns]="directionalFlowCols"
+        columnMode="flex"
+        selectionType="multiClick"
+        [searchableObjects]="true"
+        [hasDetails]="false"
+        [serverSide]="false"
+        [count]="0"
+        [maxLimit]="25"
+        [toolHeader]="true"
+        (updateSelection)="updateSelection($event, flowType.directional)"
+        (fetchData)="loadData($event)"
+      >
+        <div class="table-actions">
+          <cd-table-actions
+            [permission]="permission"
+            [selection]="dirFlowSelection"
+            class="btn-group"
+            [tableActions]="dirFlowTableActions"
+          >
+          </cd-table-actions>
+        </div>
+      </cd-table>
+    }
+    @case ('pipe') {
+      <h2
+        class="multisite-sync-policy-section__title cds--type-heading-03"
+        i18n
+      >
+        Pipe
+      </h2>
+      <p
+        class="multisite-sync-policy-section__description cds--type-body-compact-01"
+        i18n
+      >
+        Define a pipe, which specifies the actual buckets that can use these data flows, and the
+        properties associated with it.
+      </p>
+      <cd-table
+        #table
+        [autoReload]="false"
+        [data]="pipeData"
+        [columns]="pipeCols"
+        selectionType="multiClick"
+        [searchableObjects]="true"
+        [hasDetails]="false"
+        [serverSide]="false"
+        [count]="0"
+        [maxLimit]="25"
+        [toolHeader]="true"
+        (updateSelection)="pipeSelection = $event"
+        (fetchData)="loadData($event)"
+      >
+        <div class="table-actions">
+          <cd-table-actions
+            [permission]="permission"
+            [selection]="pipeSelection"
+            class="btn-group"
+            [tableActions]="pipeTableActions"
+          >
+          </cd-table-actions>
+        </div>
+      </cd-table>
+    }
+  }
+} @else if (notFound) {
+  <cd-alert-panel
+    type="error"
+    i18n
+  >
+    No sync policy group found.
+  </cd-alert-panel>
+}
+
+<ng-template #deleteTpl>
+  <cd-alert-panel
+    type="danger"
+    i18n
+  >
+    Deleting {{ resourceType | upperFirst }} may disrupt data synchronization
+  </cd-alert-panel>
+</ng-template>

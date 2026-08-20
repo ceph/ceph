@@ -49,21 +49,27 @@ def _wait_for_ctdb_status(
 
 @pytest.mark.ctdb_healthy
 def test_ctdb_cluster_healthy(smb_cfg):
-    """After deploy with placement count:3, CTDB reports three OK nodes."""
-    cluster_id = _cluster_id(smb_cfg)
-    _wait_for_ctdb_status(
-        smb_cfg,
-        cluster_id,
-        [
-            re.compile(r'pnn:0 .*OK'),
-            re.compile(r'pnn:1 .*OK'),
-            re.compile(r'pnn:2 .*OK'),
-            re.compile(r'Number of nodes:3'),
-        ],
-        # allow CTDB a bit of time after orch reports the service running
-        attempts=12,
-        sleep_s=10,
-    )
+    """After deploy with placement count:3, CTDB reports three OK nodes.
+
+    Checks every unique cluster_id present in shares so multi-cluster
+    deploys (e.g. ports2c) wait for each CTDB cluster, not only the first.
+    """
+    cluster_ids = sorted({s['cluster_id'] for s in smbutil.get_shares(smb_cfg)})
+    matchers = [
+        re.compile(r'pnn:0 .*OK'),
+        re.compile(r'pnn:1 .*OK'),
+        re.compile(r'pnn:2 .*OK'),
+        re.compile(r'Number of nodes:3'),
+    ]
+    for cluster_id in cluster_ids:
+        _wait_for_ctdb_status(
+            smb_cfg,
+            cluster_id,
+            matchers,
+            # allow CTDB a bit of time after orch reports the service running
+            attempts=12,
+            sleep_s=10,
+        )
 
 
 @pytest.mark.ctdb_node_gone

@@ -428,10 +428,10 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
                               rgw_bucket& bucket,
 			      optional_yield y)
 {
-  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.bucket_suspended()) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
-    return -ERR_USER_SUSPENDED;
+    return -ERR_BUCKET_SUSPENDED;
   }
 
   if (bucket.name.empty()) {
@@ -465,10 +465,10 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   std::unique_ptr<rgw::sal::Object> mpobj;
   rgw_obj obj;
 
-  if (!s->auth.identity->is_admin() && bucket_info.flags & BUCKET_SUSPENDED) {
+  if (!s->auth.identity->is_admin() && bucket_info.bucket_suspended()) {
     ldpp_dout(dpp, 0) << "NOTICE: bucket " << bucket_info.bucket.name
         << " is suspended" << dendl;
-    return -ERR_USER_SUSPENDED;
+    return -ERR_BUCKET_SUSPENDED;
   }
 
   // when getting policy info for copy-source obj, upload_id makes no sense.
@@ -617,6 +617,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     ret = read_bucket_policy(dpp, driver, s, s->bucket->get_info(),
 			     s->bucket->get_attrs(),
 			     s->bucket_acl, s->bucket->get_key(), y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "failed to read bucket policy, err: "
+          << cpp_strerror(ret) << dendl;
+      return ret;
+    }
 
     s->bucket_owner = s->bucket_acl.get_owner();
     acct_acl_user = &s->bucket_owner;
@@ -1177,6 +1182,18 @@ int handle_cloudtier_obj(req_state* s, const DoutPrefixProvider *dpp, rgw::sal::
       auto iter = bl.cbegin();
       decode(restore_status, iter);
     }
+
+    // Non-versioned bucket: only the implicit version exists. Versionless
+    // requests on versioned buckets need no handling here; s->object
+    // already carries the OLH-resolved current version from the head read.
+    if (!s->bucket->versioned() && s->object->have_instance()) {
+      if (!s->object->get_key().have_null_instance()) {
+        s->err.message = "versionId is not allowed for a non-versioned bucket";
+        return -ERR_INVALID_REQUEST;
+      }
+      s->object->set_instance("");
+    }
+
     if (restore_status == rgw::sal::RGWRestoreStatus::RestoreAlreadyInProgress) {
       if (read_through) {
         // For glacier tier, fail immediately as restores can take hours/days
@@ -3117,10 +3134,15 @@ void RGWGetUsage::execute(optional_yield y)
   bool is_truncated = true;
 
   RGWUsageIter usage_iter;
-  
-  while (s->bucket && is_truncated) {
-    op_ret = s->bucket->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
+
+  while (is_truncated) {
+    if (s->bucket) {
+      op_ret = s->bucket->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
+				     usage_iter, usage);
+    } else {
+      op_ret = s->user->read_usage(this, start_epoch, end_epoch, max_entries, &is_truncated,
 				   usage_iter, usage);
+    }
     if (op_ret == -ENOENT) {
       op_ret = 0;
       is_truncated = false;
@@ -3128,7 +3150,7 @@ void RGWGetUsage::execute(optional_yield y)
 
     if (op_ret < 0) {
       return;
-    }    
+    }
   }
 
   op_ret = rgw_sync_all_stats(this, y, driver, s->user->get_id(),

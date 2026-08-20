@@ -85,10 +85,8 @@ void publish_commit_completion(rados_completion_t completion, void* arg) {
 class Manager : public DoutPrefixProvider {
   using Executor = boost::asio::io_context::executor_type;
   bool shutdown = false;
-  static constexpr auto queues_update_period = std::chrono::milliseconds(30000); // 30s
   static constexpr auto queues_update_retry = std::chrono::milliseconds(1000); // 1s
   static constexpr auto queue_idle_sleep = std::chrono::milliseconds(100); // 100ms
-  const utime_t failover_time = utime_t(queues_update_period*3); // 90s
   CephContext* const cct;
   static constexpr auto COOKIE_LEN = 16;
   const std::string lock_cookie;
@@ -683,6 +681,12 @@ private:
     auto& rados_ioctx = rados_store->getRados()->get_notif_pool_ctx();
     auto next_check_time = ceph::coarse_real_clock::zero();
     while (!shutdown) {
+      // both the refresh period and the ownership timeout are derived from the
+      // same read, so the renewal cadence always stays shorter than the lock
+      // duration, even if the option is changed at runtime
+      const auto queues_update_period = std::chrono::seconds(
+          cct->_conf.get_val<uint64_t>("rgw_topic_ownership_update_period"));
+      const utime_t failover_time = utime_t(queues_update_period*3);
       // check if queue list needs to be refreshed
       if (ceph::coarse_real_clock::now() > next_check_time) {
         next_check_time = ceph::coarse_real_clock::now() + queues_update_period;

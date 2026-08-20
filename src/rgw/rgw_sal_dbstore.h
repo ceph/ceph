@@ -217,6 +217,7 @@ protected:
     virtual bool allow_read_through() { return tier.allow_read_through; }
     virtual uint64_t get_read_through_restore_days() { return tier.read_through_restore_days; }
     virtual bool retain_head_object() { return tier.retain_head_object; }
+    virtual bool retain_current_version() { return tier.retain_current_version; }
     RGWZoneGroupPlacementTier& get_rt() { return tier; }
   };
 
@@ -619,7 +620,10 @@ protected:
           Attrs* vals) override;
       virtual int omap_set_val_by_key(const DoutPrefixProvider *dpp, const std::string& key, bufferlist& val,
           bool must_exist, optional_yield y) override;
-      virtual int chown(User& new_user, const DoutPrefixProvider* dpp, optional_yield y) override;
+      virtual int chown(const DoutPrefixProvider* dpp,
+                        const rgw_owner& new_owner,
+                        const std::string& new_owner_name,
+                        optional_yield y) override;
     private:
       int read_attrs(const DoutPrefixProvider* dpp, DB::Object::Read &read_op, optional_yield y, rgw_obj* target_obj = nullptr);
   };

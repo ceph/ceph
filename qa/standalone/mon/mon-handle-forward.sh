@@ -27,7 +27,7 @@ function run() {
     (
         FSID=$(uuidgen)
         export CEPH_ARGS
-        CEPH_ARGS+="--fsid=$FSID --auth-supported=none "
+        CEPH_ARGS+="--fsid=$FSID --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
         CEPH_ARGS+="--mon-host=$MONA,$MONB "
         run_mon $dir a --public-addr $MONA || return 1
         run_mon $dir b --public-addr $MONB || return 1

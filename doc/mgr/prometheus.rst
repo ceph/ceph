@@ -206,10 +206,10 @@ encountered since the last ``clear`` command was issued:
     3 health check(s) listed
 
 
-RBD IO statistics
------------------
+RBD I/O statistics
+------------------
 
-The ``prometheus`` module can optionally collect RBD per-image IO statistics by enabling
+The ``prometheus`` module can optionally collect RBD per-image I/O statistics by enabling
 dynamic OSD performance counters. Statistics are gathered for all images
 in the pools that are specified by the ``mgr/prometheus/rbd_stats_pools``
 configuration parameter. The parameter is a comma or space separated list

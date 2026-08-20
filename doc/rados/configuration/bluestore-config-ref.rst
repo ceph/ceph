@@ -385,7 +385,7 @@ SPDK Usage
 To use the SPDK driver for NVMe devices, you must first prepare your system.
 See `SPDK document`__.
 
-.. __: http://www.spdk.io/doc/getting_started.html#getting_started_examples
+.. __: https://www.spdk.io/doc/getting_started.html#getting_started_examples
 
 SPDK offers a script that will configure the device automatically. Run this
 script with root permissions:

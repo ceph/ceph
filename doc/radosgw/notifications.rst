@@ -88,6 +88,7 @@ which tells the client that it may retry later.
 Persistent bucket notifications are managed by the following central configuration options:
 
 .. confval:: rgw_bucket_persistent_notif_num_shards
+.. confval:: rgw_topic_ownership_update_period
 
 .. note:: When a topic is created during a Ceph upgrade, per-key reordering of notifications may
    happen on any bucket mapped to that topic.

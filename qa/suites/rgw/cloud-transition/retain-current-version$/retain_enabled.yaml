@@ -1,0 +1,5 @@
+overrides:
+  rgw-cloudtier:
+    client.0:
+      cloud_retain_head_object: "true"
+      cloud_retain_current_version: "true"

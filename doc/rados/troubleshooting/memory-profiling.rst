@@ -187,7 +187,7 @@ For example:
    ceph tell osd.0 heap stop_profiler
 
 .. _Logging and Debugging: ../log-and-debug
-.. _Google Heap Profiler: http://goog-perftools.sourceforge.net/doc/heap_profiler.html
+.. _Google Heap Profiler: https://goog-perftools.sourceforge.net/doc/heap_profiler.html
 
 Alternative Methods of  Memory Profiling
 ----------------------------------------

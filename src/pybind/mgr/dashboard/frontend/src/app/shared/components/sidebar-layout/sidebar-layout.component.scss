@@ -37,6 +37,10 @@
 .sidebar-layout-main {
   margin-left: layout.rem(272px);
 
+  &.no-sidebar {
+    margin-left: var(--cds-spacing-05);
+  }
+
   .cds--table-toolbar {
     background-color: var(--cds-layer-03);
   }

@@ -201,6 +201,7 @@ class Namespace(NamedTuple):
     rbd_image_name: Annotated[str, CliHeader("RBD Image")]
     rados_namespace_name: Annotated[Optional[str], CliHeader("RADOS Namespace")]
     rbd_pool_name: Annotated[str, CliHeader("RBD Pool")]
+    rbd_data_pool_name: Annotated[str, CliHeader("RBD Data Pool")]
     load_balancing_group: Annotated[int, CliHeader('LB Group')]
     rbd_image_size: Annotated[int, CliFlags.SIZE]
     block_size: Annotated[int, CliFlags.SIZE]
@@ -217,8 +218,9 @@ class Namespace(NamedTuple):
     disable_auto_resize: Optional[bool]
     read_only: Optional[bool]
     location: Optional[str]
-    encryption_algorithm: Optional[str]
     encryption_entries: Annotated[List[EncryptionEntry], CliFlags.EXCLUSIVE_LIST]
+    degraded: Optional[bool]
+    pinned: Optional[bool]
 
 
 class NamespaceList(NamedTuple):

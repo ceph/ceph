@@ -26,7 +26,7 @@ For example::
 
   sudo rbd device map rbd/myimage --id admin
  
-If you use `cephx`_ authentication, you must also specify a secret.  It may come
+If you use :ref:`CephX <user-management>` authentication, you must also specify a secret.  It may come
 from a keyring or a file containing the secret. ::
 
   sudo rbd device map rbd/myimage --id admin --keyring /path/to/keyring
@@ -55,5 +55,3 @@ For example::
 
 	sudo rbd device unmap /dev/rbd/rbd/foo
 
-
-.. _cephx: ../../rados/operations/user-management/

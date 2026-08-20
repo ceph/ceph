@@ -17,6 +17,9 @@ import { InventoryComponent } from './ceph/cluster/inventory/inventory.component
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
+import { MgrModuleResourceBreadcrumbResolver } from './ceph/cluster/mgr-modules/mgr-module-resource-page/mgr-module-resource-breadcrumb.resolver';
+import { MgrModuleResourcePageComponent } from './ceph/cluster/mgr-modules/mgr-module-resource-page/mgr-module-resource-page.component';
+import { MgrModuleResourceSidebarComponent } from './ceph/cluster/mgr-modules/mgr-module-resource-sidebar/mgr-module-resource-sidebar.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
@@ -62,6 +65,9 @@ import { SmbJoinAuthFormComponent } from './ceph/smb/smb-join-auth-form/smb-join
 import { SmbUsersgroupsFormComponent } from './ceph/smb/smb-usersgroups-form/smb-usersgroups-form.component';
 import { NfsClusterComponent } from './ceph/nfs/nfs-cluster/nfs-cluster.component';
 import { SmbClusterListComponent } from './ceph/smb/smb-cluster-list/smb-cluster-list.component';
+import { SmbClusterResourceSidebarComponent } from './ceph/smb/smb-cluster-resource-sidebar/smb-cluster-resource-sidebar.component';
+import { SmbClusterResourcePageComponent } from './ceph/smb/smb-cluster-resource-page/smb-cluster-resource-page.component';
+import { SmbClusterResourceBreadcrumbResolver } from './ceph/smb/smb-cluster-resource-page/smb-cluster-resource-breadcrumb.resolver';
 import { SmbJoinAuthListComponent } from './ceph/smb/smb-join-auth-list/smb-join-auth-list.component';
 import { SmbUsersgroupsListComponent } from './ceph/smb/smb-usersgroups-list/smb-usersgroups-list.component';
 import { SmbOverviewComponent } from './ceph/smb/smb-overview/smb-overview.component';
@@ -187,7 +193,7 @@ const routes: Routes = [
           {
             path: 'daemons',
             component: HostResourcePageComponent,
-            data: { breadcrumbs: 'Daemons', section: 'daemons' }
+            data: { breadcrumbs: 'Service instances', section: 'daemons' }
           },
           {
             path: 'performance',
@@ -446,6 +452,22 @@ const routes: Routes = [
             data: {
               breadcrumbs: StartCaseBreadcrumbsResolver
             }
+          },
+          {
+            path: ':name',
+            component: MgrModuleResourceSidebarComponent,
+            data: {
+              breadcrumbs: MgrModuleResourceBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: MgrModuleResourcePageComponent,
+                data: { breadcrumbs: 'Overview', section: 'overview' }
+              }
+            ]
           }
         ]
       },
@@ -550,7 +572,7 @@ const routes: Routes = [
               { path: '', component: SmbClusterListComponent },
               {
                 path: 'cluster',
-                data: { breadcrumbs: 'Cluster' },
+                data: { breadcrumbs: 'Clusters' },
                 children: [
                   { path: '', component: SmbClusterListComponent },
                   {
@@ -562,6 +584,22 @@ const routes: Routes = [
                     path: `${URLVerbs.EDIT}/:cluster_id`,
                     component: SmbClusterFormComponent,
                     data: { breadcrumbs: ActionLabels.EDIT }
+                  },
+                  {
+                    path: ':cluster_id',
+                    component: SmbClusterResourceSidebarComponent,
+                    data: {
+                      breadcrumbs: SmbClusterResourceBreadcrumbResolver,
+                      showBreadcrumbsLayout: false
+                    },
+                    children: [
+                      { path: '', redirectTo: 'overview', pathMatch: 'full' },
+                      {
+                        path: 'overview',
+                        component: SmbClusterResourcePageComponent,
+                        data: { breadcrumbs: 'Overview', section: 'overview' }
+                      }
+                    ]
                   }
                 ]
               },

@@ -74,7 +74,7 @@ Run the following command to reset ``oprofile``:
    results from prior tests do not get mixed in with the results of the current
    test. 
 
-.. _oprofile: http://oprofile.sourceforge.net/about/
+.. _oprofile: https://oprofile.sourceforge.net/about/
 .. _Installing Oprofile: ../../../dev/cpu-profiler
 
 

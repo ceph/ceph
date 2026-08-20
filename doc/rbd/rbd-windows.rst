@@ -91,7 +91,7 @@ The following sample imports an RBD image and boots a Hyper-V VM using it::
     # Feel free to use any other image. This one is convenient to use for
     # testing purposes because it's very small (~15MB) and the login prompt
     # prints the pre-configured password.
-    wget http://download.cirros-cloud.net/0.5.1/cirros-0.5.1-x86_64-disk.img `
+    wget https://download.cirros-cloud.net/0.5.1/cirros-0.5.1-x86_64-disk.img `
          -OutFile cirros-0.5.1-x86_64-disk.img
 
     # We'll need to make sure that the imported images are raw (so no qcow2 or vhdx).
@@ -198,7 +198,7 @@ Hyper-V disk addressing
 There are a few possible ways of avoiding this Hyper-V limitation:
 
 * use an NTFS/ReFS partition to store VHDX image files instead of directly
-  attaching the RBD image. This may slightly impact the IO performance.
+  attaching the RBD image. This may slightly impact the I/O performance.
 * use the Hyper-V ``AutomaticStartAction`` setting to prevent the VMs from
   booting with the incorrect disks and have a script that updates VM disks
   attachments before powering them back on. The ``ElementName`` field of the

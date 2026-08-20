@@ -123,9 +123,9 @@ WRITE_CLASS_ENCODER(rgw_lc_multipart_upload_info)
 
 static inline string get_key_instance(const rgw_obj_key& key)
 {
-  // if non-current entry, add versionID to the
-  // transitioned object name including "null".
-  if (!key.instance.empty()) {
+  // if non-current entry, add the encoded version id to the
+  // transitioned object name.
+  if (key.need_to_encode_instance()) {
     return "-" + key.instance;
   }
   return "";
@@ -157,7 +157,9 @@ static inline string make_target_obj_name(const RGWLCCloudTierCtx& tier_ctx)
     target_obj_name = tier_ctx.bucket_info.bucket.name + "/" +
                       tier_ctx.obj->get_name();
   }
-  if (!tier_ctx.o.is_current()) {
+  /** Append version ID for non-current objects (existing behavior),
+   * or for current objects when retain_current_version is enabled */
+  if (!tier_ctx.o.is_current() || tier_ctx.retain_current_version) {
     target_obj_name += get_key_instance(tier_ctx.obj->get_key());
   }
   return target_obj_name;

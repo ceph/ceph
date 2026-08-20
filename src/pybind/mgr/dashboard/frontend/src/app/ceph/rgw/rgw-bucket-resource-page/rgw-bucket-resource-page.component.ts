@@ -7,6 +7,7 @@ import { ContentSwitcherOption } from 'carbon-components-angular';
 
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { Bucket } from '../models/rgw-bucket';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { RgwBucketReplication } from '../models/rgw-bucket-replication';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
@@ -15,6 +16,7 @@ import { OverviewField } from '~/app/shared/components/resource-overview-card/re
   selector: 'cd-rgw-bucket-resource-page',
   templateUrl: './rgw-bucket-resource-page.component.html',
   styleUrls: ['./rgw-bucket-resource-page.component.scss'],
+  providers: [CdDatePipe],
   encapsulation: ViewEncapsulation.None,
   standalone: false
 })
@@ -63,7 +65,8 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
   constructor(
     private route: ActivatedRoute,
     private rgwBucketService: RgwBucketService,
-    private cd: ChangeDetectorRef
+    private cd: ChangeDetectorRef,
+    private cdDatePipe: CdDatePipe
   ) {}
 
   ngOnInit(): void {
@@ -265,7 +268,10 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
         emptyText: $localize`No Limit`
       },
       { label: $localize`Number of Shards`, value: this.selection?.num_shards },
-      { label: $localize`Last modification time`, value: this.selection?.mtime },
+      {
+        label: $localize`Last modification time`,
+        value: this.cdDatePipe.transform(this.selection?.mtime)
+      },
       ...this.toFields(this.overviewData),
       ...this.toFields(this.quotaData)
     ];

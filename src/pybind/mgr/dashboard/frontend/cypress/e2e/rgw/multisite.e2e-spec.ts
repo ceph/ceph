@@ -38,7 +38,7 @@ describe('Multisite page', () => {
 
     it('should delete policy', () => {
       multisite.navigateTo();
-      multisite.delete('test', null, null, true, true);
+      multisite.delete('test', null, null, true, false, false, false);
     });
   });
 

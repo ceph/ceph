@@ -1040,6 +1040,15 @@ class HostCache():
         self.mgr.inventory.update_known_hostnames(hostnames[0], hostnames[1], hostnames[2])
         self.last_facts_update[host] = datetime_now()
 
+    def get_host_fips_enabled(self, host: str) -> Optional[bool]:
+        facts = self.get_facts(host)
+        value = facts.get('fips_enabled')
+
+        if isinstance(value, bool):
+            return value
+
+        return None
+
     def update_autotune(self, host: str) -> None:
         host = normalize_hostname(host)
         self.last_autotune[host] = datetime_now()
@@ -1840,7 +1849,11 @@ class NodeProxyCache:
 
     def save(self,
              host: str = '',
-             data: Dict[str, Any] = {}) -> None:
+             data: Optional[Dict[str, Any]] = None) -> None:
+        if data is None:
+            data = {}
+        host = normalize_hostname(host)
+        self.data[host] = data
         self.mgr.set_store(f'{NODE_PROXY_CACHE_PREFIX}/data/{host}', json.dumps(data))
 
     def update_oob(self, host: str, host_oob_info: Dict[str, str]) -> None:

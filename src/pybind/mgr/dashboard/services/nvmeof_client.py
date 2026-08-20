@@ -328,11 +328,10 @@ def get_gateway_locations(pool: str, group: str, hosts: Optional[List[str]] = No
                     location = gw.get('location', '')
 
                     # Extract hostname from gw-id (format: client.nvmeof.pool.group.hostname.xxx)
-                    # pool might contains '.'
                     if gw_id:
                         parts = gw_id.split('.')
                         if len(parts) >= 5:
-                            hostname = parts[-2]
+                            hostname = parts[4]
                             if location:
                                 host_to_location[hostname] = location
                         else:

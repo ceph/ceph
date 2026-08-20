@@ -135,4 +135,4 @@ Limitations
    See also: https://tracker.ceph.com/issues/55090
 
 #. *Snapshot file data which has since been deleted or changed does not count
-   towards the quota.* See also: http://tracker.ceph.com/issues/24284
+   towards the quota.* See also: https://tracker.ceph.com/issues/24284

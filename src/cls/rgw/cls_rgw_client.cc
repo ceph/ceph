@@ -322,6 +322,15 @@ void cls_rgw_bucket_link_olh(librados::ObjectWriteOperation& op, const cls_rgw_o
   op.exec(method::bucket_link_olh, in);
 }
 
+void cls_rgw_bucket_refresh_instance(librados::ObjectWriteOperation& op, const cls_rgw_obj_key& key)
+{
+  bufferlist in;
+  rgw_cls_refresh_instance_op call;
+  call.key = key;
+  encode(call, in);
+  op.exec(method::bucket_refresh_instance, in);
+}
+
 int cls_rgw_bucket_unlink_instance(librados::IoCtx& io_ctx, const string& oid,
                                    const cls_rgw_obj_key& key, const string& op_tag,
                                    const string& olh_tag, uint64_t olh_epoch, bool log_op,

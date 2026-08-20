@@ -71,7 +71,7 @@ will occur despite the fact that the primary PG is unable to replicate data (a
 situation that, under normal non-netsplit circumstances, would result in the
 marking of affected OSDs as ``down`` and their removal from the PG). When this
 happens, Ceph will be unable to satisfy durability guarantees and
-consequently IO will not be permitted.
+consequently I/O will not be permitted.
 
 The second category of failures that we will discuss are those in
 which the constraints are not sufficient to guarantee the replication of data

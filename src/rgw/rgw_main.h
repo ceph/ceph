@@ -161,6 +161,7 @@ static inline RGWRESTMgr *set_logging(RGWRESTMgr* mgr)
   return mgr;
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static inline RGWRESTMgr *rest_filter(rgw::sal::Driver* driver, int dialect, RGWRESTMgr* orig)
 {
   RGWSyncModuleInstanceRef sync_module = driver->get_sync_module();
@@ -170,4 +171,13 @@ static inline RGWRESTMgr *rest_filter(rgw::sal::Driver* driver, int dialect, RGW
     return orig;
   }
 }
+#else
+// sync modules (and their REST filters) are a RADOS-only feature; the
+// complete RGWSyncModuleInstance type lives in the rados driver, so avoid
+// referring to it in no-RADOS builds
+static inline RGWRESTMgr *rest_filter(rgw::sal::Driver*, int, RGWRESTMgr* orig)
+{
+  return orig;
+}
+#endif
 

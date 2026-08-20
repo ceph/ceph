@@ -43,6 +43,14 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: ms_shutdown_timeout
+  type: millisecs
+  level: advanced
+  desc: Timeout for connection to shutdown gracefully
+  default: 120000
+  flags:
+  - runtime
+  min: 1
 - name: public_addrv
   type: addrvec
   level: basic
@@ -182,8 +190,8 @@ options:
 - name: mon_dns_srv_name
   type: str
   level: advanced
-  desc: Name of DNS SRV record to check for monitor addresses
-  fmt_desc: The service name used querying the DNS for Monitor hosts / addresses
+  desc: Name of the DNS SRV record to check for Monitor addresses
+  fmt_desc: The service name used for querying the DNS for Monitor hosts / addresses
   default: ceph-mon
   tags:
   - network
@@ -418,8 +426,8 @@ options:
 - name: fatal_signal_handlers
   type: bool
   level: advanced
-  desc: Whether to register signal handlers for SIGABRT etc that dump a stack trace
-  long_desc: This is normally true for daemons and values for libraries.
+  desc: Whether to register signal handlers for SIGABRT etc. that dump a stack trace
+  long_desc: This is normally true for daemons and false for libraries.
   fmt_desc: If set, we will install signal handlers for SEGV, ABRT, BUS, ILL,
     FPE, XCPU, XFSZ, SYS signals to generate a useful log message
   default: true
@@ -799,12 +807,12 @@ options:
 - name: qat_compressor_session_max_number
   type: uint
   level: advanced
-  desc: Set the maximum number of session within Qatzip when using QAT compressor
+  desc: Set the maximum number of sessions within Qatzip when using QAT compressor
   default: 256
 - name: qat_compressor_busy_polling
   type: bool
   level: advanced
-  desc: Set QAT busy bolling to reduce latency at the cost of potentially increasing CPU usage
+  desc: Set QAT busy polling to reduce latency at the cost of potentially increasing CPU usage
   default: false
 - name: uadk_compressor_enabled
   type: bool
@@ -1069,9 +1077,9 @@ options:
   type: str
   level: advanced
   desc: Compression algorithm to use in Messenger when communicating with OSD
-  long_desc: Compression algorithm for connections with OSD in order of preference 
-    Although the default value is set to snappy, a list
-    (like snappy zlib zstd etc.) is acceptable as well. 
+  long_desc: Compression algorithm for connections with OSD in order of preference.
+    Although the default value is set to snappy, a space-delimited list
+    (for example, 'snappy zlib zstd') is acceptable as well.
   default: snappy
   services:
   - osd
@@ -1082,13 +1090,13 @@ options:
 - name: ms_compress_secure
   type: bool
   level: advanced
-  desc: Allowing compression when on-wire encryption is enabled
+  desc: Allow compression when on-wire encryption is enabled
   long_desc: Combining encryption with compression reduces the level of security of
-    messages between peers. In case both encryption and compression are enabled, 
-    compression setting will be ignored and message will not be compressed. 
-    This behaviour can be override using this setting. 
+    messages between peers. In case both encryption and compression are enabled,
+    compression setting will be ignored and message will not be compressed.
+    This behavior can be overridden using this setting.
   default: false
-  see_also: 
+  see_also:
   - ms_osd_compress_mode
   flags:
   - runtime
@@ -1526,9 +1534,9 @@ options:
 - name: ms_dpdk_devs_allowlist
   type: str
   level: advanced
-  desc: NIC's PCIe address are allowed to use
-  long_desc: for a single NIC use ms_dpdk_devs_allowlist=-a 0000:7d:010 or --allow=0000:7d:010;
-    for a bond nics use ms_dpdk_devs_allowlist=--allow=0000:7d:01.0 --allow=0000:7d:02.6
+  desc: PCIe addresses of NICs allowed for use
+  long_desc: For a single NIC use ms_dpdk_devs_allowlist=-a 0000:7d:010 or --allow=0000:7d:010;
+    for bonded NICs use ms_dpdk_devs_allowlist=--allow=0000:7d:01.0 --allow=0000:7d:02.6
     --vdev=net_bonding0,mode=2,slave=0000:7d:01.0,slave=0000:7d:02.6.
 - name: ms_dpdk_host_ipv4_addr
   type: str
@@ -1582,12 +1590,12 @@ options:
 - name: mon_initial_members
   type: str
   level: advanced
-  fmt_desc: The IDs of initial monitors in a cluster during startup. If 
-    specified, Ceph requires an odd number of monitors to form an 
+  fmt_desc: The IDs of initial Monitors in a cluster during startup. If
+    specified, Ceph requires an odd number of Monitors to form an
     initial quorum (e.g., 3).
-  note: A *majority* of monitors in your cluster must be able to reach 
-    each other in order to establish a quorum. You can decrease the initial 
-    number of monitors to establish a quorum with this setting.
+  note: A *majority* of Monitors in your cluster must be able to reach
+    each other in order to establish a quorum. You can decrease the initial
+    number of Monitors to establish a quorum with this setting.
   services:
   - mon
   flags:
@@ -2155,7 +2163,15 @@ options:
    ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
    each other. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
+- name: auth_exit_on_failure
+  type: int
+  level: dev
+  desc: call _exit with given error code when auth fails when non-negative
+  default: -1
+  flags:
+  - runtime
 # required by daemons of clients
 - name: auth_service_required
   type: str
@@ -2165,7 +2181,8 @@ options:
    to authenticate with the cluster in order to access
    Ceph services. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
 # what clients require of daemons
 - name: auth_client_required
   type: str
@@ -2175,13 +2192,8 @@ options:
    authenticate with Ceph clients. Valid settings are ``cephx``
    or ``none``.
   default: cephx, none
-  with_legacy: true
-# deprecated; default value for above if they are not defined.
-- name: auth_supported
-  type: str
-  level: advanced
-  desc: Authentication methods required (deprecated)
-  with_legacy: true
+  flags:
+    - runtime
 - name: max_rotating_auth_attempts
   type: int
   level: advanced
@@ -2213,7 +2225,7 @@ options:
 - name: cephx_require_version
   type: int
   level: advanced
-  desc: Cephx version required (1 = pre-mimic, 2 = mimic+)
+  desc: CephX version required (1 = pre-mimic, 2 = mimic+)
   default: 2
   with_legacy: true
 - name: cephx_cluster_require_signatures
@@ -2226,7 +2238,7 @@ options:
 - name: cephx_cluster_require_version
   type: int
   level: advanced
-  desc: Cephx version required by the cluster from clients (1 = pre-mimic, 2 = mimic+)
+  desc: CephX version required by the cluster from clients (1 = pre-mimic, 2 = mimic+)
   default: 2
   with_legacy: true
 - name: cephx_service_require_signatures
@@ -2239,7 +2251,7 @@ options:
 - name: cephx_service_require_version
   type: int
   level: advanced
-  desc: Cephx version required from ceph services (1 = pre-mimic, 2 = mimic+)
+  desc: CephX version required from Ceph services (1 = pre-mimic, 2 = mimic+)
   default: 2
   with_legacy: true
 # Default to signing session messages if supported
@@ -2254,15 +2266,25 @@ options:
   type: float
   level: advanced
   default: 72_hr
-  with_legacy: true
+  desc: The time-to-live for tickets with the auth subsystem of the Monitors.
+  long_desc: >
+    The time-to-live for tickets with the auth subsystem of the Monitors.
+    These tickets are used to reclaim the global ID associated with the
+    running client.
+  flags:
+  - runtime
 - name: auth_service_ticket_ttl
   type: float
   level: advanced
   default: 1_hr
-  fmt_desc: When the Ceph Storage Cluster sends a Ceph Client a ticket for
-   authentication, the Ceph Storage Cluster assigns the ticket a
-   time to live.
-  with_legacy: true
+  desc: The time-to-live for non-auth service tickets issued by the Monitors.
+  fmt_desc: >
+   The time-to-live for non-auth service tickets issued by the Monitors. These
+   tickets would include services like the OSD or MDS. This allows the client
+   to authenticate independently with the service for the given timeframe
+   before having to refresh its tickets with the Monitors again.
+  flags:
+  - runtime
 - name: auth_allow_insecure_global_id_reclaim
   type: bool
   level: advanced
@@ -2561,9 +2583,9 @@ options:
 - name: osd_pool_default_min_size
   type: uint
   level: advanced
-  desc: The minimal number of copies allowed to write to a degraded pool for new replicated
+  desc: The minimum number of copies allowed to write to a degraded pool for new replicated
     pools
-  long_desc: 0 means no specific default; ceph will use size-size/2
+  long_desc: 0 means no specific default; Ceph will use size-size/2
   fmt_desc: Sets the minimum number of written replicas for objects in the
     pool in order to acknowledge an I/O operation to the client.  If
     minimum is not met, Ceph will not acknowledge the I/O to the
@@ -2586,13 +2608,13 @@ options:
   desc: number of PGs for new pools
   fmt_desc: The default number of placement groups for a pool. The default
     value is the same as ``pg_num`` with ``mkpool``.
-  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being 
-    `on` the number of PGs for new pools will start out with 1 pg, unless the 
+  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being
+    `on` the number of PGs for new pools will start out with 1 PG, unless the
     user specifies the pg_num.
   default: 32
   services:
   - mon
-  see_also: 
+  see_also:
   - osd_pool_default_pg_autoscale_mode
   flags:
   - runtime
@@ -2637,8 +2659,8 @@ options:
 - name: osd_pool_default_read_ratio
   type: uint
   level: advanced
-  desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
-  long_desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+  desc: Default read ratio (the percent of read I/Os out of all I/Os) for a pool.
+  long_desc: Default read ratio (the percent of read I/Os out of all I/Os) for a pool.
     applicable to replicated pools only. This value is used to improve read balancing
     when OSDs have different weights.
   default: 70
@@ -2769,7 +2791,7 @@ options:
   type: str
   level: advanced
   desc: Default PG autoscaling behavior for new pools
-  long_desc: When 'on', the autoscaler assigns 1 pg to new pools unless the user
+  long_desc: When 'on', the autoscaler assigns 1 PG to new pools unless the user
     specifies a value.
   default: 'on'
   enum_values:
@@ -2945,7 +2967,7 @@ options:
 - name: osd_heartbeat_min_size
   type: size
   level: advanced
-  desc: Minimum heartbeat packet size in bytes. Will padd if the heartbeat
+  desc: Minimum heartbeat packet size in bytes. Will pad if the heartbeat
     packet is smaller than this. This helps identify host and switch
     MTU configuration issues when jumbo frames are in use.
   default: 2000
@@ -3124,7 +3146,7 @@ options:
   type: uint
   level: dev
   desc: How many versions back to track in order to detect duplicate ops; this is
-    combined with both the regular pg log entries and additional minimal dup detection
+    combined with both the regular PG log entries and additional minimal dup detection
     entries
   default: 3000
   services:
@@ -3335,7 +3357,7 @@ options:
 - name: osd_debug_deep_scrub_sleep
   type: float
   level: dev
-  desc: Inject an expensive sleep during deep scrub IO to make it easier to induce
+  desc: Inject an expensive sleep during deep scrub I/O to make it easier to induce
     preemption
   default: 0
   with_legacy: true
@@ -3561,7 +3583,7 @@ options:
 - name: rocksdb_delete_range_threshold
   type: uint
   level: advanced
-  desc: The number of keys required to invoke DeleteRange when deleting muliple keys.
+  desc: The number of keys required to invoke DeleteRange when deleting multiple keys.
   default: 1_M
 - name: rocksdb_bloom_bits_per_key
   type: uint
@@ -3635,10 +3657,10 @@ options:
   level: dev
   desc: The block size for index partitions. (0 = rocksdb default)
   default: 4_K
-# osd_*_priority adjust the relative priority of client io, recovery io,
-# snaptrim io, etc
+# osd_*_priority adjust the relative priority of client I/O, recovery I/O,
+# snaptrim I/O, etc
 #
-# osd_*_priority determines the ratio of available io between client and
+# osd_*_priority determines the ratio of available I/O between client and
 # recovery.  Each option may be set between
 # 1..63.
 - name: rocksdb_cf_compact_on_deletion
@@ -3756,7 +3778,7 @@ options:
     related to a pool's ``recovery_priority``.
   default: 5
   with_legacy: true
-# set default cost equal to 20MB io
+# set default cost equal to 20MB I/O
 - name: osd_recovery_cost
   type: size
   level: advanced
@@ -4048,7 +4070,7 @@ options:
   level: dev
   default: false
   with_legacy: true
-# if N>0, then ~ 1/N IOs will complete before we crash on flush
+# if N>0, then ~ 1/N I/Os will complete before we crash on flush
 - name: bdev_inject_crash
   type: int
   level: dev
@@ -4236,10 +4258,10 @@ options:
 - name: bluefs_failed_shared_alloc_cooldown
   type: float
   level: advanced
-  desc: duration(in seconds) untill the next attempt to use
+  desc: duration (in seconds) until the next attempt to use
    'bluefs_shared_alloc_size' after facing ENOSPC failure.
-  long_desc: Cooldown period(in seconds) when BlueFS uses shared/slow device
-   allocation size instead of "bluefs_shared_alloc_size' one after facing
+  long_desc: Cooldown period (in seconds) when BlueFS uses shared/slow device
+   allocation size instead of 'bluefs_shared_alloc_size' one after facing
    recoverable (via fallback to smaller chunk size) ENOSPC failure. Intended
    primarily to avoid repetitive unsuccessful allocations which might be
    expensive.
@@ -4289,7 +4311,7 @@ options:
 - name: bluefs_buffered_io
   type: bool
   level: advanced
-  desc: Enabled buffered IO for BlueFS reads.
+  desc: Enabled buffered I/O for BlueFS reads.
   long_desc: When this option is enabled, BlueFS will in some cases perform buffered
     reads.  This allows the kernel page cache to act as a secondary cache for things
     like RocksDB block reads.  For example, if the RocksDB block cache isn't large
@@ -4419,7 +4441,7 @@ options:
   desc: Fraction of time the BlueFS spillover cleaner spends performing work.
   long_desc: Controls the rate of spillover migration work. After each migration
     step, the cleaner targets to sleep proportionally to the time spent doing work
-    This reduces interference with foreground IO. For example, if a migration step
+    This reduces interference with foreground I/O. For example, if a migration step
     took 10 ms and the ratio is 0.1, the cleaner sleeps for ~90 ms before the next
     step. This results in approximately 10% work time and 90% sleep time.
   default: 0.1
@@ -4726,11 +4748,11 @@ options:
   flags:
   - startup
   with_legacy: true
-- name: bluestore_use_optimal_io_size_for_min_alloc_size 
+- name: bluestore_use_optimal_io_size_for_min_alloc_size
   type: bool
   level: advanced
-  desc: Discover media optimal IO size and use for min_alloc_size. This is useful
-    when OSDs are created on coarse-IU QLC SSDs or other novel types of underlyinng
+  desc: Discover media optimal I/O size and use for min_alloc_size. This is useful
+    when OSDs are created on coarse-IU QLC SSDs or other novel types of underlying
     block device. It is a no-op for conventional media.
   default: false
   see_also:
@@ -4807,7 +4829,7 @@ options:
   level: advanced
   desc: Default compression algorithm to use when writing object data
   long_desc: This controls the default compressor to use (if any) if the per-pool
-    property is not set.  Note that zstd is *not* recommended for bluestore due to
+    property is not set.  Note that zstd is *not* recommended for BlueStore due to
     high CPU overhead when compressing small amounts of data.
   fmt_desc: The default compressor to use (if any) if the per-pool property
     ``compression_algorithm`` is not set. Note that ``zstd`` is *not*
@@ -4969,7 +4991,7 @@ options:
     from one or more RADOS objects.  Blobs can be compressed, typically have checksum data,
     may be overwritten, may be shared (with an extent ref map), or split.  This setting
     controls the maximum size a blob is allowed to be. A value of 0 indicates that no
-    limiit is to be enforced.
+    limit is to be enforced.
   default: 0
   flags:
   - runtime
@@ -5051,7 +5073,7 @@ options:
 - name: bluestore_cache_trim_interval
   type: float
   level: advanced
-  desc: How frequently we trim the bluestore cache
+  desc: How frequently we trim the BlueStore cache
   default: 0.05
   with_legacy: true
 - name: bluestore_cache_trim_max_skip_pinned
@@ -5185,7 +5207,7 @@ options:
   level: dev
   desc: The duration (in seconds) represented by a single cache age bin.
   fmt_desc: |
-    The caches used by bluestore will assign cache entries to an 'age bin'
+    The caches used by BlueStore will assign cache entries to an 'age bin'
     that represents a period of time during which that cache entry was most
     recently updated.  By binning the caches in this way, Ceph's priority
     cache balancing code can make better decisions about which caches should
@@ -5561,7 +5583,7 @@ options:
 - name: bluestore_throttle_bytes
   type: size
   level: advanced
-  desc: Maximum bytes in flight before we throttle IO submission
+  desc: Maximum bytes in flight before we throttle I/O submission
   default: 64_M
   flags:
   - runtime
@@ -5569,7 +5591,7 @@ options:
 - name: bluestore_throttle_deferred_bytes
   type: size
   level: advanced
-  desc: Maximum bytes for deferred writes before we throttle IO submission
+  desc: Maximum bytes for deferred writes before we throttle I/O submission
   default: 128_M
   flags:
   - runtime
@@ -5577,7 +5599,7 @@ options:
 - name: bluestore_throttle_cost_per_io
   type: size
   level: advanced
-  desc: Overhead added to transaction cost (in bytes) for each IO
+  desc: Overhead added to transaction cost (in bytes) for each I/O
   default: 0
   flags:
   - runtime
@@ -6007,7 +6029,7 @@ options:
 - name: bdev_ioring_hipri
   type: bool
   level: advanced
-  desc: Enables Linux io_uring API Use polled IO completions
+  desc: Enables Linux io_uring API Use polled I/O completions
   default: false
 - name: bdev_ioring_sqthread_poll
   type: bool
@@ -6084,7 +6106,7 @@ options:
 - name: filestore_wbthrottle_btrfs_bytes_start_flusher
   type: size
   level: advanced
-  desc: Start flushing (fsyncing) when this many bytes are written (btrfs, deprecated)  
+  desc: Start flushing (fsyncing) when this many bytes are written (btrfs, deprecated)
   default: 40_M
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_bytes_hard_limit
@@ -6096,13 +6118,13 @@ options:
 - name: filestore_wbthrottle_btrfs_ios_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many IOs are written (brtrfs, deprecated)
+  desc: Start flushing (fsyncing) when this many I/Os are written (btrfs, deprecated)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_ios_hard_limit
   type: uint
   level: advanced
-  desc: Block writes when this many IOs haven't been flushed (fsynced) (btrfs,deprecated)
+  desc: Block writes when this many I/Os haven't been flushed (fsynced) (btrfs,deprecated)
   default: 5000
   with_legacy: true
 - name: filestore_wbthrottle_btrfs_inodes_start_flusher
@@ -6127,13 +6149,13 @@ options:
 - name: filestore_wbthrottle_xfs_ios_start_flusher
   type: uint
   level: advanced
-  desc: Start flushing (fsyncing) when this many IOs are written (xfs, deprecated)
+  desc: Start flushing (fsyncing) when this many I/Os are written (xfs, deprecated)
   default: 500
   with_legacy: true
 - name: filestore_wbthrottle_xfs_ios_hard_limit
   type: uint
   level: advanced
-  desc: Block writes when this many IOs haven't been flushed (fsynced) (xfs, deprecated)
+  desc: Block writes when this many I/Os haven't been flushed (fsynced) (xfs, deprecated)
   default: 5000
   with_legacy: true
 - name: filestore_wbthrottle_xfs_inodes_start_flusher
@@ -6403,7 +6425,7 @@ options:
 - name: filestore_queue_max_ops
   type: uint
   level: advanced
-  desc: Max IO operations in flight (deprecated)
+  desc: Max I/O operations in flight (deprecated)
   default: 50
   with_legacy: true
 - name: filestore_queue_max_bytes
@@ -6652,7 +6674,7 @@ options:
 - name: journal_max_write_entries
   type: int
   level: advanced
-  desc: Max IOs in flight to journal (deprecated)
+  desc: Max I/Os in flight to journal (deprecated)
   fmt_desc: The maximum number of entries the journal will write at
    any one time.
   default: 100
@@ -7112,12 +7134,12 @@ options:
   type: str
   level: advanced
   desc: Unique string to be returned in PerfCounters
-  fmt_desc: A unique id to be created by orchestration software or the
+  fmt_desc: A unique ID to be created by orchestration software or the
     administrator upon initial setup of a service. Enforcing uniqueness
     is entirely the responsibility of the process used to create and
-    manage the cluster. A unique id will be unique within the scope of
+    manage the cluster. A unique ID will be unique within the scope of
     the entire cluster across all services if they are chosen to be so.
-  note: If this is empty no uniquifier is provided.
+  note: If this is empty, no uniquifier is provided.
   tags:
   - service
   services:
