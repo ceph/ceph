@@ -467,8 +467,7 @@ check "scriptpackage: not the command" 1 "ERROR: Unrecognized argument: 'scriptp
 check "script-package get: not a script-package subcommand" 1 "ERROR: Unrecognized argument: 'get'" script-package get
 check "script-package put: not a script-package subcommand" 1 "ERROR: Unrecognized argument: 'put'" script-package put
 
-# each command's flags are accepted on the other and then ignored, so it
-# behaves exactly as it does without them
+# each command accepts the other's flags and ignores them
 check_cluster "script-package list: --context accepted and ignored" 0 "" -- script-package list --context prerequest
 check_cluster "script-package list: --infile accepted and ignored" 0 "" -- script-package list --infile /no/such/file
 check_cluster "script-package add: --context accepted and ignored" 22 'ERROR: failed to add Lua package' -- script-package add --context prerequest --package no-such-package
@@ -592,7 +591,7 @@ check_cluster "metadata list user: --access-key script before the command words"
 # a flag the loop does know takes the word as its value first
 check_cluster "user info: --uid script" 22 'could not fetch user info' -- user info --uid script
 check_cluster "user info: --bucket script" 22 'ERROR: --uid or --access-key required' -- user info --bucket script
-check_cluster "metadata list: --bucket script" 0 "" -- metadata list --bucket script
+check_cluster "metadata list: --bucket script" 0 '[' -- metadata list --bucket script
 
 # a global flag before the command words
 check_cluster "metadata list script: --tenant before the command" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant t metadata list script
