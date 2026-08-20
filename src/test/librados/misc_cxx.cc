@@ -883,6 +883,29 @@ TEST_P(LibRadosMiscPP, CmpExtPP) {
   ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
 }
 
+TEST_P(LibRadosMiscPP, ReadRdmaUnsupportedPP) {
+  // exercises the CEPH_OSD_OP_READ_RDMA client plumbing against an OSD
+  // without RDMA support (not built with cuObject, or osd_cuobj_enabled
+  // off, or an OSD that predates the op): the op must fail cleanly with
+  // -EOPNOTSUPP, which is what RGW keys its fallback on
+  bufferlist write_bl;
+  write_bl.append("0123456789");
+  ASSERT_EQ(0, ioctx.write_full("read_rdma_obj", write_bl));
+
+  // well-formed descriptor token (addr:size:rkey:lid:qp:has_gid:gid)
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  uint64_t bytes = 42;
+  int op_rval = 0;
+  ObjectReadOperation op;
+  op.read_rdma(0, write_bl.length(), token, 0, &bytes, &op_rval);
+  int r = ioctx.operate("read_rdma_obj", &op, nullptr);
+  ASSERT_EQ(-EOPNOTSUPP, r);
+  ASSERT_EQ(-EOPNOTSUPP, op_rval);
+  ASSERT_EQ(42u, bytes);  // untouched on failure
+}
+
 TEST_P(LibRadosMiscPP, Applications) {
   // Applications are pool-level, not namespace-level, so they persist across
   // parameterized test runs. Skip this test for split_ops to avoid conflicts.

@@ -626,6 +626,51 @@ struct ObjectOperation {
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
   }
 
+  struct CB_ObjectOperation_read_rdma {
+    uint64_t* bytes_transferred;
+    int* prval;
+    CB_ObjectOperation_read_rdma(uint64_t* bt, int* pr)
+      : bytes_transferred(bt), prval(pr) {}
+    void operator()(boost::system::error_code ec, int r,
+		    const ceph::buffer::list& bl) {
+      using ceph::decode;
+      if (r >= 0) {
+	auto p = bl.cbegin();
+	try {
+	  uint64_t n;
+	  decode(n, p);
+	  if (bytes_transferred)
+	    *bytes_transferred = n;
+	} catch (const ceph::buffer::error& e) {
+	  if (prval)
+	    *prval = -EIO;
+	}
+      }
+    }
+  };
+
+  // Read an extent and deliver it out of band: the OSD RDMA-writes the
+  // data into the client memory window identified by the opaque
+  // descriptor token (see common/rdma_token.h) at the token's base
+  // address + client_offset. The reply carries only a byte count in
+  // outdata; no object data returns inline. OSDs without RDMA support
+  // fail the op with -EOPNOTSUPP.
+  void read_rdma(uint64_t off, uint64_t len, std::string_view token,
+		 uint64_t client_offset,
+		 uint64_t* bytes_transferred, int* prval) {
+    OSDOp& osd_op = add_op(CEPH_OSD_OP_READ_RDMA);
+    osd_op.op.extent.offset = off;
+    osd_op.op.extent.length = len;
+    encode((uint8_t)1, osd_op.indata);  // payload version
+    encode(token, osd_op.indata);
+    encode(client_offset, osd_op.indata);
+    encode((uint32_t)0, osd_op.indata); // reserved flags
+    if (bytes_transferred || prval) {
+      set_handler(CB_ObjectOperation_read_rdma(bytes_transferred, prval));
+      out_rval.back() = prval;
+    }
+  }
+
   void checksum(uint8_t type, const ceph::buffer::list &init_value_bl,
 		uint64_t off, uint64_t len, size_t chunk_size,
 		ceph::buffer::list *pbl, int *prval, Context *ctx) {

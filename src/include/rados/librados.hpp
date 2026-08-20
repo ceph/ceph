@@ -602,6 +602,17 @@ inline namespace v14_2_0 {
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    /**
+     * Read an extent and deliver it out of band: the OSD RDMA-writes
+     * the data into the client memory window identified by the opaque
+     * RDMA descriptor token, at the token's base address plus
+     * client_offset. No object data returns inline; on success
+     * *bytes_transferred receives the number of bytes pushed. OSDs
+     * without RDMA support fail the op with -EOPNOTSUPP.
+     */
+    void read_rdma(uint64_t off, uint64_t len, const std::string& token,
+		   uint64_t client_offset, uint64_t *bytes_transferred,
+		   int *prval);
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,
 		  uint64_t off, size_t len, size_t chunk_size, bufferlist *pbl,
 		  int *prval);

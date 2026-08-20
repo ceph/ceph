@@ -7504,6 +7504,7 @@ ostream& operator<<(ostream& out, const OSDOp& op)
           << " write_size " << op.op.alloc_hint.expected_write_size;
       break;
     case CEPH_OSD_OP_READ:
+    case CEPH_OSD_OP_READ_RDMA:
     case CEPH_OSD_OP_SPARSE_READ:
     case CEPH_OSD_OP_SYNC_READ:
     case CEPH_OSD_OP_WRITE:
