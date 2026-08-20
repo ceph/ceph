@@ -17,9 +17,12 @@ Orphan List
 -----------
 
 The supported tool for identifying orphans is ``rgw-orphan-list``. It
-replaces the deprecated ``radosgw-admin orphans find`` subcommands,
-which are retained only for reference; see `Orphans Find --
-DEPRECATED`_ below. When run, ``rgw-orphan-list`` will list the
+replaces the deprecated ``radosgw-admin orphans find`` subcommands.
+The two are separate implementations, not aliases: the deprecated
+subcommands compute their results on the cluster itself and are no
+longer maintained, and they should not be used. They are described in
+`Orphans Find -- DEPRECATED`_ below only so that operators who
+encounter them know their status. When run, ``rgw-orphan-list`` will list the
 available pools and prompt the user to enter the name of the data
 pool. At that point the tool will, perhaps after an extended period of
 time, produce a local file containing the RADOS objects from the
@@ -90,8 +93,8 @@ bucket.
 Orphans Find -- DEPRECATED
 --------------------------
 
-The ``radosgw-admin`` tool has three subcommands that were once used
-to manage orphans. These subcommands are deprecated; use
+The ``radosgw-admin`` tool has three subcommands that were previously
+used to manage orphans. These subcommands are deprecated; use
 ``rgw-orphan-list`` instead. The deprecated subcommands are:
 
 .. prompt:: bash #
