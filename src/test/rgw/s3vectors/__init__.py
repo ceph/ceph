@@ -54,6 +54,12 @@ def setup():
     global main_secret_key
     main_secret_key = cfg.get('s3 main',"secret_key")
 
+    global main_user_id
+    main_user_id = cfg.get('s3 main', "user_id")
+
+    global main_tenant
+    main_tenant = cfg.get('s3 main', "tenant", fallback="")
+
     # vars from the secondary section
     global secondary_host
     global secondary_port
@@ -131,6 +137,12 @@ def get_secret_key():
     return main_secret_key
 
 
+def get_test_user_id():
+    global main_user_id
+    global main_tenant
+    return f'{main_tenant}${main_user_id}' if main_tenant else main_user_id
+
+
 def get_config_host2():
     global secondary_host
     return secondary_host
@@ -173,4 +185,3 @@ def is_s3_backend():
 @pytest.fixture(autouse=True, scope="package")
 def configfile():
     setup()
-
