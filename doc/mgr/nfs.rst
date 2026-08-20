@@ -284,6 +284,28 @@ Example use cases include:
          }
      }
 
+   .. note::
+
+      When deploying NFS with cephadm, a ``LOG`` block ``FACILITY`` that
+      writes to a file **must** use ``/var/log/ceph/`` as the destination
+      directory.  This is the only host directory bind-mounted into the NFS
+      container.  Logs written to any other path will stay inside the
+      container and will not be visible on the host.  For example::
+
+         LOG {
+             FACILITY {
+                 name = logfile;
+                 destination = "/var/log/ceph/ganesha.log";
+                 max_level = FULL_DEBUG;
+                 enable = active;
+             }
+         }
+
+      If ``log_to_file`` is already enabled (see
+      :ref:`cephadm-nfs-file-logging`), do **not** add a ``LOG`` block
+      ``FACILITY`` that also writes to a file — using both mechanisms
+      simultaneously causes every log event to be written twice.
+
 #. Adding custom export block.
 
    The following sample block creates a single export. This export will not be
@@ -1169,9 +1191,10 @@ If the NFS service is running on a non-standard port number:
 Troubleshooting
 ===============
 
-There are two methods for examining NFS-Ganesha logs:
+There are three methods for examining NFS-Ganesha logs:
 
-#. ``cephadm``: List the NFS daemons by running the following command:
+#. **STDERR / journald** (default): List the NFS daemons by running the
+   following command:
 
    .. prompt:: bash #
 
@@ -1183,6 +1206,23 @@ There are two methods for examining NFS-Ganesha logs:
    .. prompt:: bash #
 
       cephadm logs --fsid <fsid> --name nfs.mynfs.0.0.myhost.xkfzal
+
+#. **Log files on the host**: When ``log_to_file`` is enabled
+   (see :ref:`cephadm-nfs-file-logging`), NFS-Ganesha writes logs to a
+   per-daemon file on the host::
+
+      /var/log/ceph/<fsid>/<daemon_name>/ganesha.log
+
+   For example::
+
+      /var/log/ceph/<fsid>/nfs.mynfs.0.0.myhost.xkfzal/ganesha.log
+
+   Enable file logging with:
+
+   .. prompt:: bash #
+
+      ceph config set client.nfs log_to_file true
+      ceph orch restart nfs.<cluster_id>
 
 #. ``rook``:
 
