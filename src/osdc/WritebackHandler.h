@@ -39,7 +39,7 @@ class WritebackHandler {
 			   uint64_t trunc_size, __u32 trunc_seq,
                            ceph_tid_t journal_tid,
                            const ZTracer::Trace &parent_trace,
-                           Context *oncommit) = 0;
+                           Context *oncommit, uint64_t change_attr=0) = 0;
 
   virtual void overwrite_extent(const object_t& oid, uint64_t off, uint64_t len,
                                 ceph_tid_t original_journal_tid,
@@ -50,7 +50,7 @@ class WritebackHandler {
 			   std::vector<std::pair<uint64_t, ceph::buffer::list> >& io_vec,
 			   const SnapContext& snapc, ceph::real_time mtime,
 			   uint64_t trunc_size, __u32 trunc_seq,
-			   Context *oncommit) {
+			   Context *oncommit, uint64_t change_attr=0) {
     return 0;
   }
 };

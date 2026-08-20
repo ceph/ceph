@@ -31,7 +31,7 @@ public:
 			   ceph::real_time mtime, uint64_t trunc_size,
 			   __u32 trunc_seq, ceph_tid_t journal_tid,
                            const ZTracer::Trace &parent_trace,
-			   Context *oncommit) override;
+                           Context *oncommit, uint64_t change_attr=0) override;
 
   using WritebackHandler::write;
 
