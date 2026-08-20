@@ -256,8 +256,6 @@ class Module(MgrModule):
         return 0, '', ''
 
     def ls(self) -> Tuple[int, str, str]:
-        if not self.crashes:
-            self._load_crashes()
         return self.do_ls_all('')
 
     def _do_ls(self, t: Iterable[CrashT], format: Optional[str]) -> Tuple[int, str, str]:
