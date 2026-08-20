@@ -11,6 +11,7 @@
 #include "common/ceph_context.h"
 #include "common/config.h"
 #include "common/dout.h"
+#include "common/rdma_token.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -138,36 +139,30 @@ bool RGWCuObjServer::is_available() const
   return m_server && m_server->isConnected();
 }
 
-// descriptor format: "addr:size:rkey:reserved:qp_num:lid:gid"
-// all fields hex-encoded, colon-separated
+// descriptor token: leading "addr:size:" hex fields, remainder opaque;
+// see common/rdma_token.h
 size_t RGWCuObjServer::parse_rdma_descriptor_size(const std::string& rdma_descr)
 {
-  ldout(g_ceph_context, 21) << "rgw_cuobj: parsing RDMA descriptor: " << rdma_descr << dendl;
-  auto first_colon = rdma_descr.find(':');
-  if (first_colon == std::string::npos) {
-    lderr(g_ceph_context) << "rgw_cuobj: ERROR: failed to parse RDMA descriptor: no colon found" << dendl;
+  auto window = ceph::rdma::parse_rdma_token(rdma_descr);
+  if (!window) {
+    lderr(g_ceph_context) << "rgw_cuobj: ERROR: failed to parse RDMA descriptor" << dendl;
     return 0;
   }
-  auto second_colon = rdma_descr.find(':', first_colon + 1);
-  if (second_colon == std::string::npos) {
-    lderr(g_ceph_context) << "rgw_cuobj: ERROR: failed to parse RDMA descriptor: second colon not found" << dendl;
-    return 0;
-  }
-  auto size_str = rdma_descr.substr(first_colon + 1, second_colon - first_colon - 1);
-  ldout(g_ceph_context, 21) << "rgw_cuobj: parsed size from RDMA descriptor: " << size_str << dendl;
-  return std::stoull(size_str, nullptr, 16);
+  ldout(g_ceph_context, 21) << "rgw_cuobj: parsed size from RDMA descriptor: "
+                            << window->size << dendl;
+  return window->size;
 }
 
 static uint64_t parse_rdma_descriptor_addr(const std::string& rdma_descr)
 {
-  ldout(g_ceph_context, 21) << "rgw_cuobj: parsing RDMA descriptor for address: " << rdma_descr << dendl;
-  auto first_colon = rdma_descr.find(':');
-  if (first_colon == std::string::npos) {
-    lderr(g_ceph_context) << "rgw_cuobj: ERROR: failed to parse RDMA descriptor for address: no colon found" << dendl;
+  auto window = ceph::rdma::parse_rdma_token(rdma_descr);
+  if (!window) {
+    lderr(g_ceph_context) << "rgw_cuobj: ERROR: failed to parse RDMA descriptor for address" << dendl;
     return 0;
   }
-  ldout(g_ceph_context, 21) << "rgw_cuobj: parsed address from RDMA descriptor: " << rdma_descr.substr(0, first_colon) << dendl;
-  return std::stoull(rdma_descr.substr(0, first_colon), nullptr, 16);
+  ldout(g_ceph_context, 21) << "rgw_cuobj: parsed address from RDMA descriptor: "
+                            << window->addr << dendl;
+  return window->addr;
 }
 
 uint16_t RGWCuObjServer::get_channel_id()

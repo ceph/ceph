@@ -96,6 +96,7 @@ set(common_srcs
   pick_address.cc
   prime.cc
   random_string.cc
+  rdma_token.cc
   reverse.c
   run_cmd.cc
   scrub_types.cc
