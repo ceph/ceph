@@ -252,11 +252,12 @@ class MDCache {
 
   void advance_stray();
 
-  unsigned get_ephemeral_dist_frag_bits() const {
-    return export_ephemeral_dist_frag_bits;
-  }
   bool get_export_ephemeral_distributed_config(void) const {
     return export_ephemeral_distributed_config;
+  }
+
+  unsigned get_ephemeral_frag_bits() const {
+    return export_ephemeral_frag_bits;
   }
 
   bool get_export_ephemeral_random_config(void) const {
@@ -1598,6 +1599,8 @@ private:
 
   bool is_ready_to_trim_cache(void);
 
+  double get_effective_ephemeral_frag_factor() const;
+
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;
@@ -1605,7 +1608,7 @@ private:
 
   bool export_ephemeral_distributed_config;
   bool export_ephemeral_random_config;
-  unsigned export_ephemeral_dist_frag_bits;
+  unsigned export_ephemeral_frag_bits = 0;
 
   // Stores the symlink target on the file object's head
   bool symlink_recovery;
