@@ -446,7 +446,13 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_vector_bucket_policy(configuration, this, y);
+    op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+      rgw::sal::Attrs& attrs = s->bucket->get_attrs();
+      attrs.erase(RGW_ATTR_IAM_POLICY);
+      attrs.erase(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS);
+      op_ret = s->bucket->put_info(this, false, real_time(), s->yield);
+      return op_ret;
+    }, y);
   }
 };
 
@@ -953,10 +959,14 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector PutVectorBucketPolicy" << dendl;
+    // Check if user is root account then user can put the policy
+    if(s->auth.identity->is_root_of(s->bucket_owner.id)) {
+      return 0;
+    }
     // policy TODO: implement permission check
-    /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsPutVectorBucketPolicy)) {
+    if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsPutVectorBucketPolicy)) {
       return -EACCES;
-    }*/
+    }
     return 0;
   }
 
@@ -1035,7 +1045,6 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    // policy TODO: implement
     rgw::sal::Attrs attrs(s->bucket_attrs);
     auto attr = attrs.find(RGW_ATTR_IAM_POLICY);
     if(attr == attrs.end()) {
