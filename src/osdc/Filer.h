@@ -162,7 +162,8 @@ class Filer {
 		  uint64_t truncate_size,
 		  __u32 truncate_seq,
 		  Context *oncommit,
-		  int op_flags = 0);
+                  int op_flags = 0,
+                  uint64_t change_atr = 0);
 
   void truncate(inodeno_t ino,
 	       const file_layout_t *layout,

@@ -91,6 +91,8 @@ struct ceph_dir_layout {
 	__u32  dl_unused3;
 } __attribute__ ((packed));
 
+#define CHANGE_ATTR_NAME "cattr"
+
 /* crypto algorithms */
 #define CEPH_CRYPTO_NONE 0x0
 #define CEPH_CRYPTO_AES  0x1
