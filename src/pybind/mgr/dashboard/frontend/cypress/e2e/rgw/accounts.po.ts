@@ -2,7 +2,8 @@ import { PageHelper } from '../page-helper.po';
 
 const pages = {
   index: { url: '#/rgw/accounts', id: 'cd-rgw-user-accounts' },
-  create: { url: '#/rgw/accounts/create', id: 'cd-rgw-user-accounts-form' }
+  create: { url: '#/rgw/accounts/create', id: 'cd-rgw-user-accounts-form' },
+  edit: { url: '#/rgw/accounts/edit', id: 'cd-rgw-user-accounts-form' }
 };
 
 export class AccountsPageHelper extends PageHelper {
@@ -98,7 +99,6 @@ export class AccountsPageHelper extends PageHelper {
     this.navigateTo();
   }
 
-  @PageHelper.restrictTo(pages.create.url)
   edit(account: {
     name: string;
     tenant: string;
@@ -258,6 +258,8 @@ export class AccountsPageHelper extends PageHelper {
   }
 
   invalidEdit() {
+    this.cleanUpAccount('test');
+    this.navigateTo('create');
     this.create({ name: 'test', tenant: 'new', email: 'test@test' });
     this.navigateEdit('test', false, false, null);
     cy.get('#tenant').should('be.disabled');
@@ -298,6 +300,19 @@ export class AccountsPageHelper extends PageHelper {
 
     this.navigateTo();
     this.delete('test', null, null, true, false, false, false);
+  }
+
+  cleanUpAccount(name: string) {
+    this.navigateTo();
+    cy.get('cd-table').should('exist');
+    cy.get('table[cdstable] tbody').should('exist');
+    cy.contains('Loading').should('not.exist');
+    cy.wait(1000);
+    cy.get('body').then(($body) => {
+      if ($body.find(`[cdstablerow]:contains("${name}")`).length > 0) {
+        this.delete(name, null, null, true, false, false, false);
+      }
+    });
   }
 
   // happens when users are linked to account, fn() called from users-e2e

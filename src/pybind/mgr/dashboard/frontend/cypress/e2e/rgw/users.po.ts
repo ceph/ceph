@@ -244,6 +244,19 @@ export class UsersPageHelper extends PageHelper {
     this.assertOverviewFieldValue('User type', 'Account root user');
   }
 
+  cleanUpUser(name: string) {
+    this.navigateTo();
+    cy.get('cd-table').should('exist');
+    cy.get('table[cdstable] tbody').should('exist');
+    cy.contains('Loading').should('not.exist');
+    cy.wait(1000);
+    cy.get('body').then(($body) => {
+      if ($body.find(`[cdstablerow]:contains("${name}")`).length > 0) {
+        this.delete(name, null, null, true, false, false, true);
+      }
+    });
+  }
+
   private assertOverviewFieldValue(label: string, value: string) {
     cy.contains('cd-resource-overview-card h3', 'User details').should('be.visible');
     cy.contains('cd-resource-overview-card .cd-overview-label', label)

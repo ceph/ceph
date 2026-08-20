@@ -7,12 +7,26 @@ export class LogsPageHelper extends PageHelper {
 
   private setTimepickerValue(index: number, value: number) {
     cy.get('.ngb-tp-input')
+      .should('have.length.gte', index + 1)
       .eq(index)
       .then(($input) => {
         const input = $input[0] as HTMLInputElement;
         input.value = String(value).padStart(2, '0');
         input.dispatchEvent(new Event('input', { bubbles: true }));
         input.dispatchEvent(new Event('change', { bubbles: true }));
+      });
+  }
+
+  private typeInKeywordFilter(text: string) {
+    // The logs component polls every 5s, which can detach DOM elements mid-interaction.
+    // Set value directly via DOM to avoid detached element errors during clear/type.
+    cy.get('#logs-keyword')
+      .should('be.visible')
+      .then(($input) => {
+        const input = $input[0] as HTMLInputElement;
+        input.value = text;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('keyup', { bubbles: true }));
       });
   }
 
@@ -31,8 +45,7 @@ export class LogsPageHelper extends PageHelper {
     this.setTimepickerValue(1, minute);
 
     // Enter the pool name into the filter box
-    cy.get('#logs-keyword').clear();
-    cy.get('#logs-keyword').type(poolname);
+    this.typeInKeywordFilter(poolname);
 
     cy.get('.tab-pane.active')
       .get('.log-viewer')
@@ -52,8 +65,7 @@ export class LogsPageHelper extends PageHelper {
     this.setTimepickerValue(1, minute);
 
     // Enter the config name into the filter box
-    cy.get('#logs-keyword').clear();
-    cy.get('#logs-keyword').type(configname);
+    this.typeInKeywordFilter(configname);
 
     cy.get('.tab-pane.active')
       .get('.log-viewer')
