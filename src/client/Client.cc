@@ -12782,7 +12782,8 @@ int Client::WriteEncMgr_Buffered::do_write()
                                      0, iofinish,
                                      !async
                                      ? clnt->objectcacher->CFG_block_writes_upfront()
-                                     : false, in->change_attr);
+                                     : false,
+                                     clnt->do_rados_fsync ? in->change_attr : 0);
 
   return r;
 }
@@ -12795,7 +12796,8 @@ int Client::WriteEncMgr_NotBuffered::do_write()
   clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
                            offset, size, *pbl, mtime.to_real_time(), 0,
                            in->truncate_size, in->truncate_seq,
-                           iofinish, 0 /*op_flags*/, in->change_attr);
+                           iofinish, 0 /*op_flags*/,
+                           clnt->do_rados_fsync ? in->change_attr : 0);
 
   return 0;
 }
