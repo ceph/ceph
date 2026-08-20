@@ -106,12 +106,23 @@ void Filer::write_trunc(inodeno_t ino,
 			uint64_t truncate_size,
 			__u32 truncate_seq,
 			Context *oncommit,
-			int op_flags) {
+			int op_flags, uint64_t change_attr) {
   std::vector<ObjectExtent> extents;
   Striper::file_to_extents(cct, ino, layout, offset, len, truncate_size,
 			   extents);
-  objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
-			   truncate_size, truncate_seq, oncommit, op_flags);
+  if (change_attr) {
+    ObjectOperation change_op;
+    bufferlist cbl;
+    encode(change_attr, cbl);
+    change_op.setxattr(CHANGE_ATTR_NAME, cbl);
+    objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
+                             truncate_size, truncate_seq, oncommit, op_flags,
+                             &change_op);
+
+  } else {
+    objecter->sg_write_trunc(extents, snapc, bl, mtime, flags,
+                             truncate_size, truncate_seq, oncommit, op_flags);
+  }
 }
 
 void Filer::zero(inodeno_t ino,

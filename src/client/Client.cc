@@ -12680,7 +12680,7 @@ int Client::WriteEncMgr_NotBuffered::do_write()
   clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
                            offset, size, *pbl, mtime.to_real_time(), 0,
                            in->truncate_size, in->truncate_seq,
-                           iofinish);
+                           iofinish, 0 /*op_flags*/, in->change_attr);
 
   return 0;
 }
