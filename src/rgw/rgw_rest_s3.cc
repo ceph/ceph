@@ -339,16 +339,12 @@ int RGWGetObj_ObjStore_S3::get_params(optional_yield y)
     }
   }
 
-#ifdef WITH_RADOSGW_CUOBJ
-  if (auto* cuobj = RGWCuObjServer::get_instance();
-      cuobj && cuobj->is_available()) {
-    auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
-    if (rdma_token) {
-      rdma_descriptor = *rdma_token;
-      rdma_active = true;
-    }
+  if (auto rdma_hdr = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+      rdma_hdr) {
+    // opaque cuObject descriptor; RGWGetObj::execute() decides between
+    // OSD passthrough, staged RDMA and plain-HTTP fallback
+    rdma_token = *rdma_hdr;
   }
-#endif
 
   return RGWGetObj_ObjStore::get_params(y);
 }
@@ -526,14 +522,16 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   for (auto &it : crypt_http_responses)
     dump_header(s, it.first, it.second);
 
-#ifdef WITH_RADOSGW_CUOBJ
-  if (rdma_active) {
+  if (rdma_mode != RdmaMode::NONE) {
     dump_content_length(s, 0);
     dump_header(s, "x-amz-rdma-reply", "200");
     dump_header(s, "x-amz-rdma-bytes-transferred", total_len);
-  } else
-#endif
-  {
+  } else {
+    if (!rdma_token.empty()) {
+      // token sent but RDMA is unavailable: valid fallback per the
+      // cuObject protocol, the client reads the body instead
+      dump_header(s, "x-amz-rdma-reply", "501");
+    }
     dump_content_length(s, total_len);
   }
   dump_last_modified(s, lastmod);
@@ -821,25 +819,34 @@ done:
 
 send_data:
   if (get_data && !op_ret) {
-#ifdef WITH_RADOSGW_CUOBJ
-    if (rdma_active) {
+    if (rdma_mode == RdmaMode::PASSTHROUGH) {
+      // the OSDs deliver all data; a store streaming bytes here would
+      // violate the passthrough contract
       if (bl_len > 0) {
-        auto* cuobj = RGWCuObjServer::get_instance();
-        if (!rdma_buf && cuobj) {
-          rdma_buf = cuobj->acquire_buffer(s->obj_size);
-          rdma_buf_offset = 0;
+        ldpp_dout(this, 0) << "ERROR: unexpected inline data in RDMA "
+                           << "passthrough GET" << dendl;
+        return -EIO;
+      }
+      return 0;
+    }
+#ifdef WITH_RADOSGW_CUOBJ
+    if (rdma_mode == RdmaMode::STAGED) {
+      // the staging buffer was reserved in select_rdma_mode(), before
+      // the response headers were committed
+      auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
+      if (bl_len > 0) {
+        if (!entry || rdma_buf_offset + bl_len > entry->size) {
+          ldpp_dout(this, 0) << "rgw_cuobj: ERROR: staging buffer overflow at "
+                             << rdma_buf_offset << "+" << bl_len << dendl;
+          return -EIO;
         }
-        if (rdma_buf) {
-          auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
-          memcpy(static_cast<char*>(entry->ptr) + rdma_buf_offset, bl.c_str() + bl_ofs, bl_len);
-          rdma_buf_offset += bl_len;
-        }
-      } else if (rdma_buf && rdma_buf_offset > 0) {
+        memcpy(static_cast<char*>(entry->ptr) + rdma_buf_offset, bl.c_str() + bl_ofs, bl_len);
+        rdma_buf_offset += bl_len;
+      } else if (entry && rdma_buf_offset > 0) {
         auto* cuobj = RGWCuObjServer::get_instance();
-        auto* entry = static_cast<RGWCuObjServer::RDMABufEntry*>(rdma_buf);
         ssize_t ret = cuobj->rdma_write_to_client(
             s->object->get_name(), entry, 0,
-            rdma_buf_offset, rdma_descriptor);
+            rdma_buf_offset, rdma_token);
         cuobj->release_buffer(entry);
         rdma_buf = nullptr;
         if (ret < 0) {

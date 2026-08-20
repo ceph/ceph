@@ -3831,6 +3831,8 @@ int RadosObject::copy_object(const ACLOwner& owner,
 
 int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
+  parent_op.params.rdma_token = params.rdma_token;
+  parent_op.params.rdma_bytes = params.rdma_bytes;
   return parent_op.iterate(dpp, ofs, end, cb, y);
 }
 
