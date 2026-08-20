@@ -185,7 +185,15 @@ class NFSService(CephService):
                     f'client_object_cache_max_dirty: '
                     f'{nfs_spec.client_object_cache_max_dirty}'
                 )
-
+        # log_to_file: query at the client.nfs section level to detect
+        # global or section-wide config changes
+        try:
+            log_to_file = mgr.get_foreign_ceph_option(
+                utils.name_to_config_section('nfs'), 'log_to_file')
+            if log_to_file:
+                deps.append(f'log_to_file: {bool(log_to_file)}')
+        except Exception:
+            pass
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
@@ -396,10 +404,21 @@ class NFSService(CephService):
                 'keyring': rgw_keyring,
             }
             config['enable_rdma'] = spec.enable_rdma
+            config['log_to_file'] = self._get_log_to_file(daemon_type, daemon_id)
             logger.debug('Generated cephadm config-json: %s' % config)
             return config
 
         return get_cephadm_config(), self.get_dependencies(self.mgr, spec)
+
+    def _get_log_to_file(self, daemon_type: str, daemon_id: str) -> bool:
+        """Check if log_to_file is enabled for this NFS daemon entity."""
+        daemon_name = f'{daemon_type}.{daemon_id}'
+        entity = utils.name_to_config_section(daemon_name)
+        try:
+            log_to_file = self.mgr.get_foreign_ceph_option(entity, 'log_to_file')
+            return bool(log_to_file)
+        except Exception:
+            return False
 
     def pre_daemon_service_config(self, spec: ServiceSpec) -> None:
         nfs_spec = cast(NFSServiceSpec, spec)
