@@ -2723,6 +2723,18 @@ void RGWGetObj::execute(optional_yield y)
   }
   if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
     s->object->set_cache_request();
+#ifdef RGW_HAVE_D4N_FILTER
+  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+    if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+      d4n_obj->set_remote_cache_request();
+      auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION");
+      if (object_version) {
+        d4n_obj->set_object_version(object_version.get());
+      }
+    }
+  }
+#endif
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
@@ -4882,7 +4894,6 @@ void RGWPutObj::execute(optional_yield y)
 #ifdef RGW_HAVE_D4N_FILTER
   if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
     if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
-      ldpp_dout(this, 20) << "This is a remote cache request !!!" << dendl;
       dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_remote_cache_request();
       rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
       auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION");
@@ -4904,7 +4915,7 @@ void RGWPutObj::execute(optional_yield y)
       }
       if (auto block_only = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLOCK_ONLY"); block_only) {
         if (block_only.get() == "true") {
-	      d4n_obj->set_remote_block_only(true);
+          d4n_obj->set_remote_block_only(true);
         }
       }
     }
@@ -6062,7 +6073,6 @@ void RGWDeleteObj::execute(optional_yield y)
 #ifdef RGW_HAVE_D4N_FILTER
   if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
     if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
-      ldpp_dout(this, 20) << "This is a remote cache request !!!" << dendl;
       rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
       d4n_obj->set_remote_cache_request();
     }
