@@ -171,7 +171,8 @@ check "put: stray between script and put" 1 "ERROR: Unrecognized argument: 'extr
 check "put: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
   script put --context prerequest --infile /dev/null --fakeflag
 
-# the message goes on to list the valid contexts, so it is matched up to the name
+# The list of valid contexts may change, so the assertion stops after the
+# invalid context.
 check_cluster "put: invalid context string" 22 "ERROR: invalid script context: invalid_ctx" -- \
   script put --context invalid_ctx --infile /dev/null
 
@@ -248,7 +249,8 @@ check "get: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
 check_cluster "get: --infile is accepted and ignored"  0 "" -- \
   script get --infile /dev/null --context prerequest
 
-# the message goes on to list the valid contexts, so it is matched up to the name
+# The list of valid contexts may change, so the assertion stops after the
+# invalid context.
 check_cluster "get: invalid context string" 22 "ERROR: invalid script context: invalid_ctx" -- \
   script get --context invalid_ctx
 
@@ -301,7 +303,8 @@ check "rm: stray between script and rm" 1 "ERROR: Unrecognized argument: 'extra'
 check "rm: unrecognized flag"  22 "ERROR: invalid flag --fakeflag" \
   script rm --context prerequest --fakeflag
 
-# the message goes on to list the valid contexts, so it is matched up to the name
+# The list of valid contexts may change, so the assertion stops after the
+# invalid context.
 check_cluster "rm: invalid context string" 22 "ERROR: invalid script context: invalid_ctx" -- \
   script rm --context invalid_ctx
 
@@ -422,6 +425,61 @@ echo "=== script: no subcommand, and unrecognized command words ==="
 check "bare script"         1 'ERROR: Unknown command' script
 check "unknown subcommand"  1 "ERROR: Unrecognized argument: 'banana'" script banana
 check "reversed put script" 1 "ERROR: Unrecognized argument: 'put'" put script
+
+# ============================================================
+echo ""
+echo "=== 'script' as an ordinary word ==="
+# ============================================================
+# The word 'script' names the script commands. It can also land in a data
+# position: the value of a flag, or the section argument to metadata. These
+# rows pin that it is treated as an ordinary word in each of those positions.
+# Some repeat the same line with a different word, and the two results match.
+
+# 'script' as a metadata section name. It is not a real section, so every verb
+# fails to find it, the same way any other unknown section fails. 'metadata
+# put' is left out on purpose: it reads stdin to end-of-file, so a row for it
+# would block the suite.
+check_cluster "metadata list script" 2 "ERROR: can't get key" -- metadata list script
+check_cluster "metadata get script" 2 "ERROR: can't get key" -- metadata get script
+check_cluster "metadata rm script" 2 "ERROR: can't remove key" -- metadata rm script
+check_cluster "metadata list script.instance" 2 "ERROR: can't get key" -- metadata list script.instance
+check_cluster "metadata list banana" 2 "ERROR: can't get key" -- metadata list banana
+
+# 'script' as the value of a flag the loop does not know. The word is taken as
+# the value: 'add' fails to add it, 'rm' completes.
+# These four reach the Lua package handlers, which are compiled in only when
+# ceph is built with WITH_RADOSGW_LUA_PACKAGES. That is the cmake default. A
+# build without it answers exit 1 'not permitted' instead, and these four rows
+# fail there.
+check_cluster "script-package add: --package script" 22 'ERROR: failed to add Lua package' -- script-package add --package script
+check_cluster "script-package add: --package banana" 22 'ERROR: failed to add Lua package' -- script-package add --package banana
+check_cluster "script-package rm: --package script" 0 "" -- script-package rm --package script
+check_cluster "script-package rm: --package banana" 0 "" -- script-package rm --package banana
+
+# the same shape on a command outside the script family
+check_cluster "user info: --access-key script" 22 'user.init failed' -- user info --access-key script
+check_cluster "user info: --access-key banana" 22 'user.init failed' -- user info --access-key banana
+
+# 'script' as a flag's value on the script commands themselves, before and
+# after the command words
+check_cluster "script get: --access-key bucket" 22 'user.init failed' -- script get --access-key bucket
+check_cluster "script get: --access-key script" 22 'user.init failed' -- script get --access-key script
+check_cluster "script get: --access-key banana" 22 'user.init failed' -- script get --access-key banana
+check "script: --access-key script, no subcommand" 1 'ERROR: Unknown command' script --access-key script
+check_cluster "script-package list: --access-key script" 22 'user.init failed' -- script-package list --access-key script
+check_cluster "script-package list: --access-key banana" 22 'user.init failed' -- script-package list --access-key banana
+check_cluster "script get: --access-key script before the command words" 22 'user.init failed' -- --access-key script script get
+check_cluster "script-package list: --access-key script before the command words" 22 'user.init failed' -- --access-key script script-package list
+check_cluster "metadata list user: --access-key script before the command words" 22 'user.init failed' -- --access-key script metadata list user
+
+# a flag the loop does know takes the word as its value first
+check_cluster "user info: --uid script" 22 'could not fetch user info' -- user info --uid script
+check_cluster "user info: --bucket script" 22 'ERROR: --uid or --access-key required' -- user info --bucket script
+check_cluster "metadata list: --bucket script" 0 "" -- metadata list --bucket script
+
+# a global flag before the command words
+check_cluster "metadata list script: --tenant before the command" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant t metadata list script
+check_cluster "script-package list: --tenant before the command" 22 "ERROR: --tenant is set, but there's no user ID" -- --tenant t script-package list
 
 # ============================================================
 echo ""
