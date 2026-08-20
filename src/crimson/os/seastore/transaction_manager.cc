@@ -1267,6 +1267,13 @@ TransactionManager::move_region(
         ).handle_error_interruptible(
           move_region_iertr::pass_further(),
           crimson::ct_error::assert_all("invalid error"));
+        // similar to _remove, decrement target direct refcount
+        co_await src.direct_cursor->refresh();
+        co_await lba_manager->update_mapping_refcount(
+          t, src.direct_cursor, -1
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
         src = co_await resolve_cursor_to_mapping(t, std::move(cursor));
         dst = co_await dst.refresh();
       }
