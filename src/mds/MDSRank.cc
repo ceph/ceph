@@ -4168,6 +4168,8 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
     "mds_export_ephemeral_distributed",
+    "mds_export_ephemeral_distributed_factor",
+    "mds_export_ephemeral_frag_factor",
     "mds_export_ephemeral_random",
     "mds_export_ephemeral_random_max",
     "mds_extraordinary_events_dump_interval",
