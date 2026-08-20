@@ -80,7 +80,7 @@ class ValidClearReplaceHeaderDevice(ValidDevice):
 
     def _is_valid_device(self) -> Device:
         if not self._device.is_being_replaced:
-            mlogger.info(f'{self.dev_path} has no replacement header.')
+            mlogger.debug(f'{self.dev_path} has no replacement header.')
         return self._device
 
 
