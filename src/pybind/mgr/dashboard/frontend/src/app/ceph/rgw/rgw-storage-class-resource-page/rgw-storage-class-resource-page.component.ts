@@ -19,6 +19,7 @@ import {
   TARGET_ACCESS_KEY_TEXT,
   TARGET_PATH_TEXT,
   LOCATION_CONSTRAINT_TEXT,
+  TARGET_STORAGE_CLASS_TEXT,
   TIER_TYPE,
   TIER_TYPE_DISPLAY,
   ZoneGroupDetails
@@ -219,6 +220,12 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
           label: $localize`Target Path`,
           value: details?.target_path,
           helperText: TARGET_PATH_TEXT
+        },
+        {
+          label: $localize`Target storage class`,
+          value: details?.target_storage_class,
+          helperText: TARGET_STORAGE_CLASS_TEXT,
+          emptyText: '-'
         },
         {
           label: $localize`Access key`,
