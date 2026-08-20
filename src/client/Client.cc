@@ -15269,9 +15269,16 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SETXATTR);
   filepath path;
   in->make_nosnap_relative_path(path);
-  req->set_filepath(path); // why not filepath(ino=in->ino) FIXME ??
+  req->set_filepath(path);
+
+  if (flags & VXATTR_ALTNAME) {
+    req->set_dentry(in->get_first_parent());
+    req->dentry_drop = CEPH_CAP_FILE_SHARED;
+    req->dentry_unless = CEPH_CAP_FILE_EXCL;
+  } else {
+    req->set_inode(in);
+  }
   req->set_string2(name);
-  req->set_inode(in);
   req->head.args.setxattr.flags = xattr_flags;
 
   bufferlist bl;
@@ -15726,6 +15733,31 @@ size_t Client::_vxattrcb_caps(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%s/0x%x", ccap_string(issued).c_str(), issued);
 }
 
+size_t Client::_vxattrcb_alternate_name(Inode *in, char *val, size_t size)
+{
+  auto altn = in->get_first_parent()->alternate_name;
+  auto length = altn.length();
+
+  if (size < length) {
+    return -ERANGE;
+  }
+
+  memcpy(val, altn.c_str(), length);
+  return length;
+}
+
+int Client::_vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size,
+				       const UserPerm& perms)
+{
+  return _do_setxattr(in, "ceph.alternate_name", val, size, VXATTR_ALTNAME, perms);
+}
+
+bool Client::_vxattrcb_alternate_name_exists(Inode *in)
+{
+  auto alternate_name = in->get_first_parent()->alternate_name.c_str();
+  return alternate_name_visible && !fscrypt_as && alternate_name;
+}
+
 bool Client::_vxattrcb_mirror_info_exists(Inode *in)
 {
   // checking one of the xattrs would suffice
@@ -15905,6 +15937,14 @@ const Client::VXattr Client::_common_vxattrs[] = {
     setxattr_cb: &Client::_vxattrcb_fscrypt_file_set,
     readonly: false,
     exists_cb: &Client::_vxattrcb_fscrypt_file_exists,
+    flags: 0,
+  },
+  {
+    name: "ceph.alternate_name",
+    getxattr_cb: &Client::_vxattrcb_alternate_name,
+    setxattr_cb: &Client::_vxattrcb_alternate_name_set,
+    readonly: false,
+    exists_cb: &Client::_vxattrcb_alternate_name_exists,
     flags: 0,
   },
   { name: "" }     /* Required table terminator */
