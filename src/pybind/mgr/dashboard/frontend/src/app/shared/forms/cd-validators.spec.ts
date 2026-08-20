@@ -524,6 +524,12 @@ describe('CdValidators', () => {
       formHelper.expectValid('x');
       formHelper.expectError('y', 'notUnique');
     });
+
+    it('should not error when confirm value is empty', () => {
+      formHelper.setValue('y', '');
+      CdValidators.match('x', 'y')(form);
+      formHelper.expectValid('y');
+    });
   });
 
   describe('unique', () => {

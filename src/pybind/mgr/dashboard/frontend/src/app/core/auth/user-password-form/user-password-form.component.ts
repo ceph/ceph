@@ -104,6 +104,13 @@ export class UserPasswordFormComponent {
         validators: [CdValidators.match('newpassword', 'confirmnewpassword')]
       }
     );
+
+    this.userForm.get('oldpassword').valueChanges.subscribe(() => {
+      this.userForm.get('newpassword').updateValueAndValidity({ emitEvent: false });
+    });
+    this.userForm.get('newpassword').valueChanges.subscribe(() => {
+      this.userForm.get('oldpassword').updateValueAndValidity({ emitEvent: false });
+    });
   }
 
   onSubmit() {
