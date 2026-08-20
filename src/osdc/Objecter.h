@@ -4032,12 +4032,13 @@ public:
   void sg_write_trunc(std::vector<ObjectExtent>& extents, const SnapContext& snapc,
 		      const ceph::buffer::list& bl, ceph::real_time mtime, int flags,
 		      uint64_t trunc_size, __u32 trunc_seq,
-		      Context *oncommit, int op_flags = 0) {
+		      Context *oncommit, int op_flags = 0,
+                      ObjectOperation *extra_ops=NULL) {
     if (extents.size() == 1) {
       write_trunc(extents[0].oid, extents[0].oloc, extents[0].offset,
 		  extents[0].length, snapc, bl, mtime, flags,
 		  extents[0].truncate_size, trunc_seq, oncommit,
-		  0, 0, op_flags);
+		  0, extra_ops, op_flags);
     } else {
       C_GatherBuilder gcom(cct, oncommit);
       auto it = bl.cbegin();
@@ -4055,7 +4056,7 @@ public:
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
 	      oncommit ? gcom.new_sub():0,
-	      0, 0, op_flags);
+              0, extra_ops, op_flags);
       }
       gcom.activate();
     }
