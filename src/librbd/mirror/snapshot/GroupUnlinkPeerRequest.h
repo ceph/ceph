@@ -48,6 +48,46 @@ public:
   void send();
 
 private:
+  /**
+  * @verbatim
+  *                               send()
+  *                                 |
+  *                                 v
+  *       /------------------> LIST_GROUP_SNAPS
+  *       |                         |
+  *       |                         v     no more snaps eligible (r == 0)
+  *       |                    UNLINK_PEER -----------------------> FINISH(0)
+  *       |                         |
+  *       |                         |
+  *       |                         |  snaps with no peer_uuids or incomplete/
+  *       |                         v   snaps_count > max_snaps
+  *       |                  PROCESS_SNAPSHOT
+  *       |                         |
+  *       |    empty peer uuids or  +
+  *       |    incomplete snapshot  | count = max_snaps
+  *       |                 +-------+---------+
+  *       ^                 |                 |
+  *       |                 |                 v
+  *       |                 |    REMOVE_PEER_UUID_FROM_GROUP_SNAP
+  *       |                 |                 |
+  *       |                 |                 v
+  *       |                 |    REMOVE_PEER_UUID_FROM_IMAGE_SNAPS
+  *       |                 |                 |
+  *       |                 |                 v
+  *       |                 |    UPDATE_PEER_UUID_ON_GROUP_SNAP
+  *       |                 |                 |
+  *       |                 |                 v
+  *       |                 \------->REMOVE_GROUP_SNAPSHOT
+  *       |                                   |
+  *       |                                   v
+  *       |                           REMOVE_IMAGE_SNAPSHOT
+  *       |                                   |
+  *       |                                   v
+  *       <---------------------------REMOVE_SNAP_METADATA
+  *
+  * @endverbatim
+  */
+
   librados::IoCtx &m_group_io_ctx;
   const std::string m_group_id;
   std::set<std::string> *m_mirror_peer_uuids;
@@ -55,7 +95,6 @@ private:
   Context *m_on_finish;
 
   uint64_t m_max_snaps;
-  bool m_has_newer_mirror_snap = false;
   CephContext *m_cct;
 
   std::vector<cls::rbd::GroupSnapshot> m_group_snaps;
