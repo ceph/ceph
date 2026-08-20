@@ -241,7 +241,10 @@ def test_object_create_bad_contentlength_empty():
 @pytest.mark.auth_common
 @pytest.mark.fails_on_mod_proxy_fcgi
 def test_object_create_bad_contentlength_negative():
-    client = get_client()
+    # to test Content-Length=-1, we have to prevent the checksum calculation
+    # from switching to STREAMING-UNSIGNED-PAYLOAD-TRAILER
+    config = botocore.config.Config(request_checksum_calculation = 'when_required')
+    client = get_client(config)
     bucket_name = get_new_bucket()
     key_name = 'foo'
     e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key_name, ContentLength=-1)
