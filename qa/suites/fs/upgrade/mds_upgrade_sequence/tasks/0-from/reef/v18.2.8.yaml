@@ -18,11 +18,11 @@ tasks:
         osd_class_default_list: "*"
 - print: "**** done end installing v18.2.8 cephadm ..."
 - cephadm.shell:
-    host.a:
+    mon.a:
       - ceph config set mgr mgr/cephadm/use_repo_digest true --force
 - print: "**** done cephadm.shell ceph config set mgr..."
 - cephadm.shell:
-    host.a:
+    mon.a:
       - ceph orch status
       - ceph orch ps
       - ceph orch ls
