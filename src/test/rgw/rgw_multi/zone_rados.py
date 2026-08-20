@@ -66,15 +66,8 @@ class RadosZone(Zone):
             super(RadosZone.Conn, self).__init__(zone, credentials)
 
         def get_bucket(self, name):
-            try:
-                self.s3_client.head_bucket(Bucket=name)
-                # if no exception, bucket exists
-                return self.s3_resource.Bucket(name)
-            except ClientError as e:
-                error_code = e.response['Error']['Code']
-                if error_code in ['404', 'NoSuchBucket']:
-                    return None
-                raise
+            self.s3_client.head_bucket(Bucket=name)
+            return self.s3_resource.Bucket(name)
 
         def create_bucket(self, name):
             try:
