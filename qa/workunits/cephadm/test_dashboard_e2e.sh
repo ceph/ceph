@@ -33,14 +33,17 @@ install_common () {
 
 install_chrome () {
     if grep -q  debian /etc/*-release; then
-        $SUDO bash -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list'
-        curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | $SUDO apt-key add -
-        $SUDO apt-get update
-        $SUDO apt-get install -y google-chrome-stable
+        if ! dpkg -s google-chrome-stable &>/dev/null; then
+            $SUDO bash -c 'echo "deb [arch=amd64] https://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list'
+            curl -fsSL https://dl.google.com/linux/linux_signing_key.pub | $SUDO apt-key add -
+            $SUDO apt-get update
+            $SUDO apt-get install -y google-chrome-stable
+            $SUDO rm /etc/apt/sources.list.d/google-chrome.list
+        fi
         $SUDO apt-get install -y xvfb
-        $SUDO rm /etc/apt/sources.list.d/google-chrome.list
     elif grep -q rhel /etc/*-release; then
-        $SUDO dd of=/etc/yum.repos.d/google-chrome.repo status=none <<EOF
+        if ! rpm -q google-chrome-stable &>/dev/null; then
+            $SUDO dd of=/etc/yum.repos.d/google-chrome.repo status=none <<EOF
 [google-chrome]
 name=google-chrome
 baseurl=https://dl.google.com/linux/chrome/rpm/stable/\$basearch
@@ -48,8 +51,9 @@ enabled=1
 gpgcheck=1
 gpgkey=https://dl-ssl.google.com/linux/linux_signing_key.pub
 EOF
-        $SUDO yum install -y google-chrome-stable
-        $SUDO rm /etc/yum.repos.d/google-chrome.repo
+            $SUDO yum install -y google-chrome-stable
+            $SUDO rm /etc/yum.repos.d/google-chrome.repo
+        fi
         # Cypress dependencies
         $SUDO yum install -y xorg-x11-server-Xvfb gtk2-devel gtk3-devel libnotify-devel GConf2 nss.x86_64 libXScrnSaver alsa-lib
     else
