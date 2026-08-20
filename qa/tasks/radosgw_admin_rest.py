@@ -437,6 +437,58 @@ def task(ctx, config):
     assert ret == 200
     assert not out['suspended']
 
+    # TESTCASE 'set-placement','user','modify','default placement and tags','succeeds'
+    # a STANDARD storage class is not stored as such: rgw_placement_rule is
+    # persisted through to_str(), which drops the storage class when it is the
+    # standard one, so only the placement itself can be asserted here
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : user1,
+             'default-placement' : 'default-placement',
+             'placement-tags' : 'tag1,tag2'
+            })
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : user1})
+    assert ret == 200
+    assert out['default_placement'] == 'default-placement'
+    assert out['placement_tags'] == ['tag1', 'tag2']
+
+    # TESTCASE 'keep-placement','user','modify','placement params omitted','left unchanged'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : user1, 'display-name' : display_name1})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : user1})
+    assert ret == 200
+    assert out['default_placement'] == 'default-placement'
+    assert out['placement_tags'] == ['tag1', 'tag2']
+
+    # TESTCASE 'storage-class-without-placement','user','modify','storage class alone','fails'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : user1, 'default-storage-class' : 'STANDARD'})
+    assert ret == 400
+
+    # TESTCASE 'clear-placement','user','modify','empty default placement','clears rule'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : user1, 'default-placement' : ''})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : user1})
+    assert ret == 200
+    assert out['default_placement'] == ''
+    assert out['default_storage_class'] == ''
+    assert out['placement_tags'] == ['tag1', 'tag2']
+
+    # TESTCASE 'clear-placement-tags','user','modify','empty placement tags','clears list'
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'modify'],
+            {'uid' : user1, 'placement-tags' : ''})
+    assert ret == 200
+
+    (ret, out) = rgwadmin_rest(endpoint, admin_creds, ['user', 'info'], {'uid' : user1})
+    assert ret == 200
+    assert out['default_placement'] == ''
+    assert out['placement_tags'] == []
+
     # TESTCASE 'add-keys','key','create','w/valid info','succeeds'
     (ret, out) = rgwadmin_rest(endpoint, admin_creds,
             [('user', 'key'), 'create'],
