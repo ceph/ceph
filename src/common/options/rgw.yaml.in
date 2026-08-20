@@ -2134,8 +2134,10 @@ options:
     failure. This option controls how long (in seconds) an IP address remains
     marked as "failed" before RGW considers it eligible for retry.
     After this timeout expires, the IP will be tried again in the normal
-    round-robin rotation.
-  default: 2
+    round-robin rotation. A longer timeout keeps requests away from a peer
+    that stays down, at the cost of taking that much longer to bring a
+    recovered peer back into rotation; nothing probes the IP in the meantime.
+  default: 30
   services:
   - rgw
   see_also:
