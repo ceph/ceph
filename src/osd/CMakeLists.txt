@@ -64,12 +64,18 @@ if(HAS_VTA)
   set_source_files_properties(osdcap.cc
     PROPERTIES COMPILE_FLAGS -fno-var-tracking-assignments)
 endif()
+if(WITH_OSD_CUOBJ)
+  list(APPEND osd_srcs osd_cuobj.cc)
+endif()
 add_library(osd STATIC ${osd_srcs})
 target_link_libraries(osd
   PUBLIC dmclock::dmclock Boost::MPL
   PRIVATE
     legacy-option-headers
     os heap_profiler cpu_profiler ${FMT_LIB} ${CMAKE_DL_LIBS})
+if(WITH_OSD_CUOBJ)
+  target_link_libraries(osd PRIVATE ${CUOBJSERVER_LIBRARY} IBVerbs::verbs)
+endif()
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

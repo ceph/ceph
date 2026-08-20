@@ -74,6 +74,7 @@ class Message;
 class MonClient;
 class ObjectStore;
 class FuseStore;
+class OSDCuObj;
 class OSDMap;
 class MLog;
 class Objecter;
@@ -117,6 +118,12 @@ public:
 
   md_config_cacher_t<Option::size_t> osd_max_object_size;
   md_config_cacher_t<bool> osd_skip_data_digest;
+
+#ifdef WITH_OSD_CUOBJ
+  /// cuObject RDMA endpoint backing CEPH_OSD_OP_READ_RDMA; null unless
+  /// osd_cuobj_enabled and the RDMA session came up
+  OSDCuObj* cuobj = nullptr;
+#endif
 
   void enqueue_back(OpSchedulerItem&& qi);
   void enqueue_front(OpSchedulerItem&& qi);
