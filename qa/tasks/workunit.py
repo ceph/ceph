@@ -8,6 +8,7 @@ import shlex
 
 from tasks.util import get_remote_for_role
 from tasks.util.workunit import get_refspec_after_overrides
+from tasks.watched_process import WatchedProcess
 
 from teuthology import misc
 from teuthology.config import config as teuth_config
@@ -16,6 +17,64 @@ from teuthology.parallel import parallel
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
+
+
+class WorkunitProcess(WatchedProcess):
+    """
+    Lets the DaemonWatchdog stop a workunit that is blocked on a cluster which
+    has already failed, instead of leaving it to run out its own timeout. By
+    default, watchdog is disabled.
+
+    To enable it do the following:
+
+        tasks:
+        - workunit:
+            watchdog: true
+            clients:
+            ...
+
+    If the workunit runs in cephadm, make sure to enable watchdog_setup too:
+
+        overrides:
+            cephadm:
+                watchdog_setup: true
+    """
+
+    def __init__(self, remote, role, workunit, pattern):
+        super(WorkunitProcess, self).__init__()
+
+        self._remote = remote
+        self._pattern = pattern
+        self._name = 'workunit.{role}.{workunit}'.format(role=role,
+                                                         workunit=workunit)
+
+    @property
+    def id(self):
+        return self._name
+
+    def _session(self):
+        """
+        The session the workunit's ssh command runs in, or None if it has
+        already gone. This is needed to terminate the process session if
+        the watchdog barks.
+        """
+        for line in self._remote.sh('ps -eo sess=,args=', quiet=True).splitlines():
+            sess, _, args = line.strip().partition(' ')
+            if self._pattern in args and sess.isdigit() and sess != '0':
+                return sess
+        return None
+
+    def stop(self):
+        log.debug('Stopping %s: %s', self._name, self._exception)
+        sess = self._session()
+        if sess is None:
+            log.debug('%s has already gone', self._name)
+            return
+        self._remote.run(
+            args=['sudo', 'pkill', '-KILL', '-s', sess],
+            check_status=False,
+        )
+
 
 def task(ctx, config):
     """
@@ -99,6 +158,7 @@ def task(ctx, config):
     refspec = get_refspec_after_overrides(config, overrides)
     timeout = config.get('timeout', '3h')
     cleanup = config.get('cleanup', True)
+    watchdog = config.get('watchdog', False)
 
     log.info('Pulling workunits from ref %s', refspec)
 
@@ -131,6 +191,7 @@ def task(ctx, config):
                         subdir=config.get('subdir'),
                         timeout=timeout,
                         cleanup=cleanup,
+                        watchdog=watchdog,
                         coverage_and_limits=not config.get('no_coverage_and_limits', None))
 
     if cleanup:
@@ -144,7 +205,7 @@ def task(ctx, config):
         _spawn_on_all_clients(ctx, refspec, all_tasks, config.get('env'),
                               config.get('basedir', 'qa/workunits'),
                               config.get('subdir'), timeout=timeout,
-                              cleanup=cleanup)
+                              cleanup=cleanup, watchdog=watchdog)
 
 
 def _client_mountpoint(ctx, cluster, id_):
@@ -272,7 +333,8 @@ def _make_scratch_dir(ctx, role, subdir):
     return created_mountpoint
 
 
-def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None, cleanup=True):
+def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=None,
+                          cleanup=True, watchdog=False):
     """
     Make a scratch directory for each client in the cluster, and then for each
     test spawn _run_tests() for each role.
@@ -294,7 +356,8 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
                 p.spawn(_run_tests, ctx, refspec, role, [unit], env,
                         basedir,
                         subdir,
-                        timeout=timeout)
+                        timeout=timeout,
+                        watchdog=watchdog)
 
     # cleanup the generated client directories
     if cleanup:
@@ -303,7 +366,7 @@ def _spawn_on_all_clients(ctx, refspec, tests, env, basedir, subdir, timeout=Non
 
 
 def _run_tests(ctx, refspec, role, tests, env, basedir,
-               subdir=None, timeout=None, cleanup=True,
+               subdir=None, timeout=None, cleanup=True, watchdog=False,
                coverage_and_limits=True):
     """
     Run the individual test. Create a scratch directory and then extract the
@@ -459,27 +522,39 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                         '{tdir}/archive/coverage'.format(tdir=testdir)])
                 if timeout and timeout != '0':
                     args.extend(['timeout', timeout])
-                args.extend([
-                    '{srcdir}/{workunit}'.format(
-                        srcdir=srcdir,
-                        workunit=workunit,
-                    ),
-                ])
-                if 'unit_test_scan' in optional_args:
-                    optional_args.remove('unit_test_scan')
-                    remote.run_unit_test(
-                        logger=log.getChild(role),
-                        args=args + optional_args,
-                        label="workunit test {workunit}".format(workunit=workunit),
-                        xml_path_regex=f'{testdir}/archive/unit_test_xml_report/*.xml',
-                        output_yaml=os.path.join(ctx.archive, 'unit_test_summary.yaml'),
-                    )
-                else:
-                    remote.run(
-                        logger=log.getChild(role),
-                        args=args + optional_args,
-                        label="workunit test {workunit}".format(workunit=workunit)
-                    )
+                workunit_path = '{srcdir}/{workunit}'.format(
+                    srcdir=srcdir,
+                    workunit=workunit,
+                )
+                args.extend([workunit_path])
+                watched = None
+                if watchdog:
+                    watched = WorkunitProcess(remote, role, workunit,
+                                              workunit_path)
+                    ctx.ceph[cluster].watched_processes.append(watched)
+                try:
+                    if 'unit_test_scan' in optional_args:
+                        optional_args.remove('unit_test_scan')
+                        remote.run_unit_test(
+                            logger=log.getChild(role),
+                            args=args + optional_args,
+                            label="workunit test {workunit}".format(workunit=workunit),
+                            xml_path_regex=f'{testdir}/archive/unit_test_xml_report/*.xml',
+                            output_yaml=os.path.join(ctx.archive, 'unit_test_summary.yaml'),
+                        )
+                    else:
+                        remote.run(
+                            logger=log.getChild(role),
+                            args=args + optional_args,
+                            label="workunit test {workunit}".format(workunit=workunit)
+                        )
+                except Exception:
+                    if watched is not None and watched.exception:
+                        raise watched.exception
+                    raise
+                finally:
+                    if watched is not None:
+                        ctx.ceph[cluster].watched_processes.remove(watched)
                 if cleanup:
                     args=['sudo', 'rm', '-rf', '--', scratch_tmp]
                     remote.run(logger=log.getChild(role), args=args, timeout=(60*60))
