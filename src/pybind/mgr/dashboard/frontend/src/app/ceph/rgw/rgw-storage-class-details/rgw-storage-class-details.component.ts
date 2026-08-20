@@ -17,6 +17,7 @@ import {
   RESTORE_DAYS_TEXT,
   READTHROUGH_RESTORE_DAYS_TEXT,
   RESTORE_STORAGE_CLASS_TEXT,
+  LOCATION_CONSTRAINT_TEXT,
   ZONEGROUP_TEXT,
   ACL,
   GroupedACLs,
@@ -49,6 +50,7 @@ export class RgwStorageClassDetailsComponent implements OnChanges, OnInit {
   restoreDaysText = RESTORE_DAYS_TEXT;
   readthroughrestoreDaysText = READTHROUGH_RESTORE_DAYS_TEXT;
   restoreStorageClassText = RESTORE_STORAGE_CLASS_TEXT;
+  locationConstraintText = LOCATION_CONSTRAINT_TEXT;
   zoneGroupText = ZONEGROUP_TEXT;
   groupedACLs: GroupedACLs = {};
   localStorageClassDetails = { zone_name: '', data_pool: '' };
