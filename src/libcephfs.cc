@@ -36,6 +36,7 @@
 #include "messages/MMonMap.h"
 #include "msg/Messenger.h"
 #include "include/ceph_assert.h"
+#include "common/perf_counters.h"
 #include "mds/MDSMap.h"
 
 #include "include/cephfs/libcephfs.h"
@@ -2676,6 +2677,17 @@ extern "C" void ceph_free_snap_info_buffer(struct snap_info *snap_info) {
     free((void *)snap_info->snap_metadata[i].key); // malloc'd memory is key+value composite
   }
   free(snap_info->snap_metadata);
+}
+
+extern "C" int ceph_get_perf_counters_range(struct ceph_mount_info *cmount,
+                                             int from, int count,
+                                             struct ceph_perf_counter_entry *entries)
+{
+  Client *client = cmount->get_client();
+  if (!client) {
+    return -ENOTCONN;
+  }
+  return client->get_perf_counters_range(from, count, entries);
 }
 
 extern "C" int ceph_get_perf_counters(struct ceph_mount_info *cmount, char **perf_dump) {

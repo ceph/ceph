@@ -18,6 +18,7 @@
 #include "gtest/gtest.h"
 #include "include/cephfs/libcephfs.h"
 #include "include/ceph_fs.h"
+#include "include/cephfs/ceph_perf_counter_entry.h"
 #include "mds/mdstypes.h"
 #include "include/stat.h"
 #include <errno.h>
@@ -33,6 +34,10 @@
 #include <sys/resource.h>
 #endif
 
+
+#include "common/ceph_json.h"
+#include "include/utime.h"
+
 #include "common/Clock.h"
 
 #ifdef __linux__
@@ -46,7 +51,7 @@
 #include <thread>
 #include <random>
 #include <regex>
-
+#include <cstring>
 // Darwin or windows fails to define this
 #ifndef O_RSYNC
 #define O_RSYNC 0x0
@@ -5163,4 +5168,92 @@ TEST(LibCephFS, ZeroSizeBufferAsyncReadFsync) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_release(cmount);
   ceph_userperm_destroy(perms);
+}
+
+TEST(LibCephFS, PerfCountersRange) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+
+  // unmounted handle must return -ENOTCONN
+  struct ceph_perf_counter_entry buf[CEPH_PERF_COUNTERS_MAX];
+  ASSERT_EQ(-ENOTCONN, ceph_get_perf_counters_range(cmount, 0, CEPH_PERF_COUNTERS_MAX, buf));
+
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  // Fetch all counters in one call.
+  int n = ceph_get_perf_counters_range(cmount, 0, CEPH_PERF_COUNTERS_MAX, buf);
+  ASSERT_GT(n, 0);
+
+  // Every entry must have a non-empty name and a non-negative value.
+  for (int i = 0; i < n; i++) {
+    EXPECT_NE('\0', buf[i].name[0])
+        << "slot " << i << " has empty name";
+    EXPECT_GE(buf[i].value, 0)
+        << "negative value at slot " << i
+        << " (name=" << buf[i].name << ")";
+    EXPECT_TRUE(buf[i].type == CEPH_PERF_KIND_U64 ||
+                buf[i].type == CEPH_PERF_KIND_TIME)
+        << "unknown type at slot " << i;
+  }
+
+  // Find the well-known counters by name and verify type.
+  // rdops and wrops must be 0 on a fresh mount; mdops is not checked for
+  // zero because mount() itself issues at least one metadata op (GETATTR
+  // on the mount root).
+  struct { const char *name; int kind; bool check_zero; } expected[] = {
+    { "mdops",    CEPH_PERF_KIND_U64,  false },
+    { "rdops",    CEPH_PERF_KIND_U64,  true  },
+    { "wrops",    CEPH_PERF_KIND_U64,  true  },
+    { "mdavg",    CEPH_PERF_KIND_TIME, false },
+    { "readavg",  CEPH_PERF_KIND_TIME, false },
+    { "writeavg", CEPH_PERF_KIND_TIME, false },
+  };
+  for (auto &e : expected) {
+    bool found = false;
+    for (int i = 0; i < n; i++) {
+      if (strcmp(buf[i].name, e.name) == 0) {
+        found = true;
+        EXPECT_EQ(e.kind, (int)buf[i].type)
+            << "wrong kind for counter '" << e.name << "'";
+        if (e.check_zero) {
+          EXPECT_EQ(0, buf[i].value)
+              << "'" << e.name << "' must be 0 on fresh mount";
+        }
+        break;
+      }
+    }
+    EXPECT_TRUE(found) << "counter '" << e.name << "' not found";
+  }
+
+  // Verify batched iteration returns the same entries as the single-shot fetch.
+  // Iterate two at a time and collect all results.
+  std::vector<std::string> batched_names;
+  int from = 0, got;
+  struct ceph_perf_counter_entry batch[2];
+  while ((got = ceph_get_perf_counters_range(cmount, from, 2, batch)) > 0) {
+    for (int i = 0; i < got; i++)
+      batched_names.push_back(batch[i].name);
+    from += got;
+  }
+  ASSERT_EQ(0, got); // 0 = end-of-entries, not an error
+  ASSERT_EQ((size_t)n, batched_names.size());
+  for (int i = 0; i < n; i++)
+    EXPECT_EQ(std::string(buf[i].name), batched_names[i])
+        << "batched entry " << i << " name mismatch";
+
+  printf("ceph_get_perf_counters_range  n=%d\n", n);
+  printf("  %-4s  %-5s  %-32s  %s\n", "idx", "type", "name", "value");
+  printf("  %-4s  %-5s  %-32s  %s\n", "---", "----", "----", "-----");
+  for (int i = 0; i < n; i++) {
+    printf("  %-4d  %-5s  %-32s  %lld%s\n",
+           i,
+           buf[i].type == CEPH_PERF_KIND_TIME ? "TIME" : "U64",
+           buf[i].name,
+           (long long)buf[i].value,
+           buf[i].type == CEPH_PERF_KIND_TIME ? " ns" : "");
+  }
+
+  ceph_shutdown(cmount);
 }

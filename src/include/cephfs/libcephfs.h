@@ -2432,6 +2432,21 @@ int ceph_get_snap_info(struct ceph_mount_info *cmount,
  */
 void ceph_free_snap_info_buffer(struct snap_info *snap_info);
 
+#include "ceph_perf_counter_entry.h"
+
+/**
+ * Fill a caller-supplied array with a snapshot of client perf counters.
+ *
+ * @param cmount   the ceph mount handle.
+ * @param from     index of the first counter to return (0 = start).
+ * @param count    capacity of the @p entries array.
+ * @param entries  caller-allocated array to fill.
+ *
+ * @return number of entries written (>0), 0 if @p from is past the last
+ *         counter (end-of-entries), or a negative error code.
+ */
+int ceph_get_perf_counters_range(struct ceph_mount_info *cmount, int from,  int count,struct ceph_perf_counter_entry *entries);
+
 /**
  * perf counters via libcephfs API.
  */
