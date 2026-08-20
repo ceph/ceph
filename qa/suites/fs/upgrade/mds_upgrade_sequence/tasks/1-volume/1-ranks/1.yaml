@@ -1,4 +1,4 @@
 tasks:
 - cephadm.shell:
-    host.a:
+    mon.a:
       - ceph fs set cephfs max_mds 1
