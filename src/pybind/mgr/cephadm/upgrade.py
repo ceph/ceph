@@ -1414,10 +1414,6 @@ class CephadmUpgrade:
         if self.upgrade_state.health_warnings_muted:
             self._unmute_upgrade_related_health_warnings()
 
-        if getattr(self.upgrade_state, 'noautoscale_set', False):
-            self._unset_noautoscale()
-            self.upgrade_state.noautoscale_set = False
-
         logger.info('Upgrade: Complete!')
         if self.upgrade_state.progress_id:
             self.mgr.remote('progress', 'complete',
