@@ -62,6 +62,8 @@ public:
 
   virtual bool need_tickets() = 0;
 
+  virtual void invalidate_all_tickets() {} // FIXME = 0
+
   virtual void set_global_id(uint64_t id) = 0;
 
   static AuthClientHandler* create(CephContext* cct, int proto, RotatingKeyRing* rkeys);

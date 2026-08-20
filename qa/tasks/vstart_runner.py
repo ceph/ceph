@@ -795,6 +795,8 @@ class LocalCephManager(CephManager):
         self.run_ceph_w_prefix = self.run_cluster_cmd_prefix = [CEPH_CMD]
         self.RADOS_CMD = [RADOS_CMD]
 
+        self.save_conf_epoch()
+
     def get_ceph_cmd(self, **kwargs):
         return [CEPH_CMD]
 

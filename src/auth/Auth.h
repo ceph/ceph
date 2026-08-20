@@ -16,7 +16,18 @@
 #define CEPH_AUTHTYPES_H
 
 #include "Crypto.h"
+#include "common/CanHasPrint.h"
 #include "common/entity_name.h"
+#include "common/Formatter.h"
+#include "include/buffer.h"
+#include "include/ceph_fs.h" // for CEPH_AUTH_UNKNOWN
+#include "include/common_fwd.h"
+
+#include <cstdint>
+#include <iostream>
+#include <list>
+#include <map>
+#include <string>
 
 // The _MAX values are a bit wonky here because we are overloading the first
 // byte of the auth payload to identify both the type of authentication to be
@@ -36,6 +47,13 @@ struct EntityAuth {
   std::map<std::string, ceph::buffer::list> caps;
   CryptoKey pending_key; ///< new but uncommitted key
 
+  void print(std::ostream& out) const {
+    out << "auth(key=" << key;
+    if (!pending_key.empty()) {
+      out << " pending_key=" << pending_key;
+    }
+    out << ")";
+  }
   void encode(ceph::buffer::list& bl) const {
     __u8 struct_v = 3;
     using ceph::encode;
@@ -59,18 +77,20 @@ struct EntityAuth {
       decode(pending_key, bl);
     }
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("key", key);
+    f->dump_object("pending_key", pending_key);
+    f->open_array_section("caps");
+    for (auto const& [entity, cap] : caps) {
+      f->open_object_section("cap");
+      f->dump_string("service_name", entity);
+      f->dump_string("access_spec", cap.to_str());
+      f->close_section();
+    }
+    f->close_section();
+  }
 };
 WRITE_CLASS_ENCODER(EntityAuth)
-
-inline std::ostream& operator<<(std::ostream& out, const EntityAuth& a)
-{
-  out << "auth(key=" << a.key;
-  if (!a.pending_key.empty()) {
-    out << " pending_key=" << a.pending_key;
-  }
-  out << ")";
-  return out;
-}
 
 struct AuthCapsInfo {
   bool allow_all;
@@ -217,6 +237,9 @@ struct ExpiringCryptoKey {
   CryptoKey key;
   utime_t expiration;
 
+  void print(std::ostream& out) const {
+    out << key << " expires " << expiration;
+  }
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
@@ -231,13 +254,12 @@ struct ExpiringCryptoKey {
     decode(key, bl);
     decode(expiration, bl);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("key", key);
+    f->dump_stream("expiration") << expiration;
+  }
 };
 WRITE_CLASS_ENCODER(ExpiringCryptoKey)
-
-inline std::ostream& operator<<(std::ostream& out, const ExpiringCryptoKey& c)
-{
-  return out << c.key << " expires " << c.expiration;
-}
 
 struct RotatingSecrets {
   std::map<uint64_t, ExpiringCryptoKey> secrets;
@@ -293,8 +315,28 @@ struct RotatingSecrets {
   bool empty() {
     return secrets.empty();
   }
+  void wipe() {
+    secrets.clear();
+  }
+  auto begin() const {
+    return secrets.begin();
+  }
+  auto end() const {
+    return secrets.end();
+  }
 
   void dump();
+  void dump(ceph::Formatter *f) const {
+    f->dump_int("max_ver", max_ver);
+    f->open_array_section("keys");
+    for (const auto& [id, key] : secrets) {
+      f->open_object_section("secret");
+      f->dump_int("id", id);
+      f->dump_object("expiring_key", key);
+      f->close_section();
+    }
+    f->close_section();
+  }
 };
 WRITE_CLASS_ENCODER(RotatingSecrets)
 
@@ -302,7 +344,7 @@ WRITE_CLASS_ENCODER(RotatingSecrets)
 
 class KeyStore {
 public:
-  virtual ~KeyStore() {}
+  virtual ~KeyStore() = default;
   virtual bool get_secret(const EntityName& name, CryptoKey& secret) const = 0;
   virtual bool get_service_secret(uint32_t service_id, uint64_t secret_id,
 				  CryptoKey& secret) const = 0;

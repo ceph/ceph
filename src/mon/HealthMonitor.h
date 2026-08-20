@@ -15,12 +15,14 @@
 #define CEPH_HEALTH_MONITOR_H
 
 #include "mon/PaxosService.h"
+#include "mon/PaxosMap.h"
+#include "mon/health_check.h"
 
 class HealthMonitor : public PaxosService
 {
   version_t version = 0;
-  std::map<int,health_check_map_t> quorum_checks;  // for each quorum member
-  health_check_map_t leader_checks;           // leader only
+  PaxosMap<Monitor, HealthMonitor, std::map<int,health_check_map_t> > quorum_checks;  // for each quorum member
+  PaxosMap<Monitor, HealthMonitor, health_check_map_t> leader_checks;           // leader only
   std::map<std::string,health_mute_t> mutes;
 
   std::map<std::string,health_mute_t> pending_mutes;
@@ -71,6 +73,11 @@ private:
   bool check_leader_health();
   bool check_member_health();
   bool check_mutes();
+
+public:
+  bool is_muted(const std::string& code) const {
+    return mutes.count(code) > 0;
+  }
 };
 
 #endif // CEPH_HEALTH_MONITOR_H

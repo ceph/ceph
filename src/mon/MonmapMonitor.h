@@ -37,6 +37,8 @@ class MonmapMonitor : public PaxosService {
   }
   MonMap pending_map; //the pending map awaiting passage
 
+  void init() override;
+
   void create_initial() override;
 
   void update_from_paxos(bool *need_bootstrap) override;
@@ -73,6 +75,8 @@ class MonmapMonitor : public PaxosService {
   void check_sub(Subscription *sub);
 
   void tick() override;
+
+  epoch_t bump_auth_epoch(epoch_t e);
 
 private:
   void check_subs();

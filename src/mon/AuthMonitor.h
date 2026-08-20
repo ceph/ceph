@@ -97,8 +97,9 @@ public:
 
 private:
   std::vector<Incremental> pending_auth;
-  uint64_t max_global_id;
-  uint64_t last_allocated_id;
+  uint64_t max_global_id = 0;
+  uint64_t last_allocated_id = 0;
+  boost::intrusive_ptr<CephContext> cct;
 
   // these are protected by mon->auth_lock
   int mon_num = 0, mon_rank = 0;
@@ -153,6 +154,8 @@ public:
 private:
   bool prepare_used_pending_keys(MonOpRequestRef op);
 
+  bool check_health();
+
   // propose pending update to peers
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void encode_full(MonitorDBStore::TransactionRef t) override;
@@ -164,6 +167,8 @@ private:
   bool prep_auth(MonOpRequestRef op, bool paxos_writable);
 
   bool preprocess_command(MonOpRequestRef op);
+
+  int get_cipher_type(const cmdmap_t& cmdmap, std::ostream& ss) const;
   bool prepare_command(MonOpRequestRef op);
 
   bool check_rotate();
@@ -186,10 +191,8 @@ private:
       const EntityAuth& auth);
 
  public:
-  AuthMonitor(Monitor &mn, Paxos &p, const std::string& service_name)
-    : PaxosService(mn, p, service_name),
-      max_global_id(0),
-      last_allocated_id(0)
+  AuthMonitor(CephContext* cct, Monitor &mn, Paxos &p, const std::string& service_name)
+    : PaxosService(mn, p, service_name), cct(cct)
   {}
 
   void pre_auth(MAuth *m);

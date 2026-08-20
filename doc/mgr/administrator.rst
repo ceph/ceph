@@ -39,7 +39,7 @@ upgrade a cluster from an old version of Ceph, or use the default
 install/deploy tools, your admin client should get this capability
 automatically. If you use tooling from elsewhere, you may get EACCES errors
 when invoking certain ceph cluster commands.  To fix that, add a ``mgr allow
-\*`` stanza to your client's cephx capabilities by `Modifying User
+\*`` stanza to your client's CephX capabilities by `Modifying User
 Capabilities`_.
 
 High availability
