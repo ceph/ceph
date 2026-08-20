@@ -1,6 +1,6 @@
 tasks:
 - cephadm.shell:
-    host.a:
+    mon.a:
       - ceph fs dump
       - ceph osd require-osd-release umbrella # after the upgrade, this should be bumped up
 - fs.post_upgrade_checks:
