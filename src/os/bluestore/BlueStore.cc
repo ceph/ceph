@@ -7534,11 +7534,16 @@ int BlueStore::_init_alloc()
     }
     if (restore_allocator(alloc, &num, &bytes) == 0) {
       dout(5) << __func__ << "::NCB::restore_allocator() completed successfully alloc=" << alloc << dendl;
+
       if (before_expansion_bdev_size > 0 &&
           before_expansion_bdev_size < bdev_label.size) {
         // we grow the allocation range, must reflect it in the allocation file
+        size_t delta = bdev_label.size - before_expansion_bdev_size;
+        dout(10) << __func__ << " expanding allocator with 0x" << std::hex
+                 << before_expansion_bdev_size << "~" << delta
+                 << std::dec << dendl;
         alloc->init_add_free(before_expansion_bdev_size,
-                             bdev_label.size - before_expansion_bdev_size);
+                             delta);
         need_to_destage_allocation_file = true;
       }
     } else {
