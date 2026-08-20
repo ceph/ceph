@@ -123,8 +123,14 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
     this.data$ = this.rgwRoleService.list(this.accountId);
   }
 
+  expandedRow: RgwRole;
+
   updateSelection(selection: CdTableSelection): void {
     this.selection = selection;
+  }
+
+  setExpandedRow(event: any): void {
+    this.expandedRow = event?.row || event;
   }
 
   openRoleForm(isEdit: boolean): void {
