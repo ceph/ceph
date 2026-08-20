@@ -589,8 +589,14 @@ option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)
 option(WITH_RADOSGW_CUOBJ "cuObject RDMA support for RADOS Gateway" OFF)
-if(WITH_RADOSGW_CUOBJ)
+option(WITH_OSD_CUOBJ "cuObject RDMA support for the OSD (READ_RDMA pushdown)" OFF)
+if(WITH_RADOSGW_CUOBJ OR WITH_OSD_CUOBJ)
   find_library(CUOBJSERVER_LIBRARY cuobjserver REQUIRED)
+endif()
+if(WITH_OSD_CUOBJ)
+  # osd_cuobj.cc uses ibverbs types; make IBVerbs::verbs exist even
+  # when WITH_RDMA (the async messenger transport) is disabled
+  find_package(verbs REQUIRED)
 endif()
 
 option(WITH_SYSTEM_ARROW "Use system-provided arrow" OFF)
