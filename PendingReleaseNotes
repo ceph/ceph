@@ -238,7 +238,7 @@
   for inter-zone traffic without an external load balancer. This feature is enabled
   by default; set ``rgw_rest_conn_connect_to_resolved_ips = false`` to opt out. The
   per-IP retry-after-failure timeout is controlled by ``rgw_rest_conn_ip_fail_timeout_secs``
-  (default: 2 seconds). Deployments that work around libcurl's single-address behavior
+  (default: 30 seconds). Deployments that work around libcurl's single-address behavior
   by repeating the same endpoint multiple times in zone configuration should review that
   setup, as round-robin distribution makes such duplication unnecessary.
 
