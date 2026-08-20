@@ -253,6 +253,23 @@
               </ng-template>
             </div>
           </div>
+          <div class="form-item">
+            <cds-text-label
+              labelInputID="location_constraint"
+              i18n
+              [helperText]="helpTextLabels.locationConstraintText"
+              cdOptionalField="Location Constraint"
+              >Location Constraint
+              <input
+                cdsText
+                type="text"
+                id="location_constraint"
+                formControlName="location_constraint"
+                placeholder="e.g, eu-north-1"
+                i18n-placeholder
+              />
+            </cds-text-label>
+          </div>
           <!-- Access Key  -->
           <div class="form-item">
             <div
