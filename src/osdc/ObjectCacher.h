@@ -88,18 +88,19 @@ class ObjectCacher {
     ceph::real_time mtime;
     int fadvise_flags;
     ceph_tid_t journal_tid;
+    uint64_t change_attr;
     OSDWrite(const SnapContext& sc, const ceph::buffer::list& b, ceph::real_time mt,
-	     int f, ceph_tid_t _journal_tid)
+	     int f, ceph_tid_t _journal_tid, uint64_t c_attr=0)
       : snapc(sc), bl(b), mtime(mt), fadvise_flags(f),
-	journal_tid(_journal_tid) {}
+	journal_tid(_journal_tid), change_attr(c_attr) {}
   };
 
   OSDWrite *prepare_write(const SnapContext& sc,
 			  const ceph::buffer::list &b,
 			  ceph::real_time mt,
 			  int f,
-			  ceph_tid_t journal_tid) const {
-    return new OSDWrite(sc, b, mt, f, journal_tid);
+			  ceph_tid_t journal_tid, uint64_t change_attr=0) const {
+    return new OSDWrite(sc, b, mt, f, journal_tid, change_attr);
   }
 
 
@@ -134,6 +135,7 @@ class ObjectCacher {
     ceph::real_time last_write;
     SnapContext snapc;
     ceph_tid_t journal_tid;
+    uint64_t change_attr;
     int error; // holds return value for failed reads
 
     std::map<loff_t, std::list<Context*> > waitfor_read;
@@ -148,6 +150,7 @@ class ObjectCacher {
       last_write_tid(0),
       last_read_tid(0),
       journal_tid(0),
+      change_attr(0),
       error(0) {
       ex.start = ex.length = 0;
     }
@@ -727,8 +730,9 @@ public:
   int file_write(ObjectSet *oset, file_layout_t *layout,
 		 const SnapContext& snapc, loff_t offset, uint64_t len,
 		 ceph::buffer::list& bl, ceph::real_time mtime, int flags,
-		 Context *onfreespace, bool block_writes_upfront) {
-    OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
+		 Context *onfreespace, bool block_writes_upfront,
+                 uint64_t change_attr=0) {
+    OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0, change_attr);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, wr->extents);
     return writex(wr, oset, onfreespace, nullptr, block_writes_upfront);

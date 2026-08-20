@@ -12667,7 +12667,7 @@ int Client::WriteEncMgr_Buffered::do_write()
                                      0, iofinish,
                                      !async
                                      ? clnt->objectcacher->CFG_block_writes_upfront()
-                                     : false);
+                                     : false, in->change_attr);
 
   return r;
 }
