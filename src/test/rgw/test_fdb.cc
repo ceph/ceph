@@ -84,6 +84,56 @@ struct pair_identity final
  }
 };
 
+struct rvalue_string_view_only final
+{
+ operator std::string_view() && { return {}; }
+};
+
+struct move_only_invocation_result final
+{
+ move_only_invocation_result() = default;
+ move_only_invocation_result(move_only_invocation_result&&) = default;
+ move_only_invocation_result(const move_only_invocation_result&) = delete;
+};
+
+struct immovable_invocation_result final
+{
+ immovable_invocation_result() = default;
+ immovable_invocation_result(immovable_invocation_result&&) = delete;
+ immovable_invocation_result(const immovable_invocation_result&) = delete;
+};
+
+struct move_only_transaction_argument final
+{
+ move_only_transaction_argument() = default;
+ move_only_transaction_argument(move_only_transaction_argument&&) = default;
+ move_only_transaction_argument(const move_only_transaction_argument&) = delete;
+};
+
+struct transaction_with_move_only_argument final
+{
+ void operator()(lfdb::transaction_handle&, move_only_transaction_argument&) const {}
+};
+
+struct reference_returning_transaction final
+{
+ int& operator()(lfdb::transaction_handle&) const;
+};
+
+struct immovable_string_pair_output final
+{
+ std::vector<string_pair> values;
+
+ immovable_string_pair_output() = default;
+ immovable_string_pair_output(immovable_string_pair_output&&) = delete;
+ immovable_string_pair_output(const immovable_string_pair_output&) = delete;
+
+ auto begin() { return std::begin(values); }
+ auto end() { return std::end(values); }
+
+ void push_back(string_pair value) { values.push_back(std::move(value)); }
+};
+
 TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
 {
  using string_pair_vector = std::vector<string_pair>;
@@ -99,6 +149,13 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
 
  STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<string_pair_vector>);
  STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<std::map<std::string, std::string>>);
+ STATIC_REQUIRE(lfdb::concepts::string_pair_output_range<immovable_string_pair_output>);
+ STATIC_REQUIRE_FALSE(
+  lfdb::concepts::materializable_string_pair_output_range<immovable_string_pair_output>);
+
+ STATIC_REQUIRE(lfdb::concepts::stringview_convertible<std::string>);
+ STATIC_REQUIRE(lfdb::concepts::stringview_convertible<const char[4]>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::stringview_convertible<rvalue_string_view_only>);
 
  STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<std::string&>);
  STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<char(&)[9]>);
@@ -111,6 +168,25 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<decltype([](std::span<const std::uint8_t>) {
   return true;
  })&>);
+
+ using void_transaction = decltype([](lfdb::transaction_handle&) {});
+ using value_transaction = decltype([](lfdb::transaction_handle&) {
+  return move_only_invocation_result {};
+ });
+ using immovable_transaction = decltype([](lfdb::transaction_handle&) {
+  return immovable_invocation_result {};
+ });
+
+ STATIC_REQUIRE(lfdb::detail::transaction_op<void_transaction>);
+ STATIC_REQUIRE(lfdb::detail::transaction_op<value_transaction>);
+ STATIC_REQUIRE_FALSE(lfdb::detail::transaction_op<immovable_transaction>);
+ STATIC_REQUIRE_FALSE(lfdb::detail::transaction_op<reference_returning_transaction>);
+ STATIC_REQUIRE((lfdb::detail::bound_transaction_op<
+                 transaction_with_move_only_argument,
+                 move_only_transaction_argument>));
+ STATIC_REQUIRE_FALSE((lfdb::detail::bound_transaction_op<
+                       transaction_with_move_only_argument,
+                       move_only_transaction_argument&>));
 }
 
 TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")

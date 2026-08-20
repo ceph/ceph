@@ -142,6 +142,12 @@ concept result_reporting_transaction_op =
  transaction_op<FnT, ArgTs...> &&
  std::is_void_v<transaction_invocation_result_t<FnT, ArgTs...>>;
 
+template <typename FnT, typename ...ArgTs>
+concept bound_transaction_op =
+ std::constructible_from<std::decay_t<FnT>, FnT> &&
+ (std::constructible_from<std::decay_t<ArgTs>, ArgTs> && ...) &&
+ transaction_op<std::decay_t<FnT>, std::decay_t<ArgTs>...>;
+
 template <typename FnT>
 using operation_result_t =
  std::conditional_t<std::is_void_v<transaction_invocation_result_t<FnT>>,
@@ -486,11 +492,6 @@ inline select select_from_initializer_list(std::initializer_list<std::string_vie
 }
 
 template <typename OutT>
-concept string_pair_output =
- concepts::string_pair_output_iterator<OutT> ||
- concepts::string_pair_output_range<OutT>;
-
-template <typename OutT>
 struct materialized_string_pair_output final
 {
  OutT values;
@@ -515,7 +516,7 @@ inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
   }
  }
 
- if constexpr (concepts::has_merge<ContainerT>) {
+ if constexpr (requires { out.merge(tmp); }) {
   out.merge(tmp);
   return;
  }
@@ -523,7 +524,9 @@ inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
  ceph::util::append_range(out, move_range(tmp));
 }
 
-template <query::expression SelectionT, string_pair_output OutT>
+template <query::expression SelectionT, typename OutT>
+requires concepts::string_pair_output_iterator<OutT> ||
+         concepts::string_pair_output_range<OutT>
 inline std::size_t get_value_selection_from_transaction(transaction& txn,
                                                         const SelectionT& selection,
                                                         OutT& out)
@@ -762,7 +765,7 @@ class transactor final
  }
 
  template <typename FnT, typename ...ArgTs>
- requires (sizeof...(ArgTs) > 0 && detail::transaction_op<FnT, ArgTs...>)
+ requires (sizeof...(ArgTs) > 0 && detail::bound_transaction_op<FnT, ArgTs...>)
  decltype(auto) operator()(FnT&& fn, ArgTs&& ...args) const
  {
   auto bound = bind_invocation(std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
@@ -778,7 +781,10 @@ class transactor final
  }
 
  template <typename FnT, typename ...ArgTs>
- requires (sizeof...(ArgTs) > 0 && detail::result_reporting_transaction_op<FnT, ArgTs...>)
+ requires (sizeof...(ArgTs) > 0 &&
+           detail::bound_transaction_op<FnT, ArgTs...> &&
+           detail::result_reporting_transaction_op<
+             std::decay_t<FnT>, std::decay_t<ArgTs>...>)
  transaction_result operator()(with_result_t, FnT&& fn, ArgTs&& ...args) const
  {
   auto bound = bind_invocation(std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
@@ -1112,7 +1118,6 @@ template <typename ResultT>
 using stored_invocation_result_t = typename invocation_result_traits<ResultT>::stored_t;
 
 template <typename ResultT, typename FnT>
-requires concepts::supported_invocation_result<ResultT>
 auto store_invocation_result(transaction_handle& txn, FnT&& fn)
  -> stored_invocation_result_t<ResultT>
 {
@@ -1120,7 +1125,6 @@ auto store_invocation_result(transaction_handle& txn, FnT&& fn)
 }
 
 template <typename ResultT, typename StoredT>
-requires std::is_void_v<ResultT> || concepts::storable_invocation_result<ResultT>
 decltype(auto) invocation_value_from_result(std::optional<StoredT>&& result)
 {
  return invocation_result_traits<ResultT>::take(std::move(result));
@@ -1130,7 +1134,6 @@ template <invocation_failure_policy FailurePolicy,
           typename FnT,
           typename CommitFnT,
           typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-requires concepts::supported_invocation_result<ResultT>
 auto attempt_invocation(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn)
  -> std::optional<stored_invocation_result_t<ResultT>>
 {
@@ -1167,7 +1170,6 @@ template <invocation_failure_policy FailurePolicy,
           typename FnT,
           typename CommitFnT,
           typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-requires concepts::supported_invocation_result<ResultT>
 decltype(auto) invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn)
 {
  for (auto tries = transaction_retry_attempts; tries; --tries) {

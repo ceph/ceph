@@ -137,7 +137,8 @@ namespace ceph::libfdb::concepts {
 // Note that "stringlikes" are not all "stringview-likes", such as when they can be
 // written to:
 template <typename StringViewLikeT>
-concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
+concept stringview_convertible =
+ std::convertible_to<std::remove_reference_t<StringViewLikeT> const&, std::string_view>;
 
 template <typename KeyViewT>
 concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::string_view>;
@@ -201,13 +202,8 @@ concept string_pair_output_range =
 template <typename RangeT>
 concept materializable_string_pair_output_range =
  string_pair_output_range<RangeT> and
- std::default_initializable<std::remove_cvref_t<RangeT>>;
-
-template <typename ContainerT>
-concept has_merge =
- requires(ContainerT& out, ContainerT& in) {
-  out.merge(in);
- };
+ std::default_initializable<std::remove_cvref_t<RangeT>> and
+ std::move_constructible<std::remove_cvref_t<RangeT>>;
 
 template <typename FnT>
 concept value_invocable =
@@ -226,12 +222,11 @@ concept decoded_value_sink =
  std::is_object_v<std::remove_reference_t<T>>;
 
 template <typename T>
-concept storable_invocation_result =
- not std::is_void_v<T> and not std::is_reference_v<T>;
-
-template <typename T>
 concept supported_invocation_result =
- not std::is_reference_v<T>;
+ std::is_void_v<T> or
+ (not std::is_reference_v<T> and
+  std::constructible_from<std::remove_cvref_t<T>, T> and
+  std::move_constructible<std::remove_cvref_t<T>>);
 
 } // namespace ceph::libfdb::concepts
 
