@@ -130,6 +130,3 @@ We need to build a bunch of internal interfaces for this.
   scenarios that are otherwise difficult to separate from the caps dirtied by
   a write() call.)
 - Include change_attr param in MClientRequest (for Client::_do_setattr).
-- Right now, we write out change_attr unconditionally. This may have a
-  performance impact. Change that based on client_fsync_to_rados (or
-  another param, for more precise testing options).
