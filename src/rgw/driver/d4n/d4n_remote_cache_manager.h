@@ -36,12 +36,12 @@ class RemoteCacheOp {
       std::string object_name;
       uint64_t offset = 0;
       uint64_t len = 0;
-      std::string version;
+      std::string version; // Cache version (equivalent to "instance_id" param in versioning enabled buckets)
 	  bool dirty{false};
       rgw_user bucket_owner;
       std::string remote_addr;
       uint64_t obj_size = 0;
-      bool is_bucket_versioned{false};
+      std::string instance_id = "";
     };
     RemoteCacheOp(rgw::sal::Driver* driver, RemoteCacheOpData& op) : driver(driver), op(op), cb(in_bl) {}
     virtual ~RemoteCacheOp() = default; 

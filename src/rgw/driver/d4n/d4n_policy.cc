@@ -517,7 +517,6 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     }
 
     std::string object_name = block.cacheObj.objName; // without version
-    bool is_versioned = false;
     bufferlist out_bl;
 	rgw::sal::Attrs obj_attrs;
 	int ret = cacheDriver->get(dpp, entry.key, block.blockID, block.size, out_bl, obj_attrs, y);
@@ -525,13 +524,14 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 	  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Failed to retrieve victim data block from cache." << dendl;
 	  return ret;
 	} 
-    
+
+    std::string instance_id = "";
 	if (obj_attrs.contains(RGW_CACHE_ATTR_VERSION_ID)) {
-	  is_versioned = true;
-	  std::string instance = obj_attrs.at(RGW_CACHE_ATTR_VERSION_ID).to_str();
-	  if (instance != "null") {
-		block.cacheObj.objName = "_:" + instance + "_" + block.cacheObj.objName;
+	  instance_id = obj_attrs.at(RGW_CACHE_ATTR_VERSION_ID).to_str();
+	  if (instance_id != "null") {
+		block.cacheObj.objName = "_:" + instance_id + "_" + block.cacheObj.objName;
 	  } // null version is not part of the data block's objName
+	  ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "(): Info: populating remote op instance ID with " << instance_id << dendl;
 	}
 
 	bufferlist bl = obj_attrs[RGW_CACHE_ATTR_INVALID];
@@ -565,7 +565,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 			  entry.user,
 			  remoteCacheAddress,
 			  block.cacheObj.size,
-			  is_versioned
+              instance_id
 			};
 			std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op, true);
 			if ((ret = remote_put->send_and_complete_request(dpp, y, &out_bl)) < 0){

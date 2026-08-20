@@ -26,12 +26,14 @@ int RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp, optional_yield
 
   HostStyle host_style = PathStyle;
   std::map<std::string, std::string> extra_headers;
+  extra_headers["x-rgw-remote-cache-request"] = "true";
+  extra_headers["x-rgw-cache-obj-version"] = op.version;
   uint64_t end_offset = op.offset + op.len - 1;
   std::string range_val = "bytes=" + std::to_string(op.offset) + "-" + std::to_string(end_offset);
   extra_headers["RANGE"] = std::move(range_val);
   param_vec_t params;
-  if (op.is_bucket_versioned) {
-    params.push_back(param_pair_t("versionId", op.version));
+  if (op.instance_id.size()) {
+	params.push_back(param_pair_t("versionId", op.instance_id));
   }
 
   auto resource = get_resource(op.bucket_name, op.object_name);
@@ -74,13 +76,15 @@ rgw::AioResultList RemoteCacheGetOp::send_request(const DoutPrefixProvider* dpp,
 
     HostStyle host_style = PathStyle;
     std::map<std::string, std::string> extra_headers;
+	extra_headers["x-rgw-remote-cache-request"] = "true";
+	extra_headers["x-rgw-cache-object-version"] = op.version;
     uint64_t end_offset = op.offset + op.len - 1;
     std::string range_val = "bytes=" + std::to_string(op.offset) + "-" + std::to_string(end_offset);
     extra_headers["RANGE"] = std::move(range_val);
     param_vec_t params;
-    if (op.is_bucket_versioned) {
-      params.push_back(param_pair_t("versionId", op.version));
-    }
+	if (op.instance_id.size()) {
+	  params.push_back(param_pair_t("versionId", op.instance_id));
+	}
     auto resource = get_resource(op.bucket_name, op.object_name);
     sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "GET", op.remote_addr, &cb, nullptr, &params, "", host_style);
 
