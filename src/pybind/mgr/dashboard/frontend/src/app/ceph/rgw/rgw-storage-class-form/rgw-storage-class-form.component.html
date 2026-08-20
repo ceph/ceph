@@ -199,6 +199,99 @@
               }
             </ng-template>
           </div>
+          <div class="form-item">
+            <cds-text-label
+              labelInputID="target_storage_class"
+              i18n
+              [helperText]="helpTextLabels.targetStorageClassText"
+              cdOptionalField="Target storage class"
+              >Target storage class
+              <input
+                cdsText
+                type="text"
+                id="target_storage_class"
+                formControlName="target_storage_class"
+                placeholder="STANDARD, STANDARD_IA, GLACIER..."
+                i18n-placeholder
+              />
+            </cds-text-label>
+          </div>
+          <div class="form-item">
+            <cds-checkbox
+              id="allow_read_through"
+              formControlName="allow_read_through"
+              cdOptionalField="Allow Read Through"
+              i18n
+              (change)="onAllowReadThroughChange($event)"
+              >Allow Read Through
+              <cd-help-text>{{ helpTextLabels?.allowReadThroughText }}</cd-help-text>
+            </cds-checkbox>
+          </div>
+          <div class="form-item">
+            <cds-checkbox
+              id="retain_head_object"
+              formControlName="retain_head_object"
+              cdOptionalField="Head Object (Stub File)"
+              i18n
+              >Head Object (Stub File)
+              <cd-help-text>{{ helpTextLabels?.retainHeadObjectText }}</cd-help-text>
+            </cds-checkbox>
+          </div>
+          <div
+            class="form-item form-item-append"
+            cdsRow
+          >
+            <div cdsCol>
+              <cds-number
+                name="read_through_restore_days"
+                formControlName="read_through_restore_days"
+                id="read_through_restore_days"
+                min="1"
+                label="ReadThrough Restore Days"
+                [helperText]="helpTextLabels.readthroughrestoreDaysText"
+                i18n-helperText
+                i18n-label
+                i18n
+                [invalid]="
+                  storageClassForm.controls.read_through_restore_days.invalid &&
+                  storageClassForm.controls.read_through_restore_days.dirty
+                "
+                [invalidText]="readThroughError"
+              ></cds-number>
+              <ng-template #readThroughError>
+                @if (storageClassForm.showError('read_through_restore_days', formDir, 'pattern')) {
+                  <span
+                    class="invalid-feedback"
+                    i18n
+                  >
+                    ReadThrough Restore Days must be positive.
+                  </span>
+                }
+              </ng-template>
+            </div>
+            <div cdsCol>
+              <cds-select
+                formControlName="restore_storage_class"
+                label="Restore Storage Class"
+                id="restore_storage_class"
+                [helperText]="helpTextLabels.restoreStorageClassText"
+                i18n-label
+              >
+                <option
+                  [value]="''"
+                  i18n
+                >
+                  -- Select the glacier restore storage class --
+                </option>
+                <option
+                  [ngValue]="standard"
+                  i18n
+                >
+                  Standard
+                </option>
+              </cds-select>
+            </div>
+          </div>
         </div>
         <div class="form-item">
           <cds-text-label

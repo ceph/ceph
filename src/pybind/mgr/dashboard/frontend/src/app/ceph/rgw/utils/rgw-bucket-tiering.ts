@@ -63,6 +63,7 @@ export class BucketTieringUtils {
       read_through_restore_days: val.read_through_restore_days,
       acls: val.s3.acl_mappings,
       ...val.s3,
+      target_storage_class: val.s3?.target_storage_class ?? '',
       location_constraint: val.s3?.location_constraint ?? ''
     };
 
