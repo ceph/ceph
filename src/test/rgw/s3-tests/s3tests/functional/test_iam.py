@@ -507,7 +507,7 @@ def test_deny_bucket_actions_in_user_policy():
                                       UserName=get_alt_user_id())
     assert response['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    e = assert_raises(ClientError, s3_client.list_buckets, Bucket=bucket)
+    e = assert_raises(ClientError, s3_client.list_buckets)
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 403
     assert error_code == 'AccessDenied'
