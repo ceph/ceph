@@ -361,7 +361,9 @@ target_link_libraries(rgw_common
     global
     cls_rgw_client
     keyring
-    rt
+    # librt is Linux-only; its clock and timer entry points are in libc
+    # elsewhere.
+    $<$<PLATFORM_ID:Linux>:rt>
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -483,7 +485,9 @@ if(WITH_RADOSGW_STANDALONE)
     global
     cls_rgw_client
     keyring
-    rt
+    # librt is Linux-only; its clock and timer entry points are in libc
+    # elsewhere.
+    $<$<PLATFORM_ID:Linux>:rt>
     ICU::uc
     OATH::OATH
     dmclock::dmclock

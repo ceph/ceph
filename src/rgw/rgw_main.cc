@@ -108,7 +108,12 @@ int main(int argc, char *argv[])
   DoutPrefix dp(cct.get(), dout_subsys, "rgw main: ");
   rgw::AppMain main(&dp);
 
+#if defined(__linux__)
+  // Only the Linux Key Retention Service has a process keyring to set up;
+  // keyring.cc defines this alongside the rest of LinuxKeyringSecret, under
+  // the same guard.
   LinuxKeyringSecret::initialize_process_keyring();
+#endif
 
   main.init_frontends1(false /* nfs */);
   main.init_numa();
