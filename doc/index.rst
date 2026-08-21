@@ -95,7 +95,7 @@ about Ceph, see our `Architecture`_ section.
 .. _Ceph Block Device: rbd
 .. _Ceph File System: cephfs
 .. _Getting Started: start
-.. _Architecture: architecture
+.. _Architecture: architecture/
 
 .. toctree::
    :maxdepth: 3
@@ -113,7 +113,7 @@ about Ceph, see our `Architecture`_ section.
    mgr/dashboard
    monitoring/index
    api/index
-   architecture
+   architecture/index
    Developer Guide <dev/developer_guide/index>
    dev/internals
    governance
