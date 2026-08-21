@@ -276,6 +276,8 @@ class SplitOp {
     mini_flat_map<int, Details> details;
     int rc = -EIO;
     std::optional<InternalVersion> internal_version;
+    /// bytes this sub-read's OSD delivered out of band (rdma delivery)
+    uint64_t oob = 0;
 
     SubRead(int count) : details(count) {}
   };
@@ -343,6 +345,11 @@ class SplitOp {
   int flags = 0;
   int reference_sub_read = -1;
   std::map<int, std::vector<int>> op_offset_map;
+  /// rdma delivery descriptor fan-out state: set when the parent op
+  /// carries a descriptor and exactly one plain READ op (the only
+  /// shape with well-defined per-sub placement)
+  bool oob_fanned_out = false;
+  int oob_ops_index = -1;
 
  public:
  /**
