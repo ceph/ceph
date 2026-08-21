@@ -11123,7 +11123,13 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
 
   int cmode = ceph_flags_to_mode(cflags);
 
-  int want = ceph_caps_for_mode(cmode);
+  /*
+   * Fl is never needed to complete an open.  It only lets _read()/_write()
+   * keep using the cache while the file is shared, and they ask for it
+   * themselves when they need it.  Requiring it here would send a request to
+   * the MDS for every open of a file whose caps we already hold.
+   */
+  int want = ceph_caps_for_mode(cmode & ~CEPH_FILE_MODE_LAZY);
   int result = 0;
 
 #if defined(__linux__)
