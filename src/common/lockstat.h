@@ -244,6 +244,11 @@ public: // Methods
       LockMode mode);
 
   ///
+  /// @brief Return true if traits points at a valid table entry
+  ///
+  [[nodiscard]] static bool traits_is_valid(const LockStatTraits* traits);
+
+  ///
   /// @brief Return the entry for given index
   ///
   [[nodiscard]] LockStatEntry*
@@ -595,6 +600,9 @@ public: // Methods
   void
   record_wait_time(lockstat_clock::duration wait_time, LockMode mode) const
   {
+    if (!m_lockstat_traits) {
+      return;
+    }
     // record stats if wait threshold exceeded and if record_iopath_locks is set
     // only record stats for threads with thread_iopath_flag set
     if (unlikely(
@@ -612,6 +620,9 @@ public: // Methods
   void
   record_hold_time(lockstat_clock::duration hold_time, LockMode mode) const
   {
+    if (!m_lockstat_traits) {
+      return;
+    }
     // record stats if hold threshold exceeded and if record_iopath_locks is set
     // only record stats for threads with thread_iopath_flag set
     if (unlikely(

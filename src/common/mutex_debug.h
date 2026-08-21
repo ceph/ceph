@@ -176,7 +176,8 @@ public:
     }
     ceph_assert(r == 0);
 #ifdef CEPH_LOCKSTAT
-    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+                 get_traits())) {
       m_hold_start = lockstat_detail::lockstat_clock::now();
       m_hold_mode = lockstat_detail::LockMode::WRITE;
       record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
@@ -192,10 +193,9 @@ public:
           lockstat_detail::lockstat_clock::now() - hold_start;
       const auto hold_mode = m_hold_mode;
       m_hold_start = lockstat_detail::lockstat_clock::zero();
-      int r = pthread_mutex_unlock(&m);
-      ceph_assert(r == 0);
-      record_hold_time(hold_time, hold_mode);
-      return;
+      if (get_traits()) {
+        record_hold_time(hold_time, hold_mode);
+      }
     }
 #endif
     int r = pthread_mutex_unlock(&m);
@@ -213,7 +213,8 @@ public:
     switch (r) {
     case 0:
 #ifdef CEPH_LOCKSTAT
-      if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+      if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+                   get_traits())) {
         m_hold_start = lockstat_detail::lockstat_clock::now();
         m_hold_mode = explicit_try
             ? lockstat_detail::LockMode::TRY_WRITE
@@ -242,7 +243,9 @@ public:
           lockstat_detail::lockstat_clock::now() - hold_start;
       const auto hold_mode = m_hold_mode;
       m_hold_start = lockstat_detail::lockstat_clock::zero();
-      record_hold_time(hold_time, hold_mode);
+      if (get_traits()) {
+        record_hold_time(hold_time, hold_mode);
+      }
     }
   }
 
@@ -250,7 +253,8 @@ public:
   condvar_wait_end(
       lockstat_detail::lockstat_clock::time_point wait_start_clock)
   {
-    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+                 get_traits())) {
       const auto now = lockstat_detail::lockstat_clock::now();
       record_wait_time(
           now - wait_start_clock, lockstat_detail::LockMode::WRITE);
