@@ -134,6 +134,7 @@ if(WITH_LIBCEPHFS)
 
   add_executable(ceph_test_libcephfs_lazyio
     lazyio.cc
+    cto.cc
   )
   target_link_libraries(ceph_test_libcephfs_lazyio
     cephfs
