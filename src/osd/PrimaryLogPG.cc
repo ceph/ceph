@@ -65,6 +65,7 @@
 #include "Session.h"
 #ifdef WITH_OSD_CUOBJ
 #include "osd_cuobj.h"
+#include "osd/oob_placement.h"
 #endif
 
 // required includes order:
@@ -9347,6 +9348,122 @@ void PrimaryLogPG::apply_stats(
   m_scrubber->stats_of_handled_objects(delta_stats, soid);
 }
 
+#ifdef WITH_OSD_CUOBJ
+bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
+			       std::vector<uint64_t>& oob)
+{
+  auto m = ctx->op->get_req<MOSDOp>();
+  const auto& d = m->get_rdma_delivery();
+  if (d.flags != 0) {
+    // reserved flag bits we do not implement: deliver inline so
+    // future semantics degrade safely
+    return false;
+  }
+  // a resent op could double-execute against client memory while the
+  // superseded attempt's write is still in flight on another OSD;
+  // deliver inline so at most one attempt ever writes the window
+  if (m->get_retry_attempt() > 0) {
+    return false;
+  }
+  if (d.lease_ms) {
+    utime_t age = ceph_clock_now() - m->get_recv_stamp();
+    if (age.to_msec() > d.lease_ms) {
+      dout(10) << __func__ << " lease expired (" << age << " > "
+	       << d.lease_ms << "ms), delivering inline" << dendl;
+      return false;
+    }
+  }
+  // exactly one data-bearing read op may go out of band: placement of
+  // multiple reads with unrelated offset origins is undefined, and
+  // non-data ops (guards, version reads) always stay inline
+  OSDOp* data_op = nullptr;
+  size_t data_idx = 0;
+  for (size_t i = 0; i < rops.size(); i++) {
+    switch (rops[i].op.op) {
+    case CEPH_OSD_OP_READ:
+    case CEPH_OSD_OP_SYNC_READ:
+    case CEPH_OSD_OP_SPARSE_READ:
+      if (data_op) {
+	return false;
+      }
+      data_op = &rops[i];
+      data_idx = i;
+      break;
+    default:
+      break;
+    }
+  }
+  if (!data_op || data_op->rval < 0 || !data_op->outdata.length()) {
+    return false;
+  }
+
+  const bool ec_direct = ctx->op->ec_direct_read();
+  ceph::osd::oob::placement_plan plan;
+  bufferlist payload;  // the bytes the plan indexes
+  std::map<uint64_t, uint64_t> sparse_extents;
+  if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
+    if (ec_direct) {
+      // the fiemap extent map is in shard-offset space; interleaving
+      // sparse data is a follow-up - deliver inline
+      return false;
+    }
+    bufferlist databl;
+    try {
+      auto bp = data_op->outdata.cbegin();
+      decode(sparse_extents, bp);
+      decode(databl, bp);
+    } catch (const ceph::buffer::error&) {
+      return false;
+    }
+    plan = ceph::osd::oob::sparse_plan(d.base_offset,
+				       data_op->op.extent.offset,
+				       sparse_extents, databl.length());
+    payload = std::move(databl);
+  } else if (ec_direct) {
+    if (!pool.info.is_erasure() || !pool.info.allows_ecoptimizations()) {
+      return false;
+    }
+    const auto sinfo = pgbackend->ec_get_sinfo();
+    if (!sinfo.supports_direct_reads()) {
+      return false;
+    }
+    // the reply holds this shard's chunks in ascending stripe order;
+    // scatter them to their logical positions in the client window
+    plan = ceph::osd::oob::ec_direct_plan(
+      d.base_offset, data_op->op.extent.offset, data_op->op.extent.length,
+      sinfo.get_chunk_size(), sinfo.get_k(),
+      static_cast<uint32_t>(
+	static_cast<int>(sinfo.get_raw_shard(pg_whoami.shard))),
+      data_op->outdata.length());
+    payload = data_op->outdata;
+  } else {
+    plan = ceph::osd::oob::linear_plan(d.base_offset,
+				       data_op->outdata.length());
+    payload = data_op->outdata;
+  }
+  if (plan.empty()) {
+    return false;
+  }
+
+  ssize_t pushed = osd->cuobj->execute_plan(m->get_hobj().oid.name, d.token,
+					    payload, plan);
+  if (pushed < 0) {
+    dout(10) << __func__ << " plan execution failed (" << pushed
+	     << "), delivering inline" << dendl;
+    return false;
+  }
+  // strip the delivered data from the reply; sparse reads keep their
+  // extent map inline with an empty data blob
+  data_op->outdata.clear();
+  if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
+    encode(sparse_extents, data_op->outdata);
+    encode(bufferlist(), data_op->outdata);
+  }
+  oob[data_idx] = static_cast<uint64_t>(pushed);
+  return true;
+}
+#endif // WITH_OSD_CUOBJ
+
 void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 {
   auto m = ctx->op->get_req<MOSDOp>();
@@ -9364,6 +9481,23 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 
   MOSDOpReply *reply = ctx->reply;
   ctx->reply = nullptr;
+
+#ifdef WITH_OSD_CUOBJ
+  if (result >= 0 && osd->cuobj && m->has_rdma_delivery()) {
+    // advisory out-of-band delivery: try to RDMA-write the read data
+    // straight into the client window; on any refusal or failure the
+    // reply simply keeps the data inline. The reply constructor
+    // already copied the ops (shallow bufferlists), so mutate the
+    // reply's own copy via the claim_ops swap.
+    std::vector<OSDOp> rops;
+    reply->claim_ops(rops);
+    std::vector<uint64_t> oob(rops.size(), 0);
+    if (deliver_oob(ctx, rops, oob)) {
+      reply->set_oob_bytes(std::move(oob));
+    }
+    reply->claim_ops(rops);
+  }
+#endif
 
   if (result >= 0) {
     if (!ctx->ignore_log_op_stats) {

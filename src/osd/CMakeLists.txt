@@ -59,6 +59,7 @@ set(osd_srcs
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   ${osd_cyg_functions_src}
   ${osdc_osd_srcs}
+  oob_placement.cc
   osd_tracer.cc)
 if(HAS_VTA)
   set_source_files_properties(osdcap.cc

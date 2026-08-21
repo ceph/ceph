@@ -6,11 +6,15 @@
 #include <cuobjserver.h>
 
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
+#include <thread>
 
 #include "common/ceph_context.h"
+#include "common/Clock.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/Formatter.h"
 #include "common/rdma_token.h"
 
 #define dout_context m_cct
@@ -257,4 +261,179 @@ ssize_t OSDCuObj::rdma_write(const std::string& key,
   }
   dout(20) << "RDMA wrote " << total << " bytes for " << key << dendl;
   return static_cast<ssize_t>(total);
+}
+
+ssize_t OSDCuObj::execute_plan(const std::string& key,
+			       const std::string& token,
+			       const ceph::buffer::list& data,
+			       const ceph::osd::oob::placement_plan& plan)
+{
+  if (!is_available()) {
+    return -EOPNOTSUPP;
+  }
+  auto window = ceph::rdma::parse_rdma_token(token);
+  if (!window) {
+    dout(5) << "malformed RDMA token for " << key << dendl;
+    return -EINVAL;
+  }
+  // expand triples into <=1 GiB work items, validating up front
+  struct work_item {
+    uint64_t local_ofs;   // offset into the staged buffer
+    uint64_t remote_ofs;  // offset into the client window
+    uint64_t len;
+  };
+  std::vector<work_item> items;
+  uint64_t total = 0;
+  for (const auto& t : plan) {
+    if (t.len == 0) {
+      continue;
+    }
+    if (t.client_ofs > window->size || t.len > window->size - t.client_ofs ||
+	t.reply_data_ofs > data.length() ||
+	t.len > data.length() - t.reply_data_ofs) {
+      dout(5) << "placement triple " << t.reply_data_ofs << "/" << t.client_ofs
+	      << "~" << t.len << " outside window (" << window->size
+	      << ") or data (" << data.length() << ") for " << key << dendl;
+      return -EINVAL;
+    }
+    for (uint64_t done = 0; done < t.len; ) {
+      const uint64_t chunk = std::min(t.len - done, MAX_RDMA_OP_SIZE);
+      items.push_back({t.reply_data_ofs + done, t.client_ofs + done, chunk});
+      done += chunk;
+    }
+    total += t.len;
+  }
+  if (items.empty()) {
+    return 0;
+  }
+  uint16_t channel = get_channel_id();
+  if (channel == invalid_channel) {
+    return -EIO;
+  }
+  bool transient = false;
+  BufEntry* buf = acquire_buffer(data.length(), &transient);
+  if (!buf) {
+    derr << "ERROR: no RDMA buffer available for " << data.length()
+	 << " bytes" << dendl;
+    return -ENOMEM;
+  }
+  {
+    auto it = data.begin();
+    it.copy(data.length(), static_cast<char*>(buf->ptr));
+  }
+
+  m_plans_started++;
+  dout(20) << "executing plan for " << key << ": " << items.size()
+	   << " writes, " << total << " bytes, channel " << channel << dendl;
+
+  // batched async submission: at most POLL_BATCH outstanding, polled
+  // to completion on the same channel (the library caps poll() at 16
+  // events and documents no larger per-channel bound)
+  constexpr int POLL_BATCH = 16;
+  const utime_t deadline = ceph_clock_now() + utime_t(60, 0);
+  size_t next = 0;
+  size_t outstanding = 0;
+  size_t completed = 0;
+  ssize_t err = 0;
+  while (completed < items.size()) {
+    while (err == 0 && next < items.size() && outstanding < POLL_BATCH) {
+      auto& w = items[next];
+      ssize_t r = m_server->handleGetObject(
+	key, buf->handle, window->addr + w.remote_ofs, w.len, token, channel,
+	w.local_ofs, nullptr, /*async_handle=*/&items[next]);
+      if (r < 0) {
+	derr << "ERROR: async handleGetObject submission failed for " << key
+	     << ": " << r << dendl;
+	err = r;
+	break;
+      }
+      next++;
+      outstanding++;
+      m_writes_inflight++;
+    }
+    if (outstanding == 0) {
+      break;  // submission failed before anything went out
+    }
+    cuObjAsyncEvent_t events[POLL_BATCH];
+    for (auto& e : events) {
+      e.async_handle = nullptr;
+    }
+    int n = m_server->poll(events, POLL_BATCH, channel);
+    if (n == 0) {
+      // nothing completed yet; don't hot-spin the op worker
+      std::this_thread::sleep_for(std::chrono::microseconds(5));
+      if (ceph_clock_now() > deadline) {
+	derr << "ERROR: plan for " << key << " timed out with " << outstanding
+	     << " writes outstanding; leaking the staging buffer" << dendl;
+	m_writes_inflight -= outstanding;
+	m_buffers_leaked++;
+	m_plans_failed++;
+	return -ETIMEDOUT;
+      }
+      continue;
+    }
+    if (n < 0) {
+      // on -EIO the return is NOT a completion count and the library
+      // has reset the QP, flushing the remaining writes; scan for the
+      // events that were filled, then abandon the plan
+      for (const auto& e : events) {
+	if (e.async_handle) {
+	  outstanding--;
+	  m_writes_inflight--;
+	  completed++;
+	}
+      }
+      derr << "ERROR: poll failed for " << key << ": " << n << dendl;
+      err = err ? err : -EIO;
+      // after a QP reset nothing more will complete; count the rest
+      // as flushed
+      m_writes_inflight -= outstanding;
+      completed += outstanding;
+      outstanding = 0;
+      break;
+    }
+    for (int i = 0; i < n; i++) {
+      if (!events[i].async_handle) {
+	continue;
+      }
+      outstanding--;
+      m_writes_inflight--;
+      completed++;
+      if (events[i].status != 0 /* IBV_WC_SUCCESS */) {
+	derr << "ERROR: RDMA write completion failed for " << key
+	     << ": wc_status=" << events[i].status << dendl;
+	err = err ? err : -EIO;
+      }
+    }
+    if (ceph_clock_now() > deadline) {
+      // wedged transport: we cannot release the staged buffer while
+      // writes may still reference it - leak it deliberately
+      derr << "ERROR: plan for " << key << " timed out with " << outstanding
+	   << " writes outstanding; leaking the staging buffer" << dendl;
+      m_writes_inflight -= outstanding;
+      m_buffers_leaked++;
+      m_plans_failed++;
+      return -ETIMEDOUT;
+    }
+  }
+  release_buffer(buf, transient);
+  if (err < 0) {
+    m_plans_failed++;
+    return err == -EOPNOTSUPP ? -EIO : err;
+  }
+  m_plans_completed++;
+  m_bytes_pushed += total;
+  dout(20) << "plan for " << key << " pushed " << total << " bytes" << dendl;
+  return static_cast<ssize_t>(total);
+}
+
+void OSDCuObj::dump_stats(ceph::Formatter* f) const
+{
+  f->dump_bool("available", is_available());
+  f->dump_unsigned("plans_started", m_plans_started.load());
+  f->dump_unsigned("plans_completed", m_plans_completed.load());
+  f->dump_unsigned("plans_failed", m_plans_failed.load());
+  f->dump_unsigned("bytes_pushed", m_bytes_pushed.load());
+  f->dump_unsigned("writes_inflight", m_writes_inflight.load());
+  f->dump_unsigned("buffers_leaked", m_buffers_leaked.load());
 }
