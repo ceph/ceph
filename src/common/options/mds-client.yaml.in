@@ -337,6 +337,49 @@ options:
   - mds_client
   flags:
   - startup
+- name: client_close_to_open
+  type: bool
+  level: advanced
+  desc: Relax file data consistency to close-to-open
+  long_desc: Keep caching file data even while the file is open for writing on
+    another client, and only guarantee that data written before a file was
+    closed is visible to opens that begin after the close.  This is the
+    consistency model that NFS provides.  Data is flushed when the last
+    descriptor for a file is closed, and the cache is revalidated on open and
+    when an advisory lock is taken.  Applications that share a file without
+    serializing their access with close/open or file locks may read stale
+    data.  Only files opened after this option was set are affected.
+  fmt_desc: Relax file data consistency from POSIX to close-to-open, as
+    provided by NFS.  See :doc:`/cephfs/lazyio`.
+  default: false
+  services:
+  - mds_client
+  see_also:
+  - client_close_to_open_timeout
+  - client_force_lazyio
+  flags:
+  - runtime
+- name: client_close_to_open_timeout
+  type: secs
+  level: advanced
+  desc: Maximum time close-to-open reads may be served from a cache the MDS is
+    not protecting
+  long_desc: Upper bound on how long a client with client_close_to_open enabled
+    keeps serving reads from a cache that is no longer protected by the MDS,
+    comparable to the acregmax mount option of NFS.  The cache is revalidated
+    on the first read after the interval has expired.  Setting this to zero
+    disables the timer, which leaves open() and locking as the only points
+    where a cache is revalidated.
+  fmt_desc: Set how long a client may serve cached file data of a shared file
+    without revalidating it, when ``client_close_to_open`` is enabled.  Zero
+    disables revalidation on read.
+  default: 1_min
+  services:
+  - mds_client
+  see_also:
+  - client_close_to_open
+  flags:
+  - runtime
 - name: fuse_use_invalidate_cb
   type: bool
   level: advanced
