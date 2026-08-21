@@ -88,7 +88,7 @@ function(do_build_boost root_dir version)
 
   if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
     set(toolset gcc)
-  elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+  elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     set(toolset clang)
   else()
     message(SEND_ERROR "unknown compiler: ${CMAKE_CXX_COMPILER_ID}")
