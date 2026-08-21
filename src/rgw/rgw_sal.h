@@ -1178,6 +1178,9 @@ class Object {
         std::string rdma_token;
         /// out: bytes delivered out of band by iterate()
         uint64_t* rdma_bytes{nullptr};
+        /// out: true when iterate() sent at least one descriptor-bearing
+        /// operation to the OSDs (fence-wait gating on fallback)
+        bool rdma_submitted{false};
       } params;
 
       virtual ~ReadOp() = default;
