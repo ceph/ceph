@@ -190,7 +190,7 @@ TEST(ProjectDecryptCBC, MultipartCrossesPartBoundary)
 {
   // 2 parts, each 8192 bytes encrypted (=plaintext for CBC)
   // request [4000, 12000] crosses parts
-  vector<size_t> parts = {8192, 8192};
+  vector<uint64_t> parts = {8192, 8192};
   auto dr = project_encrypt_range(4000, 12000, 4096, 4096, 16384, parts);
 
   // 4000 < 4096, so start is within first block of part 0
@@ -242,7 +242,7 @@ TEST(ProjectDecryptGCM, MultipartCumulativeOffsets)
   // 2 parts: part0 = 4112 bytes (1 chunk), part1 = 8224 bytes (2 chunks)
   // total encrypted = 12336
   // request plaintext [0, 4095]: all in part0
-  vector<size_t> parts = {4112, 8224};
+  vector<uint64_t> parts = {4112, 8224};
   auto dr = project_encrypt_range(0, 4095, GCM_BLOCK, GCM_ENC_BLOCK, 12336, parts);
 
   // entirely within part 0
@@ -256,7 +256,7 @@ TEST(ProjectDecryptGCM, MultipartSecondPart)
   // 2 parts: part0 = 4112 (1 plain chunk), part1 = 8224 (2 plain chunks)
   // plaintext sizes: part0=4096, part1=8192
   // request plaintext [4096, 8191]: starts at part1 offset 0
-  vector<size_t> parts = {4112, 8224};
+  vector<uint64_t> parts = {4112, 8224};
   auto dr = project_encrypt_range(4096, 8191, GCM_BLOCK, GCM_ENC_BLOCK, 12336, parts);
 
   // starts at beginning of part 1 (cumulative enc offset 4112)
@@ -269,7 +269,7 @@ TEST(ProjectDecryptGCM, EndBeyondLastPartClamped)
 {
   // 1 part of 4112 bytes (1 chunk, 4096 plain)
   // request beyond: [0, 99999]
-  vector<size_t> parts = {4112};
+  vector<uint64_t> parts = {4112};
   auto dr = project_encrypt_range(0, 99999, GCM_BLOCK, GCM_ENC_BLOCK, 4112, parts);
 
   // end is clamped to the single part's encrypted size
