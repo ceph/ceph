@@ -46,21 +46,21 @@
   let-value="data.value"
   let-row="data.row"
 >
-@if (value) {
-  <div
-    [cdsStack]="'horizontal'"
-    gap="4"
-  >
-  @if (value === HostStatus.AVAILABLE || value === HostStatus.RUNNING) {
-    <cd-icon type="success"></cd-icon>
+  @if (value) {
+    <div
+      [cdsStack]="'horizontal'"
+      gap="4"
+    >
+      @if (value === HostStatus.AVAILABLE || value === HostStatus.RUNNING) {
+        <cd-icon type="success"></cd-icon>
+      } @else {
+        <cd-icon type="error"></cd-icon>
+      }
+      <span class="cds-ml-3">{{ value | titlecase }}</span>
+    </div>
   } @else {
-    <cd-icon type="error"></cd-icon>
+    <span>-</span>
   }
-  <span class="cds-ml-3">{{ value | titlecase }}</span>
-  </div>
-} @else {
-  <span>-</span>
-}
 </ng-template>
 
 <ng-template

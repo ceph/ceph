@@ -2,11 +2,16 @@
   <div class="info-group-title">
     <span data-testid="group-title">{{ groupTitle }}</span>
     <cd-helper iconClass="fa fa-info-circle fa-2xs">
-      <div class="text-center"
-           i18n>For an overview of {{ groupTitle|lowercase }} widgets click
-        <cd-doc section="dashboard-landing-page-{{ groupTitle|lowercase }}"
-                docText="here"
-                i18n-docText></cd-doc>
+      <div
+        class="text-center"
+        i18n
+      >
+        For an overview of {{ groupTitle | lowercase }} widgets click
+        <cd-doc
+          section="dashboard-landing-page-{{ groupTitle | lowercase }}"
+          docText="here"
+          i18n-docText
+        ></cd-doc>
       </div>
     </cd-helper>
   </div>

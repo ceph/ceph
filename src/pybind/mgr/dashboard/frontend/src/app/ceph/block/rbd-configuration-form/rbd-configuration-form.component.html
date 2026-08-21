@@ -6,12 +6,17 @@
 
   <div *ngFor="let section of rbdConfigurationService.sections">
     <h5 class="cd-header">
-      <legend (click)="toggleSectionVisibility(section.class)"
-              class="collapsible"
-              tabindex="0"
-              (keydown.enter)="toggleSectionVisibility(section.class)">
-        {{ section.heading }} <i [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
-                                 aria-hidden="true"></i>
+      <legend
+        (click)="toggleSectionVisibility(section.class)"
+        class="collapsible"
+        tabindex="0"
+        (keydown.enter)="toggleSectionVisibility(section.class)"
+      >
+        {{ section.heading }}
+        <i
+          [ngClass]="!sectionVisibility[section.class] ? icons.addCircle : icons.minusCircle"
+          aria-hidden="true"
+        ></i>
       </legend>
     </h5>
     <div
@@ -94,10 +99,12 @@
                 *ngIf="!form.get('configuration').get(option.name).disabled; else resetIcon"
               ></svg>
               <ng-template #resetIcon>
-                <svg cdsIcon="reset"
-                     size="32"
-                     class="cds--btn__icon"
-                     *ngIf="form.get('configuration').get(option.name).disabled"></svg>
+                <svg
+                  cdsIcon="reset"
+                  size="32"
+                  class="cds--btn__icon"
+                  *ngIf="form.get('configuration').get(option.name).disabled"
+                ></svg>
               </ng-template>
             </cds-icon-button>
             <ng-template #formError>

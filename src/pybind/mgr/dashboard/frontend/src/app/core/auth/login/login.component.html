@@ -1,11 +1,14 @@
-<div class="container"
-     *ngIf="isLoginActive">
+<div
+  class="container"
+  *ngIf="isLoginActive"
+>
   <h1 class="sr-only">Ceph login</h1>
-  <form name="loginForm"
-        (ngSubmit)="login()"
-        #loginForm="ngForm"
-        novalidate>
-
+  <form
+    name="loginForm"
+    (ngSubmit)="login()"
+    #loginForm="ngForm"
+    novalidate
+  >
     <!-- Username -->
     <div class="form-group has-feedback d-flex flex-column py-3">
       <label

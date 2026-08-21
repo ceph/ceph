@@ -8,8 +8,10 @@
       (select)="onNodeSelected($event)"
     >
     </cds-tree-view>
-    <ng-template #treeNodeTemplate
-                 let-node>
+    <ng-template
+      #treeNodeTemplate
+      let-node
+    >
       <i [class]="node?.cdIcon"></i>
       <span>{{ node?.name }}</span>
       &nbsp;

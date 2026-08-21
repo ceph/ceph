@@ -130,13 +130,16 @@
   </div>
 </ng-template>
 
-<ng-template #removingStatTpl
-             let-column="data.column"
-             let-value="data.value"
-             let-row="data.row">
-
-  <i [ngClass]="[icons.spinner, icons.spin]"
-     *ngIf="row.cdExecuting"></i>
+<ng-template
+  #removingStatTpl
+  let-column="data.column"
+  let-value="data.value"
+  let-row="data.row"
+>
+  <i
+    [ngClass]="[icons.spinner, icons.spin]"
+    *ngIf="row.cdExecuting"
+  ></i>
   <span [ngClass]="column?.customTemplateConfig?.valueClass">
     {{ value }}
   </span>
@@ -150,10 +153,12 @@
   >
     ({{ row.cdExecuting }})
   </span>
-  <i *ngIf="row.source && row.source === 'REMOVING'"
-     i18n-title
-     title="RBD in status 'Removing'"
-     class="{{ icons.warning }} warn"></i>
+  <i
+    *ngIf="row.source && row.source === 'REMOVING'"
+    i18n-title
+    title="RBD in status 'Removing'"
+    class="{{ icons.warning }} warn"
+  ></i>
 </ng-template>
 
 <ng-template #forcePromoteConfirmation>
@@ -186,7 +191,6 @@
     >
     </cd-usage-bar>
   </ng-template>
-
 </ng-template>
 
 <ng-template #usageTooltip>
