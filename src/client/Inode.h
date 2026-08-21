@@ -263,6 +263,11 @@ struct Inode : RefCountedObject {
 
   ObjectCacher::ObjectSet oset; // ORDER DEPENDENCY: ino
 
+  // Set while the object cache is (or has been) used without holding Fc/Fb,
+  // which LazyIO allows.  The MDS does not keep such a cache coherent, so it
+  // has to be revalidated explicitly before it can be trusted again.
+  bool lazyio_cache_stale = false;
+
   uint64_t reported_size = 0;
   uint64_t wanted_max_size = 0;
   uint64_t requested_max_size = 0;

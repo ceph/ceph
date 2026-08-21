@@ -421,6 +421,7 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   user_id = cct->_conf->client_mount_uid;
   group_id = cct->_conf->client_mount_gid;
   client_permissions = cct->_conf.get_val<bool>("client_permissions");
+  close_to_open = cct->_conf.get_val<bool>("client_close_to_open");
   fuse_default_permissions = cct->_conf.get_val<bool>(
     "fuse_default_permissions");
 
@@ -4702,12 +4703,18 @@ void Client::_invalidate_inode_cache(Inode *in)
 {
   ldout(cct, 10) << __func__ << " " << *in << dendl;
 
+  bool invalidated = true;
+
   // invalidate our userspace inode cache
   if (cct->_conf->client_oc) {
     objectcacher->release_set(&in->oset);
-    if (!objectcacher->set_is_empty(&in->oset))
+    invalidated = objectcacher->set_is_empty(&in->oset);
+    if (!invalidated)
       lderr(cct) << "failed to invalidate cache for " << *in << dendl;
   }
+
+  if (invalidated)
+    in->lazyio_cache_stale = false;
 
   _schedule_invalidate_callback(in, 0, 0);
 }
@@ -4806,8 +4813,16 @@ void Client::check_cap_issue(Inode *in, unsigned issued)
   unsigned had = in->caps_issued();
 
   if ((issued & CEPH_CAP_FILE_CACHE) &&
-      !(had & CEPH_CAP_FILE_CACHE))
+      !(had & CEPH_CAP_FILE_CACHE)) {
     in->cache_gen++;
+    /*
+     * From here on the MDS protects the cache again, but not what it may
+     * have missed while only Fl kept it: drop that first, or it would be
+     * served as if it had been protected all along.
+     */
+    if (in->lazyio_cache_stale)
+      _invalidate_inode_cache(in);
+  }
 
   if ((issued & CEPH_CAP_FILE_SHARED) !=
       (had & CEPH_CAP_FILE_SHARED)) {
@@ -6251,6 +6266,15 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
     if (m->oserrno == -EQUARANTINED) {
       in->set_quarantine();
     }
+
+    /*
+     * LazyIO lets us keep the cache across the loss of Fc/Fb.  From here on
+     * the MDS no longer prevents other clients from writing the file, so what
+     * we kept may go stale.
+     */
+    if ((revoked & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER)) &&
+	(new_caps & CEPH_CAP_FILE_LAZYIO))
+      in->lazyio_cache_stale = true;
 
     // recall delegations if we're losing caps necessary for them
     if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_RD))
@@ -11064,6 +11088,8 @@ int Client::_release_fh(Fh *f)
 
   in->unset_deleg(f);
 
+  int cto_err = 0;
+
   if (in->snapid == CEPH_NOSNAP) {
 #if defined(__linux__)
     FSCryptKeyHandlerRef kh;
@@ -11075,6 +11101,23 @@ int Client::_release_fh(Fh *f)
       }
     }
 #endif
+    /*
+     * Close-to-open consistency promises that everything written before
+     * close() returns is visible to opens that begin afterwards, so the data
+     * and the metadata that describes it have to reach the cluster here
+     * rather than whenever writeback gets around to it.  That holds for every
+     * descriptor written on a close-to-open mount, including those that keep
+     * strict semantics for their own reads (O_APPEND): a close-to-open reader
+     * elsewhere does not make the MDS take their buffered writes away.
+     */
+    if (close_to_open && (f->mode & CEPH_FILE_MODE_WR) &&
+	!is_unmounting() && !blocklisted) {
+      cto_err = _fsync(in, false, false);
+      if (cto_err < 0)
+	ldout(cct, 1) << __func__ << " " << f << " on inode " << *in
+		      << " failed to flush: " << cpp_strerror(cto_err) << dendl;
+    }
+
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
       check_caps(in, 0);
@@ -11088,6 +11131,8 @@ int Client::_release_fh(Fh *f)
 
   // Finally, read any async err (i.e. from flushes)
   int err = f->take_async_err();
+  if (err == 0)
+    err = cto_err;
   if (err != 0) {
     ldout(cct, 1) << __func__ << " " << f << " on inode " << *in << " caught async_err = "
                   << cpp_strerror(err) << dendl;
@@ -11116,9 +11161,12 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
     return -EROFS;
   }
 
+  bool cto = in->snapid == CEPH_NOSNAP && in->is_file() &&
+	     _is_close_to_open(flags);
+
   // use normalized flags to generate cmode
   int cflags = ceph_flags_sys2wire(flags);
-  if (cct->_conf.get_val<bool>("client_force_lazyio"))
+  if (cct->_conf.get_val<bool>("client_force_lazyio") || cto)
     cflags |= CEPH_O_LAZY;
 
   int cmode = ceph_flags_to_mode(cflags);
@@ -11210,10 +11258,20 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
     }
   }
 
+  /*
+   * Close-to-open consistency stops the MDS from invalidating our cache when
+   * another client writes the file, so revalidate it here if it was left
+   * unprotected at any point since it was filled.  This is the point where
+   * NFS revalidates as well.
+   */
+  if (result >= 0 && cto && in->lazyio_cache_stale)
+    result = _lazyio_synchronize(in.get(), perms);
+
   // success?
   if (result >= 0) {
     if (fhp) {
       *fhp = _create_fh(in.get(), flags, cmode, perms);
+      (*fhp)->close_to_open = cto;
       // ceph_flags_sys2wire/ceph_flags_to_mode() calls above transforms O_DIRECTORY flag
       // into CEPH_FILE_MODE_PIN mode. Although this mode is used at server size
       // we [ab]use it here to determine whether we should pin inode to prevent from
@@ -11816,6 +11874,10 @@ retry:
       (have & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_LAZYIO))) {
     // CAES 1 - blocking or non-blocking caller with the client holding Fc caps
     //          and client_debug_force_sync_read being default (`false)
+
+    // reading through the cache on Fl alone leaves it unprotected by the MDS
+    if (!(have & CEPH_CAP_FILE_CACHE))
+      in->lazyio_cache_stale = true;
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
@@ -12910,6 +12972,11 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     have &= ~(CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO);
 
   bool buffered_write = (cct->_conf->client_oc && (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO)));
+
+  // buffering on Fl alone leaves the cache unprotected by the MDS
+  if (buffered_write && !(have & CEPH_CAP_FILE_BUFFER))
+    in->lazyio_cache_stale = true;
+
   ceph::ref_t<WriteEncMgr> enc_mgr;
 
   if (buffered_write) {
@@ -13416,7 +13483,13 @@ int64_t Client::nonblocking_fsync(Inode *in, bool syncdataonly, Context *onfinis
   return 0;
 }
 
-int Client::_fsync(Inode *in, bool syncdataonly)
+/*
+ * wait_unsafe = false is for close-to-open: other clients need our data on
+ * the OSDs and our dirty caps flushed, not our unsafe MDS requests committed
+ * to the journal - the MDS already serves their results - so don't make
+ * every close of a file we just created wait for a journal flush.
+ */
+int Client::_fsync(Inode *in, bool syncdataonly, bool wait_unsafe)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
@@ -13442,7 +13515,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
       flush_tid = last_flush_tid;
   } else ldout(cct, 10) << "no metadata needs to commit" << dendl;
 
-  if (!syncdataonly && !in->unsafe_ops.empty()) {
+  if (!syncdataonly && wait_unsafe && !in->unsafe_ops.empty()) {
     flush_mdlog_sync(in);
 
     MetaRequest *req = in->unsafe_ops.back();
@@ -14304,6 +14377,26 @@ int Client::ll_lazyio(Fh *fh, int enable)
 
   std::scoped_lock lock(client_lock);
   return _lazyio(fh, enable);
+}
+
+/*
+ * Whether a file opened with these flags gets close-to-open consistency
+ * instead of the default POSIX consistency.
+ */
+bool Client::_is_close_to_open(int flags) const
+{
+  if (!close_to_open)
+    return false;
+
+  /*
+   * Opens that ask for something stricter keep what they asked for, and
+   * O_APPEND is excluded because appenders that cache the end of the file
+   * would silently overwrite each other.
+   */
+  if (flags & (O_DIRECT | O_SYNC | O_APPEND | O_DIRECTORY))
+    return false;
+
+  return true;
 }
 
 int Client::_lazyio_synchronize(Inode *in, const UserPerm& perms)
@@ -16185,9 +16278,11 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
     return -EDQUOT;
   }
 
+  bool cto = _is_close_to_open(flags);
+
   // use normalized flags to generate cmode
   int cflags = ceph_flags_sys2wire(flags);
-  if (cct->_conf.get_val<bool>("client_force_lazyio"))
+  if (cct->_conf.get_val<bool>("client_force_lazyio") || cto)
     cflags |= CEPH_O_LAZY;
 
   int cmode = ceph_flags_to_mode(cflags);
@@ -16248,6 +16343,15 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
     goto reply_error;
   }
 
+  // the file may have been there all along, in which case we may be sitting
+  // on a cache of it that nothing has invalidated
+  if (fhp && cto && (*inp)->lazyio_cache_stale) {
+    res = _lazyio_synchronize(inp->get(), perms);
+    if (res < 0) {
+      goto reply_error;
+    }
+  }
+
   /* If the caller passed a value in fhp, do the open */
   if(fhp) {
 #if defined(__linux__)
@@ -16263,6 +16367,7 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
 
     (*inp)->get_open_ref(cmode);
     *fhp = _create_fh(inp->get(), flags, cmode, perms);
+    (*fhp)->close_to_open = cto;
   }
 
  reply_error:
@@ -17610,6 +17715,18 @@ int Client::ll_flush(Fh *fh)
   tout(cct) << (uintptr_t)fh << std::endl;
 
   std::scoped_lock lock(client_lock);
+  /*
+   * close(2) on a FUSE mount waits for FLUSH, while RELEASE - and with it
+   * _release_fh() - comes asynchronously once the last reference is gone.
+   * Close-to-open owes the data to whoever opens the file next as soon as
+   * close() returns, so flush here.
+   */
+  if (close_to_open && (fh->mode & CEPH_FILE_MODE_WR) &&
+      !is_unmounting() && !blocklisted) {
+    int r = _fsync(fh->inode.get(), false, false);
+    int err = _flush(fh);
+    return err ? err : r;
+  }
   return _flush(fh);
 }
 
@@ -19074,6 +19191,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_cache_mid",
     "client_cache_size",
     "client_caps_release_delay",
+    "client_close_to_open",
     "client_deleg_break_on_open",
     "client_deleg_timeout",
     "client_fscrypt_as",
@@ -19101,6 +19219,9 @@ void Client::handle_conf_change(const ConfigProxy& conf,
 
   if (changed.count("client_permissions")) {
     client_permissions = cct->_conf.get_val<bool>("client_permissions");
+  }
+  if (changed.count("client_close_to_open")) {
+    close_to_open = cct->_conf.get_val<bool>("client_close_to_open");
   }
   if (changed.count("fuse_default_permissions")) {
     fuse_default_permissions = cct->_conf.get_val<bool>("fuse_default_permissions");
