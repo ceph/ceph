@@ -1,6 +1,8 @@
 from typing import Optional
 
 from ..controllers.rgw import RgwRESTController
+from ..exceptions import DashboardException
+from ..rest_client import RequestException
 from ..security import Scope
 from ..services.rgw_iam import RgwAccounts
 from ..tools import str_to_bool
@@ -76,6 +78,23 @@ class RgwUserAccountsController(RgwRESTController):
         Get an account by account id
         """
         return self.get_account(account_id, daemon_name)
+
+    @EndpointDoc("Check if account name exists",
+                 parameters={'account_name': (str, 'Account name'),
+                             'daemon_name': (str, 'Name of the daemon')})
+    @RESTController.Collection(method='GET', path='/exists')
+    def exists(self, account_name: str, daemon_name=None):
+        """
+        Check if an account with the given name exists
+        Returns True if account exists, False otherwise
+        """
+        try:
+            self.proxy(daemon_name, 'GET', 'account', {'name': account_name})
+            # If we get a result without error, the account exists
+            return True
+        except (DashboardException, RequestException):
+            # If we get an error (e.g., account not found), it doesn't exist
+            return False
 
     def get_account(self, account_id, daemon_name=None) -> dict:
         return self.proxy(daemon_name, 'GET', 'account', {'id': account_id})

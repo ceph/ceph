@@ -26,6 +26,15 @@ class RgwAccounts:
         return cls.send_rgw_cmd(get_accounts_cmd)
 
     @classmethod
+    def get_account_by_name(cls, account_name: str):
+        """
+        Get account info by account name
+        Returns account info if found, raises exception otherwise
+        """
+        get_account_cmd = ['account', 'info', '--account-name', account_name]
+        return cls.send_rgw_cmd(get_account_cmd)
+
+    @classmethod
     def set_quota(cls, quota_type: str, account_id: str, max_size: str, max_objects: str,
                   enabled: bool):
         set_quota_cmd = ['quota', 'set', '--quota-scope', quota_type, '--account-id', account_id,
