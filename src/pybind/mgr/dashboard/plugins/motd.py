@@ -59,9 +59,12 @@ class Motd(SP):
             expires = datetime_to_str(datetime_now() + delta)
         else:
             expires = ''
+
+        # pylint: disable=unexpected-keyword-arg
+        md5 = hashlib.md5(message.encode(), usedforsecurity=False).hexdigest()
         value: str = json.dumps({
             'message': message,
-            'md5': hashlib.md5(message.encode()).hexdigest(),
+            'md5': md5,
             'severity': severity.value,
             'expires': expires
         })
