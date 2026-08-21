@@ -559,17 +559,49 @@ static int32_t proxy_config_source_validate(int32_t fd, struct stat *before,
 static int32_t proxy_config_destination_prepare(proxy_settings_t *settings)
 {
 	int32_t fd;
+#ifndef O_TMPFILE
+	char tmp[PATH_MAX];
+	int32_t len;
+#endif
 
+#ifdef O_TMPFILE
 	fd = open(settings->work_dir, O_TMPFILE | O_WRONLY, 0600);
 	if (fd < 0) {
 		return proxy_log(LOG_ERR, errno, "openat() failed");
 	}
+#else
+	/* Darwin has no O_TMPFILE, so there is no way to hold an unnamed file
+	 * open. Give it a name that proxy_config_destination_commit() links to
+	 * the final one and proxy_config_destination_close() then removes;
+	 * close() runs on every path out of proxy_config_prepare(), so the
+	 * name does not outlive the descriptor. */
+	len = proxy_snprintf(tmp, sizeof(tmp), "%s/.tmpXXXXXX",
+			     settings->work_dir);
+	if (len < 0) {
+		return len;
+	}
+
+	fd = mkstemp(tmp);
+	if (fd < 0) {
+		return proxy_log(LOG_ERR, errno, "mkstemp() failed");
+	}
+#endif
 
 	return fd;
 }
 
 static void proxy_config_destination_close(int32_t fd)
 {
+#ifndef O_TMPFILE
+	char tmp[PATH_MAX];
+
+	/* Drop the name prepare() had to give the file. F_GETPATH is what
+	 * Darwin offers in place of /proc/self/fd. */
+	if (fcntl(fd, F_GETPATH, tmp) >= 0) {
+		unlink(tmp);
+	}
+#endif
+
 	close(fd);
 }
 
@@ -592,13 +624,20 @@ static int32_t proxy_config_destination_write(int32_t fd, void *data,
 static int32_t proxy_config_destination_commit(proxy_settings_t *settings,
 					       int32_t fd, const char *path)
 {
+#ifdef AT_EMPTY_PATH
 	char fd_path[32];
 	int32_t len;
+#else
+	/* F_GETPATH writes up to MAXPATHLEN bytes, not the handful that
+	 * "/proc/self/fd/%d" needs. */
+	char fd_path[PATH_MAX];
+#endif
 
 	if (fsync(fd) < 0) {
 		return proxy_log(LOG_ERR, errno, "fsync() failed");
 	}
 
+#ifdef AT_EMPTY_PATH
 	if (linkat(fd, "", AT_FDCWD, path, AT_EMPTY_PATH) < 0) {
 		if (errno == EEXIST) {
 			return 0;
@@ -619,6 +658,20 @@ static int32_t proxy_config_destination_commit(proxy_settings_t *settings,
 			return proxy_log(LOG_ERR, errno, "linkat() failed");
 		}
 	}
+#else
+	/* The file still carries the name prepare() gave it, so link that.
+	 * EEXIST means another process published the same contents first,
+	 * which is what the path being a hash of them makes possible. */
+	if (fcntl(fd, F_GETPATH, fd_path) < 0) {
+		return proxy_log(LOG_ERR, errno, "fcntl(F_GETPATH) failed");
+	}
+
+	if (link(fd_path, path) < 0) {
+		if (errno != EEXIST) {
+			return proxy_log(LOG_ERR, errno, "link() failed");
+		}
+	}
+#endif
 
 	return 0;
 }
