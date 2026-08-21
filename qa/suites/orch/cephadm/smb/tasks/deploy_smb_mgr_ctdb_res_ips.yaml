@@ -22,7 +22,7 @@ overrides:
     log-only-match:
       - CEPHADM_
 tasks:
-- cephadm.deploy_samba_ad_dc:
+- smb.deploy_samba_ad_dc:
     role: host.d
 - vip:
     count: 2
