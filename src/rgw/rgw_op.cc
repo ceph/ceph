@@ -10540,7 +10540,7 @@ int get_decrypt_filter(
 
   // in case of a multipart upload, we need to know the part lengths to
   // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
+  std::vector<uint64_t> parts_len;
 
   // Read (S3 part number, GCM salt) pairs from the attribute (set by Complete).
   std::vector<std::pair<uint32_t, std::string>> part_keys;
@@ -10616,7 +10616,7 @@ int get_decrypt_filter(
   if (encrypted_total_size == 0 &&
       block_crypt->get_block_size() != block_crypt->get_encrypted_block_size()) {
     if (!parts_len.empty()) {
-      for (size_t part_len : parts_len) {
+      for (uint64_t part_len : parts_len) {
         encrypted_total_size += part_len;
       }
     } else if (!attrs.count(RGW_ATTR_COMPRESSION)) {

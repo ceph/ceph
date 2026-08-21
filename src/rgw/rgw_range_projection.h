@@ -100,7 +100,7 @@ inline DecompressRange project_compress_range(
 // Find which multipart part contains a given plaintext offset.
 inline void find_part_for_offset(
     off_t plaintext_ofs,
-    const std::vector<size_t>& parts_len,
+    const std::vector<uint64_t>& parts_len,
     size_t block_size,
     size_t enc_block_size,
     bool clamp_to_last,
@@ -134,7 +134,7 @@ inline DiskRange project_encrypt_range(
     size_t block_size,
     size_t enc_block_size,
     uint64_t encrypted_total_size,
-    const std::vector<size_t>& parts_len)
+    const std::vector<uint64_t>& parts_len)
 {
   DiskRange r;
   r.length = end + 1 - ofs;
