@@ -191,8 +191,9 @@ Based on tests performed at scale with small objects in the range
 150 Million objects), it was found that scheduling with mClock was not optimal
 with multiple OSD shards. For example, in this cluster with multiple OSD node
 failures, the client throughput was found to be inconsistent across test runs
-coupled with multiple reported slow requests. For more details
-see https://tracker.ceph.com/issues/66289. With multiple shards, the situation
+coupled with multiple reported slow requests. Small objects suffered
+throughput losses of as much as 79 percent during OSD failures, while
+large objects lost upwards of 20 percent. With multiple shards, the situation
 was exacerbated when MAX limit was allocated to both client and background
 recovery class of operations. During the OSD failure phase, since both client
 and recovery ops were in direct competition to utilize the full bandwidth of
