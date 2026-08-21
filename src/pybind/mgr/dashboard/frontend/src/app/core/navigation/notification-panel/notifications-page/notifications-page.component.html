@@ -59,105 +59,105 @@
   <div class="notifications-page__body">
     <div class="notifications-page__list border-subtle-right">
       @for (notification of notifications(); track notification.id) {
-        <div
-          class="notifications-page__item border-subtle-bottom"
-          [class.notifications-page__item--active]="selectedNotificationID() === notification.id"
-          [class.notifications-page__item--unread]="!readMap()[notification.id]"
-          role="button"
-          tabindex="0"
-          (click)="onNotificationSelect(notification)"
-          (keydown.enter)="onNotificationSelect(notification)"
+      <div
+        class="notifications-page__item border-subtle-bottom"
+        [class.notifications-page__item--active]="selectedNotificationID() === notification.id"
+        [class.notifications-page__item--unread]="!readMap()[notification.id]"
+        role="button"
+        tabindex="0"
+        (click)="onNotificationSelect(notification)"
+        (keydown.enter)="onNotificationSelect(notification)"
+      >
+        <cd-notification-item
+          [type]="notification.type"
+          [title]="notification.displayTitle"
+          [timestamp]="notification.timestamp"
+          [message]="notification.displayPreview"
+          [notificationId]="notification.id"
+          [occurrences]="notification.occurrences"
+          [showChevron]="true"
+          [showUnread]="!readMap()[notification.id]"
         >
-          <cd-notification-item
-            [type]="notification.type"
-            [title]="notification.displayTitle"
-            [timestamp]="notification.timestamp"
-            [message]="notification.displayPreview"
-            [notificationId]="notification.id"
-            [occurrences]="notification.occurrences"
-            [showChevron]="true"
-            [showUnread]="!readMap()[notification.id]"
-          >
-          </cd-notification-item>
-        </div>
+        </cd-notification-item>
+      </div>
       } @empty {
-        <div class="notifications-page__empty">
-          <cd-icon
-            type="notification"
-            [size]="iconSize.size20"
-            [useDefault]="true"
-          ></cd-icon>
-          <p
-            class="cds-mt-3"
-            i18n
-          >
-            No notifications available
-          </p>
-          <p
-            class="cds-mt-3 cds--type-helper-text-01"
-            i18n
-          >
-            Notifications are stored locally and cleared on browser reset.
-          </p>
-        </div>
+      <div class="notifications-page__empty">
+        <cd-icon
+          type="notification"
+          [size]="iconSize.size20"
+          [useDefault]="true"
+        ></cd-icon>
+        <p
+          class="cds-mt-3"
+          i18n
+        >
+          No notifications available
+        </p>
+        <p
+          class="cds-mt-3 cds--type-helper-text-01"
+          i18n
+        >
+          Notifications are stored locally and cleared on browser reset.
+        </p>
+      </div>
       }
     </div>
 
     <div class="notifications-page__detail">
       @if (selectedNotification(); as selected) {
-        <div class="notifications-page__detail-header">
-          <cd-notification-item
-            [type]="selected.type"
-            [title]="selected.displayTitle"
-            [timestamp]="selected.timestamp"
-            [notificationId]="selected.id"
-            [application]="selected.application"
-            (deleted)="onNotificationDeleted($event)"
-          ></cd-notification-item>
-        </div>
-        <div class="notifications-page__detail-body cds-mt-5">
-          @if (selected.occurrences > 1) {
-            <p
-              class="notifications-page__occurrences cds--type-label-01"
-              i18n
-            >
-              Occurrences: {{ selected.occurrences }}
-            </p>
-          }
-          <p
-            class="notifications-page__detail-text cds--type-body-01"
-            [innerHTML]="selected.displayDetail | sanitizeHtml"
-          ></p>
-          @if (selected.prometheusAlert?.sourceUrl) {
-            <a
-              cdsLink
-              class="notifications-page__prometheus-link cds-mt-5"
-              [href]="selected.prometheusAlert.sourceUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span i18n>View in Prometheus</span>
-              <cd-icon
-                type="launch"
-                [useDefault]="true"
-              ></cd-icon>
-            </a>
-          }
-        </div>
-      } @else {
-        <div class="notifications-page__empty">
+      <div class="notifications-page__detail-header">
+        <cd-notification-item
+          [type]="selected.type"
+          [title]="selected.displayTitle"
+          [timestamp]="selected.timestamp"
+          [notificationId]="selected.id"
+          [application]="selected.application"
+          (deleted)="onNotificationDeleted($event)"
+        ></cd-notification-item>
+      </div>
+      <div class="notifications-page__detail-body cds-mt-5">
+        @if (selected.occurrences > 1) {
+        <p
+          class="notifications-page__occurrences cds--type-label-01"
+          i18n
+        >
+          Occurrences: {{ selected.occurrences }}
+        </p>
+        }
+        <p
+          class="notifications-page__detail-text cds--type-body-01"
+          [innerHTML]="selected.displayDetail | sanitizeHtml"
+        ></p>
+        @if (selected.prometheusAlert?.sourceUrl) {
+        <a
+          cdsLink
+          class="notifications-page__prometheus-link cds-mt-5"
+          [href]="selected.prometheusAlert.sourceUrl"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span i18n>View in Prometheus</span>
           <cd-icon
-            type="notification"
-            [size]="iconSize.size20"
+            type="launch"
             [useDefault]="true"
           ></cd-icon>
-          <p
-            class="cds-mt-3"
-            i18n
-          >
-            Select a notification to view details
-          </p>
-        </div>
+        </a>
+        }
+      </div>
+      } @else {
+      <div class="notifications-page__empty">
+        <cd-icon
+          type="notification"
+          [size]="iconSize.size20"
+          [useDefault]="true"
+        ></cd-icon>
+        <p
+          class="cds-mt-3"
+          i18n
+        >
+          Select a notification to view details
+        </p>
+      </div>
       }
     </div>
   </div>
