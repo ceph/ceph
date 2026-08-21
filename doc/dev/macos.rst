@@ -60,9 +60,11 @@ virtualenv interpreter, and turns off what cannot build here::
   ./do_cmake_macos.sh
   ninja -C build vstart-base librbd rbd
 
-Always build named targets. ``all`` is not expected to succeed, because it also
-covers the components that have not been ported, and it is not the way to reach
-the Cython bindings either - those have to be asked for by name.
+``all`` does succeed, which makes it a reasonable way to notice a regression;
+every one of the 3891 targets of the `Optional components`_ configuration
+builds. Two things it will not do for you: it does not reach the Cython
+bindings, which have to be named, and with ``WITH_TESTS=ON`` a few test files
+still fail to compile - `What does not build`_ has the list.
 
 What builds
 -----------
@@ -314,6 +316,25 @@ What does not build
 
 * BlueStore, and therefore any persistent OSD; it needs libaio or io_uring and
   the Linux block layer
+* seven of the 1942 test targets, with ``WITH_TESTS=ON``. The rest of ``all``
+  builds, so this is the whole of what is left:
+
+  * ``test/libcephfs/flock.cc``, ``recordlock.cc`` and ``recordlock_hl.cc``
+    call ``sem_timedwait()`` in 54 places, and Darwin has no such function.
+    This is the only one of the three that is real work rather than a
+    spelling.
+  * ``test/libcephfs/ceph_pthread_self.h`` casts a ``pthread_t`` to
+    ``uint64_t`` and ``test/system/systest_runnable.cc`` calls
+    ``pthread_getthreadid_np()``. Darwin's ``pthread_t`` is a pointer, and
+    the thread id comes from ``pthread_threadid_np()`` instead.
+  * ``test/client/nonblocking.cc`` uses ``O_PATH``, ``O_RSYNC`` and
+    ``FSCRYPT_MAXIO_SIZE``, none of which exist here, so those cases want
+    skipping rather than porting. ``test/libcephfs/vxattr.cc`` uses
+    ``XATTR_REPLACE``, which Darwin does have, in ``<sys/xattr.h>``.
+
+  The Catch2 tests are not counted: CPM fetches Catch2 over the network at
+  configure time, and ``do_cmake_macos.sh`` leaves ``WITH_CATCH2`` off. None
+  of this says anything about whether the tests that do build pass.
 
 Notes
 -----
