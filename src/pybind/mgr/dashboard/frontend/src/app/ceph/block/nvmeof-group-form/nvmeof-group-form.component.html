@@ -3,15 +3,21 @@
   [formGroup]="groupForm"
   novalidate
 >
-  <div cdsGrid
-       [useCssGrid]="true"
-       [narrow]="true"
-       [fullWidth]="true">
-    <div cdsCol
-         [columnNumbers]="{sm: 4, md: 8}">
-      <div cdsRow
-           class="form-heading form-item">
-      <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
+  <div
+    cdsGrid
+    [useCssGrid]="true"
+    [narrow]="true"
+    [fullWidth]="true"
+  >
+    <div
+      cdsCol
+      [columnNumbers]="{ sm: 4, md: 8 }"
+    >
+      <div
+        cdsRow
+        class="form-heading form-item"
+      >
+        <cd-help-text [formAllFieldsRequired]="true"></cd-help-text>
       </div>
       <div
         cdsRow
@@ -24,7 +30,8 @@
             i18n-helperText
             helperText="A unique name to identify this gateway group."
             cdRequiredField="Gateway group name"
-            [invalid]="groupName.isInvalid">
+            [invalid]="groupName.isInvalid"
+          >
             Gateway group name
             <input
               cdsText
@@ -54,14 +61,20 @@
           >
           <span
             class="invalid-feedback"
-            *ngIf="groupForm.get('groupName')?.hasError('invalidChars') && (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)"
-            i18n>Special characters are not allowed.</span>
-
+            *ngIf="
+              groupForm.get('groupName')?.hasError('invalidChars') &&
+              (groupForm.get('groupName')?.dirty || groupForm.get('groupName')?.touched)
+            "
+            i18n
+            >Special characters are not allowed.</span
+          >
         </div>
       </div>
       <!-- Pool -->
-      <div cdsRow
-           class="form-item">
+      <div
+        cdsRow
+        class="form-item"
+      >
         <div cdsCol>
           <cds-select
             label="Block pool"
@@ -75,62 +88,89 @@
             i18n-label
             i18n-helperText
           >
-            <option *ngIf="poolsLoading"
-                    [ngValue]="null"
-                    i18n>Loading...</option>
-            <option *ngIf="!poolsLoading && pools.length === 0"
-                    [ngValue]="null"
-                    i18n>-- No block pools available --</option>
-            <option *ngFor="let pool of pools"
-                    [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            <option
+              *ngIf="poolsLoading"
+              [ngValue]="null"
+              i18n
+            >
+              Loading...
+            </option>
+            <option
+              *ngIf="!poolsLoading && pools.length === 0"
+              [ngValue]="null"
+              i18n
+            >
+              -- No block pools available --
+            </option>
+            <option
+              *ngFor="let pool of pools"
+              [value]="pool.pool_name"
+            >
+              {{ pool.pool_name }}
+            </option>
           </cds-select>
           <ng-template #poolError>
-            <span class="invalid-feedback"
-                  *ngIf="groupForm.showError('pool', formDir, 'required')"
-                  i18n>This field is required.</span>
+            <span
+              class="invalid-feedback"
+              *ngIf="groupForm.showError('pool', formDir, 'required')"
+              i18n
+              >This field is required.</span
+            >
           </ng-template>
         </div>
       </div>
 
       <!-- CDS Checkbox -->
-      <div cdsRow
-           class="form-item">
+      <div
+        cdsRow
+        class="form-item"
+      >
         <div cdsCol>
-          <cds-checkbox id="enableCds"
-                        formControlName="enableEncryption"
-                        i18n>Enable encryption
+          <cds-checkbox
+            id="enableCds"
+            formControlName="enableEncryption"
+            i18n
+            >Enable encryption
           </cds-checkbox>
         </div>
       </div>
 
       <!-- CDS Input (shown when checkbox is checked) -->
       @if (groupForm.controls.enableEncryption.value) {
-      <div cdsRow
-           class="form-item">
-        <div cdsCol>
-          <cds-textarea-label
-            labelInputID="cdsInput"
-            helperText="Provide the encryption configuration details."
-            i18n
-            i18n-helperText>Encryption configuration
-            <textarea cdsTextArea
-                      id="cdsInput"
-                      cdValidate
-                      #encryptionConfig="cdValidate"
-                      [invalid]="encryptionConfig.invalid"
-                      [invalidText]="encryptionConfigError"
-                      formControlName="encryptionConfig"
-                      cols="100"
-                      rows="4">
-            </textarea>
-          </cds-textarea-label>
+        <div
+          cdsRow
+          class="form-item"
+        >
+          <div cdsCol>
+            <cds-textarea-label
+              labelInputID="cdsInput"
+              helperText="Provide the encryption configuration details."
+              i18n
+              i18n-helperText
+              >Encryption configuration
+              <textarea
+                cdsTextArea
+                id="cdsInput"
+                cdValidate
+                #encryptionConfig="cdValidate"
+                [invalid]="encryptionConfig.invalid"
+                [invalidText]="encryptionConfigError"
+                formControlName="encryptionConfig"
+                cols="100"
+                rows="4"
+              >
+              </textarea>
+            </cds-textarea-label>
+          </div>
         </div>
-      </div>
-      <ng-template #encryptionConfigError>
-        <span *ngIf="groupForm.controls.encryptionConfig.hasError('required')"
-              class="invalid-feedback"
-              i18n>This field is required.</span>
-      </ng-template>
+        <ng-template #encryptionConfigError>
+          <span
+            *ngIf="groupForm.controls.encryptionConfig.hasError('required')"
+            class="invalid-feedback"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
       }
       <!-- Target Nodes Selection -->
       <div
@@ -149,15 +189,6 @@
         >
           <cd-nvmeof-gateway-node (hostsLoaded)="onHostsLoaded($event)"></cd-nvmeof-gateway-node>
         </div>
-      </div>
-      <div
-        cdsRow
-        class="form-item cds-mb-0"
-      >
-        <cd-nvmeof-gateway-node
-          (hostsLoaded)="onHostsLoaded($event)"
-        ></cd-nvmeof-gateway-node>
-      </div>
       </div>
 
       <div cdsRow>

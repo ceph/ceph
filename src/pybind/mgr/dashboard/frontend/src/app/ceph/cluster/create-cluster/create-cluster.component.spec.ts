@@ -81,7 +81,7 @@ describe('CreateClusterComponent', () => {
     component.createCluster();
     fixture.detectChanges();
     const heading = fixture.debugElement.query(By.css('.title')).nativeElement;
-    expect(heading.innerHTML).toBe('Add Hosts');
+    expect(heading.innerHTML.trim()).toBe('Add Hosts');
   });
 
   it('should show the host list when cluster creation as first step', () => {

@@ -34,20 +34,24 @@
     </ng-container>
 
     <!-- Matcher actions -->
-    <button type="button"
-            class="btn btn-light"
-            id="matcher-edit-{{index}}"
-            i18n-ngbTooltip
-            ngbTooltip="Edit"
-            (click)="showMatcherModal(index)">
+    <button
+      type="button"
+      class="btn btn-light"
+      id="matcher-edit-{{ index }}"
+      i18n-ngbTooltip
+      ngbTooltip="Edit"
+      (click)="showMatcherModal(index)"
+    >
       <i [ngClass]="[icons.edit]"></i>
     </button>
-    <button type="button"
-            class="btn btn-light"
-            id="matcher-delete-{{index}}"
-            i18n-ngbTooltip
-            ngbTooltip="Delete"
-            (click)="deleteMatcher(index)">
+    <button
+      type="button"
+      class="btn btn-light"
+      id="matcher-delete-{{ index }}"
+      i18n-ngbTooltip
+      ngbTooltip="Delete"
+      (click)="deleteMatcher(index)"
+    >
       <i [ngClass]="[icons.trash]"></i>
     </button>
   </div>
@@ -235,11 +239,13 @@
 
             <div class="row">
               <div class="col-12">
-                <button type="button"
-                        id="add-matcher"
-                        class="btn btn-light float-end my-3"
-                        [ngClass]="{'btn-warning': formDir.submitted && matchers.length === 0 }"
-                        (click)="showMatcherModal()">
+                <button
+                  type="button"
+                  id="add-matcher"
+                  class="btn btn-light float-end my-3"
+                  [ngClass]="{ 'btn-warning': formDir.submitted && matchers.length === 0 }"
+                  (click)="showMatcherModal()"
+                >
                   <i [ngClass]="[icons.add]"></i>
                   <ng-container i18n>Add matcher</ng-container>
                 </button>

@@ -84,23 +84,31 @@
   <span class="fw-bold">{{ row.name }}</span>
 
   <span *ngIf="row?.info?.state === 'complete'; else snapshotRetainedTpl">
-    <i [ngClass]="[icons.success, icons.large]"
-       ngbTooltip="{{row.name}} is ready to use"
-       class="text-success"></i>
+    <i
+      [ngClass]="[icons.success, icons.large]"
+      ngbTooltip="{{ row.name }} is ready to use"
+      class="text-success"
+    ></i>
   </span>
 
   <ng-template #snapshotRetainedTpl>
-    <i [ngClass]="[icons.warning, icons.large]"
-       class="text-warning"
-       ngbTooltip="{{row.name}} is removed after retaining the snapshots"></i>
+    <i
+      [ngClass]="[icons.warning, icons.large]"
+      class="text-warning"
+      ngbTooltip="{{ row.name }} is removed after retaining the snapshots"
+    ></i>
   </ng-template>
 
-  <cd-label [value]="row.info.type"
-            *ngIf="row.info.type !== 'subvolume'"></cd-label>
+  <cd-label
+    [value]="row.info.type"
+    *ngIf="row.info.type !== 'subvolume'"
+  ></cd-label>
 
-  <cd-label value="namespaced"
-            *ngIf="row.info.pool_namespace"
-            [tooltipText]="row.info.pool_namespace"></cd-label>
+  <cd-label
+    value="namespaced"
+    *ngIf="row.info.pool_namespace"
+    [tooltipText]="row.info.pool_namespace"
+  ></cd-label>
 </ng-template>
 
 <ng-template
