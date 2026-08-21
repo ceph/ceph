@@ -21,10 +21,16 @@
 
 #if defined(__sun) || defined(_AIX) || defined(__APPLE__) || \
     defined(__FreeBSD__) || defined(_WIN32)
+#include <stdint.h>
+
+#ifdef __cplusplus
 extern "C" {
-__s32  ceph_to_hostos_errno(__s32 e);
-__s32  hostos_to_ceph_errno(__s32 e);
+#endif
+int32_t  ceph_to_hostos_errno(int32_t e);
+int32_t  hostos_to_ceph_errno(int32_t e);
+#ifdef __cplusplus
 }
+#endif
 #else
 #define  ceph_to_hostos_errno(e) (e)
 #define  hostos_to_ceph_errno(e) (e)
