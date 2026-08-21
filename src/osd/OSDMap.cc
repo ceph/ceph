@@ -6631,9 +6631,9 @@ int OSDMap::set_rbi_fair(
     int64_t pool_id,
     float total_w_pa,
     float pa_sum,
-    int num_osds,
     int osd_pa_count,
     float total_osd_weight,
+    uint num_pgs,
     uint max_prims_per_osd,
     uint max_acting_prims_per_osd,
     float avg_prims_per_osd,
@@ -6681,15 +6681,20 @@ int OSDMap::set_rbi_fair(
   rbi.pa_weighted_avg = rbi_round(rbi.pa_weighted / total_osd_weight); // in [0..1]
   // p_rbi->pa_weighted / osd_pa_count; // in [0..1]
 
-  rbi.raw_score = rbi_round((float)max_prims_per_osd / avg_prims_per_osd); // >=1
+  // Keep the unrounded scores for the divisions below, so that the adjusted
+  // scores are not the result of dividing already rounded values.
+  float raw_score = (float)max_prims_per_osd / avg_prims_per_osd; // >=1
+  float acting_raw_score;
+  rbi.raw_score = rbi_round(raw_score);
   if (acting_on_zero_pa) {
-    rbi.acting_raw_score = rbi_round(max_osd_score);
+    acting_raw_score = max_osd_score;
     rbi.err_msg = fmt::format(
               "pool {} has acting primaries on OSD(s) with primary affinity 0, read balance score is not accurate",
               pool_id);
   } else {
-    rbi.acting_raw_score = rbi_round((float)max_acting_prims_per_osd / avg_prims_per_osd);
+    acting_raw_score = (float)max_acting_prims_per_osd / avg_prims_per_osd;
   }
+  rbi.acting_raw_score = rbi_round(acting_raw_score);
 
   if (osd_pa_count != 0) {
     // this implies that pa_sum > 0
@@ -6710,18 +6715,27 @@ int OSDMap::set_rbi_fair(
                       pool_id, ss.str());
       return -EINVAL;
     }
+    // The number of primaries the busiest OSD would have in a perfectly balanced
+    // pool. Primaries can only be placed on the osd_pa_count OSDs which have a
+    // non-zero primary affinity, and when the PGs can't be spread evenly between
+    // them (e.g. a pool with fewer PGs than OSDs) even a perfectly balanced pool
+    // has ceil() primaries on some OSD.
+    float optimal_prims_per_osd = std::ceil(float(num_pgs) / float(osd_pa_count));
     // osd_pa_count counts only OSDs which hold PGs of this pool, so it is never
-    // larger than num_osds and the optimal score is always >= 1.
-    float optimal_score = float(num_osds) / float(osd_pa_count); // >= 1
+    // larger than the number of OSDs the average is taken over, which makes the
+    // optimal score always >= 1.
+    float optimal_score = optimal_prims_per_osd / avg_prims_per_osd; // >= 1
     rbi.optimal_score = rbi_round(optimal_score);
     // adjust the score to the primary affinity setting (if prim affinity is set
     // the raw score can't be 1 and the optimal (perfect) score is hifgher than 1)
     // When total system primary affinity is too low (average < 1 / pool replica count)
     // the score is negative in order to grab the user's attention.
     // Divide by the unrounded optimal score, so that rounding can never turn the
-    // divisor into 0 (and the score into infinity).
-    rbi.adjusted_score = rbi_round(rbi.raw_score / optimal_score); // >= 1 if PA is not low
-    rbi.acting_adj_score = rbi_round(rbi.acting_raw_score / optimal_score); // >= 1 if PA is not low
+    // divisor into 0 (and the score into infinity). The result is the number of
+    // primaries on the busiest OSD relative to the best achievable one, so a
+    // perfectly balanced pool scores exactly 1 - whatever its number of PGs is.
+    rbi.adjusted_score = rbi_round(raw_score / optimal_score); // >= 1 if PA is not low
+    rbi.acting_adj_score = rbi_round(acting_raw_score / optimal_score); // >= 1 if PA is not low
 
   } else {
     // We should never get here - this condition is checked before calling this function - this is just sanity check code.
@@ -6865,8 +6879,8 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
   }
 
   int rc = tmp_osd_map.set_rbi_fair(cct, rbi, pool_id, total_weighted_pa,
-                                    prim_affinity_sum, num_osds, osd_pa_count,
-                                    total_osd_weight, max_prims_per_osd,
+                                    prim_affinity_sum, osd_pa_count,
+                                    total_osd_weight, num_pgs, max_prims_per_osd,
                                     max_acting_prims_per_osd, avg_prims_per_osd,
                                     prim_on_zero_pa, acting_on_zero_pa, max_osd_score);
 
@@ -7005,7 +7019,9 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
 int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
 				    read_balance_info_t *p_rbi) const
 {
-  //BUG: wrong score with one PG replica 3 and 4 OSDs
+  //TODO: the size-optimal score still compares the load of the busiest OSD to the
+  //      theoretical average load, so a pool with very few PGs scores above 1 even
+  //      when it is as balanced as it can possibly be.
   if (cct != nullptr)
     ldout(cct,20) << __func__ << " pool " << get_pool_name(pool_id) << dendl;
 
