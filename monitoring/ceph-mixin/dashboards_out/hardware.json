@@ -78,6 +78,7 @@
                            "type": "range"
                         }
                      ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -107,7 +108,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -415,6 +416,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [ ]
@@ -437,7 +439,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -467,6 +469,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [ ]
@@ -489,7 +492,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -623,6 +626,7 @@
                            "type": "range"
                         }
                      ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -652,7 +656,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -682,6 +686,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -716,7 +721,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -748,6 +753,7 @@
                      "mappings": [ ],
                      "max": 85,
                      "min": 0,
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -782,7 +788,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -814,6 +820,7 @@
                      "mappings": [ ],
                      "max": 88,
                      "min": 0,
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -848,7 +855,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -878,6 +885,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [ ]
@@ -900,7 +908,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -936,6 +944,7 @@
                      "mappings": [ ],
                      "max": 100,
                      "min": 0,
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -970,7 +979,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1004,6 +1013,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -1038,7 +1048,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1074,6 +1084,7 @@
                      "mappings": [ ],
                      "max": 85,
                      "min": 0,
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -1108,7 +1119,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1159,6 +1170,7 @@
                            "type": "range"
                         }
                      ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -1188,7 +1200,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1239,6 +1251,7 @@
                            "type": "range"
                         }
                      ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -1268,7 +1281,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1319,6 +1332,7 @@
                            "type": "range"
                         }
                      ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [
@@ -1348,7 +1362,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1555,6 +1569,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [ ]
@@ -1578,7 +1593,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1614,6 +1629,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [ ]
@@ -1636,7 +1652,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
@@ -1670,6 +1686,7 @@
                      "decimals": 0,
                      "links": [ ],
                      "mappings": [ ],
+                     "noValue": "N/A",
                      "thresholds": {
                         "mode": "absolute",
                         "steps": [ ]
@@ -1692,7 +1709,7 @@
                   "orientation": "horizontal",
                   "reduceOptions": {
                      "calcs": [
-                        "lastNotNull"
+                        "last"
                      ],
                      "fields": "",
                      "values": false
