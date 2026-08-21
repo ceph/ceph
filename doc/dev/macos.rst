@@ -60,11 +60,10 @@ virtualenv interpreter, and turns off what cannot build here::
   ./do_cmake_macos.sh
   ninja -C build vstart-base librbd rbd
 
-``all`` does succeed, which makes it a reasonable way to notice a regression;
-every one of the 3891 targets of the `Optional components`_ configuration
-builds. Two things it will not do for you: it does not reach the Cython
-bindings, which have to be named, and with ``WITH_TESTS=ON`` a few test files
-still fail to compile - `What does not build`_ has the list.
+Build named targets, as above. ``all`` succeeds too, and is a fair way to check
+that nothing has regressed, with two caveats: it does not reach the Cython
+bindings, which have to be asked for by name, and a few test files still fail
+to compile. `What does not build`_ has both.
 
 What builds
 -----------
@@ -199,8 +198,6 @@ the environment above.
 
 Things worth knowing before they are hit:
 
-* ``memstore`` keeps everything in memory, so data does not survive restarting
-  an OSD, and a single-OSD cluster reports ``POOL_NO_REDUNDANCY``.
 * ``memstore_device_bytes`` defaults to 1 GiB, and memstore serves close to a
   gigabyte a second, so a few seconds of an unbounded write test fills it. The
   OSD then correctly marks itself full and every subsequent write blocks, which
@@ -215,7 +212,13 @@ Things worth knowing before they are hit:
     ./bin/ceph --admin-daemon asok/osd.0.asok status
     ./bin/ceph --admin-daemon asok/osd.0.asok perf dump osd
 
-* The mgr modules that fail to load do so for want of pip packages, and nothing
+The mgr modules
+~~~~~~~~~~~~~~~
+
+Which modules come up is decided by what the embedded interpreter can import,
+so it is a question of packages rather than of the port:
+
+* The modules that fail to load do so for want of pip packages, and nothing
   about them is specific to Darwin - all of these install as arm64 wheels,
   ``scipy`` included, with nothing to compile::
 
@@ -239,6 +242,9 @@ Things worth knowing before they are hit:
 
 Mounting CephFS
 ---------------
+
+With ``ceph-fuse`` built - see `Optional components`_ - a CephFS created by
+vstart can be mounted like any other file system.
 
 macFUSE's default backend is a kernel extension, so before the first mount
 macOS wants it approved and then wants a restart. Until that has happened the
