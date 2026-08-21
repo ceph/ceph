@@ -178,23 +178,30 @@ spread across the entire MDS cluster. This can be set via:
     setfattr -n ceph.dir.pin.distributed -v 1 /cephfs/home
 
 
-**Random Ephemeral Pins**: This policy indicates any descendent sub-directory
-may be ephemerally pinned. This is set through the extended attribute
-``ceph.dir.pin.random`` with the value set to the percentage of directories
-that should be pinned. For example:
+**Random Ephemeral Pins**: This policy causes a directory to fragment and
+randomly distributes a configured percentage of its directory fragments (dirfrags)
+across active MDS ranks. This is especially useful for spreading the workload of
+large, flat directories with millions of files across multiple MDS ranks.
+
+This is set through the extended attribute ``ceph.dir.pin.random`` with the value
+set to the percentage (between ``0.0`` and ``1.0``) of fragments that should be
+randomly pinned across the cluster. For example:
 
 .. prompt:: bash #
 
-    setfattr -n ceph.dir.pin.random -v 0.5 /cephfs/tmp
+    setfattr -n ceph.dir.pin.random -v 0.5 /cephfs/flat_dir
 
-Would cause any directory loaded into cache or created under ``/tmp`` to be
-ephemerally pinned 50 percent of the time.
+Would cause ``/flat_dir`` to fragment and deterministically export approximately
+50% of its directory fragments across active MDS ranks, retaining the remaining
+fragments on the primary directory authority.
 
-It is recommended to only set this to small values, like ``.001`` or ``0.1%``.
-Having too many subtrees may degrade performance. For this reason, the config
-``mds_export_ephemeral_random_max`` enforces a cap on the maximum of this
-percentage (default: ``.01``). The MDS returns ``EINVAL`` when attempting to
-set a value beyond this config.
+Setting ``ceph.dir.pin.random`` to ``1.0`` (100%) is functionally and algorithmically
+equivalent to setting ``ceph.dir.pin.distributed -v 1``, distributing all fragments
+across the active MDS ranks.
+
+The configuration option ``mds_export_ephemeral_random_max`` enforces an upper
+bound on the allowed percentage (default: ``1.0``). The MDS returns ``EINVAL``
+when attempting to set a value exceeding this threshold.
 
 Both random and distributed ephemeral pin policies are off by default in
 Octopus. The features may be enabled via the
