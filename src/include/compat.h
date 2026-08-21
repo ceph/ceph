@@ -67,7 +67,21 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 #endif /* __FreeBSD__ */
 
 #if defined(__APPLE__)
-struct cpu_set_t;
+// Darwin has no sched_setaffinity(2) and no cpu_set_t.  numa.cc's non-Linux
+// stubs never inspect the value, but callers still need a complete type in
+// order to declare one (e.g. OSD::numa_cpu_set).  Shaped like the Windows
+// shim further down this file.
+#ifndef CPU_SETSIZE
+#define CPU_SETSIZE (sizeof(size_t)*8)
+#endif
+typedef union {
+  char cpuset[CPU_SETSIZE/8];
+  size_t _align;
+} cpu_set_t;
+
+// Darwin has no procfs.  Define PROCPREFIX so that the /proc readers still
+// compile; they degrade to a runtime error when the path cannot be opened.
+#define PROCPREFIX
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -162,6 +176,9 @@ struct cpu_set_t;
 #endif
 
 #if defined(__FreeBSD__) || defined(__APPLE__)
+// off_t is already 64-bit wide on both, and neither provides off64_t.
+// Consistent with the duplicate typedef in include/types.h.
+typedef off_t off64_t;
 #define lseek64(fd, offset, whence) lseek(fd, offset, whence)
 #endif
 
