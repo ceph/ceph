@@ -82,6 +82,23 @@ typedef union {
 // Darwin has no procfs.  Define PROCPREFIX so that the /proc readers still
 // compile; they degrade to a runtime error when the path cannot be opened.
 #define PROCPREFIX
+
+// Darwin has no posix_fadvise(2).  The call is purely advisory - it hints the
+// page cache and nothing more - so ignoring it is a faithful degradation, and
+// it is what the bundled RocksDB already does on this platform.  Keep the
+// Linux numbering: these values reach the callers through configuration
+// options (rgw_d3n_l1_fadvise, rgw_d4n_l1_fadvise), not just as literals.
+#define POSIX_FADV_NORMAL     0
+#define POSIX_FADV_RANDOM     1
+#define POSIX_FADV_SEQUENTIAL 2
+#define POSIX_FADV_WILLNEED   3
+#define POSIX_FADV_DONTNEED   4
+#define POSIX_FADV_NOREUSE    5
+static inline int posix_fadvise(int fd, off_t offset, off_t len, int advice) {
+  (void)fd; (void)offset; (void)len; (void)advice;
+  return 0;
+}
+
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
