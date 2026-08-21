@@ -5,7 +5,10 @@
 
 #include <cstdint>
 #include <optional>
+#include <string>
 #include <string_view>
+
+#include "include/encoding.h"
 
 namespace ceph::rdma {
 
@@ -27,5 +30,44 @@ inline constexpr size_t RDMA_TOKEN_MAX_LEN = 512;
 /// forwarded verbatim to the RDMA library. Returns std::nullopt on
 /// malformed input.
 std::optional<token_window> parse_rdma_token(std::string_view token);
+
+/**
+ * Out-of-band delivery descriptor carried on a MOSDOp.
+ *
+ * The descriptor is advisory: an OSD that can and will deliver a
+ * read's data out of band RDMA-writes it into the client memory
+ * window named by the opaque token, at the token's base address plus
+ * base_offset plus the data's offset relative to the read's extent,
+ * and reports the pushed byte count in the reply's oob_bytes; any OSD
+ * that cannot (or will not: expired lease, retransmitted op, unknown
+ * flags) replies with the data inline exactly as if no descriptor
+ * were present. Degradation is therefore always plain, correct,
+ * in-band data.
+ */
+struct delivery_t {
+  std::string token;      ///< opaque cuObject RDMA descriptor
+  uint64_t base_offset = 0; ///< client-window offset for the read's first byte
+  uint32_t lease_ms = 0;  ///< do not START an RDMA write later than this after
+                          ///< op receipt; 0 = no lease
+  uint32_t flags = 0;     ///< reserved; OSDs deliver inline when nonzero
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    ceph::encode(token, bl);
+    ceph::encode(base_offset, bl);
+    ceph::encode(lease_ms, bl);
+    ceph::encode(flags, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    ceph::decode(token, p);
+    ceph::decode(base_offset, p);
+    ceph::decode(lease_ms, p);
+    ceph::decode(flags, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(delivery_t)
 
 } // namespace ceph::rdma

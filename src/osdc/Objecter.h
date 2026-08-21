@@ -48,6 +48,7 @@
 
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
+#include "common/rdma_token.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_timer.h"
 #include "common/config_obs.h"
@@ -102,6 +103,14 @@ struct ObjectOperation {
   boost::container::small_vector<boost::system::error_code*,
 				 osdc_opvec_len> out_ec;
 
+  /// advisory out-of-band delivery descriptor, carried on the MOSDOp
+  /// (see common/rdma_token.h): an OSD that can honor it RDMA-writes
+  /// read data straight into the client window and returns only byte
+  /// counts; any other OSD returns the data inline as usual
+  std::optional<ceph::rdma::delivery_t> rdma_delivery;
+  /// out: total bytes the OSD delivered out of band (0 = all inline)
+  uint64_t* rdma_oob_bytes = nullptr;
+
   ObjectOperation() = default;
   ObjectOperation(const ObjectOperation&) = delete;
   ObjectOperation& operator =(const ObjectOperation&) = delete;
@@ -121,6 +130,15 @@ struct ObjectOperation {
     out_handler.clear();
     out_rval.clear();
     out_ec.clear();
+    rdma_delivery.reset();
+    rdma_oob_bytes = nullptr;
+  }
+
+  void set_rdma_delivery(std::string_view token, uint64_t base_offset,
+			 uint32_t lease_ms, uint64_t* oob_bytes) {
+    rdma_delivery = ceph::rdma::delivery_t{std::string(token), base_offset,
+					   lease_ms, 0};
+    rdma_oob_bytes = oob_bytes;
   }
 
   void set_last_op_flags(int flags) {
@@ -624,51 +642,6 @@ struct ObjectOperation {
   void sparse_read(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_SPARSE_READ, off, len, bl);
-  }
-
-  struct CB_ObjectOperation_read_rdma {
-    uint64_t* bytes_transferred;
-    int* prval;
-    CB_ObjectOperation_read_rdma(uint64_t* bt, int* pr)
-      : bytes_transferred(bt), prval(pr) {}
-    void operator()(boost::system::error_code ec, int r,
-		    const ceph::buffer::list& bl) {
-      using ceph::decode;
-      if (r >= 0) {
-	auto p = bl.cbegin();
-	try {
-	  uint64_t n;
-	  decode(n, p);
-	  if (bytes_transferred)
-	    *bytes_transferred = n;
-	} catch (const ceph::buffer::error& e) {
-	  if (prval)
-	    *prval = -EIO;
-	}
-      }
-    }
-  };
-
-  // Read an extent and deliver it out of band: the OSD RDMA-writes the
-  // data into the client memory window identified by the opaque
-  // descriptor token (see common/rdma_token.h) at the token's base
-  // address + client_offset. The reply carries only a byte count in
-  // outdata; no object data returns inline. OSDs without RDMA support
-  // fail the op with -EOPNOTSUPP.
-  void read_rdma(uint64_t off, uint64_t len, std::string_view token,
-		 uint64_t client_offset,
-		 uint64_t* bytes_transferred, int* prval) {
-    OSDOp& osd_op = add_op(CEPH_OSD_OP_READ_RDMA);
-    osd_op.op.extent.offset = off;
-    osd_op.op.extent.length = len;
-    encode((uint8_t)1, osd_op.indata);  // payload version
-    encode(token, osd_op.indata);
-    encode(client_offset, osd_op.indata);
-    encode((uint32_t)0, osd_op.indata); // reserved flags
-    if (bytes_transferred || prval) {
-      set_handler(CB_ObjectOperation_read_rdma(bytes_transferred, prval));
-      out_rval.back() = prval;
-    }
   }
 
   void checksum(uint8_t type, const ceph::buffer::list &init_value_bl,
@@ -2103,6 +2076,12 @@ public:
 
     int *data_offset;
 
+    /// advisory out-of-band delivery; re-stamped onto every MOSDOp
+    /// this Op sends (resends included, where the OSD-side retry
+    /// refusal keeps the descriptor inert)
+    std::optional<ceph::rdma::delivery_t> rdma_delivery;
+    uint64_t* rdma_oob_bytes = nullptr;
+
     osd_reqid_t reqid; // explicitly setting reqid
     ZTracer::Trace trace;
     std::uint64_t subsystem = 0;
@@ -3193,6 +3172,8 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery = std::move(op.rdma_delivery);
+    o->rdma_oob_bytes = op.rdma_oob_bytes;
     op.clear();
     return o;
   }
@@ -3232,6 +3213,8 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery = std::move(op.rdma_delivery);
+    o->rdma_oob_bytes = op.rdma_oob_bytes;
     if (features)
       o->features = features;
     op.clear();
