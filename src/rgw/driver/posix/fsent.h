@@ -522,6 +522,7 @@ public:
   int add_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, std::unique_ptr<File>& marker, const std::string &name);
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
   int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
+  int get_latest_version_ent(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt>& latest);
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<VersionedDirectory>(*this);
   }
