@@ -362,7 +362,7 @@ def command_ceph(ctx: CephadmContext) -> int:
     # into the container.
     vparser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
     vparser.add_argument('-i', dest='inbuf')
-    if ctx.command[0] == '--':
+    if ctx.command and ctx.command[0] == '--':
         _command = ctx.command[1:]
     else:
         _command = ctx.command
@@ -382,10 +382,15 @@ def command_ceph(ctx: CephadmContext) -> int:
         command += ['-i', '-']
     ctx.volume = vols
 
-    return _shell(ctx, command)
+    return _shell(ctx, command, tty=not ctx.command)
 
 
-def _shell(ctx: CephadmContext, command: Optional[List[str]] = None) -> int:
+def _shell(
+    ctx: CephadmContext,
+    command: Optional[List[str]] = None,
+    *,
+    tty: bool = False
+) -> int:
     container_args: List[str] = ['-i']
     mounts: Dict[str, str] = {}
     binds: List[str] = []
@@ -422,6 +427,8 @@ def _shell(ctx: CephadmContext, command: Optional[List[str]] = None) -> int:
         ctx.current_cluster.write_ceph_keyring(tmp2)
         mounts[tmp2.name] = '/etc/ceph/ceph.keyring:z'
 
+        if tty and '-t' not in container_args:
+            container_args.append('-t')
         ctr = CephContainer(
             ctx,
             image=ctx.image or ctx.current_cluster.image,
