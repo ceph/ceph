@@ -94,6 +94,7 @@ cpdef enum:
     CEPH_SNAP_MD_OP_CREATE = (1 << 0)
     CEPH_SNAP_MD_OP_EXCL   = (1 << 1)
     CEPH_SNAP_MD_OP_REMOVE = (1 << 2)
+    CEPH_SNAP_MD_OP_UPDATE = (1 << 3)
 
 
 # XXX: errno definitions, hard-coded numbers here are errnos defined by Linux
