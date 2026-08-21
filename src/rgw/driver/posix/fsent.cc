@@ -1694,15 +1694,6 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
 
   if (instance_id.empty()) {
-    /* Check if directory is empty */
-    ret = for_each(dpp, [](const char *n) {
-      return -ENOENT;
-    });
-
-    if (ret == 0) {
-      /* We're empty, nuke us */
-      return Directory::remove(dpp, y, /*delete_children=*/true, result);
-    }
 
     /* Add a delete marker */
     std::unique_ptr<File> f;
