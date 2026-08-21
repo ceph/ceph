@@ -2,16 +2,19 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <cerrno>
+#include <chrono>
 #include <optional>
 #include <cstdlib>
 #include <system_error>
 #include <span>
 #include <sstream>
 #include <string_view>
+#include <thread>
 
 #include <unistd.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 #include <fmt/format.h>
@@ -2991,12 +2994,34 @@ void RGWGetObj::execute(optional_yield y)
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
 
   if (op_ret == -EOPNOTSUPP && rdma_mode == RdmaMode::PASSTHROUGH) {
-    // an OSD (or the store) cannot push directly - old OSDs, EC pools,
-    // cuObject absent or disabled. no HTTP bytes are committed yet and
-    // rewriting any partially written client ranges is safe, so restart
-    // the whole GET in staged (or plain HTTP) mode.
+    // an OSD (or the store) cannot push directly - old OSDs, cuObject
+    // absent or disabled, an expired lease or a resent op. No HTTP
+    // bytes are committed yet, so restart the whole GET in staged (or
+    // plain HTTP) mode.
     ldpp_dout(this, 4) << "rdma passthrough unsupported, restarting GET "
                        << "in fallback mode" << dendl;
+    if (read_op->params.rdma_submitted) {
+      // descriptor-bearing ops reached OSDs: an RDMA write we lost
+      // track of (an OSD marked down mid-request) may still be in a
+      // NIC retry queue. Wait out the lease horizon plus the
+      // transport drain bound before the fallback rewrites the same
+      // client ranges, so no stale write can land afterward.
+      const auto wait_ms =
+        s->cct->_conf.get_val<uint64_t>("rgw_cuobj_fence_wait_ms");
+      if (wait_ms) {
+        ldpp_dout(this, 4) << "rdma fence: waiting " << wait_ms
+                           << "ms before fallback" << dendl;
+        if (s->yield) {
+          auto& yctx = s->yield.get_yield_context();
+          boost::asio::steady_timer timer(yctx.get_executor());
+          timer.expires_after(std::chrono::milliseconds(wait_ms));
+          boost::system::error_code ec;
+          timer.async_wait(yctx[ec]);
+        } else {
+          std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+        }
+      }
+    }
     read_op->params.rdma_token.clear();
     read_op->params.rdma_bytes = nullptr;
     rdma_bytes = 0;

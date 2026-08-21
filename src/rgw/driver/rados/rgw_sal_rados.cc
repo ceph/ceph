@@ -3833,7 +3833,9 @@ int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
 {
   parent_op.params.rdma_token = params.rdma_token;
   parent_op.params.rdma_bytes = params.rdma_bytes;
-  return parent_op.iterate(dpp, ofs, end, cb, y);
+  int r = parent_op.iterate(dpp, ofs, end, cb, y);
+  params.rdma_submitted = parent_op.params.rdma_submitted;
+  return r;
 }
 
 int RadosObject::swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
