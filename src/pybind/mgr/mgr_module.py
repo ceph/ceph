@@ -11,6 +11,7 @@ from typing import (
     NamedTuple,
     no_type_check,
     Optional,
+    overload,
     Sequence,
     Set,
     TYPE_CHECKING,
@@ -1742,6 +1743,26 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         """
         return cast(List[ServerInfoT], self._ceph_get_server(None))
 
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str) -> Optional[Dict[str, str]]:
+        ...
+
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str,
+                     default: None) -> Optional[Dict[str, str]]:
+        ...
+
+    @overload
+    def get_metadata(self,
+                     svc_type: str,
+                     svc_id: str,
+                     default: Dict[str, str]) -> Dict[str, str]:
+        ...
+
     def get_metadata(self,
                      svc_type: str,
                      svc_id: str,
@@ -1751,12 +1772,14 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
 
         ceph-mgr fetches metadata asynchronously, so are windows of time during
         addition/removal of services where the metadata is not available to
-        modules.  ``None`` is returned if no metadata is available.
+        modules.  ``None`` is returned if no metadata is available, unless
+        ``default`` is provided, in which case ``default`` is returned.
 
         :param str svc_type: service type (e.g., 'mds', 'osd', 'mon')
         :param str svc_id: service id. convert OSD integer IDs to strings when
             calling this
-        :rtype: dict, or None if no metadata found
+        :param default: value to return when no metadata is available
+        :rtype: dict, or None if no metadata found and no default given
         """
         metadata = self._ceph_get_metadata(svc_type, svc_id)
         if not metadata:
