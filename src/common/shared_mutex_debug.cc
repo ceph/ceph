@@ -92,7 +92,8 @@ void shared_mutex_debug::lock()
 #endif
 
 #ifdef CEPH_LOCKSTAT
-  if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+  if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+               get_traits())) {
     m_write_hold_start = lockstat_detail::lockstat_clock::now();
     m_write_hold_mode = lockstat_detail::LockMode::WRITE;
     record_wait_time(
@@ -118,7 +119,8 @@ bool shared_mutex_debug::try_lock()
   switch (r) {
   case 0:
 #ifdef CEPH_LOCKSTAT
-    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+                 get_traits())) {
       m_write_hold_start = lockstat_detail::lockstat_clock::now();
       m_write_hold_mode = lockstat_detail::LockMode::TRY_WRITE;
       record_wait_time(
@@ -150,11 +152,9 @@ void shared_mutex_debug::unlock()
         lockstat_detail::lockstat_clock::now() - hold_start;
     const auto hold_mode = m_write_hold_mode;
     m_write_hold_start = lockstat_detail::lockstat_clock::zero();
-    if (int r = pthread_rwlock_unlock(&rwlock); r != 0) {
-      throw std::system_error(r, std::generic_category());
+    if (get_traits()) {
+      record_hold_time(hold_time, hold_mode);
     }
-    record_hold_time(hold_time, hold_mode);
-    return;
   }
 #endif
   if (int r = pthread_rwlock_unlock(&rwlock); r != 0) {
@@ -191,7 +191,8 @@ void shared_mutex_debug::lock_shared()
 #endif
 
 #ifdef CEPH_LOCKSTAT
-  if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+  if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+               get_traits())) {
     record_wait_time(
         lockstat_detail::lockstat_clock::now() - wait_start_clock,
         lockstat_detail::LockMode::READ);
@@ -219,7 +220,8 @@ bool shared_mutex_debug::try_lock_shared()
   switch (int r = pthread_rwlock_rdlock(&rwlock); r) {
   case 0:
 #ifdef CEPH_LOCKSTAT
-    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+                 get_traits())) {
       record_wait_time(
           lockstat_detail::lockstat_clock::now() - wait_start_clock,
           lockstat_detail::LockMode::TRY_READ);
