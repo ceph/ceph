@@ -232,28 +232,48 @@ command:
 For all but the very smallest deployments a value of 200 is recommended.
 A value above 500 may result in excessive peering traffic and RAM usage.
 
-The autoscaler analyzes pools and adjusts on a per-subtree basis.  Because each
-pool might map to a different CRUSH rule, and each rule might distribute data
-across different and possibly overlapping sets of devices,
-Ceph will consider the utilization of each subtree of
-the CRUSH hierarchy independently. For example, a pool that maps to OSDs of class
-``ssd`` and a pool that maps to OSDs of class ``hdd`` will each have calculated PG
-counts that are determined by how many OSDs of these two different device types
-there are.
+.. _overlapping_crush_roots:
 
-If a pool uses OSDs under two or more CRUSH roots (for example, shadow trees
-with both ``ssd`` and ``hdd`` devices), the autoscaler issues a warning to the
-user in the manager log. The warning states the name of the pool and the set of
-roots that overlap each other. The autoscaler does not scale any pools with
-overlapping roots because this condition can cause problems with the scaling
-process. We recommend constraining each pool so that it belongs to only one
-root (that is, one device OSD class) to silence the warning and ensure successful
-scaling.
+Overlapping CRUSH Roots PG Budget
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+When OSDs are distributed across multiple CRUSH roots, each root receives a PG target based
+on its OSDs, with OSDs shared across multiple roots contributing proportionally less to each
+root's allocation. The budget assigned to each root is:
+
+.. math::
+
+   \sum_{\text{OSD}_i \in R} \frac{\text{mon_target_pg_per_osd}}{|\text{roots}(\text{OSD}_i)|}
+
+This ensures that the total PG budget is distributed proportionally across all roots.
+
+Consider a cluster with the following topology:
+
+.. prompt:: bash #
+
+   mon_target_pg_per_osd = 300
+
+- **rootid -1**: Contains OSDs {0, 1, 2, 3}
+- **rootid -2**: Contains OSDs {0, 1}
+- **rootid -3**: Contains OSDs {2, 3}
+
+OSD membership:
+
+- **OSD 0**: Belongs to roots {-1, -2}
+- **OSD 1**: Belongs to roots {-1, -2}
+- **OSD 2**: Belongs to roots {-1, -3}
+- **OSD 3**: Belongs to roots {-1, -3}
+
+The PG target allocation for each root is calculated as follows:
+
+- Root -1: pg_target = 600 = (300 / 2 roots for OSD 0) + (300 / 2 roots for OSD 1) + (300 / 2 roots for OSD 2) + (300 / 2 roots for OSD 3)
+- Root -2: pg_target = 300 = (300 / 2 roots for OSD 0) + (300 / 2 roots for OSD 1)
+- Root -3: pg_target = 300 = (300 / 2 roots for OSD 2) + (300 / 2 roots for OSD 3)
 
 .. _allocation_algorithm:
 
 Allocation Algorithm
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~
 
 The autoscaler sets each pool's ``final_pool_pg_target`` to be rounded to the
 nearest power of two while ensuring that the number of PGs to be placed on each OSD
