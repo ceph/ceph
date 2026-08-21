@@ -421,6 +421,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   fuse_default_permissions = cct->_conf.get_val<bool>(
     "fuse_default_permissions");
 
+  alternate_name_visible = cct->_conf.get_val<bool>(
+    "client_alternate_name_visible");
+
   _collect_and_send_global_metrics = cct->_conf.get_val<bool>(
     "client_collect_and_send_global_metrics");
 
@@ -18991,6 +18994,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
 {
   static constexpr auto as_sv = std::to_array<std::string_view>({
     "client_acl_type",
+    "client_alternate_name_visible",
     "client_cache_mid",
     "client_cache_size",
     "client_caps_release_delay",
@@ -19032,6 +19036,9 @@ void Client::handle_conf_change(const ConfigProxy& conf,
     acl_type = NO_ACL;
     if (cct->_conf->client_acl_type == "posix_acl")
       acl_type = POSIX_ACL;
+  }
+  if (changed.count("client_alternate_name_visible")) {
+    alternate_name_visible = cct->_conf.get_val<bool>("client_alternate_name_visible");
   }
   if (changed.count("client_oc_size")) {
     objectcacher->set_max_size(cct->_conf->client_oc_size);
