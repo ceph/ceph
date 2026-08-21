@@ -44,5 +44,8 @@ export class EnterNgZoneScheduler extends NgZoneScheduler {
   providedIn: 'root'
 })
 export class NgZoneSchedulerService {
-  constructor(public leave: LeaveNgZoneScheduler, public enter: EnterNgZoneScheduler) {}
+  constructor(
+    public leave: LeaveNgZoneScheduler,
+    public enter: EnterNgZoneScheduler
+  ) {}
 }

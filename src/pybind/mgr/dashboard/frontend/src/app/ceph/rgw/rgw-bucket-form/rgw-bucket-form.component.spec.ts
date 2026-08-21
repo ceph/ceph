@@ -93,9 +93,8 @@ describe('RgwBucketFormComponent', () => {
       expect(component.zonegroup).toBe(payload.zonegroup);
       const placementTargets = [];
       for (const placementTarget of payload['placement_targets']) {
-        placementTarget[
-          'description'
-        ] = `${placementTarget['name']} (pool: ${placementTarget['data_pool']})`;
+        placementTarget['description'] =
+          `${placementTarget['name']} (pool: ${placementTarget['data_pool']})`;
         placementTargets.push(placementTarget);
       }
       expect(component.placementTargets).toEqual(placementTargets);
@@ -166,9 +165,8 @@ describe('RgwBucketFormComponent', () => {
       });
       fixture.detectChanges();
       fixture.whenStable().then(() => {
-        const mfaTokenSerial = fixture.debugElement.nativeElement.querySelector(
-          '#mfa-token-serial'
-        );
+        const mfaTokenSerial =
+          fixture.debugElement.nativeElement.querySelector('#mfa-token-serial');
         const mfaTokenPin = fixture.debugElement.nativeElement.querySelector('#mfa-token-pin');
         if (expectedVisibility) {
           expect(mfaTokenSerial).toBeTruthy();
@@ -349,8 +347,9 @@ describe('RgwBucketFormComponent', () => {
     beforeEach(() => {
       component.loading = LoadingStatus.Ready;
       fixture.detectChanges();
-      childComponent = fixture.debugElement.query(By.directive(RgwRateLimitComponent))
-        .componentInstance;
+      childComponent = fixture.debugElement.query(
+        By.directive(RgwRateLimitComponent)
+      ).componentInstance;
     });
     it('Scenario 1: tenanted owner with tenanted bucket name', () => {
       const rateLimitSpy = spyOn(rgwBucketService, 'updateBucketRateLimit').and.returnValue(

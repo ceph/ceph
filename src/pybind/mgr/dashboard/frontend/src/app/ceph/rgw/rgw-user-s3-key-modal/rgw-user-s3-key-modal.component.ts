@@ -29,7 +29,10 @@ export class RgwUserS3KeyModalComponent extends BaseModal {
   resource: string;
   action: string;
 
-  constructor(private formBuilder: CdFormBuilder, public actionLabels: ActionLabelsI18n) {
+  constructor(
+    private formBuilder: CdFormBuilder,
+    public actionLabels: ActionLabelsI18n
+  ) {
     super();
     this.resource = $localize`S3 Key`;
     this.createForm();
