@@ -1,4 +1,6 @@
 overrides:
+  cephadm:
+    watchdog_setup: true
   ceph:
     log-ignorelist:
     - but it is still running
@@ -14,6 +16,7 @@ overrides:
       - python3-pytest
 tasks:
 - workunit:
+    watchdog: true
     timeout: 1h
     clients:
       client.0:

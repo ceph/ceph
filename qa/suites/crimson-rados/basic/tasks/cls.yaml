@@ -1,10 +1,13 @@
 overrides:
+  cephadm:
+    watchdog_setup: true
   ceph:
     conf:
       osd:
         debug objclass: 20 
 tasks:
 - workunit:
+    watchdog: true
     clients:
       client.0:
         - cls/test_cls_cmpomap.sh 
