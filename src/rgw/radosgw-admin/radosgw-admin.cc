@@ -11009,6 +11009,19 @@ next:
   }
 
   if (opt_cmd == OPT::BILOG_AUTOTRIM) {
+    // The background sync-log-trim thread only runs bucket trim on zones whose
+    // sync module exports data. Non-exporting zones (e.g. archive) deliberately
+    // forbid bucket-instance removal. Likewise, here, we add the same guard for
+    // user triggered auto-trim.
+    if (!static_cast<rgw::sal::RadosStore*>(driver)->svc()->zone->sync_module_exports_data() &&
+        !yes_i_really_mean_it) {
+      cerr << "This zone's sync module does not export data (e.g. an archive zone). "
+              "bilog autotrim can remove bucket instance metadata that this zone type "
+              "is meant to retain.\n"
+              "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EPERM;
+    }
+
     RGWCoroutinesManager crs(driver->ctx(), driver->get_cr_registry());
     RGWHTTPManager http(driver->ctx(), crs.get_completion_mgr());
     int ret = http.start();

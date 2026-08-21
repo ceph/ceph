@@ -595,3 +595,14 @@ def test_az_versioning_support_in_zones():
     key_az = bucket_az.get_key("foo", version_id=obj_az_version_id)
     p19 = key_az.get_contents_as_string(encoding='ascii') == "zero"
     assert_equal(p19, True)
+
+
+def test_az_bilog_autotrim_refused_on_archive_zone():
+    """ bilog autotrim must refuse on an archive zone without --yes-i-really-mean-it """
+    _, az_zones = init_env()
+    az_zone = az_zones[0]
+    # a non-exporting (archive) zone forbids bucket-instance removal
+    _, retcode = az_zone.zone.cluster.admin(['bilog', 'autotrim'], check_retcode=False)
+    assert_not_equal(retcode, 0)
+    # the escape hatch still lets a user force it
+    az_zone.zone.cluster.admin(['bilog', 'autotrim', '--yes-i-really-mean-it'])
