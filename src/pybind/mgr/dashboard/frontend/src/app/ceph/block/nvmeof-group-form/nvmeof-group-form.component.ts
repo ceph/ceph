@@ -241,7 +241,6 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
 
       if (formValues.pool) {
         serviceSpec['pool'] = formValues.pool;
-
       }
 
       if (
