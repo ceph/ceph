@@ -112,7 +112,7 @@ built-in profiles may be enabled by following the steps mentioned in next sectio
 +------------------------+-------------+--------+-------+
 | background recovery    | 50%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | MIN         | 1      | 90%   |
+| background best-effort |  5%         | 2      | 90%   |
 +------------------------+-------------+--------+-------+
 
 high_client_ops
@@ -131,7 +131,7 @@ the resource control parameters set by the profile:
 +------------------------+-------------+--------+-------+
 | background recovery    | 40%         | 1      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | MIN         | 1      | 70%   |
+| background best-effort |  5%         | 4      | 70%   |
 +------------------------+-------------+--------+-------+
 
 high_recovery_ops
@@ -149,7 +149,7 @@ parameters set by the profile:
 +------------------------+-------------+--------+-------+
 | background recovery    | 70%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
-| background best-effort | MIN         | 1      | MAX   |
+| background best-effort |  5%         | 2      | MAX   |
 +------------------------+-------------+--------+-------+
 
 .. note:: Across the built-in profiles, internal background best-effort clients
