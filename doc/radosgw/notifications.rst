@@ -1,3 +1,5 @@
+.. _radosgw-notifications:
+
 ====================
 Bucket Notifications
 ====================

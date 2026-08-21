@@ -1,3 +1,5 @@
+.. _radosgw-vault:
+
 ===========================
 HashiCorp Vault Integration
 ===========================
@@ -157,9 +159,9 @@ Vault instances, or you could use either separately mounted
 transit instances, or different branches under a common transit
 point.  If you are not using separate Vault instances, you can
 use these to point SSE-KMS and SSE-S3 to separate containers:
-``rgw_crypt_vault_prefix``
+:confval:`rgw_crypt_vault_prefix`
 and/or
-``rgw_crypt_sse_s3_vault_prefix``.
+:confval:`rgw_crypt_sse_s3_vault_prefix`.
 When granting Vault permissions to SSE-KMS bucket owners, you should
 not give them permission to muck around with SSE-S3 keys;
 only Ceph itself should be doing that.
