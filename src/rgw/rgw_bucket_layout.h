@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <optional>
 #include <string>
 #include "include/encoding.h"
@@ -241,6 +243,37 @@ inline bucket_log_layout_generation log_layout_from_index(
     uint64_t gen, const bucket_index_layout_generation& index)
 {
   return {gen, {BucketLogType::InIndex, {index.gen, index.layout.normal}}};
+}
+
+// compute an appropriate number of bilog shards for a given index shard count
+// upon reshard. uses logarithmic formula to keep the bilog shard count much lower,
+// growing slowly every time index shards double, bilog gets 2 more shards.
+// typically ranges from 7 to 21 across the default index max shards 11 to 1999 shards.
+inline uint32_t bilog_shards_for_index(uint32_t index_shards,
+                                       uint32_t min_shards = 7,
+                                       uint32_t max_shards = 0)
+{
+  if (index_shards == 0) {
+    return min_shards;
+  }
+  auto v = static_cast<uint32_t>(std::log2(index_shards) * 2.0);
+  v = std::max(v, min_shards);
+  if (max_shards > 0) {
+    v = std::min(v, max_shards);
+  }
+  return v;
+}
+
+// return a log layout backed by independent FIFO objects
+inline bucket_log_layout_generation fifo_log_layout_from_index(
+    uint64_t gen, const bucket_index_layout_generation& index)
+{
+  bucket_log_layout_generation log;
+  log.gen = gen;
+  log.layout.type = BucketLogType::FIFO;
+  log.layout.in_index = {index.gen, index.layout.normal};
+  log.layout.fifo.num_shards = bilog_shards_for_index(index.layout.normal.num_shards);
+  return log;
 }
 
 inline auto matches_gen(uint64_t gen)
