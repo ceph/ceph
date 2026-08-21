@@ -54,7 +54,7 @@ TEST(EncodingRoundTrip, StringNoHead) {
   test_encode_and_nohead_nohead(static_cast<unsigned>(size), str);
   test_encode_and_nohead_nohead(static_cast<uint32_t>(size), str);
   test_encode_and_nohead_nohead(static_cast<__u32>(size), str);
-  test_encode_and_nohead_nohead(static_cast<size_t>(size), str);
+  test_encode_and_nohead_nohead(static_cast<uint64_t>(size), str);
 }
 
 TEST(EncodingRoundTrip, BufferListNoHead) {
@@ -65,7 +65,7 @@ TEST(EncodingRoundTrip, BufferListNoHead) {
   test_encode_and_nohead_nohead(static_cast<unsigned>(size), bl);
   test_encode_and_nohead_nohead(static_cast<uint32_t>(size), bl);
   test_encode_and_nohead_nohead(static_cast<__u32>(size), bl);
-  test_encode_and_nohead_nohead(static_cast<size_t>(size), bl);
+  test_encode_and_nohead_nohead(static_cast<uint64_t>(size), bl);
 }
 
 typedef std::multimap < int, std::string > multimap_t;
