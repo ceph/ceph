@@ -2074,6 +2074,32 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
 
+
+  if (!versioned()) {
+    if (ret == -ENOENT) {
+      return 0;
+    }
+    ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
+
+    if (ret < 0) {
+      return ret;
+    }
+    driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
+    driver->get_quota_handler()->update_stats(b->get_owner(), b->get_key(),
+                                              -1, 0, state.accounted_size);
+    return 0;
+  }
+
+  bool created = false;
+  auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
+  // Versioned bucket
+  if (vd_ent && !vd_ent->get_cur_version_ent()) {
+    if (!key.instance.empty()) {
+      // Nothing to do
+      return 0;
+    }
+  }
+
   if (ret == -ENOENT) {
     if (!versioned() || !key.instance.empty() ) {
       // Nothing to do
