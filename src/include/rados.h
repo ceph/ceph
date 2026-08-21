@@ -269,8 +269,9 @@ extern const char *ceph_osd_state_name(int s);
 										\
 	f(GET_INTERNAL_VERSIONS, __CEPH_OSD_OP(RD, DATA, 33), "get-internal-versions") \
 										\
-	/* read + out-of-band RDMA push to a client-supplied descriptor */  \
-	f(READ_RDMA,	__CEPH_OSD_OP(RD, DATA, 34),	"read-rdma")	    \
+	/* RD|DATA 34 briefly carried READ_RDMA during development of the   \
+	 * out-of-band RDMA delivery descriptor (now a MOSDOp field);       \
+	 * leave the slot unused */					    \
 										\
 	/* sync */							    \
 	f(SYNC_READ,	__CEPH_OSD_OP(RD, DATA, 11),	"sync_read")	    \
