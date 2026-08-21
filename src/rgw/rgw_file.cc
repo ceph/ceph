@@ -160,7 +160,11 @@ namespace rgw {
 	  rgw_fh->set_size(st->st_size);
 	}
 	if (st_mask & RGW_SETATTR_MTIME) {
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+	  rgw_fh->set_times(st->st_mtimespec);
+#else
 	  rgw_fh->set_times(st->st_mtim);
+#endif
 	}
       } /* st */
     } /* rgw_fh */
