@@ -24,7 +24,7 @@ function run() {
 
     export CEPH_MON="127.0.0.1:7112" # git grep '\<7112\>' : there must be only one
     export CEPH_ARGS
-    CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
+    CEPH_ARGS+="--fsid=$(uuidgen) --auth_cluster_required=none --auth_service_required=none --auth_client_required=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd_mclock_override_recovery_settings=true "
 

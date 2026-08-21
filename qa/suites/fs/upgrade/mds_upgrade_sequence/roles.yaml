@@ -1,10 +1,13 @@
 roles:
-- - host.a
+- - mon.a
+  - mgr.x
   - client.0
   - osd.0
   - osd.1
   - osd.2
-- - host.b
+- - mon.b
+  - mon.c
+  - mgr.y
   - client.1
   - osd.3
   - osd.4

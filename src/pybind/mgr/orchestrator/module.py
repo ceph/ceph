@@ -211,7 +211,6 @@ class ServiceAction(enum.Enum):
     restart = 'restart'
     redeploy = 'redeploy'
     reconfig = 'reconfig'
-    rotate_key = 'rotate-key'
 
 
 class DaemonAction(enum.Enum):
@@ -219,7 +218,6 @@ class DaemonAction(enum.Enum):
     stop = 'stop'
     restart = 'restart'
     reconfig = 'reconfig'
-    rotate_key = 'rotate-key'
 
 
 class IngressType(enum.Enum):
@@ -1820,7 +1818,7 @@ Usage:
 
     @OrchestratorCLICommand.Write('orch daemon')
     def _daemon_action(self, action: DaemonAction, name: str, force: bool = False) -> HandleCommandResult:
-        """Start, stop, restart, redeploy, reconfig, or rotate-key for a specific daemon"""
+        """Start, stop, restart, redeploy or reconfig for a specific daemon"""
         if '.' not in name:
             raise OrchestratorError('%s is not a valid daemon name' % name)
         completion = self.daemon_action(action.value, name, force=force)

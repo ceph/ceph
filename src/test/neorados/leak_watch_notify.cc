@@ -36,7 +36,8 @@ int main()
 
   std::optional<neorados::RADOS> rados;
   neorados::IOContext pool;
-  neorados::RADOS::Builder{}.build(c, [&](error_code ec, neorados::RADOS r_) {
+  auto b = create_test_builder();
+  b.build(c, [&](error_code ec, neorados::RADOS r_) {
     rados = std::move(r_);
     create_pool(*rados, get_temp_pool_name(),
 		[&](error_code ec, int64_t poolid) {

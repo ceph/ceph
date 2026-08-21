@@ -31,6 +31,29 @@
 #define CEPHX_REQUEST_TYPE_MASK            0x0F00
 #define CEPHX_CRYPT_ERR			1
 
+
+/* Principal <-> AuthMonitor */
+/* The session's connection secret: encrypted with AUTH ticket session key */
+#define CEPHX_KEY_USAGE_AUTH_CONNECTION_SECRET  0x03
+/* The ticket's CephXServiceTicket containing the session key: uses principal's key for the AUTH ticket otherwise the AUTH ticket session key for the service tickets */
+#define CEPHX_KEY_USAGE_TICKET_SESSION_KEY         0x04
+/* The ticket's CephXTicketBlob: uses old AUTH session key (if presented) */
+#define CEPHX_KEY_USAGE_TICKET_BLOB                0x05
+
+/* Principal <-> Service */
+/* Client Authorization Request: using the ticket session key */
+#define CEPHX_KEY_USAGE_AUTHORIZE             0x10
+/* Service's Challenge: using the ticket session key */
+#define CEPHX_KEY_USAGE_AUTHORIZE_CHALLENGE   0x11
+/* Service's final reply: using the ticket session key */
+#define CEPHX_KEY_USAGE_AUTHORIZE_REPLY       0x12
+
+/* Service Daemon <-> AuthMonitor */
+/* Rotating Secret Fetch by Services: service daemon's principal key */
+#define CEPHX_KEY_USAGE_ROTATING_SECRET       0x20
+/* CephXServiceTicketInfo: rotating service key */
+#define CEPHX_KEY_USAGE_TICKET_INFO           0x30
+
 #include "auth/Auth.h"
 #include <errno.h>
 #include <sstream>
@@ -257,15 +280,16 @@ void cephx_calc_client_server_challenge(CephContext *cct,
 struct CephXSessionAuthInfo {
   uint32_t service_id;
   uint64_t secret_id;
-  AuthTicket ticket;
-  CryptoKey session_key;
+  AuthTicket ticket; /* TODO encapsulate in CephXServiceTicketInfo member */
+  CryptoKey session_key; /* ditto */
   CryptoKey service_secret;
   utime_t validity;
+
+  void print(std::ostream& os) const;
 };
 
 
-extern bool cephx_build_service_ticket_blob(CephContext *cct,
-					    CephXSessionAuthInfo& ticket_info, CephXTicketBlob& blob);
+extern bool cephx_build_service_ticket_blob(CephContext *cct, const CephXSessionAuthInfo& ticket_info, CephXTicketBlob& blob);
 
 extern void cephx_build_service_ticket_request(CephContext *cct, 
 					       uint32_t keys,
@@ -427,6 +451,7 @@ struct CephXTicketManager {
   void set_have_need_key(uint32_t service_id, uint32_t& have, uint32_t& need);
   void validate_tickets(uint32_t mask, uint32_t& have, uint32_t& need);
   void invalidate_ticket(uint32_t service_id);
+  void invalidate_all_tickets();
 
 private:
   CephContext *cct;
@@ -601,15 +626,45 @@ extern bool cephx_verify_authorizer(
 static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
 template <typename T>
-void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key,
+void decode_decrypt_enc_bl(CephContext *cct, T& t, const CryptoKey& key,
 			   const ceph::buffer::list& bl_enc,
 			   std::string &error)
 {
   uint64_t magic;
   ceph::buffer::list bl;
 
-  if (key.decrypt(cct, bl_enc, bl, &error) < 0)
+  if (key.decrypt(cct, bl_enc, bl, &error) < 0) {
+    error = "decryption failed";
     return;
+  }
+
+  auto iter2 = bl.cbegin();
+  __u8 struct_v;
+  using ceph::decode;
+  decode(struct_v, iter2);
+  decode(magic, iter2);
+  if (magic != AUTH_ENC_MAGIC) {
+    std::ostringstream oss;
+    oss << "bad magic in decode_decrypt, " << magic << " != " << AUTH_ENC_MAGIC;
+    error = oss.str();
+    return;
+  }
+
+  decode(t, iter2);
+}
+
+template <typename T>
+void decode_decrypt_enc_bl(CephContext *cct, T& t, const CryptoKey& key,
+			   uint32_t usage, const ceph::buffer::list& bl_enc,
+			   std::string &error)
+{
+  uint64_t magic;
+  ceph::buffer::list bl;
+
+  if (key.decrypt_ext(cct, usage, bl_enc, bl, &error) < 0) {
+    error = "decryption failed";
+    return;
+  }
 
   auto iter2 = bl.cbegin();
   __u8 struct_v;
@@ -642,6 +697,22 @@ void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
 }
 
 template <typename T>
+void encode_encrypt_enc_bl(CephContext *cct, const T& t, const CryptoKey& key,
+			   uint32_t usage, ceph::buffer::list& out,
+                           std::string &error)
+{
+  ceph::buffer::list bl;
+  __u8 struct_v = 1;
+  using ceph::encode;
+  encode(struct_v, bl);
+  uint64_t magic = AUTH_ENC_MAGIC;
+  encode(magic, bl);
+  encode(t, bl);
+
+  key.encrypt_ext(cct, usage, bl, out, &error);
+}
+
+template <typename T>
 int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
 		    ceph::buffer::list::const_iterator& iter, std::string &error)
 {
@@ -650,6 +721,25 @@ int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
   try {
     decode(bl_enc, iter);
     decode_decrypt_enc_bl(cct, t, key, bl_enc, error);
+  }
+  catch (ceph::buffer::error &e) {
+    error = "error decoding block for decryption";
+  }
+  if (!error.empty())
+    return CEPHX_CRYPT_ERR;
+  return 0;
+}
+
+template <typename T>
+int decode_decrypt(CephContext *cct, T& t, const CryptoKey& key,
+		    uint32_t usage, ceph::buffer::list::const_iterator& iter,
+                    std::string &error)
+{
+  ceph::buffer::list bl_enc;
+  using ceph::decode;
+  try {
+    decode(bl_enc, iter);
+    decode_decrypt_enc_bl(cct, t, key, usage, bl_enc, error);
   }
   catch (ceph::buffer::error &e) {
     error = "error decoding block for decryption";
@@ -670,6 +760,33 @@ int encode_encrypt(CephContext *cct, const T& t, const CryptoKey& key,
     return CEPHX_CRYPT_ERR;
   }
   encode(bl_enc, out);
+  return 0;
+}
+
+template <typename T>
+int encode_encrypt(CephContext *cct, const T& t, const CryptoKey& key,
+		    uint32_t usage, ceph::buffer::list& out, std::string &error)
+{
+  using ceph::encode;
+  ceph::buffer::list bl_enc;
+  encode_encrypt_enc_bl(cct, t, key, usage, bl_enc, error);
+  if (!error.empty()){
+    return CEPHX_CRYPT_ERR;
+  }
+  encode(bl_enc, out);
+  return 0;
+}
+
+template <typename T>
+int encode_hash(CephContext *cct, const T& t, const CryptoKey& key,
+                ceph::buffer::list& out, std::string &error)
+{
+  using ceph::encode;
+  ceph::buffer::list bl_enc;
+  /* simple encoding, we don't need to add any magic because this will not be decoded */
+  ::encode(t, bl_enc);
+  sha256_digest_t hash = key.hmac_sha256(cct, bl_enc);
+  out.append((const char *)&hash, sizeof(hash));
   return 0;
 }
 

@@ -43,6 +43,14 @@ options:
   flags:
   - startup
   with_legacy: true
+- name: ms_shutdown_timeout
+  type: millisecs
+  level: advanced
+  desc: Timeout for connection to shutdown gracefully
+  default: 120000
+  flags:
+  - runtime
+  min: 1
 - name: public_addrv
   type: addrvec
   level: basic
@@ -2155,7 +2163,15 @@ options:
    ``ceph-osd``, ``ceph-mds`` and ``ceph-mgr``) must authenticate with
    each other. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
+- name: auth_exit_on_failure
+  type: int
+  level: dev
+  desc: call _exit with given error code when auth fails when non-negative
+  default: -1
+  flags:
+  - runtime
 # required by daemons of clients
 - name: auth_service_required
   type: str
@@ -2165,7 +2181,8 @@ options:
    to authenticate with the cluster in order to access
    Ceph services. Valid settings are ``cephx`` or ``none``.
   default: cephx
-  with_legacy: true
+  flags:
+    - runtime
 # what clients require of daemons
 - name: auth_client_required
   type: str
@@ -2175,13 +2192,8 @@ options:
    authenticate with Ceph clients. Valid settings are ``cephx``
    or ``none``.
   default: cephx, none
-  with_legacy: true
-# deprecated; default value for above if they are not defined.
-- name: auth_supported
-  type: str
-  level: advanced
-  desc: Authentication methods required (deprecated)
-  with_legacy: true
+  flags:
+    - runtime
 - name: max_rotating_auth_attempts
   type: int
   level: advanced
@@ -2254,15 +2266,25 @@ options:
   type: float
   level: advanced
   default: 72_hr
-  with_legacy: true
+  desc: The time-to-live for tickets with the auth subsystem of the Monitors.
+  long_desc: >
+    The time-to-live for tickets with the auth subsystem of the Monitors.
+    These tickets are used to reclaim the global ID associated with the
+    running client.
+  flags:
+  - runtime
 - name: auth_service_ticket_ttl
   type: float
   level: advanced
   default: 1_hr
-  fmt_desc: When the Ceph Storage Cluster sends a Ceph Client a ticket for
-   authentication, the Ceph Storage Cluster assigns the ticket a
-   time to live.
-  with_legacy: true
+  desc: The time-to-live for non-auth service tickets issued by the Monitors.
+  fmt_desc: >
+   The time-to-live for non-auth service tickets issued by the Monitors. These
+   tickets would include services like the OSD or MDS. This allows the client
+   to authenticate independently with the service for the given timeframe
+   before having to refresh its tickets with the Monitors again.
+  flags:
+  - runtime
 - name: auth_allow_insecure_global_id_reclaim
   type: bool
   level: advanced
