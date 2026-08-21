@@ -73,6 +73,11 @@ Daemons::
 
   ceph-mon ceph-osd ceph-mgr ceph-mds radosgw rbd-mirror
 
+Erasure code and compressor plugins::
+
+  ec_isa ec_jerasure ec_lrc ec_shec ec_clay
+  ceph_zlib ceph_snappy ceph_zstd ceph_lz4
+
 Command line and offline tools::
 
   rados rbd crushtool osdmaptool monmaptool ceph-authtool ceph-conf
@@ -84,6 +89,42 @@ Command line and offline tools::
 the build tree::
 
   CEPH_LIB=$PWD/build/lib ./build/bin/ceph-dencoder list_types
+
+Hardware acceleration
+---------------------
+
+Two things kept the ARMv8 code paths Linux-only, and both are now handled, so
+an Apple silicon build gets them with nothing to configure. Apple's toolchain
+spells ``CMAKE_SYSTEM_PROCESSOR`` as ``arm64`` rather than ``aarch64``, which
+decided at configure time what was compiled at all; and Darwin has no
+``getauxval()``, so the runtime probe in ``arch/arm.c`` reads the features from
+``sysctl`` instead. What that buys:
+
+* crc32c uses the CRC32 instructions. ``unittest_crc32c`` reports around
+  7400 MB/s for them against 1260 MB/s for the portable table, and crc32c is
+  on every read and write path.
+* jerasure and shec use gf-complete's NEON Galois field routines rather than
+  its table arithmetic, and the legacy ``ec_jerasure_neon`` and
+  ``ec_shec_neon`` plugins are built.
+* ISA-L builds, so ``WITH_EC_ISA_PLUGIN`` turns itself on and the ``isa``
+  erasure code plugin exists. ISA-L's own aarch64 dispatchers already special
+  case Darwin, where they have no auxiliary vector to read: they return the
+  NEON implementations and never the SVE ones, which Apple silicon does not
+  have.
+* the zlib compressor is built with the ISA-L igzip sources, so
+  ``compressor_zlib_isal=true`` takes effect instead of warning and falling
+  back to plain zlib.
+
+To see the ISA-L plugin on a running cluster, three OSDs are enough for a
+``k=2 m=1`` pool::
+
+  MON=1 OSD=3 MDS=0 MGR=0 RGW=0 ../src/vstart.sh -n --memstore -X
+  ./bin/ceph osd erasure-code-profile set isa21 plugin=isa k=2 m=1 \
+      crush-failure-domain=osd
+  ./bin/ceph osd pool create ecpool 8 8 erasure isa21
+
+Reading an object back after stopping one of the acting set's OSDs exercises
+the ISA-L decode, not just the encode.
 
 Optional daemons
 ----------------
