@@ -9,6 +9,8 @@
  * Foundation.  See file COPYING.
  */
 
+#include <algorithm>
+
 #include "osdc/SplitOp.h"
 #include "osdc/Objecter.h"
 #include "osd/osd_types.h"
@@ -352,7 +354,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t length = op.op.extent.length;
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
-                                   osds.size());
+                                   static_cast<uint64_t>(osds.size()));
   uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
   
   // Use reference_sub_read (set in constructor) as the starting shard
