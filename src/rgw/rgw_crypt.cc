@@ -2125,7 +2125,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           if (!gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(key_bin.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_info().bucket.bucket_id,
+                  s->bucket->get_marker(),
                   s->object->get_name(),
                   part_number)) {
             ldpp_dout(s, 5) << "ERROR: SSE-C-AES256-GCM key derivation failed for "
@@ -2249,7 +2249,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
             if (!gcm || !gcm->derive_object_key(
                     reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                     AES_256_KEYSIZE,
-                    s->bucket->get_info().bucket.bucket_id,
+                    s->bucket->get_marker(),
                     s->object->get_name(),
                     part_number,
                     "SSE-KMS-GCM")) {
@@ -2347,7 +2347,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           if (!gcm || !gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(actual_key.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_info().bucket.bucket_id,
+                  s->bucket->get_marker(),
                   s->object->get_name(),
                   part_number,
                   "AES256-GCM")) {
@@ -2416,7 +2416,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
           if (!gcm->derive_object_key(
                   reinterpret_cast<const uint8_t*>(master_encryption_key.c_str()),
                   AES_256_KEYSIZE,
-                  s->bucket->get_info().bucket.bucket_id,
+                  s->bucket->get_marker(),
                   s->object->get_name(),
                   part_number,
                   "RGW-AUTO-GCM")) {
@@ -2470,12 +2470,12 @@ static void pick_gcm_identity(req_state* s,
       return;
     }
     if (s->src_object && s->src_object->get_bucket()) {
-      bucket_id = s->src_object->get_bucket()->get_info().bucket.bucket_id;
+      bucket_id = s->src_object->get_bucket()->get_marker();
       object_name = s->src_object->get_name();
       return;
     }
   }
-  bucket_id = s->bucket->get_info().bucket.bucket_id;
+  bucket_id = s->bucket->get_marker();
   object_name = s->object->get_name();
 }
 
