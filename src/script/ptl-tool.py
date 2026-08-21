@@ -473,7 +473,7 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
         print("Nothing to relabel until QA approves this ticket.")
         return 'not_approved'
 
-    label_in = input(f"Label to relabel [{default_label}] (Enter to accept, type a different label, or 'q' to cancel): ").strip()
+    label_in = logged_input(f"Label to relabel [{default_label}] (Enter to accept, type a different label, or 'q' to cancel): ").strip()
     if label_in.lower() == 'q':
         print("Audit cancelled.")
         return 'cancelled'
@@ -539,13 +539,14 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
         print("[DRY RUN] Would apply the above -- no labels changed.")
         return 'completed'
 
-    confirm = input("Apply this? [y/N] ").strip().lower()
+    confirm = logged_input("Apply this? [y/N] ").strip().lower()
     if confirm != 'y':
         print("Audit cancelled -- no labels changed.")
         return 'cancelled'
 
     print("Applying label changes...")
     updated = 0
+    partial = 0
     for num, title in prs:
         # Add the new labels FIRST, remove the old one second: if the POST
         # fails, the PR still has its old label (safe, retry-able). Doing it
@@ -560,6 +561,7 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
         del_url = f"https://api.github.com/repos/{BASE_PROJECT}/{BASE_REPO}/issues/{num}/labels/{quote(label, safe='')}"
         resp = session.delete(del_url, auth=GithubBearerAuth())
         if resp.status_code not in (200, 404):
+            partial += 1
             log.error(f"Added new labels to #{num} but failed to remove '{label}': {resp.status_code} {resp.text}")
             print(f"  PARTIAL #{num}: new labels added, old label '{label}' still present -- see error above")
         elif resp.status_code == 404:
@@ -577,10 +579,20 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
         log.error(f"All {len(prs)} PR(s) failed to update -- no labels were changed anywhere.")
         sys.exit(1)
 
+    if partial > 0:
+        log.warning(f"{partial} PR(s) above are still wearing '{label}' (old-label removal failed) -- "
+                    f"clearing tracker #{redmine_issue.id}'s Ceph PR Label anyway, since it's the field "
+                    f"the --qe-label gate actually checks, but consider re-running the delete for those PR(s).")
+
     if R is not None:
-        R.issue.update(redmine_issue.id, custom_fields=[{'id': REDMINE_CUSTOM_FIELD_ID_CEPH_PR_LABEL, 'value': ''}])
-        print(f"Cleared 'Ceph PR Label' on tracker #{redmine_issue.id} -- '{label}' is now free for a new round "
-              f"(tracker stays QA Approved and open).")
+        try:
+            R.issue.update(redmine_issue.id, custom_fields=[{'id': REDMINE_CUSTOM_FIELD_ID_CEPH_PR_LABEL, 'value': ''}])
+            print(f"Cleared 'Ceph PR Label' on tracker #{redmine_issue.id} -- '{label}' is now free for a new round "
+                  f"(tracker stays QA Approved and open).")
+        except Exception as e:
+            log.warning(f"PR labels were updated above, but failed to clear tracker #{redmine_issue.id}'s "
+                        f"Ceph PR Label field: {e} -- '{label}' will still look locked to the --qe-label gate "
+                        f"until this is retried or fixed manually.")
 
     print(f"\nDone. Re-run ptl-tool.py if you want to start a new round for tracker #{redmine_issue.id} or a different label.")
     return 'completed'
