@@ -59,6 +59,58 @@ struct OFDLockGuard {
   }
 };
 
+
+/*  Versions */
+
+static std::string to_base36(uint64_t v)
+{
+  if (v == 0) return "0";
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  std::string result;
+  while (v > 0) {
+    result.insert(result.begin(), digits[v % 36]);
+    v /= 36;
+  }
+  return result;
+}
+
+#if 0
+static bool from_base36(const std::string& s, uint64_t& out)
+{
+  out = 0;
+  for (char c : s) {
+    uint64_t d;
+    if (c >= '0' && c <= '9') {
+      d = c - '0';
+    } else if (c >= 'a' && c <= 'z') {
+      d = 10 + (c - 'a');
+    } else {
+      return false;
+    }
+    out = out * 36 + d;
+  }
+  return true;
+}
+#endif
+
+
+static uint64_t statx_mtime_ns(const struct statx& stx)
+{
+  return (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+       + stx.stx_mtime.tv_nsec;
+}
+
+std::string posix_version_id_from_statx(const struct statx& stx)
+{
+  return "mtime-" + to_base36(statx_mtime_ns(stx))
+       + "-ino-" + to_base36(stx.stx_ino);
+}
+
+
+/* Versions ends */
+
+
+
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display)
 {
@@ -659,7 +711,7 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return ret;
   }
 
-  ret = stat(dpp);
+  ret = stat(dpp, true);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
@@ -1449,7 +1501,25 @@ int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_y
 {
   if (!cur_version)
     return -EINVAL;
-  int ret = cur_version->link_temp_file(dpp, y, temp_fname);
+  // Get the mtime+inode info for the temp file via its fd
+
+  struct statx stx;
+  int ret = statx(cur_version->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret == 0) {
+    std::string ver_id = posix_version_id_from_statx (stx);
+    rgw_obj_key key = decode_obj_key(get_name());
+    key.instance = ver_id;
+    std::string versioned_fname = get_key_fname(key, true);
+    cur_version->set_name(versioned_fname);
+  } else {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not stat temp file for" << get_name() << ": "
+                      << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  ret = cur_version->link_temp_file(dpp, y, temp_fname);
   if (ret < 0)
     return ret;
 
@@ -1587,6 +1657,17 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
   }
+  struct statx stx;
+  ret = statx(marker->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret < 0) {
+    return ret;
+  }
+  std::string ver_id = posix_version_id_from_statx (stx);
+  rgw_obj_key key = decode_obj_key(get_name());
+  key.instance = ver_id;
+  std::string versioned_fname = get_key_fname(key, true);
+  marker->set_name(versioned_fname);
 
   // Link temp file to final name atomically
   ret = marker->link_temp_file(dpp, y, name);
@@ -1594,6 +1675,9 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     // removing the temporary files before returning failure
     marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
+  }
+  if (instance_id.empty()){
+    instance_id = ver_id;
   }
 
   return 0;
@@ -1626,13 +1710,14 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     key.instance = gen_rand_instance_name();
     tgtname = get_key_fname(key, /*use_version=*/true);
 
-    result->delete_marker = true;
-    result->version_id = key.instance;
-
     f = std::make_unique<File>(tgtname, this, ctx);
     ret = add_delete_marker(dpp, y, f, tgtname);
     if (ret < 0) {
       return ret;
+    }
+    if (result) {
+      result->delete_marker = true;
+      result->version_id = instance_id;
     }
 
     newlink = true;
@@ -1661,12 +1746,16 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       }
       bufferlist bl;
       if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-       result->delete_marker = true;
+        if (result) {
+          result->delete_marker = true;
+        }
       }
       ret = f->remove(dpp, y, /*delete_children=*/true, result);
       if (ret < 0)
        return ret;
-      result->version_id = instance_id;
+      if (result) {
+        result->version_id = instance_id;
+      }
     } else {
       return ret;
     }
