@@ -349,7 +349,8 @@ export class CdValidators {
         return null;
       }
       if (ctrl1.value !== ctrl2.value) {
-        ctrl2.setErrors({ match: true });
+        const errors = _.merge({}, ctrl2.errors, { match: true });
+        ctrl2.setErrors(errors);
       } else {
         const hasError = ctrl2.hasError('match');
         if (hasError) {
