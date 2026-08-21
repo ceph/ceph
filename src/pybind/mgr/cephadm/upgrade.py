@@ -1149,6 +1149,39 @@ class CephadmUpgrade:
                 image_settings[opt['section']] = opt['value']
         return image_settings
 
+    def _mds_in_rank_active(
+        self,
+        mdsmap: Dict[str, Any],
+        fs_name: Optional[str] = None,
+    ) -> bool:
+        for rank in mdsmap.get('in', []):
+            gid = mdsmap['up'].get(f'mds_{rank}')
+            if gid is None:
+                return False
+            mds = mdsmap['info'].get(f'gid_{gid}')
+            if mds is None or mds['state'] != 'up:active':
+                if fs_name and mds:
+                    self.mgr.log.info(
+                        'Upgrade: Waiting for fs %s mds.%s to be up:active (currently %s)',
+                        fs_name, mds['name'], mds['state'])
+                return False
+        return True
+
+    def _wait_for_fs_mdss_active(self, fs_name: str, timeout: int = 600) -> bool:
+        elapsed = 0
+        while elapsed < timeout:
+            fsmap = self.mgr.get("fs_map")
+            for fs in fsmap.get('filesystems', []):
+                mdsmap = fs['mdsmap']
+                if mdsmap['fs_name'] != fs_name:
+                    continue
+                if self._mds_in_rank_active(mdsmap, fs_name):
+                    return True
+                break
+            time.sleep(10)
+            elapsed += 10
+        return False
+
     def _prepare_for_mds_upgrade(
         self,
         target_major: str,
@@ -1196,8 +1229,13 @@ class CephadmUpgrade:
                             'fs_name': fs_name
                         })
                         if ret != 0:
+                            self.mgr.log.error(
+                                'Upgrade: fs fail for %s failed: %s', fs_name, err)
                             continue_upgrade = False
-                    continue
+                            continue
+                        continue_upgrade = False
+                        continue
+                    # fs already failed: fall through to wait for in-rank active
                 else:
                     self.mgr.log.info('Upgrade: Scaling down filesystem %s' % (
                         fs_name
@@ -1231,17 +1269,23 @@ class CephadmUpgrade:
                 # incompatible compatsets; the mons will not do any promotions.
                 # We must upgrade to continue.
             elif len(mdsmap['up']) > 0:
-                mdss = list(mdsmap['info'].values())
-                assert len(mdss) == 1
-                lone_mds = mdss[0]
-                if lone_mds['state'] != 'up:active':
-                    self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
-                        lone_mds['name'],
-                        lone_mds['state'],
-                    ))
-                    time.sleep(10)
-                    continue_upgrade = False
-                    continue
+                if self.upgrade_state.fail_fs and mdsmap['max_mds'] > 1:
+                    if not self._mds_in_rank_active(mdsmap, fs_name):
+                        time.sleep(10)
+                        continue_upgrade = False
+                        continue
+                else:
+                    mdss = list(mdsmap['info'].values())
+                    assert len(mdss) == 1
+                    lone_mds = mdss[0]
+                    if lone_mds['state'] != 'up:active':
+                        self.mgr.log.info('Upgrade: Waiting for mds.%s to be up:active (currently %s)' % (
+                            lone_mds['name'],
+                            lone_mds['state'],
+                        ))
+                        time.sleep(10)
+                        continue_upgrade = False
+                        continue
             else:
                 assert False
 
@@ -1655,6 +1699,10 @@ class CephadmUpgrade:
                     raise OrchestratorError("Failed to set"
                                             "fs joinable true"
                                             f"due to {e}")
+                if not self._wait_for_fs_mdss_active(fs_name):
+                    raise OrchestratorError(
+                        f'MDS daemons for filesystem {fs_name} did not become '
+                        f'up:active after fail_fs upgrade')
         elif self.upgrade_state.fs_original_max_mds:
             for fs in self.mgr.get("fs_map")['filesystems']:
                 fscid = fs["id"]
