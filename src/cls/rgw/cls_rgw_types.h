@@ -1347,7 +1347,8 @@ struct cls_rgw_lc_obj_head
     uint64_t t = start_date;
     encode(t, bl);
     encode(marker, bl);
-    encode(shard_rollover_date, bl);
+    t = shard_rollover_date;
+    encode(t, bl);
     ENCODE_FINISH(bl);
   }
 
