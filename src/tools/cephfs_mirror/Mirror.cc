@@ -112,7 +112,7 @@ struct Mirror::C_DisableMirroring : Context {
   void disable_mirroring() {
     Context *ctx = new C_CallbackAdapter<C_DisableMirroring,
                                          &C_DisableMirroring::handle_disable_mirroring>(this);
-    mirror->disable_mirroring(filesystem, ctx);
+    mirror->disable_mirroring(filesystem, ctx, true);
   }
 
   void handle_disable_mirroring(int r) {
@@ -471,7 +471,8 @@ void Mirror::handle_disable_mirroring(const Filesystem &filesystem, int r) {
   }
 }
 
-void Mirror::disable_mirroring(const Filesystem &filesystem, Context *on_finish) {
+void Mirror::disable_mirroring(const Filesystem &filesystem, Context *on_finish,
+                               bool purge_persisted_sync_stats) {
   ceph_assert(ceph_mutex_is_locked(m_lock));
 
   auto &mirror_action = m_mirror_actions.at(filesystem);
@@ -485,7 +486,9 @@ void Mirror::disable_mirroring(const Filesystem &filesystem, Context *on_finish)
   }
 
   mirror_action.action_in_progress = true;
-  mirror_action.fs_mirror->shutdown(new C_AsyncCallback<ContextWQ>(m_work_queue, on_finish));
+  mirror_action.fs_mirror->shutdown(
+    new C_AsyncCallback<ContextWQ>(m_work_queue, on_finish),
+    purge_persisted_sync_stats);
 }
 
 void Mirror::mirroring_disabled(const Filesystem &filesystem) {
