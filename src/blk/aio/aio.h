@@ -104,6 +104,8 @@ struct io_queue_t {
   virtual int submit_batch(aio_iter begin, aio_iter end,
 			   void *priv, int *retries, int submit_retries, int initial_delay_us) = 0;
   virtual int get_next_completed(int timeout_ms, aio_t **paio, int max) = 0;
+  /// route completion notifications to an eventfd (see aio_queue_t)
+  virtual int set_notify_eventfd(int fd) { return -EOPNOTSUPP; }
 };
 
 struct aio_queue_t final : public io_queue_t {
@@ -113,6 +115,20 @@ struct aio_queue_t final : public io_queue_t {
 #elif defined(HAVE_POSIXAIO)
   int ctx;
 #endif
+  // When >= 0, every completion also signals this eventfd
+  // (io_set_eventfd on each iocb; libaio only).  Lets an external
+  // reaper epoll for completions instead of blocking in
+  // get_next_completed.
+  int notify_eventfd = -1;
+
+  int set_notify_eventfd(int fd) override {
+#if defined(HAVE_LIBAIO)
+    notify_eventfd = fd;
+    return 0;
+#else
+    return -EOPNOTSUPP;
+#endif
+  }
 
   explicit aio_queue_t(unsigned max_iodepth)
     : max_iodepth(max_iodepth),

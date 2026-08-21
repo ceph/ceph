@@ -410,6 +410,14 @@ void KernelDevice::close()
     VOID_TEMP_FAILURE_RETRY(::close(fd_buffereds[i]));
     fd_buffereds[i] = -1;
   }
+  if (completion_efd >= 0) {
+    // the eventfd is borrowed, not owned - just drop our references
+    // so a re-opened device does not stamp iocbs with it unless the
+    // owner installs it again (io_queue outlives close/open cycles)
+    write_io_queue->set_notify_eventfd(-1);
+    completion_efd = -1;
+    external_completions = false;
+  }
   path.clear();
 }
 
@@ -599,8 +607,11 @@ int KernelDevice::_aio_start()
 	return r;
       }
     }
-    aio_write_thread.queue = write_io_queue.get();
-    aio_write_thread.create("bstore_aio");
+    if (!external_completions) {
+      // in external mode the write ring is reaped by the owner
+      aio_write_thread.queue = write_io_queue.get();
+      aio_write_thread.create("bstore_aio");
+    }
     aio_read_thread.queue = read_io_queue.get();
     aio_read_thread.create("bstore_aio_rd");
   }
@@ -613,14 +624,27 @@ void KernelDevice::_aio_stop()
     dout(10) << __func__ << dendl;
     aio_stop = true;
 
+    if (external_completions) {
+      // no write-side thread exists; the owner must have stopped
+      // submitting by now, but completions may still sit unreaped in
+      // the write ring - drain them here rather than letting
+      // io_destroy discard them (their callbacks would never run)
+      while (_reap_completions(write_io_queue.get(), 0,
+			       cct->_conf->bdev_aio_reap_max) > 0) {}
+    }
+
     // the wakeup ctxs must outlive the joins: the woken thread may
     // reap them at any point before it exits (or never - harmless)
     IOContext wake_w(cct, nullptr, false);
     IOContext wake_r(cct, nullptr, false);
     bufferlist bl_w, bl_r;
-    _aio_thread_wake(write_io_queue.get(), &wake_w, &bl_w, 0);
+    if (!external_completions) {
+      _aio_thread_wake(write_io_queue.get(), &wake_w, &bl_w, 0);
+    }
     _aio_thread_wake(read_io_queue.get(), &wake_r, &bl_r, block_size);
-    aio_write_thread.join();
+    if (!external_completions) {
+      aio_write_thread.join();
+    }
     aio_read_thread.join();
 
     // a thread can exit without reaping its wakeup (it checked
@@ -628,7 +652,7 @@ void KernelDevice::_aio_stop()
     // joined nobody else will, so retire the inflight accounting
     // explicitly or the leaked interval trips the overlap abort on
     // this device's next stop cycle
-    if (wake_w.num_running.load() > 0) {
+    if (!external_completions && wake_w.num_running.load() > 0) {
       _aio_log_finish(&wake_w, 0, block_size);
     }
     if (wake_r.num_running.load() > 0) {
@@ -851,6 +875,38 @@ int KernelDevice::_reap_completions(io_queue_t *q, int timeout_ms, int max)
     }
   }
   return r;
+}
+
+// Must be called before open(); the fd is borrowed from the caller
+// (never closed here) and stays installed for the device's whole open
+// lifetime - there is no mode switching on an open device.  Applies
+// to the WRITE ring only: the read ring always keeps its own
+// completion thread, so read completion latency never couples to the
+// owner's schedule.
+int KernelDevice::set_completion_eventfd(int fd)
+{
+#if defined(HAVE_LIBAIO)
+  ceph_assert(!aio_write_thread.is_started());
+  ceph_assert(fd >= 0);
+  int r = write_io_queue->set_notify_eventfd(fd);
+  if (r < 0) {
+    return r;
+  }
+  completion_efd = fd;
+  external_completions = true;
+  dout(5) << __func__ << " efd " << fd << dendl;
+  return 0;
+#else
+  return -EOPNOTSUPP;
+#endif
+}
+
+// drain the WRITE ring (external mode only)
+int KernelDevice::reap_completions(int max)
+{
+  ceph_assert(external_completions);
+  ceph_assert(max > 0);  // sizes a VLA in _reap_completions
+  return _reap_completions(write_io_queue.get(), 0, max);
 }
 
 void KernelDevice::_aio_thread(io_queue_t *q, bool primary)

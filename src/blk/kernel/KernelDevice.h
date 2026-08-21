@@ -107,8 +107,11 @@ private:
   void _aio_thread_wake(io_queue_t *q, IOContext *ioc,
 			ceph::buffer::list *bl, uint64_t off);
   // one reap pass: get_next_completed(timeout_ms) + full completion
-  // processing (factored out of _aio_thread)
+  // processing (shared by the completion threads and, for the write
+  // ring, reap_completions())
   int _reap_completions(io_queue_t *q, int timeout_ms, int max);
+  bool external_completions = false;   ///< write ring reaped externally
+  int completion_efd = -1;             ///< borrowed from the owner; not closed here
   void _discard_thread(DiscardThread* thr);
   bool _queue_discard(interval_set<uint64_t> &to_release);
   bool try_discard(interval_set<uint64_t> &to_release,
@@ -181,6 +184,8 @@ public:
 		bool buffered,
 		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
+  int set_completion_eventfd(int fd) override;
+  int reap_completions(int max) override;
   int _discard(uint64_t offset, uint64_t len);
 
   // for managing buffered readers/writers
