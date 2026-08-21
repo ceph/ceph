@@ -2,8 +2,11 @@
 
 set(extblkdev_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/extblkdev)
 
-add_subdirectory(vdo)
-add_subdirectory(fcm)
+# Both plugins are Linux-specific: vdo reads sysfs and fcm needs libblkid.
+if(LINUX)
+  add_subdirectory(vdo)
+  add_subdirectory(fcm)
+endif()
 
 add_library(extblkdev STATIC ExtBlkDevPlugin.cc)
 
@@ -12,6 +15,10 @@ if(LINUX)
   target_link_libraries(extblkdev cap)
 endif()
 
-add_custom_target(extblkdev_plugins DEPENDS
-    ceph_ebd_vdo
-    ceph_ebd_fcm)
+if(LINUX)
+  add_custom_target(extblkdev_plugins DEPENDS
+      ceph_ebd_vdo
+      ceph_ebd_fcm)
+else()
+  add_custom_target(extblkdev_plugins)
+endif()
