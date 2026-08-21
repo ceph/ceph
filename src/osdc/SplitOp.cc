@@ -353,7 +353,14 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
                                    osds.size());
-  uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
+  // Round the per-slice size up from the ceiling division: with floor
+  // division (length / slice_count) the chunk count could come out as
+  // slice_count + 1, wrapping the round-robin below so one sub_read
+  // received two reads in the same ops_index whose out_bl/out_ec slots
+  // alias the same Details entry - the second reply then silently
+  // overwrote the first chunk's data.
+  uint64_t chunk_size = p2roundup((length + slice_count - 1) / slice_count,
+                                  (uint64_t)CEPH_PAGE_SIZE);
   
   // Use reference_sub_read (set in constructor) as the starting shard
   // This provides load balancing while ensuring reference_sub_read is always set
