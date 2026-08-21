@@ -159,6 +159,9 @@ class NFSService(CephService):
         # choose_next_action() ignores False/None in the symmetric diff, so
         # False <-> None transitions do not trigger reconfig or redeploy.
 
+        # Metrics related
+        if nfs_spec.enable_nfs_metrics:
+            deps.append(f'enable_nfs_metrics: {nfs_spec.enable_nfs_metrics}')
         # RDMA related
         if nfs_spec.enable_rdma:
             deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
@@ -329,6 +332,7 @@ class NFSService(CephService):
                 "tls_debug": spec.tls_debug,
                 "ceph_nodes": ceph_nodes,
                 "protocols": "3, 4" if spec.enable_nfsv3 else "4",
+                "enable_nfs_metrics": spec.enable_nfs_metrics,
                 "use_old_nodeid": False if nodeid.isdigit() else True,
                 "enable_client_object_cache": spec.enable_client_object_cache,
                 "client_object_cache_size": (
