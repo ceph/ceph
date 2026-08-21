@@ -14300,6 +14300,25 @@ int Client::ll_lazyio(Fh *fh, int enable)
   return _lazyio(fh, enable);
 }
 
+int Client::_lazyio_synchronize(Inode *in, const UserPerm& perms)
+{
+  ldout(cct, 10) << __func__ << " " << *in << dendl;
+
+  int r = _fsync(in, true);
+  if (r < 0)
+    return r;
+
+  /*
+   * Don't use _release() here.  It declines to invalidate the cache while
+   * another thread holds a Fc reference on the inode, which would leave the
+   * caller reading stale data after a successful return.  The flush above
+   * made sure that there is nothing dirty left to lose.
+   */
+  _invalidate_inode_cache(in);
+
+  return _getattr(in, CEPH_STAT_CAP_SIZE, perms);
+}
+
 int Client::lazyio_propagate(int fd, loff_t offset, size_t count)
 {
   std::scoped_lock l(client_lock);
@@ -14323,22 +14342,9 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   Fh *f = get_filehandle(fd);
   if (!f)
     return -EBADF;
-  Inode *in = f->inode.get();
 
   // for now
-  int r = _fsync(f, true);
-  if (r < 0)
-    return r;
-
-  /*
-   * Don't use _release() here.  It declines to invalidate the cache while
-   * another thread holds a Fc reference on the inode, which would leave the
-   * caller reading stale data after a successful return.  The flush above
-   * made sure that there is nothing dirty left to lose.
-   */
-  _invalidate_inode_cache(in);
-
-  return _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+  return _lazyio_synchronize(f->inode.get(), f->actor_perms);
 }
 
 

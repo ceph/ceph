@@ -2193,6 +2193,7 @@ private:
   int _setlk(Fh *fh, struct flock *fl, uint64_t owner, int sleep);
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
+  int _lazyio_synchronize(Inode *in, const UserPerm& perms);
 
   Dentry *get_or_create(Inode *dir, const std::string& name);
 
