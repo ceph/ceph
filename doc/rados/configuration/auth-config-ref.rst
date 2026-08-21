@@ -383,9 +383,9 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
        ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_SERVICE_KEY_TYPE") | not'
 
-   output gives ``false``.
+   output gives ``true``. then there is no daemon that needs to be upgraded and you can continue.
 
-   If it outputs ``true``, there is another daemon that needs to be upgraded.
+   If it outputs ``false``, there is another daemon that needs to be upgraded.
    Check the output of ``ceph health detail``.
 
 #. **Upgrade the cipher for rotating service keys.**
@@ -411,6 +411,8 @@ this upgrade, it's necessary to do the upgrade in several steps.
    .. code:: bash
 
        ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_SERVICE_TICKETS") | not'
+
+   output gives ``true`` and you can continue.
 
 #. **Wipe the rotating service keys.**
 
@@ -460,7 +462,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
        ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_KEYS_CREATABLE") | not'
 
-   output gives ``false``.
+   output gives ``true`` and you can continue.
 
    For more information, see :ref:`auth_allow_insecure_keys`.
 
@@ -504,7 +506,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. code:: bash
 
-       ceph -n client.admin -k /etc/ceph/ceph.client.admin.keyring ceph auth ls
+       ceph -n client.admin -k /etc/ceph/ceph.client.admin.keyring auth ls
 
    If everything looks good, remove the backup key:
 
@@ -550,7 +552,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
        ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_CLIENT_KEY_TYPE") | not'
 
-   output gives ``false``.
+   output gives ``true`` and you can continue.
 
    If you cannot rotate a particular client key yet, you may prefer to mute the
    health warning until you can complete upgrading all of the client keys. We
@@ -582,7 +584,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
        ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_KEYS_ALLOWED") | not'
 
-   output gives ``false``.
+   output should be ``true``.
 
 At this point, your CephX ciphers and keys should be upgraded.
    
