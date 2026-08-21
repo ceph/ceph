@@ -13,15 +13,17 @@
   <cd-tearsheet-step>
     <cd-nvmeof-subsystem-step-two
       #tearsheetStep
-      [group]="group"></cd-nvmeof-subsystem-step-two>
+      [group]="group"
+      (hostTypeChanged)="onHostTypeChanged($event)"
+    ></cd-nvmeof-subsystem-step-two>
   </cd-tearsheet-step>
   @if(showAuthStep) {
-  <cd-tearsheet-step>
-    <cd-nvmeof-subsystem-step-three
-     #tearsheetStep
-     [stepTwoValue]="stepTwoValue"
-     [group]="group"></cd-nvmeof-subsystem-step-three>
-  </cd-tearsheet-step>
+    <cd-tearsheet-step>
+      <cd-nvmeof-subsystem-step-three
+       #tearsheetStep
+       [stepTwoValue]="stepTwoValue"
+       [group]="group"></cd-nvmeof-subsystem-step-three>
+    </cd-tearsheet-step>
   }
   <cd-tearsheet-step>
     <cd-nvmeof-subsystem-step-four

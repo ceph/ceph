@@ -24,7 +24,7 @@ export class NvmeGatewayViewComponent implements OnInit {
       this.groupName = pm.get('group') ?? '';
       this.sidebarItems = [
         {
-          label: $localize`Gateway nodes`,
+          label: $localize`Overview`,
           route: [this.basePath, this.groupName, 'nodes'],
           routerLinkActiveOptions: { exact: true }
         },
