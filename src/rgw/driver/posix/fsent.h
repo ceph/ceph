@@ -257,6 +257,7 @@ public:
 
   int get_fd() { return fd; };
   std::string& get_name() { return fname; }
+  void set_name(const std::string& name) { fname = name; }
   Directory* get_parent() { return parent; }
   bool exists() { return exist; }
   struct statx& get_stx() { return stx; }
@@ -535,6 +536,7 @@ public:
 };
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
+std::string posix_version_id_from_statx(const struct statx& stx);
 
 } // namespace posix
 } } // namespace rgw::sal
