@@ -6915,8 +6915,9 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
   pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pool_id, &prim_pgs_by_osd, &acting_prims_by_osd);
   auto num_osds = pgs_by_osd.size();
   int64_t num_pg_osd_legs = 0;
-  for (uint64_t i = 0 ; i < num_osds ; i++) {
-    if (get_primary_affinity(int(i)) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+  // Iterate over the OSDs which hold PGs of this pool, keyed by OSD id.
+  for (const auto& [osd, pgs] : pgs_by_osd) {
+    if (tmp_osd_map.get_primary_affinity(int(osd)) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
       if (cct != nullptr) {
         ldout(cct, 30) << __func__ << " pool " << pool_id
                            << " has primary_affinity set to non-default value on some OSDs" << dendl;
@@ -6926,7 +6927,7 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
                                   "this is ignored by the size-optimal read balancer", pool_id);
       }
     }
-    num_pg_osd_legs += pgs_by_osd[i].size();
+    num_pg_osd_legs += pgs.size();
   }
   if (num_pg_osd_legs != num_pgs * pgpool->get_size()) {
     if (cct != nullptr) {
