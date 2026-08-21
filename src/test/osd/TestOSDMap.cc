@@ -3068,6 +3068,11 @@ TEST_F(OSDMapTest, ReadBalanceScoreSmallPoolLargeCluster) {
   ASSERT_GE(rbi.optimal_score, 1.0);
   ASSERT_TRUE(score_in_range(rbi.adjusted_score));
   ASSERT_TRUE(score_in_range(rbi.acting_adj_score));
+
+  // a single PG pool is as balanced as it can be - the only PG has exactly one
+  // primary - so it must score exactly 1
+  ASSERT_FLOAT_EQ(rbi.adjusted_score, 1.0);
+  ASSERT_FLOAT_EQ(rbi.acting_adj_score, 1.0);
 }
 
 TEST_F(OSDMapTest, read_balance_small_map) {
