@@ -44,30 +44,31 @@
       >
       </cd-table-key-value>
     } @else if (expandedRow?.alert_count > 1) {
-    <cd-table
-      *cdTableDetail
-      [data]="expandedRow?.subalerts"
-      [columns]="innerColumns"
-      identifier="fingerprint"
-      [forceIdentifier]="true"
-      [customCss]="customCss"
-      selectionType="single"
-      [hasDetails]="true"
-      (setExpandedRow)="setExpandedInnerRow($event)"
-      [scrollable]="false"
-    >
-    @if (expandedInnerRow) {
-      <cd-table-key-value
+      <cd-table
         *cdTableDetail
-        [renderObjects]="true"
-        [hideEmpty]="true"
-        [appendParentKey]="false"
-        [data]="expandedInnerRow"
+        [data]="expandedRow?.subalerts"
+        [columns]="innerColumns"
+        identifier="fingerprint"
+        [forceIdentifier]="true"
         [customCss]="customCss"
-        [autoReload]="false"
+        selectionType="single"
+        [hasDetails]="true"
+        (setExpandedRow)="setExpandedInnerRow($event)"
+        [scrollable]="false"
       >
-      </cd-table-key-value> }
-    </cd-table>
+        @if (expandedInnerRow) {
+          <cd-table-key-value
+            *cdTableDetail
+            [renderObjects]="true"
+            [hideEmpty]="true"
+            [appendParentKey]="false"
+            [data]="expandedInnerRow"
+            [customCss]="customCss"
+            [autoReload]="false"
+          >
+          </cd-table-key-value>
+        }
+      </cd-table>
     }
   </cd-table>
 }

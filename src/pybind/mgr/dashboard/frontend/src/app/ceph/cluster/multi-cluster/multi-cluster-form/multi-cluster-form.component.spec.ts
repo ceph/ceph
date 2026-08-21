@@ -17,12 +17,7 @@ describe('MultiClusterFormComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule
-      ],
+      imports: [SharedModule, ReactiveFormsModule, RouterTestingModule, HttpClientTestingModule],
       declarations: [MultiClusterFormComponent],
       providers: [NgbActiveModal, NotificationService, CdDatePipe, DatePipe]
     }).compileComponents();
