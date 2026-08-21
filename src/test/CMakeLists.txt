@@ -159,7 +159,7 @@ add_executable(ceph_bench_log
   ${bench_log_srcs}
   )
 target_link_libraries(ceph_bench_log global pthread ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
-if(NOT WIN32)
+if(LINUX)
   target_link_libraries(ceph_bench_log rt)
 endif()
 
