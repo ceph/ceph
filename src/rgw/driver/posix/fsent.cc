@@ -1863,6 +1863,29 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
   return 0;
 }
 
+int VersionedDirectory::get_latest_version_ent(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt> &latest)
+{
+  std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(get_name(), this, ctx);
+  int ret = sl->stat(dpp);
+  if (ret < 0) {
+    if (ret == -ENOENT)
+      return 0;
+    return ret;
+  }
+
+  if (!sl->exists()) {
+    return 0;
+  }
+
+  auto nent = sl->get_target()->clone_base();
+  ret = nent->open(dpp);
+  if (ret < 0) {
+    return 0;
+  }
+  latest.swap(nent);
+  return 0;
+}
+
 std::string VersionedDirectory::get_cur_version()
 {
   if (!cur_version)
