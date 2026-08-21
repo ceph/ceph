@@ -10,6 +10,7 @@
 #include "rgw_arn.h"
 #include "common/async/yield_context.h"
 #include <boost/algorithm/string/predicate.hpp>
+#include "rgw/rgw_sal.h"
 
 struct LanceDBSession;
 
