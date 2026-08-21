@@ -2731,6 +2731,62 @@ test_force_promote()
   start_mirrors "${secondary_cluster}"
 }
 
+declare -a test_mirror_group_snapshot_unlink_peer_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 3 '')
+
+test_mirror_group_snapshot_unlink_peer_scenarios=1
+
+test_mirror_group_snapshot_unlink_peer()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  local group0=test-group-unlink
+  start_mirrors "${primary_cluster}"
+
+  local mirror_peer_uuid
+  get_remote_peer_uuid "${primary_cluster}" "${pool}" "${secondary_cluster}" mirror_peer_uuid
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  for ((i = 0; i < image_count; i++)); do
+    write_image "${primary_cluster}" "${pool}" "${image_prefix}${i}" 10 4096
+  done
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" "${image_count}"
+
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  local group_snap_id group_id_before secondary_group_snap_id
+  get_newest_complete_mirror_group_snapshot_id "${primary_cluster}" "${pool}/${group0}" group_snap_id
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  mirror_group_snapshot_and_wait_for_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}"/"${group0}"
+  wait_for_group_snapshot_peer_uuid_removed "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" "${mirror_peer_uuid}"
+  test_group_image_snapshots_peer_uuid_removed "${primary_cluster}" "${pool}/${group0}" "${group_snap_id}" "${mirror_peer_uuid}"
+  get_id_from_group_info "${secondary_cluster}" "${pool}/${group0}" group_id_before
+  mirror_group_resync "${secondary_cluster}" "${pool}/${group0}"
+  wait_for_group_id_changed "${secondary_cluster}" "${pool}/${group0}" "${group_id_before}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}/${group0}"
+  get_newest_complete_mirror_group_snapshot_id "${secondary_cluster}" "${pool}/${group0}" secondary_group_snap_id
+  test "$(count_mirror_group_snaps ${secondary_cluster} ${pool}/${group0})" -eq 1
+  for ((i = 0; i < image_count; i++)); do
+    # verify that there are no orphan image snapshots present without a associated group snapshot
+    test "$(count_mirror_snaps ${secondary_cluster} ${pool} ${image_prefix}${i})" -eq 1
+    assert_image_snap_present_in_group_snap "${secondary_cluster}" "${pool}" "${group0}" "${image_prefix}${i}" "${secondary_group_snap_id}"
+  done
+
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+  group_remove "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
+  wait_for_no_keys "${primary_cluster}"
+  stop_mirrors "${primary_cluster}"
+}
+
 declare -a test_force_promote_delete_group_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 '')
 declare -a test_force_promote_delete_group_2=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 5 'disable_reenable_primary')
 
@@ -3171,6 +3227,61 @@ test_multiple_mirror_group_snapshot_unlink_time()
   if [ ${results[1]} -gt $((${results[0]}+3)) ]; then
     fail "Snapshot time isn't independent of the group image count" 
   fi
+}
+
+declare -a test_group_snap_sync_after_user_snap_removal_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 2)
+
+test_group_snap_sync_after_user_snap_removal_scenarios=1
+
+test_group_snap_sync_after_user_snap_removal()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local image_prefix=$1 ; shift
+  local image_count=$(($1*"${image_multiplier}")) ; shift
+
+  local group0=test-group0
+  start_mirrors "${primary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group0}"
+  images_create "${primary_cluster}" "${pool}/${image_prefix}" $(("${image_count}"-1))
+  write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 10 4096
+  group_images_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${image_prefix}" $(("${image_count}"-1))
+
+  big_image=test-image-big
+  image_create "${primary_cluster}" "${pool}/${big_image}" 1G
+  group_image_add "${primary_cluster}" "${pool}/${group0}" "${pool}/${big_image}"
+  mirror_group_enable "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group0}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}"/"${group0}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}"/"${group0}" 'up+replaying' "${image_count}"
+  wait_for_group_status_in_pool_dir "${primary_cluster}" "${pool}"/"${group0}" 'up+stopped' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  write_image "${primary_cluster}" "${pool}" "${image_prefix}0" 10 4096
+  write_image "${primary_cluster}" "${pool}" "${big_image}" 256 4194304
+  snap='regular_snap'
+  group_snap_create "${primary_cluster}" "${pool}/${group0}" "${snap}"
+  check_group_snap_exists "${primary_cluster}" "${pool}/${group0}" "${snap}"
+  local group_snap_id
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
+  wait_for_group_snap_present "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+  #if mirror snapshot is present => user snapshot must be present
+  check_group_snap_exists "${secondary_cluster}" "${pool}/${group0}" "${snap}"
+  group_snap_remove "${primary_cluster}" "${pool}/${group0}" "${snap}"
+  wait_for_group_synced "${primary_cluster}" "${pool}"/"${group0}" "${secondary_cluster}" "${pool}"/"${group0}"
+  # snapshot sync can be completed only after removal of user snapshot
+  check_group_snap_doesnt_exist "${secondary_cluster}" "${pool}/${group0}" "${snap}"
+  test_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
+
+  mirror_group_disable "${primary_cluster}" "${pool}/${group0}"
+  group_remove "${primary_cluster}" "${pool}/${group0}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group0}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group0}"
+  images_remove "${primary_cluster}" "${pool}/${image_prefix}" $(("${image_count}"-1))
+  image_remove "${primary_cluster}" "${pool}/${big_image}"
+  wait_for_no_keys "${primary_cluster}"
+  stop_mirrors "${primary_cluster}"
 }
 
 # test force promote scenarios
@@ -4060,6 +4171,7 @@ run_all_tests()
   run_test_all_scenarios test_create_group_with_images_then_mirror_with_regular_snapshots
   run_test_all_scenarios test_create_group_with_large_image
   run_test_all_scenarios test_create_group_with_multiple_images_do_io
+  run_test_all_scenarios test_mirror_group_snapshot_unlink_peer
   run_test_all_scenarios test_group_and_standalone_images_do_io
   run_test_all_scenarios test_stopped_daemon
   run_test_all_scenarios test_create_group_with_regular_snapshots_then_mirror
@@ -4074,6 +4186,7 @@ run_all_tests()
   run_test_all_scenarios test_group_with_clone_image
   run_test_all_scenarios test_interrupted_sync_restarted_daemon
   run_test_all_scenarios test_interrupted_sync
+  run_test_all_scenarios test_group_snap_sync_after_user_snap_removal
   run_test_all_scenarios test_resync_after_relocate_and_force_promote
   run_test_all_scenarios test_multiple_mirror_group_snapshot_unlink_time
   run_test_all_scenarios test_force_promote_delete_group
