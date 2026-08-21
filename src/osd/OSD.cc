@@ -2866,6 +2866,14 @@ void OSD::asok_command(
                      superblock.cluster_osdmap_trim_lower_bound);
     f->dump_unsigned("num_pgs", num_pgs);
     f->close_section();
+#ifdef WITH_OSD_CUOBJ
+  } else if (prefix == "cuobj status") {
+    f->open_object_section("cuobj");
+    if (service.cuobj) {
+      service.cuobj->dump_stats(f);
+    }
+    f->close_section();
+#endif
   } else if (prefix == "flush_journal") {
     store->flush_journal();
   } else if (prefix == "dump_ops_in_flight" ||
@@ -4121,6 +4129,14 @@ void OSD::final_init()
   int r = admin_socket->register_command("status", asok_hook,
 					 "high-level status of OSD");
   ceph_assert(r == 0);
+#ifdef WITH_OSD_CUOBJ
+  if (service.cuobj) {
+    r = admin_socket->register_command(
+      "cuobj status", asok_hook,
+      "cuObject out-of-band RDMA delivery statistics");
+    ceph_assert(r == 0);
+  }
+#endif
   r = admin_socket->register_command("flush_journal",
                                      asok_hook,
                                      "flush the journal to permanent store");

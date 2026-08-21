@@ -10,6 +10,9 @@
 
 #include "include/buffer.h"
 #include "include/common_fwd.h"
+#include "osd/oob_placement.h"
+
+namespace ceph { class Formatter; }
 
 struct rdma_buffer;
 class cuObjServer;
@@ -49,6 +52,23 @@ public:
   ssize_t rdma_write(const std::string& key, const ceph::buffer::list& bl,
 		     const std::string& token, uint64_t client_offset);
 
+  /**
+   * Execute a placement plan: stage data once into a registered
+   * buffer, then RDMA-write each triple's byte range to
+   * token_base + triple.client_ofs, batching asynchronous submissions
+   * on this thread's channel and polling them to completion. All or
+   * nothing: returns total bytes pushed only if every triple
+   * completed, else a negative errno (and the caller must deliver
+   * inline instead). Blocks until the batch drains.
+   */
+  ssize_t execute_plan(const std::string& key,
+		       const std::string& token,
+		       const ceph::buffer::list& data,
+		       const ceph::osd::oob::placement_plan& plan);
+
+  /// asok/debug counters
+  void dump_stats(ceph::Formatter* f) const;
+
 private:
   struct BufEntry {
     void* ptr = nullptr;
@@ -75,6 +95,13 @@ private:
   std::unique_ptr<BufEntry[]> m_pool;
   size_t m_pool_count = 0;
   size_t m_buf_size = 0;
+
+  std::atomic<uint64_t> m_plans_started{0};
+  std::atomic<uint64_t> m_plans_completed{0};
+  std::atomic<uint64_t> m_plans_failed{0};
+  std::atomic<uint64_t> m_bytes_pushed{0};
+  std::atomic<uint32_t> m_writes_inflight{0};
+  std::atomic<uint64_t> m_buffers_leaked{0};
 
   static thread_local uint16_t tls_channel_id;
   static thread_local bool tls_channel_valid;
