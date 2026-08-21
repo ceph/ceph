@@ -349,7 +349,7 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t length = op.op.extent.length;
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
-                                   valid_indices.size());
+                                   static_cast<uint64_t>(valid_indices.size()));
   // A multi-op request may carry a read shorter than the minimum split
   // size; serve it whole from the reference OSD.
   slice_count = std::max<uint64_t>(slice_count, 1);
