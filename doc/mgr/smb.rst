@@ -1844,6 +1844,49 @@ at the prompt. Refer to the `smbclient documentation`_ for more details.
 .. _smbclient documentation:
    https://www.samba.org/samba/docs/current/man-html/smbclient.1.html
 
+.. _smb-cephfs-proxy:
+
+The CephFS Proxy Sidecar
+========================
+
+When a cluster hosts CephFS-backed shares that use the default
+``samba-vfs/proxied`` provider (see the ``provider`` share field
+above), the smb module adds the ``cephfs-proxy`` feature to the smb
+service specification that it generates, and cephadm deploys a
+``cephfs-proxy`` sidecar container alongside each Samba instance. No
+operator action is needed, and the sidecar is not a separate
+orchestrator service. The sidecar always runs on the same host as
+its Samba instance and shares that instance's ``/run`` mount and
+namespaces.
+
+The sidecar container runs the ``libcephfsd`` daemon. Unlike the
+Samba containers, which use images from the samba-container project,
+the sidecar uses the Ceph container image; the ``smb`` service
+intentionally runs containers from both images. Without the proxy,
+every SMB client connection opens its own ``libcephfs`` instance
+with its own private cache, which can consume large amounts of
+memory on busy servers. The proxy multiplexes the client connections
+over shared CephFS mounts for connections with identical
+configuration, serving a greater number of concurrent clients with
+fewer server-side resources. When the number of clients is very
+large, there may be some impact to individual client performance.
+
+Points useful when troubleshooting:
+
+* The proxy listens on the UNIX socket ``/run/libcephfsd.sock``
+  inside the ``/run`` mount that the smb instance's containers
+  share.
+* The daemon binary is ``/usr/sbin/libcephfsd``. It runs as a
+  sidecar container in the ``smb`` service, with a ``proxy`` suffix
+  in the container name.
+* The proxy is only deployed when at least one share uses the
+  proxied provider. Shares using ``samba-vfs/classic`` or
+  ``samba-vfs/new`` connect to CephFS directly from the Samba
+  container.
+
+For design details, see the developer documentation in
+``doc/dev/libcephfs_proxy.rst``.
+
 .. _smb-remote-control:
 
 SMB Remote Control

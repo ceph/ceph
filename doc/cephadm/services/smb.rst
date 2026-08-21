@@ -348,44 +348,15 @@ exercise for the reader.
    scheme has different performance and security characteristics.
 
 
-.. _smb-cephfs-proxy:
-
 The CephFS Proxy Sidecar
 ========================
 
-When a cluster hosts CephFS-backed shares that use the default
-``samba-vfs/proxied`` provider (see the ``provider`` share field in
-:ref:`mgr-smb`), cephadm automatically runs a ``cephfs-proxy``
-sidecar container alongside each Samba instance. No operator action
-is needed to deploy it, and it is not a separate orchestrator
-service.
-
-The sidecar container runs the ``libcephfsd`` daemon. Unlike the
-Samba containers, which use images from the samba-container project,
-the sidecar uses the regular Ceph container image; the ``smb``
-service intentionally runs containers from both images. Without the
-proxy, every SMB client connection opens its own ``libcephfs``
-instance with its own private cache, which can consume large amounts
-of memory on busy servers. The proxy multiplexes the client
-connections over shared CephFS mounts for connections with identical
-configuration, serving a greater number of concurrent clients with
-fewer server-side resources. When the number of clients is very
-large, there may be some impact to individual client performance.
-
-Points useful when troubleshooting:
-
-* The proxy listens on the UNIX socket ``/run/libcephfsd.sock``
-  inside the ``/run`` mount that the ``smb`` daemon's containers
-  share.
-* The daemon binary is ``/usr/sbin/libcephfsd``; its container is
-  named as a ``proxy`` sub-daemon of the parent ``smb`` daemon.
-* The proxy is only deployed when at least one share uses the
-  proxied provider. Shares using ``samba-vfs/classic`` or
-  ``samba-vfs/new`` connect to CephFS directly from the Samba
-  container.
-
-For design details, see the developer documentation in
-``doc/dev/libcephfs_proxy.rst``.
+When at least one CephFS-backed share uses a proxied provider, the
+smb manager module includes the ``cephfs-proxy`` feature in the
+``features`` parameter of the smb service specification, and cephadm
+deploys a ``cephfs-proxy`` sidecar container alongside each Samba
+instance. See :ref:`smb-cephfs-proxy` for a description of the
+sidecar and troubleshooting pointers.
 
 Limitations
 ===========
