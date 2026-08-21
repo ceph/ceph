@@ -131,11 +131,11 @@ public:
   using osptr = std::unique_ptr<sss>;
 
   CachedStackStringStream() {
-    if (cache.destructed || cache.c.empty()) {
+    if (cache().destructed || cache().c.empty()) {
       osp = std::make_unique<sss>();
     } else {
-      osp = std::move(cache.c.back());
-      cache.c.pop_back();
+      osp = std::move(cache().c.back());
+      cache().c.pop_back();
       osp->reset();
     }
   }
@@ -144,8 +144,8 @@ public:
   CachedStackStringStream(CachedStackStringStream&&) = delete;
   CachedStackStringStream& operator=(CachedStackStringStream&&) = delete;
   ~CachedStackStringStream() {
-    if (!cache.destructed && cache.c.size() < max_elems) {
-      cache.c.emplace_back(std::move(osp));
+    if (!cache().destructed && cache().c.size() < max_elems) {
+      cache().c.emplace_back(std::move(osp));
     }
   }
 
@@ -187,7 +187,11 @@ private:
     bool destructed = false;
   };
 
-  inline static thread_local Cache cache;
+  static Cache& cache() {
+    static thread_local Cache c;
+    return c;
+  }
+
   osptr osp;
 };
 
