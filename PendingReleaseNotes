@@ -14,6 +14,15 @@
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
+>=20.2.3
+
+* RBD: It's possible to specify source cluster's ``mon_host`` and ``key`` for
+  ``native`` format migration via the migration spec now.  This eliminates the
+  dependency on ``<cluster-name>.conf`` file in a known location which is
+  rather rigid and also challenging to disseminate in some environments.  The
+  key can be embedded in the migration spec or just referenced from there while
+  stored in the MON config-key store.
+
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on
   very large namespaces.
