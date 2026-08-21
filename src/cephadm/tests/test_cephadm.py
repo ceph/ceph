@@ -50,7 +50,8 @@ def _container_info(*args, **kwargs):
 def bootstrap_test_ctx(*args, **kwargs):
     with with_cephadm_ctx(*args, **kwargs) as ctx:
         ctx.no_cleanup_on_failure = True
-        yield ctx
+        with mock.patch('cephadm.CephContainer.run', return_value='[]'):
+            yield ctx
 
 
 class TestCephAdm(object):
