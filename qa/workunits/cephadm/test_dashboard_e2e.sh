@@ -76,6 +76,7 @@ CYPRESS_BASE_URL=$(ceph mgr services | jq -r .dashboard)
 export CYPRESS_BASE_URL
 
 cd $DASHBOARD_FRONTEND_DIR
+export IBM_TELEMETRY_DISABLED=true
 
 # This is required for Cypress to understand typescript
 npm ci --unsafe-perm
