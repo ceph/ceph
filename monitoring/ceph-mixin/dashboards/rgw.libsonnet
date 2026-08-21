@@ -84,7 +84,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         7
       ),
       RgwSyncOverviewPanel(
-        'Replication (objects) from Source Zone',
+        'Replication Rate (Objects/s) from Source Zone',
         'short',
         'Objects/s',
         'ceph_data_sync_from_zone_fetch_bytes_count',
