@@ -4,7 +4,7 @@
 @let telemetryEnabled = telemetryEnabled$ | async;
 @let pgAlertCount = pgAlertCount$ | async;
 
-@let colorClass = "overview-health-card-status--" + vm?.clusterHealth?.icon;
+@let colorClass = ('overview-health-card-status--' + vm?.clusterHealth?.icon);
 
 <cd-productive-card class="overview-health-card">
   <!-- ----------------------HEALTH CARD HEADER ---------------->
@@ -364,16 +364,16 @@
             class="cds-mt-4"
           >
             @if (pgAlertCount > 0) {
-              <a
-                cdsButton="primary"
-                size="sm"
-                class="overview-health-card-resiliency-btn"
-                [routerLink]="['/monitoring/active-alerts']"
-                [queryParams]="{ search: 'CephPG' }"
-              >
-                <span i18n>View alerts ({{ pgAlertCount }})</span>
-                <cd-icon type="arrowRight"></cd-icon>
-              </a>
+            <a
+              cdsButton="primary"
+              size="sm"
+              class="overview-health-card-resiliency-btn"
+              [routerLink]="['/monitoring/active-alerts']"
+              [queryParams]="{ search: 'CephPG' }"
+            >
+              <span i18n>View alerts ({{ pgAlertCount }})</span>
+              <cd-icon type="arrowRight"></cd-icon>
+            </a>
             }
             <button
               cdsButton="tertiary"
@@ -388,51 +388,49 @@
           </div>
         </div>
         @if (vm?.pgs?.activeCleanChartData && vm?.pgs?.activeCleanChartOptions) {
-          <div class="overview-health-card-tab-content-item-row">
-            <ibm-gauge-chart
-              class="overview-health-card-resiliency-chart"
-              [options]="vm?.pgs?.activeCleanChartOptions"
-              [data]="vm?.pgs?.activeCleanChartData"
-            ></ibm-gauge-chart>
-            <div class="overview-health-card-resiliency-chart-text">
-              <p
-                i18n
-                class="cds--type-helper-text-01 overview-health-card-secondary-text cds-mt-2 cds-mb-3"
-              >
-                <em>Data resiliency</em> reflects data availability and replication (% of placement
-                groups that are active and clean).
-              </p>
-              @if (vm?.pgs?.activeCleanChartReason?.length) {
-                <p
-                  class="cds--type-helper-text-01 overview-health-card-secondary-text overview-health-card-bold cds-mb-2"
-                  i18n
-                >
-                  {{
-                    vm?.resiliencyHealth?.severity === 'progress'
-                      ? 'Data cleanup in progress'
-                      : 'What is affecting resiliency?'
-                  }}
-                </p>
-                @for (
-                  item of vm?.pgs?.activeCleanChartReason;
-                  track item.state;
-                  let isLast = $last
-                ) {
-                  @if (item.count) {
-                    <p class="cds-mb-0">
-                      <span class="cds--type-label-01 cds-mr-1">{{ item?.state }}:</span>
-                      <span class="cds--type-label-01 overview-health-card-bold"
-                        >{{ item.count }} %</span
-                      >
-                      @if (!item?.state?.includes('Scrub') && item?.state !== 'Remapped') {
-                        <cd-icon type="arrowDown"></cd-icon>
-                      }
-                    </p>
-                  }
-                }
+        <div class="overview-health-card-tab-content-item-row">
+          <ibm-gauge-chart
+            class="overview-health-card-resiliency-chart"
+            [options]="vm?.pgs?.activeCleanChartOptions"
+            [data]="vm?.pgs?.activeCleanChartData"
+          ></ibm-gauge-chart>
+          <div class="overview-health-card-resiliency-chart-text">
+            <p
+              i18n
+              class="cds--type-helper-text-01 overview-health-card-secondary-text cds-mt-2 cds-mb-3"
+            >
+              <em>Data resiliency</em> reflects data availability and replication (% of placement
+              groups that are active and clean).
+            </p>
+            @if (vm?.pgs?.activeCleanChartReason?.length) {
+            <p
+              class="cds--type-helper-text-01 overview-health-card-secondary-text overview-health-card-bold cds-mb-2"
+              i18n
+            >
+              {{
+                vm?.resiliencyHealth?.severity === 'progress'
+                  ? 'Data cleanup in progress'
+                  : 'What is affecting resiliency?'
+              }}
+            </p>
+            @for (
+              item of vm?.pgs?.activeCleanChartReason;
+              track item.state;
+              let isLast = $last
+            ) {
+            @if (item.count) {
+            <p class="cds-mb-0">
+              <span class="cds--type-label-01 cds-mr-1">{{ item?.state }}:</span>
+              <span class="cds--type-label-01 overview-health-card-bold">{{ item.count }} %</span>
+              @if (!item?.state?.includes('Scrub') && item?.state !== 'Remapped') {
+              <cd-icon type="arrowDown"></cd-icon>
               }
-            </div>
+            </p>
+            }
+            }
+            }
           </div>
+        </div>
         } @else {
         <cds-skeleton-placeholder></cds-skeleton-placeholder>
         }

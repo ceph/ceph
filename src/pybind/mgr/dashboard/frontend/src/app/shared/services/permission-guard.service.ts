@@ -7,10 +7,7 @@ import { AuthStorageService } from './auth-storage.service';
   providedIn: 'root'
 })
 export class PermissionGuardService {
-  constructor(
-    private router: Router,
-    private authStorageService: AuthStorageService
-  ) {}
+  constructor(private router: Router, private authStorageService: AuthStorageService) {}
 
   canActivate(route: ActivatedRouteSnapshot): boolean {
     const permissions = this.authStorageService.getPermissions();

@@ -10,14 +10,14 @@
     novalidate
   >
     @if (errorMessage) {
-      <cd-alert-panel
-        type="danger"
-        [dismissible]="true"
-        (dismissed)="errorMessage = ''"
-        [showTitle]="false"
-      >
-        {{ errorMessage }}
-      </cd-alert-panel>
+    <cd-alert-panel
+      type="danger"
+      [dismissible]="true"
+      (dismissed)="errorMessage = ''"
+      [showTitle]="false"
+    >
+      {{ errorMessage }}
+    </cd-alert-panel>
     }
 
     <!-- Username -->
