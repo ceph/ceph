@@ -9,22 +9,34 @@ set(cephfs_journal_tool_srcs
   Resetter.cc
   RoleSelector.cc
   MDSUtility.cc)
+if(WITH_AUDITLOGGING)
+  list(APPEND cephfs_journal_tool_srcs ToolsAuditLogger.cc)
+endif()
 add_executable(cephfs-journal-tool ${cephfs_journal_tool_srcs})
 target_link_libraries(cephfs-journal-tool
   legacy-option-headers
   ceph-common librados mds osdc global Boost::boost
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
+if(WITH_AUDITLOGGING)
+  target_link_libraries(cephfs-journal-tool audit_db cephsqlite SQLite3::SQLite3)
+endif()
 
 set(cephfs-meta-injection_srcs
   cephfs-meta-injection.cc
   MetaTool.cc
   RoleSelector.cc
   MDSUtility.cc)
+if(WITH_AUDITLOGGING)
+  list(APPEND cephfs-meta-injection_srcs ToolsAuditLogger.cc)
+endif()
 add_executable(cephfs-meta-injection ${cephfs-meta-injection_srcs})
 target_link_libraries(cephfs-meta-injection
   legacy-option-headers
   ceph-common librados mds osdc global
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+if(WITH_AUDITLOGGING)
+  target_link_libraries(cephfs-meta-injection audit_db cephsqlite SQLite3::SQLite3)
+endif()
 
 set(cephfs_table_tool_srcs
   cephfs-table-tool.cc
@@ -32,9 +44,15 @@ set(cephfs_table_tool_srcs
   ProgressTracker.cc
   RoleSelector.cc
   MDSUtility.cc)
+if(WITH_AUDITLOGGING)
+  list(APPEND cephfs_table_tool_srcs ToolsAuditLogger.cc)
+endif()
 add_executable(cephfs-table-tool ${cephfs_table_tool_srcs})
 target_link_libraries(cephfs-table-tool ceph-common librados mds osdc global Boost::boost
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
+if(WITH_AUDITLOGGING)
+  target_link_libraries(cephfs-table-tool audit_db cephsqlite SQLite3::SQLite3)
+endif()
 
 set(cephfs_data_scan_srcs
   cephfs-data-scan.cc
@@ -43,10 +61,16 @@ set(cephfs_data_scan_srcs
   RoleSelector.cc
   PgFiles.cc
   MDSUtility.cc)
+if(WITH_AUDITLOGGING)
+  list(APPEND cephfs_data_scan_srcs ToolsAuditLogger.cc)
+endif()
 add_executable(cephfs-data-scan ${cephfs_data_scan_srcs})
 target_link_libraries(cephfs-data-scan ceph-common librados cephfs mds osdc global Boost::boost
   cls_cephfs_client
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} Boost::filesystem)
+if(WITH_AUDITLOGGING)
+  target_link_libraries(cephfs-data-scan audit_db cephsqlite SQLite3::SQLite3)
+endif()
 
 set(cephfs_tool_srcs
   cephfs-tool.cc)
