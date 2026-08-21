@@ -168,6 +168,9 @@ static inline int posix_fadvise(int fd, off_t offset, off_t len, int advice) {
 #ifndef EREMOTEIO
 #define EREMOTEIO 121
 #endif
+#ifndef ENOKEY
+#define ENOKEY 126
+#endif
 #ifndef EKEYREJECTED
 #define EKEYREJECTED 129
 #endif
