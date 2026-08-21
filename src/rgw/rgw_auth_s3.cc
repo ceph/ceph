@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <algorithm>
+#include <array>
 #include <boost/algorithm/string/predicate.hpp>
 #include <map>
 #include <iterator>
@@ -30,7 +31,7 @@
 
 using namespace std;
 
-static const auto signed_subresources = {
+static constexpr auto signed_subresources = std::to_array<std::string_view>({
   "acl",
   "cors",
   "delete",
@@ -59,7 +60,27 @@ static const auto signed_subresources = {
   "versions",
   "website",
   "object-lock"
+});
+
+static constexpr std::string_view view_or_empty(const char *const text) noexcept
+{
+  return text ? std::string_view { text } : std::string_view {};
+}
+
+template <typename Map>
+concept has_transparent_string_lookup = requires {
+  typename Map::key_compare::is_transparent;
 };
+
+template <typename Map>
+auto find_string_map_entry(const Map& map, const std::string_view key)
+{
+  if constexpr (has_transparent_string_lookup<Map>) {
+    return map.find(key);
+  }
+
+  return map.find(std::string { key });
+}
 
 /*
  * ?get the canonical amazon-style header for something?
@@ -90,29 +111,23 @@ get_canon_amz_hdrs(const M& map)
 /*
  * ?get the canonical representation of the object's location
  */
+template <typename SubResources>
 static std::string
-get_canon_resource(const DoutPrefixProvider *dpp, const char* const request_uri,
-                   const std::map<std::string, std::string>& sub_resources)
+get_canon_resource(const DoutPrefixProvider *dpp,
+                   const std::string_view request_uri,
+                   const SubResources& sub_resources)
 {
-  std::string dest;
-
-  if (request_uri) {
-    dest.append(request_uri);
-  }
+  std::string dest { request_uri };
 
   bool initial = true;
   for (const auto& subresource : signed_subresources) {
-    const auto iter = sub_resources.find(subresource);
+    const auto iter = find_string_map_entry(sub_resources, subresource);
     if (iter == std::end(sub_resources)) {
       continue;
     }
 
-    if (initial) {
-      dest.append("?");
-      initial = false;
-    } else {
-      dest.append("&");
-    }
+    dest.append(initial ? "?" : "&");
+    initial = false;
 
     dest.append(iter->first);
     if (! iter->second.empty()) {
@@ -129,38 +144,29 @@ get_canon_resource(const DoutPrefixProvider *dpp, const char* const request_uri,
  * get the header authentication  information required to
  * compute a request's signature
  */
-void rgw_create_s3_canonical_header(
+template <typename SubResources>
+static void rgw_create_s3_canonical_header_impl(
   const DoutPrefixProvider *dpp,
-  const char* const method,
-  const char* const content_md5,
-  const char* const content_type,
-  const char* const date,
+  const std::string_view method,
+  const std::string_view content_md5,
+  const std::string_view content_type,
+  const std::string_view date,
   const meta_map_t& meta_map,
   const meta_map_t& qs_map,
-  const char* const request_uri,
-  const std::map<std::string, std::string>& sub_resources,
+  const std::string_view request_uri,
+  const SubResources& sub_resources,
   std::string& dest_str)
 {
-  std::string dest;
-
-  if (method) {
-    dest = method;
-  }
+  std::string dest { method };
   dest.append("\n");
 
-  if (content_md5) {
-    dest.append(content_md5);
-  }
+  dest.append(content_md5);
   dest.append("\n");
 
-  if (content_type) {
-    dest.append(content_type);
-  }
+  dest.append(content_type);
   dest.append("\n");
 
-  if (date) {
-    dest.append(date);
-  }
+  dest.append(date);
   dest.append("\n");
 
   dest.append(get_canon_amz_hdrs(meta_map));
@@ -170,13 +176,55 @@ void rgw_create_s3_canonical_header(
   dest_str = dest;
 }
 
+void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
+  const std::string_view method,
+  const std::string_view content_md5,
+  const std::string_view content_type,
+  const std::string_view date,
+  const meta_map_t& meta_map,
+  const meta_map_t& qs_map,
+  const std::string_view request_uri,
+  const RGWHTTPArgs::name_value_map& sub_resources,
+  std::string& dest_str)
+{
+  rgw_create_s3_canonical_header_impl(dpp, method, content_md5, content_type,
+                                      date, meta_map, qs_map, request_uri,
+                                      sub_resources, dest_str);
+}
+
+void rgw_create_s3_canonical_header(
+  const DoutPrefixProvider *dpp,
+  const char *method,
+  const char *content_md5,
+  const char *content_type,
+  const char *date,
+  const meta_map_t& meta_map,
+  const meta_map_t& qs_map,
+  const char *request_uri,
+  const std::map<std::string, std::string>& sub_resources,
+  std::string& dest_str)
+{
+  rgw_create_s3_canonical_header_impl(
+      dpp,
+      view_or_empty(method),
+      view_or_empty(content_md5),
+      view_or_empty(content_type),
+      view_or_empty(date),
+      meta_map,
+      qs_map,
+      view_or_empty(request_uri),
+      sub_resources,
+      dest_str);
+}
+
 static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
 }
 
 static inline void get_v2_qs_map(const req_info& info,
 				 meta_map_t& qs_map) {
-  const auto& params = const_cast<RGWHTTPArgs&>(info.args).get_params();
+  const auto& params = info.args.get_params();
   for (const auto& elt : params) {
     std::string k = boost::algorithm::to_lower_copy(elt.first);
     if (k.find("x-amz-meta-") == /* offset */ 0) {
@@ -257,9 +305,9 @@ bool rgw_create_s3_canonical_header(const DoutPrefixProvider *dpp,
   }
 
   auto method = rgw::auth::s3::get_canonical_method(dpp, op_type, info);
-  rgw_create_s3_canonical_header(dpp, method.c_str(), content_md5, content_type,
-                                 date.c_str(), meta_map, qs_map,
-				 request_uri.c_str(), sub_resources, dest);
+  rgw_create_s3_canonical_header(dpp, method, view_or_empty(content_md5),
+                                 view_or_empty(content_type), date, meta_map,
+                                 qs_map, request_uri, sub_resources, dest);
   return true;
 }
 
@@ -668,17 +716,17 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
   return canonical_qs;
 }
 
-static void add_v4_canonical_params_from_map(const map<string, string>& m,
-                                        std::map<string, string> *result,
-                                        bool is_non_s3_op)
+static void add_v4_canonical_params_from_map(const RGWHTTPArgs::name_value_map& m,
+                                             std::map<string, string>& result,
+                                             bool is_non_s3_op)
 {
-  for (auto& entry : m) {
+  for (const auto& entry : m) {
     const auto& key = entry.first;
     if (key.empty() || (is_non_s3_op && key == "PayloadHash")) {
       continue;
     }
 
-    (*result)[aws4_uri_recode(key, true)] = aws4_uri_recode(entry.second, true);
+    result[aws4_uri_recode(key, true)] = aws4_uri_recode(entry.second, true);
   }
 }
 
@@ -686,8 +734,8 @@ std::string gen_v4_canonical_qs(const req_info& info, bool is_non_s3_op)
 {
   std::map<std::string, std::string> canonical_qs_map;
 
-  add_v4_canonical_params_from_map(info.args.get_params(), &canonical_qs_map, is_non_s3_op);
-  add_v4_canonical_params_from_map(info.args.get_sys_params(), &canonical_qs_map, false);
+  add_v4_canonical_params_from_map(info.args.get_params(), canonical_qs_map, is_non_s3_op);
+  add_v4_canonical_params_from_map(info.args.get_sys_params(), canonical_qs_map, false);
 
   if (canonical_qs_map.empty()) {
     return string();
