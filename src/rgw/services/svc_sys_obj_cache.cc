@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
+#include <chrono>
+#include <thread>
+
 #include "common/admin_socket.h"
 
 #include "svc_sys_obj_cache.h"
@@ -455,6 +458,18 @@ int RGWSI_SysObj_Cache::distribute_cache(const DoutPrefixProvider *dpp,
                                          ObjectCacheInfo& obj_info, int op,
                                          optional_yield y)
 {
+  // for testing: hold the cache notification in-flight to reproduce
+  // timing-sensitive races
+  if (cct->_conf->rgw_inject_delay_sec > 0) {
+    if (std::string_view(cct->_conf->rgw_inject_delay_pattern) ==
+        "delay_distribute_cache") {
+      const double delay_sec = cct->_conf->rgw_inject_delay_sec;
+      ldpp_dout(dpp, 0) << "distribute_cache: injecting delay of " << delay_sec
+          << "s before notify for " << obj << dendl;
+      std::this_thread::sleep_for(std::chrono::duration<double>(delay_sec));
+    }
+  }
+
   RGWCacheNotifyInfo info;
   info.op = op;
   info.obj_info = obj_info;
