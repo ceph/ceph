@@ -26,30 +26,39 @@
             </ng-container>
 
             <ng-template #noError>
-              <cd-alert-panel *ngIf="device.value.info?.smart_status | pipeFunction:isEmpty; else hasSmartStatus"
-                              id="alert-self-test-unknown"
-                              size="slim"
-                              type="warning"
-                              i18n-title
-                              title="SMART overall-health self-assessment test result"
-                              i18n>unknown</cd-alert-panel>
+              <cd-alert-panel
+                *ngIf="device.value.info?.smart_status | pipeFunction: isEmpty; else hasSmartStatus"
+                id="alert-self-test-unknown"
+                size="slim"
+                type="warning"
+                i18n-alertTitle
+                alertTitle="SMART overall-health self-assessment test result"
+                i18n
+                >unknown</cd-alert-panel
+              >
               <ng-template #hasSmartStatus>
                 <!-- HDD/NVMe self test -->
                 <ng-container *ngIf="device.value.info.smart_status.passed; else selfTestFailed">
-                  <cd-alert-panel id="alert-self-test-passed"
-                                  size="slim"
-                                  type="info"
-                                  i18n-title
-                                  title="SMART overall-health self-assessment test result"
-                                  i18n>passed</cd-alert-panel>
+                  <cd-alert-panel
+                    id="alert-self-test-passed"
+                    size="slim"
+                    type="info"
+                    i18n-alertTitle
+                    alertTitle="SMART overall-health self-assessment test result"
+                    i18n
+                    >passed</cd-alert-panel
+                  >
                 </ng-container>
                 <ng-template #selfTestFailed>
-                  <cd-alert-panel id="alert-self-test-failed"
-                                  size="slim"
-                                  type="warning"
-                                  i18n-title
-                                  title="SMART overall-health self-assessment test result"
-                                  i18n>failed</cd-alert-panel>
+                  <cd-alert-panel
+                    id="alert-self-test-failed"
+                    size="slim"
+                    type="warning"
+                    i18n-alertTitle
+                    alertTitle="SMART overall-health self-assessment test result"
+                    i18n
+                    >failed</cd-alert-panel
+                  >
                 </ng-template>
               </ng-template>
             </ng-template>

@@ -57,6 +57,7 @@ import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button/copy2clipboard-button.component';
 import { DeleteConfirmationModalComponent } from './delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeleteGuardModalComponent } from './delete-guard-modal/delete-guard-modal.component';
 import { CustomLoginBannerComponent } from './custom-login-banner/custom-login-banner.component';
 import { DateTimePickerComponent } from './date-time-picker/date-time-picker.component';
 import { DocComponent } from './doc/doc.component';
@@ -125,6 +126,7 @@ import ArrowDown16 from '@carbon/icons/es/arrow--down/16';
 import Warning16 from '@carbon/icons/es/warning/16';
 import Deploy16 from '@carbon/icons/es/deploy/16';
 import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.component';
+import { ProductiveCardComponent } from './productive-card/productive-card.component';
 
 @NgModule({
   imports: [
@@ -172,7 +174,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     LayerModule,
     LayoutModule,
     TilesModule,
-    ThemeModule
+    ThemeModule,
+    ProductiveCardComponent
   ],
   declarations: [
     SparklineComponent,
@@ -184,6 +187,7 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     ModalComponent,
     NotificationsSidebarComponent,
     DeleteConfirmationModalComponent,
+    DeleteGuardModalComponent,
     ConfirmationModalComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
@@ -265,7 +269,8 @@ import { SidebarLayoutComponent } from './sidebar-layout/sidebar-layout.componen
     TearsheetStepComponent,
     DetailsCardComponent,
     SidePanelComponent,
-    SidebarLayoutComponent
+    SidebarLayoutComponent,
+    ProductiveCardComponent
   ]
 })
 export class ComponentsModule {

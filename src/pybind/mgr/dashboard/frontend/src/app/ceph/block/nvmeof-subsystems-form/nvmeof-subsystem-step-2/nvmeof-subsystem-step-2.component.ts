@@ -1,4 +1,13 @@
-import { Component, Input, OnInit, TemplateRef, ViewChild, ViewEncapsulation } from '@angular/core';
+import {
+  Component,
+  EventEmitter,
+  Input,
+  OnInit,
+  Output,
+  TemplateRef,
+  ViewChild,
+  ViewEncapsulation
+} from '@angular/core';
 import { FormControl, UntypedFormControl } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -20,6 +29,8 @@ import { TearsheetStep } from '~/app/shared/models/tearsheet-step';
 export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
   @Input() group!: string;
   @Input() existingHosts: string[] = [];
+  @Input() allowAllHosts = true;
+  @Output() hostTypeChanged = new EventEmitter<string>();
   @ViewChild('rightInfluencer', { static: true })
   rightInfluencer?: TemplateRef<any>;
   formGroup: CdFormGroup;
@@ -36,7 +47,6 @@ export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
   csvDropText: string = $localize`Drag and drop files here or click to upload`;
   NQN_REGEX = /^nqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+(:[A-Za-z0-9-\.]+)*)$/;
   NQN_REGEX_UUID = /^nqn\.2014-08\.org\.nvmexpress:uuid:[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
-  ALLOW_ALL_HOST = '*';
   uploadedHosts = new Set<string>();
 
   constructor(
@@ -48,7 +58,8 @@ export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
   ngOnInit() {
     this.createForm();
 
-    this.formGroup.get('hostType')?.valueChanges.subscribe(() => {
+    this.formGroup.get('hostType')?.valueChanges.subscribe((hostType: string) => {
+      this.hostTypeChanged.emit(hostType);
       this.formGroup.get('hostname')?.updateValueAndValidity();
     });
 
@@ -56,6 +67,7 @@ export class NvmeofSubsystemsStepTwoComponent implements OnInit, TearsheetStep {
       this.formGroup.get('hostname')?.updateValueAndValidity();
     });
 
+    this.hostTypeChanged.emit(this.formGroup.get('hostType')?.value);
     this.formGroup.get('hostname')?.updateValueAndValidity();
   }
 

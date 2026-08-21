@@ -23,12 +23,14 @@ export interface CephServiceSpec {
   status: CephServiceStatus;
   spec: CephServiceAdditionalSpec;
   placement: CephServicePlacement;
+  events?: string[];
 }
 
 // Type for service spec update payload (excludes read-only status field)
 export type CephServiceSpecUpdate = Omit<CephServiceSpec, 'status'>;
 
 export interface CephServiceAdditionalSpec {
+  placement?: CephServicePlacement;
   backend_service: string;
   api_user: string;
   api_password: string;
@@ -48,6 +50,7 @@ export interface CephServiceAdditionalSpec {
   server_cert: string;
   server_key: string;
   rgw_frontend_ssl_certificate: string;
+  certificate_source: string;
   ssl: boolean;
   ssl_cert: string;
   ssl_certificate: string;
@@ -72,6 +75,7 @@ export interface CephServiceAdditionalSpec {
   client_secret: string;
   oidc_issuer_url: string;
   enable_auth: boolean;
+  encryption_key?: string;
   qat: QatSepcs;
 }
 
@@ -80,10 +84,22 @@ export interface CephServicePlacement {
   placement?: string;
   hosts?: string[];
   label?: string | string[];
+  locations?: Record<string, string[]>;
 }
 
 export interface QatSepcs {
   [key: string]: string;
+}
+
+export enum CertificateType {
+  internal = 'internal',
+  external = 'external'
+}
+
+export enum CertMode {
+  externalOnly = 'externalOnly',
+  both = 'both',
+  internalOnly = 'internalOnly'
 }
 
 export enum QatOptions {
@@ -91,3 +107,22 @@ export enum QatOptions {
   sw = 'sw',
   none = 'none'
 }
+
+export interface CephServiceCertificate {
+  has_certificate: boolean;
+  cert_name: string;
+  expiry_date: string;
+  days_to_expiration: number;
+  status: 'valid' | 'expiring' | 'expired' | 'not_configured' | 'invalid';
+  signed_by: string;
+  issuer: string;
+}
+
+export const CERTIFICATE_STATUS_ICON_MAP: Record<string, string> = {
+  valid: 'success',
+  expiring: 'warningAlt',
+  expired: 'danger',
+  not_configured: 'warningAlt',
+  invalid: 'danger',
+  default: 'infoCircle'
+};
