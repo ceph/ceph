@@ -14309,7 +14309,8 @@ int Client::do_snap_md_op(const char* path, const string& md_key,
 {
   if (op_flag != CEPH_SNAP_MD_OP_CREATE &&
       op_flag != (CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL) &&
-      op_flag != CEPH_SNAP_MD_OP_REMOVE) {
+      op_flag != CEPH_SNAP_MD_OP_REMOVE &&
+      op_flag != CEPH_SNAP_MD_OP_UPDATE) {
     return -EINVAL;
   }
 
