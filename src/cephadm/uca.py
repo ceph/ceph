@@ -358,6 +358,8 @@ def command_ceph(ctx: CephadmContext) -> int:
     require_cluster(ctx)
 
     command = ['ceph']
+    if ctx.status:
+        command.append('-s')
     # use argparse to intercept -i options so we can map files on the "host"
     # into the container.
     vparser = argparse.ArgumentParser(add_help=False, exit_on_error=False)
@@ -746,6 +748,12 @@ def _get_parser() -> argparse.ArgumentParser:
             '--no-hosts',
             action='store_true',
             help='dont pass /etc/hosts through to the container',
+        )
+        sp.add_argument(
+            '--status',
+            '-s',
+            action='store_true',
+            help='Pass -s option to ceph command',
         )
         sp.add_argument('command', nargs=argparse.REMAINDER, help='command')
 
