@@ -20,6 +20,8 @@
 #include <cstdint>
 #include <memory>
 #include <stdexcept>
+#include <string>
+#include <string_view>
 
 #include "include/buffer_fwd.h"
 #include "include/common_fwd.h"
