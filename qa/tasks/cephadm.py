@@ -1998,7 +1998,18 @@ def initialize_config(ctx, config):
         # mons will be named after hosts
         first_mon = None
         max_mons = config.get('max_mons', 5)
-        for remote, _ in remotes_and_roles:
+        for remote, roles in remotes_and_roles:
+            mon_roles = [r for r in roles
+                         if teuthology.is_type('mon', cluster_name)(r)]
+            if mon_roles:
+                # Fabricated host-named mons would be deployed on top of the
+                # mon roles, and the default mon service placement created by
+                # cephadm bootstrap races with the explicit placement applied
+                # later, deploying host-named mons on ports assigned to the
+                # role-named mons.
+                raise RuntimeError(
+                    'roleless cephadm requires host-only roles; found %s on %s'
+                    % (mon_roles, remote.shortname))
             ctx.cluster.remotes[remote].append('mon.' + remote.shortname)
             if not first_mon:
                 first_mon = remote.shortname
