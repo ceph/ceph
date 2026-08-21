@@ -2926,6 +2926,44 @@ TEST(LibCephFS, SnapMdCreateUpdates) {
   ceph_shutdown(cmount);
 }
 
+// Test UPDATE-only snap metadata op: update existing key, reject missing key.
+TEST(LibCephFS, SnapMdOpUpdateOnly) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_parse_env(cmount, NULL), 0);
+  ASSERT_EQ(do_ceph_mount(cmount, NULL), 0);
+
+  char dir_path[64];
+  char snap_name[64];
+  char snap_path[PATH_MAX];
+  sprintf(dir_path, "/dir0_%d-update", getpid());
+  sprintf(snap_name, "snap_%d_update", getpid());
+  sprintf(snap_path, "%s/.snap/%s", dir_path, snap_name);
+
+  ASSERT_EQ(0, ceph_mkdir(cmount, dir_path, 0755));
+  struct snap_metadata snap_meta[] = {{"foo", "bar"}};
+  ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
+                           std::size(snap_meta)));
+
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo", "bar2",
+                                  CEPH_SNAP_MD_OP_UPDATE));
+
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount, snap_path, &info));
+  ASSERT_EQ(info.nr_snap_metadata, 1);
+  ASSERT_STREQ(info.snap_metadata[0].key, "foo");
+  ASSERT_STREQ(info.snap_metadata[0].value, "bar2");
+  ceph_free_snap_info_buffer(&info);
+
+  ASSERT_EQ(-EINVAL, ceph_do_snap_md_op(cmount, snap_path, "missing", "val",
+                                        CEPH_SNAP_MD_OP_UPDATE));
+
+  ASSERT_EQ(0, ceph_rmsnap(cmount, dir_path, snap_name));
+  ASSERT_EQ(0, ceph_rmdir(cmount, dir_path));
+  ceph_shutdown(cmount);
+}
+
 
 // Test that k-v pair is added successfully by ceph_do_snap_md_op() in
 // EXCL mode.
