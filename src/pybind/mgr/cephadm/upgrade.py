@@ -1081,6 +1081,12 @@ class CephadmUpgrade:
                 self.upgrade_state.rotated_mgr_mon_auth_key_daemons = []
             # do mgr and mon keyrings as one off after mons have been upgraded
             mon_daemons = self.mgr.cache.get_daemons_by_service('mon')
+            if not mon_daemons:
+                # Without any mon daemons in the cache we cannot tell whether
+                # the mons have been upgraded, and there is no mon keyring to
+                # rotate either.  Try again on the next upgrade pass.
+                self.mgr.log.debug('Skipping mgr/mon key rotation, no mon daemons known')
+                return
             _, mons_needing_upgrade, __, ___ = self._detect_need_upgrade(mon_daemons, target_digests, target_image)
             need_rotate_self = False
             if not mons_needing_upgrade:
