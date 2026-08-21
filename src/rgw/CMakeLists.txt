@@ -375,7 +375,7 @@ target_link_libraries(rgw_common
     global
     cls_rgw_client
     keyring
-    rt
+    ${RT_LIBRARY}
     ICU::uc
     OATH::OATH
     dmclock::dmclock
@@ -493,7 +493,7 @@ if(WITH_RADOSGW_STANDALONE)
     global
     cls_rgw_client
     keyring
-    rt
+    ${RT_LIBRARY}
     ICU::uc
     OATH::OATH
     dmclock::dmclock
