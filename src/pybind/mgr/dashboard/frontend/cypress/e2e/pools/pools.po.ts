@@ -67,5 +67,7 @@ export class PoolPageHelper extends PageHelper {
     cy.get('.float-start.me-2.select-menu-edit').click();
     cy.get('.popover-body').should('be.visible');
     apps.forEach((app) => cy.get('.select-menu-item-content').contains(app).click());
+    cy.get('cd-pool-form').click();
+    cy.get('.popover-body').should('not.exist');
   }
 }
