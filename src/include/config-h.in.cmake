@@ -344,6 +344,7 @@
 
 /* Defined if getentropy() is available */
 #cmakedefine HAVE_GETENTROPY
+#cmakedefine HAVE_SYS_RANDOM_H
 
 /* Defined if libradosstriper is enabled: */
 #cmakedefine WITH_LIBRADOSSTRIPER
