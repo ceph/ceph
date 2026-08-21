@@ -189,7 +189,7 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     tick();
     fixture.detectChanges();
 
-    const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
+    const values = fixture.nativeElement.querySelectorAll('.cds--type-label-02');
     const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
     expect(valueTexts).not.toContain('MTLS');
   }));
@@ -199,7 +199,7 @@ describe('NvmeofSubsystemOverviewComponent', () => {
     tick();
     fixture.detectChanges();
 
-    const values = fixture.nativeElement.querySelectorAll('.cds--type-body-compact-01');
+    const values = fixture.nativeElement.querySelectorAll('.cds--type-label-02');
     const valueTexts = Array.from(values).map((el: HTMLElement) => el.textContent.trim());
     expect(valueTexts).toContain('Allow all hosts');
   }));
