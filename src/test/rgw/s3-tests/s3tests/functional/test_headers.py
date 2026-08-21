@@ -1,5 +1,6 @@
 import boto3
 import pytest
+import botocore.config
 from botocore.exceptions import ClientError
 from email.utils import formatdate
 
@@ -209,7 +210,10 @@ def test_object_create_bad_contentlength_empty():
 @pytest.mark.auth_common
 @pytest.mark.fails_on_mod_proxy_fcgi
 def test_object_create_bad_contentlength_negative():
-    client = get_client()
+    # to test Content-Length=-1, we have to prevent the checksum calculation
+    # from switching to STREAMING-UNSIGNED-PAYLOAD-TRAILER
+    config = botocore.config.Config(request_checksum_calculation = 'when_required')
+    client = get_client(config)
     bucket_name = get_new_bucket()
     key_name = 'foo'
     e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key_name, ContentLength=-1)
@@ -504,12 +508,14 @@ def test_bucket_create_bad_authorization_invalid_aws2():
     assert error_code == 'InvalidArgument'
 
 @pytest.mark.auth_aws2
+@pytest.mark.fails_on_rgw
 def test_bucket_create_bad_ua_empty_aws2():
     v2_client = get_v2_client()
     headers = {'User-Agent': ''}
     _add_header_create_bucket(headers, v2_client)
 
 @pytest.mark.auth_aws2
+@pytest.mark.fails_on_rgw
 def test_bucket_create_bad_ua_none_aws2():
     v2_client = get_v2_client()
     remove = 'User-Agent'
