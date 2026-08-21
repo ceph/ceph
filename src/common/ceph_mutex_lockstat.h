@@ -107,7 +107,7 @@ public:
     } else {
       mutex_base::lock();
     }
-    if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
       m_hold_start = lockstat_clock::now();
       m_hold_mode = LockMode::WRITE;
       record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
@@ -118,12 +118,11 @@ public:
   try_lock()
   {
     const auto wait_start_clock =
-        unlikely(
-            g_start_cycles.load(std::memory_order_relaxed) != lockstat_clock::zero())
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
     if (mutex_base::try_lock()) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+      if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
         m_hold_start = lockstat_clock::now();
         m_hold_mode = LockMode::TRY_WRITE;
         record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
@@ -142,11 +141,11 @@ public:
       const auto hold_time = lockstat_clock::now() - hold_start;
       const auto hold_mode = m_hold_mode;
       m_hold_start = lockstat_clock::zero();
-      mutex_base::unlock();
-      record_hold_time(hold_time, hold_mode);
-    } else {
-      mutex_base::unlock();
+      if (get_traits()) {
+        record_hold_time(hold_time, hold_mode);
+      }
     }
+    mutex_base::unlock();
   }
 
   template <typename Rep, typename Period>
@@ -159,7 +158,7 @@ public:
               ? lockstat_clock::now()
               : lockstat_clock::zero();
       if (mutex_base::try_lock_for(awhile)) {
-        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
           m_hold_start = lockstat_clock::now();
           m_hold_mode = LockMode::TRY_WRITE;
           record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
@@ -184,7 +183,7 @@ public:
               ? lockstat_clock::now()
               : lockstat_clock::zero();
       if (mutex_base::try_lock_until(when)) {
-        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
           m_hold_start = lockstat_clock::now();
           m_hold_mode = LockMode::TRY_WRITE;
           record_wait_time(m_hold_start - wait_start_clock, m_hold_mode);
@@ -206,14 +205,16 @@ public:
       const auto hold_time = lockstat_clock::now() - hold_start;
       const auto hold_mode = m_hold_mode;
       m_hold_start = lockstat_clock::zero();
-      record_hold_time(hold_time, hold_mode);
+      if (get_traits()) {
+        record_hold_time(hold_time, hold_mode);
+      }
     }
   }
 
   void
   condvar_wait_end(lockstat_clock::time_point wait_start_clock)
   {
-    if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
       const auto now = lockstat_clock::now();
       record_wait_time(now - wait_start_clock, LockMode::WRITE);
       m_hold_start = now;
@@ -259,7 +260,7 @@ public:
     } else {
       mutex_base::lock();
     }
-    if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
       m_write_hold_start = lockstat_clock::now();
       m_write_hold_mode = LockMode::WRITE;
       record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
@@ -270,12 +271,11 @@ public:
   try_lock()
   {
     const auto wait_start_clock =
-        unlikely(
-            g_start_cycles.load(std::memory_order_relaxed) != lockstat_clock::zero())
+        unlikely(lockstat_detail::LockStat::is_lockstat_enabled())
             ? lockstat_clock::now()
             : lockstat_clock::zero();
     if (mutex_base::try_lock()) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+      if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
         m_write_hold_start = lockstat_clock::now();
         m_write_hold_mode = LockMode::TRY_WRITE;
         record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
@@ -294,11 +294,11 @@ public:
       const auto hold_time = lockstat_clock::now() - hold_start;
       const auto hold_mode = m_write_hold_mode;
       m_write_hold_start = lockstat_clock::zero();
-      mutex_base::unlock();
-      record_hold_time(hold_time, hold_mode);
-    } else {
-      mutex_base::unlock();
+      if (get_traits()) {
+        record_hold_time(hold_time, hold_mode);
+      }
     }
+    mutex_base::unlock();
   }
 
   template <typename Rep, typename Period>
@@ -311,7 +311,7 @@ public:
               ? lockstat_clock::now()
               : lockstat_clock::zero();
       if (mutex_base::try_lock_for(awhile)) {
-        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
           m_write_hold_start = lockstat_clock::now();
           m_write_hold_mode = LockMode::TRY_WRITE;
           record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
@@ -335,7 +335,7 @@ public:
               ? lockstat_clock::now()
               : lockstat_clock::zero();
       if (mutex_base::try_lock_until(when)) {
-        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
           m_write_hold_start = lockstat_clock::now();
           m_write_hold_mode = LockMode::TRY_WRITE;
           record_wait_time(m_write_hold_start - wait_start_clock, m_write_hold_mode);
@@ -369,7 +369,7 @@ public:
     } else {
       mutex_base::lock_shared();
     }
-    if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+    if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
       record_wait_time(lockstat_clock::now() - wait_start_clock, LockMode::READ);
       begin_shared_hold(LockMode::READ);
     }
@@ -384,7 +384,7 @@ public:
             ? lockstat_clock::now()
             : lockstat_clock::zero();
     if (mutex_base::try_lock_shared()) {
-      if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+      if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
         record_wait_time(
             lockstat_clock::now() - wait_start_clock, LockMode::TRY_READ);
         begin_shared_hold(LockMode::TRY_READ);
@@ -412,7 +412,7 @@ public:
               ? lockstat_clock::now()
               : lockstat_clock::zero();
       if (mutex_base::try_lock_shared_for(awhile)) {
-        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
           record_wait_time(
               lockstat_clock::now() - wait_start_clock, LockMode::TRY_READ);
           begin_shared_hold(LockMode::TRY_READ);
@@ -438,7 +438,7 @@ public:
               ? lockstat_clock::now()
               : lockstat_clock::zero();
       if (mutex_base::try_lock_shared_until(when)) {
-        if (unlikely(wait_start_clock != lockstat_clock::zero())) {
+        if (unlikely(wait_start_clock != lockstat_clock::zero() && get_traits())) {
           record_wait_time(
               lockstat_clock::now() - wait_start_clock, LockMode::TRY_READ);
           begin_shared_hold(LockMode::TRY_READ);

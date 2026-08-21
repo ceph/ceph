@@ -19,6 +19,7 @@
 #include <ranges>
 #include <mutex>
 #include <numeric>
+#include <sched.h>
 #include <unordered_map>
 
 #include "include/ceph_assert.h"
@@ -215,18 +216,48 @@ atomic_max(std::atomic<T>& maximum_value, T const& value) noexcept
   }
 }
 
+bool
+LockStatTraits::traits_is_valid(const LockStatTraits* traits)
+{
+  if (!traits || !traits->m_lockstat_entry) {
+    return false;
+  }
+  const LockStatTraitsTableT& table = get_traits_table();
+  return traits >= table.data() && traits < table.data() + table.size();
+}
+
+static size_t
+get_lockstat_cpu_index(const LockStatEntry* lockstat_entry)
+{
+  ceph_assert(lockstat_entry != nullptr);
+  int cpu = sched_getcpu();
+  if (cpu < 0) {
+    cpu = 0;
+  }
+  const size_t ncpus = lockstat_entry->m_stats_table.size();
+  if (ncpus == 0) {
+    return 0;
+  }
+  const size_t cpu_index = static_cast<size_t>(cpu);
+  if (cpu_index >= ncpus) {
+    return cpu_index % ncpus;
+  }
+  return cpu_index;
+}
+
 void
 LockStatTraits::record_wait_time(
     const LockStatTraits* traits,
     const lockstat_clock::duration wait_time,
     const LockMode mode)
 {
-  if (!traits || !traits->m_lockstat_entry) {
+  if (!traits_is_valid(traits)) {
     return;
   }
   LockStatEntry* lockstat_entry = traits->m_lockstat_entry;
 
-  LockStatEntry::LockStats& stats(lockstat_entry->m_stats_table[sched_getcpu()]);
+  LockStatEntry::LockStats& stats(
+      lockstat_entry->m_stats_table[get_lockstat_cpu_index(lockstat_entry)]);
   stats.m_wait_count[static_cast<size_t>(mode)]++;
   stats.m_wait_duration[static_cast<size_t>(mode)] += wait_time;
   auto wait_ns =
@@ -243,12 +274,13 @@ LockStatTraits::record_hold_time(
     const lockstat_clock::duration hold_time,
     const LockMode mode)
 {
-  if (!traits || !traits->m_lockstat_entry) {
+  if (!traits_is_valid(traits)) {
     return;
   }
   LockStatEntry* lockstat_entry = traits->m_lockstat_entry;
 
-  LockStatEntry::LockStats& stats(lockstat_entry->m_stats_table[sched_getcpu()]);
+  LockStatEntry::LockStats& stats(
+      lockstat_entry->m_stats_table[get_lockstat_cpu_index(lockstat_entry)]);
   stats.m_hold_count[static_cast<size_t>(mode)]++;
   stats.m_hold_duration[static_cast<size_t>(mode)] += hold_time;
   auto hold_ns =
@@ -271,6 +303,9 @@ thread_local std::unordered_map<const LockStat*, SharedHoldState>
 void
 LockStat::begin_shared_hold(const LockMode mode) const
 {
+  if (!m_lockstat_traits) {
+    return;
+  }
   SharedHoldState& state = thread_shared_hold_states[this];
   if (state.depth == 0) {
     state.hold_start =
@@ -283,6 +318,9 @@ LockStat::begin_shared_hold(const LockMode mode) const
 void
 LockStat::end_shared_hold() const
 {
+  if (!m_lockstat_traits) {
+    return;
+  }
   const auto it = thread_shared_hold_states.find(this);
   if (it == thread_shared_hold_states.end()) {
     return;
