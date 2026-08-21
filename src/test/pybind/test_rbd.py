@@ -3080,6 +3080,7 @@ class TestGroups(object):
         create_group()
         snap_name = get_temp_snap_name()
         self.group = Group(ioctx, group_name)
+        self.dne_group = Group(ioctx, "group_does_not_exist")
 
     def teardown_method(self, method):
         remove_group()
@@ -3193,6 +3194,7 @@ class TestGroups(object):
 
     def test_group_snap(self):
         global snap_name
+        assert_raises(ObjectNotFound, self.dne_group.list_snaps)
         eq([], list(self.group.list_snaps()))
         self.group.create_snap(snap_name)
         eq([snap_name], [snap['name'] for snap in self.group.list_snaps()])
