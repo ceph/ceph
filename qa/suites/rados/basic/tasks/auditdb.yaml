@@ -1,0 +1,20 @@
+overrides:
+  ceph:
+    conf:
+      client:
+        debug ms: 1
+        debug client: 20
+        debug cephsqlite: 20
+        debug audit_logging: 20
+    log-ignorelist:
+    - POOL_APP_NOT_ENABLED
+    - do not have an application enabled
+    - application not enabled
+    - or freeform for custom applications
+tasks:
+- exec:
+   client.0:
+   - ceph auth get-or-create client.auditdb mon 'allow r, allow command "osd pool create", allow command "osd pool application enable"' osd 'allow rwx pool=.test_audit_db' >> /etc/ceph/ceph.keyring
+- exec:
+   client.0:
+   - ceph_test_audit_db --id auditdb --no-log-to-stderr

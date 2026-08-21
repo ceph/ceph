@@ -114,6 +114,31 @@ template<> struct hash<LogEntryKey> {
 };
 } // namespace std
 
+struct LogMsg {
+  entity_name_t name;
+  entity_addrvec_t addrs;
+  EntityName entity_name;
+  std::string cmd;
+  std::string cmd_args;
+  std::string cmd_state;
+  int cmd_retval;
+
+  void encode(bufferlist& bl, uint64_t features) const;
+  void decode(bufferlist::const_iterator& p);
+};
+WRITE_CLASS_ENCODER_FEATURES(LogMsg)
+
+inline std::ostream& operator<<(std::ostream &os, const LogMsg &m) {
+  os << "from='" << m.name << " " << m.addrs << "' "
+     << "entity='" << m.entity_name << "' " << "cmd=" << m.cmd;
+  if (!m.cmd_args.empty()) {
+    os << " args=" << m.cmd_args;
+  }
+  os << " r=" << m.cmd_retval;
+  os << ": " << m.cmd_state;
+  return os;
+}
+
 struct LogEntry {
   EntityName name;
   entity_name_t rank;
@@ -123,8 +148,10 @@ struct LogEntry {
   clog_type prio;
   std::string msg;
   std::string channel;
+  version_t epoch;
+  LogMsg logmsg;
 
-  LogEntry() : seq(0), prio(CLOG_DEBUG) {}
+  LogEntry() : seq(0), prio(CLOG_DEBUG), epoch(0) {}
 
   LogEntryKey key() const { return LogEntryKey(rank, stamp, seq); }
 
@@ -151,6 +178,10 @@ struct LogEntry {
       return "UNKNOWN";
     }
     return "???";
+  }
+
+  bool has_logmsg() const {
+    return msg.empty();
   }
 };
 WRITE_CLASS_ENCODER_FEATURES(LogEntry)

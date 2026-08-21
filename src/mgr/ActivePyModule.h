@@ -64,7 +64,7 @@ public:
 
   int load(ActivePyModules *py_modules);
   void notify(const std::string &notify_type, const std::string &notify_id);
-  void notify_clog(const LogEntry &le);
+  void notify_log_channel(const LogEntry &le, const std::string& channel);
 
   bool method_exists(const std::string &method) const;
 
