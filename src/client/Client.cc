@@ -14311,9 +14311,7 @@ int Client::lazyio_propagate(int fd, loff_t offset, size_t count)
     return -EBADF;
 
   // for now
-  _fsync(f, true);
-
-  return 0;
+  return _fsync(f, true);
 }
 
 int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
@@ -14326,14 +14324,21 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   if (!f)
     return -EBADF;
   Inode *in = f->inode.get();
-  
-  _fsync(f, true);
-  if (_release(in)) {
-    int r =_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
-    if (r < 0) 
-      return r;
-  }
-  return 0;
+
+  // for now
+  int r = _fsync(f, true);
+  if (r < 0)
+    return r;
+
+  /*
+   * Don't use _release() here.  It declines to invalidate the cache while
+   * another thread holds a Fc reference on the inode, which would leave the
+   * caller reading stale data after a successful return.  The flush above
+   * made sure that there is nothing dirty left to lose.
+   */
+  _invalidate_inode_cache(in);
+
+  return _getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
 }
 
 
