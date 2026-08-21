@@ -113,7 +113,6 @@
                     [cdsLayer]="2"
                     class="cds-mt-4"
                   >
-                    <!-- filter names column -->
                     <div
                       cdsCol
                       [columnNumbers]="{ sm: 4, md: 4 }"
@@ -130,14 +129,12 @@
                         />
                       </cds-text-label>
                     </div>
-
-                    <!-- filter values column -->
                     <div
                       cdsCol
                       [columnNumbers]="{ sm: 4, md: 4 }"
                     >
                       <cds-select
-                        (valueChange)="onChangeFilter($event, filter)"
+                        (valueChange)="onSelectFilter(filter.column.name); onChangeFilter($event)"
                         [id]="'filter_value_' + i"
                         label="Value"
                         size="md"
@@ -148,7 +145,7 @@
                         @for (option of filter.options; track option.raw) {
                           <option
                             [value]="option.raw"
-                            [selected]="option.raw === selectedFilters[filter.column.name]"
+                            [selected]="option.raw === filter.value?.raw"
                           >
                             {{ option.formatted }}
                           </option>
@@ -188,7 +185,6 @@
                         />
                       </cds-text-label>
                     </div>
-
                     <div
                       cdsCol
                       [columnNumbers]="{ sm: 4, md: 3, lg: 7 }"
@@ -204,7 +200,6 @@
                         />
                       </cds-text-label>
                     </div>
-
                     @if (i !== 0) {
                       <div
                         cdsCol
@@ -241,7 +236,6 @@
                 }
               }
             </div>
-
             <div class="filter--footer">
               <button
                 cdsButton="secondary"
@@ -252,7 +246,6 @@
               >
                 <ng-container i18n>Clear all</ng-container>
               </button>
-
               <button
                 cdsButton="primary"
                 size="lg"
