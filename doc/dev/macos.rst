@@ -83,7 +83,7 @@ Command line and offline tools::
   rados rbd crushtool osdmaptool monmaptool ceph-authtool ceph-conf
   ceph-dencoder ceph-erasure-code-tool ceph-kvstore-tool ceph-monstore-tool
   ceph-objectstore-tool ceph-diff-sorted librados-config neorados ceph-syn
-  rbd-replay ceph-immutable-object-cache radosgw-admin
+  rbd-replay ceph-immutable-object-cache radosgw-admin ceph-fuse
 
 ``ceph-dencoder`` loads its type modules from the install path, so point it at
 the build tree::
@@ -240,13 +240,58 @@ Things worth knowing before they are hit:
   ``requests``, ``cherrypy``, ``scipy``, ``urllib3``, ``cryptography`` - except
   ``devicehealth``, which needs ``WITH_LIBCEPHSQLITE``.
 
+Mounting CephFS
+---------------
+
+``ceph-fuse`` builds and mounts. It needs macFUSE, which is not part of the
+base dependency set - and because ``WITH_FUSE`` does a
+``find_package(FUSE REQUIRED)``, turning it on without macFUSE installed
+fails at configure time rather than quietly dropping the binary. So
+``do_cmake_macos.sh`` leaves it off, and it goes on the `Optional daemons`_
+configure line alongside the MDS::
+
+  brew install --cask macfuse
+
+macFUSE's default backend is a kernel extension, so macOS asks for it to be
+approved and then wants a restart before the first mount. Until that has
+happened the mount fails inside macFUSE, before Ceph is involved::
+
+  mount_macfuse: the file system is not available (1)
+
+Add ``-DWITH_FUSE=ON`` to the configure invocation, then build and mount the
+file system vstart created::
+
+  ninja -C build-all ceph-fuse
+  cd build-all
+  mkdir -p /tmp/cephfs
+  ./bin/ceph-fuse -c ceph.conf --client_fs a /tmp/cephfs
+
+Reads, writes, directories, rename, truncate, chmod, symlinks, hard links,
+``statfs`` and both user and ``ceph.*`` extended attributes all work, and
+``umount`` is enough to unmount - there is no ``fusermount`` on Darwin.
+
+macFUSE also has a second backend built on FSKit, Apple's user-space file
+system API, selected with ``-o backend=fskit``. It needs no kernel extension
+and so no restart, which makes it the more attractive option for a laptop,
+but it is not the one used above and it comes with strings attached:
+
+* the file system extension has to be enabled under ``System Settings >
+  General > Login Items & Extensions``. macFUSE ships two of them, and a
+  distributed file system needs the non-local one; PluginKit does
+  not always find either, in which case macFUSE's own advice is to register it
+  by hand with ``sudo pluginkit -v -a`` against the ``.appex`` under
+  ``/Library/Filesystems/macfuse.fs``.
+* mount points outside ``/Volumes`` are not supported.
+* macFUSE documents the backend as having no FUSE notification API and no
+  request context. ``fuse_ll.cc`` reads the caller's uid and gid out of
+  ``fuse_req_ctx()`` on nearly every operation, so whether permissions behave
+  there is an open question - it has not been tried.
+
 What does not build
 -------------------
 
 * BlueStore, and therefore any persistent OSD; it needs libaio or io_uring and
   the Linux block layer
-* ``ceph-fuse``, which is untried; it would need macFUSE and ``WITH_FUSE=ON``.
-  ``cmake/modules/FindFUSE.cmake`` already has an ``APPLE`` branch.
 
 Notes
 -----
