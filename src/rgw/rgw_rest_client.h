@@ -116,11 +116,8 @@ private:
   ReceiveCB *cb{nullptr};
   RGWWriteDrainCB *write_drain_cb{nullptr};
   bufferlist in_data;
-  size_t chunk_ofs{0};
   size_t ofs{0};
   uint64_t write_ofs{0};
-  bool read_paused{false};
-  bool send_paused{false};
   bool stream_writes{false};
   bool write_stream_complete{false};
 protected:
