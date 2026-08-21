@@ -24,6 +24,17 @@
 #define FUSE_USE_VERSION	312
 #endif
 
+/*
+ * macFUSE's libfuse3 enables a set of Darwin extensions by default, which
+ * replace the signatures of fuse_reply_entry(), fuse_reply_attr() and the
+ * xattr operations with ones taking Darwin-specific structs.  Everything
+ * here is written against the vanilla libfuse3 API, so ask for that.  Must
+ * be defined before fuse_common.h, which is where the default is applied.
+ */
+#if defined(__APPLE__) && !defined(FUSE_DARWIN_ENABLE_EXTENSIONS)
+#define FUSE_DARWIN_ENABLE_EXTENSIONS 0
+#endif
+
 #include <fuse.h>
 #include "acconfig.h"
 
