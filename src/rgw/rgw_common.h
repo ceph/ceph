@@ -17,6 +17,7 @@
 #pragma once
 
 #include <array>
+#include <bitset>
 #include <cstdint>
 #include <iterator>
 #include <ranges>
@@ -402,12 +403,80 @@ class NameVal
 
 /** Stores the XML arguments associated with the HTTP request in req_state*/
 class RGWHTTPArgs {
+ public:
+  enum struct http_arg : uint8_t {
+    acl,
+    append,
+    attributes,
+    bulk_delete,
+    caps,
+    cors,
+    delete_,
+    encryption,
+    end_date,
+    extract_archive,
+    format,
+    index,
+    key,
+    layout,
+    legal_hold,
+    lifecycle,
+    list,
+    location,
+    logging,
+    mdsearch,
+    multipart_manifest,
+    notification,
+    object,
+    object_lock,
+    ownership_controls,
+    part_number,
+    policy,
+    policy_status,
+    position,
+    public_access_block,
+    quota,
+    replication,
+    request_payment,
+    response_cache_control,
+    response_content_disposition,
+    response_content_encoding,
+    response_content_language,
+    response_content_type,
+    response_expires,
+    restore,
+    retention,
+    select_type,
+    start_date,
+    subuser,
+    sync,
+    tagging,
+    torrent,
+    upload_id,
+    uploads,
+    usage,
+    version_id,
+    versioning,
+    versions,
+    website,
+    count,
+  };
+  using name_value_map = std::map<std::string, std::string, std::less<>>;
+
+ private:
   std::string str, empty_str;
-  std::map<std::string, std::string> val_map;
-  std::map<std::string, std::string> sys_val_map;
-  std::map<std::string, std::string> sub_resources;
+  name_value_map val_map;
+  name_value_map sys_val_map;
+  name_value_map sub_resources;
+  std::bitset<static_cast<size_t>(http_arg::count)> present_args;
+  std::bitset<static_cast<size_t>(http_arg::count)> present_sub_resources;
   bool has_resp_modifier = false;
   bool admin_subresource_added = false;
+
+  static constexpr size_t index(http_arg name) noexcept {
+    return static_cast<size_t>(name);
+  }
+
  public:
   RGWHTTPArgs() = default;
   explicit RGWHTTPArgs(const std::string& s, const DoutPrefixProvider *dpp) {
@@ -418,7 +487,11 @@ class RGWHTTPArgs {
   /** Set the arguments; as received */
   void set(const std::string& s) {
     has_resp_modifier = false;
+    admin_subresource_added = false;
+    present_args.reset();
+    present_sub_resources.reset();
     val_map.clear();
+    sys_val_map.clear();
     sub_resources.clear();
     str = s;
   }
@@ -427,46 +500,41 @@ class RGWHTTPArgs {
   void append(const std::string& name, const std::string& val);
   void remove(const std::string& name);
   /** Get the value for a specific argument parameter */
-  const std::string& get(const std::string& name, bool *exists = NULL) const;
+  const std::string& get(std::string_view name, bool *exists = NULL) const;
   boost::optional<const std::string&>
-  get_optional(const std::string& name) const;
-  int get_bool(const std::string& name, bool *val, bool *exists) const;
+  get_optional(std::string_view name) const;
+  int get_bool(std::string_view name, bool *val, bool *exists) const;
   int get_bool(const char *name, bool *val, bool *exists) const;
   void get_bool(const char *name, bool *val, bool def_val) const;
   int get_int(const char *name, int *val, int def_val) const;
 
   /** Get the value for specific system argument parameter */
-  std::string sys_get(const std::string& name, bool *exists = nullptr) const;
+  std::string sys_get(std::string_view name, bool *exists = nullptr) const;
 
   /** see if a parameter is contained in this RGWHTTPArgs */
-  bool exists(const char *name) const {
-    return (val_map.find(name) != std::end(val_map));
-  }
-  bool sub_resource_exists(const char *name) const {
-    return (sub_resources.find(name) != std::end(sub_resources));
-  }
+  bool exists(std::string_view name) const;
+  bool sub_resource_exists(std::string_view name) const;
   bool exist_obj_excl_sub_resource() const {
-    const char* const obj_sub_resource[] = {"append", "torrent", "uploadId",
-                                            "partNumber", "versionId"};
-    for (unsigned i = 0; i != std::size(obj_sub_resource); i++) {
-      if (sub_resource_exists(obj_sub_resource[i])) return true;
-    }
-    return false;
+    return sub_resource_exists(http_arg::append) ||
+           sub_resource_exists(http_arg::torrent) ||
+           sub_resource_exists(http_arg::upload_id) ||
+           sub_resource_exists(http_arg::part_number) ||
+           sub_resource_exists(http_arg::version_id);
   }
 
-  std::map<std::string, std::string>& get_params() {
+  name_value_map& get_params() {
     return val_map;
   }
-  const std::map<std::string, std::string>& get_params() const {
+  const name_value_map& get_params() const {
     return val_map;
   }
-  std::map<std::string, std::string>& get_sys_params() {
+  name_value_map& get_sys_params() {
     return sys_val_map;
   }
-  const std::map<std::string, std::string>& get_sys_params() const {
+  const name_value_map& get_sys_params() const {
     return sys_val_map;
   }
-  const std::map<std::string, std::string>& get_sub_resources() const {
+  const name_value_map& get_sub_resources() const {
     return sub_resources;
   }
   unsigned get_num_params() const {
@@ -475,8 +543,14 @@ class RGWHTTPArgs {
   bool has_response_modifier() const {
     return has_resp_modifier;
   }
+  bool exists(http_arg name) const {
+    return present_args.test(index(name));
+  }
+  bool sub_resource_exists(http_arg name) const {
+    return present_sub_resources.test(index(name));
+  }
   void set_system() { /* make all system params visible */
-    std::map<std::string, std::string>::iterator iter;
+    name_value_map::iterator iter;
     for (iter = sys_val_map.begin(); iter != sys_val_map.end(); ++iter) {
       val_map[iter->first] = iter->second;
     }

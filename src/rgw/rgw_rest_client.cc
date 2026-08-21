@@ -8,7 +8,6 @@
 #include "rgw_http_errors.h"
 
 #include "common/strtol.h"
-#include "include/str_list.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
@@ -61,12 +60,13 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
   ldpp_dout(this, 30) << "received header: " << line << dendl;
 
   auto trim = [](std::string_view & v) {
-    auto n = v.find_first_not_of(" \t");
+    const auto n = v.find_first_not_of(" \t");
     if (n == v.npos) {
       v = std::string_view{};
-    } else {
-      v.remove_prefix(n);
+      return;
     }
+
+    v.remove_prefix(n);
   };
   trim(line);
   if (line.empty()) {
@@ -81,22 +81,23 @@ int RGWHTTPSimpleRequest::receive_header(void *ptr, size_t len)
   auto right = line.substr(sep + 1, line.npos);
   trim(right);
 
-  if (left == "HTTP" || left.starts_with("HTTP/")) {
-    // First line
-    sep = right.find_first_of(" \t");
-    auto status_tok = right.substr(0, sep);
-    // .value_or(0) mimics atol's behavior on receiving no digits.
-    http_status = ceph::parse<std::uint16_t>(status_tok).value_or(0);
-    if (http_status == 100) {
-      return 0;
-    }
-    status = rgw_http_error_to_errno(http_status);
-  } else {
+  if (left != "HTTP" && !left.starts_with("HTTP/")) {
     std::string header_name;
     uppercase_dash_transform(left, std::back_inserter(header_name));
     out_headers[header_name] = std::string{right};
     return handle_header(header_name, right);
   }
+
+  // First line
+  sep = right.find_first_of(" \t");
+  auto status_tok = right.substr(0, sep);
+  // .value_or(0) mimics atol's behavior on receiving no digits.
+  http_status = ceph::parse<std::uint16_t>(status_tok).value_or(0);
+  if (http_status == 100) {
+    return 0;
+  }
+  status = rgw_http_error_to_errno(http_status);
+
   return 0;
 }
 
@@ -145,31 +146,23 @@ int RGWHTTPSimpleRequest::receive_data(void *ptr, size_t len, bool *pause)
 
 static void append_param(string& dest, const string& name, const string& val)
 {
-  if (dest.empty()) {
-    dest.append("?");
-  } else {
-    dest.append("&");
-  }
-  string url_name;
-  url_encode(name, url_name);
-  dest.append(url_name);
+  dest.append(dest.empty() ? "?" : "&");
+  url_encode(name, dest);
 
   if (!val.empty()) {
-    string url_val;
-    url_encode(val, url_val);
     dest.append("=");
-    dest.append(url_val);
+    url_encode(val, dest);
   }
 }
 
-static void do_get_params_str(const param_vec_t& params, map<string, string>& extra_args, string& dest)
+template <typename Map>
+static void do_get_params_str(const param_vec_t& params, const Map& extra_args, string& dest)
 {
-  map<string, string>::iterator miter;
-  for (miter = extra_args.begin(); miter != extra_args.end(); ++miter) {
-    append_param(dest, miter->first, miter->second);
+  for (const auto& [name, value] : extra_args) {
+    append_param(dest, name, value);
   }
-  for (auto iter = params.begin(); iter != params.end(); ++iter) {
-    append_param(dest, iter->first, iter->second);
+  for (const auto& [name, value] : params) {
+    append_param(dest, name, value);
   }
 }
 
@@ -274,60 +267,76 @@ static int sign_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key,
   return sign_request_v4(dpp, key, region, service, env, info, opt_content);
 }
 
-static string extract_region_name(string&& s)
+static string extract_region_name(std::string_view s)
 {
   if (s == "s3") {
-      return "us-east-1";
+    return "us-east-1";
   }
-  if (boost::algorithm::starts_with(s, "s3-")) {
-    return s.substr(3);
+  if (s.starts_with("s3-")) {
+    return std::string{s.substr(3)};
   }
-  return std::move(s);
+
+  return std::string{s};
 }
 
+static std::string_view next_dot_token(std::string_view& str)
+{
+  const auto first = str.find_first_not_of('.');
+  if (first == str.npos) {
+    str = {};
+    return {};
+  }
+
+  str.remove_prefix(first);
+
+  const auto sep = str.find('.');
+  const auto token = str.substr(0, sep);
+
+  if (sep == str.npos) {
+    str = {};
+    return token;
+  }
+
+  str.remove_prefix(sep + 1);
+  return token;
+}
 
 static bool identify_scope(const DoutPrefixProvider *dpp,
-                           CephContext *cct,
                            const string& host,
                            string *region,
                            string& service)
 {
-  if (!boost::algorithm::ends_with(host, "amazonaws.com")) {
+  if (!host.ends_with("amazonaws.com")) {
     ldpp_dout(dpp, 20) << "NOTICE: cannot identify region for connection to: " << host << dendl;
     return false;
   }
 
-  vector<string> vec;
-
-  get_str_vec(host, ".", vec);
-
-  string ser = service;
   if (service.empty()) {
     service = "s3"; /* default */
   }
 
-  for (auto iter = vec.begin(); iter != vec.end(); ++iter) {
-    auto& s = *iter;
+  auto labels = std::string_view{host};
+  while (!labels.empty()) {
+    const auto s = next_dot_token(labels);
     if (s == "s3" ||
         s == "execute-api" ||
         s == "iam") {
       if (s == "execute-api") {
-        service = s;
+        service = std::string{s};
       }
-      ++iter;
-      if (iter == vec.end()) {
+      if (labels.empty()) {
         ldpp_dout(dpp, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
         return false;
       }
-      auto& next = *iter;
+      const auto next = next_dot_token(labels);
       if (next == "amazonaws") {
         *region = "us-east-1";
         return true;
       }
-      *region = next;
+      *region = std::string{next};
       return true;
-    } else if (boost::algorithm::starts_with(s, "s3-")) {
-      *region = extract_region_name(std::move(s));
+    } else if (s.starts_with("s3-")) {
+      *region = extract_region_name(s);
       return true;
     }
   }
@@ -348,7 +357,7 @@ static void scope_from_api_name(const DoutPrefixProvider *dpp,
     return;
   }
 
-  if (!identify_scope(dpp, cct, host, region, service)) {
+  if (!identify_scope(dpp, host, region, service)) {
     if (service == "iam") {
       *region = cct->_conf->rgw_zonegroup;
     } else {
@@ -432,7 +441,7 @@ auto RGWRESTSimpleRequest::forward_request(const DoutPrefixProvider *dpp, const 
   }
 
   string params_str;
-  get_params_str(new_info.args.get_params(), params_str);
+  do_get_params_str(params, new_info.args.get_params(), params_str);
 
   endpoint.set_path(new_info.request_uri);
   endpoint.set_query(params_str);
@@ -571,7 +580,7 @@ void RGWRESTGenerateHTTPHeaders::init(const string& _method, const string& host,
   scope_from_api_name(this, cct, host, api_name, &region, service);
 
   string params_str;
-  map<string, string>& args = new_info->args.get_params();
+  auto& args = new_info->args.get_params();
   do_get_params_str(params, args, params_str);
 
   /* merge params with extra args so that we can sign correctly */
@@ -605,8 +614,8 @@ static bool is_x_amz(const string& s) {
 
 void RGWRESTGenerateHTTPHeaders::set_extra_headers(const map<string, string>& extra_headers)
 {
-  for (auto iter : extra_headers) {
-    const string& name = lowercase_dash_http_attr(iter.first);
+  for (const auto& iter : extra_headers) {
+    const auto name = lowercase_dash_http_attr(iter.first);
     new_env->set(name, iter.second.c_str());
     if (is_x_amz(name)) {
       new_info->x_meta_map[name] = iter.second;
@@ -746,36 +755,40 @@ void RGWRESTStreamS3PutObj::put_obj_init(const DoutPrefixProvider *dpp, RGWAcces
   send_ready(dpp, key, attrs);
 }
 
-void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
+static const string& get_header_value_or_empty(const map<string, string>& out_headers,
+                                               const string& header_name)
 {
-  map<string, string>::iterator iter = out_headers.find(header_name);
+  const auto iter = out_headers.find(header_name);
   if (iter != out_headers.end()) {
-    str = iter->second;
-  } else {
-    str.clear();
+    return iter->second;
   }
+
+  static const string empty;
+  return empty;
 }
 
-static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, const string& s, ceph::real_time *rt)
+static int parse_rgwx_mtime(const DoutPrefixProvider *dpp,
+                            const string& s,
+                            ceph::real_time *rt)
 {
   string err;
-  vector<string> vec;
+  auto tokens = std::string_view{s};
+  const auto secs_str = next_dot_token(tokens);
 
-  get_str_vec(s, ".", vec);
-
-  if (vec.empty()) {
+  if (secs_str.empty()) {
     return -EINVAL;
   }
 
-  long secs = strict_strtol(vec[0].c_str(), 10, &err);
+  const long secs = strict_strtol(secs_str, 10, &err);
   long nsecs = 0;
   if (!err.empty()) {
     ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
     return -EINVAL;
   }
 
-  if (vec.size() > 1) {
-    nsecs = strict_strtol(vec[1].c_str(), 10, &err);
+  const auto nsecs_str = next_dot_token(tokens);
+  if (!nsecs_str.empty()) {
+    nsecs = strict_strtol(nsecs_str, 10, &err);
     if (!err.empty()) {
       ldpp_dout(dpp, 0) << "ERROR: failed converting mtime (" << s << ") to real_time " << dendl;
       return -EINVAL;
@@ -789,11 +802,12 @@ static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, con
 
 static void send_prepare_convert(const rgw_obj& obj, string *resource)
 {
-  string urlsafe_bucket, urlsafe_object;
-  url_encode(obj.bucket.get_key(':', 0), urlsafe_bucket);
+  resource->clear();
+  url_encode(obj.bucket.get_key(':', 0), *resource);
+  resource->append("/");
+
   // do not encode slash. It leads to 404 errors when fetching objects inside folders.
-  url_encode(obj.key.name, urlsafe_object, false);
-  *resource = urlsafe_bucket + "/" + urlsafe_object;
+  url_encode(obj.key.name, *resource, false);
 }
 
 int RGWRESTStreamRWRequest::send_request(const DoutPrefixProvider *dpp, RGWAccessKey& key, map<string, string>& extra_headers, const rgw_obj& obj, RGWHTTPManager *mgr)
@@ -941,14 +955,13 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
   unique_lock guard(out_headers_lock);
 
   if (etag) {
-    set_str_from_headers(out_headers, "ETAG", *etag);
+    *etag = get_header_value_or_empty(out_headers, "ETAG");
   }
   if (status >= 0) {
     if (mtime) {
-      string mtime_str;
-      set_str_from_headers(out_headers, "RGWX_MTIME", mtime_str);
+      const auto& mtime_str = get_header_value_or_empty(out_headers, "RGWX_MTIME");
       if (!mtime_str.empty()) {
-        int ret = parse_rgwx_mtime(this, cct, mtime_str, mtime);
+        int ret = parse_rgwx_mtime(this, mtime_str, mtime);
         if (ret < 0) {
           return ret;
         }
@@ -957,10 +970,9 @@ int RGWHTTPStreamRWRequest::complete_request(const DoutPrefixProvider* dpp,
       }
     }
     if (psize) {
-      string size_str;
-      set_str_from_headers(out_headers, "RGWX_OBJECT_SIZE", size_str);
+      const auto& size_str = get_header_value_or_empty(out_headers, "RGWX_OBJECT_SIZE");
       string err;
-      *psize = strict_strtoll(size_str.c_str(), 10, &err);
+      *psize = strict_strtoll(size_str, 10, &err);
       if (!err.empty()) {
         ldpp_dout(this, 0) << "ERROR: failed parsing embedded metadata object size (" << size_str << ") to int " << dendl;
         return -EIO;
@@ -1012,29 +1024,34 @@ int RGWHTTPStreamRWRequest::handle_header(std::string_view name, std::string_vie
 
 int RGWHTTPStreamRWRequest::receive_data(void *ptr, size_t len, bool *pause)
 {
-  size_t orig_len = len;
+  const size_t orig_len = len;
 
   if (cb) {
     in_data.append((const char *)ptr, len);
 
-    size_t orig_in_data_len = in_data.length();
+    const size_t orig_in_data_len = in_data.length();
 
-    int ret = cb->handle_data(in_data, pause);
-    if (ret < 0)
+    const int ret = cb->handle_data(in_data, pause);
+    if (ret < 0) {
       return ret;
+    }
+
     if (ret == 0) {
       in_data.clear();
-    } else {
-      /* partial read */
-      ceph_assert(in_data.length() <= orig_in_data_len);
-      len = ret;
-      bufferlist bl;
-      size_t left_to_read = orig_in_data_len - len;
-      if (in_data.length() > left_to_read) {
-        in_data.splice(0, in_data.length() - left_to_read, &bl);
-      }
+      ofs += len;
+      return orig_len;
+    }
+
+    /* partial read */
+    ceph_assert(in_data.length() <= orig_in_data_len);
+    len = ret;
+    bufferlist bl;
+    const size_t left_to_read = orig_in_data_len - len;
+    if (in_data.length() > left_to_read) {
+      in_data.splice(0, in_data.length() - left_to_read, &bl);
     }
   }
+
   ofs += len;
   return orig_len;
 }
@@ -1047,9 +1064,7 @@ void RGWHTTPStreamRWRequest::set_stream_write(bool s) {
 void RGWHTTPStreamRWRequest::unpause_receive()
 {
   std::lock_guard req_locker{get_req_lock()};
-  if (!read_paused) {
-    _set_read_paused(false);
-  }
+  _set_read_paused(false);
 }
 
 void RGWHTTPStreamRWRequest::add_send_data(bufferlist& bl)
