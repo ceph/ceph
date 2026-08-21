@@ -160,6 +160,9 @@ class NFSService(CephService):
         # choose_next_action() ignores False/None in the symmetric diff, so
         # False <-> None transitions do not trigger reconfig or redeploy.
 
+        # Metrics related
+        if nfs_spec.enable_nfs_metrics:
+            deps.append(f'enable_nfs_metrics: {nfs_spec.enable_nfs_metrics}')
         # RDMA related
         if nfs_spec.enable_rdma:
             deps.append(f'enable_rdma: {nfs_spec.enable_rdma}')
@@ -241,7 +244,11 @@ class NFSService(CephService):
         self.run_grace_tool(nfs_spec, 'add', nodeid)
 
         port = daemon_spec.ports[0] if daemon_spec.ports else 2049
-        monitoring_ip, monitoring_port = self.get_monitoring_details(daemon_spec.service_name, host, daemon_spec)
+        monitoring_ip: Optional[str] = None
+        monitoring_port: Optional[int] = None
+        if nfs_spec.enable_nfs_metrics:
+            monitoring_ip, monitoring_port = self.get_monitoring_details(
+                daemon_spec.service_name, host, daemon_spec)
 
         # create the RGW keyring
         rgw_user = f'{daemon_type}.{daemon_id}-rgw'
@@ -292,7 +299,7 @@ class NFSService(CephService):
                             "Use an IP on an RDMA-capable interface or run 'rdma link show' on the host."
                         )
 
-        if monitoring_ip:
+        if nfs_spec.enable_nfs_metrics and monitoring_ip:
             daemon_spec.port_ips.update({str(monitoring_port): monitoring_ip})
 
         ceph_nodes = []
@@ -341,6 +348,7 @@ class NFSService(CephService):
                 "tls_debug": nfs_spec.tls_debug,
                 "ceph_nodes": ceph_nodes,
                 "protocols": "3, 4" if nfs_spec.enable_nfsv3 else "4",
+                "enable_nfs_metrics": nfs_spec.enable_nfs_metrics,
                 "use_old_nodeid": False if nodeid.isdigit() else True,
                 "enable_client_object_cache": nfs_spec.enable_client_object_cache,
                 "client_object_cache_size": (

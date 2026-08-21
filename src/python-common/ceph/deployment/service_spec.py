@@ -1428,6 +1428,7 @@ class NFSServiceSpec(ServiceSpec):
                  tls_ciphers: Optional[str] = None,
                  colocation_ports: Optional[List[Dict[str, int]]] = None,
                  enable_nfsv3: bool = False,
+                 enable_nfs_metrics: bool = False,
                  enable_client_object_cache: bool = False,
                  client_object_cache_size: Optional[Union[str, int]] = None,
                  client_object_cache_max_dirty: Optional[Union[str, int]] = None,
@@ -1460,6 +1461,7 @@ class NFSServiceSpec(ServiceSpec):
         self.cluster_qos_config = cluster_qos_config
         self.cluster_qos_port = cluster_qos_port
         self.enable_nfsv3 = enable_nfsv3
+        self.enable_nfs_metrics = enable_nfs_metrics
 
         # Ceph client object cache settings written to ganesha.conf CEPH block.
         # Disabled by default; enabling it increases Ganesha memory use.
