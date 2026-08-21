@@ -195,10 +195,12 @@ private:
   int schedule_request_impl(const client_id&, const ReqParams&,
                             const Time&, const Cost&,
                             optional_yield) override {
+    auto c = counters();
+    if (c != nullptr) {
+      c->inc(throttle_counters::l_outstanding);
+    }
     if (outstanding_requests++ >= max_requests) {
-      if (auto c = counters();
-          c != nullptr) {
-        c->inc(throttle_counters::l_outstanding);
+      if (c != nullptr) {
         c->inc(throttle_counters::l_throttle);
       }
       return -EAGAIN;
