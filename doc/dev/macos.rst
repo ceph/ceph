@@ -161,16 +161,20 @@ Then configure and build all three::
       -DWITH_RADOSGW_POSIX=OFF -DWITH_RADOSGW_DBSTORE=OFF \
       -DWITH_RADOSGW_SELECT_PARQUET=OFF
   ninja -C build-all vstart-base ceph-mgr ceph-mds radosgw radosgw-admin \
-      cython_cephfs
+      cython_cephfs cython_rbd
 
 ``WITH_MGR_ROOK_CLIENT`` needs the ``rook-client-python`` submodule and the
 dashboard frontend needs ``npm``; each RGW endpoint switched off above pulls in
 another library. None are needed to run the daemons.
 
-``cython_cephfs`` is not optional when the MDS is wanted. ``vstart.sh`` creates
-the file system with ``ceph fs volume``, which the ``volumes`` mgr module
-implements, and that module imports the cephfs Python bindings. Without them
-the command does not exist, and vstart retries it forever rather than failing.
+Both Cython bindings have to be named explicitly, because nothing else in the
+build pulls them in and ``all`` is not available here. ``cython_rbd`` is what
+the ``rbd_support`` mgr module imports.
+
+``cython_cephfs`` is what the MDS needs. ``vstart.sh`` creates the file system
+with ``ceph fs volume``, which the ``volumes`` mgr module implements, and that
+module imports the cephfs bindings. Without them the command does not exist,
+and vstart retries it forever rather than failing.
 
 Running a test cluster
 ----------------------
@@ -237,8 +241,13 @@ Things worth knowing before they are hit:
     ./bin/ceph --admin-daemon asok/osd.0.asok perf dump osd
 
 * The mgr modules that fail to load do so for want of pip packages -
-  ``requests``, ``cherrypy``, ``scipy``, ``urllib3``, ``cryptography`` - except
-  ``devicehealth``, which needs ``WITH_LIBCEPHSQLITE``.
+  ``requests``, ``cherrypy``, ``scipy``, ``urllib3``, ``cryptography``.
+* ``devicehealth`` works, and is worth noting because its failure is an
+  ``[ERR]`` rather than a warning, so on its own it reports HEALTH_ERR for an
+  otherwise healthy cluster. It keeps its database in RADOS through
+  libcephsqlite's sqlite VFS, which builds here. It does log
+  ``Fail to parse JSON result from daemon mon.a`` when it asks for SMART
+  data, because nothing on Darwin answers that query.
 
 Mounting CephFS
 ---------------
