@@ -3,7 +3,7 @@ import { CephServicePlacement } from '~/app/shared/models/service.interface';
 export interface SMBCluster {
   resource_type: typeof CLUSTER_RESOURCE;
   cluster_id: string;
-  auth_mode: typeof AUTHMODE[keyof typeof AUTHMODE];
+  auth_mode: (typeof AUTHMODE)[keyof typeof AUTHMODE];
   domain_settings?: DomainSettings;
   user_group_settings?: JoinSource[];
   custom_dns?: string[];

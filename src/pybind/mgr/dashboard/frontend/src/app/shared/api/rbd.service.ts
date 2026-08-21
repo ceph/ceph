@@ -15,7 +15,10 @@ import { RbdPool } from './rbd.model';
   providedIn: 'root'
 })
 export class RbdService extends ApiClient {
-  constructor(private http: HttpClient, private rbdConfigurationService: RbdConfigurationService) {
+  constructor(
+    private http: HttpClient,
+    private rbdConfigurationService: RbdConfigurationService
+  ) {
     super();
   }
 

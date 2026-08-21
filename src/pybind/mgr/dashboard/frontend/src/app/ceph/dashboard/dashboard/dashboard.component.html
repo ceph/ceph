@@ -1,9 +1,14 @@
 <main aria-label="Overview">
-  <a href="#main"
-     class="sr-only">skip to content</a>
+  <a
+    href="#main"
+    class="sr-only"
+    >skip to content</a
+  >
 
-  <ng-container *ngIf="(enabledFeature$ | async)?.dashboard === false; else dashboardV3"
-                class="main-padding">
+  <ng-container
+    *ngIf="(enabledFeature$ | async)?.dashboard === false; else dashboardV3"
+    class="main-padding"
+  >
     <cd-refresh-selector></cd-refresh-selector>
 
     <cd-health id="main"></cd-health>

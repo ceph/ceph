@@ -1,7 +1,7 @@
 @use '@carbon/styles/scss/config' with (
   $font-path: '~@ibm/plex',
   $flex-grid-columns: 16,
-  $use-flexbox-grid: true,
+  $use-flexbox-grid: true
 );
 @use '@carbon/layout';
 @use '@carbon/colors';
@@ -11,8 +11,8 @@
 @use '@carbon/styles/scss/themes';
 @use '@carbon/styles/scss/theme' with (
   $theme: default.$theme,
-  $fallback: compat.$g90,
-  );
+  $fallback: compat.$g90
+);
 
 /******************************************
   Component token overrides should go here

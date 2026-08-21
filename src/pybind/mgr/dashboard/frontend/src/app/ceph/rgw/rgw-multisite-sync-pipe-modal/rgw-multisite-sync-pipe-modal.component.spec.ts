@@ -54,7 +54,7 @@ describe('RgwMultisiteSyncPipeModalComponent', () => {
     }).compileComponents();
 
     fixture = TestBed.createComponent(RgwMultisiteSyncPipeModalComponent);
-    multisiteServiceMock = (TestBed.inject(RgwMultisiteService) as unknown) as MultisiteServiceMock;
+    multisiteServiceMock = TestBed.inject(RgwMultisiteService) as unknown as MultisiteServiceMock;
     component = fixture.componentInstance;
     fixture.detectChanges();
   });
