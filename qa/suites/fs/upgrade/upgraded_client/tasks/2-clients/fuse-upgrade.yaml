@@ -1,6 +1,9 @@
 teuthology:
   postmerge:
-    - if not is_fuse() then reject() end
+  - |
+    -- Tracker #76780: Drop this entire branch. 
+    -- FUSE upgrade testing is being moved to a separate dedicated job.
+    reject()
 tasks:
 - ceph-fuse:
     client.0:
