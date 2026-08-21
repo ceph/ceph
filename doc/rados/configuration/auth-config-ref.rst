@@ -371,6 +371,27 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    Adjust the above script based on where the data directory for your daemons are located.
 
+   If the daemon is an OSD created using ceph-volume the ``osd_key`` bluestore label may also
+   need to be updated. To find the device that must be passed to the bluestore tool:
+
+   .. code:: bash
+
+       ceph-volume lvm list $OSD_ID --format json
+
+   and find the ``lv_path`` field. Or, for a raw OSD:
+
+   .. code:: bash
+
+       ceph-volume raw list --format json
+
+   and find the ``device`` field for the OSD who's key you wish to rotate.
+
+   Once the device path is acquired the bluestore label can be rotated by executing:
+
+   .. code:: bash
+
+       ceph-bluestore-tool --dev $DEV_PATH set-label-key --key osd_key -v $COPIED_KEYRING
+
    Finally, restart the daemon:
 
    .. code:: bash
