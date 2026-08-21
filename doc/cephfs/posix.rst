@@ -84,6 +84,10 @@ In other words, when it comes to POSIX, ::
 
   HDFS < NFS < CephFS < {XFS, ext4}
 
+The consistency of file data can be relaxed to the close-to-open model that NFS
+uses, for workloads that share files and do not need more than that; see
+:doc:`/cephfs/lazyio`.
+
 
 fsync() and error reporting
 ---------------------------
