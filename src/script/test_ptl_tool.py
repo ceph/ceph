@@ -389,6 +389,43 @@ def test_audit_dry_run_never_clears_ceph_pr_label(ptl_tool, monkeypatch):
     R.issue.update.assert_not_called()
 
 
+def test_audit_redmine_update_failure_logs_warning_but_still_completes(ptl_tool, monkeypatch, caplog):
+    """If clearing the tracker's Ceph PR Label raises (network blip, expired
+    auth), the PR relabel already happened and must not be reported as a
+    crash -- log a warning and still return 'completed'."""
+    issue = _fake_issue(ptl_tool)
+    session = mock.Mock()
+    R = mock.Mock()
+    R.issue.update.side_effect = Exception("Redmine unreachable")
+    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
+    session.delete.return_value = FakeResponse(200)
+    session.post.return_value = FakeResponse(200)
+    with mock.patch("builtins.input", side_effect=["", "y"]):
+        with caplog.at_level(logging.WARNING, logger=ptl_tool.log.name):
+            result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing", R=R)
+    assert result == "completed"
+    assert any("failed to clear tracker" in r.message and "Redmine unreachable" in r.message for r in caplog.records)
+
+
+def test_audit_partial_delete_failures_still_clears_label_but_warns(ptl_tool, monkeypatch, caplog):
+    """A PR stuck in PARTIAL state (old label removal failed) still counts
+    toward 'updated', so the tracker's Ceph PR Label is still cleared (that's
+    the field the --qe-label gate actually checks) -- but it must warn that
+    some PR(s) are still visibly wearing the old label."""
+    issue = _fake_issue(ptl_tool, owned_prs=(111,))
+    session = mock.Mock()
+    R = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
+    session.post.return_value = FakeResponse(200)
+    session.delete.return_value = FakeResponse(500, "server error")
+    with mock.patch("builtins.input", side_effect=["", "y"]):
+        with caplog.at_level(logging.WARNING, logger=ptl_tool.log.name):
+            result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing", R=R)
+    assert result == "completed"
+    R.issue.update.assert_called_once()
+    assert any("still wearing" in r.message and "1 PR(s)" in r.message for r in caplog.records)
+
+
 def test_audit_all_prs_failed_does_not_clear_ceph_pr_label(ptl_tool, monkeypatch):
     """If every PR update failed (function exits nonzero before returning),
     the tracker's Ceph PR Label must be left alone -- nothing was actually
