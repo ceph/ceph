@@ -1425,6 +1425,77 @@ void POSIXDriver::meta_list_keys_complete(void* handle)
   return;
 }
 
+/* LMDB comparator for versioned bucket listing.
+ * Key format: name \0 instance.
+ * Sort: name ascending, then instance descending (newest version first).
+ * Instance is "mtime-{base36}-ino-{base36}" — we extract and compare
+ * the mtime numerically for correct ordering regardless of base36 width. */
+static int posix_lmdb_cmp(const MDB_val *a, const MDB_val *b)
+{
+  std::string_view sa(static_cast<const char*>(a->mv_data), a->mv_size);
+  std::string_view sb(static_cast<const char*>(b->mv_data), b->mv_size);
+
+  auto sep_a = sa.find('\0');
+  auto sep_b = sb.find('\0');
+  std::string_view name_a = sa.substr(0, sep_a);
+  std::string_view name_b = sb.substr(0, sep_b);
+
+  int cmp = name_a.compare(name_b);
+  if (cmp != 0) {
+    return cmp;
+  }
+
+  /* same name — compare instances in reverse (newest first) */
+  std::string_view inst_a = (sep_a != std::string_view::npos)
+    ? sa.substr(sep_a + 1) : std::string_view{};
+  std::string_view inst_b = (sep_b != std::string_view::npos)
+    ? sb.substr(sep_b + 1) : std::string_view{};
+
+  /* empty instance (non-versioned) sorts before any version */
+  if (inst_a.empty() && inst_b.empty()) { return 0; }
+  if (inst_a.empty()) { return -1; }
+  if (inst_b.empty()) { return 1; }
+
+  /* extract mtime from "mtime-{base36}-ino-{base36}" */
+  auto extract_mtime = [](std::string_view inst) -> uint64_t {
+    static constexpr std::string_view pfx = "mtime-";
+    static constexpr std::string_view sep = "-ino-";
+    if (inst.substr(0, pfx.size()) != pfx) {
+      return 0;
+    }
+    auto ino_pos = inst.find(sep, pfx.size());
+    if (ino_pos == std::string_view::npos) {
+      return 0;
+    }
+    uint64_t val = 0;
+    for (size_t i = pfx.size(); i < ino_pos; ++i) {
+      char c = inst[i];
+      uint64_t d;
+      if (c >= '0' && c <= '9') { d = c - '0'; }
+      else if (c >= 'a' && c <= 'z') { d = 10 + (c - 'a'); }
+      else { return 0; }
+      val = val * 36 + d;
+    }
+    return val;
+  };
+
+  uint64_t mt_a = extract_mtime(inst_a);
+  uint64_t mt_b = extract_mtime(inst_b);
+
+  /* descending: larger mtime sorts first */
+  if (mt_a > mt_b) { return -1; }
+  if (mt_a < mt_b) { return 1; }
+
+  /* same mtime — compare full instance for determinism */
+  return inst_b.compare(inst_a);
+}
+
+
+MDB_cmp_func* POSIXBucket::lmdb_cmp()
+{
+  return posix_lmdb_cmp;
+}
+
 int POSIXBucket::fill_cache(const DoutPrefixProvider* dpp, optional_yield y,
                             fill_cache_cb_t& cb)
 {
@@ -1999,17 +2070,28 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   }
 
   int ret = stat(dpp);
-  if (ret < 0) {
-      if (ret == -ENOENT) {
-	// Nothing to do
-	return 0;
-      }
-      return ret;
-  }
-  ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
 
   cls_rgw_obj_key key;
   get_key().get_index_key(&key);
+
+  if (ret == -ENOENT) {
+    if (!versioned() || !key.instance.empty() ) {
+      // Nothing to do
+      return 0;
+    }
+    // A delete marker must be created even if the key does not exist
+    // Create the versioned directory and create a delete marker
+    ret = make_ent(posix::ObjectType::VERSIONED);
+    if (ret < 0) {
+      return ret;
+    }
+    ret = ent->create(dpp, nullptr, false);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not create " << ent->get_name() << dendl;
+      return ret;
+    }
+  }
+  ret = ent->remove(dpp, y, /*delete_children=*/false, &del_result);
 
   driver->get_bucket_cache()->remove_entry(dpp, b->get_name(), key);
 
@@ -3462,6 +3544,21 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
   // save shadow name before rename changes info.bucket.name
   std::string shadow_cache_name = shadow->get_name();
 
+  // If versioned, update the version id in the POSIXObject to the mtime+inode
+  // so the directory will be renamed to the correct name.
+
+  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
+  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
+
+  if (sb->versioned()) {
+    auto *shadow_dir = shadow->get_dir();
+    ret = shadow_dir->stat(dpp, true);
+    struct statx f_stx = shadow_dir->get_stx();
+    std::string ver_id = posix::posix_version_id_from_statx (f_stx);
+    to->set_instance_id(ver_id);
+  }
+
+
   // Rename to target_obj
   ret = shadow->rename(dpp, y, target_obj);
   if (ret < 0) {
@@ -3470,8 +3567,6 @@ int POSIXMultipartUpload::complete(const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  POSIXObject *to = static_cast<POSIXObject*>(target_obj);
-  POSIXBucket *sb = static_cast<POSIXBucket*>(target_obj->get_bucket());
   if (sb->versioned()) {
     ret = to->set_cur_version(dpp);
     if (ret < 0) {
