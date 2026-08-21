@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "./out-tsc/spec",
-    "module": "commonjs",
+    "module": "ES2022",
     "target": "es2015",
     "types": [
       "jest",
