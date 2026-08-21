@@ -1,20 +1,21 @@
-build on MacOS
-==============
+Build and run Ceph on macOS
+===========================
 
 Ceph does not have macOS CI, so macOS is a best-effort platform. What follows
 was verified on macOS 26.6 (Darwin 25.6) on Apple silicon, with the Apple clang
 that ships with the Command Line Tools. No third-party toolchain is needed; a
 separate ``brew install llvm`` is not required.
 
-The client libraries, the mon, the OSD, the mgr, the MDS, the RGW and the
-offline tools all build and run, and a ``vstart.sh`` cluster backed by
-``memstore`` runs all five daemons together. BlueStore does not build, so the
-OSD is memory-backed only.
+The client libraries, the mon, the OSD, the mgr, the MDS and the RGW all build
+and run. A ``vstart.sh`` cluster runs all five daemons together, RADOS, RBD and
+S3 all answer, and ``ceph-fuse`` mounts CephFS. The one structural limitation
+is that BlueStore does not build, so the OSD is backed by ``memstore`` and its
+data does not survive a restart.
 
-``do_cmake_macos.sh`` enables the mon, the OSD, the client libraries and the
-tools. The mgr, the MDS and the RGW are left off there, not because they fail
-to build but because each needs packages beyond the base set; `Optional
-daemons`_ covers what to install and which options to pass.
+``do_cmake_macos.sh`` configures the mon, the OSD, the client libraries and the
+tools, which need nothing beyond `Dependencies`_. The mgr, the MDS, the RGW and
+``ceph-fuse`` each want something further and are left off there; `Optional
+components`_ covers what to install and which options to add.
 
 Dependencies
 ------------
@@ -59,8 +60,9 @@ virtualenv interpreter, and turns off what cannot build here::
   ./do_cmake_macos.sh
   ninja -C build vstart-base librbd rbd
 
-Build named targets. The ``all`` target is not expected to succeed, because it
-also covers the components that have not been ported.
+Always build named targets. ``all`` is not expected to succeed, because it also
+covers the components that have not been ported, and it is not the way to reach
+the Cython bindings either - those have to be asked for by name.
 
 What builds
 -----------
@@ -83,55 +85,22 @@ Command line and offline tools::
   rados rbd crushtool osdmaptool monmaptool ceph-authtool ceph-conf
   ceph-dencoder ceph-erasure-code-tool ceph-kvstore-tool ceph-monstore-tool
   ceph-objectstore-tool ceph-diff-sorted librados-config neorados ceph-syn
-  rbd-replay ceph-immutable-object-cache radosgw-admin ceph-fuse
+  rbd-replay ceph-immutable-object-cache radosgw-admin
+
+``ceph-fuse`` builds too, but only with macFUSE installed; see `Mounting
+CephFS`_.
 
 ``ceph-dencoder`` loads its type modules from the install path, so point it at
 the build tree::
 
   CEPH_LIB=$PWD/build/lib ./build/bin/ceph-dencoder list_types
 
-Hardware acceleration
----------------------
+Optional components
+-------------------
 
-Two things kept the ARMv8 code paths Linux-only, and both are now handled, so
-an Apple silicon build gets them with nothing to configure. Apple's toolchain
-spells ``CMAKE_SYSTEM_PROCESSOR`` as ``arm64`` rather than ``aarch64``, which
-decided at configure time what was compiled at all; and Darwin has no
-``getauxval()``, so the runtime probe in ``arch/arm.c`` reads the features from
-``sysctl`` instead. What that buys:
-
-* crc32c uses the CRC32 instructions. ``unittest_crc32c`` reports around
-  7400 MB/s for them against 1260 MB/s for the portable table, and crc32c is
-  on every read and write path.
-* jerasure and shec use gf-complete's NEON Galois field routines rather than
-  its table arithmetic, and the legacy ``ec_jerasure_neon`` and
-  ``ec_shec_neon`` plugins are built.
-* ISA-L builds, so ``WITH_EC_ISA_PLUGIN`` turns itself on and the ``isa``
-  erasure code plugin exists. ISA-L's own aarch64 dispatchers already special
-  case Darwin, where they have no auxiliary vector to read: they return the
-  NEON implementations and never the SVE ones, which Apple silicon does not
-  have.
-* the zlib compressor is built with the ISA-L igzip sources, so
-  ``compressor_zlib_isal=true`` takes effect instead of warning and falling
-  back to plain zlib.
-
-To see the ISA-L plugin on a running cluster, three OSDs are enough for a
-``k=2 m=1`` pool::
-
-  MON=1 OSD=3 MDS=0 MGR=0 RGW=0 ../src/vstart.sh -n --memstore -X
-  ./bin/ceph osd erasure-code-profile set isa21 plugin=isa k=2 m=1 \
-      crush-failure-domain=osd
-  ./bin/ceph osd pool create ecpool 8 8 erasure isa21
-
-Reading an object back after stopping one of the acting set's OSDs exercises
-the ISA-L decode, not just the encode.
-
-Optional daemons
-----------------
-
-The mgr, the MDS and the RGW need extra packages and options rather than source
-changes. Build them into a separate directory so the base configuration is left
-alone.
+The mgr, the MDS, the RGW and ``ceph-fuse`` need extra packages and options
+rather than source changes. Build them into a separate directory so the base
+configuration is left alone.
 
 The MDS needs only ``WITH_CEPHFS=ON``.
 
@@ -150,31 +119,35 @@ The RGW needs liboath and two more submodules::
   git submodule update --init src/libkmip
   git submodule update --init --recursive src/s3select
 
-Then configure and build all three::
+``ceph-fuse`` needs macFUSE. ``WITH_FUSE`` does a
+``find_package(FUSE REQUIRED)``, so turning it on without macFUSE present
+fails at configure time rather than quietly dropping the binary::
+
+  brew install --cask macfuse
+
+Then configure and build the lot::
 
   BUILD_DIR=build-all ./do_cmake_macos.sh \
       -DWITH_SYSTEM_BOOST=OFF \
-      -DWITH_MGR=ON -DWITH_CEPHFS=ON -DWITH_RADOSGW=ON \
+      -DWITH_MGR=ON -DWITH_CEPHFS=ON -DWITH_RADOSGW=ON -DWITH_FUSE=ON \
       -DWITH_MGR_ROOK_CLIENT=OFF -DWITH_MGR_DASHBOARD_FRONTEND=OFF \
       -DWITH_RADOSGW_AMQP_ENDPOINT=OFF -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF \
       -DWITH_RADOSGW_LUA_PACKAGES=OFF -DWITH_RADOSGW_D4N=OFF \
       -DWITH_RADOSGW_POSIX=OFF -DWITH_RADOSGW_DBSTORE=OFF \
       -DWITH_RADOSGW_SELECT_PARQUET=OFF
   ninja -C build-all vstart-base ceph-mgr ceph-mds radosgw radosgw-admin \
-      cython_cephfs cython_rbd
+      ceph-fuse cython_cephfs cython_rbd
 
 ``WITH_MGR_ROOK_CLIENT`` needs the ``rook-client-python`` submodule and the
 dashboard frontend needs ``npm``; each RGW endpoint switched off above pulls in
 another library. None are needed to run the daemons.
 
-Both Cython bindings have to be named explicitly, because nothing else in the
-build pulls them in and ``all`` is not available here. ``cython_rbd`` is what
-the ``rbd_support`` mgr module imports.
-
-``cython_cephfs`` is what the MDS needs. ``vstart.sh`` creates the file system
-with ``ceph fs volume``, which the ``volumes`` mgr module implements, and that
-module imports the cephfs bindings. Without them the command does not exist,
-and vstart retries it forever rather than failing.
+Both Cython bindings have to be named explicitly. ``cython_rbd`` is what the
+``rbd_support`` mgr module imports. ``cython_cephfs`` is what the MDS needs:
+``vstart.sh`` creates the file system with ``ceph fs volume``, which the
+``volumes`` mgr module implements, and that module imports the cephfs
+bindings. Without them the command does not exist, and vstart retries it
+forever rather than failing.
 
 Running a test cluster
 ----------------------
@@ -240,49 +213,39 @@ Things worth knowing before they are hit:
     ./bin/ceph --admin-daemon asok/osd.0.asok status
     ./bin/ceph --admin-daemon asok/osd.0.asok perf dump osd
 
-* The mgr modules that fail to load do so for want of pip packages, and
-  nothing about them is specific to Darwin - all of these install as arm64
-  wheels, ``scipy`` included, with nothing to compile::
+* The mgr modules that fail to load do so for want of pip packages, and nothing
+  about them is specific to Darwin - all of these install as arm64 wheels,
+  ``scipy`` included, with nothing to compile::
 
     uv pip install --python .venv/bin/python requests cherrypy scipy \
         urllib3 cryptography
 
-  They have to be importable by the *embedded* interpreter, so this is only
+  They have to be importable by the embedded interpreter, so this is only
   useful together with the ``PYTHONPATH`` above.
-* ``dashboard`` is the one module pip cannot finish. It also wants its
-  frontend assets, which need ``WITH_MGR_DASHBOARD_FRONTEND=ON`` and npm::
+* ``dashboard`` is the one module those packages do not finish. It also wants
+  its frontend assets, which need ``WITH_MGR_DASHBOARD_FRONTEND=ON`` and npm::
 
     Error ENOENT: module 'dashboard' reports that it cannot run on the active
     manager daemon: Frontend assets not found ...: incomplete build?
-* ``devicehealth`` works, and is worth noting because its failure is an
-  ``[ERR]`` rather than a warning, so on its own it reports HEALTH_ERR for an
-  otherwise healthy cluster. It keeps its database in RADOS through
-  libcephsqlite's sqlite VFS, which builds here. It does log
+
+* ``devicehealth`` keeps its database in RADOS through libcephsqlite's sqlite
+  VFS, and works. It is worth knowing that its failures are reported as
+  ``[ERR]`` rather than as warnings, so this one module is enough to put an
+  otherwise healthy cluster in HEALTH_ERR. It does log
   ``Fail to parse JSON result from daemon mon.a`` when it asks for SMART
   data, because nothing on Darwin answers that query.
 
 Mounting CephFS
 ---------------
 
-``ceph-fuse`` builds and mounts. It needs macFUSE, which is not part of the
-base dependency set - and because ``WITH_FUSE`` does a
-``find_package(FUSE REQUIRED)``, turning it on without macFUSE installed
-fails at configure time rather than quietly dropping the binary. So
-``do_cmake_macos.sh`` leaves it off, and it goes on the `Optional daemons`_
-configure line alongside the MDS::
-
-  brew install --cask macfuse
-
-macFUSE's default backend is a kernel extension, so macOS asks for it to be
-approved and then wants a restart before the first mount. Until that has
-happened the mount fails inside macFUSE, before Ceph is involved::
+macFUSE's default backend is a kernel extension, so before the first mount
+macOS wants it approved and then wants a restart. Until that has happened the
+mount fails inside macFUSE, before Ceph is involved::
 
   mount_macfuse: the file system is not available (1)
 
-Add ``-DWITH_FUSE=ON`` to the configure invocation, then build and mount the
-file system vstart created::
+After that, mount the file system vstart created::
 
-  ninja -C build-all ceph-fuse
   cd build-all
   mkdir -p /tmp/cephfs
   ./bin/ceph-fuse -c ceph.conf --client_fs a /tmp/cephfs
@@ -293,20 +256,58 @@ Reads, writes, directories, rename, truncate, chmod, symlinks, hard links,
 
 macFUSE also has a second backend built on FSKit, Apple's user-space file
 system API, selected with ``-o backend=fskit``. It needs no kernel extension
-and so no restart, which makes it the more attractive option for a laptop,
-but it is not the one used above and it comes with strings attached:
+and so no restart, which makes it the more attractive option for a laptop, but
+it is not the one described above and it comes with strings attached:
 
 * the file system extension has to be enabled under ``System Settings >
   General > Login Items & Extensions``. macFUSE ships two of them, and a
-  distributed file system needs the non-local one; PluginKit does
-  not always find either, in which case macFUSE's own advice is to register it
-  by hand with ``sudo pluginkit -v -a`` against the ``.appex`` under
+  distributed file system needs the non-local one; PluginKit does not always
+  find either, in which case macFUSE's own advice is to register it by hand
+  with ``sudo pluginkit -v -a`` against the ``.appex`` under
   ``/Library/Filesystems/macfuse.fs``.
 * mount points outside ``/Volumes`` are not supported.
 * macFUSE documents the backend as having no FUSE notification API and no
   request context. ``fuse_ll.cc`` reads the caller's uid and gid out of
   ``fuse_req_ctx()`` on nearly every operation, so whether permissions behave
   there is an open question - it has not been tried.
+
+Hardware acceleration
+---------------------
+
+An Apple silicon build uses the ARMv8 accelerated code paths, and there is
+nothing to configure for it:
+
+* crc32c uses the CRC32 instructions. ``unittest_crc32c`` reports around
+  7400 MB/s for them against 1260 MB/s for the portable table, and crc32c is
+  on every read and write path.
+* jerasure and shec use gf-complete's NEON Galois field routines rather than
+  its table arithmetic, and the legacy ``ec_jerasure_neon`` and
+  ``ec_shec_neon`` plugins are built.
+* ISA-L builds, so ``WITH_EC_ISA_PLUGIN`` turns itself on and the ``isa``
+  erasure code plugin exists. ISA-L's own aarch64 dispatchers already special
+  case Darwin, where they have no auxiliary vector to read: they return the
+  NEON implementations and never the SVE ones, which Apple silicon does not
+  have.
+* the zlib compressor is built with the ISA-L igzip sources, so
+  ``compressor_zlib_isal=true`` takes effect instead of warning and falling
+  back to plain zlib.
+
+Two Darwin details decide all of the above, and are worth remembering if any of
+it ever goes quiet: Apple's toolchain spells ``CMAKE_SYSTEM_PROCESSOR`` as
+``arm64`` rather than ``aarch64``, which is what selects the ARMv8 sources at
+configure time, and Darwin has no ``getauxval()``, so the runtime probe in
+``arch/arm.c`` reads the CPU features from ``sysctl``.
+
+To exercise the ISA-L plugin on a running cluster, three OSDs are enough for a
+``k=2 m=1`` pool::
+
+  MON=1 OSD=3 MDS=0 MGR=0 RGW=0 ../src/vstart.sh -n --memstore -X
+  ./bin/ceph osd erasure-code-profile set isa21 plugin=isa k=2 m=1 \
+      crush-failure-domain=osd
+  ./bin/ceph osd pool create ecpool 8 8 erasure isa21
+
+Reading an object back after stopping one of the acting set's OSDs exercises
+the ISA-L decode, not just the encode.
 
 What does not build
 -------------------
