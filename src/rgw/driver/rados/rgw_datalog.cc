@@ -809,7 +809,7 @@ RGWDataChangesLog::renew_entries(const DoutPrefixProvider* dpp)
       // Can't use a move iterator here, since the keys have to stay
       // until they're safely on the OSD to avoid the risk of
       // double-decrement from recovery.
-      auto to_copy = std::min(sem_max_keys, keys.size());
+      auto to_copy = std::min<uint64_t>(sem_max_keys, keys.size());
       std::copy_n(keys.begin(), to_copy,
 		  std::inserter(batch, batch.end()));
       auto op = WriteOp{}.exec(ss::decrement(std::move(batch)));
