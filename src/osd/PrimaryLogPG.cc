@@ -1736,8 +1736,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
         if (!pending_pool_migration_reservation_ops.empty()) {
           dout(20) << __func__ << " reservations already requested, adding op to the replies list" << dendl;
-          pg_t source_pg = get_source_pg_from_hash(start_obj);
-          pool_migration_target_delete(source_pg, start_obj, op);
           pending_pool_migration_reservation_ops.push_back(op);
           return;
         }
