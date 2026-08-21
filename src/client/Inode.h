@@ -267,6 +267,8 @@ struct Inode : RefCountedObject {
   // which LazyIO allows.  The MDS does not keep such a cache coherent, so it
   // has to be revalidated explicitly before it can be trusted again.
   bool lazyio_cache_stale = false;
+  // when that happened, i.e. the last time the cache was known to be good
+  ceph::coarse_mono_time lazyio_validated_at;
 
   uint64_t reported_size = 0;
   uint64_t wanted_max_size = 0;

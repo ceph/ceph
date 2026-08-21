@@ -434,6 +434,9 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   caps_release_delay = cct->_conf.get_val<std::chrono::seconds>(
     "client_caps_release_delay");
 
+  close_to_open_timeout = cct->_conf.get_val<std::chrono::seconds>(
+    "client_close_to_open_timeout");
+
   injected_write_delay_secs = std::chrono::duration<int>(
     cct->_conf.get_val<std::chrono::seconds>("client_inject_write_delay_secs")).count();
 
@@ -6274,7 +6277,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
      */
     if ((revoked & (CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER)) &&
 	(new_caps & CEPH_CAP_FILE_LAZYIO))
-      in->lazyio_cache_stale = true;
+      _mark_lazyio_cache_stale(in);
 
     // recall delegations if we're losing caps necessary for them
     if (revoked & ceph_deleg_caps_for_type(CEPH_DELEGATION_RD))
@@ -11810,6 +11813,21 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl,
   }
   loff_t start_pos = offset;
 
+  /*
+   * Put an upper bound on how long a close-to-open client keeps serving a
+   * cache that the MDS is not protecting, in the spirit of the acregmax
+   * mount option of NFS.  Only done for blocking reads: the caller of an
+   * asynchronous one does not expect to wait for a flush.
+   */
+  if (!onfinish && f->close_to_open && in->lazyio_cache_stale &&
+      close_to_open_timeout > std::chrono::seconds::zero() &&
+      ceph::coarse_mono_clock::now() >
+	in->lazyio_validated_at + close_to_open_timeout) {
+    rc = _lazyio_synchronize(in, f->actor_perms);
+    if (rc < 0)
+      goto done;
+  }
+
   if (in->inline_version == 0) {
     auto r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
     if (r < 0) {
@@ -11890,7 +11908,7 @@ retry:
 
     // reading through the cache on Fl alone leaves it unprotected by the MDS
     if (!(have & CEPH_CAP_FILE_CACHE))
-      in->lazyio_cache_stale = true;
+      _mark_lazyio_cache_stale(in);
 
     if (f->flags & O_RSYNC) {
       _flush_range(in, offset, size);
@@ -12988,7 +13006,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
   // buffering on Fl alone leaves the cache unprotected by the MDS
   if (buffered_write && !(have & CEPH_CAP_FILE_BUFFER))
-    in->lazyio_cache_stale = true;
+    _mark_lazyio_cache_stale(in);
 
   ceph::ref_t<WriteEncMgr> enc_mgr;
 
@@ -14426,6 +14444,22 @@ int Client::ll_lazyio(Fh *fh, int enable)
 }
 
 /*
+ * Remember that the object cache of this inode is no longer protected by the
+ * MDS, and when that started, which is the last point in time at which the
+ * cache was known to match the file.
+ */
+void Client::_mark_lazyio_cache_stale(Inode *in)
+{
+  if (in->lazyio_cache_stale)
+    return;
+
+  ldout(cct, 20) << __func__ << " " << *in << dendl;
+
+  in->lazyio_cache_stale = true;
+  in->lazyio_validated_at = ceph::coarse_mono_clock::now();
+}
+
+/*
  * Whether a file opened with these flags gets close-to-open consistency
  * instead of the default POSIX consistency.
  */
@@ -14460,6 +14494,14 @@ int Client::_lazyio_synchronize(Inode *in, const UserPerm& perms)
    * made sure that there is nothing dirty left to lose.
    */
   _invalidate_inode_cache(in);
+
+  /*
+   * If something still pins part of the cache, it stays marked stale, but
+   * restart the clock so that close_to_open_timeout bounds the next attempt
+   * instead of every read repeating this one.
+   */
+  if (in->lazyio_cache_stale)
+    in->lazyio_validated_at = ceph::coarse_mono_clock::now();
 
   return _getattr(in, CEPH_STAT_CAP_SIZE, perms);
 }
@@ -19238,6 +19280,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_cache_size",
     "client_caps_release_delay",
     "client_close_to_open",
+    "client_close_to_open_timeout",
     "client_deleg_break_on_open",
     "client_deleg_timeout",
     "client_fscrypt_as",
@@ -19268,6 +19311,10 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("client_close_to_open")) {
     close_to_open = cct->_conf.get_val<bool>("client_close_to_open");
+  }
+  if (changed.count("client_close_to_open_timeout")) {
+    close_to_open_timeout = cct->_conf.get_val<std::chrono::seconds>(
+      "client_close_to_open_timeout");
   }
   if (changed.count("fuse_default_permissions")) {
     fuse_default_permissions = cct->_conf.get_val<bool>("fuse_default_permissions");
