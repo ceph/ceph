@@ -16,6 +16,11 @@ describe('RGW Accounts page', () => {
   });
 
   describe('create, edit & delete account tests', () => {
+    before(() => {
+      cy.login();
+      accounts.cleanUpAccount(account_name);
+    });
+
     it('should create account with all details', () => {
       const account = {
         name: account_name,
@@ -45,14 +50,13 @@ describe('RGW Accounts page', () => {
     });
   });
 
-  describe('create, edit & delete account tests', () => {
+  describe('form validation tests', () => {
     it('should put invalid input into account creation form and check fields are marked invalid', () => {
       accounts.navigateTo('create');
       accounts.invalidCreate();
     });
 
     it('should put invalid input into account edit form and check fields are marked invalid', () => {
-      accounts.navigateTo('create');
       accounts.invalidEdit();
     });
   });

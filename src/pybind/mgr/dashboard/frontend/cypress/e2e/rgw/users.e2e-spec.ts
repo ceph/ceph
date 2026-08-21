@@ -20,6 +20,11 @@ describe('RGW users page', () => {
   });
 
   describe('create, edit & delete user tests', () => {
+    before(() => {
+      cy.login();
+      users.cleanUpUser(user_name);
+    });
+
     it('should create user', () => {
       users.navigateTo('create');
       users.create(tenant, user_id, 'Some Name', 'original@website.com', '1200');
@@ -40,6 +45,12 @@ describe('RGW users page', () => {
   });
 
   describe('Invalid input tests', () => {
+    before(() => {
+      cy.login();
+      users.cleanUpUser('000invalid_tenant$000invalid_create_user');
+      users.cleanUpUser('000invalid_tenant$000invalid_edit_user');
+    });
+
     it('should put invalid input into user creation form and check fields are marked invalid', () => {
       users.invalidCreate();
     });
@@ -57,6 +68,12 @@ describe('RGW users page', () => {
       email: 'test@test',
       tenant: 'tenanted_acc'
     };
+
+    before(() => {
+      cy.login();
+      users.cleanUpUser(`${account.tenant}$${user_id}`);
+      accounts.cleanUpAccount(account.name);
+    });
 
     it('should create an account and store account_id', () => {
       accounts.navigateTo('create');
