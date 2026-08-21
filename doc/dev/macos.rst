@@ -240,8 +240,20 @@ Things worth knowing before they are hit:
     ./bin/ceph --admin-daemon asok/osd.0.asok status
     ./bin/ceph --admin-daemon asok/osd.0.asok perf dump osd
 
-* The mgr modules that fail to load do so for want of pip packages -
-  ``requests``, ``cherrypy``, ``scipy``, ``urllib3``, ``cryptography``.
+* The mgr modules that fail to load do so for want of pip packages, and
+  nothing about them is specific to Darwin - all of these install as arm64
+  wheels, ``scipy`` included, with nothing to compile::
+
+    uv pip install --python .venv/bin/python requests cherrypy scipy \
+        urllib3 cryptography
+
+  They have to be importable by the *embedded* interpreter, so this is only
+  useful together with the ``PYTHONPATH`` above.
+* ``dashboard`` is the one module pip cannot finish. It also wants its
+  frontend assets, which need ``WITH_MGR_DASHBOARD_FRONTEND=ON`` and npm::
+
+    Error ENOENT: module 'dashboard' reports that it cannot run on the active
+    manager daemon: Frontend assets not found ...: incomplete build?
 * ``devicehealth`` works, and is worth noting because its failure is an
   ``[ERR]`` rather than a warning, so on its own it reports HEALTH_ERR for an
   otherwise healthy cluster. It keeps its database in RADOS through
