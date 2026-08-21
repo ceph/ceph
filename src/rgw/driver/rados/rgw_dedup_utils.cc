@@ -47,7 +47,8 @@ namespace rgw::dedup {
   void encode(const Throttle& t, ceph::bufferlist& bl)
   {
     ENCODE_START(1, 1, bl);
-    encode(t.get_max_calls_per_second(), bl);
+    uint64_t max_calls_per_sec = t.get_max_calls_per_second();
+    encode(max_calls_per_sec, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -55,7 +56,7 @@ namespace rgw::dedup {
   void decode(Throttle& t, ceph::bufferlist::const_iterator& bl)
   {
     DECODE_START(1, bl);
-    size_t max_calls_per_sec;
+    uint64_t max_calls_per_sec;
     decode(max_calls_per_sec, bl);
     t.set_max_calls_per_sec(max_calls_per_sec);
     DECODE_FINISH(bl);
