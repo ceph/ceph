@@ -342,6 +342,68 @@ def test_audit_applies_to_every_pr_when_confirmed(ptl_tool, monkeypatch):
     assert posted == {"labels": ["needs-merge"]}
 
 
+def test_audit_clears_ceph_pr_label_when_R_given(ptl_tool, monkeypatch):
+    """When R is supplied and the relabel actually completes, the tracker's
+    own 'Ceph PR Label' custom field must be cleared -- that field is what
+    the --qe-label gate filters open trackers on, so clearing it (not the
+    tracker's status) is what frees the label for a new round."""
+    issue = _fake_issue(ptl_tool)
+    session = mock.Mock()
+    R = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
+    session.delete.return_value = FakeResponse(200)
+    session.post.return_value = FakeResponse(200)
+    with mock.patch("builtins.input", side_effect=["", "y"]):
+        result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing", R=R)
+    assert result == "completed"
+    R.issue.update.assert_called_once_with(
+        issue.id,
+        custom_fields=[{'id': ptl_tool.REDMINE_CUSTOM_FIELD_ID_CEPH_PR_LABEL, 'value': ''}],
+    )
+
+
+def test_audit_does_not_touch_redmine_when_R_not_given(ptl_tool, monkeypatch):
+    """R is optional -- omitting it (the default) must not raise or attempt
+    any Redmine call, only the PR relabel."""
+    issue = _fake_issue(ptl_tool)
+    session = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "some PR")])
+    session.delete.return_value = FakeResponse(200)
+    session.post.return_value = FakeResponse(200)
+    with mock.patch("builtins.input", side_effect=["", "y"]):
+        result = ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing")
+    assert result == "completed"
+
+
+def test_audit_dry_run_never_clears_ceph_pr_label(ptl_tool, monkeypatch):
+    """--dry-run must not touch Redmine either, even when R is given."""
+    issue = _fake_issue(ptl_tool)
+    session = mock.Mock()
+    R = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "PR one"), (222, "PR two")])
+    with mock.patch("builtins.input", side_effect=[""]):
+        result = ptl_tool.audit_tracker_and_relabel(
+            session, issue, "wip-yuri-testing", dry_run=True, R=R
+        )
+    assert result == "completed"
+    R.issue.update.assert_not_called()
+
+
+def test_audit_all_prs_failed_does_not_clear_ceph_pr_label(ptl_tool, monkeypatch):
+    """If every PR update failed (function exits nonzero before returning),
+    the tracker's Ceph PR Label must be left alone -- nothing was actually
+    relabeled, so the label must not be reported as free."""
+    issue = _fake_issue(ptl_tool, owned_prs=(111, 222))
+    session = mock.Mock()
+    R = mock.Mock()
+    _patch_get(ptl_tool, monkeypatch, [(111, "PR one"), (222, "PR two")])
+    session.post.return_value = FakeResponse(403, "Resource not accessible")
+    with mock.patch("builtins.input", side_effect=["", "y"]):
+        with pytest.raises(SystemExit):
+            ptl_tool.audit_tracker_and_relabel(session, issue, "wip-yuri-testing", R=R)
+    R.issue.update.assert_not_called()
+
+
 def test_audit_post_failure_for_one_pr_skips_its_delete_but_continues_others(ptl_tool, monkeypatch, caplog):
     """New labels go on FIRST: if adding them to one PR fails outright, that
     PR's old label must be left alone (nothing to clean up on a failed add),

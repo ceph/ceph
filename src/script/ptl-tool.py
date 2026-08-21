@@ -438,7 +438,7 @@ def get_pr_tracker_string(session, pr, response=None):
     pr_link = f'"PR #{pr}":{response["html_url"]}'
     return f'| {pr_link} | {author} | {labels_str} | {title} |'
 
-def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=False):
+def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=False, R=None):
     """
     Interactive helper for the --qe-label ticket-decision prompt's 'a'
     option: confirm the matched tracker is actually QA Approved, then
@@ -447,6 +447,13 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
     relabel_tested()/sync_approved() logic in the ptl-tool-helper
     skill's check-wip-labels.sh, done here natively so ptl-tool.py
     doesn't depend on that separate script.
+
+    If R (the Redmine client) is given, also clears the tracker's own
+    'Ceph PR Label' custom field once the PR relabel succeeds -- that
+    field is exactly what the --qe-label gate above filters open
+    trackers on, so clearing it (not closing the tracker, not touching
+    its status) is what actually frees the label for a new round while
+    this one stays QA Approved and open, full audit trail intact.
 
     Returns one of:
       'not_approved' -- ticket isn't QA Approved yet, caller should
@@ -569,6 +576,11 @@ def audit_tracker_and_relabel(session, redmine_issue, default_label, dry_run=Fal
     if updated == 0:
         log.error(f"All {len(prs)} PR(s) failed to update -- no labels were changed anywhere.")
         sys.exit(1)
+
+    if R is not None:
+        R.issue.update(redmine_issue.id, custom_fields=[{'id': REDMINE_CUSTOM_FIELD_ID_CEPH_PR_LABEL, 'value': ''}])
+        print(f"Cleared 'Ceph PR Label' on tracker #{redmine_issue.id} -- '{label}' is now free for a new round "
+              f"(tracker stays QA Approved and open).")
 
     print(f"\nDone. Re-run ptl-tool.py if you want to start a new round for tracker #{redmine_issue.id} or a different label.")
     return 'completed'
@@ -2337,7 +2349,7 @@ def build_branch(args):
                     open_in_browser([t_url])
                     log.info(f"Opened {t_url} in browser.")
                 elif ans == 'a':
-                    result = audit_tracker_and_relabel(session, t, args.qe_label, dry_run=args.dry_run)
+                    result = audit_tracker_and_relabel(session, t, args.qe_label, dry_run=args.dry_run, R=R)
                     if result == 'completed':
                         log.info("Exiting script.")
                         sys.exit(0)
