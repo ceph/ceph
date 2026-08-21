@@ -2316,6 +2316,7 @@ private:
   int _flock(Fh *fh, int cmd, uint64_t owner);
   int _lazyio(Fh *fh, int enable);
   int _lazyio_synchronize(Inode *in, const UserPerm& perms);
+  void _mark_lazyio_cache_stale(Inode *in);
   bool _is_close_to_open(int flags) const;
 
   Dentry *get_or_create(Inode *dir, const std::string& name);
@@ -2504,6 +2505,7 @@ private:
 
   ceph::coarse_mono_time last_auto_reconnect;
   std::chrono::seconds caps_release_delay, mount_timeout;
+  std::chrono::seconds close_to_open_timeout;
   int injected_write_delay_secs;
   // trace generation
   std::ofstream traceout;
