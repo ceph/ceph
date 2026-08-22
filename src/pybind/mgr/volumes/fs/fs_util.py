@@ -11,10 +11,11 @@ from .exception import VolumeException
 
 log = logging.getLogger(__name__)
 
-def create_pool(mgr, pool_name, **extra_args):
+def create_pool(mgr, pool_name, force, **extra_args):
     # create the given pool
     command = extra_args
-    command.update({'prefix': 'osd pool create', 'pool': pool_name})
+    command.update({'prefix': 'osd pool create', 'pool': pool_name,
+                    'force': force})
     return mgr.mon_command(command)
 
 def remove_pool(mgr, pool_name):
