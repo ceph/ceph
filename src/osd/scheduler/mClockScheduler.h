@@ -66,6 +66,23 @@ class mClockScheduler : public OpScheduler {
   SubQueue high_priority;
   priority_t immediate_class_priority = std::numeric_limits<priority_t>::max();
 
+  /**
+   * last_mclock_service_time
+   *
+   * Time (per crimson::dmclock::get_time()) at which an item was last
+   * successfully pulled from the mclock-managed queue (scheduler).
+   * TimeZero means "never" and is treated as already-expired.
+   */
+  crimson::dmclock::Time last_mclock_service_time = crimson::dmclock::TimeZero;
+
+  /// True if the mclock-managed queue has pending work that has gone
+  /// unserviced for at least high_priority_max_starve_time.
+  bool mclock_queue_is_starved() const {
+    return !scheduler.empty() &&
+      (crimson::dmclock::get_time() - last_mclock_service_time) >=
+        mclock_conf.get_scheduler_max_starve_time();
+  }
+
   static scheduler_id_t get_scheduler_id(const OpSchedulerItem &item) {
     return scheduler_id_t{
       item.get_scheduler_class(),
