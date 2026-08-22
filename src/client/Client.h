@@ -1747,6 +1747,7 @@ private:
 
     int64_t offset;
     uint64_t size;
+    utime_t mtime;
 
     bufferlist bl;
     bufferlist encbl;
@@ -1804,7 +1805,7 @@ private:
 
   public:
     WriteEncMgr(Client *clnt,
-                Fh *f, int64_t offset, uint64_t size,
+                Fh *f, int64_t offset, uint64_t size, const utime_t& w_mtime,
                 bufferlist& bl,
                 bool async);
     virtual ~WriteEncMgr();
@@ -1847,8 +1848,10 @@ private:
   public:
     WriteEncMgr_Buffered(Client *clnt,
                          Fh *f, int64_t offset, uint64_t size,
+                         const utime_t& w_mtime,
                          bufferlist& bl,
-                         bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
+                         bool async) : WriteEncMgr(clnt, f, offset, size,
+                                                   w_mtime,bl, async) {}
 
     void update_write_params() override;
     int do_write() override;
@@ -1858,8 +1861,10 @@ private:
   public:
     WriteEncMgr_NotBuffered(Client *clnt,
                          Fh *f, int64_t offset, uint64_t size,
+                            const utime_t& w_mtime,
                          bufferlist& bl,
-                         bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
+                         bool async) : WriteEncMgr(clnt, f, offset, size,
+                                                   w_mtime, bl, async) {}
 
     void update_write_params() override {}
     int do_write() override;
@@ -1872,13 +1877,14 @@ private:
     void finish_fsync(int r);
 
     C_Write_Finisher(Client *clnt, Context *onfinish, bool dont_need_uninline,
-                     bool is_file_write, Fh *f, Inode *in,
+                     bool is_file_write, utime_t op_mtime, Fh *f, Inode *in,
                      uint64_t fpos, int64_t req_ofs, uint64_t req_size,
                      int64_t offset, uint64_t size,
                      bool do_fsync, bool syncdataonly,
                      bool encrypted)
       : clnt(clnt), onfinish(onfinish),
-        is_file_write(is_file_write), start(mono_clock_now()), f(f), in(in), fpos(fpos),
+        is_file_write(is_file_write), start(mono_clock_now()),
+        op_mtime(op_mtime),f(f), in(in), fpos(fpos),
         req_ofs(req_ofs), req_size(req_size),
         offset(offset), size(size), syncdataonly(syncdataonly),
         encrypted(encrypted) {
@@ -1904,6 +1910,7 @@ private:
     Context *onfinish;
     bool is_file_write;
     utime_t start;
+    utime_t op_mtime;
     Fh *f;
     Inode *in;
     uint64_t fpos;
@@ -2162,7 +2169,7 @@ private:
   int64_t _read(Fh *fh, int64_t offset, uint64_t size, bufferlist *bl,
   		Context *onfinish = nullptr, bool read_for_write = false);
   void do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len);
-  int64_t _write_success(Fh *fh, utime_t start, uint64_t fpos,
+  int64_t _write_success(Fh *fh, utime_t start, utime_t op_mtime, uint64_t fpos,
                          int64_t request_offset, uint64_t request_size,
                          int64_t offset, uint64_t size, Inode *in,
                          bool encrypted);
