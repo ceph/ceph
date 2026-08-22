@@ -159,7 +159,7 @@ as follows:
 
 :command:`object rm`
   Remove an S3/Swift object. Include "--yes-i-really-mean-it" to remove object's
-  entry from bucket index, for example if it's damaged.
+  entry from bucket index, for example if it is damaged.
 
 :command:`object stat`
   Stat an S3/Swift object for its metadata.
@@ -373,7 +373,7 @@ as follows:
 
 :command:`log show`
   Dump a log from specific object or (bucket + date + bucket-id).
-  (NOTE: required to specify formatting of date to "YYYY-MM-DD-hh")
+  (NOTE: required to specify formatting of the date as "YYYY-MM-DD-hh")
 
 :command:`log rm`
   Remove log object.
@@ -526,12 +526,12 @@ Options
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use ``ceph.conf`` configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during
    startup.
 
 .. option:: -m monaddress[:port]
 
-   Connect to specified monitor (instead of selecting one
+   Connect to specified Monitor (instead of selecting one
    from ceph.conf).
 
 .. option:: --tenant=<tenant>
@@ -573,7 +573,7 @@ Options
 
 .. option:: --generate-key
 
-    create user with or without credentials.
+    Create user with or without credentials.
     If this option set to false, then user cannot set --gen-access-key/--gen-secret/--secret-key/--access-key.
     If this option set to true, then user cannot set  --secret-key/--access-key and bypass options for --gen-secret/--gen-access-key.
     Default is true.
@@ -616,7 +616,7 @@ Options
 .. option:: --pool=<pool>
 
    Specify the pool name.
-   Also used with `orphans find` as data pool to scan for leaked rados objects.
+   Also used with `orphans find` as data pool to scan for leaked RADOS objects.
 
 .. option:: --object=object
 
@@ -659,7 +659,7 @@ Options
 .. option:: --purge-keys
 
    When specified, subuser removal will also purge the subuser' keys.
-   
+
 .. option:: --purge-objects
 
    When specified, the bucket removal will also purge all objects in it.
@@ -865,7 +865,7 @@ Options
 
 .. option:: --categories=<list>
 
-    Comma separated list of categories, used in usage show.
+    Comma-separated list of categories, used in usage show.
 
 .. option:: --caps=<caps>
 
@@ -917,11 +917,11 @@ Options
 
 .. option:: --restore-status
 
-   Filter objects return by the 'restore list' command by status.
+   Filter objects returned by the 'restore list' command by status.
 
 .. option:: --show-restore-stats
 
-   Shows restore stats in a bucket stat command. Here the bucket name need be provided.
+   Shows restore stats in a bucket stat command. The bucket name needs to be provided.
 
 Quota Options
 =============
@@ -949,7 +949,7 @@ Orphans Search Options
 .. option:: --orphan-stale-secs
 
    Number of seconds to wait before declaring an object to be an orphan.
-   The efault is 86400 (24 hours).
+   The default is 86400 (24 hours).
 
 .. option:: --job-id
 
@@ -995,7 +995,7 @@ Role Options
 
 Bucket Notifications/PubSub Options
 ===================================
-.. option:: --topic                   
+.. option:: --topic
 
    The bucket notifications/pubsub topic name.
 
@@ -1091,5 +1091,5 @@ https://docs.ceph.com for more information.
 See also
 ========
 
-:doc:`ceph <ceph>`\(8)
+:doc:`ceph <ceph>`\(8),
 :doc:`radosgw <radosgw>`\(8)

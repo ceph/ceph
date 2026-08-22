@@ -77,5 +77,5 @@ https://docs.ceph.com for more information.
 See also
 ========
 
-:doc:`radosgw-admin <radosgw-admin>`\(8)
+:doc:`radosgw-admin <radosgw-admin>`\(8),
 :doc:`rgw-orphan-list <rgw-orphan-list>`\(8)
