@@ -49,6 +49,7 @@ COPYING*                                        @ceph/doc-writers
 /doc/                                           @ceph/doc-writers
 README*                                         @ceph/doc-writers
 *.rst                                           @ceph/doc-writers
+/doc/csi/                                       @ceph/doc-writers @ceph/ceph-csi-maintainers
 
 # core
 /doc/man/8/ceph-authtool.rst                    @ceph/core @ceph/doc-writers
