@@ -25,7 +25,8 @@ namespace crypto {
 
 using librbd::util::create_context_callback;
 using librbd::util::data_object_name;
-
+// TODO: Make Striper aware of ciphertext expansion? 
+        // i.e. that we write more than 4096 bytes?
 template <typename I>
 uint64_t get_file_offset(I* image_ctx, uint64_t object_no,
                          uint64_t object_off) {
@@ -87,19 +88,39 @@ struct C_AlignedObjectReadRequest : public Context {
       ldout(cct, 20) << "aligned read r=" << r << dendl;
       if (r >= 0) {
         r = 0;
-        for (auto& extent: *extents) {
+        const bool has_meta = (crypto->get_meta_size() > 0);
+        const size_t stride = has_meta ? 2 : 1;
+        for (size_t i = 0; i < extents->size(); i += stride) {
+          if (has_meta && (i + 1 >= extents->size())) {
+             lderr(cct) << "Missing metadata extent for index " << i << dendl;
+             r = -EINVAL; 
+             break;
+          }
+          auto& data_extent = (*extents)[i];
+          auto* meta_extent = has_meta ? &(*extents)[i+1] : nullptr;
           auto crypto_ret = crypto->decrypt_aligned_extent(
-              extent, get_file_offset(image_ctx, object_no, extent.offset));
+              data_extent, 
+              get_file_offset(image_ctx, object_no, data_extent.offset),
+              meta_extent);
           if (crypto_ret != 0) {
             ceph_assert(crypto_ret < 0);
             r = crypto_ret;
             break;
           }
-          r += extent.length;
+          r += data_extent.length;
         }
       }
 
       if (r == -ENOENT && !disable_read_from_parent) {
+        // For AEAD, strip metadata extents before reading from parent.
+        // read_parent is based on logical extents
+        if (crypto->get_meta_size() > 0) {
+          io::ReadExtents data_only;
+          for (size_t i = 0; i < extents->size(); i += 2) {
+            data_only.push_back(std::move((*extents)[i]));
+          }
+          *extents = std::move(data_only);
+        }
         io::util::read_parent<I>(
                 image_ctx, object_no, extents,
                 io_context->get_read_snap(),
@@ -125,7 +146,15 @@ struct C_UnalignedObjectReadRequest : public Context {
             uint64_t* version, int* object_dispatch_flags,
             Context* on_dispatched) : cct(image_ctx->cct), extents(extents),
                                       on_finish(on_dispatched) {
+    if (crypto->get_meta_size() != 0) {
+      crypto->get_physical_extends(*extents, &aligned_extents, image_ctx->get_object_size());
+      read_flags |= io::READ_FLAG_ENCRYPTED_AEAD_READ;
+    } else {
       crypto->align_extents(*extents, &aligned_extents);
+    }
+
+    ldout(cct, 20) << data_object_name(image_ctx, object_no) << " aligned extends "
+                 << aligned_extents << dendl;
 
       // send the aligned read back to get decrypted
       req = io::ObjectDispatchSpec::create_read(
@@ -140,9 +169,13 @@ struct C_UnalignedObjectReadRequest : public Context {
     }
 
     void remove_alignment_data() {
+      // When AEAD is active, get_physical_extends creates 2N aligned extents
+      // (data+meta pairs) for N original extents. Use stride 2 to skip meta.
+      const bool has_meta = (aligned_extents.size() > extents->size());
+      const size_t stride = has_meta ? 2 : 1;
       for (uint64_t i = 0; i < extents->size(); ++i) {
         auto& extent = (*extents)[i];
-        auto& aligned_extent = aligned_extents[i];
+        auto& aligned_extent = aligned_extents[i * stride];
         if (aligned_extent.extent_map.empty()) {
           uint64_t cut_offset = extent.offset - aligned_extent.offset;
           int64_t padding_count =
@@ -466,7 +499,15 @@ bool CryptoObjectDispatch<I>::read(
   ceph_assert(m_crypto != nullptr);
 
   *dispatch_result = io::DISPATCH_RESULT_COMPLETE;
-  if (m_crypto->is_aligned(*extents)) {
+  bool is_request_aligned;
+  if (m_crypto->get_meta_size() != 0) {
+    // If the READ_FLAG_ENCRYPTED_AEAD_READ we know it already contains
+    // physically aligned extents. 
+    is_request_aligned = (read_flags & io::READ_FLAG_ENCRYPTED_AEAD_READ) != 0;
+  } else {
+    is_request_aligned = m_crypto->is_aligned(*extents);
+  }
+  if (is_request_aligned) {
     auto req = new C_AlignedObjectReadRequest<I>(
             m_image_ctx, m_crypto, object_no, extents, io_context,
             op_flags, read_flags, parent_trace, version, object_dispatch_flags,
@@ -503,6 +544,11 @@ bool CryptoObjectDispatch<I>::write(
   if (m_crypto->is_aligned(object_off, data.length())) {
     auto r = m_crypto->encrypt(
         &data, get_file_offset(m_image_ctx, object_no, object_off));
+    // TODO: Maybe use issue a new write to use write_flags instead
+    ceph_assert(object_dispatch_flags != nullptr);
+    *object_dispatch_flags |= (m_crypto->get_meta_size() > 0)
+                                  ? io::OBJECT_DISPATCH_FLAG_IS_AEAD_ENCRYPTED
+                                  : 0;
     *dispatch_result = r == 0 ? io::DISPATCH_RESULT_CONTINUE
                               : io::DISPATCH_RESULT_COMPLETE;
     on_dispatched->complete(r);
@@ -632,7 +678,8 @@ int CryptoObjectDispatch<I>::prepare_copyup(
   }
 
   ceph::bufferlist current_bl;
-  current_bl.append_zero(m_image_ctx->get_object_size());
+  const uint64_t object_size = m_image_ctx->get_object_size();
+  current_bl.append_zero(object_size);
 
   for (auto& [key, extent_map]: *snapshot_sparse_bufferlist) {
     // update current_bl with data from extent_map
@@ -649,32 +696,76 @@ int CryptoObjectDispatch<I>::prepare_copyup(
 
     // encrypt
     io::SparseBufferlist encrypted_sparse_bufferlist;
-    for (auto& extent : extent_map) {
-      auto [aligned_off, aligned_len] = m_crypto->align(
-              extent.get_off(), extent.get_len());
+    const uint64_t meta_size = m_crypto->get_meta_size();
+    const uint64_t block_size = m_crypto->get_block_size();
 
+    if (meta_size != 0) {
+      // AEAD: encrypt the full object to generate integrity tags for all
+      // blocks, ensuring complete data+meta coverage for copyup.
       auto [image_extents, _] = io::util::object_to_area_extents(
-          m_image_ctx, object_no, {{aligned_off, aligned_len}});
+          m_image_ctx, object_no, {{0, object_size}});
 
       ceph::bufferlist encrypted_bl;
       uint64_t position = 0;
-      for (auto [image_offset, image_length]: image_extents) {
+      for (auto [image_offset, image_length] : image_extents) {
         ceph::bufferlist aligned_bl;
-        aligned_bl.substr_of(current_bl, aligned_off + position, image_length);
-        aligned_bl.rebuild(); // to deep copy aligned_bl from current_bl
+        aligned_bl.substr_of(current_bl, position, image_length);
+        aligned_bl.rebuild();
         position += image_length;
 
         auto r = m_crypto->encrypt(&aligned_bl, image_offset);
         if (r != 0) {
           return r;
         }
-
         encrypted_bl.append(aligned_bl);
       }
 
+      uint64_t num_blocks = object_size / block_size;
+      uint64_t data_len = num_blocks * block_size;
+      uint64_t meta_len = num_blocks * meta_size;
+      ceph_assert(encrypted_bl.length() == data_len + meta_len);
+
+      ceph::bufferlist data_bl;
+      data_bl.substr_of(encrypted_bl, 0, data_len);
       encrypted_sparse_bufferlist.insert(
-        aligned_off, aligned_len, {io::SPARSE_EXTENT_STATE_DATA, aligned_len,
-                                   std::move(encrypted_bl)});
+        0, data_len,
+        {io::SPARSE_EXTENT_STATE_DATA, data_len, std::move(data_bl)});
+
+      ceph::bufferlist meta_bl;
+      meta_bl.substr_of(encrypted_bl, data_len, meta_len);
+      encrypted_sparse_bufferlist.insert(
+        object_size, meta_len,
+        {io::SPARSE_EXTENT_STATE_DATA, meta_len, std::move(meta_bl)});
+    } else {
+      // non-AEAD: encrypt only the extents with data
+      for (auto& extent : extent_map) {
+        auto [aligned_off, aligned_len] = m_crypto->align(
+                extent.get_off(), extent.get_len());
+
+        auto [image_extents, _] = io::util::object_to_area_extents(
+            m_image_ctx, object_no, {{aligned_off, aligned_len}});
+
+        ceph::bufferlist encrypted_bl;
+        uint64_t position = 0;
+        for (auto [image_offset, image_length]: image_extents) {
+          ceph::bufferlist aligned_bl;
+          aligned_bl.substr_of(current_bl, aligned_off + position, image_length);
+          aligned_bl.rebuild();
+          position += image_length;
+
+          auto r = m_crypto->encrypt(&aligned_bl, image_offset);
+          if (r != 0) {
+            return r;
+          }
+
+          encrypted_bl.append(aligned_bl);
+        }
+
+        ceph_assert(encrypted_bl.length() == aligned_len);
+        encrypted_sparse_bufferlist.insert(aligned_off, aligned_len,
+          {io::SPARSE_EXTENT_STATE_DATA, aligned_len,
+           std::move(encrypted_bl)});
+      }
     }
 
     // replace original plaintext sparse bufferlist with encrypted one
