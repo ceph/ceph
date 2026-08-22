@@ -134,7 +134,7 @@ describe('NotificationService', () => {
       flush();
     }));
 
-    it('should show a error task notification', fakeAsync(() => {
+    it('should show and persist an error task notification', fakeAsync(() => {
       const task = _.assign(
         new FinishedTask('rbd/create', {
           pool_name: 'somePool',
@@ -153,7 +153,7 @@ describe('NotificationService', () => {
 
       expect(service.show).toHaveBeenCalled();
       const notifications = service['dataSource'].getValue();
-      expect(notifications.length).toBe(0);
+      expect(notifications.length).toBe(1);
       flush();
     }));
 
