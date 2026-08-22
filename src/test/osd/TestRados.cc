@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "test/osd/RadosModel.h"
+#include "test/osd/RadosTestHelpers.h"
 
 using namespace std;
 
@@ -618,7 +619,6 @@ int main(int argc, char **argv)
 	exit(1);
       }
       ec_pool = true;
-      no_omap = true;
       no_sparse = true;
     } else if (strcmp(argv[i], "--op") == 0) {
       i++;
@@ -778,6 +778,21 @@ int main(int argc, char **argv)
 	 << cpp_strerror(r) << std::endl;
     exit(1);
   }
+
+  // Query pool's supports_omap flag for EC pools if user didn't explicitly set --no-omap
+  // Replicated pools always support omap, so we only need to check EC pools
+  if (ec_pool && !no_omap) {
+    auto result = query_pool_flag(pool_name, "supports_omap", context.rados);
+    if (!result) {
+      cerr << "Warning: failed to query supports_omap for pool " << pool_name
+           << ": " << cpp_strerror(result.error()) << std::endl;
+    } else if (!result.value()) {
+      cout << "EC pool " << pool_name << " does not support omap, setting no_omap=true" << std::endl;
+      no_omap = true;
+      context.set_no_omap(true);
+    }
+  }
+
   context.loop(&gen);
   if (enable_dedup) {
     if (!context.check_chunks_refcount(context.low_tier_io_ctx, context.io_ctx)) {
