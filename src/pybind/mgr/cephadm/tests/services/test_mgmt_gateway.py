@@ -10,6 +10,7 @@ from ceph.deployment.service_spec import (
     MgmtGatewaySpec,
     OAuth2ProxySpec
 )
+from cephadm.services.cephadmservice import get_dashboard_endpoints
 from cephadm.services.service_registry import service_registry
 from cephadm.tests.fixtures import with_host, with_service, async_side_effect
 from cephadm.tlsobject_types import TLSCredentials
@@ -43,6 +44,25 @@ class TestMgmtGateway:
         foo_daemons = [DaemonDescription(daemon_type='foo', hostname='f1', ip='fe80::2', ports=[8080])]
         cephadm_module.cache.get_daemons_by_service = lambda name: foo_daemons if name == 'foo' else []
         assert svc.get_service_endpoints('foo') == ['[fe80::2]:8080']
+
+    def test_dashboard_endpoints_use_inventory_ips(self, cephadm_module: CephadmOrchestrator):
+        # nginx dashboard upstreams must use daemon/inventory IPs, not FQDNs,
+        # so mgmt-gateway can reach the dashboard when DNS points elsewhere.
+        svc = service_registry.get_service('mgmt-gateway')
+        mgr_daemons = [
+            DaemonDescription(daemon_type='mgr', daemon_id='a', hostname='h1', ip='10.0.0.1'),
+            DaemonDescription(daemon_type='mgr', daemon_id='b', hostname='h2', ip='fe80::1'),
+            DaemonDescription(daemon_type='mgr', daemon_id='c', hostname='h3'),
+        ]
+        cephadm_module.cache.get_daemons_by_service = lambda name: mgr_daemons if name == 'mgr' else []
+        cephadm_module.inventory.get_addr = lambda hostname: '10.0.0.3' if hostname == 'h3' else hostname
+        cephadm_module.get = lambda key: {
+            'services': {'dashboard': 'https://active.example:8443/'}
+        } if key == 'mgr_map' else {}
+
+        endpoints, scheme = get_dashboard_endpoints(svc)
+        assert scheme == 'https'
+        assert endpoints == ['10.0.0.1:8443', '[fe80::1]:8443', '10.0.0.3:8443']
 
     @patch("cephadm.serve.CephadmServe._run_cephadm")
     @patch("cephadm.services.mgmt_gateway.MgmtGatewayService.get_service_endpoints")
