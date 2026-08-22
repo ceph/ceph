@@ -3936,17 +3936,43 @@ static void _try_mark_pg_stale(
   const pg_stat_t& cur,
   PGMap::Incremental *pending_inc)
 {
-  if ((cur.state & PG_STATE_STALE) == 0 &&
-      cur.acting_primary != -1 &&
-      osdmap.is_down(cur.acting_primary)) {
+  if ((cur.state & PG_STATE_STALE) != 0 || cur.acting_primary == -1) {
+    return;
+  }
+
+  bool primary_is_down = osdmap.is_down(cur.acting_primary);
+  
+  // Only compute CRUSH mapping if primary is up (to check for CRUSH mapping failure)
+  // The current CRUSH acting set and primary may be different from cur which may be stale
+  int crush_acting_primary = -1;
+  if (!primary_is_down) {
+    vector<int> crush_acting;
+    osdmap.pg_to_acting_osds(pgid, &crush_acting, &crush_acting_primary);
+  }
+
+  // Mark PG stale if primary is down OR CRUSH mapping failed
+  if (primary_is_down || crush_acting_primary == -1) {
     pg_stat_t *newstat;
     auto q = pending_inc->pg_stat_updates.find(pgid);
     if (q != pending_inc->pg_stat_updates.end()) {
-      if ((q->second.acting_primary == cur.acting_primary) ||
-	  ((q->second.state & PG_STATE_STALE) == 0 &&
-	   q->second.acting_primary != -1 &&
-	   osdmap.is_down(q->second.acting_primary))) {
-	newstat = &q->second;
+      bool pending_primary_is_down = false;
+      int pending_crush_acting_primary = -1;
+      
+      if (q->second.acting_primary == cur.acting_primary) {
+        newstat = &q->second;
+      } else if ((q->second.state & PG_STATE_STALE) == 0 &&
+                 q->second.acting_primary != -1) {
+        pending_primary_is_down = osdmap.is_down(q->second.acting_primary);
+        if (!pending_primary_is_down) {
+          vector<int> pending_crush_acting;
+          osdmap.pg_to_acting_osds(pgid, &pending_crush_acting, &pending_crush_acting_primary);
+        }
+        if (pending_primary_is_down || pending_crush_acting_primary == -1) {
+          newstat = &q->second;
+        } else {
+          // Pending update has a working primary, don't mark stale
+          return;
+        }
       } else {
 	// pending update is no longer down or already stale
 	return;
