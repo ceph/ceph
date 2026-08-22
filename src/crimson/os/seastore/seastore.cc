@@ -4,6 +4,8 @@
 #include "seastore.h"
 
 #include <algorithm>
+#include <cctype>
+#include <string_view>
 
 #include <boost/algorithm/string/trim.hpp>
 #include <fmt/format.h>
@@ -669,16 +671,27 @@ seastar::future<> SeaStore::prepare_meta(uuid_d new_osd_fsid)
 }
 
 std::optional<device_id_t> parse_device_id(const seastar::sstring &name) {
-  auto prefix_len = sizeof("block.") - 1;
-  if (name.starts_with("block.") && name.length() > prefix_len) {
-    int id = 0;
-    std::string id_str = name.substr(prefix_len);
-    std::istringstream iss(id_str);
-    iss >> id;
-    assert(id < std::numeric_limits<uint8_t>::max());
-    return std::make_optional<device_id_t>(id);
+  constexpr std::string_view prefix = "block.";
+  if (!name.starts_with(prefix) || name.size() <= prefix.size()) {
+    return std::nullopt;
   }
-  return std::nullopt;
+  const auto id_str = name.substr(prefix.size());
+  // Only accept block.<numeric-id>. Names like block.db / block.wal are
+  // concrete device entries, not SeaStore secondary device directories.
+  if (!std::all_of(id_str.begin(), id_str.end(),
+                   [](unsigned char c) { return std::isdigit(c); })) {
+    return std::nullopt;
+  }
+  int id = 0;
+  try {
+    id = std::stoi(std::string(id_str));
+  } catch (const std::exception&) {
+    return std::nullopt;
+  }
+  if (id < 0 || id >= std::numeric_limits<uint8_t>::max()) {
+    return std::nullopt;
+  }
+  return std::make_optional<device_id_t>(static_cast<device_id_t>(id));
 }
 
 Device::access_ertr::future<> SeaStore::_mkfs(uuid_d new_osd_fsid)
