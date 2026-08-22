@@ -337,6 +337,28 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   if (!obj) {
     return -EINVAL;
   }
+  if (sync_type != APPLY_ALWAYS) {
+    RGWMetadataObject *old_obj = nullptr;
+    ret = handler->get(entry, &old_obj, y, dpp);
+    std::unique_ptr<RGWMetadataObject> oo(old_obj);
+    if (ret < 0 && ret != -ENOENT) {
+      delete obj;
+      return ret;
+    }
+    if (ret >= 0 && oo) {
+      if (!check_versions(oo->get_version(), oo->get_mtime(),
+                          *objv, mtime.to_real_time(), sync_type)) {
+        ldpp_dout(dpp, 10) << "check_versions: not applying " << metadata_key
+                  << " ver=" << objv->ver << " ondisk ver="
+                  << oo->get_version().ver << dendl;
+        if (existing_version) {
+          *existing_version = oo->get_version();
+        }
+        delete obj;
+        return STATUS_NO_APPLY;
+      }
+    }
+  }
 
   ret = handler->put(entry, obj, objv_tracker, y, dpp, sync_type, from_remote_zone);
   if (existing_version) {
