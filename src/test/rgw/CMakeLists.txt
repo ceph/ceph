@@ -44,7 +44,8 @@ add_executable(ceph_test_rgw_d4n_filter
   test_d4n_filter.cc
   )
 target_include_directories(ceph_test_rgw_d4n_filter
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n"
+  SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
 target_link_libraries(ceph_test_rgw_d4n_filter PRIVATE
   rgw_common
   librados
@@ -59,7 +60,8 @@ add_executable(ceph_test_rgw_d4n_directory
   test_d4n_directory.cc
   )
 target_include_directories(ceph_test_rgw_d4n_directory
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n")
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/d4n"
+  SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
 target_link_libraries(ceph_test_rgw_d4n_directory PRIVATE
   rgw_common
   librados
@@ -74,7 +76,8 @@ add_executable(ceph_test_rgw_d4n_policy
   test_d4n_policy.cc
   )
 target_include_directories(ceph_test_rgw_d4n_policy
-  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/"
+  SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
 target_link_libraries(ceph_test_rgw_d4n_policy PRIVATE
   rgw_common
   librados
