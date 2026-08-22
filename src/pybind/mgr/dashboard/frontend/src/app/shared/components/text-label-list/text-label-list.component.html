@@ -4,6 +4,11 @@
     i18n-helperText
     i18n
   >
+    @if ($index === 0) {
+      {{ label }}
+    } @else {
+      &#8203;
+    }
     <div class="cds-input-group">
       <input
         cdsText
@@ -22,6 +27,5 @@
         </cds-icon-button>
       }
     </div>
-    {{ $index === 0 ? label : '' }}
   </cds-text-label>
 }
