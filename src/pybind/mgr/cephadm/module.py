@@ -552,6 +552,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule):
             desc="Default IP address for RedFish API (OOB management)."
         ),
         Option(
+            'nfs_ganesha_rados_grace_timeout',
+            type='int',
+            default=30,
+            desc='Timeout in seconds for ganesha-rados-grace operations during NFS service deployment',
+            min=10,
+            max=300
             'sudo_hardening',
             type='bool',
             default=False,
