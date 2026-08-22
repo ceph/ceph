@@ -5572,6 +5572,24 @@ options:
   desc: Try to submit metadata transaction to RocksDB in queuing thread context
   default: false
   with_legacy: true
+- name: bluestore_kv_sync_reap_write_completions
+  type: bool
+  level: advanced
+  desc: Reap data device write completions in the kv sync thread
+  long_desc: Selects how the data (block) device's write completions are
+    reaped.  When true, on linux/libaio the kv sync thread collects them
+    itself (signalled through an eventfd) and the device runs a dedicated
+    read-side aio context and completion thread instead of a write-side
+    one; this costs one extra aio context per OSD.  When false, the device
+    keeps a single aio context and completion thread as before.  BlueFS
+    devices are not affected.  Read at OSD start.
+  default: true
+  with_legacy: true
+  flags:
+  - startup
+  see_also:
+  - bdev_aio_max_queue_depth
+  - bdev_aio_reap_max
 - name: bluestore_fsck_read_bytes_cap
   type: size
   level: advanced

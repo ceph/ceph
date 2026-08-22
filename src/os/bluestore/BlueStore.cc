@@ -7261,6 +7261,23 @@ int BlueStore::_open_bdev(bool create)
   string p = path + "/block";
   bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this), "bluestore");
   int r = 0;
+  // Lend the kv sync thread's wakeup eventfd to the device before
+  // open(): where the backend supports it (libaio) the device then
+  // never starts the WRITE ring's completion thread - write
+  // completions signal the same fd the kv thread sleeps on, and it
+  // reaps them itself.  The read ring keeps its own thread in every
+  // mode, so read completion latency never couples to the commit
+  // cycle.  Where the backend does not support the eventfd
+  // (io_uring, posix-aio, SPDK, pmem), or the operator disabled the
+  // mode, the write thread stays and behaves exactly as before; its
+  // callbacks stage work and notify the same fd, so the kv thread is
+  // oblivious to the mode.
+  bdev_direct_completions =
+    cct->_conf->bluestore_kv_sync_reap_write_completions &&
+    bdev->set_completion_eventfd(kv_wake.fd()) == 0;
+  dout(5) << __func__ << " data bdev completions: "
+	  << (bdev_direct_completions ? "direct (kv sync thread reaps)"
+				      : "completion thread") << dendl;
   int plugin_preload_r = 0;
   if (cct->_conf->bluestore_use_ebd) {
     //load plugins
@@ -14834,7 +14851,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	kv_queue.push_back(txc);
 	if (!kv_sync_in_progress) {
 	  kv_sync_in_progress = true;
-	  kv_cond.notify_one();
+	  kv_wake.notify();
 	}
 	if (txc->get_state() != TransContext::STATE_KV_SUBMITTED) {
 	  kv_queue_unsubmitted.push_back(txc);
@@ -15277,7 +15294,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
     std::lock_guard l(kv_lock);
     if (!kv_sync_in_progress) {
       kv_sync_in_progress = true;
-      kv_cond.notify_one();
+      kv_wake.notify();
     }
   }
   osr->drain_preceding(txc);
@@ -15303,7 +15320,7 @@ void BlueStore::_osr_drain(OpSequencer *osr)
     std::lock_guard l(kv_lock);
     if (!kv_sync_in_progress) {
       kv_sync_in_progress = true;
-      kv_cond.notify_one();
+      kv_wake.notify();
     }
   }
   osr->drain();
@@ -15340,7 +15357,7 @@ void BlueStore::_osr_drain_all()
   {
     // wake up any previously finished deferred events
     std::lock_guard l(kv_lock);
-    kv_cond.notify_one();
+    kv_wake.notify();
   }
   {
     std::lock_guard l(kv_finalize_lock);
@@ -15386,13 +15403,12 @@ void BlueStore::_kv_stop()
 {
   dout(10) << __func__ << dendl;
   {
-    std::unique_lock l{kv_lock};
-    while (!kv_sync_started) {
-      kv_cond.wait(l);
-    }
+    // no started-handshake needed: the WakeupFd is sticky, so a stop
+    // notified before the thread even reaches its wait is still seen
+    std::lock_guard l(kv_lock);
     kv_stop = true;
-    kv_cond.notify_all();
   }
+  kv_wake.notify();
   {
     std::unique_lock l{kv_finalize_lock};
     while (!kv_finalize_started) {
@@ -15436,10 +15452,9 @@ void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
+  // a prior mount's teardown drain may have left stale ticks on the fd
+  kv_wake.consume();
   std::unique_lock l{kv_lock};
-  ceph_assert(!kv_sync_started);
-  kv_sync_started = true;
-  kv_cond.notify_all();
 
   auto t0 = mono_clock::now();
   timespan twait = ceph::make_timespan(0);
@@ -15467,8 +15482,26 @@ void BlueStore::_kv_sync_thread()
       dout(20) << __func__ << " sleep" << dendl;
       auto t = mono_clock::now();
       kv_sync_in_progress = false;
-      kv_cond.wait(l);
+      l.unlock();
+      kv_wake.wait_and_consume();
       twait += mono_clock::now() - t;
+      // Drain the data bdev's WRITE completion ring (a no-op unless
+      // the device runs in external-completion mode); the callbacks
+      // (txc_aio_finish, deferred_aio_finish) run right here and
+      // stage work under kv_lock as they always did.  Reads are
+      // reaped by the device's own read-ring thread, never here.
+      // One batched reap keeps a sustained completion stream from
+      // starving the commit work below; a full batch means the ring
+      // may hold more, and the fd was consumed above, so self-notify
+      // to come straight back after this cycle.
+      {
+	const int reap_max = std::clamp(int(cct->_conf->bdev_aio_reap_max),
+					1, BlockDevice::REAP_BATCH_MAX);
+	if (bdev->reap_completions(reap_max) == reap_max) {
+	  kv_wake.notify();
+	}
+      }
+      l.lock();
 
       dout(20) << __func__ << " wake" << dendl;
     } else {
@@ -15680,8 +15713,12 @@ void BlueStore::_kv_sync_thread()
       deferred_stable_queue.swap(deferred_done);
     }
   }
+  l.unlock();
+  // nothing else drains the write ring after this thread exits; pick
+  // up any straggler completions before teardown discards them (the
+  // osr drains our callers run mean there normally are none)
+  while (bdev->reap_completions(BlockDevice::REAP_BATCH_MAX) > 0) {}
   dout(10) << __func__ << " finish" << dendl;
-  kv_sync_started = false;
 }
 
 void BlueStore::_kv_finalize_thread()
@@ -15962,7 +15999,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
     // catch us on the next commit anyway.
     if (deferred_aggressive && !kv_sync_in_progress) {
 	kv_sync_in_progress = true;
-	kv_cond.notify_one();
+	kv_wake.notify();
     }
   }
 }
@@ -16166,7 +16203,7 @@ int BlueStore::queue_transactions(
       std::lock_guard l(kv_lock);
       if (!kv_sync_in_progress) {
 	kv_sync_in_progress = true;
-	kv_cond.notify_one();
+	kv_wake.notify();
       }
     }
     throttle.finish_start_transaction(*db, *txc, tstart);
