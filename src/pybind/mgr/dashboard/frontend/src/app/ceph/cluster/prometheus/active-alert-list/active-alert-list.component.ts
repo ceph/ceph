@@ -1,8 +1,8 @@
 import { Component, Inject, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 
-import { Subscription } from 'rxjs';
-import { filter, first } from 'rxjs/operators';
+import { combineLatest, Subscription } from 'rxjs';
+import { filter, take } from 'rxjs/operators';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -51,6 +51,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   hasDocUrls = false;
   multilineTextKeys = ['description', 'impact', 'fix'];
   private cephRelease = '';
+  private docUrlColumn: CdTableColumn = {} as CdTableColumn;
   private alertsSub: Subscription;
 
   filters: CdTableColumn[] = [
@@ -91,16 +92,6 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
   ) {
     super(prometheusService);
     this.permission = this.authStorageService.getPermissions().prometheus;
-    this.docService.releaseData$
-      .pipe(
-        filter((v) => !!v),
-        first()
-      )
-      .subscribe((release) => {
-        this.cephRelease = release;
-        this.hasDocUrls = !!this.docService.urlGenerator('managing-alerts', release);
-        this.alertDocUrls = {};
-      });
     this.tableActions = [
       {
         permission: 'create',
@@ -155,6 +146,65 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         flexGrow: 1
       }
     ];
+
+    this.docUrlColumn = {
+      name: $localize`Learn more`,
+      prop: 'labels.alertname',
+      flexGrow: 1,
+      sortable: false,
+      isHidden: true,
+      cellTemplate: this.docLinkTpl
+    };
+
+    this.buildColumns();
+
+    this.docService.releaseData$
+      .pipe(
+        filter((v) => !!v),
+        take(1)
+      )
+      .subscribe((release) => {
+        this.cephRelease = release;
+        this.hasDocUrls = !!this.docService.urlGenerator('managing-alerts', release);
+        this.docUrlColumn.isHidden = !this.hasDocUrls;
+        if (this.table) {
+          this.table.updateColumns();
+        }
+      });
+
+    this.alertsSub = combineLatest([
+      this.docService.releaseData$.pipe(filter((v) => !!v)),
+      this.prometheusAlertService.totalAlerts$
+    ]).subscribe(([release]) => {
+      this.cephRelease = release;
+      if (!this.hasDocUrls) {
+        this.hasDocUrls = !!this.docService.urlGenerator('managing-alerts', release);
+      }
+      if (!this.hasDocUrls) return;
+      this.alertDocUrls = Object.fromEntries(
+        this.prometheusAlertService.alerts.map((a) => [
+          a.labels.alertname,
+          this.docService.alertDocUrl(a.labels.alertname, this.cephRelease)
+        ])
+      );
+    });
+
+    this.prometheusAlertService.getGroupedAlerts(true);
+    this.route.queryParams.subscribe((params) => {
+      const severity = params['severity'];
+      this.filters[1].filterInitValue = SeverityMap[severity];
+      if (params['search']) {
+        setTimeout(() => {
+          if (this.table) {
+            this.table.search = params['search'];
+            this.table.updateFilter();
+          }
+        });
+      }
+    });
+  }
+
+  private buildColumns() {
     this.columns = [
       {
         name: $localize`Name`,
@@ -180,40 +230,8 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         sortable: false,
         cellTemplate: this.externalLinkTpl
       },
-      ...(this.hasDocUrls
-        ? [
-            {
-              name: $localize`Learn more`,
-              prop: 'labels.alertname',
-              flexGrow: 1,
-              sortable: false,
-              cellTemplate: this.docLinkTpl
-            }
-          ]
-        : [])
+      this.docUrlColumn
     ];
-    this.alertsSub = this.prometheusAlertService.totalAlerts$.subscribe(() => {
-      if (!this.hasDocUrls) return;
-      this.alertDocUrls = Object.fromEntries(
-        this.prometheusAlertService.alerts.map((a) => [
-          a.labels.alertname,
-          this.docService.alertDocUrl(a.labels.alertname, this.cephRelease)
-        ])
-      );
-    });
-    this.prometheusAlertService.getGroupedAlerts(true);
-    this.route.queryParams.subscribe((params) => {
-      const severity = params['severity'];
-      this.filters[1].filterInitValue = SeverityMap[severity];
-      if (params['search']) {
-        setTimeout(() => {
-          if (this.table) {
-            this.table.search = params['search'];
-            this.table.updateFilter();
-          }
-        });
-      }
-    });
   }
 
   ngOnDestroy() {
