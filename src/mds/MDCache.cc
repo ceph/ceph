@@ -6976,6 +6976,8 @@ std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
   // process delayed eval_stray()
   stray_manager.advance_delayed();
 
+  process_delayed_fragment_deletes();
+
   auto result = trim_lru(count, expiremap);
   auto& trimmed = result.second;
 
@@ -14805,4 +14807,33 @@ void MDCache::aggregate_snap_sets(const std::vector<std::unique_ptr<SnapSetConte
     block_diff->blocks = extents;
   }
   on_finish->complete(r);
+}
+
+void MDCache::queue_delayed_fragment_delete(CDir *dir, bool replay)
+{
+  dir->get(CDir::PIN_DELAYEDDROP);
+  delayed_fragment_deletes.push_back({dir, replay});
+}
+
+void MDCache::process_delayed_fragment_deletes()
+{
+  auto it = delayed_fragment_deletes.begin();
+  while (it != delayed_fragment_deletes.end()) {
+    CDir *dir = it->dir;
+    bool replay = it->replay;
+    int expected_auth_pins = (!replay && dir->is_auth()) ? 1 : 0;
+
+    if (dir->get_auth_pins() <= expected_auth_pins && dir->get_dir_auth_pins() == 0) {
+      dout(10) << __func__ << ": finishing deferred old fragment " << *dir << dendl;
+      dir->put(CDir::PIN_DELAYEDDROP);
+      MDSContext::vec waiters;
+      dir->finish_old_fragment(waiters, replay);
+      if (!waiters.empty()) {
+        mds->queue_waiters(waiters);
+      }
+      it = delayed_fragment_deletes.erase(it);
+    } else {
+      ++it;
+    }
+  }
 }
