@@ -684,6 +684,10 @@ void PG::initiate_snap_trim()
 
 void PG::kick_snap_trim()
 {
+  // Scrub completion may try to resume snaptrim during PG shutdown.
+  if (stopping) {
+    return;
+  }
   if (peering_state.is_active() && peering_state.is_clean()
       && !snap_trimq.empty()
       && !peering_state.state_test(PG_STATE_SNAPTRIM)) {
@@ -1701,6 +1705,7 @@ seastar::future<> PG::stop()
   co_await osdmap_gate.stop();
   co_await wait_for_active_blocker.stop();
   client_request_orderer.clear_and_cancel(*this);
+  scrubber.stop();
   co_await recovery_handler->stop();
   co_await recovery_backend->stop();
   co_await backend->stop();
