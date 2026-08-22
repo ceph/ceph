@@ -12464,34 +12464,40 @@ bool Server::build_snap_diff(
     bool valid() const {
       return in != nullptr && dn != nullptr;
     }
-    bool meta_differs(const CInode* _in, unsigned mask, unsigned& res_mask) const {
-      ceph_assert(in);
-      ceph_assert(_in);
 
-      auto my = in->get_inode();
-      auto oth = _in->get_inode();
-      ceph_assert(my);
-      ceph_assert(oth);
+    static bool meta_differs(const CInode::mempool_inode& my,
+                             const CInode::mempool_inode& oth,
+                             unsigned mask,
+                             unsigned& res_mask) {
       res_mask = 0;
-      if ((mask & CEPH_SNAPDIFF_MODE) && (my->mode != oth->mode))
+      if ((mask & CEPH_SNAPDIFF_MODE) && (my.mode != oth.mode))
 	res_mask |= CEPH_SNAPDIFF_MODE;
-      if ((mask & CEPH_SNAPDIFF_UID) && (my->uid != oth->uid))
+      if ((mask & CEPH_SNAPDIFF_UID) && (my.uid != oth.uid))
 	res_mask |= CEPH_SNAPDIFF_UID;
-      if ((mask & CEPH_SNAPDIFF_GID) && (my->gid != oth->gid))
+      if ((mask & CEPH_SNAPDIFF_GID) && (my.gid != oth.gid))
 	res_mask |= CEPH_SNAPDIFF_GID;
-      if ((mask & CEPH_SNAPDIFF_SIZE) && (my->size != oth->size))
+      if ((mask & CEPH_SNAPDIFF_SIZE) && (my.size != oth.size))
 	res_mask |= CEPH_SNAPDIFF_SIZE;
-      if ((mask & CEPH_SNAPDIFF_NLINK) && (my->nlink != oth->nlink))
+      if ((mask & CEPH_SNAPDIFF_NLINK) && (my.nlink != oth.nlink))
 	res_mask |= CEPH_SNAPDIFF_NLINK;
-      if ((mask & CEPH_SNAPDIFF_MTIME) && (my->mtime != oth->mtime))
+      if ((mask & CEPH_SNAPDIFF_MTIME) && (my.mtime != oth.mtime))
 	res_mask |= CEPH_SNAPDIFF_MTIME;
-      if ((mask & CEPH_SNAPDIFF_ATIME) && (my->atime != oth->atime))
+      if ((mask & CEPH_SNAPDIFF_ATIME) && (my.atime != oth.atime))
 	res_mask |= CEPH_SNAPDIFF_ATIME;
-      if ((mask & CEPH_SNAPDIFF_CTIME) && (my->ctime != oth->ctime))
+      if ((mask & CEPH_SNAPDIFF_CTIME) && (my.ctime != oth.ctime))
 	res_mask |= CEPH_SNAPDIFF_CTIME;
-      if ((mask & CEPH_SNAPDIFF_BTIME) && (my->btime != oth->btime))
+      if ((mask & CEPH_SNAPDIFF_BTIME) && (my.btime != oth.btime))
 	res_mask |= CEPH_SNAPDIFF_BTIME;
       return res_mask != 0;
+    }
+
+    bool meta_differs(const CInode* _in,
+                      unsigned mask,
+                      unsigned& res_mask) const {
+      ceph_assert(in);
+      ceph_assert(_in);
+      return meta_differs(*in->get_inode(), *_in->get_inode(),
+                          mask, res_mask);
     }
   } before;
 
@@ -12503,6 +12509,27 @@ bool Server::build_snap_diff(
     return r;
   };
   client_t client = mdr->client_request->get_source().num();
+
+  // Return the inode metadata visible at @snapid. Multiversion inodes keep
+  // their historical versions in old_inodes, keyed by the version's last
+  // snapshot.
+  auto inode_at_snap = [](const CInode* head, snapid_t snapid)
+      -> const CInode::mempool_inode* {
+    ceph_assert(head->is_head());
+
+    if (snapid >= head->first)
+      return head->get_inode().get();
+
+    snapid_t old_last = head->pick_old_inode(snapid);
+    if (!old_last)
+      return nullptr;
+
+    const auto& old_inodes = head->get_old_inodes();
+    ceph_assert(old_inodes);
+    auto it = old_inodes->find(old_last);
+    ceph_assert(it != old_inodes->end());
+    return &it->second.inode;
+  };
 
   auto it = !skip_key ? dir->begin() : dir->upper_bound(*skip_key);
 
@@ -12590,9 +12617,69 @@ bool Server::build_snap_diff(
       }
     } else {
       if (snapid_prev >= dn->first && snapid <= dn->last) {
-	dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
-	continue;
+        // A multiversion inode can be COWed without COWing its dentry.
+        // Do not infer that the inode is unchanged solely because this
+        // dentry spans both snapshots.
+        CInode* head = in->is_head() ? in : mdcache->get_inode(in->ino());
+        // A replica's first can lag the inode auth MDS, so only use the
+        // range as a fast path when it is authoritative.
+        const bool inode_state_authoritative = head && head->is_auth();
+        bool inode_spans_both =
+          inode_state_authoritative &&
+          snapid_prev >= in->first && snapid <= in->last;
+        if (inode_spans_both) {
+	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	    << dn->first << "/" << dn->last << dendl;
+	  continue;
+        }
+
+        unsigned res_mask = 0;
+        bool attrs_known = false;
+        bool attrs_changed = true;
+
+        // old_inodes is authoritative only on the inode auth MDS. If this
+        // rank has only a replica, report the entry conservatively rather
+        // than silently losing an update.
+        if (inode_state_authoritative) {
+          const auto* prev_inode = inode_at_snap(head, snapid_prev);
+          const auto* snap_inode = inode_at_snap(head, snapid);
+          if (prev_inode && snap_inode) {
+            attrs_known = true;
+            attrs_changed = EntryInfo::meta_differs(
+              *prev_inode, *snap_inode, diff_mask, res_mask);
+          }
+        }
+
+        if (attrs_known && !attrs_changed) {
+          dout(20) << __func__
+            << " skipping unchanged hardlink inode attrs "
+            << dn->get_name() << " " << dn->first << "/" << dn->last
+            << dendl;
+          continue;
+        }
+
+        // Preserve hash/name ordering if a deleted entry is pending.
+        if (before.valid() && !insert_deleted(before))
+          break;
+
+        if (attrs_known) {
+          dout(20) << __func__
+            << " inode attrs changed behind unchanged hardlink dentry "
+            << dn->get_name() << " dn " << dn->first << "/" << dn->last
+            << " inode " << in->first << "/" << in->last
+            << " result mask: 0x" << std::hex << res_mask << std::dec
+            << dendl;
+        } else {
+          dout(10) << __func__
+            << " reporting unchanged-span hardlink conservatively "
+            << dn->get_name() << " dn " << dn->first << "/" << dn->last
+            << " inode " << in->first << "/" << in->last
+            << dendl;
+        }
+
+        if (!add_result_cb(dn, in, true))
+          break;
+        continue;
       } else if (snapid_prev < dn->first && snapid > dn->last) {
 	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
 	  << dn->first << "/" << dn->last << dendl;
