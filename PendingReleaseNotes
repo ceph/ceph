@@ -7,6 +7,27 @@
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
+
+* RADOS: New "simple" autoscaling provisions pools by an absolute share of
+  the PG-per-OSD budget. The new ``simpleautoscale`` cluster flag is the
+  master switch: while it is set the autoscaler plans each pool's pg_num =
+  ``effective_ratio`` x OSDs x ``mon_target_pg_per_osd`` / size, learning
+  a ratio (fill-only, from current pg_num) for pools that lack one, and a
+  create that declares ``--effective-ratio`` is born at its planned
+  pg_num. ``pg_autoscale_mode`` keeps its classic values and meanings:
+  divergent plans are stamped as ``planned_pg_num`` and reported by the
+  derived ``pg_autoscale_plan`` state (``learn``/``pending``/``current``)
+  and ``POOL_AUTOSCALE_PENDING``; mode ``on`` pools apply their plans via
+  the new atomic ``ceph osd pool autoscale-accept <pool>`` command
+  automatically (except merges beyond
+  ``mon_osd_pool_pg_merge_confirm_bytes``, which are held for
+  ``autoscale-accept --yes-i-really-mean-it``), while mode ``warn`` pools
+  always wait for the operator. Legacy knobs (``target_size_ratio``,
+  ``target_size_bytes``, ``pg_autoscale_bias``, ``bulk``) are rejected
+  while the flag is set; unsetting the flag reverts to legacy autoscaling
+  (ratios remain stored but inert). Additional new health warnings:
+  ``POOL_EFFECTIVE_RATIO_OVERCOMMITTED``, ``POOL_PLAN_CLAMPED_BY_PG_NUM_MAX``
+  and ``POOL_PG_SIZE_DRIFT``.
   
 * CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
   update and remove existing key-value pairs that are part of a snapshot
