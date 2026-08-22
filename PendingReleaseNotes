@@ -1,3 +1,7 @@
+* CephFS: Setting subvolumegroup pins on the default group i.e. ``_nogroup``
+  is now allowed. It can done by providing ``_nogroup`` as the group name.
+  ``ceph fs subvolumegroup pin <vol_name> _nogroup <pin_type> <pin_setting>``
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
