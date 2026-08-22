@@ -626,12 +626,21 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     s->bucket_owner = s->bucket_acl.get_owner();
     acct_acl_user = &s->bucket_owner;
 
-    s->zonegroup_endpoint = rgw::get_zonegroup_endpoint(zonegroup);
-    s->zonegroup_name = zonegroup.get_name();
+    const std::string& bucket_zonegroup_id = s->bucket->get_info().zonegroup;
 
-    if (!zonegroup.equals(s->bucket->get_info().zonegroup)) {
+    /* the zonegroup that holds the bucket, which is where any redirect has to
+     * point. using the local zonegroup here would send the client back to the
+     * endpoint it just used, and clients that follow redirects would loop */
+    const RGWZoneGroup* bucket_zonegroup = rgw::find_zonegroup_by_id(
+        zonegroup, s->penv.site->get_period(), bucket_zonegroup_id);
+    if (bucket_zonegroup) {
+      s->zonegroup_endpoint = rgw::get_zonegroup_endpoint(*bucket_zonegroup);
+      s->zonegroup_name = bucket_zonegroup->get_name();
+    }
+
+    if (!zonegroup.equals(bucket_zonegroup_id)) {
       ldpp_dout(dpp, 0) << "NOTICE: request for data in a different zonegroup ("
-          << s->bucket->get_info().zonegroup << " != "
+          << bucket_zonegroup_id << " != "
           << zonegroup.get_id() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
@@ -643,6 +652,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           rgw::sal::Object::empty(s->object.get())) {
+        if (s->zonegroup_endpoint.empty()) {
+          ldpp_dout(dpp, 0) << "NOTICE: no endpoint found for zonegroup "
+              << bucket_zonegroup_id << ", responding without a redirect "
+              "location" << dendl;
+        }
         return -ERR_PERMANENT_REDIRECT;
       }
     }

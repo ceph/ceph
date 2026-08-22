@@ -139,6 +139,11 @@ add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
 target_link_libraries(unittest_rgw_period_history ${rgw_libs})
 
+# unittest_rgw_zone
+add_executable(unittest_rgw_zone test_rgw_zone.cc)
+add_ceph_unittest(unittest_rgw_zone)
+target_link_libraries(unittest_rgw_zone ${rgw_libs})
+
 # unittest_rgw_compression
 add_executable(unittest_rgw_compression
   test_rgw_compression.cc
