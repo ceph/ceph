@@ -134,6 +134,8 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     int ceph_flistxattr(ceph_mount_info *cmount, int fd, char *list, size_t size)
     int ceph_llistxattr(ceph_mount_info *cmount, const char *path, char *list, size_t size)
     int ceph_fcopyfile(ceph_mount_info *cmount, const char *spath, const char *dpath, mode_t mode)
+    int ceph_fcopyfilex(ceph_mount_info *cmount, int source_fd, int64_t src_offset,
+                        int dest_fd, int64_t dest_offset, size_t size, unsigned flags)
     int ceph_write(ceph_mount_info *cmount, int fd, const char *buf, int64_t size, int64_t offset)
     int ceph_pwritev(ceph_mount_info *cmount, int fd, iovec *iov, int iovcnt, int64_t offset)
     int ceph_read(ceph_mount_info *cmount, int fd, char *buf, int64_t size, int64_t offset)
