@@ -149,6 +149,604 @@ void redis_exec_connection_pool(const DoutPrefixProvider* dpp,
     	redis_exec_cp(dpp, redis_pool, ec, req, resp, y);
 }
 
+// RedisLease implementation
+
+namespace {
+
+constexpr std::string_view lease_prefix{"d4n:leases:"};
+
+// Helper: Convert nanoseconds to milliseconds for Redis PEXPIRE
+uint64_t nanoseconds_to_milliseconds(uint64_t nanoseconds) {
+  // Convert nanoseconds to milliseconds, round up to avoid zero TTL
+  uint64_t milliseconds = (nanoseconds + 999999ULL) / 1000000ULL;
+  return std::max<uint64_t>(milliseconds, 1);  // Ensure at least 1ms
+}
+
+// Lease metadata structure
+struct LeaseData {
+  uint64_t expiry = 0;          // Expiry in nanoseconds since epoch
+  std::string holder_id;
+  std::string token;
+  uint64_t tick_count = 0;
+  std::string last_renewal_id;  // ID of last renewal - for replay detection
+
+  // Serialize to format: "expiry|holder_id|token|tick_count|last_renewal_id"
+  std::string serialize() const {
+    return std::to_string(expiry) + "|" +
+           url_encode(holder_id, true) + "|" +
+           url_encode(token, true) + "|" +
+           std::to_string(tick_count) + "|" +
+           url_encode(last_renewal_id, true);
+  }
+
+  // Deserialize from format: "expiry|holder_id|token|tick_count|last_renewal_id"
+  static bool deserialize(const std::string& value, LeaseData& data) {
+    std::vector<std::string> parts;
+    boost::split(parts, value, boost::is_any_of("|"));
+
+    // Support old formats: 3 parts (no tick), 4 parts (no renewal_id), 5 parts (current)
+    if (parts.size() < 3 || parts.size() > 5) {
+      return false;
+    }
+
+    try {
+      data.expiry = std::stoull(parts[0]);
+    } catch (...) {
+      return false;
+    }
+
+    data.holder_id = url_decode(parts[1]);
+    data.token = url_decode(parts[2]);
+
+    // Parse tick_count if present (parts[3])
+    if (parts.size() >= 4) {
+      try {
+        data.tick_count = std::stoull(parts[3]);
+      } catch (...) {
+        data.tick_count = 0;
+      }
+    } else {
+      data.tick_count = 0;
+    }
+
+    // Parse last_renewal_id if present (parts[4])
+    if (parts.size() >= 5) {
+      data.last_renewal_id = url_decode(parts[4]);
+    } else {
+      data.last_renewal_id = "";
+    }
+
+    return true;
+  }
+
+  bool is_active(uint64_t now) const {
+    return expiry > now;
+  }
+};
+
+std::string make_lease_key(const std::string& resource_name)
+{
+  return std::string{lease_prefix} + resource_name;
+}
+
+uint64_t current_time_nanoseconds()
+{
+  const auto now = std::chrono::duration_cast<std::chrono::nanoseconds>(
+      std::chrono::system_clock::now().time_since_epoch()).count();
+  return static_cast<uint64_t>(std::max<int64_t>(now, 0));
+}
+
+} // anonymous namespace
+
+int RedisLease::acquire(const DoutPrefixProvider* dpp,
+                               const std::string& resource_name,
+                               const std::string& holder_id,
+                               const std::string& token,
+                               uint64_t ttl_nanoseconds)
+{
+  if (ttl_nanoseconds == 0) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " invalid TTL=0 for resource=" << resource_name << dendl;
+    return -EINVAL;
+  }
+
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return -EINVAL;
+  }
+
+  const auto redis_key = make_lease_key(resource_name);
+  LeaseData new_lease{
+    .expiry = current_time_nanoseconds() + ttl_nanoseconds,
+    .holder_id = holder_id,
+    .token = token,
+    .tick_count = 0,
+    .last_renewal_id = ""  // No renewals yet
+  };
+
+  // Convert nanoseconds to milliseconds for Redis (PX option)
+  const uint64_t ttl_ms = nanoseconds_to_milliseconds(ttl_nanoseconds);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    // SET key value NX PX ttl_ms
+    // NX = only set if key doesn't exist
+    // PX = expire in ttl_ms milliseconds (better precision than EX seconds)
+    req.push("SET", redis_key, new_lease.serialize(), "NX", "PX", std::to_string(ttl_ms));
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return -EIO;
+    }
+
+    const auto& result = std::get<0>(resp).value();
+    if (!result.has_value() || result->empty()) {
+      // SET NX failed - resource already has an active lease
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " resource already leased: " << resource_name << dendl;
+      return -EBUSY;
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " acquired lease: resource=" << resource_name
+                       << " holder=" << holder_id
+                       << " expiry_ns=" << new_lease.expiry << dendl;
+    return 0;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+int RedisLease::renew(const DoutPrefixProvider* dpp,
+                             const std::string& resource_name,
+                             const std::string& holder_id,
+                             const std::string& token,
+                             uint64_t ttl_nanoseconds,
+                             uint64_t max_ticks)
+{
+  if (ttl_nanoseconds == 0) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " invalid TTL=0 for resource=" << resource_name << dendl;
+    return -EINVAL;
+  }
+
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return -EINVAL;
+  }
+
+  // Generate unique renewal_id BEFORE any Redis operations
+  // This ensures the same ID is used if we retry
+  const uint64_t renewal_timestamp = current_time_nanoseconds();
+  const std::string renewal_id = std::to_string(renewal_timestamp) + ":" +
+                                  holder_id + ":" +
+                                  std::to_string(std::hash<std::string>{}(token));
+
+  const auto redis_key = make_lease_key(resource_name);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+
+    // Get current lease data
+    req.push("GET", redis_key);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return -EIO;
+    }
+
+    const auto& get_result = std::get<0>(resp).value();
+    if (!get_result.has_value() || get_result->empty()) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " lease not found: resource=" << resource_name << dendl;
+      return -ENOENT;
+    }
+
+    // Parse existing lease
+    LeaseData existing_lease;
+    if (!LeaseData::deserialize(*get_result, existing_lease)) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to parse lease data for resource=" << resource_name << dendl;
+      return -EINVAL;
+    }
+
+    // REPLAY/RETRY DETECTION: Check if this exact renewal was already applied
+    if (existing_lease.last_renewal_id == renewal_id) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " renewal already applied (retry detected)"
+                         << " renewal_id=" << renewal_id
+                         << " resource=" << resource_name << dendl;
+      return 0;  // Idempotent - this renewal already happened
+    }
+
+    // Check if lease is still active
+    const auto now = current_time_nanoseconds();
+    if (!existing_lease.is_active(now)) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " lease expired: resource=" << resource_name << dendl;
+      // Clean up expired lease
+      request del_req;
+      del_req.push("DEL", redis_key);
+      response<int> del_resp;
+      boost::system::error_code del_ec;
+      if (redis_pool) {
+        redis_exec_cp(dpp, redis_pool, del_ec, del_req, del_resp, null_yield);
+      } else {
+        redis_exec(REDISconn, del_ec, del_req, del_resp, null_yield);
+      }
+      return -ENOENT;
+    }
+
+    // Validate ownership
+    if (existing_lease.holder_id != holder_id || existing_lease.token != token) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " ownership validation failed: resource=" << resource_name
+                         << " expected_holder=" << existing_lease.holder_id
+                         << " provided_holder=" << holder_id << dendl;
+      return -EACCES;
+    }
+
+    // Check if max_ticks limit reached
+    if (max_ticks > 0 && existing_lease.tick_count >= max_ticks) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " max_ticks limit reached: resource=" << resource_name
+                         << " tick_count=" << existing_lease.tick_count
+                         << " max_ticks=" << max_ticks << dendl;
+      return -EINVAL;  // Lease still held - caller decides what to do
+    }
+
+    // Renew the lease with incremented tick count and this renewal_id
+    LeaseData renewed_lease{
+      .expiry = current_time_nanoseconds() + ttl_nanoseconds,
+      .holder_id = holder_id,
+      .token = token,
+      .tick_count = existing_lease.tick_count + 1,
+      .last_renewal_id = renewal_id  // Mark this renewal as applied
+    };
+
+    // Convert nanoseconds to milliseconds for Redis (PX option)
+    const uint64_t ttl_ms = nanoseconds_to_milliseconds(ttl_nanoseconds);
+
+    request set_req;
+    set_req.push("SET", redis_key, renewed_lease.serialize(), "PX", std::to_string(ttl_ms));
+    response<std::optional<std::string>> set_resp;
+    boost::system::error_code set_ec;
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, set_ec, set_req, set_resp, null_yield);
+    } else {
+      redis_exec(REDISconn, set_ec, set_req, set_resp, null_yield);
+    }
+
+    if (set_ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to update lease for resource=" << resource_name
+                        << ": " << set_ec.message() << dendl;
+      return -EIO;
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " renewed lease: resource=" << resource_name
+                       << " holder=" << holder_id
+                       << " new_expiry_ns=" << renewed_lease.expiry
+                       << " tick_count=" << renewed_lease.tick_count
+                       << " renewal_id=" << renewal_id << dendl;
+    return 0;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+int RedisLease::release(const DoutPrefixProvider* dpp,
+                               const std::string& resource_name,
+                               const std::string& holder_id,
+                               const std::string& token)
+{
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return -EINVAL;
+  }
+
+  const auto redis_key = make_lease_key(resource_name);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+
+    // Get current lease data
+    req.push("GET", redis_key);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return -EIO;
+    }
+
+    const auto& get_result = std::get<0>(resp).value();
+    if (!get_result.has_value() || get_result->empty()) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " lease not found: resource=" << resource_name << dendl;
+      return -ENOENT;
+    }
+
+    // Parse existing lease
+    LeaseData existing_lease;
+    if (!LeaseData::deserialize(*get_result, existing_lease)) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to parse lease data for resource=" << resource_name << dendl;
+      return -ENOENT;
+    }
+
+    // Validate ownership
+    if (existing_lease.holder_id != holder_id || existing_lease.token != token) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " ownership validation failed: resource=" << resource_name
+                         << " expected_holder=" << existing_lease.holder_id
+                         << " provided_holder=" << holder_id << dendl;
+      return -EACCES;
+    }
+
+    // Release the lease
+    request del_req;
+    del_req.push("DEL", redis_key);
+    response<int> del_resp;
+    boost::system::error_code del_ec;
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, del_ec, del_req, del_resp, null_yield);
+    } else {
+      redis_exec(REDISconn, del_ec, del_req, del_resp, null_yield);
+    }
+
+    if (del_ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " failed to delete lease for resource=" << resource_name
+                        << ": " << del_ec.message() << dendl;
+      return -EIO;
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " released lease: resource=" << resource_name
+                       << " holder=" << holder_id << dendl;
+    return 0;
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return -EIO;
+  }
+}
+
+LeaseCheckResult RedisLease::any_active(const DoutPrefixProvider* dpp,
+                                        const std::string& resource_prefix)
+{
+  if (resource_prefix.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_prefix" << dendl;
+    return {.active = false, .error = -EINVAL};
+  }
+
+  // Build pattern for scanning all leases matching this resource prefix
+  const auto pattern = make_lease_key(resource_prefix) + "*";
+
+  response<std::vector<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    // Use KEYS pattern to find all matching lease keys
+    // Note: KEYS can be slow on large datasets, but lease counts should be small
+    req.push("KEYS", pattern);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource_prefix=" << resource_prefix
+                        << ": " << ec.message() << dendl;
+      return {.active = false, .error = -EIO};
+    }
+
+    const auto& keys = std::get<0>(resp).value();
+    if (keys.empty()) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " no leases found for resource prefix: " << resource_prefix << dendl;
+      return {.active = false, .error = 0};
+    }
+
+    // Check if any of the found keys contain active leases
+    // Opportunistically delete expired leases we encounter
+    const auto now = current_time_nanoseconds();
+    int total_leases = keys.size();
+    int active_leases = 0;
+    std::vector<std::string> expired_keys;
+
+    for (const auto& lease_key : keys) {
+      response<std::optional<std::string>> get_resp;
+      request get_req;
+      get_req.push("GET", lease_key);
+      boost::system::error_code get_ec;
+
+      if (redis_pool) {
+        redis_exec_cp(dpp, redis_pool, get_ec, get_req, get_resp, null_yield);
+      } else {
+        redis_exec(REDISconn, get_ec, get_req, get_resp, null_yield);
+      }
+
+      if (!get_ec) {
+        const auto& val = std::get<0>(get_resp).value();
+        if (val.has_value() && !val->empty()) {
+          LeaseData lease;
+          if (LeaseData::deserialize(*val, lease)) {
+            if (lease.is_active(now)) {
+              active_leases++;
+              ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                                 << " found active lease: holder=" << lease.holder_id
+                                 << " expiry_ns=" << lease.expiry << dendl;
+            } else {
+              // Lease expired but not yet cleaned up by Redis - delete it
+              expired_keys.push_back(lease_key);
+            }
+          }
+        }
+      }
+    }
+
+    // Opportunistic cleanup: delete expired leases
+    if (!expired_keys.empty()) {
+      request del_req;
+      for (const auto& key : expired_keys) {
+        del_req.push("DEL", key);
+      }
+      response<int> del_resp;
+      boost::system::error_code del_ec;
+      if (redis_pool) {
+        redis_exec_cp(dpp, redis_pool, del_ec, del_req, del_resp, null_yield);
+      } else {
+        redis_exec(REDISconn, del_ec, del_req, del_resp, null_yield);
+      }
+      if (!del_ec) {
+        ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                           << " cleaned up " << expired_keys.size() << " expired leases" << dendl;
+      }
+    }
+
+    bool has_active = (active_leases > 0);
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " resource_prefix=" << resource_prefix
+                       << " total_leases=" << total_leases
+                       << " active_leases=" << active_leases
+                       << " has_active=" << has_active << dendl;
+    return {.active = has_active, .error = 0};
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource_prefix=" << resource_prefix
+                      << ": " << e.what() << dendl;
+    return {.active = false, .error = -EIO};
+  }
+}
+
+LeaseCheckResult RedisLease::is_active(const DoutPrefixProvider* dpp,
+                                       const std::string& resource_name,
+                                       const std::string& holder_id,
+                                       const std::string& token)
+{
+  if (resource_name.empty() || holder_id.empty() || token.empty()) {
+    ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                       << " empty resource_name/holder_id/token" << dendl;
+    return {.active = false, .error = -EINVAL};
+  }
+
+  const auto redis_key = make_lease_key(resource_name);
+
+  response<std::optional<std::string>> resp;
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("GET", redis_key);
+
+    if (redis_pool) {
+      redis_exec_cp(dpp, redis_pool, ec, req, resp, null_yield);
+    } else {
+      redis_exec(REDISconn, ec, req, resp, null_yield);
+    }
+
+    if (ec) {
+      ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                        << " Redis error for resource=" << resource_name
+                        << ": " << ec.message() << dendl;
+      return {.active = false, .error = -EIO};
+    }
+
+    const auto& get_result = std::get<0>(resp).value();
+    if (!get_result.has_value() || get_result->empty()) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " lease not found: resource=" << resource_name << dendl;
+      return {.active = false, .error = 0};
+    }
+
+    // Parse lease data
+    LeaseData lease;
+    if (!LeaseData::deserialize(*get_result, lease)) {
+      ldpp_dout(dpp, 10) << "RedisLease::" << __func__
+                         << " failed to parse lease data for resource=" << resource_name << dendl;
+      return {.active = false, .error = -EINVAL};
+    }
+
+    // Check expiry
+    const auto now = current_time_nanoseconds();
+    if (!lease.is_active(now)) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " lease expired: resource=" << resource_name
+                         << " expiry_ns=" << lease.expiry << dendl;
+      return {.active = false, .error = 0};
+    }
+
+    // Validate ownership
+    if (lease.holder_id != holder_id || lease.token != token) {
+      ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                         << " ownership mismatch: resource=" << resource_name
+                         << " expected_holder=" << lease.holder_id
+                         << " provided_holder=" << holder_id << dendl;
+      return {.active = false, .error = 0};
+    }
+
+    ldpp_dout(dpp, 20) << "RedisLease::" << __func__
+                       << " lease is active: resource=" << resource_name
+                       << " holder=" << holder_id
+                       << " expiry_ns=" << lease.expiry << dendl;
+    return {.active = true, .error = 0};
+
+  } catch (const std::exception& e) {
+    ldpp_dout(dpp, 0) << "RedisLease::" << __func__
+                      << " exception for resource=" << resource_name
+                      << ": " << e.what() << dendl;
+    return {.active = false, .error = -EIO};
+  }
+}
+
 int RedisDirectory::get_kv(const DoutPrefixProvider* dpp, optional_yield y,
                        const std::string& key,
                        const std::string& field,
