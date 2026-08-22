@@ -212,7 +212,6 @@ public:
   };
   void init(bool has_data,
             uint64_t current_sync_gen, uint64_t last_op_sequence_num, bool persist_on_flush);
-  virtual void init_cache_buffer(std::vector<WriteBufferAllocation>::iterator allocation) {}
   virtual void init_cache_bl(bufferlist &src_bl, uint64_t off, uint64_t len) {}
   /* Returns a ref to a bl containing bufferptrs to the entry cache buffer */
   virtual buffer::list &get_cache_bl() = 0;
