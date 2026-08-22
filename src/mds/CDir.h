@@ -143,6 +143,7 @@ public:
   static const unsigned STATE_BADFRAG =       (1<<17);  // bad dirfrag
   static const unsigned STATE_TRACKEDBYOFT =  (1<<18);  // tracked by open file table
   static const unsigned STATE_AUXSUBTREE =    (1<<19);  // no subtree merge
+  static const unsigned STATE_BACKEND_FETCH = (1<<20);  // background prefetch
 
   // common states
   static const unsigned STATE_CLEAN =  0;
@@ -720,6 +721,8 @@ protected:
   int num_dirty = 0;
 
   int num_inodes_with_caps = 0;
+
+  uint8_t backend_hit_count = 0;  // hit counter for lazy bg prefetch threshold
 
   // state
   version_t committing_version = 0;
