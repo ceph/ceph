@@ -14,8 +14,26 @@ from typing import Dict, Tuple, List
 from .context import CephadmContext
 from .exceptions import Error, PortOccupiedError
 from .file_utils import read_file
+from .systemd import run_in_host
 
 logger = logging.getLogger()
+
+# Bind-check script executed on the host via a transient systemd oneshot.
+# Exits 0 on success, or with the OSError errno on failure so the caller can
+# map EADDRINUSE -> PortOccupiedError.
+_HOST_BIND_CHECK = (
+    'import socket,sys\n'
+    'ip,port=sys.argv[1],int(sys.argv[2])\n'
+    'af=socket.AF_INET6 if ":" in ip else socket.AF_INET\n'
+    's=socket.socket(af,socket.SOCK_STREAM)\n'
+    'try:\n'
+    ' s.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1)\n'
+    ' s.bind((ip,port))\n'
+    'except OSError as e:\n'
+    ' sys.exit(e.errno)\n'
+    'finally:\n'
+    ' s.close()\n'
+)
 
 
 class EndPoint:
@@ -97,15 +115,32 @@ def port_in_use(ctx: CephadmContext, endpoint: EndPoint) -> bool:
 
 def check_ip_port(ctx, ep):
     # type: (CephadmContext, EndPoint) -> None
-    if not ctx.skip_ping_check:
-        logger.info(f'Verifying IP {ep.ip} port {ep.port} ...')
-        if is_ipv6(ep.ip):
-            s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
-            ip = unwrap_ipv6(ep.ip)
-        else:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            ip = ep.ip
-        attempt_bind(ctx, s, ip, ep.port)
+    """Verify that *ep* can be bound on the host.
+
+    The bind is performed on the host via run_in_host() so that this check
+    works when cephadm itself is running inside a container.
+    """
+    if ctx.skip_ping_check:
+        return
+
+    logger.info(f'Verifying IP {ep.ip} port {ep.port} ...')
+    ip = unwrap_ipv6(ep.ip) if is_ipv6(ep.ip) else ep.ip
+    cmd = ['/usr/bin/python3', '-c', _HOST_BIND_CHECK, ip, str(ep.port)]
+    try:
+        status = run_in_host(cmd, name='cephadm-check-ip-port.service')
+    except Exception as e:
+        raise Error(e)
+    if status == 0:
+        return
+    if status == errno.EADDRINUSE:
+        msg = 'Cannot bind to IP %s port %d: %s' % (
+            ip,
+            ep.port,
+            os.strerror(status),
+        )
+        logger.warning(msg)
+        raise PortOccupiedError(msg)
+    raise OSError(status, os.strerror(status))
 
 
 def check_subnet(subnets: str) -> Tuple[int, List[int], str]:
