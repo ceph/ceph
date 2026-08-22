@@ -637,7 +637,10 @@ const routes: Routes = [
                   {
                     path: ':users_groups_id',
                     component: SmbUsersgroupsResourceSidebarComponent,
-                    data: { breadcrumbs: SmbUsergroupsResourceBreadcrumbResolver },
+                    data: {
+                      breadcrumbs: SmbUsergroupsResourceBreadcrumbResolver,
+                      showBreadcrumbsLayout: false
+                    },
                     children: [
                       { path: '', redirectTo: 'overview', pathMatch: 'full' },
                       {
