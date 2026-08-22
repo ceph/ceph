@@ -8428,6 +8428,14 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (-1 == pending_inc.new_pool_max)
     pending_inc.new_pool_max = osdmap.pool_max;
   int64_t pool = ++pending_inc.new_pool_max;
+  // Rollback helper: Any error after this point would result in the pool ID
+  // being present in pending_inc.new_pools but not in new_pool_names. This
+  // would cause the next call to check_health() -> get_pool_name() to crash on
+  // the unnamed pool. Must abort_pool before returning with an error.
+  auto abort_pool = [&] {
+    pending_inc.new_pools.erase(pool);
+    --pending_inc.new_pool_max;
+  };
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->create_time = ceph_clock_now();
@@ -8517,6 +8525,7 @@ int OSDMonitor::prepare_new_pool(string& name,
         pi->ec_coding_shard_count = erasure_code->get_coding_chunk_count();
       } else {
         *ss << "get_erasure_code failed: " << tmp.str();
+        abort_pool();
         return -EINVAL;
       }
       pi->erasure_code_profile = erasure_code_profile;
@@ -8553,6 +8562,7 @@ int OSDMonitor::prepare_new_pool(string& name,
       if (auto r = enable_pool_ec_optimizations(*pi, true); !r) {
         // for Crimson - failure is not an option
         *ss << r.error().message;
+        abort_pool();
         return r.error().error;
       }
     } else {
