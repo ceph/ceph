@@ -4838,11 +4838,18 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
 
   // if we found attrs, populate crypt_http_responses
   if (res == 0) {
-    static constexpr bool copy_source = false;
-    res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
-                                nullptr, &crypt_http_responses, copy_source);
-    if (res < 0) {
-      return res;
+    // the sse-c customer key headers are optional on completion, so only
+    // verify the key when the request provides it
+    const std::string stored_mode =
+        get_str_attribute(obj->get_attrs(), RGW_ATTR_CRYPT_MODE);
+    if (stored_mode.compare(0, 5, "SSE-C") != 0 ||
+        s->info.env->exists("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_ALGORITHM")) {
+      static constexpr bool copy_source = false;
+      res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
+                                  nullptr, &crypt_http_responses, copy_source);
+      if (res < 0) {
+        return res;
+      }
     }
   }
 
