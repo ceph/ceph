@@ -1233,6 +1233,19 @@ options:
     are flushed to the pool.
     (for testing only).
   with_legacy: true
+- name: mds_kill_after_unlink_finish
+  type: bool
+  level: dev
+  default: false
+  services:
+  - mds
+  fmt_desc: MDS will crash after _unlink_local_finish commits the unlink but
+    before CDir::commit has written the directory omap to RADOS.
+    This reproduces the crash in _eval_stray_remote when a stale remote
+    dentry on disk is loaded after MDS recovery and triggers reintegration
+    of an nlink==0 stray inode (tracker 62663).
+    (for developers only).
+  with_legacy: true
 - name: mds_inject_skip_replaying_inotable
   type: bool
   level: dev
