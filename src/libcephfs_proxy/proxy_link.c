@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <sys/uio.h>
+#include <fcntl.h>
 
 #include "proxy_link.h"
 #include "proxy_manager.h"
@@ -163,6 +164,14 @@ int32_t proxy_link_ctrl_send(int32_t sd, void *data, int32_t size, int32_t type,
 	return 0;
 }
 
+/* Darwin has no MSG_CMSG_CLOEXEC. Where it is missing, the descriptors are
+ * closed on exec by hand below instead. */
+#ifdef MSG_CMSG_CLOEXEC
+#define PROXY_MSG_CMSG_CLOEXEC MSG_CMSG_CLOEXEC
+#else
+#define PROXY_MSG_CMSG_CLOEXEC 0
+#endif
+
 int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
 			     void *ctrl, int32_t *ctrl_size)
 {
@@ -186,7 +195,7 @@ int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
 
 	msg.msg_flags = 0;
 
-	len = recvmsg(sd, &msg, MSG_NOSIGNAL | MSG_CMSG_CLOEXEC);
+	len = recvmsg(sd, &msg, MSG_NOSIGNAL | PROXY_MSG_CMSG_CLOEXEC);
 	if (len < 0) {
 		return proxy_log(LOG_ERR, errno,
 				 "Failed to received a control message");
@@ -229,6 +238,25 @@ int32_t proxy_link_ctrl_recv(int32_t sd, void *data, int32_t size, int32_t type,
 	}
 
 	memcpy(ctrl, CMSG_DATA(cmsg), clen);
+
+#ifndef MSG_CMSG_CLOEXEC
+	/* Without MSG_CMSG_CLOEXEC the descriptors arrive without O_CLOEXEC,
+	 * so set it here. Unlike the flag this is not atomic: another thread
+	 * reaching exec() between the recvmsg() above and these calls leaks
+	 * them into the new image. */
+	if (type == SCM_RIGHTS) {
+		int32_t *fds = ctrl;
+		int32_t i, count = clen / (int32_t)sizeof(*fds);
+
+		for (i = 0; i < count; i++) {
+			if (fcntl(fds[i], F_SETFD, FD_CLOEXEC) < 0) {
+				return proxy_log(LOG_ERR, errno,
+						 "Failed to make a received "
+						 "descriptor close on exec");
+			}
+		}
+	}
+#endif
 
 	return len;
 }

@@ -69,6 +69,9 @@ using boost::endian::native_to_big;
 #ifdef HAVE_GETENTROPY
 
 #include <unistd.h>
+#ifdef HAVE_SYS_RANDOM_H
+#include <sys/random.h> // for getentropy() on Darwin
+#endif
 
 static bool getentropy_works()
 {
@@ -132,6 +135,9 @@ void CryptoRandom::get_bytes(char *buf, int len)
 }
 
 #else // !HAVE_GETENTROPY && !_WIN32
+
+namespace TOPNSPC::auth {
+
 // open /dev/urandom once on construction and reuse the fd for all reads
 CryptoRandom::CryptoRandom()
   : fd{open_urandom()}

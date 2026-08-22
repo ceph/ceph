@@ -77,5 +77,17 @@ if(FUSE_FOUND)
       IMPORTED_LINK_INTERFACE_LANGUAGES "C"
       IMPORTED_LOCATION "${FUSE_LIBRARIES}"
       VERSION "${FUSE_VERSION}")
+    if(APPLE)
+      # macFUSE installs both libfuse2 and libfuse3, and ships a
+      # /usr/local/include/fuse.h shim whose only content routes <fuse.h> to
+      # the libfuse2 headers.  Apple clang searches /usr/local/include ahead
+      # of every -isystem directory, so as a system include the fuse3 headers
+      # can never win that lookup and <fuse.h> silently lands on fuse2, whose
+      # types then collide with the fuse3 ones included elsewhere.  Handing
+      # the directory over as -I puts it first.  The property needs CMake
+      # 3.23; below that this is ignored and such a build has to point
+      # FUSE_INCLUDE_DIR at one version only.
+      set_target_properties(FUSE::FUSE PROPERTIES IMPORTED_NO_SYSTEM TRUE)
+    endif()
   endif()
 endif()

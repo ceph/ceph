@@ -1,7 +1,9 @@
 
 #include <stdlib.h>
 
+#ifdef __linux__
 #include <linux/fscrypt.h>
+#endif
 
 #include "proxy_log.h"
 #include "proxy_helpers.h"
@@ -1192,6 +1194,7 @@ __public int32_t ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
 				      const char *key_data, int32_t key_len,
 				      char *kid, int32_t user)
 {
+#ifdef __linux__
 	CEPH_REQ(ceph_add_fscrypt_key, req, 1, ans, 1);
 
 	req.user = user;
@@ -1202,12 +1205,16 @@ __public int32_t ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
 	CEPH_BUFF_ADD(ans, kid, FSCRYPT_KEY_IDENTIFIER_SIZE);
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_ADD_FSCRYPT_KEY, req, ans);
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 __public int32_t ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
 					 struct fscrypt_remove_key_arg *arg,
 					 int32_t user)
 {
+#ifdef __linux__
 	CEPH_REQ(ceph_remove_fscrypt_key, req, 1, ans, 1);
 
 	req.user = user;
@@ -1217,11 +1224,15 @@ __public int32_t ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
 	CEPH_BUFF_ADD(ans, arg, sizeof(struct fscrypt_remove_key_arg));
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY, req, ans);
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 __public int32_t ceph_get_fscrypt_key_status(
 	struct ceph_mount_info *cmount, struct fscrypt_get_key_status_arg *arg)
 {
+#ifdef __linux__
 	CEPH_REQ(ceph_get_fscrypt_key_status, req, 1, ans, 1);
 
 	CEPH_DATA_ADD(req, arg, arg, sizeof(struct fscrypt_get_key_status_arg));
@@ -1229,12 +1240,16 @@ __public int32_t ceph_get_fscrypt_key_status(
 	CEPH_BUFF_ADD(ans, arg, sizeof(struct fscrypt_get_key_status_arg));
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY, req, ans);
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 __public int32_t ceph_ll_set_fscrypt_policy_v2(
 	struct ceph_mount_info *cmount, Inode *in,
 	const struct fscrypt_policy_v2 *policy)
 {
+#ifdef __linux__
 	CEPH_REQ(ceph_ll_set_fscrypt_policy_v2, req, 1, ans, 0);
 
 	req.inode = ptr_value(in);
@@ -1243,12 +1258,16 @@ __public int32_t ceph_ll_set_fscrypt_policy_v2(
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_SET_FSCRYPT_POLICY_V2, req,
 			    ans);
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 __public int32_t ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
 					       Inode *in,
 					       struct fscrypt_policy_v2 *policy)
 {
+#ifdef __linux__
 	CEPH_REQ(ceph_ll_get_fscrypt_policy_v2, req, 0, ans, 1);
 
 	req.inode = ptr_value(in);
@@ -1258,6 +1277,9 @@ __public int32_t ceph_ll_get_fscrypt_policy_v2(struct ceph_mount_info *cmount,
 
 	return CEPH_PROCESS(cmount, LIBCEPHFSD_OP_LL_GET_FSCRYPT_POLICY_V2, req,
 			    ans);
+#else
+	return -EOPNOTSUPP;
+#endif
 }
 
 __public int32_t ceph_ll_is_encrypted(struct ceph_mount_info *cmount,

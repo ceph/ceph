@@ -10382,7 +10382,7 @@ int get_decrypt_filter(
 
   // in case of a multipart upload, we need to know the part lengths to
   // correctly decrypt across part boundaries
-  std::vector<size_t> parts_len;
+  std::vector<uint64_t> parts_len;
 
   // Read (S3 part number, GCM salt) pairs from the attribute (set by Complete).
   std::vector<std::pair<uint32_t, std::string>> part_keys;
