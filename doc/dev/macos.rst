@@ -320,8 +320,27 @@ the ISA-L decode, not just the encode.
 What does not build
 -------------------
 
-* BlueStore, and therefore any persistent OSD; it needs libaio or io_uring and
-  the Linux block layer
+* BlueStore, and therefore any persistent OSD. Not for want of a portable IO
+  backend: ``blk/aio`` already has a ``HAVE_POSIXAIO`` path over POSIX aio and
+  kqueue, written for FreeBSD, and Darwin has the whole of POSIX aio and
+  defines both ``SIGEV_KEVENT`` and ``EVFILT_AIO``. Setting ``HAVE_POSIXAIO``
+  here is one line and CMake then configures. Two things stop it working:
+
+  * ``SIGEV_KEVENT`` is declared but not implemented. ``aio_write()`` with it
+    fails with ``EINVAL``, and Darwin's ``struct sigevent`` has no
+    ``sigev_notify_kqueue`` to name the queue with. Plain ``aio_write()``
+    polled with ``aio_error()`` does work, but delivery to a kqueue is
+    precisely what ``aio_queue_t::get_next_completed()`` reaps with.
+  * ``kern.aioprocmax`` is 16 outstanding requests per process, against a
+    ``bdev_aio_max_queue_depth`` that defaults to 1024. Darwin's POSIX aio is
+    a small thread pool, not an asynchronous IO subsystem.
+
+  So this wants a different ``io_queue_t`` rather than the FreeBSD one spelled
+  differently. Behind it the rest is ordinary: the surface that fails to
+  compile is 19 files, mostly the ``p2aligned`` type deduction and missing
+  includes this port has met elsewhere, plus ``O_DIRECT``, ``fdatasync()``,
+  ``MAP_POPULATE`` and ``MAP_HUGETLB``, none of which Darwin has.
+
 * seven of the 1942 test targets, with ``WITH_TESTS=ON``. The rest of ``all``
   builds, so this is the whole of what is left:
 
