@@ -583,7 +583,8 @@
       rules: [
         {
           alert: 'CephPoolGrowthWarning',
-          expr: '(predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(%(cluster)spool_id, instance) group_right() ceph_pool_metadata) >= 95' % $.MultiClusterQuery(),
+          'for': '1h',
+          expr: '(predict_linear(avg by (%(cluster)spool_id) (ceph_pool_percent_used)[2d:], 3600 * 24 * 5) * on(%(cluster)spool_id) group_right() avg by (%(cluster)spool_id, name) (ceph_pool_metadata)) >= 95' % [$.MultiClusterQuery(), $.MultiClusterQuery(), $.MultiClusterQuery()],
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.9.2' },
           annotations: {
             summary: 'Pool growth rate may soon exceed capacity%(cluster)s' % $.MultiClusterSummary(),
