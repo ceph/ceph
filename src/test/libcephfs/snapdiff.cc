@@ -358,7 +358,6 @@ public:
                                relpath,
                                s1.c_str(),
                                s2.c_str(),
-                               diff_mask,
                                &info);
     if (r != 0) {
       std::cerr << " Failed to open snapdiff, ret:" << r << std::endl;
@@ -383,6 +382,45 @@ public:
     }
     return r;
   }
+  int for_each_readdir_snapdiff2(const char* relpath,
+    const char* snap1,
+    const char* snap2,
+    std::function<bool(const dirent*, uint64_t)> fn)
+  {
+    auto s1 = make_snap_name(snap1);
+    auto s2 = make_snap_name(snap2);
+    ceph_snapdiff_info2 *info;
+    ceph_snapdiff_entry_t res_entry;
+    int r = ceph_open_snapdiff2(cmount,
+                                dir_path,
+                                relpath,
+                                s1.c_str(),
+                                s2.c_str(),
+                                diff_mask,
+                                &info);
+    if (r != 0) {
+      std::cerr << " Failed to open snapdiff, ret:" << r << std::endl;
+      return r;
+    }
+    while (0 < (r = ceph_readdir_snapdiff2(info,
+                                           &res_entry))) {
+      if (strcmp(res_entry.dir_entry.d_name, ".") == 0 ||
+        strcmp(res_entry.dir_entry.d_name, "..") == 0) {
+        continue;
+      }
+      if (!fn(&res_entry.dir_entry, res_entry.snapid)) {
+        r = -EINTR;
+        break;
+      }
+    }
+    ceph_assert(0 == ceph_close_snapdiff2(info));
+    if (r != 0) {
+      std::cerr << " Failed to readdir snapdiff, ret:" << r
+                << " " << relpath << ", " << snap1 << " vs. " << snap2
+                << std::endl;
+    }
+    return r;
+  }
   int readdir_snapdiff_and_compare(const char* relpath,
     const char* snap1,
     const char* snap2,
@@ -390,19 +428,23 @@ public:
   {
     vector<pair<string, uint64_t>> expected(expected0);
     auto end = expected.end();
-    int r = for_each_readdir_snapdiff(relpath, snap1, snap2,
-      [&](const dirent* dire, uint64_t snapid) {
-
-        pair<string, uint64_t> p = std::make_pair(dire->d_name, snapid);
-        auto it = std::find(expected.begin(), end, p);
-        if (it == end) {
-          std::cerr << "readdir_snapdiff_and_compare error: unexpected name:"
-            << dire->d_name << "/" << snapid << std::endl;
-          return false;
-        }
-        expected.erase(it);
-        return true;
-      });
+    auto check_fn = [&](const dirent* dire, uint64_t snapid) {
+      pair<string, uint64_t> p = std::make_pair(dire->d_name, snapid);
+      auto it = std::find(expected.begin(), end, p);
+      if (it == end) {
+        std::cerr << "readdir_snapdiff_and_compare error: unexpected name:"
+                  << dire->d_name << "/" << snapid << std::endl;
+        return false;
+      }
+      expected.erase(it);
+      return true;
+    };
+    int r;
+    if (diff_mask == 0) {
+      r = for_each_readdir_snapdiff(relpath, snap1, snap2, check_fn);
+    } else {
+      r = for_each_readdir_snapdiff2(relpath, snap1, snap2, check_fn);
+    }
     if (r == 0 && !expected.empty()) {
       std::cerr << __func__ << " error: left entries:" << std::endl;
       for (auto& e : expected) {
