@@ -112,4 +112,43 @@ describe('OverviewComponent', () => {
       expect(statusText).toBeTruthy();
     });
   });
+
+  describe('Loading State', () => {
+    it('should set loading property to true', () => {
+      component.loading = true;
+      fixture.detectChanges();
+
+      expect(component.loading).toBe(true);
+    });
+
+    it('should calculate the correct number of loading placeholders based on columns when fields are empty', () => {
+      component.columns = 4;
+      component.fields = [];
+      component.ngOnChanges();
+
+      expect(component.loadingPlaceholders.length).toBe(4);
+      expect(component.loadingPlaceholders).toEqual([0, 1, 2, 3]);
+    });
+
+    it('should calculate the correct number of loading placeholders based on fields length when fields exist', () => {
+      component.columns = 4;
+      component.fields = [
+        { label: 'Field 1', value: '1' },
+        { label: 'Field 2', value: '2' }
+      ];
+      component.ngOnChanges();
+
+      // Should prefer fields.length (2) over columns (4)
+      expect(component.loadingPlaceholders.length).toBe(2);
+      expect(component.loadingPlaceholders).toEqual([0, 1]);
+    });
+
+    it('should always render at least 1 placeholder if both fields length and columns are 0', () => {
+      component.columns = 0;
+      component.fields = [];
+      component.ngOnChanges();
+
+      expect(component.loadingPlaceholders.length).toBe(1);
+    });
+  });
 });

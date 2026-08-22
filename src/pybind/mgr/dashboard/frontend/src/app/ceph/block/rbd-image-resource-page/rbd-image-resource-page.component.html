@@ -1,4 +1,6 @@
-@if (selection && selection.source !== 'REMOVING') {
+@if (
+  (selection && selection.source !== 'REMOVING') || (section === 'overview' && isOverviewLoading)
+) {
   @switch (section) {
     @case ('overview') {
       <cd-resource-overview-card
@@ -6,6 +8,7 @@
         title="Image details"
         [columns]="4"
         [fields]="overviewFields"
+        [loading]="isOverviewLoading"
       >
       </cd-resource-overview-card>
     }

@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { ActivatedRoute } from '@angular/router';
 import { Subscription } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -18,6 +19,7 @@ export class SmbUsersgroupsResourcePageComponent implements OnInit, OnDestroy {
   section = '';
   selection: SMBUsersGroups;
   notFound = false;
+  isOverviewLoading = false;
   overviewFields: OverviewField[] = [];
   columns: CdTableColumn[] = [];
 
@@ -43,15 +45,20 @@ export class SmbUsersgroupsResourcePageComponent implements OnInit, OnDestroy {
       usersGroupsIdParamMap.subscribe((params) => {
         const usersGroupsId = decodeURIComponent(params.get('users_groups_id') ?? '');
         if (!usersGroupsId) {
+          this.isOverviewLoading = false;
           this.applyStandalone(null);
           return;
         }
 
+        this.isOverviewLoading = true;
         this.sub.add(
-          this.smbService.getUsersGroups(usersGroupsId).subscribe({
-            next: (standalone: SMBUsersGroups) => this.applyStandalone(standalone),
-            error: () => this.applyStandalone(null)
-          })
+          this.smbService
+            .getUsersGroups(usersGroupsId)
+            .pipe(finalize(() => (this.isOverviewLoading = false)))
+            .subscribe({
+              next: (standalone: SMBUsersGroups) => this.applyStandalone(standalone),
+              error: () => this.applyStandalone(null)
+            })
         );
       })
     );
