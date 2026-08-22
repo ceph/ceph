@@ -1259,6 +1259,14 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
   CDir *olddir = 0;
   if (renamed_dirino) {
     renamed_diri = mds->mdcache->get_inode(renamed_dirino);
+    if (renamed_diri && renamed_diri->ino() != renamed_dirino) {
+      // See the inode_map corruption check in the full dentry loop.
+      dout(0) << "EMetaBlob.replay inode_map corruption: renamed inode " << renamed_diri->ino()
+	      << " expected " << renamed_dirino << dendl;
+      mds->clog->error() << "failure replaying journal (EMetaBlob): corrupt inode_map entry";
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
+    }
     if (renamed_diri)
       dout(10) << "EMetaBlob.replay renamed inode is " << *renamed_diri << dendl;
     else
@@ -1285,7 +1293,18 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
     dout(10) << "EMetaBlob.replay dir " << lp << dendl;
     dirlump &lump = lump_map[lp];
 
-    // the dir 
+    if (!lump.fnode) {
+      // A dirlump always carries its fnode in the encoded event.  A null
+      // fnode means the event data is corrupt (e.g. lump_order and
+      // lump_map out of sync); mark the MDS damaged instead of crashing
+      // on the null dereference in update_projected_version().
+      dout(0) << "EMetaBlob.replay corrupt dirlump, missing fnode for " << lp << dendl;
+      mds->clog->error() << "failure replaying journal (EMetaBlob): missing fnode for dirfrag " << lp;
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
+    }
+
+    // the dir
     CDir *dir = mds->mdcache->get_force_dirfrag(lp, true);
     if (!dir) {
       // hmm.  do i have the inode?
@@ -1310,7 +1329,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
       if (MDS_INO_IS_BASE(lp.ino))
 	mds->mdcache->adjust_subtree_auth(dir, CDIR_AUTH_UNDEF);
 
-      dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;  
+      dout(10) << "EMetaBlob.replay added dir " << *dir << dendl;
     }
     dir->reset_fnode(std::move(lump.fnode));
     dir->update_projected_version();
@@ -1355,6 +1374,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 
     // full dentry+inode pairs
     for (auto& fb : lump._get_dfull()) {
+      if (fb.dnfirst > fb.dnlast) {
+	dout(0) << "EMetaBlob.replay corrupt dentry [" << fb.dnfirst << ","
+		<< fb.dnlast << "] " << fb.dn << " in " << dir->dirfrag() << dendl;
+	mds->clog->error() << "failure replaying journal (EMetaBlob): corrupt dentry version";
+	mds->damaged();
+	ceph_abort();  // Should be unreachable because damaged() calls respawn()
+      }
       CDentry *dn = dir->lookup_exact_snap(fb.dn, fb.dnlast);
       if (!dn) {
 	dn = dir->add_null_dentry(fb.dn, fb.dnfirst, fb.dnlast);
@@ -1394,6 +1420,19 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 	dir->link_primary_inode(dn, in);
 	dout(10) << "EMetaBlob.replay added " << *in << dendl;
       } else {
+	if (in->ino() != fb.inode->ino) {
+	  // The inode_map/snap_inode_map entry for the journal's ino does not
+	  // match the inode's own number.  This happens when replay of an
+	  // earlier corrupt event left a stale (or overwritten) map entry;
+	  // using such an inode may dereference freed memory later (e.g. a
+	  // subsequent rename event's renamed_dirino).  Mark the MDS damaged
+	  // instead of continuing.
+	  dout(0) << "EMetaBlob.replay inode_map corruption: found inode " << in->ino()
+		  << " expected " << fb.inode->ino << " for dentry " << fb.dn << dendl;
+	  mds->clog->error() << "failure replaying journal (EMetaBlob): corrupt inode_map entry";
+	  mds->damaged();
+	  ceph_abort();  // Should be unreachable because damaged() calls respawn()
+	}
 	in->first = fb.dnfirst;
 	fb.update_inode(mds, in);
 	if (dn->get_linkage()->get_inode() != in && in->get_parent_dn()) {
@@ -1452,6 +1491,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 
     // remote dentries
     for (const auto& rb : lump.get_dremote()) {
+      if (rb.dnfirst > rb.dnlast) {
+	dout(0) << "EMetaBlob.replay corrupt dentry [" << rb.dnfirst << ","
+		<< rb.dnlast << "] " << rb.dn << " in " << dir->dirfrag() << dendl;
+	mds->clog->error() << "failure replaying journal (EMetaBlob): corrupt dentry version";
+	mds->damaged();
+	ceph_abort();  // Should be unreachable because damaged() calls respawn()
+      }
       CDentry *dn = dir->lookup_exact_snap(rb.dn, rb.dnlast);
       if (!dn) {
 	dn = dir->add_remote_dentry(rb.dn, rb.ino, rb.d_type, mempool::mds_co::string(rb.alternate_name), rb.dnfirst, rb.dnlast);
@@ -1488,6 +1534,13 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 
     // null dentries
     for (const auto& nb : lump.get_dnull()) {
+      if (nb.dnfirst > nb.dnlast) {
+	dout(0) << "EMetaBlob.replay corrupt dentry [" << nb.dnfirst << ","
+		<< nb.dnlast << "] " << nb.dn << " in " << dir->dirfrag() << dendl;
+	mds->clog->error() << "failure replaying journal (EMetaBlob): corrupt dentry version";
+	mds->damaged();
+	ceph_abort();  // Should be unreachable because damaged() calls respawn()
+      }
       CDentry *dn = dir->lookup_exact_snap(nb.dn, nb.dnlast);
       if (!dn) {
 	dn = dir->add_null_dentry(nb.dn, nb.dnfirst, nb.dnlast);
@@ -1536,6 +1589,14 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
       // we imported a diri we haven't seen before
       renamed_diri = mds->mdcache->get_inode(renamed_dirino);
       ceph_assert(renamed_diri);  // it was in the metablob
+      if (renamed_diri->ino() != renamed_dirino) {
+	// See the inode_map corruption check in the full dentry loop.
+	dout(0) << "EMetaBlob.replay inode_map corruption: renamed inode " << renamed_diri->ino()
+		<< " expected " << renamed_dirino << dendl;
+	mds->clog->error() << "failure replaying journal (EMetaBlob): corrupt inode_map entry";
+	mds->damaged();
+	ceph_abort();  // Should be unreachable because damaged() calls respawn()
+      }
     }
 
     if (olddir) {
@@ -1568,6 +1629,20 @@ void EMetaBlob::replay(MDSRank *mds, LogSegmentRef const& logseg, int type, MDPe
 	else
 	  mds->mdcache->try_trim_non_auth_subtree(root);
       }
+    }
+
+    // The trim above may have discarded the subtree we renamed out of; with
+    // corrupt journal data that decision can be wrong and free renamed_diri
+    // itself.  Detect that via the event's ino (a plain map lookup, no
+    // dereference of the possibly-freed pointer) instead of dereferencing
+    // freed memory in the check below.  On healthy data the renamed inode
+    // always survives the trim, so this cannot trigger spuriously.
+    if (mds->mdcache->get_inode(renamed_dirino) != renamed_diri) {
+      dout(0) << "EMetaBlob.replay renamed inode " << renamed_dirino
+              << " was freed during replay (corrupt journal?)" << dendl;
+      mds->clog->error() << "failure replaying journal (EMetaBlob): renamed inode was trimmed during replay";
+      mds->damaged();
+      ceph_abort();  // Should be unreachable because damaged() calls respawn()
     }
 
     // if we are the srci importer, we'll also have some dirfrags we have to open up...
