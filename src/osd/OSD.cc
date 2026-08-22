@@ -59,6 +59,7 @@
 #include "common/ceph_argparse.h"
 #include "common/ceph_releases.h"
 #include "common/ceph_time.h"
+#include "common/Cond.h"
 #include "common/debug.h"
 #include "common/version.h"
 #include "common/async/blocked_completion.h"
