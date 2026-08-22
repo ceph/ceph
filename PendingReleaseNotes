@@ -7,7 +7,18 @@
 * RADOS: PG autoscaler allows overlapping roots. Each root receives a PG target based
   on its OSDs, with OSDs shared across multiple roots contributing proportionally
   less to each root's allocation.
-  
+
+* RADOS: A new experimental OSD op queue, ``bfq``, is available via
+  ``osd_op_queue = bfq``. Modeled on the Linux BFQ elevator as exposed through
+  the cgroups v2 io controller, it shares OSD throughput purely proportionally
+  between a background group and client workload-type streams (block, object
+  data and metadata, file data and metadata -- classified by pool application
+  metadata, including an explicit per-pool ``traffic-class`` key), using
+  weighted budget fair queueing with no device capacity estimate. Weights,
+  budgets, and an optional additive op cost model (``osd_bfq_cost_per_op``,
+  ``osd_bfq_cost_per_io``) are tunable at runtime via the ``osd_bfq_*``
+  options.
+
 * CephFS: CephFS snapshots metadata is now mutable. It is now possible to add,
   update and remove existing key-value pairs that are part of a snapshot
   metadata via libcephfs API ceph_do_snap_md_op().

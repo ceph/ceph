@@ -7192,10 +7192,24 @@ using missing_map_t = std::map<hobject_t,
 enum class op_queue_type_t : uint8_t {
   WeightedPriorityQueue = 0,
   mClockScheduler,
-  PrioritizedQueue
+  PrioritizedQueue,
+  BfqScheduler
 };
 std::string_view get_op_queue_type_name(const op_queue_type_t &q);
 std::optional<op_queue_type_t> get_op_queue_type_by_name(
   const std::string_view &s);
+
+/**
+ * True if the given op queue distributes QoS costs: byte-denominated
+ * item costs and recovery priority values that encode a scheduler
+ * class (see PGRecoveryMsg::get_scheduler_class).  False for the
+ * legacy WeightedPriorityQueue cost conventions.
+ *
+ * The string overload matches an osd_op_queue config value; note that
+ * an unresolved "debug_random" intentionally reads as non-QoS, exactly
+ * like the string comparisons it replaces.
+ */
+bool op_queue_type_uses_qos_cost(const op_queue_type_t &q);
+bool op_queue_type_uses_qos_cost(const std::string_view &s);
 
 #endif

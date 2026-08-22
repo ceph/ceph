@@ -1729,7 +1729,7 @@ void OSDService::queue_recovery_context(
   epoch_t e = get_osdmap_epoch();
 
   uint64_t cost_for_queue = [this, cost] {
-    if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
+    if (op_queue_type_uses_qos_cost(osd->osd_op_queue_type())) {
       return cost;
     } else {
       /* We retain this legacy behavior for WeightedPriorityQueue. It seems to
@@ -1756,7 +1756,7 @@ void OSDService::queue_for_snap_trim(PG *pg, uint64_t cost_per_object)
 {
   dout(10) << "queueing " << *pg << " for snaptrim" << dendl;
   uint64_t cost_for_queue = [this, cost_per_object] {
-    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+    if (op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
       /* The cost calculation is valid for most snap trim iterations except
        * for the following cases:
        * 1) The penultimate iteration which may return 1 object to trim, in
@@ -1925,7 +1925,7 @@ void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e, int64_t num_objects)
 {
   dout(10) << __func__ << " on " << pgid << " e " << e  << dendl;
   uint64_t cost_for_queue = [this, num_objects] {
-    if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
+    if (op_queue_type_uses_qos_cost(osd->osd_op_queue_type())) {
       return num_objects * cct->_conf->osd_pg_delete_cost;
     } else {
       return cct->_conf->osd_pg_delete_cost;
@@ -2088,7 +2088,7 @@ void OSDService::_queue_for_recovery(
   ceph_assert(ceph_mutex_is_locked_by_me(recovery_lock));
 
   uint64_t cost_for_queue = [this, &reserved_pushes, &p] {
-    if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
+    if (op_queue_type_uses_qos_cost(osd->osd_op_queue_type())) {
       return p.cost_per_object * reserved_pushes;
     } else {
       /* We retain this legacy behavior for WeightedPriorityQueue. It seems to
@@ -10756,6 +10756,7 @@ void OSDShard::consume_map(
   dout(10) << new_osdmap->get_epoch()
            << " (was " << (old_osdmap ? old_osdmap->get_epoch() : 0) << ")"
 	   << dendl;
+  scheduler->update_from_osdmap(*new_osdmap);
   int queued = 0;
 
   // check slots

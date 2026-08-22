@@ -295,7 +295,7 @@ uint64_t ECSubRead::cost(CephContext *cct, std::pair<int, int>& subchunk_info)
    * running with mClock scheduler will interpret this and set
    * the cost to 1 accordingly.
    */
-  if (cct->_conf->osd_op_queue != "mclock_scheduler") {
+  if (!op_queue_type_uses_qos_cost(cct->_conf->osd_op_queue)) {
     return total_cost; // Legacy behavior for WPQ scheduler
   }
 
