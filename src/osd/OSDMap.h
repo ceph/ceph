@@ -684,6 +684,7 @@ private:
   uint32_t crush_version = 1;
 
   friend class OSDMonitor;
+  friend class OSDMapTest;
 
  public:
   OSDMap() : epoch(0), 
