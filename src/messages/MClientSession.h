@@ -16,6 +16,7 @@
 #ifndef CEPH_MCLIENTSESSION_H
 #define CEPH_MCLIENTSESSION_H
 
+#include "include/container_ios.h"
 #include "mds/MDSAuthCaps.h"
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
