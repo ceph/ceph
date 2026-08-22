@@ -463,25 +463,6 @@ int MemStore::collection_list(CollectionHandle& ch,
   return 0;
 }
 
-int MemStore::omap_get(
-  CollectionHandle& ch,                ///< [in] Collection containing oid
-  const ghobject_t &oid,   ///< [in] Object containing omap
-  ceph::buffer::list *header,      ///< [out] omap header
-  std::map<std::string, ceph::buffer::list> *out /// < [out] Key to value map
-  )
-{
-  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
-  Collection *c = static_cast<Collection*>(ch.get());
-
-  ObjectRef o = c->get_object(oid);
-  if (!o)
-    return -ENOENT;
-  std::lock_guard lock{o->omap_mutex};
-  *header = o->omap_header;
-  *out = o->omap;
-  return 0;
-}
-
 int MemStore::omap_get_header(
   CollectionHandle& ch,                ///< [in] Collection containing oid
   const ghobject_t &oid,   ///< [in] Object containing omap
