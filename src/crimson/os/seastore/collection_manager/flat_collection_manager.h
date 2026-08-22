@@ -26,6 +26,10 @@ class FlatCollectionManager : public CollectionManager {
 public:
   explicit FlatCollectionManager(TransactionManager &tm);
 
+  get_root_ret get_coll_node(const coll_root_t &coll_root, Transaction &t) {
+    return get_coll_root(coll_root, t);
+  }
+
   mkfs_ret mkfs(Transaction &t) final;
 
   create_ret create(coll_root_t &coll_root, Transaction &t, coll_t cid,

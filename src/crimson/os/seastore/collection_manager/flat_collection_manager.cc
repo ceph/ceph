@@ -67,7 +67,7 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
   return get_coll_root(coll_root, t
   ).si_then([=, this, &coll_root, &t] (auto &&extent) {
     return extent->create(
-      get_coll_context(t), cid, info.split_bits
+      get_coll_context(t), cid, coll_value_t{info.split_bits, info.onode_root}
     ).si_then([=, this, &coll_root, &t] (auto ret) {
       switch (ret) {
       case CollectionNode::create_result_t::OVERFLOW: {
@@ -84,7 +84,7 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 
 	  root_extent->decoded = extent->decoded;
 	  return root_extent->create(
-	    get_coll_context(t), cid, info.split_bits
+	    get_coll_context(t), cid, coll_value_t{info.split_bits, info.onode_root}
 	  ).si_then([=, this, &t](auto result) {
 	    assert(result == CollectionNode::create_result_t::SUCCESS);
 	    return tm.remove(t, extent->get_laddr());
@@ -122,7 +122,8 @@ FlatCollectionManager::update(const coll_root_t &coll_root, Transaction &t,
   logger().debug("FlatCollectionManager: {}", __func__);
   return get_coll_root(coll_root, t)
     .si_then([this, &t, cid, info] (auto extent) {
-      return extent->update(get_coll_context(t), cid, info.split_bits);
+      return extent->update(get_coll_context(t), cid,
+                             coll_value_t{info.split_bits, info.onode_root});
   });
 }
 

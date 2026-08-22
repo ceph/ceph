@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "osd/osd_types.h"
 #include "crimson/common/type_helpers.h"
 #include "crimson/os/seastore/cached_extent.h"
 #include "crimson/os/seastore/transaction_manager.h"
@@ -12,6 +13,10 @@
 #include "node_types.h"
 #include "stages/node_stage_layout.h"
 #include "super.h"
+
+namespace crimson::os::seastore::collection_manager {
+class FlatCollectionManager;
+}
 
 /**
  * node_extent_manager.h
@@ -90,7 +95,10 @@ class NodeExtentManager {
 
   static NodeExtentManagerURef create_dummy(bool is_sync);
   static NodeExtentManagerURef create_seastore(
-      TransactionManager &tm, laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
+      TransactionManager &tm,
+      coll_t cid,
+      crimson::os::seastore::collection_manager::FlatCollectionManager &collection_manager,
+      laddr_t min_laddr = L_ADDR_MIN, double p_eagain = 0.0);
 };
 inline std::ostream& operator<<(std::ostream& os, const NodeExtentManager& nm) {
   return nm.print(os);

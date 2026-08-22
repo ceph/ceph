@@ -14,12 +14,14 @@ namespace crimson::os::seastore {
 
 struct coll_info_t {
   unsigned split_bits;
-  
-  coll_info_t(unsigned bits)
-    : split_bits(bits) {}
-  
+  // root of this collection's onode tree (see FLTreeOnodeManager)
+  laddr_t onode_root;
+
+  coll_info_t(unsigned bits, laddr_t onode_root)
+    : split_bits(bits), onode_root(onode_root) {}
+
   bool operator==(const coll_info_t &rhs) const {
-    return split_bits == rhs.split_bits;
+    return split_bits == rhs.split_bits && onode_root == rhs.onode_root;
   }
 };
 

@@ -29,6 +29,7 @@
 #include "crimson/os/seastore/onode_manager.h"
 #include "crimson/os/seastore/omap_manager.h"
 #include "crimson/os/seastore/collection_manager.h"
+#include "crimson/os/seastore/collection_manager/flat_collection_manager.h"
 #include "crimson/os/seastore/object_data_handler.h"
 
 namespace crimson::os::seastore {
@@ -317,7 +318,7 @@ public:
             LOG_PREFIX(SeaStoreS::repeat_with_onode);
             SUBDEBUGT(seastore, "{} cid={} oid={} ...",
                       t, tname, ch->get_cid(), oid);
-            return onode_manager->get_onode(t, oid
+            return onode_manager->get_onode(t, ch->get_cid(), oid
             ).si_then([&](auto onode) {
               return seastar::do_with(std::move(onode), [&](auto& onode) {
                 return f(t, *onode);
@@ -400,6 +401,11 @@ public:
       internal_context_t &ctx,
       OnodeRef &onode,
       OnodeRef &d_onode);
+    tm_ret _migrate_onode(
+      internal_context_t &ctx,
+      coll_t src_cid,
+      OnodeRef &onode,
+      OnodeRef &d_onode);
     tm_ret _clone_range(
       internal_context_t &ctx,
       OnodeRef &src_onode,
@@ -437,12 +443,15 @@ public:
       const coll_t& cid, int bits);
     tm_ret _split_collection(
       internal_context_t &ctx,
-      const coll_t& cid, int bits);
+      const coll_t cid, int bits, int rem, const coll_t dest_cid);
     tm_ret _merge_collection(
       internal_context_t &ctx,
       coll_t cid,
       coll_t dest_cid,
       int bits);
+    tm_ret _collection_set_bits(
+      internal_context_t &ctx,
+      const coll_t cid, int bits);
     tm_ret _remove_collection(
       internal_context_t &ctx,
       const coll_t& cid);
@@ -667,7 +676,7 @@ public:
 
     std::vector<Device*> secondaries;
     TransactionManagerRef transaction_manager;
-    CollectionManagerRef collection_manager;
+    collection_manager::FlatCollectionManagerRef collection_manager;
     OnodeManagerRef onode_manager;
 
     common::Throttle throttler;

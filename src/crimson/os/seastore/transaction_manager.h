@@ -1135,32 +1135,33 @@ public:
   }
 
   /**
-   * read_onode_root
+   * read_meta_onode_root
    *
-   * Get onode-tree root logical address
+   * Get the meta collection's onode-tree root logical address.
    */
-  using read_onode_root_iertr = base_iertr;
-  using read_onode_root_ret = read_onode_root_iertr::future<laddr_t>;
-  read_onode_root_ret read_onode_root(Transaction &t) {
+  using read_meta_onode_root_iertr = base_iertr;
+  using read_meta_onode_root_ret = read_meta_onode_root_iertr::future<laddr_t>;
+  read_meta_onode_root_ret read_meta_onode_root(Transaction &t) {
     return cache->get_root(t).si_then([&t](auto croot) {
-      LOG_PREFIX(TransactionManager::read_onode_root);
-      laddr_t ret = croot->get_root().onode_root;
+      LOG_PREFIX(TransactionManager::read_meta_onode_root);
+      laddr_t ret = croot->get_root().meta_onode_root;
       SUBTRACET(seastore_tm, "{}", t, ret);
       return ret;
     });
   }
 
   /**
-   * write_onode_root
+   * write_meta_onode_root
    *
-   * Write onode-tree root logical address, must be called after read.
+   * Write the meta collection's onode-tree root logical address, must be
+   * called after read.
    */
-  void write_onode_root(Transaction &t, laddr_t addr) {
-    LOG_PREFIX(TransactionManager::write_onode_root);
+  void write_meta_onode_root(Transaction &t, laddr_t addr) {
+    LOG_PREFIX(TransactionManager::write_meta_onode_root);
     SUBDEBUGT(seastore_tm, "{}", t, addr);
     auto croot = cache->get_root_fast(t);
     croot = cache->duplicate_for_write(t, croot)->cast<RootBlock>();
-    croot->get_root().onode_root = addr;
+    croot->get_root().meta_onode_root = addr;
   }
 
   /**
