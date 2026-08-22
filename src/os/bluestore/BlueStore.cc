@@ -7043,6 +7043,7 @@ void BlueStore::_main_bdev_label_try_reserve()
       }
     }
   };
+  // TODO: Naveen: allocate_here() will help here ?
   // Iterating over free is very inefficient.
   // We can do it here only because its only on init, otherwise it would be unacceptable.
   // Here we could use some API like: alloc->allocate_at().
