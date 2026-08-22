@@ -44,7 +44,8 @@ from ceph.deployment.service_spec import (
     TunedProfileSpec,
     MgmtGatewaySpec,
     NvmeofServiceSpec,
-    CertificateSource
+    CertificateSource,
+    GeneralArgList
 )
 from ceph.deployment.drive_group import DeviceSelection
 from ceph.utils import str_to_datetime, datetime_to_str, datetime_now
@@ -3694,7 +3695,9 @@ Then run the following:
             unmanaged=False,
             method=drive_group.method,
             objectstore=drive_group.objectstore,
-            osd_type=OSDType(drive_group.osd_type)
+            osd_type=OSDType(drive_group.osd_type),
+            extra_container_args=cast(GeneralArgList, drive_group.extra_container_args),
+            extra_entrypoint_args=cast(GeneralArgList, drive_group.extra_entrypoint_args),
         )
 
         self.log.info(f"Creating OSDs with service ID: {drive_group.service_id} on {host}:{device_list}")

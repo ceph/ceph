@@ -423,3 +423,133 @@ class TestApplyOAuth2ProxyYaml:
             'provider_display_name, client_id, client_secret.'
         ) in res.stderr
         mock_apply_misc.assert_not_called()
+
+
+@mock.patch("orchestrator.module.OrchestratorCli.create_osds")
+class TestDaemonAddOsd:
+    """Test suite for OSD daemon creation via CLI"""
+
+    def setup_method(self):
+        self.m = OrchestratorCli('orchestrator', 0, 0)
+
+    @pytest.mark.parametrize("svc_arg", [
+        "host1:data_devices=/dev/sda",
+        "host1:data_devices=/dev/sdb,/dev/sdc,/dev/sdd",
+        "host1:data_devices=/dev/sdb,db_devices=/dev/nvme0n1",
+        "host1:data_devices=/dev/sdb,db_devices=/dev/nvme0n1,wal_devices=/dev/nvme0n2",
+        "host1:data_devices=/dev/sdb,encrypted=true",
+        "host1:data_devices=/dev/sdb,extra_container_args=--memory 32g  --memory-reservation 16g",
+    ])
+    def test_daemon_add_osd_simple_device(self, mock_create_osds, svc_arg):
+        """Test basic OSD daemon creation with various device configurations"""
+        mock_create_osds.return_value = mock.MagicMock(
+            serialized_exception=None,
+            result_str=lambda: "OSD created"
+        )
+
+        res = self.m._daemon_add_osd(svc_arg=svc_arg)
+
+        assert res.retval == 0
+        mock_create_osds.assert_called_once()
+
+    def test_daemon_add_osd_with_multiple_device_types(self, mock_create_osds):
+        """Test OSD daemon creation with data, db, and wal devices"""
+        mock_create_osds.return_value = mock.MagicMock(
+            serialized_exception=None,
+            result_str=lambda: "OSD created"
+        )
+
+        res = self.m._daemon_add_osd(
+            svc_arg="host1:data_devices=/dev/sdb,db_devices=/dev/nvme0n1,wal_devices=/dev/nvme0n1p1"
+        )
+
+        assert res.retval == 0
+        mock_create_osds.assert_called_once()
+
+        call_args = mock_create_osds.call_args
+        drive_group_spec = call_args[0][0]
+
+        # Verify all device types were properly set
+        assert drive_group_spec.data_devices is not None
+        assert drive_group_spec.db_devices is not None
+        assert drive_group_spec.wal_devices is not None
+
+    def test_daemon_add_osd_with_encrypted_flag(self, mock_create_osds):
+        """Test OSD daemon creation with encryption enabled"""
+        mock_create_osds.return_value = mock.MagicMock(
+            serialized_exception=None,
+            result_str=lambda: "OSD created"
+        )
+
+        res = self.m._daemon_add_osd(
+            svc_arg="host1:data_devices=/dev/sdb,encrypted=true"
+        )
+
+        assert res.retval == 0
+        mock_create_osds.assert_called_once()
+
+        call_args = mock_create_osds.call_args
+        drive_group_spec = call_args[0][0]
+
+        # Verify encrypted flag was properly set
+        assert drive_group_spec.encrypted is True
+
+    def test_daemon_add_osd_missing_svc_arg(self, mock_create_osds):
+        """Test that missing svc_arg returns error"""
+        res = self.m._daemon_add_osd(svc_arg=None)
+
+        assert res.retval != 0
+        assert "Usage:" in res.stderr
+        mock_create_osds.assert_not_called()
+
+    def test_daemon_add_osd_invalid_format(self, mock_create_osds):
+        """Test that invalid svc_arg format returns error"""
+        res = self.m._daemon_add_osd(svc_arg="invalid_format")
+
+        assert res.retval != 0
+        mock_create_osds.assert_not_called()
+
+    def test_daemon_add_osd_with_extra_container_args(self, mock_create_osds):
+        """Integration test: verify extra_container_args are properly parsed and can be split"""
+        mock_create_osds.return_value = mock.MagicMock(
+            serialized_exception=None,
+            result_str=lambda: "OSD created"
+        )
+
+        # Call the CLI with extra_container_args containing space-separated values
+        # This simulates:
+        # ceph orch daemon add osd host:data_devices=/dev/vdb,extra_container_args=--memory 32g --memory-reservation 16g --label "app=my storage service"
+        res = self.m._daemon_add_osd(
+            svc_arg=(
+                'ceph-node-0:data_devices=/dev/vdb,'
+                'extra_container_args=--memory 32g  --memory-reservation 16g  --label "app=my storage service"'
+            )
+        )
+
+        assert res.retval == 0
+        mock_create_osds.assert_called_once()
+
+        # Extract the DriveGroupSpec from the mock call
+        drive_group_spec = mock_create_osds.call_args[0][0]
+
+        # Verify data_devices
+        assert drive_group_spec.data_devices is not None
+        assert drive_group_spec.data_devices.paths[0].path == '/dev/vdb'
+
+        # Verify extra_container_args were parsed correctly
+        # Note: The value is stored as a single ArgumentSpec object with split=True
+        # The splitting happens when to_args() is called
+        assert drive_group_spec.extra_container_args is not None
+
+        # Verify the argument can be properly split via shlex
+        arg_spec = drive_group_spec.extra_container_args[0]
+        assert arg_spec.split is True
+
+        # When to_args() is called, it should split the space-separated values
+        split_args = arg_spec.to_args()
+        assert '--memory' in split_args
+        assert '32g' in split_args
+        assert '--memory-reservation' in split_args
+        assert '16g' in split_args
+        assert '--label' in split_args
+        assert 'app=my storage service' in split_args

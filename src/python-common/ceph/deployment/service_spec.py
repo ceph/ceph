@@ -1,6 +1,7 @@
 import fnmatch
 import os
 import re
+import shlex
 import enum
 from enum import Enum
 from collections import OrderedDict
@@ -759,7 +760,7 @@ class ArgumentSpec:
         """
         if not self.split:
             return [self.argument]
-        return [part for part in self.argument.split(" ") if part]
+        return shlex.split(self.argument)
 
     def __eq__(self, other: Any) -> bool:
         if isinstance(other, ArgumentSpec):

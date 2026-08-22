@@ -1589,11 +1589,15 @@ Usage:
             while values:
                 v = values[0].split(',', 1)[0]
                 if '=' in v:
-                    drv_grp_spec_arg, value = v.split('=')
+                    drv_grp_spec_arg, value = v.split('=', 1)
                     if drv_grp_spec_arg in ['data_devices',
                                             'db_devices',
                                             'wal_devices',
                                             'journal_devices']:
+                        drive_group_spec[drv_grp_spec_arg] = []
+                        drive_group_spec[drv_grp_spec_arg].append(value)
+                    elif drv_grp_spec_arg in ['extra_container_args',
+                                              'extra_entrypoint_args']:
                         drive_group_spec[drv_grp_spec_arg] = []
                         drive_group_spec[drv_grp_spec_arg].append(value)
                     else:
