@@ -7,19 +7,11 @@
 #include "common/strtol.h"
 
 #include <cstdio>
-#include <vector>
 
 namespace cephfs {
 namespace mirror {
 
 namespace {
-
-const std::vector<std::string> CHECKPOINT_METADATA_KEY_LIST = {
-  CHECKPOINT_STATUS_KEY,
-  CHECKPOINT_CREATED_AT_KEY,
-  CHECKPOINT_UPDATED_AT_KEY,
-  CHECKPOINT_ERROR_MSG_KEY,
-};
 
 std::map<std::string, std::string> decode_snap_metadata(snap_metadata *md,
                                                         size_t nr_snap_metadata) {
@@ -128,38 +120,55 @@ int write_checkpoint_metadata(CephContext *cct, MountRef mnt,
   auto snap_path = snapshot_path(cct, dir_root, snap_name);
   auto checkpoint_metadata = info.to_metadata();
 
-  // Write/update checkpoint metadata keys
-  for (const auto &[key, val] : checkpoint_metadata) {
-    // created_at is set by the mgr when the checkpoint is created; mirror
-    // daemon updates must not rewrite it.
-    if (key == CHECKPOINT_CREATED_AT_KEY && snap_metadata.count(key)) {
-      continue;
-    }
-
+  // Mirror daemon only updates existing checkpoints; mgr creates them via
+  // CREATE|EXCL.  UPDATE fails if a key was removed while sync was in progress.
+  auto do_op = [&](const std::string &key, const std::string &val,
+                   unsigned int op_flag) -> int {
     auto it = snap_metadata.find(key);
-    if (it != snap_metadata.end() && it->second == val) {
-      continue;
+    if (op_flag == CEPH_SNAP_MD_OP_UPDATE ||
+        op_flag == CEPH_SNAP_MD_OP_CREATE) {
+      if (it != snap_metadata.end() && it->second == val) {
+        return 0;
+      }
+    } else if (op_flag == CEPH_SNAP_MD_OP_REMOVE) {
+      if (it == snap_metadata.end()) {
+        return 0;
+      }
     }
+    return ceph_do_snap_md_op(mnt, snap_path.c_str(), key.c_str(), val.c_str(),
+                              op_flag);
+  };
 
-    // For updates: use CREATE (allows both create and update)
-    // For new creates: use CREATE | EXCL (create only, reject update)
-    unsigned int op_flag = it != snap_metadata.end() ?
-      CEPH_SNAP_MD_OP_CREATE : (CEPH_SNAP_MD_OP_CREATE | CEPH_SNAP_MD_OP_EXCL);
-    int r = ceph_do_snap_md_op(mnt, snap_path.c_str(), key.c_str(), val.c_str(),
-                               op_flag);
+  int r = do_op(CHECKPOINT_STATUS_KEY,
+                checkpoint_metadata.at(CHECKPOINT_STATUS_KEY),
+                CEPH_SNAP_MD_OP_UPDATE);
+  if (r == -EINVAL) {
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  r = do_op(CHECKPOINT_UPDATED_AT_KEY,
+            checkpoint_metadata.at(CHECKPOINT_UPDATED_AT_KEY),
+            CEPH_SNAP_MD_OP_UPDATE);
+  if (r == -EINVAL) {
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  if (!info.error_msg.empty()) {
+    r = do_op(CHECKPOINT_ERROR_MSG_KEY, info.error_msg,
+              CEPH_SNAP_MD_OP_CREATE);
     if (r < 0) {
       return r;
     }
-  }
-
-  // Remove checkpoint metadata keys that are no longer present
-  for (const auto &key : CHECKPOINT_METADATA_KEY_LIST) {
-    if (snap_metadata.count(key) && !checkpoint_metadata.count(key)) {
-      int r = ceph_do_snap_md_op(mnt, snap_path.c_str(), key.c_str(), "",
-                                 CEPH_SNAP_MD_OP_REMOVE);
-      if (r < 0) {
-        return r;
-      }
+  } else {
+    r = do_op(CHECKPOINT_ERROR_MSG_KEY, "", CEPH_SNAP_MD_OP_REMOVE);
+    if (r < 0 && r != -EINVAL) {
+      return r;
     }
   }
 
