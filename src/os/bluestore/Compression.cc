@@ -652,6 +652,8 @@ void Scan::expand_left(exmp_cit& it)
       ++it; //back out
       break;
     }
+    scanned_left_it = it;
+    scanned_left = it->logical_offset;
     if (estimator->is_worth(&(*it))) {
       dout(20) << "expand_left take " << it->print(mode) << dendl;
       estimator->mark_recompress(&(*it));
@@ -661,8 +663,6 @@ void Scan::expand_left(exmp_cit& it)
       break;
     }
   }
-  scanned_left_it = it;
-  scanned_left = it->logical_offset;
   dout(30) << "expand_left done it=" << lo(it) << dendl;
 }
 
