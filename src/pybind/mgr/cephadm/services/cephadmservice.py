@@ -1442,6 +1442,17 @@ class RgwService(CephService):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{utils.config_hash(ssl_cert)}')
 
+        # track frontend config so that changes to rgw_frontend_extra_args
+        # (ex: so_reuseport toggle) or frontend type trigger a reconfig
+        if rgw_spec:
+            frontend_parts = []
+            if rgw_spec.rgw_frontend_type:
+                frontend_parts.append(f'type={rgw_spec.rgw_frontend_type}')
+            if rgw_spec.rgw_frontend_extra_args:
+                frontend_parts.append(f'extra_args={rgw_spec.rgw_frontend_extra_args}')
+            if frontend_parts:
+                deps.append(f'frontend:{utils.config_hash(str(frontend_parts))}')
+
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
 
