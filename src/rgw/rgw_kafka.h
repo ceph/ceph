@@ -27,6 +27,7 @@ struct connection_id_t {
   std::string user;
   std::string password;
   std::string ca_location;
+  std::string ca_cert;
   std::string mechanism;
   std::string ssl_certificate;
   std::string ssl_key;
@@ -41,6 +42,7 @@ struct connection_id_t {
                   const std::string& _user,
                   const std::string& _password,
                   const boost::optional<const std::string&>& _ca_location,
+                  const boost::optional<const std::string&>& _ca_cert,
                   const boost::optional<const std::string&>& _mechanism,
                   bool _ssl,
                   bool _verify_ssl,
@@ -60,6 +62,7 @@ bool connect(connection_id_t& conn_id,
              bool use_ssl,
              bool verify_ssl,
              boost::optional<const std::string&> ca_location,
+             boost::optional<const std::string&> ca_cert,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
              boost::optional<const std::string&> password,
