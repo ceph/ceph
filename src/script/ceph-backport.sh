@@ -1077,6 +1077,7 @@ function try_known_milestones {
         reef) mn="16" ;;
         squid) mn="20" ;;
         tentacle) mn="31" ;;
+        umbrella) mn="39" ;;
     esac
     echo "$mn"
 }
