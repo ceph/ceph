@@ -4,6 +4,13 @@
  Adding/Removing Monitors
 ==========================
 
+.. note:: The procedures on this page are for clusters that are not
+   managed by cephadm. In a cephadm-managed cluster, Monitors are
+   added and removed through the orchestrator: see
+   :ref:`deploy_additional_monitors`. Using the procedures below on a
+   cephadm-managed cluster will conflict with the orchestrator's own
+   management of the daemons.
+
 It is possible to add Monitors to a running cluster as long as redundancy is
 maintained. To bootstrap a Monitor, see `Manual Deployment`_ or `Monitor
 Bootstrap`_.
@@ -168,7 +175,7 @@ lost.
 
    .. prompt:: bash $
 
-      service ceph -a stop mon.{mon-id}
+      systemctl stop ceph-mon@{mon-id}
 
 #. Remove the Monitor from the cluster:
 

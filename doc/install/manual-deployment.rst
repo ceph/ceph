@@ -4,6 +4,13 @@
  Manual Deployment
 ===================
 
+.. note:: This page describes deploying a cluster entirely by hand,
+   without cephadm. Manual deployment is intended mainly for
+   developers of deployment tools and for environments where cephadm
+   cannot be used. For production clusters, the recommended method is
+   :ref:`cephadm <cephadm_deploying_new_cluster>`; see
+   :ref:`install-overview` for all installation methods.
+
 All Ceph clusters require at least one monitor, and at least as many OSDs as
 copies of an object stored on the cluster.  Bootstrapping the initial monitor(s)
 is the first step in deploying a Ceph Storage Cluster. Monitor deployment also
@@ -355,6 +362,8 @@ Manager daemon configuration
 On each node where you run a ceph-mon daemon, you should also set up a ceph-mgr daemon.
 
 See :ref:`mgr-administrator-guide`
+
+.. _manual-deployment-adding-osds:
 
 Adding OSDs
 ===========

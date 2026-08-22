@@ -234,4 +234,5 @@ Further Reading
 * :ref:`rados-operations`
 * :ref:`rados-troubleshooting-mon`
 * :ref:`cephadm-restore-quorum`
+* :ref:`adding-and-removing-monitors` (clusters not managed by cephadm)
 
