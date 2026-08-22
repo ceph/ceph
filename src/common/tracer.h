@@ -127,7 +127,7 @@ public:
   template <typename T> void AddEvent(std::string_view name, const T& fields = {}) {}
   jspan_context GetContext() const { return _ctx; }
   void UpdateName(std::string_view) {}
-  bool IsRecording() { return false; }
+  bool IsRecording() const { return false; }
 };
 
 class jspan_ptr {
