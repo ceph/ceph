@@ -121,6 +121,60 @@ class Pipeline {
     bool pipeline_mode{false};
 };
 
+class Lease {
+  public:
+    Lease() = default;
+    virtual ~Lease() = default;
+
+    // Acquire a lease for a resource
+    // resource_name: identifier for the resource being leased (e.g., "bucket/object")
+    // holder_id: identifier of the lease holder (e.g., node ID, process ID)
+    // token: unique token for this lease acquisition (prevents conflicts)
+    // ttl_seconds: time-to-live for the lease in seconds
+    // Returns: 0 on success, -EEXISTS if resource already leased, -EINVAL for invalid params
+    virtual int acquire(const DoutPrefixProvider* dpp,
+                        const std::string& resource_name,
+                        const std::string& holder_id,
+                        const std::string& token,
+                        uint64_t ttl_seconds) = 0;
+
+    // Renew an existing lease
+    // Must provide matching resource_name, holder_id, and token from acquire
+    // max_ticks: optional limit on renewal attempts (0 = unlimited)
+    // Returns: 0 on success, -ENOENT if lease not found/expired, -EACCES if token/holder mismatch,
+    //          -EINVAL if max_ticks limit reached (lease still held - caller decides next action)
+    virtual int renew(const DoutPrefixProvider* dpp,
+                      const std::string& resource_name,
+                      const std::string& holder_id,
+                      const std::string& token,
+                      uint64_t ttl_seconds,
+                      uint64_t max_ticks = 0) = 0;
+
+    // Release a lease
+    // Must provide matching resource_name, holder_id, and token from acquire
+    // Returns: 0 on success, -ENOENT if lease not found, -EACCES if token/holder mismatch
+    virtual int release(const DoutPrefixProvider* dpp,
+                        const std::string& resource_name,
+                        const std::string& holder_id,
+                        const std::string& token) = 0;
+
+    // Check if any active lease exists for a resource (supports prefix matching)
+    // resource_prefix: the resource prefix to check (e.g., "bucket:object:version")
+    // Performs prefix scan to find all leases starting with resource_prefix
+    // As a side effect, opportunistically deletes any expired leases encountered during the scan
+    // Returns: true if any active (non-expired) lease with matching prefix exists, false otherwise
+    virtual bool any_active(const DoutPrefixProvider* dpp,
+                            const std::string& resource_prefix) = 0;
+
+    // Check if a specific lease is still active and owned by the caller
+    // Validates that the lease exists, matches holder_id and token, and is not expired
+    // Returns: true if lease is valid and owned by caller, false otherwise
+    virtual bool is_active(const DoutPrefixProvider* dpp,
+                           const std::string& resource_name,
+                           const std::string& holder_id,
+                           const std::string& token) = 0;
+};
+
 template<typename T>
 concept SeqContainer =
 requires(T& t, typename T::value_type v) {

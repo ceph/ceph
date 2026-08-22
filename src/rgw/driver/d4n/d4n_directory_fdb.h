@@ -46,6 +46,48 @@ struct FDBRange {
   std::string end;
 };
 
+class FDBLease : public Lease {
+public:
+    explicit FDBLease(lfdb::database_handle db)
+      : FDBdb(db)
+    {
+    }
+
+    void set_fdb_database(lfdb::database_handle db)
+    {
+      FDBdb = db;
+    }
+
+    int acquire(const DoutPrefixProvider* dpp,
+                const std::string& resource_name,
+                const std::string& holder_id,
+                const std::string& token,
+                uint64_t ttl_seconds) override;
+
+    int renew(const DoutPrefixProvider* dpp,
+              const std::string& resource_name,
+              const std::string& holder_id,
+              const std::string& token,
+              uint64_t ttl_seconds,
+              uint64_t max_ticks = 0) override;
+
+    int release(const DoutPrefixProvider* dpp,
+                const std::string& resource_name,
+                const std::string& holder_id,
+                const std::string& token) override;
+
+    bool any_active(const DoutPrefixProvider* dpp,
+                    const std::string& resource_prefix) override;
+
+    bool is_active(const DoutPrefixProvider* dpp,
+                   const std::string& resource_name,
+                   const std::string& holder_id,
+                   const std::string& token) override;
+
+private:
+    lfdb::database_handle FDBdb;
+};
+
 class FDBDirectory : virtual public Directory {
 public:
     lfdb::database_handle FDBdb;

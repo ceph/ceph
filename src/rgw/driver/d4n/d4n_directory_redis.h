@@ -11,6 +11,46 @@ using boost::redis::request;
 using boost::redis::response;
 using boost::redis::ignore_t;
 
+class RedisLease : public Lease {
+  public:
+    explicit RedisLease(std::shared_ptr<RedisConnection>& redis_conn)
+      : redis_pool(nullptr), REDISconn(redis_conn->get_redis_conn()) {}
+
+    void set_redis_pool(std::shared_ptr<RedisPool> pool) {
+      redis_pool = pool;
+    }
+
+    int acquire(const DoutPrefixProvider* dpp,
+                const std::string& resource_name,
+                const std::string& holder_id,
+                const std::string& token,
+                uint64_t ttl_seconds) override;
+
+    int renew(const DoutPrefixProvider* dpp,
+              const std::string& resource_name,
+              const std::string& holder_id,
+              const std::string& token,
+              uint64_t ttl_seconds,
+              uint64_t max_ticks = 0) override;
+
+    int release(const DoutPrefixProvider* dpp,
+                const std::string& resource_name,
+                const std::string& holder_id,
+                const std::string& token) override;
+
+    bool any_active(const DoutPrefixProvider* dpp,
+                    const std::string& resource_prefix) override;
+
+    bool is_active(const DoutPrefixProvider* dpp,
+                   const std::string& resource_name,
+                   const std::string& holder_id,
+                   const std::string& token) override;
+
+  private:
+    std::shared_ptr<RedisPool> redis_pool;
+    std::shared_ptr<boost::redis::connection> REDISconn;
+};
+
 class RedisDirectory: virtual public Directory {
   public:
 	std::shared_ptr<RedisPool> redis_pool{nullptr}; // Redis connection pool
