@@ -1753,6 +1753,11 @@ struct CryptAttributes {
       return std::string_view();
     }
   }
+
+  bool exists(crypt_option_e option)
+  {
+    return x_meta_map.count(crypt_options[option].post_part_name) > 0;
+  }
 };
 
 std::string fetch_bucket_key_id(req_state *s)
@@ -2177,7 +2182,7 @@ int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
     /* AMAZON server side encryption with KMS (key management service) */
     std::string_view req_sse =
         crypt_attributes.get(X_AMZ_SERVER_SIDE_ENCRYPTION);
-    if (! req_sse.empty()) {
+    if (crypt_attributes.exists(X_AMZ_SERVER_SIDE_ENCRYPTION)) {
 
       if (req_sse == "aws:kms") {
         if (s->cct->_conf->rgw_crypt_require_ssl &&

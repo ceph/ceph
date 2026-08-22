@@ -11911,6 +11911,24 @@ def test_sse_kms_not_declared():
     assert status == 400
 
 @pytest.mark.encryption
+def test_sse_empty_algorithm():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    sse_client_headers = {
+        'x-amz-server-side-encryption': ''
+    }
+    data = 'A'*100
+    key = 'testobj'
+
+    lf = (lambda **kwargs: kwargs['params']['headers'].update(sse_client_headers))
+    client.meta.events.register('before-call.s3.PutObject', lf)
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key, Body=data)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidArgument'
+
+@pytest.mark.encryption
 @pytest.mark.fails_on_dbstore
 def test_sse_kms_multipart_upload():
     kms_keyid = get_main_kms_keyid()
