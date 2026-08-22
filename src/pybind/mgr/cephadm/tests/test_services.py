@@ -35,14 +35,14 @@ from ceph.deployment.service_spec import (
     MgmtGatewaySpec,
     OAuth2ProxySpec
 )
-from cephadm.tests.fixtures import with_host, with_service, _run_cephadm, async_side_effect
+from cephadm.tests.fixtures import with_host, with_service, wait, _run_cephadm, async_side_effect
 
 from ceph.utils import datetime_now
 
 from orchestrator import OrchestratorError
 from orchestrator._interface import DaemonDescription
 
-from typing import Dict, List
+from typing import Any, Dict, List, cast
 
 cephadm_root_ca = """-----BEGIN CERTIFICATE-----\nMIIE7DCCAtSgAwIBAgIUE8b2zZ64geu2ns3Zfn3/4L+Cf6MwDQYJKoZIhvcNAQEL\nBQAwFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MB4XDTI0MDYyNjE0NDA1M1oXDTM0\nMDYyNzE0NDA1M1owFzEVMBMGA1UEAwwMY2VwaGFkbS1yb290MIICIjANBgkqhkiG\n9w0BAQEFAAOCAg8AMIICCgKCAgEAsZRJsdtTr9GLG1lWFql5SGc46ldFanNJd1Gl\nqXq5vgZVKRDTmNgAb/XFuNEEmbDAXYIRZolZeYKMHfn0pouPRSel0OsC6/02ZUOW\nIuN89Wgo3IYleCFpkVIumD8URP3hwdu85plRxYZTtlruBaTRH38lssyCqxaOdEt7\nAUhvYhcMPJThB17eOSQ73mb8JEC83vB47fosI7IhZuvXvRSuZwUW30rJanWNhyZq\neS2B8qw2RSO0+77H6gA4ftBnitfsE1Y8/F9Z/f92JOZuSMQXUB07msznPbRJia3f\nueO8gOc32vxd1A1/Qzp14uX34yEGY9ko2lW226cZO29IVUtXOX+LueQttwtdlpz8\ne6Npm09pXhXAHxV/OW3M28MdXmobIqT/m9MfkeAErt5guUeC5y8doz6/3VQRjFEn\nRpN0WkblgnNAQ3DONPc+Qd9Fi/wZV2X7bXoYpNdoWDsEOiE/eLmhG1A2GqU/mneP\nzQ6u79nbdwTYpwqHpa+PvusXeLfKauzI8lLUJotdXy9EK8iHUofibB61OljYye6B\nG3b8C4QfGsw8cDb4APZd/6AZYyMx/V3cGZ+GcOV7WvsC8k7yx5Uqasm/kiGQ3EZo\nuNenNEYoGYrjb8D/8QzqNUTwlEh27/ps80tO7l2GGTvWVZL0PRZbmLDvO77amtOf\nOiRXMoUCAwEAAaMwMC4wGwYDVR0RBBQwEocQAAAAAAAAAAAAAAAAAAAAATAPBgNV\nHRMBAf8EBTADAQH/MA0GCSqGSIb3DQEBCwUAA4ICAQAxwzX5AhYEWhTV4VUwUj5+\nqPdl4Q2tIxRokqyE+cDxoSd+6JfGUefUbNyBxDt0HaBq8obDqqrbcytxnn7mpnDu\nhtiauY+I4Amt7hqFOiFA4cCLi2mfok6g2vL53tvhd9IrsfflAU2wy7hL76Ejm5El\nA+nXlkJwps01Whl9pBkUvIbOn3pXX50LT4hb5zN0PSu957rjd2xb4HdfuySm6nW4\n4GxtVWfmGA6zbC4XMEwvkuhZ7kD2qjkAguGDF01uMglkrkCJT3OROlNBuSTSBGqt\ntntp5VytHvb7KTF7GttM3ha8/EU2KYaHM6WImQQTrOfiImAktOk4B3lzUZX3HYIx\n+sByO4P4dCvAoGz1nlWYB2AvCOGbKf0Tgrh4t4jkiF8FHTXGdfvWmjgi1pddCNAy\nn65WOCmVmLZPERAHOk1oBwqyReSvgoCFo8FxbZcNxJdlhM0Z6hzKggm3O3Dl88Xl\n5euqJjh2STkBW8Xuowkg1TOs5XyWvKoDFAUzyzeLOL8YSG+gXV22gPTUaPSVAqdb\nwd0Fx2kjConuC5bgTzQHs8XWA930U3XWZraj21Vaa8UxlBLH4fUro8H5lMSYlZNE\nJHRNW8BkznAClaFSDG3dybLsrzrBFAu/Qb5zVkT1xyq0YkepGB7leXwq6vjWA5Pw\nmZbKSphWfh0qipoqxqhfkw==\n-----END CERTIFICATE-----\n"""
 
@@ -330,9 +330,119 @@ class TestNVMEOFService:
     def test_nvmeof_client_caps(self):
         pass
 
-    @patch('cephadm.utils.resolve_ip')
-    def test_nvmeof_dashboard_config(self, mock_resolve_ip):
-        pass
+    @pytest.mark.parametrize(
+        "addr,addr_map,daemon_ip,expected",
+        [
+            # Nothing declared: the address cephadm reaches the host at.
+            (None, None, None, '1.2.3.4:5500'),
+            # Declared per host: that one. Registering the host address instead
+            # is what leaves the gateway unreachable.
+            (None, {'testhost1': '10.0.0.7'}, None, '10.0.0.7:5500'),
+            # Resolved for the placement, which is how a `networks` CIDR arrives.
+            (None, None, '10.0.0.9', '10.0.0.9:5500'),
+            # A wildcard listener is not something to dial. The host address is
+            # among the ones it answers on, so register that instead.
+            ('0.0.0.0', None, None, '1.2.3.4:5500'),
+            ('::', None, None, '1.2.3.4:5500'),
+            # A v6 address is bracketed before the port is appended.
+            ('fd00::7', None, None, '[fd00::7]:5500'),
+        ])
+    @patch('cephadm.utils.resolve_ip', lambda addr: addr)
+    def test_nvmeof_dashboard_config(self, addr, addr_map, daemon_ip, expected):
+        spec = NvmeofServiceSpec(service_type='nvmeof', service_id='a',
+                                 addr=addr, addr_map=addr_map)
+        dd = DaemonDescription(daemon_type='nvmeof', hostname='testhost1',
+                               daemon_id='a', ip=daemon_ip)
+        with patch.object(self.mgr, 'check_mon_command') as check_mon_command, \
+                patch.object(self.mgr.spec_store.all_specs, 'get', return_value=spec):
+            check_mon_command.return_value = (0, '{"gateways": {}}', '')
+            self.nvmeof_service.config_dashboard([dd])
+            adds = [c.args for c in check_mon_command.mock_calls
+                    if c.args and c.args[0].get('prefix') == 'dashboard nvmeof-gateway-add']
+        # _check_and_set_dashboard pops 'inbuf' and passes it as the second
+        # positional argument, so the registered URL is args[1].
+        assert [a[1] for a in adds] == [expected]
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    def test_nvmeof_config_bind_addr(self, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+
+        def gateway_conf(spec: NvmeofServiceSpec) -> str:
+            # prepare_create is what fills final_config, and it is also where the
+            # address is chosen, so the rendered conf is what to assert on.
+            with with_host(cephadm_module, 'host1', addr='1.2.3.7'):
+                cephadm_module.cache.update_host_networks('host1', {
+                    '1.2.3.0/24': {'if0': ['1.2.3.7']},
+                    '10.0.0.0/24': {'if1': ['10.0.0.7', '10.0.0.8']},
+                })
+                with with_service(cephadm_module, spec, status_running=True):
+                    dd = wait(cephadm_module, cephadm_module.list_daemons())[0]
+                    daemon_spec = service_registry.get_service('nvmeof').prepare_create(
+                        CephadmDaemonDeploySpec.from_daemon_description(dd))
+                    return cast(str, daemon_spec.final_config['files']['ceph-nvmeof.conf'])
+
+        # Gateway and discovery listener both take the address the scheduler
+        # resolved from `networks`, not the one cephadm reaches the host at.
+        conf = gateway_conf(NvmeofServiceSpec(
+            service_id='testpool.groupa', group='groupa', pool='testpool',
+            placement=PlacementSpec(hosts=['host1']), networks=['10.0.0.0/24']))
+        assert conf.count('addr = 10.0.0.7\n') == 2
+        assert 'addr = 1.2.3.7\n' not in conf
+
+        # An explicit per-host address still wins over the resolved one.
+        conf = gateway_conf(NvmeofServiceSpec(
+            service_id='testpool.groupb', group='groupb', pool='testpool',
+            placement=PlacementSpec(hosts=['host1']), networks=['10.0.0.0/24'],
+            addr_map={'host1': '10.0.0.8'}))
+        assert 'addr = 10.0.0.8\n' in conf
+
+    def test_nvmeof_addr_dependencies(self, cephadm_module: CephadmOrchestrator):
+        def deps(**kwargs: Any) -> List[str]:
+            spec = NvmeofServiceSpec(service_id='testpool.groupa', group='groupa',
+                                     pool='testpool', **kwargs)
+            return NvmeofService.get_dependencies(cephadm_module, spec, 'nvmeof')
+
+        # A spec that names no address carries what it carried before these
+        # were tracked, so upgrading to them reconfigures nothing.
+        assert deps() == []
+
+        # Each declaration bind_addr reads is one the daemon has to be told
+        # about, having been deployed with the address it resolved to.
+        assert deps(addr='10.0.0.7') != deps()
+        assert deps(addr_map={'host1': '10.0.0.7'}) != deps()
+        assert deps(discovery_addr='10.0.0.7') != deps()
+        assert deps(discovery_addr_map={'host1': '10.0.0.7'}) != deps()
+        assert deps(addr_map={'host1': '10.0.0.7'}) != deps(addr_map={'host1': '10.0.0.8'})
+
+        # The same map written in another order is the same map. Deps that
+        # differ from one pass to the next reconfigure on every pass.
+        assert (deps(addr_map={'host1': '10.0.0.7', 'host2': '10.0.0.8'})
+                == deps(addr_map={'host2': '10.0.0.8', 'host1': '10.0.0.7'}))
+
+        # `networks` is left to the placement, which the scheduler already
+        # compares against the daemon it deployed.
+        assert deps(networks=['10.0.0.0/24']) == []
+
+    # daemon_check_post() runs config_dashboard(), which here parses an empty
+    # gateway list; the address it would register is test_nvmeof_dashboard_config's
+    @patch("cephadm.services.nvmeof.NvmeofService.config_dashboard", MagicMock())
+    @patch("cephadm.serve.CephadmServe._run_cephadm")
+    @patch("cephadm.module.CephadmOrchestrator._daemon_action")
+    def test_nvmeof_choose_next_action_on_addr_change(
+            self, _daemon_action, _run_cephadm, cephadm_module: CephadmOrchestrator):
+        _run_cephadm.side_effect = async_side_effect(('{}', '', 0))
+        spec = NvmeofServiceSpec(service_id='testpool.groupa', group='groupa',
+                                 pool='testpool', placement=PlacementSpec(hosts=['test']))
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, spec):
+                _daemon_action.reset_mock()
+                # Moving the gateway has to reach the gateway. While the address
+                # was not a dependency the spec moved under a daemon that went
+                # on listening where it was, and only the registry followed.
+                spec.addr_map = {'test': '10.0.0.7'}
+                cephadm_module.apply([spec])
+                CephadmServe(cephadm_module)._check_daemons()
+                _daemon_action.assert_called_with(ANY, action='reconfig')
 
     @patch("cephadm.inventory.Inventory.get_addr", lambda _, __: '192.168.100.100')
     @patch("cephadm.serve.CephadmServe._run_cephadm")
