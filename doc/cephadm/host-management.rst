@@ -708,7 +708,7 @@ To enable sudo hardening for the entire cluster, use the following command:
 This command performs a comprehensive sudo hardening setup:
 
 1. **Host Preparation**: Prepares all cluster hosts for sudo hardening by:
-   - Installing/upgrading cephadm RPM with the invoker script
+   - Installing/upgrading the cephadm package (RPM or DEB) with the invoker script
    - Configuring restricted sudo access for non-root users
    - Setting up SSH key authorization
 
