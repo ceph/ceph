@@ -4,6 +4,8 @@
 #pragma once
 
 #include <string>
+#include <utility>
+#include <vector>
 #include <boost/algorithm/string.hpp>
 #include "include/ceph_assert.h"
 
@@ -209,7 +211,7 @@ struct RGWUserAdminOpState {
   rgw_placement_rule default_placement; // user default placement
   bool default_placement_specified{false};
 
-  std::list<std::string> placement_tags;  // user default placement_tags
+  std::vector<std::string> placement_tags;  // user default placement_tags
   bool placement_tags_specified{false};
 
   void set_access_key(const std::string& access_key) {
@@ -398,8 +400,8 @@ struct RGWUserAdminOpState {
     default_placement_specified = true;
   }
 
-  void set_placement_tags(const std::list<std::string>& _tags) {
-    placement_tags = _tags;
+  void set_placement_tags(std::vector<std::string> tags) {
+    placement_tags = std::move(tags);
     placement_tags_specified = true;
   }
 

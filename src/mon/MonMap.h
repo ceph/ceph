@@ -467,7 +467,7 @@ public:
    * @param removed optional pointer to set to insert removed mon addrs to
    */
   void set_initial_members(CephContext *cct,
-			   std::list<std::string>& initial_members,
+			   const std::vector<std::string>& initial_members,
 			   std::string my_name,
 			   const entity_addrvec_t& my_addrs,
 			   std::set<entity_addrvec_t> *removed);

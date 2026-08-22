@@ -18,7 +18,7 @@
 #include "common/common_init.h"
 #include "common/config.h"
 #include "common/config_obs.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "osd/osd_types.h"
 #include "common/errno.h"
@@ -47,7 +47,6 @@ using std::cerr;
 using std::cout;
 using std::map;
 using std::less;
-using std::list;
 using std::ostream;
 using std::ostringstream;
 using std::pair;
@@ -102,19 +101,17 @@ const char *ceph_conf_level_name(int level)
 int ceph_resolve_file_search(const std::string& filename_list,
 			     std::string& result)
 {
-  list<string> ls;
-  get_str_list(filename_list, ";,", ls);
+  auto ls = ceph::split_strings(filename_list, ";,");
 
   int ret = -ENOENT;
-  list<string>::iterator iter;
-  for (iter = ls.begin(); iter != ls.end(); ++iter) {
-    int fd = ::open(iter->c_str(), O_RDONLY|O_CLOEXEC);
+  for (const auto& filename : ls) {
+    int fd = ::open(filename.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       ret = -errno;
       continue;
     }
     close(fd);
-    result = *iter;
+    result = filename;
     return 0;
   }
 
@@ -420,7 +417,7 @@ md_config_t::parse_buffer(ConfigValues& values,
   return 0;
 }
 
-std::list<std::string>
+std::vector<std::string>
 md_config_t::get_conffile_paths(const ConfigValues& values,
 				const char *conf_files_str,
 				std::ostream *warnings,
@@ -437,19 +434,18 @@ md_config_t::get_conffile_paths(const ConfigValues& values,
     }
   }
 
-  std::list<std::string> paths;
-  get_str_list(conf_files_str, ";,", paths);
-  for (auto i = paths.begin(); i != paths.end(); ) {
-    string& path = *i;
+  auto paths = ceph::split_strings(conf_files_str, ";,");
+  std::erase_if(paths, [&](string& path) {
     if (path.find("$data_dir") != path.npos &&
 	data_dir_option.empty()) {
       // useless $data_dir item, skip
-      i = paths.erase(i);
-    } else {
-      early_expand_meta(values, path, warnings);
-      ++i;
+      return true;
     }
-  }
+
+    early_expand_meta(values, path, warnings);
+    return false;
+  });
+
   return paths;
 }
 

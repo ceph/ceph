@@ -49,7 +49,7 @@ extern "C" {
 #endif
 
 #include "include/utime.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #ifdef WITH_RADOSGW_RADOS
 #include "radosgw-admin/orphan.h"
@@ -661,11 +661,9 @@ public:
 
   void add_commands(std::vector<Def>& cmds) {
     for (auto& cmd : cmds) {
-      vector<string> words;
-      get_str_vec(cmd.cmd, " ", words);
-
       auto node = &cmd_root;
-      for (auto& word : words) {
+      for (const auto word_view : ceph::split(cmd.cmd, " ")) {
+        const string word { word_view };
         auto norm = normalize_alias(word);
         auto parent = node;
 
@@ -3690,13 +3688,22 @@ void resolve_zone_ids_opt(std::optional<vector<string> >& names, std::optional<v
   }
 }
 
+static list<string> split_to_list(std::string_view input,
+                                  std::string_view delims = ";,= \t")
+{
+  const auto parts = ceph::split(input, delims);
+
+  return { std::begin(parts), std::end(parts) };
+}
+
 static vector<rgw_zone_id> zone_ids_from_str(const string& val)
 {
+  const auto zones = ceph::split(val, ";,= \t");
   vector<rgw_zone_id> result;
-  vector<string> v;
-  get_str_vec(val, v);
-  for (auto& z : v) {
-    result.push_back(rgw_zone_id(z));
+  result.reserve(std::ranges::distance(zones));
+
+  for (const auto z : zones) {
+    result.emplace_back(std::string { z });
   }
   return result;
 }
@@ -3882,9 +3889,9 @@ int main(int argc, const char **argv)
   string object_version;
   string placement_id;
   std::optional<string> opt_storage_class;
-  list<string> tags;
-  list<string> tags_add;
-  list<string> tags_rm;
+  vector<string> tags;
+  vector<string> tags_add;
+  vector<string> tags_rm;
 #ifdef WITH_RADOSGW_RADOS
   int placement_inline_data = true;
   bool placement_inline_data_specified = false;
@@ -4370,12 +4377,8 @@ int main(int argc, const char **argv)
       format_arg_passed = true;
 #endif
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
-      string cat_str = val;
-      list<string> cat_list;
-      list<string>::iterator iter;
-      get_str_list(cat_str, cat_list);
-      for (iter = cat_list.begin(); iter != cat_list.end(); ++iter) {
-	categories[*iter] = true;
+      for (const auto category : ceph::split(val, ";,= \t")) {
+	categories[std::string { category }] = true;
       }
     } else if (ceph_argparse_binary_flag(args, i, &delete_child_objects, NULL, "--purge-objects", (char*)NULL)) {
       // do nothing
@@ -4493,11 +4496,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
       opt_storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
-      get_str_list(val, ",", tags);
+      tags = ceph::split_strings(val, ",");
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
-      get_str_list(val, ",", tags_add);
+      tags_add = ceph::split_strings(val, ",");
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-rm", (char*)NULL)) {
-      get_str_list(val, ",", tags_rm);
+      tags_rm = ceph::split_strings(val, ",");
     } else if (ceph_argparse_witharg(args, i, &val, "--api-name", (char*)NULL)) {
       api_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-id", (char*)NULL)) {
@@ -4507,11 +4510,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-new-name", (char*)NULL)) {
       zone_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--endpoints", (char*)NULL)) {
-      get_str_list(val, endpoints);
+      endpoints = split_to_list(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from", (char*)NULL)) {
-      get_str_list(val, sync_from);
+      sync_from = split_to_list(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--sync-from-rm", (char*)NULL)) {
-      get_str_list(val, sync_from_rm);
+      sync_from_rm = split_to_list(val);
     } else if (ceph_argparse_binary_flag(args, i, &tmp_int, NULL, "--sync-from-all", (char*)NULL)) {
       sync_from_all = (bool)tmp_int;
       sync_from_all_specified = true;
@@ -4603,21 +4606,15 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--flow-type", (char*)NULL)) {
       opt_flow_type = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--zones", "--zone-names", (char*)NULL)) {
-      vector<string> v;
-      get_str_vec(val, v);
-      opt_zone_names = std::move(v);
+      opt_zone_names = ceph::split_strings(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--zone-ids", (char*)NULL)) {
       opt_zone_ids = zone_ids_from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zones", "--source-zone-names", (char*)NULL)) {
-      vector<string> v;
-      get_str_vec(val, v);
-      opt_source_zone_names = std::move(v);
+      opt_source_zone_names = ceph::split_strings(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--source-zone-ids", (char*)NULL)) {
       opt_source_zone_ids = zone_ids_from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-zones", "--dest-zone-names", (char*)NULL)) {
-      vector<string> v;
-      get_str_vec(val, v);
-      opt_dest_zone_names = std::move(v);
+      opt_dest_zone_names = ceph::split_strings(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--dest-zone-ids", (char*)NULL)) {
       opt_dest_zone_ids = zone_ids_from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--flow-id", (char*)NULL)) {
@@ -7186,7 +7183,7 @@ int main(int argc, const char **argv)
   }
 
   if (!tags.empty()) {
-    user_op.set_placement_tags(tags);
+    user_op.set_placement_tags(std::move(tags));
   }
   user_op.path = path;
 

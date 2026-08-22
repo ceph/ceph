@@ -22,7 +22,7 @@
 #include "auth/Crypto.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "mon/MonMap.h"
 #include "mon/mon_types.h" // for ceph::features::mon::*
 
@@ -437,8 +437,8 @@ int main(int argc, const char **argv)
 
   if (filter) {
     // apply initial members
-    list<string> initial_members;
-    get_str_list(g_conf()->mon_initial_members, initial_members);
+    const auto initial_members =
+      ceph::split_strings(g_conf()->mon_initial_members);
     if (!initial_members.empty()) {
       cout << "initial_members " << initial_members << ", filtering seed monmap" << std::endl;
       set<entity_addrvec_t> removed;

@@ -64,22 +64,22 @@ void AuthRegistry::handle_conf_change(
 void AuthRegistry::_parse_method_list(const string& s,
 				      std::vector<uint32_t> *v)
 {
-  std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
+  const auto sup_list = ceph::split(s, ";,= \t");
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
   v->clear();
-  for (auto& i : sup_list) {
-    ldout(cct, 5) << "adding auth protocol: " << i << dendl;
-    if (i == "cephx") {
+  for (const auto auth_protocol_name : sup_list) {
+    ldout(cct, 5) << "adding auth protocol: " << auth_protocol_name << dendl;
+    if (auth_protocol_name == "cephx") {
       v->push_back(CEPH_AUTH_CEPHX);
-    } else if (i == "none") {
+    } else if (auth_protocol_name == "none") {
       v->push_back(CEPH_AUTH_NONE);
-    } else if (i == "gss") {
+    } else if (auth_protocol_name == "gss") {
       v->push_back(CEPH_AUTH_GSS);
     } else {
-      lderr(cct) << "WARNING: unknown auth protocol defined: " << i << dendl;
+      lderr(cct) << "WARNING: unknown auth protocol defined: "
+                 << auth_protocol_name << dendl;
     }
   }
   if (v->empty()) {
@@ -91,20 +91,20 @@ void AuthRegistry::_parse_method_list(const string& s,
 void AuthRegistry::_parse_mode_list(const string& s,
 				    std::vector<uint32_t> *v)
 {
-  std::list<std::string> sup_list;
-  get_str_list(s, sup_list);
+  const auto sup_list = ceph::split(s, ";,= \t");
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
   v->clear();
-  for (auto& i : sup_list) {
-    ldout(cct, 5) << "adding con mode: " << i << dendl;
-    if (i == "crc") {
+  for (const auto connection_mode_name : sup_list) {
+    ldout(cct, 5) << "adding con mode: " << connection_mode_name << dendl;
+    if (connection_mode_name == "crc") {
       v->push_back(CEPH_CON_MODE_CRC);
-    } else if (i == "secure") {
+    } else if (connection_mode_name == "secure") {
       v->push_back(CEPH_CON_MODE_SECURE);
     } else {
-      lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
+      lderr(cct) << "WARNING: unknown connection mode "
+                 << connection_mode_name << dendl;
     }
   }
   if (v->empty()) {
@@ -375,4 +375,3 @@ AuthAuthorizeHandler *AuthRegistry::get_handler(int peer_type, int method)
   }
   return ah;
 }
-
