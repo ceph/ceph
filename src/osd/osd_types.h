@@ -77,6 +77,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(15, "fastinfo pg attr")
 #define CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES CompatSet::Feature(16, "deletes in missing set")
 #define CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2 CompatSet::Feature(17, "new snapmapper key structure")
+#define CEPH_OSD_FEATURE_INCOMPAT_FULLMAP_CHECKPOINTS CompatSet::Feature(18, "periodic full osdmap checkpoints")
 
 
 /// pool priority range set by user

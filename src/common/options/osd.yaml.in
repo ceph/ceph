@@ -890,6 +890,30 @@ options:
   default: 50
   fmt_desc: The number of OSD maps to keep cached.
   with_legacy: true
+- name: osd_map_full_checkpoint_interval
+  type: int
+  level: advanced
+  desc: Store a full OSDMap only every Nth epoch; intermediate epochs keep only
+    the incremental map and are rebuilt on demand from the nearest older full
+    map. 0 means store a full map every epoch.
+  long_desc: Storing full maps only periodically reduces per-epoch metadata
+    writes on every OSD, which matters on large clusters with big OSDMaps
+    (e.g. many pg_upmap entries) during periods of fast epoch churn. Full maps
+    received from the monitor are always stored. Setting a non-zero value adds
+    an incompat superblock feature; OSD versions without support for this
+    feature will refuse to start on such a store. Setting the value back to 0
+    and restarting the OSD backfills the missing full maps and clears the
+    superblock feature again. The value may be changed at any time; placement
+    of already stored full maps is discovered by probing the store, so no
+    invariant depends on the previous setting. Rebuilding an evicted
+    intermediate map costs one incremental replay per epoch since the nearest
+    older full map, so values much larger than osd_map_cache_size are not
+    recommended.
+  default: 0
+  min: 0
+  max: 1000
+  see_also:
+  - osd_map_cache_size
 - name: osd_pg_epoch_max_lag_factor
   type: float
   level: advanced
