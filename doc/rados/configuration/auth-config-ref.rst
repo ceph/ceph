@@ -242,6 +242,14 @@ Time to Live
 .. confval:: auth_mon_ticket_ttl
 .. confval:: auth_service_ticket_ttl
 
+A daemon checks the lifetime of a ticket against its own value of
+``auth_service_ticket_ttl``, so a monitor configured with a larger value than
+the OSDs will hand out tickets that those OSDs reject.
+
+A daemon also checks the ticket's timestamps against its own clock and rejects
+a ticket that was minted more than roughly twice that setting away from now.
+Keep the daemon clocks in sync; a node whose clock drifts past that window will
+reject otherwise valid tickets.
 
 
 .. _cephx-upgrade:
@@ -808,7 +816,6 @@ check if insecure key types are in use. Consider this a low-level API. For
 example, the caps listed are in a binary format that is unsuitable for analysis.
 
 .. note:: Generally, the Monitors will warn you if there is a dangerous situation such as insecure key types are in use.
-
 
 
 .. _Monitor Bootstrapping: ../../../install/manual-deployment#monitor-bootstrapping
