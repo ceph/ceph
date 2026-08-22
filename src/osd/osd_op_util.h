@@ -62,6 +62,7 @@ public:
   bool allows_returnvec() const;
   bool ec_direct_read() const;
   bool ec_sync_read() const;
+  bool is_primary_only() const;
 
   void set_read();
   void set_write();
@@ -77,6 +78,7 @@ public:
   void set_read_data();
   void set_ec_direct_read();
   void set_ec_sync_read();
+  void set_primary_only();
 
   int set_from_op(
     const MOSDOp *m,
