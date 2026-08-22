@@ -7,6 +7,7 @@ if(${WITH_CEPHFS})
     nonblocking.cc
     commands.cc
     syncio.cc
+    subs.cc
     )
   target_link_libraries(ceph_test_client
     client
