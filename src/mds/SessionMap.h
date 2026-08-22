@@ -203,7 +203,8 @@ public:
     return ino;
   }
 
-  void delegate_inos(int want, interval_set<inodeno_t>& inos) {
+  void delegate_inos(int want, interval_set<inodeno_t>& inos,
+                     enum ino_prealloc_killpoint& kill_ino_prealloc_at) {
     want -= (int)delegated_inos.size();
     if (want <= 0)
       return;

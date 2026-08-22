@@ -1157,6 +1157,14 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_kill_ino_prealloc_at
+  type: int
+  level: dev
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_kill_link_at
   type: int
   level: dev
