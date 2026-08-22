@@ -15227,6 +15227,138 @@ def test_delete_bucket_encryption_kms():
 
     assert response_code == 'ServerSideEncryptionConfigurationNotFoundError'
 
+def _put_bucket_blocked_encryption_types(client, bucket_name, types):
+    """
+    block the given encryption types on the bucket. 'NONE' unblocks
+    """
+    server_side_encryption_conf = {
+        'Rules': [
+            {
+                'BlockedEncryptionTypes': {
+                    'EncryptionType': types
+                }
+            },
+        ]
+    }
+    response = client.put_bucket_encryption(Bucket=bucket_name, ServerSideEncryptionConfiguration=server_side_encryption_conf)
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+_sse_c_args = {
+    'SSECustomerAlgorithm': 'AES256',
+    'SSECustomerKey': 'pO3upElrwuEXSoFwCfnZPdSsmt/xWeFa0N9KgDijwVs=',
+    'SSECustomerKeyMD5': 'DWygnHRtgiJ77HCm+1rvHw==',
+}
+
+@pytest.mark.encryption
+@pytest.mark.sse_c_block_by_default
+def test_bucket_blocks_sse_c_by_default():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    response = client.get_bucket_encryption(Bucket=bucket_name)
+    assert response['ServerSideEncryptionConfiguration']['Rules'][0]['BlockedEncryptionTypes']['EncryptionType'] == ['SSE-C']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name,
+                      Key='blocked', Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['NONE'])
+    client.put_object(Bucket=bucket_name, Key='unblocked', Body='A'*100,
+                      **_sse_c_args)
+
+@pytest.mark.encryption
+def test_bucket_block_sse_c():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # sse-c is allowed until the bucket blocks it
+    client.put_object(Bucket=bucket_name, Key='testobj', Body='A'*100, **_sse_c_args)
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['SSE-C'])
+
+    response = client.get_bucket_encryption(Bucket=bucket_name)
+    assert response['ServerSideEncryptionConfiguration']['Rules'][0]['BlockedEncryptionTypes']['EncryptionType'] == ['SSE-C']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name,
+                      Key='blocked', Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    e = assert_raises(ClientError, client.create_multipart_upload,
+                      Bucket=bucket_name, Key='blocked', **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket_name,
+                      Key='blocked', CopySource={'Bucket': bucket_name, 'Key': 'testobj'},
+                      CopySourceSSECustomerAlgorithm='AES256',
+                      CopySourceSSECustomerKey=_sse_c_args['SSECustomerKey'],
+                      CopySourceSSECustomerKeyMD5=_sse_c_args['SSECustomerKeyMD5'],
+                      **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # writes that don't ask for sse-c are unaffected
+    client.put_object(Bucket=bucket_name, Key='plain', Body='A'*100)
+
+    # objects encrypted before the block are still readable
+    response = client.get_object(Bucket=bucket_name, Key='testobj', **_sse_c_args)
+    assert response['Body'].read() == b'A'*100
+
+@pytest.mark.encryption
+def test_bucket_unblock_sse_c():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['SSE-C'])
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name,
+                      Key='testobj', Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['NONE'])
+
+    client.put_object(Bucket=bucket_name, Key='testobj', Body='A'*100, **_sse_c_args)
+
+@pytest.mark.encryption
+def test_bucket_block_sse_c_multipart():
+    bucket_name = get_new_bucket()
+    client = get_client()
+
+    # an sse-c multipart upload started before the block
+    response = client.create_multipart_upload(Bucket=bucket_name, Key='mpobj', **_sse_c_args)
+    upload_id = response['UploadId']
+    response = client.upload_part(Bucket=bucket_name, Key='mpobj', UploadId=upload_id,
+                                  PartNumber=1, Body='A'*100, **_sse_c_args)
+    part_etag = response['ETag']
+
+    _put_bucket_blocked_encryption_types(client, bucket_name, ['SSE-C'])
+
+    # further parts are rejected
+    e = assert_raises(ClientError, client.upload_part, Bucket=bucket_name, Key='mpobj',
+                      UploadId=upload_id, PartNumber=2, Body='A'*100, **_sse_c_args)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # and so is completing the upload
+    e = assert_raises(ClientError, client.complete_multipart_upload, Bucket=bucket_name,
+                      Key='mpobj', UploadId=upload_id,
+                      MultipartUpload={'Parts': [{'ETag': part_etag, 'PartNumber': 1}]})
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 403
+    assert error_code == 'AccessDenied'
+
+    # the upload can still be aborted
+    client.abort_multipart_upload(Bucket=bucket_name, Key='mpobj', UploadId=upload_id)
+
 def _test_sse_s3_default_upload(file_size):
     """
     Test enables bucket encryption.
@@ -17229,6 +17361,31 @@ def test_put_bucket_logging_errors():
             assert False, 'expected failure'
         except ClientError as e:
             assert e.response['Error']['Code'] == 'MalformedXML'
+
+
+@pytest.mark.bucket_logging
+def test_put_bucket_logging_blocked_encryption_target():
+    src_bucket_name = get_new_bucket_name()
+    src_bucket = get_new_bucket_resource(name=src_bucket_name)
+    log_bucket_name = get_new_bucket_name()
+    log_bucket = get_new_bucket_resource(name=log_bucket_name)
+    client = get_client()
+    prefix = 'log/'
+    _set_log_bucket_policy(client, log_bucket_name, [src_bucket_name], [prefix])
+
+    # blocking sse-c is not default encryption, so the target stays valid
+    _put_bucket_blocked_encryption_types(client, log_bucket_name, ['SSE-C'])
+    response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': {'TargetBucket': log_bucket_name, 'TargetPrefix': prefix},
+    })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # and when the block is explicitly cleared
+    _put_bucket_blocked_encryption_types(client, log_bucket_name, ['NONE'])
+    response = client.put_bucket_logging(Bucket=src_bucket_name, BucketLoggingStatus={
+        'LoggingEnabled': {'TargetBucket': log_bucket_name, 'TargetPrefix': prefix},
+    })
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
 
 
 def _verify_access_denied(client, src_bucket_name, log_bucket_name, prefix):

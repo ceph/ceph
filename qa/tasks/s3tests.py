@@ -489,6 +489,8 @@ def run_tests(ctx, config):
             attrs += ['not fails_with_subdomain']
         if not client_config.get('with-sse-s3'):
             attrs += ['not sse_s3']
+        if not client_config.get('sse-c-block-by-default'):
+            attrs += ['not sse_c_block_by_default']
         if not client_config.get('s3control', False):
             attrs += ["not s3control"]
 
