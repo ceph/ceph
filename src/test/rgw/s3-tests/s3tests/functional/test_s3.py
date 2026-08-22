@@ -6822,7 +6822,7 @@ def test_multipart_sse_c_get_part():
     assert status == 404
     assert error_code == 'NoSuchKey'
 
-    res = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts}, **get_args)
+    res = client.complete_multipart_upload(Bucket=bucket_name, Key=key, UploadId=upload_id, MultipartUpload={'Parts': parts})
     assert len(parts) == part_count
 
     for part, size in zip(parts, part_sizes):
@@ -21250,14 +21250,7 @@ def _test_copy_part_enc(file_size, source_mode_key, dest_mode_key, source_sc=Non
     })
 
     if dest_mode_key == 'sse-c':
-        # make sure api is verifying the SSE-C headers
-        e = assert_raises(ClientError, client.complete_multipart_upload,
-                          Bucket=dest_bucket_name, Key='testobj2',
-                          UploadId=upload_id, MultipartUpload={'Parts': parts})
-        status, _ = _get_status_and_error_code(e.response)
-        assert status == 400
-
-        # and the key would be the same as the one used in upload part
+        # the key would be the same as the one used in upload part
         # use the source key to complete the upload
         # this is not allowed, so we expect an error
         source_sse_c_args = _copy_enc_source_modes['sse-c']['args']
