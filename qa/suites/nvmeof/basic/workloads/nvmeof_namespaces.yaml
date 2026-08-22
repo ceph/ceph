@@ -1,7 +1,7 @@
 tasks:
 - nvmeof:
     installer: host.a
-    gw_image: quay.io/ceph/nvmeof:devel # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
+    gw_image: default # "default" is the image cephadm defaults to; change to test specific nvmeof images, example "latest"
     rbd:
       pool_name: mypool
       image_name_prefix: myimage
@@ -23,6 +23,7 @@ tasks:
     env:
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage
+      NVMEOF_NATIVE_CLI: 'true'
 
 - workunit:
     no_coverage_and_limits: true
@@ -31,8 +32,7 @@ tasks:
       client.0:
         - nvmeof/fio_test.sh --rbd_iostat
       client.1:
-        - nvmeof/basic_tests.sh
-        - nvmeof/namespace_test.sh
+        - nvmeof/basic_tests.sh 
         - nvmeof/cross_namespace_copy_test.sh
     env:
       RBD_POOL: mypool

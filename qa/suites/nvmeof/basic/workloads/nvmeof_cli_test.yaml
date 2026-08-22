@@ -6,8 +6,8 @@ tasks:
       pool_name: mypool
       image_name_prefix: myimage
     gateway_config:
-      subsystems_count: 16
-      namespaces_count: 4 # each subsystem
+      subsystems_count: 3
+      namespaces_count: 20
       cli_image: quay.io/ceph/nvmeof-cli:devel
 
 - cephadm.wait_for_service:
@@ -24,4 +24,18 @@ tasks:
       RBD_POOL: mypool
       RBD_IMAGE_PREFIX: myimage
       NVMEOF_NATIVE_CLI: 'true'
-      NVMEOF_AUTO_LISTENER: 'true'
+
+- workunit:
+    no_coverage_and_limits: true
+    timeout: 30m
+    clients:
+      client.0:
+        - nvmeof/fio_test.sh --rbd_iostat
+      client.1:
+        - nvmeof/basic_tests.sh
+        - nvmeof/add_delete_test.sh
+    env:
+      RBD_POOL: mypool
+      IOSTAT_INTERVAL: '10'
+      RUNTIME: '120'
+      NEW_NAMESPACES_COUNT: '5'
