@@ -466,6 +466,13 @@ void rgw::keystone::TokenEnvelope::Role::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("name", name, obj, true);
 }
 
+void rgw::keystone::TokenEnvelope::ApplicationCredential::AccessRule::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("service", service, obj);
+  JSONDecoder::decode_json("method", method, obj);
+  JSONDecoder::decode_json("path", path, obj);
+}
+
 void rgw::keystone::TokenEnvelope::Domain::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj, true);
@@ -491,6 +498,10 @@ void rgw::keystone::TokenEnvelope::ApplicationCredential::decode_json(JSONObj *o
   JSONDecoder::decode_json("id", id, obj, true);
   JSONDecoder::decode_json("name", name, obj, true);
   JSONDecoder::decode_json("restricted", restricted, obj, true);
+  // Optional. The std::optional decoder leaves access_rules with no value
+  // when the field is absent and emplaces a (possibly empty) vector when
+  // present.
+  JSONDecoder::decode_json("access_rules", access_rules, obj, false);
 }
 
 void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
@@ -502,7 +513,7 @@ void rgw::keystone::TokenEnvelope::decode(JSONObj* const root_obj)
   JSONDecoder::decode_json("roles", roles, root_obj, true);
   JSONDecoder::decode_json("project", project, root_obj, true);
 
-  // Optional application_credential field (only present for app cred auth)
+  // Optional, only present for application-credential authentication.
   ApplicationCredential tmp_app_cred;
   if (JSONDecoder::decode_json("application_credential", tmp_app_cred, root_obj, false)) {
     app_cred = std::move(tmp_app_cred);
