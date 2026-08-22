@@ -53,6 +53,7 @@ class TestAgent:
                             'extra_entrypoint_args': None,
                         },
                         "config_blobs": agent_config,
+                        "skip_port_check": False,
                     }),
                     error_ok=True,
                     use_current_daemon_image=False,
