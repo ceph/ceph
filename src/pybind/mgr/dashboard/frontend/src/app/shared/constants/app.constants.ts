@@ -113,6 +113,8 @@ export class ActionLabelsI18n {
   MOVE: string;
   NEXT: string;
   BACK: string;
+  PREVIOUS: string;
+  CREATING: string;
   CHANGE: string;
   COPY: string;
   CLONE: string;
@@ -205,6 +207,8 @@ export class ActionLabelsI18n {
     /* Wizard wording */
     this.NEXT = $localize`Next`;
     this.BACK = $localize`Back`;
+    this.PREVIOUS = $localize`Previous`;
+    this.CREATING = $localize`Creating`;
 
     /* Non-standard actions */
     this.CLONE = $localize`Clone`;
@@ -396,6 +400,7 @@ export const USER = 'user';
 export const VERSION_PREFIX = 'ceph version';
 
 export const CEPHFS_MIRRORING_PAGE_HEADER = {
-  title: $localize`CephFS Mirroring`,
-  description: $localize`Centralised view of all CephFS Mirroring relationships.`
+  title: $localize`Filesystem Mirroring`,
+  subtitle: $localize`Manage snapshot-based replication for CephFS across clusters.`,
+  description: $localize`Configure mirroring between filesystems and monitor replication status.`
 };

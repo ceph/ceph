@@ -27,7 +27,7 @@
   let-row="data.row"
 >
   <cd-usage-bar
-    *ngIf="row.info.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
+    *ngIf="row.info?.bytes_pcent && row.info.bytes_pcent !== 'undefined'; else noLimitTpl"
     [total]="row.info.bytes_quota"
     [used]="row.info.bytes_used"
     [title]="row.name"
@@ -35,13 +35,27 @@
   ></cd-usage-bar>
   <ng-template #noLimitTpl>
     <span
+      *ngIf="row.info?.bytes_pcent === 'undefined'; else missingQuotaTpl"
       ngbTooltip="Quota limit is not set"
-      *ngIf="row.info.bytes_pcent === 'undefined'"
       i18n-ngbTooltip
     >
       {{ row.info.bytes_used | dimlessBinary }}</span
     >
+    <ng-template #missingQuotaTpl>-</ng-template>
   </ng-template>
+</ng-template>
+
+<ng-template
+  #nameTpl
+  let-row="data.row"
+>
+  <span class="fw-bold">{{ row.name }}</span>
+
+  <cd-label
+    [value]="unmanagedState"
+    *ngIf="row?.info?.state === unmanagedState"
+    [tooltipText]="unmanagedHint"
+  ></cd-label>
 </ng-template>
 
 <ng-template

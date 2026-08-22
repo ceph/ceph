@@ -1,15 +1,27 @@
 # -*- coding: utf-8 -*-
+import errno
 import json
+import urllib.parse
 from collections import defaultdict
 
 try:
-    from mock import Mock
+    from mock import Mock, patch
 except ImportError:
-    from unittest.mock import patch, Mock
+    from unittest.mock import Mock, patch
 
 from .. import mgr
-from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus
+from ..controllers.cephfs import CephFS, CephFSMirror, CephFSMirrorStatus, \
+    CephFSSubvolume, CephFSSubvolumeGroups, CephFSSubvolumeSnapshots
+from ..services.cephfs import unmanaged_volume_info
 from ..tests import ControllerTestCase
+
+UNMANAGED_VOLUME_ERROR = (-errno.EINVAL, '', 'failed to getxattr on subvolume metadata')
+VOL_NAME = 'test_fs'
+SUBVOL_NAME = 'sv1'
+GROUP_NAME = 'g1'
+SNAP_NAME = 'snap1'
+SUBVOL_PATH = '/volumes/_nogroup/sv1'
+GROUP_PATH = '/volumes/g1'
 
 
 class MetaDataMock(object):
@@ -44,7 +56,7 @@ class CephFsTest(ControllerTestCase):
         self.assertEqual(mds_versions['bar'], ['foo'])
 
 
-class CephFSMirrorTest(ControllerTestCase):
+class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-methods
 
     @classmethod
     def setup_server(cls):
@@ -117,6 +129,56 @@ class CephFSMirrorTest(ControllerTestCase):
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_peer_bootstrap_create',
                                            fs_name, client_name, site_name)
+
+    def test_enable_success(self):
+        fs_name = 'test_fs'
+        mgr.remote = Mock(return_value=(0, '{}', ''))
+
+        self._post('/api/cephfs/mirror/enable', {
+            'fs_name': fs_name
+        })
+        self.assertStatus(201)
+        self.assertJsonBody({})
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_enable', fs_name)
+
+    def test_enable_error(self):
+        fs_name = 'test_fs'
+        error_message = 'Failed to enable mirroring'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post('/api/cephfs/mirror/enable', {
+            'fs_name': fs_name
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to enable Cephfs mirroring', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_enable', fs_name)
+
+    def test_disable_success(self):
+        fs_name = 'test_fs'
+        mgr.remote = Mock(return_value=(0, '{}', ''))
+
+        self._post('/api/cephfs/mirror/disable', {
+            'fs_name': fs_name
+        })
+        self.assertStatus(200)
+        self.assertJsonBody({})
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_disable', fs_name)
+
+    def test_disable_error(self):
+        fs_name = 'test_fs'
+        error_message = 'Failed to disable mirroring'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post('/api/cephfs/mirror/disable', {
+            'fs_name': fs_name
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to disable Cephfs mirroring', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_disable', fs_name)
 
     def test_create_success(self):
         fs_name = 'test_fs'
@@ -206,7 +268,7 @@ class CephFSMirrorTest(ControllerTestCase):
         mock_output = json.dumps(expected_status)
         mgr.remote = Mock(return_value=(0, mock_output, ''))
 
-        self._get('/api/cephfs/mirror/daemon-status')
+        self._get('/api/cephfs/mirror/daemon/status')
         self.assertStatus(200)
         self.assertJsonBody(expected_status)
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_daemon_status')
@@ -215,12 +277,424 @@ class CephFSMirrorTest(ControllerTestCase):
         error_message = 'Daemon not available'
         mgr.remote = Mock(return_value=(1, '', error_message))
 
-        self._get('/api/cephfs/mirror/daemon-status')
+        self._get('/api/cephfs/mirror/daemon/status')
         self.assertStatus(400)
         response = self.json_body()
         self.assertIn('Failed to get Cephfs mirror daemon status', response.get('detail', ''))
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_daemon_status')
+
+    def test_add_directory_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected_result = {'path': path}
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._post('/api/cephfs/mirror/directory', {
+            'fs_name': fs_name,
+            'path': path
+        })
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_add_dir', fs_name, path)
+
+    def test_add_directory_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        error_message = 'path already mirrored'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post('/api/cephfs/mirror/directory', {
+            'fs_name': fs_name,
+            'path': path
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to add mirroring path', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_add_dir', fs_name, path)
+
+    def test_remove_directory_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected_result = {}
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._delete(
+            f'/api/cephfs/mirror/directory?fs_name={fs_name}&path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_remove_dir', fs_name, path)
+
+    def test_remove_directory_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        error_message = 'directory not tracked'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._delete(
+            f'/api/cephfs/mirror/directory?fs_name={fs_name}&path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to remove mirroring path', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_remove_dir', fs_name, path)
+
+    def test_list_directories_success(self):
+        fs_name = 'test_fs'
+        expected_dirs = ['/volumes/g1/sv1', '/volumes/g2/sv2']
+        mock_output = json.dumps(expected_dirs)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._get(f'/api/cephfs/mirror/directory/{fs_name}')
+        self.assertStatus(200)
+        self.assertJsonBody(expected_dirs)
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_ls', fs_name)
+
+    def test_list_directories_error(self):
+        fs_name = 'test_fs'
+        error_message = 'filesystem not found'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._get(f'/api/cephfs/mirror/directory/{fs_name}')
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to list mirroring directories', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with('mirroring', 'snapshot_mirror_ls', fs_name)
+
+    def test_list_checkpoints_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected_result = {
+            'dir_root': path,
+            'checkpoints': [{
+                'snap_id': 1,
+                'snap_name': 'snap1',
+                'status': 'created',
+                'created_at': '2024-01-01T00:00:00.000000+0000',
+                'updated_at': '2024-01-01T00:00:00.000000+0000',
+            }]
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._get(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_ls', fs_name, path)
+
+    def test_list_checkpoints_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        error_message = 'directory not mirrored'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._get(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to list checkpoints', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_ls', fs_name, path)
+
+    def test_add_checkpoint_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        expected_result = {
+            'status': 'success',
+            'message': f'checkpoint added for snapshot {snap_name}',
+            'dir_root': path,
+            'snap_id': 1,
+            'snap_name': snap_name,
+            'checkpoint_status': 'created',
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint', {
+            'path': path,
+            'snap_name': snap_name,
+        })
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_add', fs_name, path, snap_name)
+
+    def test_add_checkpoint_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        error_message = 'checkpoint already exists for snapshot'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint', {
+            'path': path,
+            'snap_name': snap_name,
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to add checkpoint', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_add', fs_name, path, snap_name)
+
+    def test_checkpoint_now_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected_result = {
+            'status': 'success',
+            'message': 'checkpoint created on latest snapshot',
+            'dir_root': path,
+            'snap_id': 2,
+            'snap_name': 'snap2',
+            'checkpoint_status': 'created',
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint/now', {
+            'path': path,
+        })
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_now', fs_name, path)
+
+    def test_checkpoint_now_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        error_message = 'no snapshots found under /volumes/g1/sv1'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._post(f'/api/cephfs/mirror/{fs_name}/checkpoint/now', {
+            'path': path,
+        })
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to create checkpoint on latest snapshot', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_now', fs_name, path)
+
+    def test_remove_checkpoint_success(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        expected_result = {
+            'status': 'success',
+            'message': f'checkpoint removed for snapshot {snap_name}',
+            'dir_root': path,
+            'snap_name': snap_name,
+        }
+        mock_output = json.dumps(expected_result)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._delete(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+            f'&snap_name={snap_name}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(expected_result)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_remove', fs_name, path, snap_name)
+
+    def test_remove_checkpoint_error(self):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        snap_name = 'snap1'
+        error_message = 'checkpoint not found for snapshot'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._delete(
+            f'/api/cephfs/mirror/{fs_name}/checkpoint?path={urllib.parse.quote(path)}'
+            f'&snap_name={snap_name}'
+        )
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to remove checkpoint', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_checkpoint_remove', fs_name, path, snap_name)
+
+    def test_mirror_status_success(self):
+        fs_name = 'test_fs'
+        peer_uuid = 'peer-uuid-123'
+        last_synced_snap = {
+            'name': 'snap1',
+            'sync_bytes': '1.00 KiB',
+            'sync_time_stamp': '1704189600.000000s'
+        }
+        peer_status = {'state': 'idle', 'last_synced_snap': last_synced_snap}
+        expected_status = {
+            'metrics': {'/dir1': {'peer': {peer_uuid: peer_status}}}
+        }
+        mock_output = json.dumps(expected_status)
+        mgr.remote = Mock(return_value=(0, mock_output, ''))
+
+        self._get(f'/api/cephfs/mirror/{fs_name}/status?peer_id={peer_uuid}')
+        self.assertStatus(200)
+        self.assertJsonBody(expected_status)
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_status', fs_name, None, peer_uuid)
+
+    def test_mirror_status_error(self):
+        fs_name = 'test_fs'
+        error_message = 'no cephfs-mirror daemon available'
+        mgr.remote = Mock(return_value=(1, '', error_message))
+
+        self._get(f'/api/cephfs/mirror/{fs_name}/status')
+        self.assertStatus(400)
+        response = self.json_body()
+        self.assertIn('Failed to get Cephfs mirror status', response.get('detail', ''))
+        self.assertIn(error_message, response.get('detail', ''))
+        mgr.remote.assert_called_once_with(
+            'mirroring', 'snapshot_mirror_status', fs_name, None, None)
+
+
+class CephFSUnmanagedVolumeFallbackTest(ControllerTestCase):
+
+    @classmethod
+    def setup_server(cls):
+        cls.setup_controllers([
+            CephFSSubvolume,
+            CephFSSubvolumeGroups,
+            CephFSSubvolumeSnapshots,
+        ])
+
+    def test_subvolume_list_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_ls':
+                return (0, json.dumps([{'name': SUBVOL_NAME}]), '')
+            if cmd == '_cmd_fs_subvolume_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolume_getpath':
+                return (0, SUBVOL_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/{VOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': SUBVOL_NAME,
+            'info': {
+                **unmanaged_volume_info(),
+                'path': SUBVOL_PATH,
+            },
+        }])
+
+    def test_subvolume_info_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolume_getpath':
+                return (0, SUBVOL_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(
+            f'/api/cephfs/subvolume/{VOL_NAME}/info'
+            f'?subvol_name={SUBVOL_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody({
+            **unmanaged_volume_info(),
+            'path': SUBVOL_PATH,
+        })
+
+    def test_subvolume_group_list_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolumegroup_ls':
+                return (0, json.dumps([{'name': GROUP_NAME}]), '')
+            if cmd == '_cmd_fs_subvolumegroup_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolumegroup_getpath':
+                return (0, GROUP_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/group/{VOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': GROUP_NAME,
+            'info': {
+                **unmanaged_volume_info(),
+                'path': GROUP_PATH,
+            },
+        }])
+
+    def test_subvolume_group_info_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolumegroup_info':
+                return UNMANAGED_VOLUME_ERROR
+            if cmd == '_cmd_fs_subvolumegroup_getpath':
+                return (0, GROUP_PATH, '')
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(
+            f'/api/cephfs/subvolume/group/{VOL_NAME}/info'
+            f'?group_name={GROUP_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody({
+            **unmanaged_volume_info(),
+            'path': GROUP_PATH,
+        })
+
+    def test_subvolume_snapshot_list_unmanaged_fallback(self):
+        def remote_side_effect(module, cmd, *_args, **_kwargs):
+            self.assertEqual(module, 'volumes')
+            if cmd == '_cmd_fs_subvolume_snapshot_ls':
+                return (0, json.dumps([{'name': SNAP_NAME}]), '')
+            if cmd == '_cmd_fs_subvolume_snapshot_info':
+                return UNMANAGED_VOLUME_ERROR
+            raise AssertionError(f'unexpected volumes command: {cmd}')
+
+        mgr.remote = Mock(side_effect=remote_side_effect)
+
+        self._get(f'/api/cephfs/subvolume/snapshot/{VOL_NAME}/{SUBVOL_NAME}')
+        self.assertStatus(200)
+        self.assertJsonBody([{
+            'name': SNAP_NAME,
+            'info': unmanaged_volume_info(),
+        }])
+
+    def test_subvolume_snapshot_info_unmanaged_fallback(self):
+        mgr.remote = Mock(return_value=UNMANAGED_VOLUME_ERROR)
+
+        self._get(
+            f'/api/cephfs/subvolume/snapshot/{VOL_NAME}/{SUBVOL_NAME}/info'
+            f'?snap_name={SNAP_NAME}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(unmanaged_volume_info())
+        mgr.remote.assert_called_once_with(
+            'volumes', '_cmd_fs_subvolume_snapshot_info', None, {
+                'vol_name': VOL_NAME,
+                'sub_name': SUBVOL_NAME,
+                'snap_name': SNAP_NAME,
+            })
 
 
 class CephFSMirrorStatusTest(ControllerTestCase):

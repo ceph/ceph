@@ -1,5 +1,12 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
-import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
+import {
+  ComponentFixture,
+  discardPeriodicTasks,
+  fakeAsync,
+  flush,
+  TestBed,
+  tick
+} from '@angular/core/testing';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
@@ -144,6 +151,38 @@ describe('MgrModuleService', () => {
       expect(notificationService.suspendToasties).toHaveBeenCalledTimes(2);
       expect(blockUIService.start).toHaveBeenCalled();
       expect(blockUIService.stop).toHaveBeenCalled();
+    }));
+
+    it('should enable multiple modules sequentially', fakeAsync(() => {
+      const summaryService = TestBed.inject(SummaryService);
+      spyOn(service, 'enable').and.returnValues(
+        observableThrowError('mirroring reconnect'),
+        observableOf(null)
+      );
+      spyOn(service, 'list').and.returnValue(observableOf([]));
+      spyOn(notificationService, 'show');
+      spyOn(service.updateCompleted$, 'next');
+
+      service.updateModuleState(
+        ['mirroring', 'snap_schedule'],
+        false,
+        null,
+        '',
+        'Enabled mirroring modules'
+      );
+      tick(service.REFRESH_INTERVAL);
+      flush();
+
+      expect(service.enable).toHaveBeenCalledWith('mirroring', false);
+      expect(service.enable).toHaveBeenCalledWith('snap_schedule', false);
+      expect(service.list).toHaveBeenCalledTimes(1);
+      expect(notificationService.show).toHaveBeenCalledWith(
+        jasmine.any(Number),
+        jasmine.any(String)
+      );
+      expect(service.updateCompleted$.next).toHaveBeenCalled();
+      expect(summaryService.startPolling).toHaveBeenCalled();
+      discardPeriodicTasks();
     }));
 
     it('should not disable module without selecting one', () => {
