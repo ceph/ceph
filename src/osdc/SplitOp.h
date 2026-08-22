@@ -557,7 +557,15 @@ class ReplicaSplitOp : public SplitOp {
   bool version_mismatch() const override;
   
   void init_reference_sub_read() override;
-  
+
+  /**
+   * Acting indices that map to an existing OSD, in ascending order.
+   * Populated by init_reference_sub_read(), consumed by init_read().
+   */
+  std::vector<int> valid_indices;
+
+  size_t reference_valid_index = 0;
+
   /**
    * @brief Construct a ReplicaSplitOp.
    * @param op Original operation to be split
