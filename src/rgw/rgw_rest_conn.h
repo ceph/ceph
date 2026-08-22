@@ -156,6 +156,7 @@ class RGWRESTConn
 {
   CephContext *cct;
   std::atomic<int64_t> endpoint_rr_index = { 0 }; // Round-robin counter for resolved_endpoints
+  std::atomic<bool> in_endpoint_fallback = { false }; // Set while no endpoint has a usable IP
   std::vector<ResolvedEndpoint> resolved_endpoints;
   RGWAccessKey key;
   std::string self_zone_group;
