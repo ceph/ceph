@@ -2,9 +2,14 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include "rgw_perf_counters.h"
+#include <array>
+#include <atomic>
+#include <mutex>
+#include "common/ceph_time.h"
 #include "common/perf_counters.h"
 #include "common/perf_counters_key.h"
 #include "common/ceph_context.h"
+#include "common/perf_histogram.h"
 #include "rgw_sal.h"
 
 using namespace ceph::perf_counters;
@@ -300,6 +305,64 @@ std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
 
 } // namespace rgw::lc_counters
 
+namespace rgw::op_hist {
+
+const std::string rgw_op_hist_key = "rgw_op_hist";
+static std::array<std::atomic<PerfCounters*>, RGW_OP_LAST> op_hist_counters{};
+static ceph::mutex op_hist_lock = ceph::make_mutex("rgw::op_hist_lazy_create");
+
+static PerfCounters* create_op_hist_counters(
+    CephContext* cct, const char* op_name) {
+  using axis = PerfHistogramCommon::axis_config_d;
+
+  const std::string key =
+      ceph::perf_counters::key_create(rgw_op_hist_key, {{"op", op_name}});
+  PerfCountersBuilder pcb(cct, key, l_rgw_op_hist_first, l_rgw_op_hist_last);
+  pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+  pcb.add_time_histogram(l_rgw_op_hist_lat, "lat",
+      axis::web_latency("lat"), "Request latency distribution");
+  PerfCounters* new_counters = pcb.create_perf_counters();
+  cct->get_perfcounters_collection()->add(new_counters);
+  return new_counters;
+}
+
+PerfCounters* get(CephContext* cct, RGWOpType type, const char* op_name) {
+  if (type >= RGW_OP_LAST) {
+    return nullptr;
+  }
+  if (type == RGW_OP_UNKNOWN) {
+    op_name = "unknown";
+  }
+  auto& slot = op_hist_counters[type];
+  PerfCounters* counters = slot.load(std::memory_order_acquire);
+  if (counters == nullptr) {
+    std::lock_guard lock(op_hist_lock);
+    counters = slot.load();
+    if (counters == nullptr) {
+      counters = create_op_hist_counters(cct, op_name);
+      slot.store(counters, std::memory_order_release);
+    }
+  }
+  return counters;
+}
+
+static void shutdown(CephContext* cct) {
+  std::lock_guard lock(op_hist_lock);
+  for (auto& slot : op_hist_counters) {
+    if (PerfCounters* counters = slot.exchange(nullptr)) {
+      cct->get_perfcounters_collection()->remove(counters);
+      delete counters;
+    }
+  }
+}
+
+void htinc(PerfCounters *counters, int idx, ceph::timespan amt) {
+  if (counters != nullptr) {
+    counters->htinc(idx, amt);
+  }
+}
+} // namespace rgw::op_hist
+
 int rgw_perf_start(CephContext *cct)
 {
   frontend_counters_init(cct);
@@ -337,4 +400,5 @@ void rgw_perf_stop(CephContext *cct)
   delete user_counters_cache;
   delete bucket_counters_cache;
   delete rgw::lc_counters::lc_counters_cache;
+  rgw::op_hist::shutdown(cct);
 }

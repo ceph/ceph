@@ -9,6 +9,7 @@
 #include <utility>
 #include "rgw_auth_registry.h"
 #include "rgw_dmclock_scheduler.h"
+#include "rgw_op_type.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
@@ -557,6 +558,13 @@ done:
           << " request_id=" << s->trans_id
           << " ======"
           << dendl;
+
+  {
+    const RGWOpType type = op ? op->get_type() : RGW_OP_UNKNOWN;
+    const char *op_name = op ? op->name() : "unknown";
+    auto *op_hist = rgw::op_hist::get(s->cct, type, op_name);
+    rgw::op_hist::htinc(op_hist, l_rgw_op_hist_lat, lat);
+  }
 
   if (handler)
     handler->put_op(op);
