@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-only-match:
+      - CEPHADM_
+tasks:
+- cephadm:
+    roleless: true
+    image: quay.ceph.io/ceph-ci/ceph:squid
+    compiled_cephadm_branch: squid
+
