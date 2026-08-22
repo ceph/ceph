@@ -2684,9 +2684,18 @@ void PgScrubber::set_scrub_duration(std::chrono::milliseconds duration)
 {
   dout(20) << fmt::format("{}: to {}", __func__, duration) << dendl;
   double dur_ms = double(duration.count());
+  bool is_deep = m_is_deep;
   m_pg->recovery_state.update_stats([=](auto& history, auto& stats) {
-    stats.last_scrub_duration = ceill(dur_ms / 1000.0);
-    stats.scrub_duration = dur_ms;
+    if (is_deep)
+    {
+      stats.last_deep_scrub_duration = ceill(dur_ms / 1000.0);
+      stats.deep_scrub_duration = dur_ms;
+    }
+    else
+    {
+      stats.last_scrub_duration = ceill(dur_ms / 1000.0);
+      stats.scrub_duration = dur_ms;
+    }
     return true;
   });
 }

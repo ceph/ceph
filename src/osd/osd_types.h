@@ -2363,6 +2363,7 @@ struct pg_stat_t {
   utime_t last_deep_scrub_stamp;
   utime_t last_clean_scrub_stamp;
   int32_t last_scrub_duration{0};
+  int32_t last_deep_scrub_duration{0};
 
   object_stat_collection_t stats;
 
@@ -2371,6 +2372,7 @@ struct pg_stat_t {
   int64_t ondisk_log_size;    // >= active_log_size
   int64_t objects_scrubbed;
   double scrub_duration;
+  double deep_scrub_duration;
 
   std::vector<int32_t> up, acting;
   std::vector<pg_shard_t> avail_no_missing;
