@@ -12,6 +12,8 @@ import string
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
+from teuthology.config import config as teuth_config
+from teuthology.exceptions import ConfigError
 from teuthology.orchestra import run
 
 log = logging.getLogger(__name__)
@@ -21,8 +23,10 @@ def download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading bucket-logging-tests...')
     testdir = teuthology.get_testdir(ctx)
-    branch = ctx.config.get('suite_branch')
-    repo = ctx.config.get('suite_repo')
+    branch = ctx.config.get('suite_branch') or ctx.config.get('branch')
+    repo = ctx.config.get('suite_repo') or teuth_config.get_ceph_qa_suite_git_url()
+    if not branch:
+        raise ConfigError('bucket-logging-tests: could not determine what branch to use for the ceph repo')
     log.info('Using branch %s from %s for bucket logging tests', branch, repo)
     for (client, client_config) in config.items():
 
@@ -30,7 +34,7 @@ def download(ctx, config):
             args=['git', 'clone', '-b', branch, repo, '{tdir}/ceph'.format(tdir=testdir)],
             )
 
-        sha1 = client_config.get('sha1')
+        sha1 = client_config.get('sha1') or ctx.config.get('suite_sha1')
 
         if sha1 is not None:
             ctx.cluster.only(client).run(
