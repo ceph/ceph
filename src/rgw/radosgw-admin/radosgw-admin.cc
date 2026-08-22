@@ -12580,32 +12580,69 @@ next:
     }
 
     auto ioctx = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx();
-    std::string marker;
-    std::string end_marker;
-    librados::ObjectReadOperation rop;
-    std::vector<cls_queue_entry> queue_entries;
-    bool truncated;
+    // the queue is sharded, so a marker has to hold both the shard it refers
+    // to and the position inside that shard: <shard index>#<queue marker>
+    uint64_t start_shard = 0;
+    std::string start_queue_marker;
+    if (!marker.empty()) {
+      const auto pos = marker.find('#');
+      std::string parse_err;
+      if (pos == std::string::npos) {
+        cerr << "ERROR: invalid marker: " << marker << std::endl;
+        return EINVAL;
+      }
+      start_shard = strict_strtoll(marker.substr(0, pos).c_str(), 10, &parse_err);
+      if (!parse_err.empty() || start_shard >= topic.dest.num_shards) {
+        cerr << "ERROR: invalid marker: " << marker << std::endl;
+        return EINVAL;
+      }
+      start_queue_marker = marker.substr(pos + 1);
+    }
+
+    // number of entries returned to the caller. zero means no limit
+    uint32_t max_returned = 0;
+    if (max_entries_specified) {
+      max_returned = std::max(1, max_entries); // sanity, as in "bi list"
+    }
+    // number of entries fetched from the queue in a single call
+    constexpr uint32_t max_fetched = 1000;
+    uint32_t returned = 0;
+    bool page_full = false;
+    bool more = false;
+    std::string next_marker;
+
+    formatter->open_object_section("result");
     formatter->open_array_section("eventEntries");
 
+    uint64_t shard_index = 0;
     for (const auto& shard_name: topic.dest.get_shard_names()){
-      truncated = true; 
-      marker.clear();
-      while (truncated) {
+      if (shard_index < start_shard) {
+        ++shard_index;
+        continue;
+      }
+      std::string queue_marker = (shard_index == start_shard) ? start_queue_marker : "";
+      bool truncated = true;
+      while (truncated && !page_full) {
+        const auto to_fetch = (max_returned == 0) ?
+          max_fetched : std::min(max_fetched, max_returned - returned);
+        librados::ObjectReadOperation rop;
+        std::vector<cls_queue_entry> queue_entries;
+        std::string end_marker;
         bufferlist bl;
         int rc;
-        cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
+        cls_2pc_queue_list_entries(rop, queue_marker, to_fetch, &bl, &rc);
         ioctx.operate(shard_name, &rop, nullptr);
         if (rc < 0 ) {
-          cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
+          cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-rc) << std::endl;
           return -rc;
         }
         rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
         if (rc < 0) {
-          cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
+          cerr << "ERROR: failed to parse list entries from queue. error: " << cpp_strerror(-rc) << std::endl;
           return -rc;
         }
-        std::for_each(queue_entries.cbegin(), 
-          queue_entries.cend(), 
+        std::for_each(queue_entries.cbegin(),
+          queue_entries.cend(),
           [&formatter](const auto& queue_entry) {
             rgw::notify::event_entry_t event_entry;
             bufferlist::const_iterator iter{&queue_entry.data};
@@ -12617,9 +12654,27 @@ next:
             }
           });
         formatter->flush(cout);
-        marker = end_marker;
+        returned += queue_entries.size();
+        queue_marker = end_marker;
+        page_full = (max_returned > 0 && returned >= max_returned);
       }
+      if (page_full) {
+        // resume from where this shard stopped, or from the next shard if it
+        // was fully listed
+        if (truncated) {
+          next_marker = fmt::format("{}#{}", shard_index, queue_marker);
+          more = true;
+        } else if (shard_index + 1 < topic.dest.num_shards) {
+          next_marker = fmt::format("{}#", shard_index + 1);
+          more = true;
+        }
+        break;
+      }
+      ++shard_index;
     }
+    formatter->close_section();
+    formatter->dump_bool("truncated", more);
+    formatter->dump_string("marker", next_marker);
     formatter->close_section();
     formatter->flush(cout);
   }

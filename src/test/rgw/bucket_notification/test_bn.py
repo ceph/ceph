@@ -775,7 +775,7 @@ def get_stats_persistent_topic(topic_name, assert_entries_number=None):
         if actual_number != assert_entries_number:
             log.warning('Topic stats: %s', parsed_result)
             result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
-            parsed_result = json.loads(result[0])
+            parsed_result = json.loads(result[0])['eventEntries']
             log.warning('Topic dump:')
             for entry in parsed_result:
                 log.warning(entry)
@@ -3483,7 +3483,7 @@ def test_persistent_topic_dump():
     # topic dump
     result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
     assert result[1] == 0
-    parsed_result = json.loads(result[0])
+    parsed_result = json.loads(result[0])['eventEntries']
     assert len(parsed_result) == number_of_objects
 
     # delete objects from the bucket
@@ -3500,7 +3500,7 @@ def test_persistent_topic_dump():
     # topic stats
     result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
     assert result[1] == 0
-    parsed_result = json.loads(result[0])
+    parsed_result = json.loads(result[0])['eventEntries']
     assert len(parsed_result) == 2*number_of_objects
 
     # change the endpoint port
@@ -3514,7 +3514,7 @@ def test_persistent_topic_dump():
 
     result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
     assert result[1] == 0
-    parsed_result = json.loads(result[0])
+    parsed_result = json.loads(result[0])['eventEntries']
     assert len(parsed_result) == 0
 
     # cleanup
@@ -3573,7 +3573,7 @@ def test_ps_s3_notification_concurrent_put_eventtime():
     result = admin(['topic', 'dump', '--topic', topic_name],
                    get_config_cluster())
     assert result[1] == 0
-    parsed_result = json.loads(result[0])
+    parsed_result = json.loads(result[0])['eventEntries']
     log.info(f'topic dump has {len(parsed_result)} events')
     assert len(parsed_result) > 0, 'expected at least one notification event in queue'
 
@@ -6080,6 +6080,71 @@ def test_persistent_sharded_topic_config_change_kafka():
 
 
 @pytest.mark.basic_test
+def test_persistent_topic_dump_pagination():
+    """ test that topic dump returns at most max-entries, and a marker to
+    continue from. uses a wrong endpoint so the events stay in the queue """
+    conn = connection()
+    zonegroup = get_config_zonegroup()
+
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    endpoint_address = 'http://WrongHost:1234'
+    endpoint_args = 'push-endpoint=' + endpoint_address + '&persistent=true'
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*']}]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert status // 100 == 2
+
+    number_of_objects = 23
+    for i in range(number_of_objects):
+        bucket.new_key(str(i)).set_contents_from_string('bar')
+
+    # without max-entries everything is dumped, and there is nothing to continue from
+    result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
+    assert result[1] == 0
+    parsed_result = json.loads(result[0])
+    assert len(parsed_result['eventEntries']) == number_of_objects
+    assert parsed_result['truncated'] == False
+    assert parsed_result['marker'] == ''
+
+    # with max-entries the dump is paginated, following the marker each time
+    max_entries = 5
+    event_ids = []
+    marker = None
+    while True:
+        args = ['topic', 'dump', '--topic', topic_name, '--max-entries', str(max_entries)]
+        if marker:
+            args += ['--marker', marker]
+        result = admin(args, get_config_cluster())
+        assert result[1] == 0
+        parsed_result = json.loads(result[0])
+        entries = parsed_result['eventEntries']
+        assert len(entries) <= max_entries
+        event_ids += [entry['entry']['event']['eventId'] for entry in entries]
+        if not parsed_result['truncated']:
+            break
+        marker = parsed_result['marker']
+        assert marker != ''
+
+    # the pages hold all of the events, and none of them twice
+    assert len(event_ids) == number_of_objects
+    assert len(set(event_ids)) == number_of_objects
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    delete_all_objects(conn, bucket_name)
+    conn.delete_bucket(bucket_name)
+
+
+@pytest.mark.basic_test
 def test_ps_s3_x_amz_request_id_on_master():
     """ test that the x-amz-request-id in the notification event matches
     the x-amz-request-id returned in the S3 put_object and delete_object responses.
@@ -6138,7 +6203,7 @@ def test_ps_s3_x_amz_request_id_on_master():
     # dump the persistent topic entries and verify x-amz-request-id
     result = admin(['topic', 'dump', '--topic', topic_name], get_config_cluster())
     assert result[1] == 0
-    parsed_result = json.loads(result[0])
+    parsed_result = json.loads(result[0])['eventEntries']
     assert len(parsed_result) == 2
 
     # find creation and deletion events from the dump

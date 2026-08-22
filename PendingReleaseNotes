@@ -1144,3 +1144,13 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   seconds, which matches the previously hardcoded behaviour.
 
   Relevant tracker: https://tracker.ceph.com/issues/78727
+
+* RGW: The output format of "radosgw-admin topic dump" has changed. The command
+  used to print a bare JSON array of the pending notifications. It now prints an
+  object holding that array under "eventEntries", together with "truncated" and
+  "marker". The command also honours "--max-entries" from the caller's point of
+  view: at most that many notifications are returned, and "--marker" resumes the
+  dump from where the previous one stopped. Scripts that parse the output of this
+  command have to be adjusted.
+
+  Relevant tracker: https://tracker.ceph.com/issues/78695
