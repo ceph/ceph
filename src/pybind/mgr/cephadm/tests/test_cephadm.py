@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import re
 
 from contextlib import contextmanager
 
@@ -32,12 +33,19 @@ from ceph.deployment.service_spec import (
     PlacementSpec,
     RGWSpec,
     ServiceSpec,
+    SMBSpec,
+    OAuth2ProxySpec,
+    SNMPGatewaySpec,
+    CephExporterSpec,
+    IngressSpec,
 )
 from ceph.deployment.drive_selection.selector import DriveSelection
 from ceph.deployment.inventory import Devices, Device
 from ceph.utils import datetime_to_str, datetime_now, str_to_datetime
 from orchestrator import DaemonDescription, InventoryHost, \
     HostSpec, OrchestratorError, DaemonDescriptionStatus, OrchestratorEvent
+from orchestrator._interface import GenericSpec
+from orchestrator.module import Format
 from tests import mock
 from .fixtures import wait, _run_cephadm, match_glob, with_host, \
     with_cephadm_module, with_service, make_daemons_running, async_side_effect
@@ -184,15 +192,51 @@ class TestCephadm(object):
                     DriveGroupSpec(service_type='osd', service_id=''),
                     replace_osd_ids=[]))
 
-    def test_get_unique_name(self, cephadm_module):
-        # type: (CephadmOrchestrator) -> None
-        existing = [
-            DaemonDescription(daemon_type='mon', daemon_id='a')
+    @pytest.mark.parametrize(
+        "daemon_type,hostname,existing,prefix,forcename,rank,rank_generation,expected_pattern",
+        [
+            ('mon', 'myhost', [DaemonDescription(daemon_type='mon', daemon_id='a')], None, None, None, None, 'myhost'),
+            ('mgr', 'myhost', [DaemonDescription(daemon_type='mgr', daemon_id='a')], None, None, None, None, 'myhost.*'),
+            ('mgr', 'myhost', [DaemonDescription(daemon_type='mgr', daemon_id='a')], 'foo', None, None, None, 'foo.myhost.*'),
+            ('mgr', 'myhost.us-east', [DaemonDescription(daemon_type='mgr', daemon_id='a')], None, None, None, None, 'myhost.*'),
+            ('mds', 'myhost', [], 'foo', None, 0, 1, 'foo.0.1.myhost.*'),
         ]
-        new_mon = cephadm_module.get_unique_name('mon', 'myhost', existing)
-        match_glob(new_mon, 'myhost')
-        new_mgr = cephadm_module.get_unique_name('mgr', 'myhost', existing)
-        match_glob(new_mgr, 'myhost.*')
+    )
+    def test_get_unique_name(
+        self, 
+        cephadm_module: CephadmOrchestrator, 
+        daemon_type: str, 
+        hostname: str, 
+        existing: list,
+        prefix: str, 
+        forcename: str,
+        rank: int,
+        rank_generation: int,
+        expected_pattern: str
+    ):
+        new_name = cephadm_module.get_unique_name(daemon_type, hostname, existing, prefix, forcename, rank, rank_generation)
+        match_glob(new_name, expected_pattern)
+
+    @pytest.mark.parametrize(
+        "daemon_type,hostname,existing,prefix,forcename,expected_message",
+        [
+            ('mon', 'test', [DaemonDescription(daemon_type='mon', daemon_id='a')], '', 'a', 'name mon.a already in use'),
+            ('mon', 'test', [DaemonDescription(daemon_type='mon', daemon_id='test')], '', '', 'name mon.test already in use'),
+        ]
+    )
+    def test_get_unique_name_fail(
+        self, 
+        cephadm_module: CephadmOrchestrator, 
+        daemon_type: str, 
+        hostname: str, 
+        prefix: str, 
+        existing: list,
+        forcename: str,
+        expected_message: str
+    ):
+        with pytest.raises(OrchestratorError, match=expected_message):
+            cephadm_module.get_unique_name(daemon_type, hostname, existing, prefix, forcename)
+
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_valid_url(self, cephadm_module):
@@ -2202,6 +2246,11 @@ class TestCephadm(object):
             (ServiceSpec('rbd-mirror'), CephadmOrchestrator.apply_rbd_mirror),
             (ServiceSpec('cephfs-mirror'), CephadmOrchestrator.apply_rbd_mirror),
             (ServiceSpec('mds', service_id='fsname'), CephadmOrchestrator.apply_mds),
+            (ServiceSpec('mgmt-gateway'),CephadmOrchestrator.apply_mgmt_gateway),
+            (ServiceSpec('loki'), CephadmOrchestrator.apply_loki),
+            (ServiceSpec('promtail'), CephadmOrchestrator.apply_promtail),
+            (ServiceSpec('alloy'), CephadmOrchestrator.apply_alloy),
+            (ServiceSpec("ceph-exporter"), CephadmOrchestrator.apply_ceph_exporter),
             (ServiceSpec(
                 'mds', service_id='fsname',
                 placement=PlacementSpec(
@@ -2255,6 +2304,34 @@ class TestCephadm(object):
                 envs=['SECRET=password'],
                 ports=[8080, 8443]
             ), CephadmOrchestrator.apply_container),
+            (SNMPGatewaySpec(
+                'snmp-gateway',
+                snmp_version='V2c',
+                snmp_destination='192.168.1.1:162',
+                credentials={
+                    'snmp_community': 'public'
+                },
+            ), CephadmOrchestrator.apply_snmp_gateway),
+            (SMBSpec(
+                'smb',
+                service_id='smb-service-1',
+                placement=PlacementSpec(
+                    hosts=[HostPlacementSpec(
+                        hostname='test',
+                        name='bar',
+                        network=''
+                    )]
+                ),
+                cluster_id='foxtrot', 
+                config_uri='rados://.smb/foxtrot/config.json',
+            ), CephadmOrchestrator.apply_smb),
+            (OAuth2ProxySpec(
+                'oauth2-proxy',
+                provider_display_name='my_idp_provider',
+                client_id='my_client_id',
+                client_secret='my_client_secret',
+                oidc_issuer_url='http://192.168.10.10:8888/dex',
+            ), CephadmOrchestrator.apply_oauth2_proxy),
         ]
     )
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
@@ -2265,6 +2342,29 @@ class TestCephadm(object):
         with with_host(cephadm_module, 'test'):
             with with_service(cephadm_module, spec, meth, 'test'):
                 pass
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_apply_ingress(self, cephadm_module: CephadmOrchestrator):
+            with with_host(cephadm_module, 'test', addr='1.2.3.7'):
+                s = RGWSpec(service_id="foo", placement=PlacementSpec(count=1),
+                            rgw_frontend_type='beast')
+
+                ispec = IngressSpec(service_type='ingress',
+                                    service_id='test',
+                                    backend_service='rgw.foo',
+                                    frontend_port=8089,
+                                    monitor_port=8999,
+                                    monitor_user='admin',
+                                    monitor_password='12345',
+                                    keepalived_password='12345',
+                                    virtual_interface_networks=['1.2.3.0/24'],
+                                    virtual_ip="1.2.3.4/32",
+                                    enable_stats=True)
+                
+                with with_service(cephadm_module, s) as _, \
+                        with_service(cephadm_module, ispec, CephadmOrchestrator.apply_ingress) as _:
+                    pass
+
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_mds_config_purge(self, cephadm_module: CephadmOrchestrator):
@@ -2970,6 +3070,63 @@ Traceback (most recent call last):
                     assert wait(cephadm_module, cephadm_module.describe_service())[0].size == 1
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_remove_last_admin_label(self, cephadm_module: CephadmOrchestrator):
+        hostname = "host1"
+        label = SpecialHostLabels.ADMIN
+        with with_host(cephadm_module, hostname):
+            cephadm_module.inventory.add_label(hostname, label)
+            with pytest.raises(OrchestratorError, match=f"Host {hostname} is the last host with the '{SpecialHostLabels.ADMIN}' label."):
+                cephadm_module.remove_host_label(hostname, label, force=False)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_remove_invalid_label(self, cephadm_module: CephadmOrchestrator):
+        hostname = "host1"
+        invalid_label = "invalid_label"
+        valid_label = SpecialHostLabels.ADMIN
+        with with_host(cephadm_module, hostname):
+            cephadm_module.inventory.add_label(hostname, valid_label)
+            retval = cephadm_module.remove_host_label(hostname, invalid_label, force=False)
+            assert retval.result_str().startswith(f"Host {hostname} does not have label '{invalid_label}'.")
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_host_ok_to_stop(self, cephadm_module: CephadmOrchestrator):
+        host_to_stop = 'host1'
+        with with_host(cephadm_module, 'host1'):
+            with with_host(cephadm_module, 'host2'):
+                mgr_service = ServiceSpec(
+                    'mgr', 
+                    placement=PlacementSpec(count_per_host=1, host_pattern='*')
+                )
+                with with_service(cephadm_module, mgr_service, status_running=True):
+                    retval = cephadm_module.host_ok_to_stop(host_to_stop)
+                    assert retval.result_str().startswith(f"It is presumed safe to stop host {host_to_stop}")
+
+    @pytest.mark.parametrize(
+        "hostname, host_to_stop, expected_failure",
+        [
+            ("host1", "host1", "ALERT: Cannot stop {d_name} in RGW service. Not enough remaining RGW daemons."),
+            ("host1", "invalidhost", "Cannot find host \"invalidhost\"")
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_host_ok_to_stop_fail(
+        self, 
+        cephadm_module: CephadmOrchestrator, 
+        hostname: str, 
+        host_to_stop: str, 
+        expected_failure: str
+    ):
+        with with_host(cephadm_module, hostname):
+            with with_service(
+                cephadm_module, 
+                RGWSpec(service_id='myrgw.foobar'), 
+                host=hostname,
+            ) as d_name:
+                expected = expected_failure.format(d_name=d_name)
+                with pytest.raises(OrchestratorError, match=re.escape(expected)):
+                    cephadm_module.host_ok_to_stop(host_to_stop)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
     def test_host_rm_last_admin(self, cephadm_module: CephadmOrchestrator):
         with pytest.raises(OrchestratorError):
             with with_host(cephadm_module, 'test', refresh_hosts=False, rm_with_force=False):
@@ -3491,6 +3648,170 @@ Traceback (most recent call last):
 
                 cephadm_module.set_osd_spec('osd.foo', ['1'])
 
+    @pytest.mark.parametrize(
+        "action,expected_msg",
+        [
+            ('start', "Scheduled to {action} {daemon_name} on host '{hostname}'"),
+            ('stop', "Stopping entire mgr service is prohibited."),
+            ('restart', "Scheduled to {action} {daemon_name} on host '{hostname}'"),
+            ('reconfig', "Scheduled to {action} {daemon_name} on host '{hostname}'"),
+            ('redeploy', "Scheduled to {action} {daemon_name} on host '{hostname}'"),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_service_action(
+        self,
+        cephadm_module: CephadmOrchestrator, 
+        action: str, 
+        expected_msg: str,
+    ):
+        hostname = "host1"
+        with with_host(cephadm_module, hostname):
+            spec = ServiceSpec('mgr', placement=PlacementSpec(hosts=[hostname]))
+            with with_service(cephadm_module, spec) as d_name:
+                c = cephadm_module.service_action(action, 'mgr')
+                formatted_msg = expected_msg.format(action=action, daemon_name=d_name[0], hostname=hostname)
+                assert wait(cephadm_module, c) == [formatted_msg]
+
+    @pytest.mark.parametrize(
+        "spec,service_to_remove,expected_msg",
+        [ 
+            (
+                ServiceSpec(service_type='mds',service_id='fsname',unmanaged=True),
+                "mds.fsname",
+                "No daemons exist under service name",
+            ),
+            (
+                ServiceSpec(service_type='mds',service_id='fsname',unmanaged=False),
+                "mgr",
+                "Invalid service name",
+            ),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_service_action_fail(
+        self, 
+        cephadm_module: CephadmOrchestrator, 
+        spec: ServiceSpec, 
+        service_to_remove: str, 
+        expected_msg: str,
+    ):
+        hostname = "host1"
+        with with_host(cephadm_module, hostname):
+            with with_service(cephadm_module, spec) as _:
+                with pytest.raises(OrchestratorError, match=expected_msg):
+                    cephadm_module.service_action('start', service_to_remove)
+
+    @pytest.mark.parametrize(
+        "spec,no_overwrite,continue_on_error",
+        [
+            (HostSpec(hostname='host1'),False,True),
+            (HostSpec(hostname='host1'),True,True),
+            (
+                ServiceSpec(service_type='mgr'),
+                False,
+                True,
+            ),
+            (
+                ServiceSpec(service_type='mgr'),
+                True,
+                True,
+            ),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_apply(
+        self, 
+        cephadm_module: CephadmOrchestrator, 
+        spec: GenericSpec, 
+        no_overwrite: bool, 
+        continue_on_error: bool,
+    ):
+        with with_host(cephadm_module, 'host1'):
+            if isinstance(spec, ServiceSpec):
+                cephadm_module.spec_store.save(spec)
+            ret = cephadm_module.apply([spec], no_overwrite=no_overwrite, continue_on_error=continue_on_error)
+            assert ret
+
+
+    @pytest.mark.parametrize(
+        "spec,no_overwrite,continue_on_error,expected_msg",
+        [
+            (
+                ServiceSpec('mgr', placement=PlacementSpec(count=6)),
+                False,
+                False,
+                "The maximum number of mgr daemons allowed with 1 hosts is 5.",
+            ),
+            (
+                ServiceSpec('rgw', service_id='foo', placement=PlacementSpec(count=11)),
+                False,
+                False,
+                "The maximum number of rgw daemons allowed with 1 hosts is 10 .",
+            ),
+            (
+                ServiceSpec('rgw', service_id='foo', placement=PlacementSpec(host_pattern='*',count_per_host=11)),
+                False,
+                False,
+                "The maximum count_per_host allowed is 10.",
+            ),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_apply_fail(
+        self, 
+        cephadm_module: CephadmOrchestrator, 
+        spec: GenericSpec, 
+        no_overwrite: bool, 
+        continue_on_error: bool,
+        expected_msg: str,
+    ):
+        with with_host(cephadm_module, 'host1'):
+            with pytest.raises(OrchestratorError, match=expected_msg):
+                cephadm_module.apply([spec], no_overwrite=no_overwrite, continue_on_error=continue_on_error)
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_prepare_host(self, cephadm_module: CephadmOrchestrator):
+        with with_host(cephadm_module, 'host1'):
+            rc, _, _ = cephadm_module._prepare_host('host1')
+            assert rc == 0
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_prepare_host_and_enable_sudo_hardening(self, cephadm_module: CephadmOrchestrator):
+        with mock.patch("cephadm.module.CephadmOrchestrator._get_cephadm_version_for_host_prep") as mock_get_version:
+            mock_get_version.return_value = 'v18.0.0'
+            with with_host(cephadm_module, 'host1'):
+                cephadm_module.ssh_pub = 'ssh-rsa AAAAB3NzaC1yc2E...'
+                cephadm_module.inventory.add_label('host1', SpecialHostLabels.ADMIN)
+                rc, _, _ = cephadm_module._prepare_host_and_enable_sudo_hardening(
+                    user='user', host_label=SpecialHostLabels.ADMIN
+                )
+                assert rc == 0
+
+    @pytest.mark.parametrize(
+        "format",
+        [
+            (Format.plain),
+            (Format.json),
+            (Format.json_pretty),
+        ]
+    )
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_config_checks_list(self, format, cephadm_module: CephadmOrchestrator):
+        result = cephadm_module._config_checks_list(format=format)
+        assert result.retval == 0
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_config_check_enable(self, cephadm_module: CephadmOrchestrator):
+        result = cephadm_module._config_check_enable(check_name='kernel_security')
+        assert result.retval == 0
+        assert result.stdout == "ok"
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_config_check_disable(self, cephadm_module: CephadmOrchestrator):
+        result = cephadm_module._config_check_disable(check_name='kernel_security')
+        assert result.retval == 0
+        assert result.stdout == "ok"
 
 class TestCephadmBinaryLoggingLevel:
     """Test that host-status / cephadm binary logs are suppressed based on
