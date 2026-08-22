@@ -7199,8 +7199,17 @@ int main(int argc, const char **argv)
   if (!(rgw::sal::User::empty(user) && access_key.empty()) || !subuser.empty()) {
     ret = ruser.init(dpp(), driver, user_op, null_yield);
     if (ret < 0) {
+      if (!access_key.empty() && !user_op.found_by_key) {
+        cerr << "ERROR: could not find user for access-key: "
+             << access_key << std::endl;
+        return -ENOENT;
+      }
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+    if (rgw::sal::User::empty(user) && !access_key.empty() &&
+        user_op.found_by_key) {
+      bucket_op.set_user_id(user_op.get_user_id());
     }
   }
 
