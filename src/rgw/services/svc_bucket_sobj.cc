@@ -232,9 +232,12 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(const string& key,
   string cache_key("bi/");
   cache_key.append(key);
 
+  auto expected_version = rgw_expected_version(dpp);
   if (auto e = binfo_cache->find(cache_key)) {
-    if (refresh_version &&
-        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
+    if ((refresh_version &&
+         e->info.objv_tracker.read_version.compare(&(*refresh_version))) ||
+        (expected_version &&
+         !e->info.objv_tracker.read_version.compare(&(*expected_version)))) {
       ldpp_dout(dpp, -1) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
@@ -340,13 +343,16 @@ int RGWSI_Bucket_SObj::read_bucket_info(const rgw_bucket& bucket,
   string cache_key("b/");
   cache_key.append(bucket_entry);
 
+  auto expected_version = rgw_expected_version(dpp);
   if (auto e = binfo_cache->find(cache_key)) {
     bool found_version = (bucket.bucket_id.empty() ||
                           bucket.bucket_id == e->info.bucket.bucket_id);
 
     if (!found_version ||
         (refresh_version &&
-         e->info.objv_tracker.read_version.compare(&(*refresh_version)))) {
+         e->info.objv_tracker.read_version.compare(&(*refresh_version))) ||
+        (expected_version &&
+         !e->info.objv_tracker.read_version.compare(&(*expected_version)))) {
       ldpp_dout(dpp, -1) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;

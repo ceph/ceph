@@ -3619,10 +3619,9 @@ int RGWBucketCtl::link_bucket(librados::Rados& rados,
 
   if (update_entrypoint) {
     meta_key = RGWSI_Bucket::get_entrypoint_meta_key(bucket);
-    if (pinfo) {
-      ep = pinfo->ep;
-      pattrs = &pinfo->attrs;
-    } else {
+    /* store_bucket_entrypoint_info() below needs the current version, or
+     * the correspoding mdlog entry has an empty tag and zero version */
+    if (!pinfo || rot.read_version.tag.empty()) {
       ret = svc.bucket->read_bucket_entrypoint_info(meta_key,
                                                     &ep, &rot,
                                                     nullptr, &attrs,
@@ -3632,6 +3631,10 @@ int RGWBucketCtl::link_bucket(librados::Rados& rados,
                       << cpp_strerror(-ret) << dendl;
       }
       pattrs = &attrs;
+    }
+    if (pinfo) {
+      ep = pinfo->ep;
+      pattrs = &pinfo->attrs;
     }
   }
 
