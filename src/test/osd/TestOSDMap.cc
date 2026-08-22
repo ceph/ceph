@@ -482,7 +482,7 @@ TEST_F(OSDMapTest, Features) {
   ASSERT_TRUE(features & CEPH_FEATURE_OSDHASHPSPOOL);
   ASSERT_TRUE(features & CEPH_FEATURE_OSD_PRIMARY_AFFINITY);
 
-  // remove teh EC pool, but leave the rule.  add primary affinity.
+  // remove the EC pool, but leave the rule.  add primary affinity.
   {
     OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
     new_pool_inc.old_pools.insert(osdmap.lookup_pg_pool_name("ec"));
