@@ -595,6 +595,33 @@ def test_alertmanager_spec_2():
     assert 'default_webhook_urls' in spec.user_data.keys()
 
 
+def test_node_exporter_only_bind_port_on_networks():
+    spec = ServiceSpec.from_json({
+        'service_type': 'node-exporter',
+        'networks': ['fd00::/64'],
+        'spec': {'only_bind_port_on_networks': True},
+    })
+    assert spec.networks == ['fd00::/64']
+    assert spec.only_bind_port_on_networks is True
+    # survives a JSON round-trip
+    rt = ServiceSpec.from_json(spec.to_json())
+    assert rt.networks == ['fd00::/64']
+    assert rt.only_bind_port_on_networks is True
+
+
+def test_ceph_exporter_networks_spec():
+    spec = ServiceSpec.from_json({
+        'service_type': 'ceph-exporter',
+        'networks': ['fd00::/64'],
+        'spec': {'only_bind_port_on_networks': True},
+    })
+    assert spec.networks == ['fd00::/64']
+    assert spec.only_bind_port_on_networks is True
+    rt = ServiceSpec.from_json(spec.to_json())
+    assert rt.networks == ['fd00::/64']
+    assert rt.only_bind_port_on_networks is True
+
+
 def test_nfs_spec_rdma_default():
     """NFS spec without RDMA: enable_rdma is False, get_port_start returns 2 ports."""
     spec = NFSServiceSpec(service_id='mynfs', placement=PlacementSpec(count=1))
