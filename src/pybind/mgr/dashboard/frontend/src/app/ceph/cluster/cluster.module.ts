@@ -66,6 +66,7 @@ import { HostSidebarComponent } from './hosts/host-resource-sidebar/host-resourc
 import { HostResourcePageComponent } from './hosts/host-resource-page/host-resource-page.component';
 import { HostFormComponent } from './hosts/host-form/host-form.component';
 import { HostsComponent } from './hosts/hosts.component';
+import { CephUserFormComponent } from './user/ceph-user-form/ceph-user-form.component';
 import { InventoryDevicesComponent } from './inventory/inventory-devices/inventory-devices.component';
 import { InventoryComponent } from './inventory/inventory.component';
 import { LogsComponent } from './logs/logs.component';
@@ -179,6 +180,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     ServicesComponent,
     InventoryComponent,
     HostFormComponent,
+    CephUserFormComponent,
     OsdFormComponent,
     OsdDevicesSelectionModalComponent,
     InventoryDevicesComponent,
