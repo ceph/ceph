@@ -78,7 +78,8 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
     discard_callback(d_cb),
     discard_callback_priv(d_cbpriv),
     aio_stop(false),
-    aio_thread(this),
+    aio_write_thread(this, true),
+    aio_read_thread(this, false),
     injecting_crash(0)
 {
   cct->_conf.add_observer(this);
@@ -91,7 +92,8 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   if (use_ioring && ioring_queue_t::supported()) {
     bool use_ioring_hipri = cct->_conf.get_val<bool>("bdev_ioring_hipri");
     bool use_ioring_sqthread_poll = cct->_conf.get_val<bool>("bdev_ioring_sqthread_poll");
-    io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
+    write_io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
+    read_io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
   } else {
     static bool once;
     if (use_ioring && !once) {
@@ -99,7 +101,8 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
            << dendl;
       once = true;
     }
-    io_queue = std::make_unique<aio_queue_t>(iodepth);
+    write_io_queue = std::make_unique<aio_queue_t>(iodepth);
+    read_io_queue = std::make_unique<aio_queue_t>(iodepth);
   }
 
   char name[128];
@@ -390,6 +393,14 @@ void KernelDevice::close()
     VOID_TEMP_FAILURE_RETRY(::close(fd_buffereds[i]));
     fd_buffereds[i] = -1;
   }
+  if (completion_efd >= 0) {
+    // the eventfd is borrowed, not owned - just drop our references
+    // so a re-opened device does not stamp iocbs with it unless the
+    // owner installs it again (io_queue outlives close/open cycles)
+    write_io_queue->set_notify_eventfd(-1);
+    completion_efd = -1;
+    external_completions = false;
+  }
   path.clear();
 }
 
@@ -564,17 +575,28 @@ int KernelDevice::_aio_start()
 {
   if (aio) {
     dout(10) << __func__ << dendl;
-    int r = io_queue->init(fd_directs);
-    if (r < 0) {
-      if (r == -EAGAIN) {
-	derr << __func__ << " io_setup(2) failed with EAGAIN; "
-	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
-      } else {
-	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+    for (auto q : {write_io_queue.get(), read_io_queue.get()}) {
+      int r = q->init(fd_directs);
+      if (r < 0) {
+	if (r == -EAGAIN) {
+	  derr << __func__ << " io_setup(2) failed with EAGAIN; "
+	       << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+	} else {
+	  derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+	}
+	if (q != write_io_queue.get()) {
+	  write_io_queue->shutdown();
+	}
+	return r;
       }
-      return r;
     }
-    aio_thread.create("bstore_aio");
+    if (!external_completions) {
+      // in external mode the write ring is reaped by the owner
+      aio_write_thread.queue = write_io_queue.get();
+      aio_write_thread.create("bstore_aio");
+    }
+    aio_read_thread.queue = read_io_queue.get();
+    aio_read_thread.create("bstore_aio_rd");
   }
   return 0;
 }
@@ -585,22 +607,78 @@ void KernelDevice::_aio_stop()
     dout(10) << __func__ << dendl;
     aio_stop = true;
 
-    IOContext wakeup_ctx(cct, nullptr, false);
-    bufferlist bl;
-    aio_read(0, block_size, &bl, &wakeup_ctx);
-    aio_submit(&wakeup_ctx);
+    if (external_completions) {
+      // no write-side thread exists; the owner must have stopped
+      // submitting by now, but completions may still sit unreaped in
+      // the write ring - drain them here rather than letting
+      // io_destroy discard them (their callbacks would never run)
+      while (_reap_completions(write_io_queue.get(), 0,
+			       cct->_conf->bdev_aio_reap_max) > 0) {}
+    }
 
-    aio_thread.join();
+    // the wakeup ctxs must outlive the joins: the woken thread may
+    // reap them at any point before it exits (or never - harmless)
+    IOContext wake_w(cct, nullptr, false);
+    IOContext wake_r(cct, nullptr, false);
+    bufferlist bl_w, bl_r;
+    if (!external_completions) {
+      _aio_thread_wake(write_io_queue.get(), &wake_w, &bl_w, 0);
+    }
+    _aio_thread_wake(read_io_queue.get(), &wake_r, &bl_r, block_size);
+    if (!external_completions) {
+      aio_write_thread.join();
+    }
+    aio_read_thread.join();
+
+    // a thread can exit without reaping its wakeup (it checked
+    // aio_stop between the reap and the loop top); with the threads
+    // joined nobody else will, so retire the inflight accounting
+    // explicitly or the leaked interval trips the overlap abort on
+    // this device's next stop cycle
+    if (!external_completions && wake_w.num_running.load() > 0) {
+      _aio_log_finish(&wake_w, 0, block_size);
+    }
+    if (wake_r.num_running.load() > 0) {
+      _aio_log_finish(&wake_r, block_size, block_size);
+    }
 
     if (cct->_conf->bdev_debug_aio) {
-      for (auto& i: wakeup_ctx.running_aios) {
-	debug_aio_unlink(i);
+      for (auto* c : {&wake_w, &wake_r}) {
+	for (auto& i : c->running_aios) {
+	  debug_aio_unlink(i);
+	}
       }
     }
 
     aio_stop = false;
-    io_queue->shutdown();
+    write_io_queue->shutdown();
+    read_io_queue->shutdown();
   }
+}
+
+// unblock a completion thread parked in get_next_completed() on q by
+// submitting a harmless one-block read through THAT queue directly
+// (bypassing aio_submit's read/write routing and its sync-read fast
+// path).  The caller owns ioc/bl and must keep them alive until the
+// thread is joined.  Each queue's wakeup reads a DISTINCT block: the
+// two wakeups are in flight together during _aio_stop and
+// bdev_debug_inflight_ios tracks intervals device-wide, so identical
+// offsets would trip its overlap abort.
+void KernelDevice::_aio_thread_wake(io_queue_t *q, IOContext *ioc,
+				    ceph::buffer::list *bl, uint64_t off)
+{
+  aio_read(off, block_size, bl, ioc);
+  list<aio_t>::iterator e = ioc->running_aios.begin();
+  ioc->running_aios.splice(e, ioc->pending_aios);
+  int pending = ioc->num_pending.load();
+  ioc->num_running += pending;
+  ioc->num_pending -= pending;
+  int retries = 0;
+  int r = q->submit_batch(ioc->running_aios.begin(), e,
+			  static_cast<void*>(ioc), &retries,
+			  cct->_conf->bdev_aio_submit_retry_max,
+			  cct->_conf->bdev_aio_submit_retry_initial_delay_us);
+  ceph_assert(r >= 0);
 }
 
 void KernelDevice::_discard_update_threads(bool discard_stop)
@@ -672,6 +750,18 @@ void KernelDevice::discard_drain()
   }
 }
 
+static bool aio_is_read(const aio_t& a)
+{
+#if defined(HAVE_LIBAIO)
+  return a.iocb.aio_lio_opcode == IO_CMD_PREADV;
+#elif defined(HAVE_POSIXAIO)
+  return (a.n_aiocb == 1 ? a.aio.aiocb.aio_lio_opcode
+			 : a.aio.aiocbp[0].aio_lio_opcode) == LIO_READ;
+#else
+  return false;
+#endif
+}
+
 static bool is_expected_ioerr(const int r)
 {
   // https://lxr.missinglinkelectronics.com/linux+v4.15/block/blk-core.c#L135
@@ -686,93 +776,133 @@ static bool is_expected_ioerr(const int r)
 	  );
 }
 
-void KernelDevice::_aio_thread()
+int KernelDevice::_reap_completions(io_queue_t *q, int timeout_ms, int max)
+{
+  ceph_assert(max > 0);  // sizes the VLA below
+  aio_t *aio[max];
+  int r = q->get_next_completed(timeout_ms, aio, max);
+  if (r < 0) {
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+    ceph_abort_msg("got unexpected error from io_getevents");
+  }
+  if (r > 0) {
+    dout(30) << __func__ << " got " << r << " completed aios" << dendl;
+    for (int i = 0; i < r; ++i) {
+      IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
+      _aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
+      if (aio[i]->queue_item.is_linked()) {
+	std::lock_guard l(debug_queue_lock);
+	debug_aio_unlink(*aio[i]);
+      }
+
+      // set flag indicating new ios have completed.  we do this *before*
+      // any completion or notifications so that any user flush() that
+      // follows the observed io completion will include this io.  Note
+      // that an earlier, racing flush() could observe and clear this
+      // flag, but that also ensures that the IO will be stable before the
+      // later flush() occurs.
+      io_since_flush.store(true);
+
+      long r = aio[i]->get_return_value();
+      if (r < 0) {
+	derr << __func__ << " got r=" << r << " (" << cpp_strerror(r) << ")"
+	     << dendl;
+	if (ioc->allow_eio && is_expected_ioerr(r)) {
+	  derr << __func__ << " translating the error to EIO for upper layer"
+	       << dendl;
+	  ioc->set_return_value(-EIO);
+	} else {
+	  if (is_expected_ioerr(r)) {
+	    note_io_error_event(
+	      devname.c_str(),
+	      path.c_str(),
+	      r,
+#if defined(HAVE_POSIXAIO)
+	      aio[i]->aio.aiocb.aio_lio_opcode,
+#else
+	      aio[i]->iocb.aio_lio_opcode,
+#endif
+	      aio[i]->offset,
+	      aio[i]->length);
+	    ceph_abort_msg(
+	      "Unexpected IO error. "
+	      "This may suggest a hardware issue. "
+	      "Please check your kernel log!");
+	  }
+	  ceph_abort_msg(
+	    "Unexpected IO error. "
+	    "This may suggest HW issue. Please check your dmesg!");
+	}
+      } else if (aio[i]->length != (uint64_t)r) {
+	derr << "aio to 0x" << std::hex << aio[i]->offset
+	     << "~" << aio[i]->length << std::dec
+	     << " but returned: " << r << dendl;
+	ceph_abort_msg("unexpected aio return value: does not match length");
+      }
+
+      dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
+	       << " ioc " << ioc
+	       << " with " << (ioc->num_running.load() - 1)
+	       << " aios left" << dendl;
+
+      // NOTE: once num_running and we either call the callback or
+      // call aio_wake we cannot touch ioc or aio[] as the caller
+      // may free it.
+      if (ioc->priv) {
+	if (--ioc->num_running == 0) {
+	  aio_callback(aio_callback_priv, ioc->priv);
+	}
+      } else {
+	ioc->try_aio_wake();
+      }
+    }
+  }
+  return r;
+}
+
+// Must be called before open(); the fd is borrowed from the caller
+// (never closed here) and stays installed for the device's whole open
+// lifetime - there is no mode switching on an open device.  Applies
+// to the WRITE ring only: the read ring always keeps its own
+// completion thread, so read completion latency never couples to the
+// owner's schedule.
+int KernelDevice::set_completion_eventfd(int fd)
+{
+#if defined(HAVE_LIBAIO)
+  ceph_assert(!aio_write_thread.is_started());
+  ceph_assert(fd >= 0);
+  int r = write_io_queue->set_notify_eventfd(fd);
+  if (r < 0) {
+    return r;
+  }
+  completion_efd = fd;
+  external_completions = true;
+  dout(5) << __func__ << " efd " << fd << dendl;
+  return 0;
+#else
+  return -EOPNOTSUPP;
+#endif
+}
+
+// drain the WRITE ring (external mode only)
+int KernelDevice::reap_completions(int max)
+{
+  ceph_assert(external_completions);
+  ceph_assert(max > 0);  // sizes a VLA in _reap_completions
+  return _reap_completions(write_io_queue.get(), 0, max);
+}
+
+void KernelDevice::_aio_thread(io_queue_t *q, bool primary)
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    int max = cct->_conf->bdev_aio_reap_max;
-    aio_t *aio[max];
-    int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
-					 aio, max);
-    if (r < 0) {
-      derr << __func__ << " got " << cpp_strerror(r) << dendl;
-      ceph_abort_msg("got unexpected error from io_getevents");
-    }
-    if (r > 0) {
-      dout(30) << __func__ << " got " << r << " completed aios" << dendl;
-      for (int i = 0; i < r; ++i) {
-	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
-	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
-	if (aio[i]->queue_item.is_linked()) {
-	  std::lock_guard l(debug_queue_lock);
-	  debug_aio_unlink(*aio[i]);
-	}
-
-	// set flag indicating new ios have completed.  we do this *before*
-	// any completion or notifications so that any user flush() that
-	// follows the observed io completion will include this io.  Note
-	// that an earlier, racing flush() could observe and clear this
-	// flag, but that also ensures that the IO will be stable before the
-	// later flush() occurs.
-	io_since_flush.store(true);
-
-	long r = aio[i]->get_return_value();
-        if (r < 0) {
-          derr << __func__ << " got r=" << r << " (" << cpp_strerror(r) << ")"
-	       << dendl;
-          if (ioc->allow_eio && is_expected_ioerr(r)) {
-            derr << __func__ << " translating the error to EIO for upper layer"
-		 << dendl;
-            ioc->set_return_value(-EIO);
-          } else {
-	    if (is_expected_ioerr(r)) {
-	      note_io_error_event(
-		devname.c_str(),
-		path.c_str(),
-		r,
-#if defined(HAVE_POSIXAIO)
-                aio[i]->aio.aiocb.aio_lio_opcode,
-#else
-                aio[i]->iocb.aio_lio_opcode,
-#endif
-		aio[i]->offset,
-		aio[i]->length);
-	      ceph_abort_msg(
-		"Unexpected IO error. "
-		"This may suggest a hardware issue. "
-		"Please check your kernel log!");
-	    }
-	    ceph_abort_msg(
-	      "Unexpected IO error. "
-	      "This may suggest HW issue. Please check your dmesg!");
-          }
-        } else if (aio[i]->length != (uint64_t)r) {
-          derr << "aio to 0x" << std::hex << aio[i]->offset
-	       << "~" << aio[i]->length << std::dec
-               << " but returned: " << r << dendl;
-          ceph_abort_msg("unexpected aio return value: does not match length");
-        }
-
-        dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
-                 << " ioc " << ioc
-                 << " with " << (ioc->num_running.load() - 1)
-                 << " aios left" << dendl;
-
-	// NOTE: once num_running and we either call the callback or
-	// call aio_wake we cannot touch ioc or aio[] as the caller
-	// may free it.
-	if (ioc->priv) {
-	  if (--ioc->num_running == 0) {
-	    aio_callback(aio_callback_priv, ioc->priv);
-	  }
-	} else {
-          ioc->try_aio_wake();
-	}
-      }
-    }
-    if (cct->_conf->bdev_debug_aio) {
+    _reap_completions(q, cct->_conf->bdev_aio_poll_ms,
+		      cct->_conf->bdev_aio_reap_max);
+    // the stalled-aio watchdog and crash injection are device-wide
+    // per-iteration policies; one thread running them suffices
+    if (primary && cct->_conf->bdev_debug_aio) {
       utime_t now = ceph_clock_now();
       std::lock_guard l(debug_queue_lock);
       if (debug_oldest) {
@@ -793,7 +923,7 @@ void KernelDevice::_aio_thread()
 	}
       }
     }
-    if (cct->_conf->bdev_inject_crash) {
+    if (primary && cct->_conf->bdev_inject_crash) {
       ++inject_crash_count;
       if (inject_crash_count * cct->_conf->bdev_aio_poll_ms / 1000 >
 	  cct->_conf->bdev_inject_crash + cct->_conf->bdev_inject_crash_flush_delay) {
@@ -1014,6 +1144,87 @@ void KernelDevice::_aio_log_finish(
   }
 }
 
+// Fast path: a lone aio on a waiter-style IOContext (priv == NULL,
+// i.e. the caller blocks in aio_wait() rather than consuming a
+// completion callback) is one contiguous preadv/pwritev whose
+// submitter is about to wait for it - asynchrony buys nothing, so
+// execute it synchronously in the caller and skip the whole aio
+// completion round trip (ring, completion-thread wakeup, waiter
+// wakeup); aio_wait() then falls straight through.  This covers the
+// common single-extent read from _do_read and every single-segment
+// BlueFS flush (the WAL append on the commit path most importantly).
+// Callback-style IOContexts (txc data writes, deferred batches) are
+// not eligible: their callers do not wait, the pipeline consumes
+// their completions asynchronously.  Returns true if the io was
+// executed here.
+bool KernelDevice::_aio_lone_waiter_sync(IOContext *ioc)
+{
+#if defined(HAVE_LIBAIO)
+  if (!aio || ioc->priv != nullptr ||
+      ioc->num_pending.load() != 1) {
+    return false;
+  }
+  aio_t& a = ioc->pending_aios.back();
+  const bool is_read = (a.iocb.aio_lio_opcode == IO_CMD_PREADV);
+  dout(20) << __func__ << " sync " << (is_read ? "read" : "write")
+	   << " 0x" << std::hex << a.offset << "~"
+	   << a.length << std::dec << dendl;
+  ssize_t r;
+  if (is_read) {
+    r = ::preadv(a.fd, a.iov.data(), a.iov.size(), a.offset);
+  } else {
+    r = ::pwritev(a.fd, a.iov.data(), a.iov.size(), a.offset);
+    // as in _sync_write/reap: arm the next flush() BEFORE anything
+    // can observe the write as complete
+    io_since_flush.store(true);
+  }
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " sync " << (is_read ? "preadv" : "pwritev")
+	 << " 0x" << std::hex << a.offset << "~" << a.length
+	 << std::dec << " got " << cpp_strerror(r) << dendl;
+    // same error handling as the completion thread's
+    if (ioc->allow_eio && is_expected_ioerr(r)) {
+      ioc->set_return_value(-EIO);
+    } else {
+      if (is_expected_ioerr(r)) {
+	note_io_error_event(
+	  devname.c_str(),
+	  path.c_str(),
+	  r,
+#if defined(HAVE_POSIXAIO)
+	  a.aio.aiocb.aio_lio_opcode,
+#else
+	  a.iocb.aio_lio_opcode,
+#endif
+	  a.offset,
+	  a.length);
+	ceph_abort_msg(
+	  "Unexpected IO error. "
+	  "This may suggest a hardware issue. "
+	  "Please check your kernel log!");
+      }
+      ceph_abort_msg(
+	"Unexpected IO error. "
+	"This may suggest HW issue. Please check your dmesg!");
+    }
+  } else if ((uint64_t)r != a.length) {
+    // partial preadv/pwritev does not happen on O_DIRECT block
+    // devices; treat it like the completion thread treats a short
+    // return
+    derr << __func__ << " sync io 0x" << std::hex << a.offset
+	 << "~" << a.length << std::dec << " returned " << r << dendl;
+    ceph_abort_msg("short io from sync fast path");
+  }
+  _aio_log_finish(ioc, a.offset, a.length);
+  ioc->num_pending--;
+  ioc->pending_aios.clear();
+  return true;
+#else
+  return false;
+#endif
+}
+
 void KernelDevice::aio_submit(IOContext *ioc)
 {
   dout(20) << __func__ << " ioc " << ioc
@@ -1022,6 +1233,10 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << dendl;
 
   if (ioc->num_pending.load() == 0) {
+    return;
+  }
+
+  if (_aio_lone_waiter_sync(ioc)) {
     return;
   }
 
@@ -1053,9 +1268,36 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << " bdev_aio_submit_retry_max " << retry_max
 	   << " bdev_aio_submit_retry_initial_delay_us " << initial_delay_us
 	   << dendl;
-  int r, retries = 0;
-  r = io_queue->submit_batch(ioc->running_aios.begin(), e,
-			     priv, &retries, retry_max, initial_delay_us);
+  // Route by direction.  An IOContext normally carries one direction
+  // only (reads come from _do_read/_do_readv, writes from the txc
+  // and deferred paths), but bdev_inject_crash deliberately
+  // substitutes reads for writes on a write ioc, so a mixed batch
+  // must work: move the batch's reads to its tail, then submit each
+  // direction through its own queue.  List splices keep the aio_t
+  // addresses stable, which the kernel-held iocb pointers require.
+  auto first_read = e;
+  for (auto p = ioc->running_aios.begin(); p != first_read; ) {
+    auto n = std::next(p);
+    if (aio_is_read(*p)) {
+      ioc->running_aios.splice(e, ioc->running_aios, p);
+      if (first_read == e) {
+	first_read = p;
+      }
+    }
+    p = n;
+  }
+  int r = 0, retries = 0;
+  auto wbegin = ioc->running_aios.begin();
+  if (wbegin != first_read) {
+    r = write_io_queue->submit_batch(wbegin, first_read,
+				     priv, &retries, retry_max,
+				     initial_delay_us);
+  }
+  if (r >= 0 && first_read != e) {
+    r = read_io_queue->submit_batch(first_read, e,
+				    priv, &retries, retry_max,
+				    initial_delay_us);
+  }
 
   if (retries)
     derr << __func__ << " retries " << retries << dendl;

@@ -296,6 +296,28 @@ public:
     bool buffered,
     int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
+
+  // External completion reaping of the WRITE ring (opt-in, per
+  // instance).  When a caller-owned eventfd is installed with
+  // set_completion_eventfd() BEFORE open(), the device does not run
+  // the write ring's completion thread for its whole open lifetime;
+  // instead every write completion signals that eventfd, and the
+  // owner must drain them by calling reap_completions() - the write
+  // aio callbacks then run in the caller's context.  The read ring
+  // is unaffected: it always keeps its own completion thread.  The
+  // device only borrows the fd: the caller owns its lifetime and
+  // must keep it valid while the device is open.  The owner's
+  // obligations: (a) the reaping thread must never submit write aio
+  // itself or wait on a write IOContext - it is that ring's only
+  // drain, so sleeping in the submit EAGAIN retry loop (or in
+  // aio_wait) would deadlock; (b) no write aio may be issued at all
+  // while nothing is reaping.  Reads are exempt.  Default:
+  // unsupported.
+  virtual int set_completion_eventfd(int fd) { return -EOPNOTSUPP; }
+  // Nonblocking; processes up to max (> 0) completed aios and returns
+  // the number processed.
+  virtual int reap_completions(int max) { return -EOPNOTSUPP; }
+
   virtual bool try_discard(interval_set<uint64_t> &to_release,
                            bool async=true,
                            bool force=false) { return false; }

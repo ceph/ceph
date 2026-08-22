@@ -56,7 +56,13 @@ private:
   std::atomic<bool> io_since_flush = {false};
   ceph::mutex flush_mutex = ceph::make_mutex("KernelDevice::flush_mutex");
 
-  std::unique_ptr<io_queue_t> io_queue;
+  // Reads and writes use dedicated aio contexts (independent kernel
+  // rings, independent queue depths, each with its own completion
+  // thread): read submissions can never be starved behind a write
+  // burst filling the ring, and the two directions' completion
+  // handling can evolve independently.
+  std::unique_ptr<io_queue_t> write_io_queue;
+  std::unique_ptr<io_queue_t> read_io_queue;
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
@@ -70,12 +76,15 @@ private:
 
   struct AioCompletionThread : public Thread {
     KernelDevice *bdev;
-    explicit AioCompletionThread(KernelDevice *b) : bdev(b) {}
+    io_queue_t *queue = nullptr;  ///< bound at _aio_start
+    bool primary;                 ///< runs the debug watchdog etc.
+    AioCompletionThread(KernelDevice *b, bool primary)
+      : bdev(b), primary(primary) {}
     void *entry() override {
-      bdev->_aio_thread();
+      bdev->_aio_thread(queue, primary);
       return NULL;
     }
-  } aio_thread;
+  } aio_write_thread, aio_read_thread;
 
   struct DiscardThread : public Thread {
     KernelDevice *bdev;
@@ -94,7 +103,15 @@ private:
   virtual int _post_open() { return 0; }  // hook for child implementations
   virtual void  _pre_close() { }  // hook for child implementations
 
-  void _aio_thread();
+  void _aio_thread(io_queue_t *q, bool primary);
+  void _aio_thread_wake(io_queue_t *q, IOContext *ioc,
+			ceph::buffer::list *bl, uint64_t off);
+  // one reap pass: get_next_completed(timeout_ms) + full completion
+  // processing (shared by the completion threads and, for the write
+  // ring, reap_completions())
+  int _reap_completions(io_queue_t *q, int timeout_ms, int max);
+  bool external_completions = false;   ///< write ring reaped externally
+  int completion_efd = -1;             ///< borrowed from the owner; not closed here
   void _discard_thread(DiscardThread* thr);
   bool _queue_discard(interval_set<uint64_t> &to_release);
   bool try_discard(interval_set<uint64_t> &to_release,
@@ -114,6 +131,7 @@ private:
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
   int _sync_write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint);
+  bool _aio_lone_waiter_sync(IOContext *ioc);
 
   int _lock();
 
@@ -166,6 +184,8 @@ public:
 		bool buffered,
 		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
+  int set_completion_eventfd(int fd) override;
+  int reap_completions(int max) override;
   int _discard(uint64_t offset, uint64_t len);
 
   // for managing buffered readers/writers
