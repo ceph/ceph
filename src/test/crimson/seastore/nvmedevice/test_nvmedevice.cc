@@ -56,7 +56,8 @@ using crimson::common::local_conf;
 TEST_F(nvdev_test_t, write_and_verify_test)
 {
   run_async([this] {
-    device.reset(new random_block_device::nvme::NVMeBlockDevice(dev_path));
+    device.reset(new random_block_device::nvme::NVMeBlockDevice(
+      dev_path, device_type_t::RANDOM_BLOCK_SSD, 0));
     local_conf().set_val("seastore_cbjournal_size", "1048576").get();
     device->start(seastar::this_smp_shard_count()).get();
     device->mkfs(
@@ -68,7 +69,7 @@ TEST_F(nvdev_test_t, write_and_verify_test)
 	backend_type_t::RANDOM_BLOCK,
 	static_cast<device_id_t>(DEVICE_ID_RANDOM_BLOCK_MIN)},
 	seastore_meta_t{uuid_d()},
-	secondary_device_set_t()}
+	device_set_t()}
     ).unsafe_get();
     device->mount().unsafe_get();
     nvdev_test_block_t original_data;

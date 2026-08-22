@@ -1973,7 +1973,8 @@ using TransactionManagerRef = std::unique_ptr<TransactionManager>;
 
 TransactionManagerRef make_transaction_manager(
     Device *primary_device,
-    const std::vector<Device*> &secondary_devices,
+    const std::vector<Device*> &cache_devices,
+    const std::vector<Device*> &data_devices,
     shard_stats_t& shard_stats,
     store_index_t store_index,
     bool is_test);

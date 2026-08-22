@@ -17,14 +17,23 @@ seastar::future<> RotationalDevice::start(uint32_t shard_nums) {
   LOG_PREFIX(NVMeBlockDevice::start);
   DEBUG("device_shard_nums={} seastar::smp={}, num_shard_services={}",
     device_shard_nums, seastar::this_smp_shard_count(), num_shard_services);
-  return shard_devices.start(num_shard_services, device_path);
+  return shard_devices.start(
+    num_shard_services,
+    device_path,
+    get_device_type(),
+    get_device_id());
 }
 
 RotationalDevice::mkfs_ret RotationalDevice::mkfs(device_config_t config) {
   LOG_PREFIX(RotationalDevice::mkfs);
   INFO("{}", config);
   return shard_devices.local().mshard_devices[0]->do_primary_mkfs(
-    config, seastar::this_smp_shard_count(), 0);
+    config,
+    seastar::this_smp_shard_count(),
+    // If there's no cache devices, the rotational
+    // device is supposed to hold the journal
+    config.cache_devices.empty()
+      ? crimson::common::get_conf<Option::size_t>("seastore_cbjournal_size") : 0);
 }
 
 RotationalDevice::mount_ret RotationalDevice::mount() {
