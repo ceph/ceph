@@ -6764,7 +6764,7 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
 		  << prim_pgs_by_osd << dendl;
 
   if (pgs_by_osd.empty() || num_pgs == 0) {
-    rbi.err_msg = fmt::format("pool {} has no PGs mapped to OSDs, read balance score is not available", pool_id);
+    // no err_msg - it would show up on every pool of an osdmap with no up OSDs
     if (cct != nullptr) {
       ldout(cct, 20) << __func__ << " pool " << pool_id
                      << " has no PGs mapped to OSDs - can't calculate read balance score" << dendl;
