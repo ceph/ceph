@@ -1624,6 +1624,9 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
 
     bool end = ((unsigned)flags & CEPH_READDIR_FRAG_END);
     bool hash_order = ((unsigned)flags & CEPH_READDIR_HASH_ORDER);
+    if (hash_order) {
+      dirp->set_hash_order();
+    }
 
     unsigned readdir_offset = dirp->next_offset;
     string readdir_start = dirp->last_name;
