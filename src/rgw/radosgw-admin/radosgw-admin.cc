@@ -10096,7 +10096,12 @@ next:
         }
       } else {
         int ret = rgw_sync_all_stats(dpp(), null_yield, driver,
-                                     user->get_id(), user->get_tenant());
+                                   user->get_id(), user->get_tenant());
+        if (ret < 0) {
+          cerr << "ERROR: could not sync user stats: " <<
+               cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
         if (ret < 0) {
           cerr << "ERROR: could not sync user stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -10137,6 +10142,13 @@ next:
     {
       Formatter::ObjectSection os(*formatter, "result");
       encode_json("stats", stats, formatter.get());
+      if (stats.storage_class_stats.has_value()) {
+        formatter->open_object_section("stats.storage-classes");
+        for(auto it = stats.storage_class_stats.value().begin(); it != stats.storage_class_stats.value().end(); ++it){
+          encode_json(it->first.c_str(), it->second, formatter.get());
+        }
+        formatter->close_section();
+      }
       utime_t last_sync_ut(last_stats_sync);
       encode_json("last_stats_sync", last_sync_ut, formatter.get());
       utime_t last_update_ut(last_stats_update);

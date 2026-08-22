@@ -171,6 +171,13 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("group_ids", info.group_ids, f);
   if (stats) {
     encode_json("stats", *stats, f);
+    if (stats->storage_class_stats.has_value()) {
+      f->open_object_section("stats.storage-classes");
+      for(auto it = stats->storage_class_stats.value().begin(); it != stats->storage_class_stats.value().end(); ++it){
+        encode_json(it->first.c_str(), it->second, f);
+      }
+      f->close_section();
+    }
   }
   f->close_section();
 }
