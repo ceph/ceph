@@ -4263,7 +4263,12 @@ void BlueFS::append_try_flush(FileWriter *h, const char* buf, size_t len)/*_WF_L
       h->envelope_head_filler = h->append_hole(File::envelope_t::head_size());
       uint32_t pos1 = h->get_effective_write_pos() - File::envelope_t::head_size();
       uint32_t pos2 = reinterpret_cast<uintptr_t>(h->envelope_head_filler.c_str());
-      ceph_assert(p2aligned(pos1 ^ pos2, CEPH_PAGE_SIZE));
+      // Buffer memory must mirror the on-disk position, but only up to
+      // the smaller of the page size (alignment of fresh appender
+      // chunks) and the block size (padding granularity of envelope
+      // flushes) - the two can differ in either direction.
+      ceph_assert(p2aligned(pos1 ^ pos2,
+                            std::min<uint32_t>(CEPH_PAGE_SIZE, super.block_size)));
     }
     size_t max_size = 1ull << 30; // cap to 1GB
     while (len > 0) {
