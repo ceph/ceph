@@ -119,6 +119,16 @@ enum {
   l_rgw_lc_per_bucket_last
 };
 
+enum {
+  l_rgw_bucket_reshard_first = 19000,
+
+  l_rgw_bucket_reshard_active,
+  l_rgw_bucket_reshard_success,
+  l_rgw_bucket_reshard_failure,
+
+  l_rgw_bucket_reshard_last
+};
+
 namespace rgw::op_counters {
 
 struct CountersContainer {
@@ -157,5 +167,14 @@ namespace rgw::lc_counters {
 
 std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
                                   const std::string& tenant);
+
+} // namespace rgw::lc_counters
+
+
+namespace rgw::bucket_reshard_counters {
+
+std::shared_ptr<PerfCounters> get_generic();
+std::shared_ptr<PerfCounters> get_for_bucket(const std::string& bucket_name,
+                                             const std::string& tenant);
 
 } // namespace rgw::lc_counters
