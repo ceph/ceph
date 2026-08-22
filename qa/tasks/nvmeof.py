@@ -334,8 +334,9 @@ class NvmeofThrasher(Thrasher, Greenlet):
         self.daemons = daemons
         self.logger = log.getChild('[nvmeof.thrasher]')
         self.stopping = Event()
-        if self.config.get("switch_thrashers"): 
+        if self.config.get("switch_thrashers"):
             self.switch_thrasher = Event()
+            self.switch_thrashers_wait = int(self.config.get('switch_thrashers_wait', 600))
         self.checker_host = get_remote_for_role(self.ctx, self.config.get('checker_host'))
         self.devices = self._get_devices(self.checker_host)
 
@@ -446,8 +447,11 @@ class NvmeofThrasher(Thrasher, Greenlet):
             ):
                 other_thrasher = t
                 self.log('switch_task: waiting for other thrasher')
-                other_thrasher.switch_thrasher.wait(600)
+                synced = other_thrasher.switch_thrasher.wait(self.switch_thrashers_wait)
                 self.log('switch_task: done waiting for the other thrasher')
+                if not synced:
+                    self.log(f'switch_task: WARNING - timed out after {self.switch_thrashers_wait}s '
+                             f'waiting for other thrasher, thrashers are now out of sync')
                 other_thrasher.switch_thrasher.clear()
 
     def kill_daemon(self, daemon):
