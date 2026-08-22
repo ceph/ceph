@@ -18,10 +18,10 @@ from mgr_util import password_hash
 
 from .. import mgr
 from ..cli import DBCLICommand
-from ..exceptions import PasswordPolicyException, PermissionNotValid, \
-    PwdExpirationDateNotValid, RoleAlreadyExists, RoleDoesNotExist, \
-    RoleIsAssociatedWithUser, RoleNotInUser, ScopeNotInRole, ScopeNotValid, \
-    UserAlreadyExists, UserDoesNotExist
+from ..exceptions import LastAdminError, PasswordPolicyException, \
+    PermissionNotValid, PwdExpirationDateNotValid, RoleAlreadyExists, \
+    RoleDoesNotExist, RoleIsAssociatedWithUser, RoleNotInUser, \
+    ScopeNotInRole, ScopeNotValid, UserAlreadyExists, UserDoesNotExist
 from ..security import Permission, Scope
 from ..settings import Settings
 
@@ -535,10 +535,23 @@ class AccessControlDB(object):
                 raise UserDoesNotExist(username)
             return self.users[username]
 
+    def _is_last_admin(self, username: str) -> bool:
+        """Check if the given user is the only enabled user with the administrator role."""
+        user = self.users.get(username)
+        if not user or ADMIN_ROLE not in user.roles:
+            return False
+        return not any(
+            u.enabled and ADMIN_ROLE in u.roles
+            for uname, u in self.users.items()
+            if uname != username
+        )
+
     def delete_user(self, username):
         with self.lock:
             if username not in self.users:
                 raise UserDoesNotExist(username)
+            if self._is_last_admin(username):
+                raise LastAdminError('delete', username)
             del self.users[username]
 
     def update_users_with_roles(self, role):
@@ -814,12 +827,16 @@ def ac_user_disable(_, username: str):
     '''
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
+        if mgr.ACCESS_CTRL_DB._is_last_admin(username):
+            raise LastAdminError('disable', username)
         user.enabled = False
 
         mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
+    except LastAdminError as ex:
+        return -errno.EPERM, '', str(ex)
 
 
 @DBCLICommand.Write('dashboard ac-user-delete')
@@ -830,9 +847,11 @@ def ac_user_delete_cmd(_, username: str):
     try:
         mgr.ACCESS_CTRL_DB.delete_user(username)
         mgr.ACCESS_CTRL_DB.save()
-        return 0, "User '{}' deleted".format(username), ""
+        return 0, f"User '{username}' deleted", ""
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
+    except LastAdminError as ex:
+        return -errno.EPERM, '', str(ex)
 
 
 @DBCLICommand.Write('dashboard ac-user-set-roles')
@@ -851,11 +870,16 @@ def ac_user_set_roles_cmd(_, username: str, roles: Sequence[str]):
             roles.append(SYSTEM_ROLES[rolename])
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
+        removing_admin = ADMIN_ROLE in user.roles and ADMIN_ROLE not in roles
+        if removing_admin and mgr.ACCESS_CTRL_DB._is_last_admin(username):
+            raise LastAdminError('remove administrator role from', username)
         user.set_roles(roles)
         mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
     except UserDoesNotExist as ex:
         return -errno.ENOENT, '', str(ex)
+    except LastAdminError as ex:
+        return -errno.EPERM, '', str(ex)
 
 
 @DBCLICommand.Write('dashboard ac-user-add-roles')
@@ -897,6 +921,9 @@ def ac_user_del_roles_cmd(_, username: str, roles: Sequence[str]):
             roles.append(SYSTEM_ROLES[rolename])
     try:
         user = mgr.ACCESS_CTRL_DB.get_user(username)
+        removing_admin = ADMIN_ROLE in roles and ADMIN_ROLE in user.roles
+        if removing_admin and mgr.ACCESS_CTRL_DB._is_last_admin(username):
+            raise LastAdminError('remove administrator role from', username)
         user.del_roles(roles)
         mgr.ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
@@ -904,6 +931,8 @@ def ac_user_del_roles_cmd(_, username: str, roles: Sequence[str]):
         return -errno.ENOENT, '', str(ex)
     except RoleNotInUser as ex:
         return -errno.ENOENT, '', str(ex)
+    except LastAdminError as ex:
+        return -errno.EPERM, '', str(ex)
 
 
 @DBCLICommand.Write('dashboard ac-user-set-password')
