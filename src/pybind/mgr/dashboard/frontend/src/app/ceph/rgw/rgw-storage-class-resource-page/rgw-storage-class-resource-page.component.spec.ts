@@ -94,6 +94,37 @@ describe('RgwStorageClassResourcePageComponent', () => {
     expect(component.details?.data_pool).toBe('my-local-pool');
   });
 
+  it('should include target_storage_class in cloud-s3 overview fields', () => {
+    jest.spyOn(BucketTieringUtils, 'filterAndMapTierTargets').mockReturnValue([
+      {
+        zonegroup_name: 'zg-1',
+        placement_target: 'pt-1',
+        storage_class: 'sc-cloud',
+        tier_type: TIER_TYPE_DISPLAY.CLOUD_TIER,
+        target_path: '/path',
+        target_storage_class: ''
+      }
+    ]);
+
+    component.ngOnInit();
+
+    pushRouteParams({
+      zonegroup_name: 'zg-1',
+      placement_target: 'pt-1',
+      storage_class: 'sc-cloud'
+    });
+
+    const targetStorageClassField = component.overviewFields.find(
+      (field) => field.label === 'Target Storage Class'
+    );
+    expect(targetStorageClassField).toEqual(
+      expect.objectContaining({
+        value: '',
+        emptyText: '-'
+      })
+    );
+  });
+
   it('should handle API errors gracefully', () => {
     zonegroupService.getAllZonegroupsInfo.mockReturnValue(throwError(() => new Error('API Error')));
 

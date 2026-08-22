@@ -50,6 +50,7 @@ export interface StorageClassDetails {
   glacier_restore_tier_type?: string;
   read_through_restore_days?: number;
   restore_storage_class?: string;
+  target_storage_class?: string;
   retain_head_object?: boolean;
   acls?: ACL[];
   acl_mappings?: ACL[];
@@ -190,6 +191,7 @@ export interface TextLabels {
   restoreDaysText: string;
   readthroughrestoreDaysText: string;
   restoreStorageClassText: string;
+  targetStorageClassText: string;
 }
 
 export const CLOUD_TIER_REQUIRED_FIELDS = [
@@ -234,8 +236,6 @@ export const TIER_TYPE_DISPLAY = {
   GLACIER: 'Cloud S3 Glacier'
 };
 
-export const GLACIER_TARGET_STORAGE_CLASS = $localize`GLACIER`;
-
 export const ALLOW_READ_THROUGH_TEXT = $localize`Enables fetching objects from remote cloud S3 if not found locally.`;
 
 export const MULTIPART_MIN_PART_TEXT = $localize`It specifies that objects this size or larger are transitioned to the cloud using multipart upload.`;
@@ -277,6 +277,8 @@ export const RESTORE_DAYS_TEXT = $localize`Refers to number of days to the objec
 export const READTHROUGH_RESTORE_DAYS_TEXT = $localize`The days for which objects restored via read-through are retained.`;
 
 export const RESTORE_STORAGE_CLASS_TEXT = $localize`The storage class to which object data is to be restored.`;
+
+export const TARGET_STORAGE_CLASS_TEXT = $localize`The storage class objects are placed into on the remote S3 endpoint (for example, STANDARD or STANDARD_IA). If empty, the remote endpoint's default is used.`;
 
 export const ZONEGROUP_TEXT = $localize`A Zonegroup is a logical grouping of one or more zones that share the same data
                   and metadata, allowing for multi-site replication and geographic distribution of

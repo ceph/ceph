@@ -352,6 +352,23 @@
             </ng-template>
           </div>
           <div class="form-item">
+            <cds-text-label
+              labelInputID="target_storage_class"
+              i18n
+              [helperText]="helpTextLabels.targetStorageClassText"
+              cdOptionalField="Target Storage Class"
+              >Target Storage Class
+              <input
+                cdsText
+                type="text"
+                id="target_storage_class"
+                formControlName="target_storage_class"
+                placeholder="STANDARD, STANDARD_IA, GLACIER..."
+                i18n-placeholder
+              />
+            </cds-text-label>
+          </div>
+          <div class="form-item">
             <cds-checkbox
               id="allow_read_through"
               formControlName="allow_read_through"
