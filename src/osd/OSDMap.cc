@@ -20,6 +20,7 @@
 
 #include <algorithm>
 #include <bit>
+#include <cmath>
 #include <iomanip>
 #include <optional>
 #include <random>
@@ -5502,6 +5503,11 @@ int OSDMap::calc_desired_primary_distribution_simple(
     ldout(cct, 20) << __func__ << " calculating simple distribution for replicated pool "
                    << get_pool_name(pid) << dendl;
     uint64_t replica_count = pool->get_size();
+    if (replica_count == 0) {
+      ldout(cct, 10) << __func__ << " pool " << get_pool_name(pid)
+                     << " has size 0 - can't calculate primary distribution" << dendl;
+      return -EINVAL;
+    }
     
     map<uint64_t,set<pg_t>> pgs_by_osd;
     pgs_by_osd = get_pgs_by_osd(cct, pid);
@@ -5549,8 +5555,8 @@ float OSDMap::calc_desired_prims_for_osdsizeopt(int npgs, int forced_primaries,
   int forced_iops_per_pg = forced_primaries * 100 + forced_secondaries * write_ratio;
   int pgs_left = npgs - forced_primaries - forced_secondaries;
   int iops_left = iops_per_osd - forced_iops_per_pg;
-  if (pgs_left <= 0)
-    return float(forced_primaries);
+  if (pgs_left <= 0 || write_ratio >= 100)
+    return float(forced_primaries);   // write_ratio 100 (no reads) - nothing to balance
   else
     return float(forced_primaries) + float(iops_left - pgs_left * write_ratio) / float(100 - write_ratio);
 }
@@ -5593,6 +5599,12 @@ int OSDMap::calc_desired_primary_distribution_osdsize_opt(
       // new scope since it is not allowed to use def_read_ratio after std::move
       uint64_t def_read_ratio = cct->_conf.get_val<uint64_t>("osd_pool_default_read_ratio");
       read_ratio = pool->opts.value_or<int64_t>(pool_opts_t::key_t::READ_RATIO, std::move(def_read_ratio));
+    }
+    if (read_ratio <= 0 || read_ratio > 100) {
+      ldout(cct, 10) << __func__ << " pool '" << get_pool_name(pid)
+                     << "' has invalid read_ratio " << read_ratio
+                     << " - can't perform osd-size-optimized read balancing" << dendl;
+      return -EINVAL;
     }
     int write_ratio = 100 - read_ratio;
     ldout(cct, 30) << __func__ << " Pool: " << pid << " read ratio: " << read_ratio << " write ratio: " << write_ratio << dendl;
@@ -6619,9 +6631,9 @@ int OSDMap::set_rbi_fair(
     int64_t pool_id,
     float total_w_pa,
     float pa_sum,
-    int num_osds,
     int osd_pa_count,
     float total_osd_weight,
+    uint num_pgs,
     uint max_prims_per_osd,
     uint max_acting_prims_per_osd,
     float avg_prims_per_osd,
@@ -6637,12 +6649,30 @@ int OSDMap::set_rbi_fair(
 
   rbi.score_type = RBS_FAIR;
 
-  if (total_w_pa / total_osd_weight < 1. / float(pool->get_size())) {
+  // Sanity check the values we are about to divide by. These are not expected in
+  // a healthy cluster, but may happen with artificially generated osdmaps - and
+  // dividing by them yields inf / nan scores.
+  auto pool_size = pool->get_size();
+  if (pool_size == 0 ||
+      !std::isfinite(total_osd_weight) || total_osd_weight <= 0. ||
+      !std::isfinite(avg_prims_per_osd) || avg_prims_per_osd <= 0. ||
+      !std::isfinite(total_w_pa)) {
+    ldout(cct, 10) << __func__ << " pool " << pool_id << " size " << pool_size
+                   << " total_osd_weight " << total_osd_weight
+                   << " avg_prims_per_osd " << avg_prims_per_osd << dendl;
+    rbi.err_msg = fmt::format(
+              "pool {} has size {}, total OSD weight {} and {} primaries per OSD on average, "
+              "can't calculate a reliable read balance score",
+              pool_id, pool_size, total_osd_weight, avg_prims_per_osd);
+    return -EINVAL;
+  }
+
+  if (total_w_pa / total_osd_weight < 1. / float(pool_size)) {
     ldout(cct, 20) << __func__ << " pool " << pool_id << " average primary affinity is lower than"
-                    << 1. / float(pool->get_size()) << dendl;
+                    << 1. / float(pool_size) << dendl;
     rbi.err_msg = fmt::format(
               "pool {} average primary affinity is lower than {:.2f}, read balance score is not reliable",
-              pool_id, 1. / float(pool->get_size()));
+              pool_id, 1. / float(pool_size));
     return -EINVAL;
   }
   rbi.pa_weighted = total_w_pa;
@@ -6651,15 +6681,20 @@ int OSDMap::set_rbi_fair(
   rbi.pa_weighted_avg = rbi_round(rbi.pa_weighted / total_osd_weight); // in [0..1]
   // p_rbi->pa_weighted / osd_pa_count; // in [0..1]
 
-  rbi.raw_score = rbi_round((float)max_prims_per_osd / avg_prims_per_osd); // >=1
+  // Keep the unrounded scores for the divisions below, so that the adjusted
+  // scores are not the result of dividing already rounded values.
+  float raw_score = (float)max_prims_per_osd / avg_prims_per_osd; // >=1
+  float acting_raw_score;
+  rbi.raw_score = rbi_round(raw_score);
   if (acting_on_zero_pa) {
-    rbi.acting_raw_score = rbi_round(max_osd_score);
+    acting_raw_score = max_osd_score;
     rbi.err_msg = fmt::format(
               "pool {} has acting primaries on OSD(s) with primary affinity 0, read balance score is not accurate",
               pool_id);
   } else {
-    rbi.acting_raw_score = rbi_round((float)max_acting_prims_per_osd / avg_prims_per_osd);
+    acting_raw_score = (float)max_acting_prims_per_osd / avg_prims_per_osd;
   }
+  rbi.acting_raw_score = rbi_round(acting_raw_score);
 
   if (osd_pa_count != 0) {
     // this implies that pa_sum > 0
@@ -6680,13 +6715,27 @@ int OSDMap::set_rbi_fair(
                       pool_id, ss.str());
       return -EINVAL;
     }
-    rbi.optimal_score = rbi_round(float(num_osds) / float(osd_pa_count)); // >= 1
+    // The number of primaries the busiest OSD would have in a perfectly balanced
+    // pool. Primaries can only be placed on the osd_pa_count OSDs which have a
+    // non-zero primary affinity, and when the PGs can't be spread evenly between
+    // them (e.g. a pool with fewer PGs than OSDs) even a perfectly balanced pool
+    // has ceil() primaries on some OSD.
+    float optimal_prims_per_osd = std::ceil(float(num_pgs) / float(osd_pa_count));
+    // osd_pa_count counts only OSDs which hold PGs of this pool, so it is never
+    // larger than the number of OSDs the average is taken over, which makes the
+    // optimal score always >= 1.
+    float optimal_score = optimal_prims_per_osd / avg_prims_per_osd; // >= 1
+    rbi.optimal_score = rbi_round(optimal_score);
     // adjust the score to the primary affinity setting (if prim affinity is set
     // the raw score can't be 1 and the optimal (perfect) score is hifgher than 1)
     // When total system primary affinity is too low (average < 1 / pool replica count)
     // the score is negative in order to grab the user's attention.
-    rbi.adjusted_score = rbi_round(rbi.raw_score / rbi.optimal_score); // >= 1 if PA is not low
-    rbi.acting_adj_score = rbi_round(rbi.acting_raw_score / rbi.optimal_score); // >= 1 if PA is not low
+    // Divide by the unrounded optimal score, so that rounding can never turn the
+    // divisor into 0 (and the score into infinity). The result is the number of
+    // primaries on the busiest OSD relative to the best achievable one, so a
+    // perfectly balanced pool scores exactly 1 - whatever its number of PGs is.
+    rbi.adjusted_score = rbi_round(raw_score / optimal_score); // >= 1 if PA is not low
+    rbi.acting_adj_score = rbi_round(acting_raw_score / optimal_score); // >= 1 if PA is not low
 
   } else {
     // We should never get here - this condition is checked before calling this function - this is just sanity check code.
@@ -6714,8 +6763,12 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
     ldout(cct,30) << __func__ << " Primaries for pool: "
 		  << prim_pgs_by_osd << dendl;
 
-  if (pgs_by_osd.empty()) {
-    //rbi.err_msg = fmt::format("pool {} has no PGs mapped to OSDs", pool_id);
+  if (pgs_by_osd.empty() || num_pgs == 0) {
+    // no err_msg - it would show up on every pool of an osdmap with no up OSDs
+    if (cct != nullptr) {
+      ldout(cct, 20) << __func__ << " pool " << pool_id
+                     << " has no PGs mapped to OSDs - can't calculate read balance score" << dendl;
+    }
     return -EINVAL;
   }
   if (cct != nullptr) {
@@ -6753,7 +6806,20 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
   }
   uint osd_pa_count = 0;
 
-  for (auto [osd, oweight] : osds_crush_weight) {  // loop over all OSDs
+  for (auto [osd, oweight] : osds_crush_weight) {  // loop over the OSDs of the pool's crush rule
+    // Take into account only OSDs which actually hold PGs of this pool. Otherwise,
+    // for a pool which is mapped to just a few OSDs of a large cluster (e.g. the
+    // .mgr pool with a single PG), osd_pa_count would count all the OSDs of the
+    // crush rule and could be much larger than num_osds. That makes the optimal
+    // score (num_osds / osd_pa_count) smaller than 1 - and once it is rounded down
+    // to 0 the read balance score, which is divided by it, goes to infinity.
+    if (!pgs_by_osd.contains(osd)) {
+      if (cct != nullptr) {
+        ldout(cct, 20) << __func__ << " pool " << pool_id << " ignoring OSD." << osd
+                       << " which holds no PGs of this pool" << dendl;
+      }
+      continue;
+    }
     total_osd_weight += oweight;
     float osd_pa = tmp_osd_map.get_primary_affinityf(osd);
     total_weighted_pa += oweight * osd_pa;
@@ -6801,10 +6867,10 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
   if (prim_affinity_sum == 0.0) {
     if (cct != nullptr) {
       ldout(cct, 10) << __func__ << " pool " << pool_id
-	         << " has primary_affinity set to zero on all OSDs" << dendl;
+	         << " has primary_affinity set to zero on all of its OSDs" << dendl;
     }
     zero_rbi(rbi);
-    rbi.err_msg = fmt::format("pool {} has primary_affinity set to zero on all OSDs", pool_id);
+    rbi.err_msg = fmt::format("pool {} has primary_affinity set to zero on all of its OSDs", pool_id);
 
     return -ERANGE;   // score has a different meaning now.
   }
@@ -6813,8 +6879,8 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
   }
 
   int rc = tmp_osd_map.set_rbi_fair(cct, rbi, pool_id, total_weighted_pa,
-                                    prim_affinity_sum, num_osds, osd_pa_count,
-                                    total_osd_weight, max_prims_per_osd,
+                                    prim_affinity_sum, osd_pa_count,
+                                    total_osd_weight, num_pgs, max_prims_per_osd,
                                     max_acting_prims_per_osd, avg_prims_per_osd,
                                     prim_on_zero_pa, acting_on_zero_pa, max_osd_score);
 
@@ -6853,6 +6919,7 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
       ldout(cct, 20) << __func__ << " pool " << pool_id
                      << " has no PGs - can't calculate size-optimal read balancer score" << dendl;
     }
+    return -EINVAL;
   }
 
   map<uint64_t,set<pg_t>> pgs_by_osd;
@@ -6862,8 +6929,9 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
   pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pool_id, &prim_pgs_by_osd, &acting_prims_by_osd);
   auto num_osds = pgs_by_osd.size();
   int64_t num_pg_osd_legs = 0;
-  for (uint64_t i = 0 ; i < num_osds ; i++) {
-    if (get_primary_affinity(int(i)) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+  // Iterate over the OSDs which hold PGs of this pool, keyed by OSD id.
+  for (const auto& [osd, pgs] : pgs_by_osd) {
+    if (tmp_osd_map.get_primary_affinity(int(osd)) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
       if (cct != nullptr) {
         ldout(cct, 30) << __func__ << " pool " << pool_id
                            << " has primary_affinity set to non-default value on some OSDs" << dendl;
@@ -6873,7 +6941,7 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
                                   "this is ignored by the size-optimal read balancer", pool_id);
       }
     }
-    num_pg_osd_legs += pgs_by_osd[i].size();
+    num_pg_osd_legs += pgs.size();
   }
   if (num_pg_osd_legs != num_pgs * pgpool->get_size()) {
     if (cct != nullptr) {
@@ -6902,7 +6970,9 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
     rbi.err_msg = fmt::format("ERROR: pool {} has no active OSDs, can't calculate loads and read balance score", pool_id);
     return -EINVAL;
   }
-  float load_per_osd = total_load / num_osds;
+  // Floating point division - integer division loses precision and can even
+  // truncate the average load to 0 (which is used as a divisor below).
+  float load_per_osd = float(total_load) / float(num_osds);
   rbi.max_osd = -1;
   rbi.max_acting_osd = -1;
   rbi.avg_osd_load = int(load_per_osd);
@@ -6929,8 +6999,13 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
     rbi.err_msg = fmt::format("ERROR: Could not find max_acting_load for pool {}", pool_id);
     return -EINVAL;
   }
-  // All conditions that can cause load_per_osd to be 0 were checked before this point.
-  ceph_assert(load_per_osd != 0.0);
+  // All conditions that can cause load_per_osd to be 0 were checked before this
+  // point, but never divide by it if we got here anyway.
+  if (load_per_osd <= 0.0) {
+    rbi.err_msg = fmt::format("ERROR: pool {} has an average OSD load of 0, "
+                              "can't calculate read balance score", pool_id);
+    return -EINVAL;
+  }
   rbi.acting_adj_score = rbi_round(float(rbi.max_acting_osd_load / load_per_osd));
   if (rbi.max_osd < 0) {
     // This is just a warning since the important value is the rbi.acting_adj_score
@@ -6944,7 +7019,9 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
 int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
 				    read_balance_info_t *p_rbi) const
 {
-  //BUG: wrong score with one PG replica 3 and 4 OSDs
+  //TODO: the size-optimal score still compares the load of the busiest OSD to the
+  //      theoretical average load, so a pool with very few PGs scores above 1 even
+  //      when it is as balanced as it can possibly be.
   if (cct != nullptr)
     ldout(cct,20) << __func__ << " pool " << get_pool_name(pool_id) << dendl;
 
