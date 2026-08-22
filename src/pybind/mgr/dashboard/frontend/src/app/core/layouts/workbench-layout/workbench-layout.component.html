@@ -6,8 +6,7 @@
         overview:
           router.url == '/overview' ||
           router.url == '/dashboard_3' ||
-          router.url == '/multi-cluster/overview',
-        'rgw-dashboard': router.url == '/rgw/overview'
+          router.url == '/multi-cluster/overview'
       }"
     >
       <!-- ************************ -->
@@ -19,8 +18,7 @@
           'ms-4 me-4':
             router.url == '/overview' ||
             router.url == '/dashboard_3' ||
-            router.url == '/multi-cluster/overview' ||
-            router.url == '/rgw/overview'
+            router.url == '/multi-cluster/overview'
         }"
       >
         @if (enabledFeature$ | async; as features) {
