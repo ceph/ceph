@@ -2035,6 +2035,70 @@ class TestMirroring(CephFSTestCase):
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_sparse_file_sync(self):
+        """Test snapshot sync of a sparse file with hole (absent) objects.
+
+        A sparse file has objects that were never written.  LIST_SNAPS on
+        such an absent object fails at the request level with -ENOENT while
+        the per-op rval is 0 with an empty payload, and Objecter's per-op
+        decoder turns that into -EIO.  blockdiff used to fail the whole
+        incremental sync with -EIO instead of treating the object as a
+        hole; this test guards against regressions of that bug.
+
+        The mtime of each snapshot version of the file is pinned explicitly.
+        The snap diff the MDS computes for an incremental sync drops a file
+        whose two snapshot versions carry the same mtime, and the mtime it
+        compares is the one cached on its own inode, which lags behind the
+        client for as long as the writer still holds unflushed write caps --
+        so a write followed straight away by a snapshot can leave both
+        versions reporting the mtime from before the write (tracker #74984).
+        Leaving the mtimes to chance would make it a coin flip whether the
+        file reaches file_blockdiff() at all, which is what this test needs
+        to exercise.  Pinning an mtime is a setattr, so the MDS picks the
+        value up right away and it writes to no object -- the clone lists
+        the block diff is computed from are left undisturbed.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.mount_a.run_shell(["mkdir", "d0"])
+
+        # 64MB sparse file with 1MB of data at offsets 0, 32MB and 60MB.
+        # All other objects (4MB each) are holes and do not exist on the OSD.
+        self.mount_a.run_shell(["truncate", "-s", "64M", "d0/sparse"])
+        self.mount_a.run_shell(["dd", "if=/dev/zero", "of=d0/sparse", "bs=1M",
+                                "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["dd", "if=/dev/zero", "of=d0/sparse", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["dd", "if=/dev/zero", "of=d0/sparse", "bs=1M",
+                                "seek=60", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:00 UTC",
+                                "d0/sparse"])
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      "client.mirror_remote@ceph", self.secondary_fs_name)
+
+        # snapshot 1: full sync
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_a"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_a', 1)
+        self.verify_snapshot('d0', 'snap_a')
+
+        # rewrite 1MB @ 32MB with different content, then snapshot again:
+        # the incremental sync must compute a blockdiff over the sparse
+        # file, which includes many hole objects.
+        self.mount_a.run_shell(["dd", "if=/dev/urandom", "of=d0/sparse", "bs=1M",
+                                "seek=32", "count=1", "conv=notrunc"])
+        self.mount_a.run_shell(["touch", "-m", "-d", "2020-01-01 00:00:02 UTC",
+                                "d0/sparse"])
+        self.mount_a.run_shell(["mkdir", "d0/.snap/snap_b"])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               "client.mirror_remote@ceph", '/d0', 'snap_b', 2)
+        self.verify_snapshot('d0', 'snap_b')
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
     def test_cephfs_mirror_with_parent_snapshot(self):
         """Test snapshot synchronization with parent directory snapshots"""
         self.mount_a.run_shell(["mkdir", "-p", "d0/d1/d2/d3"])

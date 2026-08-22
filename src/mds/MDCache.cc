@@ -14700,9 +14700,22 @@ void MDCache::file_blockdiff(CInode *in1, CInode *in2, BlockDiff *block_diff, ui
     op.list_snaps(&ssc->snaps, &ssc->r);
     ssc->objectid = scan_idx;
 
-    mds->objecter->read(file_object_t(in1->ino(), scan_idx),
-			OSDMap::file_to_object_locator(in2->get_inode()->layout),
-			op, LIBRADOS_SNAP_DIR, NULL, 0, gather_ctx.new_sub());
+    auto *ssc_ptr = ssc.get();
+    auto *sub = gather_ctx.new_sub();
+
+    mds->objecter->read(
+        file_object_t(in1->ino(), scan_idx),
+        OSDMap::file_to_object_locator(in2->get_inode()->layout),
+        op, LIBRADOS_SNAP_DIR, NULL, 0,
+        new LambdaContext([ssc_ptr, sub](int r) {
+          // LIST_SNAPS on an absent object can fail the request with -ENOENT
+          // while its empty per-op payload leaves the decoder reporting -EIO.
+          // Preserve the request-level error when the request itself failed.
+          if (r < 0) {
+            ssc_ptr->r = r;
+          }
+          sub->complete(r);
+        }));
     on_finish->add_snap_set_context(std::move(ssc));
     ++scan_idx;
     --scans;
