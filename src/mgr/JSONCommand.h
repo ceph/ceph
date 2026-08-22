@@ -4,6 +4,7 @@
  * Ceph - scalable distributed file system
  *
  * Copyright (C) 2016 John Spray <john.spray@redhat.com>
+ * Copyright (C) 2026 IBM
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
@@ -20,18 +21,18 @@
 class JSONCommand : public Command
 {
 public:
-  json_spirit::mValue json_result;
+  glz::generic json_result;
 
   void wait() override
   {
     Command::wait();
 
-    if (r == 0) {
-      bool read_ok = json_spirit::read(
-          outbl.to_str(), json_result);
-      if (!read_ok) {
-        r = -EINVAL;
-      }
+    if (0 != r) {
+      return;
+    }
+
+    if (auto ec = glz::read_json(json_result, outbl.to_str()); ec) {
+	r = -EINVAL;
     }
   }
 };
