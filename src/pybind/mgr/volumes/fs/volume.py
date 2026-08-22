@@ -1004,8 +1004,11 @@ class VolumeClient(CephfsClient["Module"]):
         s_subvolname        = kwargs['sub_name']
         s_groupname         = kwargs['group_name']
         t_groupname         = kwargs['target_group_name']
+        namespace_isolated  = kwargs.get('namespace_isolated', False)
+        preserve_namespace  = kwargs.get('preserve_namespace', False)
 
-        create_clone(self.mgr, fs_handle, self.volspec, t_group, t_subvolname, t_pool, volname, s_subvolume, s_snapname)
+        create_clone(self.mgr, fs_handle, self.volspec, t_group, t_subvolname, t_pool, volname, s_subvolume, s_snapname,
+                     namespace_isolated, preserve_namespace)
         with open_subvol(self.mgr, fs_handle, self.volspec, t_group, t_subvolname, SubvolumeOpType.CLONE_INTERNAL) as t_subvolume:
             try:
                 if t_groupname == s_groupname and t_subvolname == s_subvolname:
@@ -1049,10 +1052,14 @@ class VolumeClient(CephfsClient["Module"]):
         s_groupname  = kwargs['group_name']
 
         try:
+            if kwargs.get('namespace_isolated', False) and kwargs.get('preserve_namespace', False):
+                raise VolumeException(-errno.EINVAL,
+                                      "options --namespace-isolated and --preserve-namespace are mutually exclusive")
+
             if self.mgr.snapshot_clone_no_wait and \
                get_all_pending_clones_count(self, self.mgr, self.volspec) >= self.mgr.max_concurrent_clones:
                 raise(VolumeException(-errno.EAGAIN, "all cloner threads are busy, please try again later"))
-            
+
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, s_groupname) as s_group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, s_group, s_subvolname, SubvolumeOpType.CLONE_SOURCE) as s_subvolume:

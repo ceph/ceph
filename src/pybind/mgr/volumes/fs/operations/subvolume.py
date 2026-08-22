@@ -28,7 +28,7 @@ def create_subvol(mgr, fs, vol_spec, group, subvolname, size, isolate_nspace, po
     subvolume.create(size, isolate_nspace, pool, mode, uid, gid, earmark, normalization, casesensitive, enctag)
 
 
-def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname):
+def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, source_subvolume, snapname, namespace_isolated=False, preserve_namespace=False):
     """
     create a cloned subvolume.
 
@@ -40,10 +40,13 @@ def create_clone(mgr, fs, vol_spec, group, subvolname, pool, source_volume, sour
     :param source_volume: source subvolumes volume name
     :param source_subvolume: source (parent) subvolume object
     :param snapname: source subvolume snapshot
+    :param namespace_isolated: If true, use separate RADOS namespace for this clone
+    :param preserve_namespace: If true, keep the source snapshot's RADOS namespace on the
+                                clone instead of clearing it when pool is also provided
     :return None
     """
     subvolume = loaded_subvolumes.get_subvolume_object_max(mgr, fs, vol_spec, group, subvolname)
-    subvolume.create_clone(pool, source_volume, source_subvolume, snapname)
+    subvolume.create_clone(pool, source_volume, source_subvolume, snapname, namespace_isolated, preserve_namespace)
 
 
 def remove_subvol(mgr, fs, vol_spec, group, subvolname, force=False, retainsnaps=False):

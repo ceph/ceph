@@ -795,6 +795,8 @@ The output format is JSON and contains the following fields.
 * ``created_at``: creation time of the snapshot in the format ``YYYY-MM-DD
   HH:MM:SS:ffffff``
 * ``data_pool``: data pool to which the snapshot belongs
+* ``pool_namespace``: RADOS namespace of the snapshot's data, empty if the
+  source subvolume was not namespace-isolated
 * ``has_pending_clones``: ``yes`` if snapshot clone is in progress, otherwise
   ``no``
 * ``pending_clones``: list of in-progress or pending clones and their target
@@ -954,6 +956,38 @@ the following form to create a cloned subvolume with a specific pool layout:
 .. prompt:: bash #
 
    ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout>
+
+A clone can be placed in its own separate RADOS namespace, regardless of
+whether the source subvolume was namespace-isolated, by passing
+``--namespace-isolated``. This uses the same namespace naming convention as
+``ceph fs subvolume create --namespace-isolated`` (see the note on pool
+namespace naming below), and can be combined with ``--pool_layout``:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --namespace-isolated
+
+By default, ``--pool_layout`` clears the RADOS namespace on the clone. Pass
+``--preserve-namespace`` along with ``--pool_layout`` to keep the source
+snapshot's pool namespace on the clone instead:
+
+.. prompt:: bash #
+
+   ceph fs subvolume snapshot clone <vol_name> <subvol_name> <snap_name> <target_subvol_name> --pool_layout <pool_layout> --preserve-namespace
+
+Without ``--pool_layout``, ``--preserve-namespace`` has no effect, since the
+namespace is already inherited from the source snapshot by default. Since a
+RADOS namespace only has meaning within the pool it was created in,
+``--preserve-namespace`` is only accepted when the ``--pool_layout`` target
+is the same pool the source snapshot is already in; passing it along with a
+``--pool_layout`` that names a different pool results in an error.
+``--namespace-isolated`` and ``--preserve-namespace`` are mutually exclusive
+and passing both results in an error.
+
+.. note:: Client caps authorized against the source subvolume's namespace do
+   not automatically grant access to a ``--namespace-isolated`` clone, since
+   the clone gets its own separate namespace. Re-run ``ceph fs subvolume
+   authorize`` on the clone to grant access to it.
 
 Run a command of the following form to check the status of a clone operation:
 
