@@ -1,0 +1,4 @@
+overrides:
+  ceph:
+    cephfs:
+      host_anti_affinity: true
