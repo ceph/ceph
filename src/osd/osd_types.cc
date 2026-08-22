@@ -1816,7 +1816,7 @@ SnapContext pg_pool_t::get_snap_context() const
   return SnapContext(get_snap_seq(), s);
 }
 
-uint32_t pg_pool_t::hash_key(const string& key, const string& ns) const
+uint32_t pg_pool_t::hash_key(std::string_view key, std::string_view ns) const
 {
  if (ns.empty()) 
     return ceph_str_hash(object_hash, key.data(), key.length());
