@@ -7,6 +7,7 @@ import subprocess
 import urllib.request
 import hashlib
 from multiprocessing import Process
+import filecmp
 import os
 import string
 import shutil
@@ -35,10 +36,10 @@ class Dedup_Stats:
     skip_src_record: int = 0
     skip_changed_object: int = 0
     corrupted_etag: int = 0
-    sha256_mismatch: int = 0
-    valid_sha256: int = 0
-    invalid_sha256: int = 0
-    set_sha256: int = 0
+    hash_mismatch: int = 0
+    valid_hash: int = 0
+    invalid_hash: int = 0
+    set_hash: int = 0
     total_processed_objects: int = 0
     size_before_dedup: int = 0
     #loaded_objects: int = 0
@@ -594,8 +595,8 @@ def calc_expected_stats(dedup_stats, obj_size, num_copies, config):
     else:
         dedup_stats.skip_src_record += 1
         dedup_stats.set_shared_manifest_src += 1
-        dedup_stats.set_sha256 += num_copies
-        dedup_stats.invalid_sha256 += num_copies
+        dedup_stats.set_hash += num_copies
+        dedup_stats.invalid_hash += num_copies
         dedup_stats.unique_obj += 1
         dedup_stats.duplicate_obj += dups_count
         dedup_stats.deduped_obj += dups_count
@@ -939,10 +940,10 @@ def reset_full_dedup_stats(dedup_stats):
     dedup_stats.skip_singleton_bytes = 0
     dedup_stats.skip_changed_object = 0
     dedup_stats.corrupted_etag = 0
-    dedup_stats.sha256_mismatch = 0
-    dedup_stats.valid_sha256 = 0
-    dedup_stats.invalid_sha256 = 0
-    dedup_stats.set_sha256 = 0
+    dedup_stats.hash_mismatch = 0
+    dedup_stats.valid_hash = 0
+    dedup_stats.invalid_hash = 0
+    dedup_stats.set_hash = 0
 
 
 #-------------------------------------------------------------------------------
@@ -964,11 +965,11 @@ def read_full_dedup_stats(dedup_stats, md5_stats):
         dedup_stats.skip_changed_object = skipped[key]
 
     notify=md5_stats['notify']
-    dedup_stats.valid_sha256 = notify['Valid SHA256 attrs']
-    dedup_stats.invalid_sha256 = notify['Invalid SHA256 attrs']
-    key='Set SHA256'
+    dedup_stats.valid_hash = notify['Valid HASH attrs']
+    dedup_stats.invalid_hash = notify['Invalid HASH attrs']
+    key='Set HASH'
     if key in notify:
-        dedup_stats.set_sha256 = notify[key]
+        dedup_stats.set_hash = notify[key]
 
     sys_failures = md5_stats['system failures']
     key='Corrupted ETAG'
@@ -976,9 +977,9 @@ def read_full_dedup_stats(dedup_stats, md5_stats):
         dedup_stats.corrupted_etag = sys_failures[key]
 
     log_failures = md5_stats['logical failures']
-    key='SHA256 mismatch'
+    key='HASH mismatch'
     if key in log_failures:
-        dedup_stats.sha256_mismatch = log_failures[key]
+        dedup_stats.hash_mismatch = log_failures[key]
 
 
 #-------------------------------------------------------------------------------
@@ -1070,19 +1071,30 @@ def read_dedup_stats(dry_run):
 
 
 #-------------------------------------------------------------------------------
+def set_bucket_index_throttling(limit):
+    cmd = ['dedup', 'throttle', '--max-bucket-index-ops', str(limit)]
+    result = admin(cmd)
+    assert result[1] == 0
+    log.debug(result[0])
+
+#-------------------------------------------------------------------------------
 def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
+    ### set throttling to a rand val between 50-200 IOPS (i.e. 50K-200K objs)
+    limit=random.randint(50, 200)
+    set_bucket_index_throttling(limit)
+
     log.debug("sending exec_dedup request: dry_run=%d", dry_run)
     if dry_run:
         result = admin(['dedup', 'estimate'])
         reset_full_dedup_stats(expected_dedup_stats)
     else:
-        result = admin(['dedup', 'restart'])
+        result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
 
     assert result[1] == 0
     log.debug("wait for dedup to complete")
 
     dedup_time = 0
-    dedup_timeout = 5
+    dedup_timeout = 3
     dedup_stats = Dedup_Stats()
     dedup_ratio=Dedup_Ratio()
     wait_for_completion = True
@@ -1095,7 +1107,10 @@ def exec_dedup_internal(expected_dedup_stats, dry_run, max_dedup_time):
             wait_for_completion = False
             log.info("dedup completed in %d seconds", dedup_time)
             return (dedup_time, ret[1], ret[2], ret[3])
-
+        else:
+            ### set throttling to a rand val between 50-200 IOPS (i.e. 50K-200K objs)
+            limit=random.randint(50, 200)
+            set_bucket_index_throttling(limit)
 
 #-------------------------------------------------------------------------------
 def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True):
@@ -1121,7 +1136,7 @@ def exec_dedup(expected_dedup_stats, dry_run, verify_stats=True):
         log.debug("potential_unique_obj= %d / %d ", dedup_stats.potential_unique_obj,
                   expected_dedup_stats.potential_unique_obj)
 
-    #dedup_stats.set_sha256 = dedup_stats.invalid_sha256
+    #dedup_stats.set_hash = dedup_stats.invalid_hash
     if dedup_stats != expected_dedup_stats:
         log.debug("==================================================")
         print_dedup_stats_diff(dedup_stats, expected_dedup_stats)
@@ -1308,7 +1323,7 @@ def check_full_dedup_state():
     global full_dedup_state_was_checked
     global full_dedup_state_disabled
     log.debug("check_full_dedup_state:: sending FULL Dedup request")
-    result = admin(['dedup', 'restart'])
+    result = admin(['dedup', 'exec', '--yes-i-really-mean-it'])
     if result[1] == 0:
         log.debug("full dedup is enabled!")
         full_dedup_state_disabled = False
@@ -1336,6 +1351,230 @@ def full_dedup_is_disabled():
     return full_dedup_state_disabled
 
 
+#==============================================================================
+#                            RGW Versioning Tests:
+#==============================================================================
+#-------------------------------------------------------------------------------
+def delete_all_versions(conn, bucket_name, dry_run=False):
+    log.info("delete_all_versions")
+    p_conf = {
+        'PageSize': 1000  # Request 1000 items per page
+        # MaxItems is omitted to allow unlimited total items
+    }
+    paginator = conn.get_paginator('list_object_versions')
+    to_delete = []
+
+    for page in paginator.paginate(Bucket=bucket_name, PaginationConfig=p_conf):
+        # Collect versions
+        for v in page.get('Versions', []):
+            to_delete.append({'Key': v['Key'], 'VersionId': v['VersionId']})
+
+        # Collect delete markers
+        for dm in page.get('DeleteMarkers', []):
+            to_delete.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
+
+        # Delete in chunks
+        if dry_run:
+            log.info("DRY RUN would delete %d objects", len(to_delete))
+        else:
+            conn.delete_objects(Bucket=bucket_name, Delete={'Objects': to_delete})
+            to_delete.clear()
+
+
+#-------------------------------------------------------------------------------
+def list_all_versions(conn, bucket_name, verbose=False):
+    p_conf = {
+        'PageSize': 1000  # Request 1000 items per page
+        # MaxItems is omitted to allow unlimited total items
+    }
+    paginator = conn.get_paginator("list_object_versions")
+    total_s3_versioned_objs=0
+    for page in paginator.paginate(Bucket=bucket_name, PaginationConfig=p_conf):
+        # normal object versions
+        for v in page.get("Versions", []):
+            total_s3_versioned_objs += 1
+            key = v["Key"]
+            vid = v["VersionId"]
+            size = v.get("Size", 0)
+            is_latest = v.get("IsLatest", False)
+            #etag = v.get("ETag")
+            if verbose:
+                log.info("%s::ver=%s, size=%d, IsLatest=%d",
+                         key, vid, size, is_latest)
+
+        # delete markers (no Size)
+        for dm in page.get("DeleteMarkers", []):
+            key = dm["Key"]
+            vid = dm["VersionId"]
+            is_latest = dm.get("IsLatest", False)
+            if verbose:
+                log.info("DeleteMarker::%s::ver=%s, IsLatest=%d",
+                         key, vid, is_latest)
+
+    return total_s3_versioned_objs
+
+#-------------------------------------------------------------------------------
+def gen_files_in_range_single_copy(files, count, min_size, max_size):
+    assert(min_size <= max_size)
+    assert(min_size > 0)
+
+    idx=0
+    size_range = max_size - min_size
+    for i in range(0, count):
+        size = min_size + random.randint(0, size_range-1)
+        idx += 1
+        filename = "OBJ_" + str(idx)
+        files.append((filename, size, 1))
+        write_file(filename, size)
+
+    assert len(files) == count
+
+#-------------------------------------------------------------------------------
+def simple_upload(bucket_name, files, conn, config, op_log, first_time):
+    for f in files:
+        src_filename=f[0]
+        size=f[1]
+        if first_time:
+            key = src_filename
+        else:
+            idx=random.randint(0, len(files)-1)
+            key=files[idx][0]
+
+        log.debug("upload_file %s -> %s/%s (%d)", src_filename, bucket_name, key, size)
+        conn.upload_file(OUT_DIR + src_filename, bucket_name, key, Config=config)
+        resp = conn.head_object(Bucket=bucket_name, Key=key)
+        version_id = resp.get("VersionId")
+        op_log.append((src_filename, size, key, version_id))
+
+#-------------------------------------------------------------------------------
+def ver_calc_rados_obj_count(config, files, op_log):
+    size_dict  = {}
+    num_copies_dict = {}
+    unique_s3_objs = set()
+
+    for f in files:
+        src_filename=f[0]
+        size=f[1]
+        size_dict[src_filename] = size
+        num_copies_dict[src_filename] = 0
+
+    for o in op_log:
+        src_filename=o[0]
+        key=o[2]
+        num_copies_dict[src_filename] += 1
+        unique_s3_objs.add(key)
+
+    rados_obj_total  = 0
+    duplicated_tail_objs = 0
+    for key, value in size_dict.items():
+        size = value
+        num_copies = num_copies_dict[key]
+        assert num_copies > 0
+        rados_obj_count  = calc_rados_obj_count(num_copies, size, config)
+        rados_obj_total += (rados_obj_count * num_copies)
+        duplicated_tail_objs += ((num_copies-1) * (rados_obj_count-1))
+
+    # versioned buckets hold an extra rados-obj per versioned S3-Obj
+    unique_s3_objs_count = len(unique_s3_objs)
+    rados_obj_total += unique_s3_objs_count
+    rados_obj_count_post_dedup=(rados_obj_total-duplicated_tail_objs)
+    log.debug("calc::rados_obj_total=%d, rados_obj_count_post_dedup=%d",
+              rados_obj_total, rados_obj_count_post_dedup)
+    return(rados_obj_total, rados_obj_count_post_dedup, unique_s3_objs_count)
+
+#-------------------------------------------------------------------------------
+def verify_objects_with_version(bucket_name, op_log, conn, config):
+    tmpfile = OUT_DIR + "temp"
+    pend_delete_set = set()
+    for o in op_log:
+        src_filename=o[0]
+        size=o[1]
+        key=o[2]
+        version_id=o[3]
+        log.debug("verify: %s/%s:: ver=%s", bucket_name, src_filename, version_id)
+
+        # call garbage collect for tail objects before reading the same src_filename
+        # this will help detect bad deletions
+        if src_filename in pend_delete_set:
+            result = admin(['gc', 'process', '--include-all'])
+            assert result[1] == 0
+
+        # only objects larger than RADOS_OBJ_SIZE got tail-objects
+        if size > RADOS_OBJ_SIZE:
+            pend_delete_set.add(src_filename)
+
+        conn.download_file(Bucket=bucket_name, Key=key, Filename=tmpfile,
+                           Config=config, ExtraArgs={'VersionId': version_id})
+
+        equal = filecmp.cmp(tmpfile, OUT_DIR + src_filename, shallow=False)
+        assert equal ,"Files %s and %s differ!!" % (key, tmpfile)
+        os.remove(tmpfile)
+        conn.delete_object(Bucket=bucket_name, Key=key, VersionId=version_id)
+
+
+#-------------------------------------------------------------------------------
+# generate @num_files objects with @ver_count versions each of @obj_size
+# verify that we got the correct number of rados-objects
+# then dedup and verify that duplicate tail objects been removed
+# read-verify *all* objects in all versions deleting one version after another
+# while making sure the remaining versions are still good
+# finally make sure no rados-object was left behind after the last ver was removed
+@pytest.mark.basic_test
+def test_dedup_with_versions():
+    #return
+
+    if full_dedup_is_disabled():
+        return
+
+    prepare_test()
+    bucket_name = "bucket1"
+    files=[]
+    op_log=[]
+    num_files=43
+    min_size=1*KB
+    max_size=MULTIPART_SIZE*2
+    success=False
+    try:
+        conn=get_single_connection()
+        conn.create_bucket(Bucket=bucket_name)
+        gen_files_in_range_single_copy(files, num_files, min_size, max_size)
+        # enable versioning
+        conn.put_bucket_versioning(Bucket=bucket_name,
+                                   VersioningConfiguration={"Status": "Enabled"})
+        ver_count=7
+        first_time=True
+        for i in range(0, ver_count):
+            simple_upload(bucket_name, files, conn, default_config, op_log, first_time)
+            first_time=False
+
+        ret=ver_calc_rados_obj_count(default_config, files, op_log)
+        rados_objects_total=ret[0]
+        rados_objects_post_dedup=ret[1]
+        unique_s3_objs_count=ret[2]
+        assert unique_s3_objs_count == num_files
+        log.info("rados_objects_total=%d, rados_objects_post_dedup=%d",
+                 rados_objects_total, rados_objects_post_dedup)
+        log.info("unique_s3_objs_count=%d, total_s3_versioned_objs=%d",
+                 unique_s3_objs_count, len(op_log))
+        total_s3_versioned_objs=list_all_versions(conn, bucket_name)
+        assert total_s3_versioned_objs == (num_files * ver_count)
+        assert total_s3_versioned_objs == len(op_log)
+        assert rados_objects_total == count_object_parts_in_all_buckets()
+        exec_dedup_internal(Dedup_Stats(), dry_run=False, max_dedup_time=500)
+        assert rados_objects_post_dedup == count_object_parts_in_all_buckets()
+        verify_objects_with_version(bucket_name, op_log, conn, default_config)
+        success=True
+    finally:
+        # cleanup must be executed even after a failure
+        if success == False:
+            delete_all_versions(conn, bucket_name, dry_run=False)
+
+        # otherwise, objects been removed by verify_objects_with_version()
+        cleanup(bucket_name, conn)
+
+#==============================================================================
+#                            ETag Corruption Tests:
+#==============================================================================
 CORRUPTIONS = ("no corruption", "change_etag", "illegal_hex_value",
                "change_num_parts", "illegal_separator",
                "illegal_dec_val_num_parts", "illegal_num_parts_overflow")
@@ -1455,9 +1694,9 @@ def test_dedup_etag_corruption():
             dedup_ratio_actual=ret[3]
 
             if corruption == "no corruption":
-                expected_dedup_stats.valid_sha256=1
-                expected_dedup_stats.invalid_sha256=0
-                expected_dedup_stats.set_sha256=0
+                expected_dedup_stats.valid_hash=1
+                expected_dedup_stats.invalid_hash=0
+                expected_dedup_stats.set_hash=0
 
             s3_bytes_before=expected_dedup_stats.size_before_dedup
             expected_ratio_actual=Dedup_Ratio()
@@ -1527,10 +1766,10 @@ def test_md5_collisions():
         dedup_stats.size_before_dedup=2*BLOCK_SIZE
         # the md5 collision confuses the estimate
         dedup_stats.dedup_bytes_estimate=BLOCK_SIZE
-        # SHA256 check will expose the problem
-        dedup_stats.invalid_sha256=dedup_stats.total_processed_objects
-        dedup_stats.set_sha256=dedup_stats.total_processed_objects
-        dedup_stats.sha256_mismatch=1
+        # HASH check will expose the problem
+        dedup_stats.invalid_hash=dedup_stats.total_processed_objects
+        dedup_stats.set_hash=dedup_stats.total_processed_objects
+        dedup_stats.hash_mismatch=1
         s3_bytes_before=dedup_stats.size_before_dedup
         expected_ratio_actual=Dedup_Ratio()
         expected_ratio_actual.s3_bytes_before=s3_bytes_before
@@ -1544,9 +1783,9 @@ def test_md5_collisions():
 
         assert expected_ratio_actual == dedup_ratio_actual
 
-        dedup_stats.valid_sha256=dedup_stats.total_processed_objects
-        dedup_stats.invalid_sha256=0
-        dedup_stats.set_sha256=0
+        dedup_stats.valid_hash=dedup_stats.total_processed_objects
+        dedup_stats.invalid_hash=0
+        dedup_stats.set_hash=0
 
         log.debug("test_md5_collisions: second call to exec_dedup")
         ret=exec_dedup(dedup_stats, dry_run)
@@ -1657,9 +1896,9 @@ def test_dedup_inc_0_with_tenants():
         dedup_stats2.set_shared_manifest_src=0
         dedup_stats2.deduped_obj=0
         dedup_stats2.deduped_obj_bytes=0
-        dedup_stats2.valid_sha256=dedup_stats.invalid_sha256
-        dedup_stats2.invalid_sha256=0
-        dedup_stats2.set_sha256=0
+        dedup_stats2.valid_hash=dedup_stats.invalid_hash
+        dedup_stats2.invalid_hash=0
+        dedup_stats2.set_hash=0
 
         log.debug("test_dedup_inc_0_with_tenants: incremental dedup:")
         # run dedup again and make sure nothing has changed
@@ -1706,9 +1945,9 @@ def test_dedup_inc_0():
         dedup_stats2.set_shared_manifest_src=0
         dedup_stats2.deduped_obj=0
         dedup_stats2.deduped_obj_bytes=0
-        dedup_stats2.valid_sha256=dedup_stats.invalid_sha256
-        dedup_stats2.invalid_sha256=0
-        dedup_stats2.set_sha256=0
+        dedup_stats2.valid_hash=dedup_stats.invalid_hash
+        dedup_stats2.invalid_hash=0
+        dedup_stats2.set_hash=0
 
         log.debug("test_dedup_inc_0: incremental dedup:")
         # run dedup again and make sure nothing has changed
@@ -1775,9 +2014,9 @@ def test_dedup_inc_1_with_tenants():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_1_with_tenants: incremental dedup:")
         # run dedup again
@@ -1840,9 +2079,9 @@ def test_dedup_inc_1():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_1: incremental dedup:")
         # run dedup again
@@ -1918,9 +2157,9 @@ def test_dedup_inc_2_with_tenants():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_2_with_tenants: incremental dedup:")
         # run dedup again
@@ -1991,9 +2230,9 @@ def test_dedup_inc_2():
         stats_combined.deduped_obj         -= stats_base.deduped_obj
         stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-        stats_combined.valid_sha256    = stats_base.set_sha256
-        stats_combined.invalid_sha256 -= stats_base.set_sha256
-        stats_combined.set_sha256     -= stats_base.set_sha256
+        stats_combined.valid_hash    = stats_base.set_hash
+        stats_combined.invalid_hash -= stats_base.set_hash
+        stats_combined.set_hash     -= stats_base.set_hash
 
         log.debug("test_dedup_inc_2: incremental dedup:")
         # run dedup again
@@ -2076,9 +2315,9 @@ def test_dedup_inc_with_remove_multi_tenants():
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
-        dedup_stats.valid_sha256=valid_sha
-        dedup_stats.invalid_sha256=0
-        dedup_stats.set_sha256=0
+        dedup_stats.valid_hash=valid_sha
+        dedup_stats.invalid_hash=0
+        dedup_stats.set_hash=0
 
         log.debug("test_dedup_inc_with_remove: incremental dedup:")
         dry_run=False
@@ -2163,9 +2402,9 @@ def test_dedup_inc_with_remove():
         dedup_stats.deduped_obj_bytes=0
         dedup_stats.skip_src_record=src_record
         dedup_stats.skip_shared_manifest=shared_manifest
-        dedup_stats.valid_sha256=valid_sha
-        dedup_stats.invalid_sha256=0
-        dedup_stats.set_sha256=0
+        dedup_stats.valid_hash=valid_sha
+        dedup_stats.invalid_hash=0
+        dedup_stats.set_hash=0
 
         log.debug("test_dedup_inc_with_remove: incremental dedup:")
         log.debug("stats_base.size_before_dedup=%d", stats_base.size_before_dedup)
@@ -2426,9 +2665,9 @@ def inc_step_with_tenants(stats_base, files, conns, bucket_names, config):
     stats_combined.deduped_obj         -= stats_base.deduped_obj
     stats_combined.deduped_obj_bytes   -= stats_base.deduped_obj_bytes
 
-    stats_combined.valid_sha256    = stats_base.set_sha256
-    stats_combined.invalid_sha256 -= stats_base.set_sha256
-    stats_combined.set_sha256     -= stats_base.set_sha256
+    stats_combined.valid_hash    = stats_base.set_hash
+    stats_combined.invalid_hash -= stats_base.set_hash
+    stats_combined.set_hash     -= stats_base.set_hash
 
     log.debug("test_dedup_inc_2_with_tenants: incremental dedup:")
     # run dedup again
@@ -2470,10 +2709,10 @@ def test_dedup_inc_loop_with_tenants():
             files=ret[0]
             stats_last=ret[1]
             stats_base.set_shared_manifest_src += stats_last.set_shared_manifest_src
-            stats_base.dup_head_size       += stats_last.dup_head_size
-            stats_base.deduped_obj         += stats_last.deduped_obj
-            stats_base.deduped_obj_bytes   += stats_last.deduped_obj_bytes
-            stats_base.set_sha256          += stats_last.set_sha256
+            stats_base.dup_head_size     += stats_last.dup_head_size
+            stats_base.deduped_obj       += stats_last.deduped_obj
+            stats_base.deduped_obj_bytes += stats_last.deduped_obj_bytes
+            stats_base.set_hash          += stats_last.set_hash
     finally:
         # cleanup must be executed even after a failure
         cleanup_all_buckets(bucket_names, conns)
