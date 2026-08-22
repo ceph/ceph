@@ -3,8 +3,9 @@ import pytest
 from unittest.mock import patch, MagicMock
 
 from cephadm.services.service_registry import service_registry
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.module import CephadmOrchestrator
-from ceph.deployment.service_spec import RGWSpec, CertificateSource
+from ceph.deployment.service_spec import RGWSpec, CertificateSource, PlacementSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm
 from cephadm.tlsobject_types import TLSCredentials
 
@@ -50,6 +51,40 @@ class TestRGWService:
                     'key': 'rgw_frontends',
                 })
                 assert f == expected
+
+    @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_rgw_port_ips_with_explicit_ip(self, cephadm_module: CephadmOrchestrator):
+        """Explicit placement IP must populate port_ips for the host-side precheck.
+
+        Without this, fetch_endpoints() defaults to 0.0.0.0 and port_in_use()
+        falsely conflicts with unrelated listeners on other addresses.
+        """
+        ip = '1.2.3.4'
+        port = 7480
+        with with_host(cephadm_module, 'host1'):
+            s = RGWSpec(
+                service_id='foo',
+                placement=PlacementSpec(hosts=['host1']),
+                rgw_frontend_type='beast',
+                rgw_frontend_port=port,
+            )
+            with with_service(cephadm_module, s) as _:
+                daemon_spec = service_registry.get_service('rgw').prepare_create(
+                    CephadmDaemonDeploySpec(
+                        host='host1',
+                        daemon_type='rgw',
+                        daemon_id='foo.host1.0',
+                        service_name=s.service_name(),
+                        ports=[port],
+                        ip=ip,
+                    ))
+                assert daemon_spec.port_ips == {str(port): ip}
+                _, f, _ = cephadm_module.check_mon_command({
+                    'prefix': 'config get',
+                    'who': f'client.{daemon_spec.name()}',
+                    'key': 'rgw_frontends',
+                })
+                assert f == f'beast endpoint={ip}:{port}'
 
     @pytest.mark.parametrize(
         "disable_sync_traffic",
