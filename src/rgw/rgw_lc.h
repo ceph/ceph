@@ -683,12 +683,28 @@ public:
 
   private:
 
-  int handle_multipart_expiration(rgw::sal::Bucket* target,
-				  const std::multimap<std::string, lc_op>& prefix_map,
-				  ceph::async::spawn_throttle& workpool,
-				  boost::asio::yield_context yield,
-				  LCWorker* worker, LCBatchCounters* batch_counters,
-				  time_t stop_at, bool once);
+  int handle_lc_ops(rgw::sal::Bucket* bucket,
+                    std::set<std::string>& cloud_targets,
+                    const std::string& prefix,
+                    int index_sid,
+                    int num_shards,
+                    const std::vector<lc_op*>& ops,
+                    time_t stop_at,
+                    bool once,
+                    LCBatchCounters* batch_counters,
+                    ceph::async::spawn_throttle* workpool,
+                    boost::asio::yield_context yield);
+
+  int handle_lc_mp_ops(rgw::sal::Bucket* bucket,
+                       const std::string& prefix,
+                       int index_sid,
+                       int num_shards,
+                       const std::vector<lc_op*>& ops,
+                       time_t stop_at,
+                       bool once,
+                       LCBatchCounters* batch_counters,
+                       ceph::async::spawn_throttle* workpool,
+                       boost::asio::yield_context yield);
 };
 
 namespace rgw::lc {
