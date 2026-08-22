@@ -5906,11 +5906,6 @@ int RGWRados::restore_obj_from_cloud(RGWLCCloudTierCtx& tier_ctx,
   void (*progress_cb)(off_t, void *) = NULL;
   void *progress_data = NULL;
   bool cb_processed = false;
-  RGWFetchObjFilter *filter;
-  RGWFetchObjFilter_Default source_filter;
-  if (!filter) {
-    filter = &source_filter;
-  }
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
   rgw_placement_rule dest_placement(dest_bucket_info.placement_rule, tier_ctx.restore_storage_class);

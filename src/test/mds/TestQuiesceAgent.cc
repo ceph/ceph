@@ -35,10 +35,9 @@ class QuiesceAgentTest : public testing::Test {
       std::promise<void> done;
       auto future = done.get_future();
 
-      auto job = std::bind(f, args...);
-
-      auto tt = std::thread([job=std::move(job)](std::promise<void> done) {
-        job();
+      auto tt = std::thread([f=std::forward<Function>(f),
+                             ... args=std::forward<Args>(args)](std::promise<void> done) mutable {
+        std::invoke(std::move(f), std::move(args)...);
         done.set_value();
       }, std::move(done));
 
