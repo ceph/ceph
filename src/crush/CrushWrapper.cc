@@ -1253,8 +1253,8 @@ int CrushWrapper::move_bucket(
   int bucket_weight = detach_bucket(cct, id);
 
   // insert the bucket back into the hierarchy
-  return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc,
-		     false);
+  return insert_item(cct, id, (float)raw_to_nominal_weightf(bucket_weight),
+		     id_name, loc, false);
 }
 
 int CrushWrapper::detach_bucket(CephContext *cct, int item)
@@ -1381,7 +1381,8 @@ int CrushWrapper::link_bucket(
   crush_bucket *b = get_bucket(id);
   unsigned bucket_weight = b->weight;
 
-  return insert_item(cct, id, bucket_weight / (float)0x10000, id_name, loc);
+  return insert_item(cct, id, (float)raw_to_nominal_weightf(bucket_weight),
+		     id_name, loc);
 }
 
 int CrushWrapper::create_or_move_item(
@@ -1436,13 +1437,13 @@ int CrushWrapper::update_item(
   }
 
   // compare quantized (fixed-point integer) weights!  
-  int iweight = (int)(weight * (float)0x10000);
+  int iweight = (int)nominal_weightf_to_raw(weight);
   int old_iweight;
   if (check_item_loc(cct, item, loc, &old_iweight)) {
     ldout(cct, 5) << "update_item " << item << " already at " << loc << dendl;
     if (old_iweight != iweight) {
       ldout(cct, 5) << "update_item " << item << " adjusting weight "
-		    << ((float)old_iweight/(float)0x10000) << " -> " << weight
+		    << raw_to_nominal_weightf(old_iweight) << " -> " << weight
 		    << dendl;
       adjust_item_weight_in_loc(cct, item, iweight, loc);
       ret = rebuild_roots_with_classes(cct);
@@ -2274,6 +2275,253 @@ void CrushWrapper::reweight_bucket(
     }
   }
   //cout << __func__ << " finish " << b->id << " " << *weightv << std::endl;
+}
+
+uint32_t CrushWrapper::max_raw_weight_for_bucket(int id) const
+{
+  // if some other bucket references this one, this bucket's weight is also an
+  // item weight over there, and item weights are read as a signed int by the
+  // straw/straw2 draw.  a root is referenced by nobody, so it is bounded only
+  // by the width of crush_bucket.weight.
+  if (_search_item_exists(id)) {
+    return CRUSH_MAX_ITEM_WEIGHT;
+  }
+  return CRUSH_MAX_BUCKET_WEIGHT;
+}
+
+void CrushWrapper::get_max_raw_weights(vector<uint32_t> *max_by_index) const
+{
+  max_by_index->assign(crush->max_buckets, CRUSH_MAX_BUCKET_WEIGHT);
+  for (int i = 0; i < crush->max_buckets; i++) {
+    crush_bucket *b = crush->buckets[i];
+    if (!b) {
+      continue;
+    }
+    for (unsigned j = 0; j < b->size; ++j) {
+      int item = b->items[j];
+      if (item < 0 && -1 - item < crush->max_buckets) {
+	(*max_by_index)[-1 - item] = CRUSH_MAX_ITEM_WEIGHT;
+      }
+    }
+  }
+}
+
+double CrushWrapper::get_weight_utilization() const
+{
+  vector<uint32_t> max_weight;
+  get_max_raw_weights(&max_weight);
+  double worst = 0;
+  for (int i = 0; i < crush->max_buckets; i++) {
+    crush_bucket *b = crush->buckets[i];
+    if (!b) {
+      continue;
+    }
+    double u = (double)b->weight / (double)max_weight[i];
+    if (u > worst) {
+      worst = u;
+    }
+  }
+  return worst;
+}
+
+int CrushWrapper::rescale_weights(CephContext *cct, unsigned new_shift,
+				  ostream *err)
+{
+  if (new_shift > CRUSH_MAX_WEIGHT_SHIFT) {
+    if (err) {
+      *err << "weight shift " << new_shift << " is above the maximum of "
+	   << CRUSH_MAX_WEIGHT_SHIFT;
+    }
+    return -EINVAL;
+  }
+  const unsigned old_shift = get_weight_shift();
+  if (new_shift == old_shift) {
+    return 0;
+  }
+
+  // validate everything up front: a rescale that gave up half way through
+  // would leave the map inconsistent
+  {
+    vector<uint32_t> max_weight;
+    if (new_shift < old_shift) {
+      get_max_raw_weights(&max_weight);
+    }
+    for (int i = 0; i < crush->max_buckets; i++) {
+      crush_bucket *b = crush->buckets[i];
+      if (!b) {
+	continue;
+      }
+      switch (b->alg) {
+      case CRUSH_BUCKET_UNIFORM:
+      case CRUSH_BUCKET_LIST:
+      case CRUSH_BUCKET_TREE:
+      case CRUSH_BUCKET_STRAW:
+      case CRUSH_BUCKET_STRAW2:
+	break;
+      default:
+	if (err) {
+	  *err << "bucket " << b->id << " has unknown algorithm "
+	       << (int)b->alg;
+	}
+	return -EINVAL;
+      }
+      if (new_shift < old_shift) {
+	// weights grow when the shift comes down
+	uint64_t w = (uint64_t)b->weight << (old_shift - new_shift);
+	if (w > max_weight[i]) {
+	  if (err) {
+	    *err << "cannot lower the weight shift to " << new_shift
+		 << ": the weight of bucket " << b->id << " ("
+		 << get_item_name(b->id) << ") would become "
+		 << ((double)w / (double)0x10000) << ", above the maximum of "
+		 << ((double)max_weight[i] / (double)0x10000);
+	  }
+	  return -ERANGE;
+	}
+      }
+    }
+  }
+
+  // Scaling every weight in the map by the same factor does not change
+  // placement: CRUSH only ever compares the weights of items within one
+  // bucket, and those ratios are preserved.  Rounding moves each weight by at
+  // most half a raw unit, which is the same granularity that ordinary
+  // reweighting already works at.
+  auto scale = [old_shift, new_shift](uint32_t w) -> uint32_t {
+    if (w == 0) {
+      return 0;
+    }
+    if (new_shift > old_shift) {
+      const unsigned d = new_shift - old_shift;
+      uint64_t v = ((uint64_t)w + (1ull << (d - 1))) >> d;
+      // never let a non-zero weight round down to zero: that would quietly
+      // take the item out of the map
+      return v ? (uint32_t)v : 1u;
+    }
+    return (uint32_t)((uint64_t)w << (old_shift - new_shift));
+  };
+
+  for (int i = 0; i < crush->max_buckets; i++) {
+    crush_bucket *b = crush->buckets[i];
+    if (!b) {
+      continue;
+    }
+    switch (b->alg) {
+    case CRUSH_BUCKET_UNIFORM:
+      {
+	auto ub = reinterpret_cast<crush_bucket_uniform*>(b);
+	ub->item_weight = scale(ub->item_weight);
+      }
+      break;
+    case CRUSH_BUCKET_LIST:
+      {
+	auto lb = reinterpret_cast<crush_bucket_list*>(b);
+	uint32_t sum = 0;
+	for (unsigned j = 0; j < b->size; ++j) {
+	  lb->item_weights[j] = scale(lb->item_weights[j]);
+	  sum += lb->item_weights[j];
+	  lb->sum_weights[j] = sum;
+	}
+      }
+      break;
+    case CRUSH_BUCKET_TREE:
+      {
+	auto tb = reinterpret_cast<crush_bucket_tree*>(b);
+	for (unsigned j = 0; j < tb->num_nodes; ++j) {
+	  tb->node_weights[j] = scale(tb->node_weights[j]);
+	}
+      }
+      break;
+    case CRUSH_BUCKET_STRAW:
+      {
+	auto sb = reinterpret_cast<crush_bucket_straw*>(b);
+	for (unsigned j = 0; j < b->size; ++j) {
+	  sb->item_weights[j] = scale(sb->item_weights[j]);
+	}
+      }
+      break;
+    case CRUSH_BUCKET_STRAW2:
+      {
+	auto sb = reinterpret_cast<crush_bucket_straw2*>(b);
+	for (unsigned j = 0; j < b->size; ++j) {
+	  sb->item_weights[j] = scale(sb->item_weights[j]);
+	}
+      }
+      break;
+    default:
+      ceph_abort();  // ruled out above
+    }
+    b->weight = scale(b->weight);
+  }
+
+  // the balancer's weight sets are weights too, and they have to keep summing
+  // up the hierarchy the same way
+  for (auto& i : choose_args) {
+    for (__u32 j = 0; j < i.second.size; j++) {
+      crush_choose_arg *arg = &i.second.args[j];
+      for (__u32 k = 0; k < arg->weight_set_positions; k++) {
+	crush_weight_set *ws = &arg->weight_set[k];
+	for (__u32 l = 0; l < ws->size; l++) {
+	  ws->weights[l] = scale(ws->weights[l]);
+	}
+      }
+    }
+  }
+
+  crush->weight_shift = new_shift;
+
+  // recompute the bucket sums (and the straw scalers, and the shadow trees)
+  // from the scaled leaf weights, so that every parent's idea of a child's
+  // weight matches that child exactly rather than approximately
+  reweight(cct);
+
+  ldout(cct, 1) << __func__ << " rescaled all crush weights, weight shift "
+		<< old_shift << " -> " << new_shift << ": a weight of 1.0 now "
+		<< "means " << (raw_weight_unit_bytes() >> 40) << " TiB"
+		<< dendl;
+  return 0;
+}
+
+int CrushWrapper::make_weight_headroom(CephContext *cct,
+				       double additional_nominal_weight,
+				       ostream *err)
+{
+  const unsigned cur = get_weight_shift();
+  const uint64_t add_nominal = additional_nominal_weight > 0 ?
+    (uint64_t)(additional_nominal_weight * (double)0x10000) : 0;
+  vector<uint32_t> max_weight;
+  get_max_raw_weights(&max_weight);
+
+  for (unsigned s = cur; s <= CRUSH_MAX_WEIGHT_SHIFT; ++s) {
+    // conservatively assume the new weight lands under every bucket at once
+    const uint64_t add = add_nominal >> s;
+    bool fits = true;
+    for (int i = 0; i < crush->max_buckets && fits; i++) {
+      crush_bucket *b = crush->buckets[i];
+      if (!b) {
+	continue;
+      }
+      uint64_t w = ((uint64_t)b->weight >> (s - cur)) + add;
+      if (w > max_weight[i]) {
+	fits = false;
+      }
+    }
+    if (!fits) {
+      continue;
+    }
+    if (s == cur) {
+      return 0;
+    }
+    int r = rescale_weights(cct, s, err);
+    return r < 0 ? r : 1;
+  }
+
+  if (err) {
+    *err << "a weight of " << additional_nominal_weight
+	 << " does not fit in this crush map even at the maximum weight shift "
+	 << "of " << CRUSH_MAX_WEIGHT_SHIFT;
+  }
+  return -ERANGE;
 }
 
 int CrushWrapper::add_simple_rule_at(
@@ -3243,6 +3491,17 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   if (HAVE_FEATURE(features, CRUSH_MSR)) {
     encode(crush->msr_descents, bl);
     encode(crush->msr_collision_tries, bl);
+
+    // NOTE: this has to stay last, and anything appended after it has to
+    // encode weight_shift unconditionally, because the decoder tells the
+    // fields apart by position alone.
+    //
+    // Leaving it out for a peer that predates it is harmless: weight_shift
+    // records what a weight of 1.0 stands for and has no effect on placement,
+    // so such a peer computes exactly the same mappings without it.
+    if (HAVE_FEATURE(features, SERVER_VAMPIRE)) {
+      encode(crush->weight_shift, bl);
+    }
   }
 }
 
@@ -3399,6 +3658,12 @@ void CrushWrapper::decode(bufferlist::const_iterator& blp)
       decode(crush->msr_collision_tries, blp);
     } else {
       set_default_msr_tunables();
+    }
+    if (!blp.end()) {
+      decode(crush->weight_shift, blp);
+      if (crush->weight_shift > CRUSH_MAX_WEIGHT_SHIFT) {
+	throw ceph::buffer::malformed_input("crush weight_shift out of range");
+      }
     }
     update_choose_args(nullptr); // in case we decode a legacy "corrupted" map
     finalize();
@@ -3590,6 +3855,9 @@ void CrushWrapper::dump(Formatter *f) const
   dump_tunables(f);
   f->close_section();
 
+  f->dump_unsigned("weight_shift", get_weight_shift());
+  f->dump_unsigned("weight_unit_bytes", raw_weight_unit_bytes());
+
   dump_choose_args(f);
 }
 
@@ -3711,7 +3979,7 @@ void CrushWrapper::dump_choose_args(Formatter *f) const
 	  __u32 *weights = arg->weight_set[j].weights;
 	  __u32 size = arg->weight_set[j].size;
 	  for (__u32 k = 0; k < size; k++) {
-	    f->dump_float("weight", (float)weights[k]/(float)0x10000);
+	    f->dump_float("weight", raw_to_nominal_weightf(weights[k]));
 	  }
 	  f->close_section();
 	}
@@ -3890,8 +4158,8 @@ protected:
 	       pos < (int)cmap.args[bidx].weight_set[0].size &&
 		 b->items[pos] != qi.id;
 	       ++pos) ;
-	  *tbl << weightf_t((float)cmap.args[bidx].weight_set[0].weights[pos] /
-			    (float)0x10000);
+	  *tbl << weightf_t((float)crush->raw_to_nominal_weightf(
+				      cmap.args[bidx].weight_set[0].weights[pos]));
 	  continue;
 	}
       }
