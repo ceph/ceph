@@ -1,3 +1,15 @@
+* BlueStore: reads and writes now use dedicated kernel aio contexts in
+  every KernelDevice instance (the data device and BlueFS's db/wal/slow
+  devices alike); read completions are handled by a new
+  ``bstore_aio_rd`` thread per device.  Each device therefore holds two
+  aio contexts of ``bdev_aio_max_queue_depth`` slots, so deployments
+  with many OSDs per host may need to raise ``fs.aio-max-nr``.  On
+  Linux with libaio, the data device's write completions are reaped by
+  the ``bstore_kv_sync`` thread itself (woken through the same eventfd
+  submitters use) and that device's write-side ``bstore_aio`` thread is
+  no longer created.  Other backends (io_uring, posix-aio, SPDK, pmem)
+  keep both completion threads and are unchanged.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file

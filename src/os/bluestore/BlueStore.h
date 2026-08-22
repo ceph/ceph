@@ -23,6 +23,7 @@
 
 #include <atomic>
 #include <bit>
+#include <thread>
 #include <chrono>
 #include <ratio>
 #include <mutex>
@@ -49,6 +50,7 @@
 #include "common/bloom_filter.hpp"
 #include "common/Finisher.h"
 #include "common/ceph_mutex.h"
+#include "common/WakeupFd.h"
 #include "common/Throttle.h"
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
@@ -2465,9 +2467,15 @@ private:
 
   KVSyncThread kv_sync_thread;
   ceph::mutex kv_lock = ceph::make_mutex("BlueStore::kv_lock");
-  ceph::condition_variable kv_cond;
+  /// wakes _kv_sync_thread: submitters (and, in direct-completion
+  /// mode, the kernel via IOCB_FLAG_RESFD) notify this fd
+  WakeupFd kv_wake;
+  // data bdev accepted kv_wake's eventfd: no write-side completion
+  // thread, the kv sync thread reaps (see _open_bdev)
+  bool bdev_direct_completions = false;
+
+  bool in_kv_sync_thread() const;
   bool _kv_only = false;
-  bool kv_sync_started = false;
   bool kv_stop = false;
   bool kv_finalize_started = false;
   bool kv_finalize_stop = false;
