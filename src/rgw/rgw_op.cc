@@ -143,6 +143,45 @@ bool parse_aws_s3_error(const std::string& input, rgw_err& err)
   return true;
 }
 
+// try to parse the json error response body.
+static bool parse_json_error(const std::string& input, rgw_err& err)
+{
+  JSONParser parser;
+  if (!parser.parse(input.c_str(), input.length())) {
+    return false;
+  }
+  JSONObj* error = parser.find_obj("Error");
+  if (!error) {
+    error = &parser;
+  }
+  if (auto code = error->find_obj("Code"); code) {
+    err.err_code = code->get_data();
+  }
+  if (auto message = error->find_obj("Message"); message) {
+    err.message = message->get_data();
+  }
+  return true;
+}
+
+// parse the error response body. s3/iam/sts use xml, but the admin api
+// uses json
+static bool parse_error_response(const std::string& input, rgw_err& err)
+{
+  const auto pos = input.find_first_not_of(" \t\r\n");
+  if (pos == std::string::npos) {
+    return false;
+  }
+  switch (input[pos]) {
+    case '<':
+      return parse_aws_s3_error(input, err);
+    case '{':
+    case '[':
+      return parse_json_error(input, err);
+    default:
+      return false;
+  }
+}
+
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const rgw_owner& effective_owner,
@@ -186,7 +225,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
   }
   err.http_ret = *result;
   if (err.is_err() && outdata.length()) { // 4xx or 5xx
-    std::ignore = parse_aws_s3_error(rgw_bl_str(outdata), err);
+    std::ignore = parse_error_response(rgw_bl_str(outdata), err);
   }
   int ret = rgw_http_error_to_errno(err.http_ret);
   if (ret < 0) {
