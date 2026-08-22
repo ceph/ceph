@@ -1,4 +1,4 @@
-<cds-tile class="resource-page-card cds-mt-6">
+<cds-tile class="resource-page-card cds-mt-5">
   <div class="resource-page-panels">
     <section class="resource-page-panel">
       <h4
@@ -18,9 +18,9 @@
         <span
           class="cds--type-label-01"
           i18n
-          >Throughput</span
+          >Bytes</span
         >
-        <span class="cds--type-heading-03">{{ overviewModel.readThroughput | empty }}</span>
+        <span class="cds--type-heading-03">{{ overviewModel.readBytes }}</span>
       </div>
 
       <div class="resource-page-row cds-mt-5">
@@ -29,17 +29,17 @@
           i18n
           >Ops</span
         >
-        <span class="cds--type-heading-03">{{ overviewModel.readOps | empty }}</span>
+        <span class="cds--type-heading-03">{{ overviewModel.readOps }}</span>
       </div>
 
       <div class="resource-page-chart cds-mt-5">
-        @if (overviewModel.readOpsChartData?.length) {
+        @if (overviewModel.readBytesChartData?.length) {
           <cd-area-chart
-            chartTitle="Read Ops"
+            chartTitle="Read Bytes"
             i18n-chartTitle
-            chartKey="readOps"
-            dataUnit=""
-            [rawData]="overviewModel.readOpsChartData"
+            chartKey="readBytes"
+            dataUnit="B/s"
+            [rawData]="overviewModel.readBytesChartData"
             [legendEnabled]="false"
             [height]="'180px'"
           >
@@ -68,9 +68,9 @@
         <span
           class="cds--type-label-01"
           i18n
-          >Throughput</span
+          >Bytes</span
         >
-        <span class="cds--type-heading-03">{{ overviewModel.writeThroughput | empty }}</span>
+        <span class="cds--type-heading-03">{{ overviewModel.writeBytes }}</span>
       </div>
 
       <div class="resource-page-row cds-mt-5">
@@ -79,17 +79,17 @@
           i18n
           >Ops</span
         >
-        <span class="cds--type-heading-03">{{ overviewModel.writeOps | empty }}</span>
+        <span class="cds--type-heading-03">{{ overviewModel.writeOps }}</span>
       </div>
 
       <div class="resource-page-chart cds-mt-5">
-        @if (overviewModel.writeOpsChartData?.length) {
+        @if (overviewModel.writeBytesChartData?.length) {
           <cd-area-chart
-            chartTitle="Write Ops"
+            chartTitle="Write Bytes"
             i18n-chartTitle
-            chartKey="writeOps"
-            dataUnit=""
-            [rawData]="overviewModel.writeOpsChartData"
+            chartKey="writeBytes"
+            dataUnit="B/s"
+            [rawData]="overviewModel.writeBytesChartData"
             [legendEnabled]="false"
             [height]="'180px'"
           >
