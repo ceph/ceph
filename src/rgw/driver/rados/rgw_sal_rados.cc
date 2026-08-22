@@ -367,18 +367,11 @@ int RadosUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
 
 RadosBucket::~RadosBucket() {}
 
-int RadosBucket::remove(const DoutPrefixProvider* dpp,
-			bool delete_children,
-			optional_yield y)
+int RadosBucket::delete_objects_sync(const DoutPrefixProvider* dpp,
+					 bool delete_children,
+					 optional_yield y)
 {
   int ret;
-
-  // Refresh info
-  ret = load_bucket(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-
   ListParams params;
   params.list_versions = true;
   params.allow_unordered = true;
@@ -419,7 +412,24 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
     }
   }
 
-  // remove lifecycle config, if any (XXX note could be made generic)
+  return 0;
+}
+
+
+int RadosBucket::remove(const DoutPrefixProvider* dpp,
+			bool delete_children,
+			optional_yield y)
+{
+  int ret;
+
+  // Refresh info
+  ret = load_bucket(dpp, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = delete_objects_sync(dpp, delete_children, y);
+
   if (get_attrs().count(RGW_ATTR_LC)) {
     constexpr bool update_attrs = false; // don't update xattrs, we're deleting
     (void) store->getRados()->get_lc()->remove_bucket_config(
@@ -451,6 +461,7 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   }
 
   librados::Rados& rados = *store->getRados()->get_rados_handle();
+  const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
   if (own_bucket) {
     ret = store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, nullptr);
     if (ret < 0) {
@@ -491,14 +502,13 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
   return ret;
 }
 
-int RadosBucket::remove_bypass_gc(int concurrent_max, bool
-				  keep_index_consistent,
-				  optional_yield y, const
-				  DoutPrefixProvider *dpp)
+int RadosBucket::delete_objects_aio(const DoutPrefixProvider* dpp,
+					optional_yield y,
+					int concurrent_max,
+					bool keep_index_consistent)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
-  map<string, bool> common_prefixes;
   RGWObjectCtx obj_ctx(store);
   CephContext *cct = store->ctx();
 
@@ -613,11 +623,20 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
   }
 
   sync_owner_stats(dpp, y, nullptr);
-  if (ret < 0) {
-     ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
-  }
 
-  RGWObjVersionTracker objv_tracker;
+  return 0;
+}
+
+int RadosBucket::remove_bypass_gc(int concurrent_max, bool
+				   keep_index_consistent,
+				   optional_yield y, const
+				   DoutPrefixProvider *dpp)
+{
+  int ret = delete_objects_aio(dpp, y, concurrent_max, keep_index_consistent);
+  if (ret < 0) {
+    ldpp_dout(dpp, -1) << "ERROR: delete_objects_aio returned " << ret << dendl;
+    return ret;
+  }
 
   // this function can only be run if caller wanted children to be
   // deleted, so we can ignore the check for children as any that
@@ -625,10 +644,42 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
   ret = remove(dpp, true, y);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << this << dendl;
-    return ret;
   }
 
   return ret;
+}
+
+int RadosBucket::remove_all_objects(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y)
+{
+  int ret = load_bucket(dpp, y);
+  if (ret < 0)
+    return ret;
+
+  // Use standard per-object deletion so objects are queued to garbage
+  // collection as normal.
+  ret = delete_objects_sync(dpp, delete_children, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  const bool own_bucket = store->get_zone()->get_zonegroup().get_id() == info.zonegroup;
+  if (own_bucket) {
+    librados::Rados& rados = *store->getRados()->get_rados_handle();
+    ret = store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, nullptr);
+    if (ret < 0) {
+      ldout(store->ctx(), 1) << "WARNING: failed sync user stats. ret=" << ret << dendl;
+    }
+  }
+
+  return 0;
+}
+
+int RadosBucket::remove_all_objects_bypass_gc(int concurrent_max,
+					bool keep_index_consistent,
+					optional_yield y,
+					const DoutPrefixProvider* dpp)
+{
+  return delete_objects_aio(dpp, y, concurrent_max, keep_index_consistent);
 }
 
 int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
