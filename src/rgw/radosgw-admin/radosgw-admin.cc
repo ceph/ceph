@@ -187,6 +187,8 @@ void usage()
   cout << "  account stats                    dump account storage stats\n";
   cout << "  account rm                       remove an account\n";
   cout << "  account list                     list all account ids\n";
+  cout << "  account suspend                  suspend an account\n";
+  cout << "  account enable                   re-enable account after suspension\n";
   cout << "  bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)\n";
   cout << "  bucket limit check               show bucket sharding stats\n";
   cout << "  bucket link                      link bucket to specified user\n";
@@ -1003,6 +1005,8 @@ enum class OPT {
   ACCOUNT_STATS,
   ACCOUNT_RM,
   ACCOUNT_LIST,
+  ACCOUNT_SUSPEND,
+  ACCOUNT_ENABLE,
   RESTORE_STATUS,
   RESTORE_LIST,
   GLOBAL_CORS_GET,
@@ -1308,6 +1312,8 @@ static SimpleCmd::Commands all_cmds = {
   { "account stats", OPT::ACCOUNT_STATS },
   { "account rm", OPT::ACCOUNT_RM },
   { "account list", OPT::ACCOUNT_LIST },
+  { "account suspend", OPT::ACCOUNT_SUSPEND },
+  { "account enable", OPT::ACCOUNT_ENABLE },
   { "restore status", OPT::RESTORE_STATUS },
   { "restore list", OPT::RESTORE_LIST },
   { "global-cors get", OPT::GLOBAL_CORS_GET},
@@ -5021,7 +5027,9 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ACCOUNT_GET
                           && opt_cmd != OPT::ACCOUNT_STATS
                           && opt_cmd != OPT::ACCOUNT_RM
-                          && opt_cmd != OPT::ACCOUNT_LIST) {
+                          && opt_cmd != OPT::ACCOUNT_LIST
+                          && opt_cmd != OPT::ACCOUNT_SUSPEND
+                          && opt_cmd != OPT::ACCOUNT_ENABLE) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -7057,6 +7065,7 @@ int main(int argc, const char **argv)
   bool non_master_cmd = (!driver->is_meta_master() && !yes_i_really_mean_it);
   std::set<OPT> non_master_ops_list = {OPT::ACCOUNT_CREATE,
                                         OPT::ACCOUNT_MODIFY, OPT::ACCOUNT_RM,
+                                        OPT::ACCOUNT_SUSPEND, OPT::ACCOUNT_ENABLE,
                                         OPT::USER_CREATE, OPT::USER_RM,
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
@@ -12780,7 +12789,9 @@ next:
       opt_cmd == OPT::ACCOUNT_MODIFY ||
       opt_cmd == OPT::ACCOUNT_GET ||
       opt_cmd == OPT::ACCOUNT_STATS ||
-      opt_cmd == OPT::ACCOUNT_RM)
+      opt_cmd == OPT::ACCOUNT_RM ||
+      opt_cmd == OPT::ACCOUNT_SUSPEND ||
+      opt_cmd == OPT::ACCOUNT_ENABLE)
   {
     auto op_state = rgw::account::AdminOpState{
       .account_id = account_id,
@@ -12795,6 +12806,12 @@ next:
       .purge_data = static_cast<bool>(purge_data),
     };
 
+    if (opt_cmd == OPT::ACCOUNT_SUSPEND) {
+      op_state.suspended = true;
+    } else if (opt_cmd == OPT::ACCOUNT_ENABLE) {
+      op_state.suspended = false;
+    }
+
     std::string err_msg;
     if (opt_cmd == OPT::ACCOUNT_CREATE) {
       ret = rgw::account::create(dpp(), driver, op_state, err_msg,
@@ -12806,7 +12823,9 @@ next:
       }
     }
 
-    if (opt_cmd == OPT::ACCOUNT_MODIFY) {
+    if (opt_cmd == OPT::ACCOUNT_MODIFY ||
+        opt_cmd == OPT::ACCOUNT_SUSPEND ||
+        opt_cmd == OPT::ACCOUNT_ENABLE) {
       ret = rgw::account::modify(dpp(), driver, op_state, err_msg,
                                  stream_flusher, null_yield);
       if (ret < 0) {

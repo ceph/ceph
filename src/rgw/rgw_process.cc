@@ -421,6 +421,12 @@ int process_request(const RGWProcessEnv& penv,
       abort_early(s, op, -ERR_USER_SUSPENDED, handler, yield);
       goto done;
     }
+    if (const auto& account = s->auth.identity->get_account();
+        account && account->suspended) {
+      dout(10) << "account is suspended, account_id=" << account->id << dendl;
+      abort_early(s, op, -ERR_USER_SUSPENDED, handler, yield);
+      goto done;
+    }
 
   is_health_request = (op->get_type() == RGW_OP_GET_HEALTH_CHECK);
   {
