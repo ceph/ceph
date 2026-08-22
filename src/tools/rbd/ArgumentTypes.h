@@ -54,6 +54,7 @@ static const std::string SNAPSHOT_ID("snap-id");
 static const std::string DEST_SNAPSHOT_NAME("dest-snap");
 static const std::string PATH("path");
 static const std::string FROM_SNAPSHOT_NAME("from-snap");
+static const std::string FROM_SNAPSHOT_ID("from-snap-id");
 static const std::string WHOLE_OBJECT("whole-object");
 
 // encryption arguments
