@@ -120,6 +120,13 @@ options:
   desc: Number of beacons from MonClient before NVMeofGwMon sends ack-map to it
   services:
   - mon
+- name: mon_nvmeofgw_min_down_gws
+  type: uint
+  level: advanced
+  default: 1
+  desc: The minimal number of non active gateways to approve stop GW command
+  services:
+  - mon
 - name: mon_nvmeofgw_delete_grace
   type: secs
   level: advanced

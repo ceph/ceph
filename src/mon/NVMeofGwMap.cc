@@ -299,6 +299,29 @@ int NVMeofGwMap::cfg_admin_state_change(const NvmeGwId &gw_id,
   return 0;
 }
 
+bool NVMeofGwMap::is_ok_to_stop(const NvmeGroupKey& group_key)
+{
+  uint32_t num_gws = created_gws[group_key].size();
+  uint32_t num_down_gws = 0;
+  for (auto& gws_states: created_gws[group_key]) {
+    auto& state = gws_states.second;
+    if ((state.availability == gw_availability_t::GW_UNAVAILABLE ||
+         state.availability == gw_availability_t::GW_CREATED) &&
+        state.gw_admin_state == gw_admin_state_t::GW_ADMIN_ENABLED) {
+      num_down_gws ++; // GWs that possibly pass redeploy process
+    }
+  }
+  uint64_t min_number_down_gws =
+           g_conf().get_val<uint64_t>("mon_nvmeofgw_min_down_gws");
+  dout(10) << "num gws " << num_gws << " num down gws " << num_down_gws
+           << " configured number down " << min_number_down_gws << dendl;
+  if (min_number_down_gws == 0 || min_number_down_gws > num_down_gws ) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 bool NVMeofGwMap::validate_number_locations(int num_gws, int num_locations)
 {
   return true; // TODO: add validation in the separate PR
