@@ -10,6 +10,9 @@ except ImportError:
         pass
 
 
+def mgr_log(level: int, record: str) -> None: ...
+
+
 class BasePyOSDMap(object):
     def _get_epoch(self): ...
     def _get_crush_version(self): ...
