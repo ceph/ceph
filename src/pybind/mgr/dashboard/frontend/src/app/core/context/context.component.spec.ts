@@ -12,6 +12,8 @@ import {
   FeatureTogglesService
 } from '~/app/shared/services/feature-toggles.service';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
+import { TagModule } from 'carbon-components-angular';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { ContextComponent } from './context.component';
 
 describe('ContextComponent', () => {
@@ -29,7 +31,7 @@ describe('ContextComponent', () => {
 
   configureTestBed({
     declarations: [ContextComponent],
-    imports: [HttpClientTestingModule, RouterTestingModule]
+    imports: [HttpClientTestingModule, RouterTestingModule, TagModule]
   });
 
   beforeEach(() => {
@@ -46,6 +48,7 @@ describe('ContextComponent', () => {
     ftMap = new FeatureTogglesMap();
     ftMap.rgw = true;
     getFeatureTogglesSpy.and.returnValue(of(ftMap));
+    TestBed.inject(RgwDaemonService).selectDaemon(null);
     fixture = TestBed.createComponent(ContextComponent);
     component = fixture.componentInstance;
   });
@@ -69,13 +72,13 @@ describe('ContextComponent', () => {
     const selectedDaemon = fixture.debugElement.nativeElement.querySelector(
       '.ctx-bar-selected-rgw-daemon'
     );
-    expect(selectedDaemon.textContent).toEqual(' daemon2 ( zonegroup2 ) ');
+    expect(selectedDaemon.textContent).toEqual(' daemon2 zonegroup2');
 
     const availableDaemons = fixture.debugElement.nativeElement.querySelectorAll(
       '.ctx-bar-available-rgw-daemon'
     );
     expect(availableDaemons.length).toEqual(daemonList.length);
-    expect(availableDaemons[0].textContent).toEqual(' daemon1 ( zonegroup1 ) ');
+    expect(availableDaemons[0].textContent).toEqual(' daemon1 zonegroup1');
     component.ngOnDestroy();
   }));
 
@@ -94,7 +97,7 @@ describe('ContextComponent', () => {
     const selectedDaemon = fixture.debugElement.nativeElement.querySelector(
       '.ctx-bar-selected-rgw-daemon'
     );
-    expect(selectedDaemon.textContent).toEqual(' daemon3 ( zonegroup3 ) ');
+    expect(selectedDaemon.textContent).toEqual(' daemon3 zonegroup3');
     component.ngOnDestroy();
   }));
 });

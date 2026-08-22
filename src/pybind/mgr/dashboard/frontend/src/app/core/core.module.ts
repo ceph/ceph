@@ -4,6 +4,13 @@ import { RouterModule } from '@angular/router';
 
 import { NgbDropdownModule } from '@ng-bootstrap/ng-bootstrap';
 import { BlockUIModule } from 'ng-block-ui';
+import {
+  PlaceholderModule,
+  IconModule,
+  ThemeModule,
+  ButtonModule,
+  TagModule
+} from 'carbon-components-angular';
 
 import { ContextComponent } from '~/app/core/context/context.component';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -12,7 +19,6 @@ import { BlankLayoutComponent } from './layouts/blank-layout/blank-layout.compon
 import { LoginLayoutComponent } from './layouts/login-layout/login-layout.component';
 import { WorkbenchLayoutComponent } from './layouts/workbench-layout/workbench-layout.component';
 import { NavigationModule } from './navigation/navigation.module';
-import { PlaceholderModule } from 'carbon-components-angular';
 
 @NgModule({
   imports: [
@@ -22,7 +28,11 @@ import { PlaceholderModule } from 'carbon-components-angular';
     NgbDropdownModule,
     RouterModule,
     SharedModule,
-    PlaceholderModule
+    PlaceholderModule,
+    IconModule,
+    ThemeModule,
+    ButtonModule,
+    TagModule
   ],
   exports: [NavigationModule],
   declarations: [
