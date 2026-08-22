@@ -740,6 +740,7 @@ struct RequestMetaTable : public EmptyMetaTable {
     const auto name = table_name_upvalue(L);
     const auto s = reinterpret_cast<req_state*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const auto op_name = reinterpret_cast<const char*>(lua_touserdata(L, lua_upvalueindex(THIRD_UPVAL)));
+    const auto multi_delete_obj = reinterpret_cast<rgw::sal::Object*>(lua_touserdata(L, lua_upvalueindex(FOURTH_UPVAL)));
 
     const char* index = luaL_checkstring(L, 2);
 
@@ -762,7 +763,8 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "Bucket") == 0) {
       create_metatable<BucketMetaTable>(L, name, index, false, s);
     } else if (strcasecmp(index, "Object") == 0) {
-      create_metatable<ObjectMetaTable>(L, name, index, false, s->object);
+      create_metatable<ObjectMetaTable>(L, name, index, false,
+        multi_delete_obj ? multi_delete_obj : s->object.get());
     } else if (strcasecmp(index, "CopyFrom") == 0) {
       if (s->op_type == RGW_OP_COPY_OBJ) {
         create_metatable<CopyFromMetaTable>(L, name, index, false, s);
@@ -820,9 +822,9 @@ struct RequestMetaTable : public EmptyMetaTable {
   }
 };
 
-void create_top_metatable(lua_State* L, req_state* s, const char* op_name) {
+void create_top_metatable(lua_State* L, req_state* s, const char* op_name, rgw::sal::Object* multi_delete_obj) {
   static const char* request_table_name = "Request";
-  create_metatable<RequestMetaTable>(L, "", request_table_name, true, s, const_cast<char*>(op_name));
+  create_metatable<RequestMetaTable>(L, "", request_table_name, true, s, const_cast<char*>(op_name), multi_delete_obj);
   const auto type = lua_getglobal(L, request_table_name);
   ceph_assert(type == LUA_TTABLE);
 }
@@ -833,7 +835,8 @@ int execute(
     req_state* s, 
     RGWOp* op,
     const rgw::lua::LuaCodeType& code,
-    int& script_return_code)
+    int& script_return_code,
+    rgw::sal::Object* multi_delete_obj)
 {
   lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state,
                          s->cct->_conf->rgw_lua_max_runtime_per_state, s);
@@ -851,7 +854,7 @@ int execute(
 
     create_debug_action(L, s->cct);  
   
-    create_top_metatable(L, s, const_cast<char*>(op_name));  
+    create_top_metatable(L, s, const_cast<char*>(op_name), multi_delete_obj);
 
     //Make special error code available to lua scripts
     lua_pushinteger(L, -EPERM);
@@ -894,11 +897,11 @@ int execute(
     OpsLogSink* olog,
     req_state* s, 
     RGWOp* op,
-    const rgw::lua::LuaCodeType& code)
+    const rgw::lua::LuaCodeType& code,
+    rgw::sal::Object* multi_delete_obj)
 {
   int dummy_script_return_code = 0;
-  return execute(rest, olog, s, op, code, dummy_script_return_code);
+  return execute(rest, olog, s, op, code, dummy_script_return_code, multi_delete_obj);
 }
 
 } // namespace rgw::lua::request
-
