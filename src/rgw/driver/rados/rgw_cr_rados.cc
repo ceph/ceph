@@ -103,6 +103,10 @@ void RGWAsyncRadosProcessor::handle_request(const DoutPrefixProvider *dpp, RGWAs
 }
 
 void RGWAsyncRadosProcessor::queue(RGWAsyncRadosRequest *req) {
+  if (is_going_down()) {
+    req->complete_immediate(-ECANCELED);
+    return;
+  }
   req_throttle.get(1);
   req_wq.queue(req);
 }
