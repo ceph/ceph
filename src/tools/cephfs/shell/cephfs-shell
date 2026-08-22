@@ -1693,7 +1693,7 @@ def setup_cephfs(args):
     """
     global cephfs
     try:
-        cephfs = libcephfs.LibCephFS(conffile='')
+        cephfs = libcephfs.LibCephFS(conffile=args.ceph_config,auth_id=args.ceph_id)
         cephfs.mount(filesystem_name=args.fs)
     except libcephfs.ObjectNotFound as e:
         print('couldn\'t find ceph configuration not found')
@@ -1770,12 +1770,18 @@ def get_shell_conffile_path(arg_conf=''):
 def manage_args():
     main_parser = argparse.ArgumentParser(description='')
     main_parser.add_argument('-b', '--batch', action='store',
-                             help='Path to CephFS shell script/batch file'
+                             help='Path to CephFS shell script/batch file '
                                   'containing CephFS shell commands',
                              type=str)
     main_parser.add_argument('-c', '--config', action='store',
-                             help='Path to Ceph configuration file.',
+                             help='Path to cephfs-shell configuration file.',
                              type=str)
+    main_parser.add_argument('-C','--ceph-config',action='store',
+                             help='Path to ceph.conf configuration file.',
+                             type=str, default='')
+    main_parser.add_argument('-I','--ceph-id', action='store',
+                             help='Ceph auth id used to connect to cluster.',
+                             type=str, default=None)
     main_parser.add_argument('-f', '--fs', action='store',
                              help='Name of filesystem to mount.',
                              type=str)
@@ -1867,7 +1873,6 @@ if __name__ == '__main__':
     args = manage_args()
 
     shell = CephFSShell()
-    # TODO: perhaps, we should add an option to pass ceph.conf?
     read_shell_conf(shell, get_shell_conffile_path(args.config))
     # XXX: setting shell.exit_code to zero so that in case there are no errors
     # and exceptions, it is not set by any method or function of cephfs-shell
