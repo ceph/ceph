@@ -1150,6 +1150,29 @@ static void fuse_ll_fallocate(fuse_req_t req, fuse_ino_t ino, int mode,
 
 #endif
 
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 10)
+
+static void fuse_ll_copy_file_range(fuse_req_t req, fuse_ino_t ino_in,
+                                    off_t off_in, struct fuse_file_info *fi_in,
+                                    fuse_ino_t ino_out, off_t off_out,
+                                    struct fuse_file_info *fi_out, size_t len,
+                                    int flags)
+{
+  CephFuse::Handle *cfuse = fuse_ll_req_prepare(req);
+  Fh *src_fh = (Fh*)fi_in->fh;
+  Fh *dst_fh = (Fh*)fi_out->fh;
+
+  int r = cfuse->client->ll_copy_file_range(src_fh, off_in,
+                                             dst_fh, off_out,
+                                             len, flags);
+  if (r >= 0)
+    fuse_reply_write(req, r);
+  else
+    fuse_reply_err(req, get_sys_errno(-r));
+}
+
+#endif
+
 static void fuse_ll_release(fuse_req_t req, fuse_ino_t ino,
 			    struct fuse_file_info *fi)
 {
@@ -1558,7 +1581,10 @@ const static struct fuse_lowlevel_ops fuse_ll_oper = {
  flock: fuse_ll_flock,
 #endif
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(2, 9)
- fallocate: fuse_ll_fallocate
+ fallocate: fuse_ll_fallocate,
+#endif
+#if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 10)
+ copy_file_range: fuse_ll_copy_file_range,
 #endif
 };
 

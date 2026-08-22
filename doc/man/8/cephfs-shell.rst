@@ -166,6 +166,30 @@ Usage :
 
 * file - name of the file
 
+copy_file_range
+---------------
+
+Copy a byte range from one file to another, using server-side copy
+offload (COPY2) for object-aligned ranges which is significantly faster
+than read+write for large files.
+
+Usage :
+
+    copy_file_range [options] <src_path> <dst_path>
+
+* src_path - path of the source file
+* dst_path - path of the destination file
+
+Options:
+
+  -s, --src-offset SRC_OFFSET
+                          Source file offset (default: 0).
+  -d, --dst-offset DST_OFFSET
+                          Destination file offset (default: 0).
+  -l, --length LENGTH     Number of bytes to copy (default: entire source
+                          file from src_offset).
+  --flags FLAGS           Copy flags (reserved, default: 0).
+
 ln
 --
 
