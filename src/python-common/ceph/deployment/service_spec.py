@@ -78,6 +78,7 @@ class CertificateSource(Enum):
     INLINE = "inline"
     REFERENCE = "reference"
     CEPHADM_SIGNED = "cephadm-signed"
+    VAULT = "vault"
 
 
 class MonitorCertSource(Enum):
@@ -87,6 +88,7 @@ class MonitorCertSource(Enum):
     INLINE = CertificateSource.INLINE.value
     REFERENCE = CertificateSource.REFERENCE.value
     CEPHADM_SIGNED = CertificateSource.CEPHADM_SIGNED.value
+    VAULT = CertificateSource.VAULT.value
     REUSE_SERVICE_CERT = "reuse_service_cert"
 
 
