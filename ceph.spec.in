@@ -2136,6 +2136,8 @@ exit 0
 %{_bindir}/rgw-policy-check
 %{_bindir}/rgw-policy-test
 %{_bindir}/rgw-restore-bucket-index
+%{_bindir}/rgw-export-bucket-usage
+%{_bindir}/rgw-format-bucket-usage
 %{_sbindir}/mount.ceph
 %if 0%{?suse_version} && 0%{?suse_version} < 1550
 /sbin/mount.ceph
