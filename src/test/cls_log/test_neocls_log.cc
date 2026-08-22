@@ -246,7 +246,18 @@ auto list(RADOS& rados, Object oid, IOContext ioc,
     nullptr, asio::use_awaitable);
 }
 
-CORO_TEST_F(neocls_log, test_log_add_same_time, NeoRadosTest)
+class TestNeoClsLog : public NeoRadosPoolTypeTest {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TestNeoClsLog,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return info.param == PoolType::REPLICATED ? "Replicated" : "FastEC";
+    });
+
+CORO_TEST_P(TestNeoClsLog, test_log_add_same_time)
 {
   co_await create_obj(oid);
 
@@ -291,7 +302,7 @@ CORO_TEST_F(neocls_log, test_log_add_same_time, NeoRadosTest)
   EXPECT_FALSE(marker.empty());
 }
 
-CORO_TEST_F(neocls_log, test_log_add_different_time, NeoRadosTest)
+CORO_TEST_P(TestNeoClsLog, test_log_add_different_time)
 {
   co_await create_obj(oid);
 
@@ -356,7 +367,7 @@ CORO_TEST_F(neocls_log, test_log_add_different_time, NeoRadosTest)
   EXPECT_EQ(10, i);
 }
 
-CORO_TEST_F(neocls_log, trim_by_time, NeoRadosTest)
+CORO_TEST_P(TestNeoClsLog, trim_by_time)
 {
   co_await create_obj(oid);
 
@@ -387,7 +398,7 @@ CORO_TEST_F(neocls_log, trim_by_time, NeoRadosTest)
   }
 }
 
-CORO_TEST_F(neocls_log, trim_by_marker, NeoRadosTest)
+CORO_TEST_P(TestNeoClsLog, trim_by_marker)
 {
   co_await create_obj(oid);
 

@@ -35,9 +35,20 @@ using neorados::WriteOp;
 
 using namespace std::literals;
 
+class TestNeoClsSemSet : public NeoRadosPoolTypeTest {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TestNeoClsSemSet,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return info.param == PoolType::REPLICATED ? "Replicated" : "FastEC";
+    });
+
 /// Increment semaphore multiple times. Decrement the same number of
 /// times. Decrement once more and expect an error.
-CORO_TEST_F(cls_sem_set, inc_dec, NeoRadosTest)
+CORO_TEST_P(TestNeoClsSemSet, inc_dec)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
@@ -84,7 +95,7 @@ CORO_TEST_F(cls_sem_set, inc_dec, NeoRadosTest)
 
 /// Send too many keys to increment, expecting an error. Then send too
 /// many keys to decrement, expecting an error.
-CORO_TEST_F(cls_sem_set, inc_dec_overflow, NeoRadosTest)
+CORO_TEST_P(TestNeoClsSemSet, inc_dec_overflow)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
@@ -109,7 +120,7 @@ CORO_TEST_F(cls_sem_set, inc_dec_overflow, NeoRadosTest)
 /// one listing and ensure that the returned cursor is empty (thus
 /// showing list returned all values.) Repeat twice more to give
 /// coverage to the other two definitions of list.
-CORO_TEST_F(cls_sem_set, list_small, NeoRadosTest)
+CORO_TEST_P(TestNeoClsSemSet, list_small)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
@@ -166,7 +177,7 @@ CORO_TEST_F(cls_sem_set, list_small, NeoRadosTest)
 /// several times.  Do an iterated listing to test cursor
 /// functionality and append. Check that we have all of and only the
 /// keys we should. Repeat for the other two list functions.
-CORO_TEST_F(cls_sem_set, list_large, NeoRadosTest)
+CORO_TEST_P(TestNeoClsSemSet, list_large)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
@@ -228,7 +239,7 @@ CORO_TEST_F(cls_sem_set, list_large, NeoRadosTest)
 
 // Increment some semaphores, wait, increment some more, decrement
 // them all with a time.
-CORO_TEST_F(cls_sem_set, inc_dec_time, NeoRadosTest)
+CORO_TEST_P(TestNeoClsSemSet, inc_dec_time)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
