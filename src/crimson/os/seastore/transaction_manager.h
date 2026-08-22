@@ -1203,6 +1203,10 @@ public:
     return epm->get_stat();
   }
 
+  bool is_storage_full() const {
+    return epm->is_storage_full();
+  }
+
   ExtentTransViewRetriever& get_etvr() {
     return *cache;
   }
