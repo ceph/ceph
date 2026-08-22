@@ -30,6 +30,20 @@
   a few times in random workloads.  ``mds_dir_prefetch_backend_max`` (default 1)
   limits the number of concurrent background fetches.  This reduces latency in
   large directories while retaining cache warmth for hot directories.
+* BlueStore: on Linux with libaio, the data device's write completions
+  are by default reaped by the ``bstore_kv_sync`` thread itself (woken
+  through the same eventfd submitters use); that device no longer runs
+  a ``bstore_aio`` thread and instead runs a ``bstore_aio_rd`` thread
+  serving a dedicated read-side aio context.  The data device therefore
+  holds one extra aio context of ``bdev_aio_max_queue_depth`` slots per
+  OSD, so deployments with many OSDs per host may need to raise
+  ``fs.aio-max-nr``.  Setting the new option
+  ``bluestore_kv_sync_reap_write_completions`` to false restores the
+  previous behavior: a single aio context served by one ``bstore_aio``
+  completion thread, with no extra read-side context.  BlueFS's
+  db/wal/slow devices and other backends (io_uring, posix-aio, SPDK,
+  pmem) keep the single ring and completion thread they had before and
+  are unchanged.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
