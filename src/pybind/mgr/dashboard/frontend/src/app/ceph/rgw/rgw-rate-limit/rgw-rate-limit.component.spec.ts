@@ -5,7 +5,7 @@ import { AbstractControl, ReactiveFormsModule, ValidationErrors } from '@angular
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { CheckboxModule, InputModule, NotificationService } from 'carbon-components-angular';
-import { ToastrModule } from 'ngx-toastr';
+
 import { RouterTestingModule } from '@angular/router/testing';
 import { SharedModule } from '~/app/shared/shared.module';
 
@@ -15,14 +15,12 @@ describe('RgwRateLimitComponent', () => {
   configureTestBed({
     imports: [
       ReactiveFormsModule,
-      ToastrModule.forRoot(),
       InputModule,
       CheckboxModule,
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       InputModule
     ],
     declarations: [RgwRateLimitComponent],

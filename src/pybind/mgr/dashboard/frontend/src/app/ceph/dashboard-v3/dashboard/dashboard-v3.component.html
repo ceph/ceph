@@ -307,7 +307,6 @@
                        [title]="alert.startsAt | cdDate"
                        i18n>Active since: {{ alert.startsAt  | relativeDate }}</small>
                 <small class="alert_count"
-                       *ngIf="alert.alert_count > 1"
                        [title]="alert.alert_count"
                        i18n>Total occurrences: {{ alert.alert_count }}</small>
               </p>

@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of } from 'rxjs';
 
 import { RbdConfigurationListComponent } from '~/app/ceph/block/rbd-configuration-list/rbd-configuration-list.component';
@@ -49,7 +49,6 @@ describe('PoolListComponent', () => {
     imports: [
       BrowserAnimationsModule,
       SharedModule,
-      ToastrModule.forRoot(),
       RouterTestingModule,
       NgbNavModule,
       HttpClientTestingModule

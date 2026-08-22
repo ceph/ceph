@@ -13,7 +13,7 @@ import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { SharedModule } from '~/app/shared/shared.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute } from '@angular/router';
 
@@ -90,7 +90,7 @@ describe('RgwOverviewDashboardComponent', () => {
           useValue: { params: { subscribe: (fn: Function) => fn(params) } }
         }
       ],
-      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), CommonModule]
+      imports: [HttpClientTestingModule, SharedModule, CommonModule]
     }).compileComponents();
     fixture = TestBed.createComponent(RgwOverviewDashboardComponent);
     component = fixture.componentInstance;

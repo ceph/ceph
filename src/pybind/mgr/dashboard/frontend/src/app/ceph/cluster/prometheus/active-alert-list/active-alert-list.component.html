@@ -48,12 +48,23 @@
       [columns]="innerColumns"
       identifier="fingerprint"
       [forceIdentifier]="true"
-      columnMode="flex"
-      [toolHeader]="false"
-      [hasDetails]="false"
-      [showMultiLineText]="true"
-      [multilineTextKeys]="multilineTextKeys"
-      [scrollable]="false">
+      [customCss]="customCss"
+      selectionType="single"
+      [hasDetails]="true"
+      (setExpandedRow)="setExpandedInnerRow($event)"
+      [scrollable]="false"
+    >
+    @if (expandedInnerRow) {
+      <cd-table-key-value
+        *cdTableDetail
+        [renderObjects]="true"
+        [hideEmpty]="true"
+        [appendParentKey]="false"
+        [data]="expandedInnerRow"
+        [customCss]="customCss"
+        [autoReload]="false"
+      >
+      </cd-table-key-value> }
     </cd-table>
     }
   </cd-table>

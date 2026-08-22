@@ -1,8 +1,10 @@
 <div class="cd-navbar-main">
   <!-- ************************ -->
-  <!-- NOTIFICATIONS     -->
+  <!-- NOTIFICATION PANEL     -->
   <!-- ************************ -->
-  <cd-notifications-sidebar></cd-notifications-sidebar>
+   @if(notificationService.panelState$ | async; as isNotifPanelOpen) {
+  <cd-notification-panel></cd-notification-panel>
+   }
   <!-- ************************ -->
   <!-- HEADER                   -->
   <!-- ************************ -->
@@ -28,13 +30,12 @@
         </ng-container>
       </cds-header-menu>
     </cds-header-navigation>
-
     <cds-header-global>
       <cds-header-navigation>
         <cd-language-selector class="d-flex"></cd-language-selector>
       </cds-header-navigation>
       <div class="cds--btn cds--btn--icon-only cds--header__action"
-           (click)="toggleSidebar()">
+           (click)="onNotificationSelected($event)">
         <cd-notifications></cd-notifications>
       </div>
       <div class="cds--btn cds--btn--icon-only cds--header__action">

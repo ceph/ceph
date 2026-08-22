@@ -4,7 +4,6 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { RbdMirroringService } from '~/app/shared/api/rbd-mirroring.service';
@@ -30,7 +29,6 @@ describe('PoolEditModeModalComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastrModule.forRoot(),
       ModalModule,
       SelectModule
     ],
