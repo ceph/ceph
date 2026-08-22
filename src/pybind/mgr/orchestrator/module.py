@@ -1009,15 +1009,16 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         # Sort the list for display
         services.sort(key=lambda s: (ukn(s.spec.service_name())))
 
-        if len(services) == 0:
-            return HandleCommandResult(stdout="No services reported")
-        elif format != Format.plain:
+        if format != Format.plain:
+            # emit a valid (possibly empty) document, like 'orch ps' does
             with service_spec_allow_invalid_from_json():
                 if export:
                     data = [s.spec for s in services if s.deleted is None]
                     return HandleCommandResult(stdout=to_format(data, format, many=True, cls=ServiceSpec))
                 else:
                     return HandleCommandResult(stdout=to_format(services, format, many=True, cls=ServiceDescription))
+        elif len(services) == 0:
+            return HandleCommandResult(stdout="No services reported")
         else:
             now = datetime_now()
             table = PrettyTable(
