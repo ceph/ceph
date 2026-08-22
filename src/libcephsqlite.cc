@@ -30,6 +30,7 @@
 
 #include <limits.h>
 #include <string.h>
+#include <utility>
 
 #include <sqlite3ext.h>
 SQLITE_EXTENSION_INIT1
@@ -72,6 +73,7 @@ enum {
   P_OP_ACCESS,
   P_OP_FULLPATHNAME,
   P_OP_CURRENTTIME,
+  P_OP_SLEEP,
   P_OPF_CLOSE,
   P_OPF_READ,
   P_OPF_WRITE,
@@ -113,6 +115,7 @@ struct cephsqlite_appdata {
     plb.add_time_avg(P_OP_ACCESS, "op_access", "Time average of Access operations");
     plb.add_time_avg(P_OP_FULLPATHNAME, "op_fullpathname", "Time average of FullPathname operations");
     plb.add_time_avg(P_OP_CURRENTTIME, "op_currenttime", "Time average of Currenttime operations");
+    plb.add_time_avg(P_OP_SLEEP, "op_sleep", "Time average of Sleep operations");
     plb.add_time_avg(P_OPF_CLOSE, "opf_close", "Time average of Close file operations");
     plb.add_time_avg(P_OPF_READ, "opf_read", "Time average of Read file operations");
     plb.add_time_avg(P_OPF_WRITE, "opf_write", "Time average of Write file operations");
@@ -261,7 +264,7 @@ struct cephsqlite_file {
   struct sqlite3_vfs* vfs = nullptr;
   int flags = 0;
   // There are 5 lock states: https://sqlite.org/c3ref/c_lock_exclusive.html
-  int lock = 0;
+  SimpleRADOSStriper::LockLevel lock = SimpleRADOSStriper::LockLevel::None;
   struct cephsqlite_fileloc loc{};
   struct cephsqlite_fileio io{};
 };
@@ -269,26 +272,41 @@ struct cephsqlite_file {
 
 #define getdata(vfs) (*((cephsqlite_appdata*)((vfs)->pAppData)))
 
+/*
+ * SQLite VFS lock states map directly to the SimpleRADOSStriper lock levels:
+ * SQLITE_LOCK_NONE (0)      -> Striper Level 0 (No locks)
+ * SQLITE_LOCK_SHARED (1)    -> Striper Level 1 (Primary shared)
+ * SQLITE_LOCK_RESERVED (2)  -> Striper Level 2 (Primary shared + XATTR_EXCL populated)
+ * SQLITE_LOCK_PENDING (3)   -> Striper Level 3 (Primary shared + XATTR_EXCL populated)
+ * SQLITE_LOCK_EXCLUSIVE (4) -> Striper Level 4 (Primary exclusive + XATTR_EXCL populated)
+ *
+ * The XATTR_EXCL attribute acts as a gatekeeper for writers to prevent upgrade deadlocks.
+ */
 static int Lock(sqlite3_file *file, int ilock)
 {
   auto f = (cephsqlite_file*)file;
+  auto target_lock = static_cast<SimpleRADOSStriper::LockLevel>(ilock);
   auto start = ceph::coarse_mono_clock::now();
-  df(5) << std::hex << ilock << dendl;
+  df(5) << std::hex << std::to_underlying(target_lock) << dendl;
 
   auto& lock = f->lock;
-  ceph_assert(!f->io.rs->is_locked() || lock > SQLITE_LOCK_NONE);
-  ceph_assert(lock <= ilock);
-  if (!f->io.rs->is_locked() && ilock > SQLITE_LOCK_NONE) {
-    if (int rc = f->io.rs->lock(0); rc < 0) {
+  ceph_assert(!f->io.rs->is_locked() || lock > SimpleRADOSStriper::LockLevel::None);
+  ceph_assert(lock <= target_lock);
+
+  if (lock < target_lock) {
+    if (int rc = f->io.rs->lock(target_lock); rc < 0) {
       df(5) << "failed: " << rc << dendl;
+      if (rc == -EBUSY) {
+        return SQLITE_BUSY;
+      }
       if (rc == -EBLOCKLISTED) {
         getdata(f->vfs).maybe_reconnect(f->io.cluster);
       }
-      return SQLITE_IOERR;
+      return SQLITE_IOERR_LOCK;
     }
   }
 
-  lock = ilock;
+  lock = target_lock;
   auto end = ceph::coarse_mono_clock::now();
   getdata(f->vfs).logger->tinc(P_OPF_LOCK, end-start);
   return SQLITE_OK;
@@ -297,14 +315,16 @@ static int Lock(sqlite3_file *file, int ilock)
 static int Unlock(sqlite3_file *file, int ilock)
 {
   auto f = (cephsqlite_file*)file;
+  auto target_lock = static_cast<SimpleRADOSStriper::LockLevel>(ilock);
   auto start = ceph::coarse_mono_clock::now();
-  df(5) << std::hex << ilock << dendl;
+  df(5) << std::hex << std::to_underlying(target_lock) << dendl;
 
   auto& lock = f->lock;
-  ceph_assert(lock == SQLITE_LOCK_NONE || (lock > SQLITE_LOCK_NONE && f->io.rs->is_locked()));
-  ceph_assert(lock >= ilock);
-  if (ilock <= SQLITE_LOCK_NONE && SQLITE_LOCK_NONE < lock) {
-    if (int rc = f->io.rs->unlock(); rc < 0) {
+  ceph_assert(lock == SimpleRADOSStriper::LockLevel::None || (lock > SimpleRADOSStriper::LockLevel::None && f->io.rs->is_locked()));
+  ceph_assert(lock >= target_lock);
+
+  if (lock > target_lock) {
+    if (int rc = f->io.rs->unlock(target_lock); rc < 0) {
       df(5) << "failed: " << rc << dendl;
       if (rc == -EBLOCKLISTED) {
         getdata(f->vfs).maybe_reconnect(f->io.cluster);
@@ -313,7 +333,7 @@ static int Unlock(sqlite3_file *file, int ilock)
     }
   }
 
-  lock = ilock;
+  lock = target_lock;
   auto end = ceph::coarse_mono_clock::now();
   getdata(f->vfs).logger->tinc(P_OPF_UNLOCK, end-start);
   return SQLITE_OK;
@@ -327,8 +347,17 @@ static int CheckReservedLock(sqlite3_file *file, int *result)
   *result = 0;
 
   auto& lock = f->lock;
-  if (lock > SQLITE_LOCK_SHARED) {
+  if (lock > SimpleRADOSStriper::LockLevel::Shared) {
     *result = 1;
+  } else {
+    bool is_reserved = false;
+    if (int rc = f->io.rs->check_reservation(&is_reserved); rc < 0) {
+      if (rc == -EBLOCKLISTED) {
+        getdata(f->vfs).maybe_reconnect(f->io.cluster);
+      }
+      return SQLITE_IOERR;
+    }
+    *result = is_reserved ? 1 : 0;
   }
 
   df(10);
@@ -543,9 +572,30 @@ static int FileControl(sqlite3_file* sf, int op, void *arg)
   auto f = (cephsqlite_file*)sf;
   auto start = ceph::coarse_mono_clock::now();
   df(5) << op << ", " << arg << dendl;
+
+  int rc = SQLITE_NOTFOUND;
+  if (op == SQLITE_FCNTL_LOCKSTATE) {
+    auto* state = static_cast<int32_t*>(arg);
+    *state = std::to_underlying(f->lock);
+    df(5) << "SQLITE_FCNTL_LOCKSTATE: " << *state << dendl;
+    rc = SQLITE_OK;
+  } else if (op == SQLITE_FCNTL_SIZE_HINT) {
+    auto* hint = static_cast<int64_t*>(arg);
+    df(5) << "SQLITE_FCNTL_SIZE_HINT: " << *hint << dendl;
+    rc = SQLITE_OK;
+  } else if (op == SQLITE_FCNTL_LOCK_TIMEOUT) {
+    auto* timeout_ptr = static_cast<int32_t*>(arg);
+    int prev_timeout = f->io.rs->get_acquire_timeout().count();
+    auto value = std::chrono::milliseconds(*timeout_ptr);
+    df(2) << "Updating SQLITE_FCNTL_LOCK_TIMEOUT to " << value << dendl;
+    f->io.rs->set_acquire_timeout(std::chrono::milliseconds(*timeout_ptr));
+    *timeout_ptr = prev_timeout;
+    rc = SQLITE_OK;
+  }
+
   auto end = ceph::coarse_mono_clock::now();
   getdata(f->vfs).logger->tinc(P_OPF_FILECONTROL, end-start);
-  return SQLITE_NOTFOUND;
+  return rc;
 }
 
 static int DeviceCharacteristics(sqlite3_file* sf)
@@ -676,7 +726,7 @@ static int Delete(sqlite3_vfs* vfs, const char* path, int dsync)
     return SQLITE_IOERR;
   }
 
-  if (int rc = io.rs->lock(0); rc < 0) {
+  if (int rc = io.rs->lock(SimpleRADOSStriper::LockLevel::Exclusive); rc < 0) {
     return SQLITE_IOERR;
   }
 
@@ -781,6 +831,19 @@ static int CurrentTime(sqlite3_vfs* vfs, sqlite3_int64* time)
 
   auto end = ceph::coarse_mono_clock::now();
   getdata(vfs).logger->tinc(P_OP_CURRENTTIME, end-start);
+  return SQLITE_OK;
+}
+
+static int Sleep(sqlite3_vfs* vfs, int microseconds)
+{
+  auto start = ceph::coarse_mono_clock::now();
+  auto [cct, cluster] = getdata(vfs).get_cluster();
+  dv(5) << microseconds << dendl;
+
+  std::this_thread::sleep_for(std::chrono::microseconds(microseconds));
+
+  auto end = ceph::coarse_mono_clock::now();
+  getdata(vfs).logger->tinc(P_OP_SLEEP, end-start);
   return SQLITE_OK;
 }
 
@@ -924,6 +987,7 @@ LIBCEPHSQLITE_API int sqlite3_cephsqlite_init(sqlite3* db, char** err, const sql
     vfs->xOpen = Open;
     vfs->xDelete = Delete;
     vfs->xAccess = Access;
+    vfs->xSleep = Sleep;
     vfs->xFullPathname = FullPathname;
     vfs->xCurrentTimeInt64 = CurrentTime;
     if (int rc = sqlite3_vfs_register(vfs, 0); rc) {
