@@ -12356,6 +12356,7 @@ void Server::_readdir_diff(
   size_t rollback_pos = 0;
   size_t rollback_num = 0;
 
+  bool waiting = false;
   bool end = build_snap_diff(
     mdr,
     dir,
@@ -12427,7 +12428,11 @@ void Server::_readdir_diff(
       mdcache->lru.lru_touch(dn);
       ++numfiles;
       return true;
-    });
+    },
+    &waiting);
+
+  if (waiting)
+    return;
 
   __u16 flags = 0;
   if (req_flags & CEPH_READDIR_REPLY_BITFLAGS) {
@@ -12449,7 +12454,8 @@ bool Server::build_snap_diff(
   snapid_t snapid,
   unsigned diff_mask,
   const bufferlist& dnbl,
-  std::function<bool (CDentry*, CInode*, bool)> add_result_cb)
+  std::function<bool (CDentry*, CInode*, bool)> add_result_cb,
+  bool *waiting)
 {
   struct EntryInfo {
     CDentry* dn = nullptr;
@@ -12494,6 +12500,36 @@ bool Server::build_snap_diff(
       return res_mask != 0;
     }
   } before;
+
+  auto snapflush_pending = [&](CInode *in) -> bool {
+    if (!in->is_head() && !in->client_snap_caps.empty())
+      return true;
+    CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+    if (!head)
+      return true;
+    for (const auto& p : head->client_need_snapflush) {
+      if (p.first >= snapid_prev && p.first <= snapid && !p.second.empty())
+	return true;
+    }
+    return false;
+  };
+
+  // rdlock filelock so pending snapflush completes before metadata is read.
+  auto rdlock_file_start = [&](CInode *in) -> bool {
+    if (!mds->locker->rdlock_start(&in->filelock, mdr)) {
+      dout(10) << __func__ << " waiting for snapflush, deferring readdir_snapdiff on "
+           << *in << " snap " << snapid_prev << " vs. " << snapid << dendl;
+      if (waiting)
+        *waiting = true;
+      return false;
+    }
+    return true;
+  };
+  auto rdlock_file_finish = [&](CInode *in) {
+    auto lit = mdr->locks.find(&in->filelock);
+    ceph_assert(lit != mdr->locks.end());
+    mds->locker->rdlock_finish(lit, mdr.get(), nullptr);
+  };
 
   auto insert_deleted = [&](EntryInfo& ei) {
     dout(20) << "build_snap_diff deleted file " << ei.dn->get_name() << " "
@@ -12590,8 +12626,42 @@ bool Server::build_snap_diff(
       }
     } else {
       if (snapid_prev >= dn->first && snapid <= dn->last) {
-	dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
-	  << dn->first << "/" << dn->last << dendl;
+	if (!snapflush_pending(in)) {
+	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	    << dn->first << "/" << dn->last << dendl;
+	  continue;
+	}
+	if (before.dn) {
+	  if (!insert_deleted(before)) {
+	    break;
+	  }
+	  before.reset();
+	}
+	CInode *head = in->is_head() ? in : mdcache->get_inode(in->ino());
+	if (!head) {
+	  dout(20) << __func__ << " skipping unchanged " << dn->get_name() << " "
+	    << dn->first << "/" << dn->last << dendl;
+	  continue;
+	}
+	unsigned res_mask = 0;
+	if (!rdlock_file_start(in))
+	  return false;
+	CInode *in_prev = mdcache->pick_inode_snap(head, snapid_prev);
+	CInode *in_snap = mdcache->pick_inode_snap(head, snapid);
+	EntryInfo prev_ei{dn, in_prev};
+	bool differs = prev_ei.meta_differs(in_snap, diff_mask, res_mask);
+	rdlock_file_finish(in);
+	if (differs) {
+	  dout(30) << __func__ << " attrs changed on unchanged span "
+	    << dn->get_name() << " " << dn->first << "/" << dn->last
+	    << " result mask: 0x" << std::hex << res_mask << std::dec << dendl;
+	  if (!add_result_cb(dn, in, true)) {
+	    break;
+	  }
+	  continue;
+	}
+	dout(20) << __func__ << " skipping unchanged after snapflush check "
+	  << dn->get_name() << " " << dn->first << "/" << dn->last << dendl;
 	continue;
       } else if (snapid_prev < dn->first && snapid > dn->last) {
 	dout(20) << __func__ << " skipping inner modification " << dn->get_name() << " "
@@ -12628,11 +12698,27 @@ bool Server::build_snap_diff(
 		<< dendl;
 	      before.reset();
 	    } else {
-	      dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
-		<< dn->first << "/" << dn->last
-		<< dendl;
-	      before.reset();
-	      continue;
+	      /* If attrs match, rdlock the filelock which waits for pending snap
+	       * flush so that latest metadata is fetched under the lock.
+	       */
+	      if (!rdlock_file_start(in))
+		return false;
+	      bool differs = before.meta_differs(in, diff_mask, res_mask);
+	      rdlock_file_finish(in);
+	      if (differs) {
+		dout(0) << __func__ << " attrs changed " << dn->get_name() << " "
+		  << dn->first << "/" << dn->last
+		  << " result mask: 0x" << std::hex << res_mask << std::dec
+		  << " (after snapflush)"
+		  << dendl;
+		before.reset();
+	      } else {
+		dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
+		  << dn->first << "/" << dn->last
+		  << dendl;
+		before.reset();
+		continue;
+	      }
 	    }
 	  }
 	}
