@@ -1,4 +1,6 @@
 #include "crimson/common/logclient.h"
+#include <algorithm>
+#include <iterator>
 #include <fmt/ranges.h>
 #include "include/str_map.h"
 #include "messages/MLog.h"
@@ -247,7 +249,7 @@ MessageURef LogClient::get_mon_log_message(log_flushing_t flush_flag)
 
 bool LogClient::are_pending() const
 {
-  return last_log > last_log_sent;
+  return !log_queue.empty() && log_queue.back().seq > last_log_sent;
 }
 
 MessageURef LogClient::_get_mon_log_message()
@@ -264,8 +266,22 @@ MessageURef LogClient::_get_mon_log_message()
     return {};
   }
 
+  // last_log is bumped for *every* log entry, including those that are
+  // not queued for the monitors (see LogChannel::do_log()), and any
+  // channel sharing this LogClient may empty the queue via reset().
+  // last_log - last_log_sent is therefore not a count of queued entries
+  // that we have yet to send: find the first unsent entry -- if any --
+  // by walking the (seq-ordered) queue instead.
+  auto log_iter = std::find_if(log_queue.begin(), log_queue.end(),
+			       [this](const LogEntry& e) {
+				 return e.seq > last_log_sent;
+			       });
+  if (log_iter == log_queue.end()) {
+    return {};
+  }
+
   // limit entries per message
-  const int64_t num_unsent = last_log - last_log_sent;
+  const int64_t num_unsent = std::distance(log_iter, log_queue.end());
   int64_t num_to_send;
   if (local_conf()->mon_client_max_log_entries_per_message > 0) {
     num_to_send = std::min(num_unsent,
@@ -277,13 +293,7 @@ MessageURef LogClient::_get_mon_log_message()
   logger().debug("log_queue is {} last_log {} sent {} num {} unsent {}"
 		" sending {}", log_queue.size(), last_log,
 		last_log_sent, log_queue.size(), num_unsent, num_to_send);
-  ceph_assert((unsigned)num_unsent <= log_queue.size());
-  auto log_iter = log_queue.begin();
   std::deque<LogEntry> out_log_queue; /* will send the logs contained here */
-  while (log_iter->seq <= last_log_sent) {
-    ++log_iter;
-    ceph_assert(log_iter != log_queue.end());
-  }
   while (num_to_send--) {
     ceph_assert(log_iter != log_queue.end());
     out_log_queue.push_back(*log_iter);
