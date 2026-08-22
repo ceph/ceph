@@ -261,6 +261,19 @@ lfdb::select revision_rank_query(const std::string_view collection_id,
  return lq::between(begin_prefix, lq::successor(end_prefix));
 }
 
+struct malformed_interval_expression final : li::detail::expression_tag
+{};
+
+struct incomplete_configured_expression final
+{
+ using interval_expression_type = lq::interval;
+ using domain_type = lq::byte_string_domain;
+};
+
+using configured_difference =
+ decltype(lq::with_options(lq::difference(lq::empty(), lq::universal()),
+                           lq::query_options {}));
+
 static_assert(lq::expression<lq::interval>);
 static_assert(lq::expression<decltype(lq::difference(lq::empty(), lq::universal()))>);
 static_assert(lq::expression<decltype(lq::set_union(lq::empty(), lq::universal()))>);
@@ -270,9 +283,12 @@ static_assert(lq::expression<decltype(lq::without(lq::universal(), "m"))>);
 static_assert(lq::non_interval_expression<decltype(lq::difference(lq::empty(), lq::universal()))>);
 static_assert(not lq::expression<lq::interval_bound>);
 static_assert(not lq::non_interval_expression<lq::interval>);
+static_assert(lq::configured_expression<configured_difference>);
+static_assert(not lq::configured_expression<incomplete_configured_expression>);
 static_assert(li::expression<li::query<int_domain>>);
 static_assert(li::expression<decltype(li::difference(li::query<int_domain>::empty(),
                                                      li::query<int_domain>::universal()))>);
+static_assert(not li::expression<malformed_interval_expression>);
 
 using composite_intersection_query =
  decltype(lq::intersection(lq::difference(lq::empty(), lq::universal()),

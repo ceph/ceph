@@ -283,17 +283,22 @@ concept query_interval =
 
 template <typename T>
 concept byte_interval_expression =
- core::domain_expression<T> &&
+ core::expression<T> &&
  std::same_as<core::expression_domain_t<T>, byte_string_domain>;
 
 template <typename T>
 concept configured_expression =
- requires {
+ requires(const std::remove_cvref_t<T>& configured) {
   typename std::remove_cvref_t<T>::interval_expression_type;
   typename std::remove_cvref_t<T>::domain_type;
- } &&
- byte_interval_expression<typename std::remove_cvref_t<T>::interval_expression_type> &&
- std::same_as<typename std::remove_cvref_t<T>::domain_type, byte_string_domain>;
+  requires byte_interval_expression<
+             typename std::remove_cvref_t<T>::interval_expression_type>;
+  requires std::same_as<typename std::remove_cvref_t<T>::domain_type,
+                        byte_string_domain>;
+  { configured.expression } ->
+   std::same_as<const typename std::remove_cvref_t<T>::interval_expression_type&>;
+  { configured.options } -> std::same_as<const query_options&>;
+ };
 
 template <byte_interval_expression ExprT>
 struct configured final
