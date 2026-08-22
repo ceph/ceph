@@ -353,7 +353,14 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
                                    osds.size());
-  uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
+  // Round the per-slice size up from the ceiling division: with floor
+  // division (length / slice_count) the chunk count could come out as
+  // slice_count + 1, wrapping the round-robin below so one sub_read
+  // received two reads in the same ops_index whose out_bl/out_ec slots
+  // alias the same Details entry - the second reply then silently
+  // overwrote the first chunk's data.
+  uint64_t chunk_size = p2roundup((length + slice_count - 1) / slice_count,
+                                  (uint64_t)CEPH_PAGE_SIZE);
   
   // Use reference_sub_read (set in constructor) as the starting shard
   // This provides load balancing while ensuring reference_sub_read is always set
@@ -525,7 +532,34 @@ void SplitOp::complete() {
   boost::system::error_code handler_error;
 
   int rc = assemble_rc();
+
+  // Aggregate out-of-band delivery. Mixed replies (some sub-reads
+  // pushed, some returned inline) cannot be assembled into a coherent
+  // response: retry to the primary, where the resend (attempts > 0)
+  // is guaranteed to deliver inline.
+  uint64_t oob_total = 0;
+  if (rc >= 0 && oob_fanned_out) {
+    bool any_inline = false;
+    for (auto& [index, sub_read] : sub_reads) {
+      oob_total += sub_read.oob;
+      if (sub_read.details.contains(oob_ops_index) &&
+          sub_read.details.at(oob_ops_index).bl.length()) {
+        any_inline = true;
+      }
+    }
+    if (oob_total > 0 && any_inline) {
+      ldout(cct, DBG_LVL) << __func__
+        << " mixed inline/oob sub-replies, retrying inline" << dendl;
+      rc = -EAGAIN;
+      oob_total = 0;
+    }
+  }
+
   if (rc >= 0) {
+
+    if (orig_op->rdma_oob_bytes) {
+      *orig_op->rdma_oob_bytes = oob_total;
+    }
 
     // In a "normal" completion, out_ops is generated in the MOSDOpReply reply
     // which we do not have here. Here we are going to mimic this behaviour
@@ -1047,6 +1081,30 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
 
   split_read->protect_torn_reads();
 
+  // Fan out an advisory rdma delivery descriptor. Only the
+  // single-plain-READ shape has well-defined per-sub placement:
+  // replica sub-reads cover disjoint logical ranges (window shifted
+  // to each sub-read's origin) while EC-direct sub-reads carry the
+  // original extent (shared origin; the shard OSD interleaves).
+  // Anything else simply doesn't fan out and every reply arrives
+  // inline, which is always correct.
+  if (op->rdma_delivery) {
+    int data_reads = 0;
+    for (unsigned i = 0; i < op->ops.size(); ++i) {
+      const auto opcode = op->ops[i].op.op;
+      if (opcode == CEPH_OSD_OP_READ) {
+        data_reads++;
+        split_read->oob_ops_index = i;
+      } else if (opcode == CEPH_OSD_OP_SPARSE_READ) {
+        data_reads = 2;  // sparse fan-out is a follow-up
+        break;
+      }
+    }
+    if (data_reads == 1) {
+      split_read->oob_fanned_out = true;
+    }
+  }
+
 
   op->split_op_tids = std::make_unique<std::vector<ceph_tid_t>>(split_read->sub_reads.size());
   auto &tids = *op->split_op_tids;
@@ -1066,6 +1124,22 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     auto sub_op = objecter.prepare_read_op(
       target.base_oid, target.base_oloc, split_read->sub_reads.at(index).rd, op->snapid,
       nullptr, split_read->flags, -1, fin, objver);
+
+    if (split_read->oob_fanned_out) {
+      auto d = *op->rdma_delivery;
+      const uint64_t orig_ofs =
+        op->ops[split_read->oob_ops_index].op.extent.offset;
+      uint64_t sub_ofs = orig_ofs;
+      for (const auto& so : sub_op->ops) {
+        if (so.op.op == CEPH_OSD_OP_READ) {
+          sub_ofs = so.op.extent.offset;
+          break;
+        }
+      }
+      d.base_offset += sub_ofs - orig_ofs;  // zero shift for EC-direct subs
+      sub_op->rdma_delivery = std::move(d);
+      sub_op->rdma_oob_bytes = &sub_read.oob;
+    }
 
     auto &st = sub_op->target;
     st = target; // Target can start off in same state as parent.

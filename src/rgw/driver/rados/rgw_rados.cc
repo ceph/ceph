@@ -8681,7 +8681,30 @@ int RGWRados::Object::Read::read(int64_t ofs, int64_t end,
   return bl.length();
 }
 
+int get_obj_data::flush_rdma(rgw::AioResultList&& results) {
+  int r = rgw::check_for_errors(results);
+  if (r < 0) {
+    return r;
+  }
+  // OSDs that pushed wrote straight into client memory (byte counts
+  // arrive through the per-stripe delivery out-params); an inline
+  // reply means that OSD could not push - no RDMA support, expired
+  // lease, resent op - and the whole GET must restart in a fallback
+  // mode. Either way the client callback never sees data here.
+  while (!results.empty()) {
+    auto& e = results.front();
+    if (e.data.length() > 0) {
+      return -EOPNOTSUPP;
+    }
+    results.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+  }
+  return 0;
+}
+
 int get_obj_data::flush(rgw::AioResultList&& results) {
+  if (rdma) {
+    return flush_rdma(std::move(results));
+  }
   int r = rgw::check_for_errors(results);
   if (r < 0) {
     return r;
@@ -8746,6 +8769,14 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     // coverity[check_after_deref:SUPPRESS]
     if (astate &&
         obj_ofs < astate->data.length()) {
+      if (d->rdma) {
+        // inline head data would have to be served from RGW memory,
+        // breaking the passthrough contract; the caller disables
+        // prefetch when a token is present, so fall back instead
+        ldpp_dout(dpp, 4) << "rdma passthrough: unexpected inline head data, "
+                          << "falling back" << dendl;
+        return -EOPNOTSUPP;
+      }
       unsigned chunk_len = std::min((uint64_t)astate->data.length() - obj_ofs, (uint64_t)len);
 
       r = d->client_cb->handle_data(astate->data, obj_ofs, chunk_len);
@@ -8770,7 +8801,21 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
   }
 
   ldpp_dout(dpp, 20) << "rados->get_obj_iterate_cb oid=" << read_obj.oid << " obj-ofs=" << obj_ofs << " read_ofs=" << read_ofs << " len=" << len << dendl;
-  op.read(read_ofs, len, nullptr, nullptr);
+  if (d->rdma) {
+    // a plain read carrying an advisory delivery descriptor: an OSD
+    // that can push RDMA-writes the stripe into the client window at
+    // the stripe's logical offset within the requested range and
+    // reports the byte count through the slot; any other OSD returns
+    // the data inline, which flush_rdma treats as the fallback signal
+    op.read(read_ofs, len, nullptr, nullptr);
+    d->rdma_slots.emplace_back(0);
+    op.set_rdma_delivery(d->rdma_token,
+                         uint64_t(obj_ofs) - d->rdma_range_start,
+                         d->rdma_lease_ms, &d->rdma_slots.back());
+    d->rdma_ops_sent = true;
+  } else {
+    op.read(read_ofs, len, nullptr, nullptr);
+  }
 
   const uint64_t cost = len;
   const uint64_t id = obj_ofs; // use logical object offset for sorting replies
@@ -8791,6 +8836,21 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
 
+  if (!params.rdma_token.empty()) {
+    if (store->get_use_datacache()) {
+      // d3n substitutes cached stripe sources, which is incompatible
+      // with OSD-direct delivery; make the caller fall back
+      ldpp_dout(dpp, 4) << "rdma passthrough unsupported with d3n datacache"
+                        << dendl;
+      return -EOPNOTSUPP;
+    }
+    data.rdma = true;
+    data.rdma_token = params.rdma_token;
+    data.rdma_range_start = ofs;
+    data.rdma_lease_ms = static_cast<uint32_t>(
+      cct->_conf.get_val<uint64_t>("rgw_cuobj_lease_ms"));
+  }
+
   if (state.obj.empty()) {
     state.obj = source->get_obj();
   }
@@ -8800,10 +8860,24 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   if (r < 0) {
     ldpp_dout(dpp, 0) << "iterate_obj() failed with " << r << dendl;
     data.cancel(); // drain completions without writing back to client
+    params.rdma_submitted = data.rdma_ops_sent;
     return r;
   }
 
-  return data.drain();
+  r = data.drain();
+  params.rdma_submitted = data.rdma_ops_sent;
+  if (r < 0) {
+    return r;
+  }
+  if (data.rdma && params.rdma_bytes) {
+    // all completions are drained, so every slot is final
+    uint64_t total = 0;
+    for (auto b : data.rdma_slots) {
+      total += b;
+    }
+    *params.rdma_bytes = total;
+  }
+  return 0;
 }
 
 int RGWRados::iterate_obj(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx,

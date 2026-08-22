@@ -883,6 +883,38 @@ TEST_P(LibRadosMiscPP, CmpExtPP) {
   ASSERT_EQ(-MAX_ERRNO - 5, ioctx.cmpext("cmpextpp", 0, bad_cmp_bl));
 }
 
+TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
+  // exercises the advisory rdma delivery descriptor against an OSD
+  // without RDMA support (not built with cuObject, osd_cuobj_enabled
+  // off, or an OSD that predates the MOSDOp field): the read must
+  // succeed with the data returned INLINE and zero bytes reported as
+  // delivered out of band - the transparent degradation the RGW
+  // passthrough fallback keys on
+  const std::string payload = "0123456789";
+  bufferlist write_bl;
+  write_bl.append(payload);
+  // NB: write_full claims the bufferlist, so write_bl is empty after
+  ASSERT_EQ(0, ioctx.write_full("rdma_delivery_obj", write_bl));
+
+  // well-formed descriptor token (addr:size:rkey:lid:qp:has_gid:gid)
+  const std::string token =
+    "0102030405060708:01020304:0102aabb:0102:010203:1:"
+    "0102030405060708090a0b0c0d0e0f10";
+  uint64_t oob = 42;
+  int op_rval = 0;
+  bufferlist read_bl;
+  ObjectReadOperation op;
+  op.read(0, payload.size(), &read_bl, &op_rval);
+  op.set_rdma_delivery(token, 0, 5000, &oob);
+  int r = ioctx.operate("rdma_delivery_obj", &op, nullptr);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, op_rval);
+  ASSERT_EQ(0u, oob);  // nothing was delivered out of band
+  bufferlist expected;
+  expected.append(payload);
+  ASSERT_TRUE(read_bl.contents_equal(expected));  // data arrived inline
+}
+
 TEST_P(LibRadosMiscPP, Applications) {
   // Applications are pool-level, not namespace-level, so they persist across
   // parameterized test runs. Skip this test for split_ops to avoid conflicts.

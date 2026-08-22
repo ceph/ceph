@@ -229,6 +229,16 @@ static void log_usage(req_state *s, const string& op_name)
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
 
+  // account out-of-band RDMA bytes toward the direction the object
+  // data actually moved
+  if (s->rdma_bytes_transferred) {
+    if (s->info.method && strcmp(s->info.method, "PUT") == 0) {
+      bytes_received += s->rdma_bytes_transferred;
+    } else {
+      bytes_sent += s->rdma_bytes_transferred;
+    }
+  }
+
   rgw_usage_data data(bytes_sent, bytes_received);
 
   data.ops = 1;
@@ -664,6 +674,15 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
 
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();
   uint64_t bytes_received = ACCOUNTING_IO(s)->get_bytes_received();
+  // account out-of-band RDMA bytes toward the direction the object
+  // data actually moved
+  if (s->rdma_bytes_transferred) {
+    if (s->info.method && strcmp(s->info.method, "PUT") == 0) {
+      bytes_received += s->rdma_bytes_transferred;
+    } else {
+      bytes_sent += s->rdma_bytes_transferred;
+    }
+  }
 
   entry.time = s->time;
   entry.total_time = s->time_elapsed();

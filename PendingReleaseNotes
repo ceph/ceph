@@ -34,6 +34,21 @@
   restore status in listing responses. Restore status is stored in the bucket
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
+
+* RGW/RADOS: S3 objects can now be served over RDMA using the NVIDIA cuObject
+  library (``x-amz-rdma-token``). In addition to the gateway-staged mode
+  (``WITH_RADOSGW_CUOBJ`` + ``rgw_cuobj_enabled``), a new OSD passthrough mode
+  (``rgw_cuobj_osd_passthrough`` with OSDs built with ``WITH_OSD_CUOBJ`` and
+  ``osd_cuobj_enabled``) forwards the client's RDMA descriptor to the OSDs as
+  an advisory delivery field on the RADOS request, so GET data is DMA-written
+  directly from each OSD into client (or client GPU) memory without traversing
+  the gateway; replicated and erasure-coded pools are supported, including a
+  shard-direct interleave for EC split reads. Any OSD that cannot push (older
+  release, feature absent or disabled, expired delivery lease, retransmitted
+  request) returns the data inline as a normal read, so mixed-version clusters
+  degrade transparently to ordinary behavior. librados gains
+  ``ObjectReadOperation::set_rdma_delivery()``. See
+  ``doc/radosgw/s3-rdma.rst``.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on

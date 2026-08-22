@@ -2,16 +2,19 @@
 // vim: ts=8 sw=2 sts=2 expandtab ft=cpp
 
 #include <cerrno>
+#include <chrono>
 #include <optional>
 #include <cstdlib>
 #include <system_error>
 #include <span>
 #include <sstream>
 #include <string_view>
+#include <thread>
 
 #include <unistd.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/optional.hpp>
 #include <boost/utility/in_place_factory.hpp>
 #include <fmt/format.h>
@@ -85,6 +88,11 @@
 #include "rgw_flight.h"
 #include "rgw_flight_frontend.h"
 #endif
+
+#ifdef WITH_RADOSGW_CUOBJ
+#include "rgw_cuobj.h"
+#endif
+#include "common/rdma_token.h"
 
 #ifdef WITH_LTTNG
 #define TRACEPOINT_DEFINE
@@ -2588,6 +2596,15 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 
 int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
 {
+  if (rdma_mode == RdmaMode::PASSTHROUGH && bl_len > 0) {
+    // the store streamed data instead of honoring the passthrough
+    // contract (rgw_sal.h) - e.g. a SAL store or filter that predates
+    // params.rdma_token. Reject it before any HTTP bytes are committed
+    // so execute() transparently restarts in a fallback mode.
+    ldpp_dout(this, 4) << "rdma passthrough: store returned inline data, "
+                       << "falling back" << dendl;
+    return -EOPNOTSUPP;
+  }
   /* garbage collection related handling:
    * defer_gc disabled for https://tracker.ceph.com/issues/47866 */
   return send_response_data(bl, bl_ofs, bl_len);
@@ -2611,6 +2628,13 @@ bool RGWGetObj::prefetch_data()
 {
   /* HEAD request, stop prefetch*/
   if (!get_data || s->info.env->exists("HTTP_X_RGW_AUTH")) {
+    return false;
+  }
+
+  /* when the OSDs may push data straight into client memory, inline
+   * head data staged in RGW memory would defeat the passthrough */
+  if (s->info.env->exists("HTTP_X_AMZ_RDMA_TOKEN") &&
+      s->cct->_conf.get_val<bool>("rgw_cuobj_osd_passthrough")) {
     return false;
   }
 
@@ -2666,6 +2690,45 @@ static bool rgw_calc_aead_obj_size(const DoutPrefixProvider* dpp,
     return true;
   }
   return rgw_get_aead_decrypted_size(dpp, attrs, encrypted_size, out_size);
+}
+
+void RGWGetObj::select_rdma_mode(bool plain_chain)
+{
+  rdma_mode = RdmaMode::NONE;
+  if (rdma_token.empty() || !get_data || get_type() != RGW_OP_GET_OBJ) {
+    return;
+  }
+  if (plain_chain &&
+      s->cct->_conf.get_val<bool>("rgw_cuobj_osd_passthrough")) {
+    // the whole response must fit the client's registered window for
+    // per-stripe scatter writes to be valid
+    auto window = ceph::rdma::parse_rdma_token(rdma_token);
+    if (window && total_len <= window->size) {
+      rdma_mode = RdmaMode::PASSTHROUGH;
+      return;
+    }
+    ldpp_dout(this, 4) << "rdma passthrough not eligible: "
+                       << (window ? "response larger than client window"
+                                  : "malformed token") << dendl;
+  }
+#ifdef WITH_RADOSGW_CUOBJ
+  if (auto* cuobj = RGWCuObjServer::get_instance();
+      cuobj && cuobj->is_available()) {
+    // reserve the staging buffer up front: once the response headers
+    // are out there is no way left to signal a staging failure
+    if (!rdma_buf) {
+      rdma_buf = cuobj->acquire_buffer(total_len);
+      rdma_buf_offset = 0;
+    }
+    if (rdma_buf) {
+      rdma_mode = RdmaMode::STAGED;
+      return;
+    }
+    ldpp_dout(this, 1) << "rgw_cuobj: no staging buffer for " << total_len
+                       << " bytes, serving the body over HTTP" << dendl;
+  }
+#endif
+  // otherwise NONE: data goes over HTTP with x-amz-rdma-reply: 501
 }
 
 void RGWGetObj::execute(optional_yield y)
@@ -2927,6 +2990,7 @@ void RGWGetObj::execute(optional_yield y)
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
 
+  select_rdma_mode(filter == (RGWGetObj_Filter*)&cb);
 
   if (!get_data || ofs > end) {
     send_response_data(bl, 0, 0);
@@ -2939,7 +3003,48 @@ void RGWGetObj::execute(optional_yield y)
 
   rgw::op_counters::inc(counters, l_rgw_op_get_obj_b, end-ofs);
 
+  if (rdma_mode == RdmaMode::PASSTHROUGH) {
+    read_op->params.rdma_token = rdma_token;
+    read_op->params.rdma_bytes = &rdma_bytes;
+  }
+
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
+
+  if (op_ret == -EOPNOTSUPP && rdma_mode == RdmaMode::PASSTHROUGH) {
+    // an OSD (or the store) cannot push directly - old OSDs, cuObject
+    // absent or disabled, an expired lease or a resent op. No HTTP
+    // bytes are committed yet, so restart the whole GET in staged (or
+    // plain HTTP) mode.
+    ldpp_dout(this, 4) << "rdma passthrough unsupported, restarting GET "
+                       << "in fallback mode" << dendl;
+    if (read_op->params.rdma_submitted) {
+      // descriptor-bearing ops reached OSDs: an RDMA write we lost
+      // track of (an OSD marked down mid-request) may still be in a
+      // NIC retry queue. Wait out the lease horizon plus the
+      // transport drain bound before the fallback rewrites the same
+      // client ranges, so no stale write can land afterward.
+      const auto wait_ms =
+        s->cct->_conf.get_val<uint64_t>("rgw_cuobj_fence_wait_ms");
+      if (wait_ms) {
+        ldpp_dout(this, 4) << "rdma fence: waiting " << wait_ms
+                           << "ms before fallback" << dendl;
+        if (s->yield) {
+          auto& yctx = s->yield.get_yield_context();
+          boost::asio::steady_timer timer(yctx.get_executor());
+          timer.expires_after(std::chrono::milliseconds(wait_ms));
+          boost::system::error_code ec;
+          timer.async_wait(yctx[ec]);
+        } else {
+          std::this_thread::sleep_for(std::chrono::milliseconds(wait_ms));
+        }
+      }
+    }
+    read_op->params.rdma_token.clear();
+    read_op->params.rdma_bytes = nullptr;
+    rdma_bytes = 0;
+    select_rdma_mode(false);
+    op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
+  }
 
   if (op_ret >= 0)
     op_ret = filter->flush();
@@ -2948,6 +3053,16 @@ void RGWGetObj::execute(optional_yield y)
 
   if (op_ret < 0) {
     goto done_err;
+  }
+
+  if (rdma_mode == RdmaMode::PASSTHROUGH) {
+    if (rdma_bytes != total_len) {
+      ldpp_dout(this, 0) << "ERROR: rdma passthrough delivered " << rdma_bytes
+                         << " of " << total_len << " bytes" << dendl;
+      op_ret = -EIO;
+      goto done_err;
+    }
+    s->rdma_bytes_transferred = rdma_bytes;
   }
 
   op_ret = send_response_data(bl, 0, 0);
@@ -4985,57 +5100,133 @@ void RGWPutObj::execute(optional_yield y)
       filter = &*cksum_filter;
     }
   } /* !append */
-  tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
-  do {
-    bufferlist data;
-    if (fst > lst)
-      break;
-    if (copy_source.empty()) {
-      len = get_data(data);
-    } else {
-      off_t cur_lst = min<off_t>(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
-      op_ret = get_data(fst, cur_lst, data);
-      if (op_ret < 0)
+
+#ifdef WITH_RADOSGW_CUOBJ
+  std::string rdma_descr;
+  bool rdma_put = false;
+  auto* cuobj_srv = RGWCuObjServer::get_instance();
+  if (cuobj_srv && cuobj_srv->is_available() && copy_source.empty()) {
+    auto rdma_token = s->info.env->get_optional("HTTP_X_AMZ_RDMA_TOKEN");
+    if (rdma_token) {
+      rdma_descr = *rdma_token;
+      rdma_put = true;
+    }
+  }
+
+  if (rdma_put) {
+    size_t total = RGWCuObjServer::parse_rdma_descriptor_size(rdma_descr);
+    if (total == 0) {
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: failed to parse size from RDMA descriptor" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+    ldpp_dout(this, 20) << "rgw_cuobj: RDMA PUT size=" << total
+                        << " from descriptor" << dendl;
+    auto* rbuf = cuobj_srv->acquire_buffer(total);
+    if (!rbuf) {
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: no RDMA buffer available for "
+                         << total << " bytes" << dendl;
+      op_ret = -ERR_SERVICE_UNAVAILABLE;
+      return;
+    }
+
+    ssize_t rdma_ret = cuobj_srv->rdma_read_from_client(s->object->get_name(), rbuf, 0, total, rdma_descr);
+    if (rdma_ret < 0) {
+      cuobj_srv->release_buffer(rbuf);
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: RDMA read failed: " << rdma_ret << dendl;
+      op_ret = -EIO;
+      return;
+    }
+
+    tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
+    uint64_t chunk_size = s->cct->_conf->rgw_max_chunk_size;
+    uint64_t data_ofs = 0;
+    uint64_t rdma_total = static_cast<uint64_t>(rdma_ret);
+    while (data_ofs < rdma_total) {
+      size_t clen = std::min(chunk_size, rdma_total - data_ofs);
+      bufferlist data;
+      data.append(static_cast<char*>(rbuf->ptr) + data_ofs, clen);
+
+      if (need_calc_md5) {
+        hash.Update(reinterpret_cast<const unsigned char*>(data.c_str()), data.length());
+      }
+
+      op_ret = filter->process(std::move(data), ofs);
+      if (op_ret < 0) {
+        cuobj_srv->release_buffer(rbuf);
+        ldpp_dout(this, 0) << "rgw_cuobj: ERROR: filter->process() returned ret=" << op_ret << dendl;
         return;
-      len = data.length();
-      s->content_length += len;
-      fst += len;
+      }
+      ofs += clen;
+      data_ofs += clen;
     }
-    if (len < 0) {
-      op_ret = len;
-      ldpp_dout(this, 20) << "get_data() returned ret=" << op_ret << dendl;
-      return;
-    } else if (len == 0) {
-      break;
-    }
+    tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
 
-    if (need_calc_md5) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
-    }
-
-    op_ret = filter->process(std::move(data), ofs);
+    op_ret = filter->process({}, ofs);
+    cuobj_srv->release_buffer(rbuf);
     if (op_ret < 0) {
-      ldpp_dout(this, 20) << "processor->process() returned ret="
-          << op_ret << dendl;
+      ldpp_dout(this, 0) << "rgw_cuobj: ERROR: filter->process() returned ret=" << op_ret << dendl;
+      return;
+    }
+    s->obj_size = ofs;
+    s->rdma_bytes_transferred = ofs;
+    s->object->set_obj_size(ofs);
+  }
+  else
+#endif
+  {
+    tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
+    do {
+      bufferlist data;
+      if (fst > lst)
+        break;
+      if (copy_source.empty()) {
+        len = get_data(data);
+      } else {
+        off_t cur_lst = min<off_t>(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
+        op_ret = get_data(fst, cur_lst, data);
+        if (op_ret < 0)
+          return;
+        len = data.length();
+        s->content_length += len;
+        fst += len;
+      }
+      if (len < 0) {
+        op_ret = len;
+        ldpp_dout(this, 20) << "get_data() returned ret=" << op_ret << dendl;
+        return;
+      } else if (len == 0) {
+        break;
+      }
+
+      if (need_calc_md5) {
+        hash.Update((const unsigned char *)data.c_str(), data.length());
+      }
+
+      op_ret = filter->process(std::move(data), ofs);
+      if (op_ret < 0) {
+        ldpp_dout(this, 20) << "processor->process() returned ret="
+            << op_ret << dendl;
+        return;
+      }
+
+      ofs += len;
+    } while (len > 0);
+    tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
+
+    // flush any data in filters
+    op_ret = filter->process({}, ofs);
+    if (op_ret < 0) {
       return;
     }
 
-    ofs += len;
-  } while (len > 0);
-  tracepoint(rgw_op, after_data_transfer, s->req_id.c_str(), ofs);
-
-  // flush any data in filters
-  op_ret = filter->process({}, ofs);
-  if (op_ret < 0) {
-    return;
+    if (!chunked_upload && ofs != s->content_length) {
+      op_ret = -ERR_REQUEST_TIMEOUT;
+      return;
+    }
+    s->obj_size = ofs;
+    s->object->set_obj_size(ofs);
   }
-
-  if (!chunked_upload && ofs != s->content_length) {
-    op_ret = -ERR_REQUEST_TIMEOUT;
-    return;
-  }
-  s->obj_size = ofs;
-  s->object->set_obj_size(ofs);
 
   /* For AEAD modes, ensure ORIGINAL_SIZE is set now that final size is known.
    * This handles cases where size was unknown at encryption setup:

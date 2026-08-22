@@ -224,6 +224,16 @@ void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
   o->sparse_read(off, len, m, data_bl, prval, truncate_size, truncate_seq);
 }
 
+void librados::ObjectReadOperation::set_rdma_delivery(const std::string& token,
+						      uint64_t base_offset,
+						      uint32_t lease_ms,
+						      uint64_t *oob_bytes)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->set_rdma_delivery(token, base_offset, lease_ms, oob_bytes);
+}
+
 void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
 					     const bufferlist &init_value_bl,
 					     uint64_t off, size_t len,

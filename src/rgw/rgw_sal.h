@@ -1167,6 +1167,20 @@ class Object {
         /// If the object is multipart, the total number of multipart
         /// parts is assigned to this output parameter.
         std::optional<int> parts_count;
+
+        /// When non-empty, iterate() must deliver data out of band:
+        /// each stripe is RDMA-written into the client memory window
+        /// described by this opaque cuObject token at offset
+        /// (stripe logical offset - iterate's ofs argument), and the
+        /// callback receives no data. Stores that cannot honor this
+        /// must fail iterate() with -EOPNOTSUPP before delivering any
+        /// data so the caller can fall back.
+        std::string rdma_token;
+        /// out: bytes delivered out of band by iterate()
+        uint64_t* rdma_bytes{nullptr};
+        /// out: true when iterate() sent at least one descriptor-bearing
+        /// operation to the OSDs (fence-wait gating on fallback)
+        bool rdma_submitted{false};
       } params;
 
       virtual ~ReadOp() = default;

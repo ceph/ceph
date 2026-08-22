@@ -83,6 +83,7 @@ Cluster with one API and then retrieve that data with the other API.
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
    QAT Acceleration for Encryption and Compression <qat-accel>
+   S3 over RDMA <s3-rdma>
    S3-select <s3select>
    Lua Scripting <lua-scripting>
    D3N Data Cache <d3n_datacache>
