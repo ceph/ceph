@@ -6635,11 +6635,12 @@ void MDCache::_truncate_inode(CInode *in, LogSegmentRef const& ls)
     dout(10) << "_truncate_inode write on inode " << *in << " change_attr: "
              << header.change_attr << " offset: " << header.file_offset << " blen: "
 	     << header.block_size << dendl;
+    auto filer_finisher = new C_SaferCond("flock for last block");
     filer.write(in->ino(), &layout, *snapc, header.file_offset, header.block_size,
-                data, ceph::real_clock::zero(), 0,
-                new C_OnFinisher(new C_IO_MDC_TruncateWriteFinish(this, in, ls,
-                                                                  header.block_size),
-                                 mds->finisher));
+                data, ceph::real_clock::zero(), 0, filer_finisher);
+    int r = filer_finisher->wait();
+    auto wf = new C_IO_MDC_TruncateWriteFinish(this, in, ls, header.block_size);
+    wf->finish(r);
   } else { // located in file hole.
     uint64_t length = pi->truncate_from - pi->truncate_size;
 
