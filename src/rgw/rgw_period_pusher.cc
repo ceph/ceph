@@ -151,7 +151,6 @@ class RGWPeriodPusher::CRThread : public DoutPrefixProvider {
   }
   ~CRThread()
   {
-    push_all.reset();
     coroutines.stop();
     http.stop();
     if (thread.joinable())
