@@ -1389,7 +1389,7 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y, rgw
     return ret;
   }
 
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
+  quota_handler = RGWQuotaHandler::generate_handler(this->driver, quota_threads);
 
   bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
                              zone.bucket_index_max_shards);
