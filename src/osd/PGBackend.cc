@@ -772,8 +772,12 @@ void PGBackend::rollback_setattrs(
     }
   }
   if (only_oi) {
+    auto oi_iter = to_set.find(OI_ATTR);
+    if (oi_iter == to_set.end()) {
+      return;
+    }
     object_info_t oi;
-    auto p = to_set[OI_ATTR].cbegin();
+    auto p = oi_iter->second.cbegin();
     decode(oi, p);
 
     shard_id_t my_shard = get_parent()->whoami_shard().shard;
@@ -794,7 +798,7 @@ void PGBackend::rollback_setattrs(
         coll,
         ghobject_t(hoid, ghobject_t::NO_GEN, my_shard),
         OI_ATTR,
-        to_set[OI_ATTR]);
+        oi_iter->second);
     }
   } else {
     t->setattrs(
