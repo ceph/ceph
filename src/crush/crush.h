@@ -26,7 +26,7 @@
 #define CRUSH_MAX_DEPTH 10  /* max crush hierarchy depth */
 #define CRUSH_MAX_RULES (1<<8)  /* max crush rule id */
 
-#define CRUSH_MAX_DEVICE_WEIGHT (100u * 0x10000u)
+#define CRUSH_MAX_DEVICE_WEIGHT (1000u * 0x10000u)
 #define CRUSH_MAX_BUCKET_WEIGHT (65535u * 0x10000u)
 
 #define CRUSH_ITEM_UNDEF  0x7ffffffe  /* undefined result (internal use only) */
