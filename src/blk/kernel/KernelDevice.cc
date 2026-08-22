@@ -1031,6 +1031,89 @@ void KernelDevice::_aio_log_finish(
   }
 }
 
+// Fast path: a lone aio on a waiter-style IOContext (priv == NULL,
+// i.e. the caller blocks in aio_wait() rather than consuming a
+// completion callback) is one contiguous preadv/pwritev whose
+// submitter is about to wait for it - asynchrony buys nothing, so
+// execute it synchronously in the caller and skip the whole aio
+// completion round trip (ring, completion-thread wakeup, waiter
+// wakeup); aio_wait() then falls straight through.  This covers the
+// common single-extent read from _do_read and every single-segment
+// BlueFS flush (the WAL append on the commit path most importantly).
+// Callback-style IOContexts (txc data writes, deferred batches) are
+// not eligible: their callers do not wait, the pipeline consumes
+// their completions asynchronously.  Returns true if the io was
+// executed here.  (Never during _aio_stop: its wakeup ctx is a
+// single read that must reach the ring to unblock the completion
+// thread.)
+bool KernelDevice::_aio_lone_waiter_sync(IOContext *ioc)
+{
+#if defined(HAVE_LIBAIO)
+  if (!aio || aio_stop || ioc->priv != nullptr ||
+      ioc->num_pending.load() != 1) {
+    return false;
+  }
+  aio_t& a = ioc->pending_aios.back();
+  const bool is_read = (a.iocb.aio_lio_opcode == IO_CMD_PREADV);
+  dout(20) << __func__ << " sync " << (is_read ? "read" : "write")
+	   << " 0x" << std::hex << a.offset << "~"
+	   << a.length << std::dec << dendl;
+  ssize_t r;
+  if (is_read) {
+    r = ::preadv(a.fd, a.iov.data(), a.iov.size(), a.offset);
+  } else {
+    r = ::pwritev(a.fd, a.iov.data(), a.iov.size(), a.offset);
+    // as in _sync_write/reap: arm the next flush() BEFORE anything
+    // can observe the write as complete
+    io_since_flush.store(true);
+  }
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " sync " << (is_read ? "preadv" : "pwritev")
+	 << " 0x" << std::hex << a.offset << "~" << a.length
+	 << std::dec << " got " << cpp_strerror(r) << dendl;
+    // same error handling as the completion thread's
+    if (ioc->allow_eio && is_expected_ioerr(r)) {
+      ioc->set_return_value(-EIO);
+    } else {
+      if (is_expected_ioerr(r)) {
+	note_io_error_event(
+	  devname.c_str(),
+	  path.c_str(),
+	  r,
+#if defined(HAVE_POSIXAIO)
+	  a.aio.aiocb.aio_lio_opcode,
+#else
+	  a.iocb.aio_lio_opcode,
+#endif
+	  a.offset,
+	  a.length);
+	ceph_abort_msg(
+	  "Unexpected IO error. "
+	  "This may suggest a hardware issue. "
+	  "Please check your kernel log!");
+      }
+      ceph_abort_msg(
+	"Unexpected IO error. "
+	"This may suggest HW issue. Please check your dmesg!");
+    }
+  } else if ((uint64_t)r != a.length) {
+    // partial preadv/pwritev does not happen on O_DIRECT block
+    // devices; treat it like the completion thread treats a short
+    // return
+    derr << __func__ << " sync io 0x" << std::hex << a.offset
+	 << "~" << a.length << std::dec << " returned " << r << dendl;
+    ceph_abort_msg("short io from sync fast path");
+  }
+  _aio_log_finish(ioc, a.offset, a.length);
+  ioc->num_pending--;
+  ioc->pending_aios.clear();
+  return true;
+#else
+  return false;
+#endif
+}
+
 void KernelDevice::aio_submit(IOContext *ioc)
 {
   dout(20) << __func__ << " ioc " << ioc
@@ -1039,6 +1122,10 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << dendl;
 
   if (ioc->num_pending.load() == 0) {
+    return;
+  }
+
+  if (_aio_lone_waiter_sync(ioc)) {
     return;
   }
 

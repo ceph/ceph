@@ -114,6 +114,7 @@ private:
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
 
   int _sync_write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint);
+  bool _aio_lone_waiter_sync(IOContext *ioc);
 
   int _lock();
 
