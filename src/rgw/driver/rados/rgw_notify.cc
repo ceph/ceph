@@ -90,6 +90,8 @@ class Manager : public DoutPrefixProvider {
   CephContext* const cct;
   static constexpr auto COOKIE_LEN = 16;
   const std::string lock_cookie;
+  // stored in the lock so that the owner of a queue can be identified
+  const std::string lock_description;
   boost::asio::io_context io_context;
   boost::asio::executor_work_guard<Executor> work_guard;
   std::thread worker;
@@ -718,7 +720,7 @@ private:
               ClsLockType::EXCLUSIVE,
               lock_cookie,
               "" /*no tag*/,
-              "" /*no description*/,
+              lock_description,
               failover_time,
               LOCK_FLAG_MAY_RENEW);
 
@@ -835,6 +837,7 @@ public:
   Manager(CephContext* _cct, rgw::sal::RadosStore* store, const SiteConfig& site) :
     cct(_cct),
     lock_cookie(gen_rand_alphanumeric(cct, COOKIE_LEN)),
+    lock_description(cct->_conf->name.to_str()),
     work_guard(boost::asio::make_work_guard(io_context)),
     site(site),
     rados_store(store)
@@ -1366,6 +1369,7 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
   stats.queue_reservations = 0; 
   stats.queue_size = 0; 
   stats.queue_entries = 0; 
+  stats.shard_owners.clear();
   for(const auto& shard_name: shards){
     auto ret = cls_2pc_queue_list_reservations(rados_ioctx, shard_name, reservations);
     if (ret < 0) {
@@ -1382,6 +1386,30 @@ int get_persistent_queue_stats(const DoutPrefixProvider *dpp, librados::IoCtx &r
       ldpp_dout(dpp, 1) << "ERROR: failed to get the size or number of entries for queue shard: " << shard_name << ret << dendl;
       return ret;
     }
+
+    // the owner of the shard is the holder of its lock. a shard which is not
+    // owned by any gateway has no locker, and is reported without an owner
+    rgw_topic_shard_owner owner;
+    owner.shard_name = shard_name;
+    std::map<rados::cls::lock::locker_id_t, rados::cls::lock::locker_info_t> lockers;
+    ClsLockType lock_type = ClsLockType::NONE;
+    std::string tag;
+    ret = rados::cls::lock::get_lock_info(&rados_ioctx, shard_name,
+                                          shard_name + "_lock", &lockers,
+                                          &lock_type, &tag);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 1) << "ERROR: failed to get lock info for queue shard: " << shard_name << ". error: " << ret << dendl;
+      return ret;
+    }
+    if (!lockers.empty()) {
+      // the lock is exclusive, so there is at most one locker
+      const auto& info = lockers.begin()->second;
+      owner.owned = true;
+      owner.owner = info.description;
+      owner.owner_addr = info.addr.get_legacy_str();
+      owner.expiration = info.expiration;
+    }
+    stats.shard_owners.push_back(std::move(owner));
   }
   return 0;
 }
@@ -1434,6 +1462,18 @@ void rgw_topic_stats::dump(Formatter *f) const {
   f->dump_int("Reservations", queue_reservations);
   f->dump_int("Size", queue_size);
   f->dump_int("Entries", queue_entries);
+  f->open_array_section("Shards");
+  for (const auto& shard : shard_owners) {
+    f->open_object_section("Shard");
+    f->dump_string("Name", shard.shard_name);
+    if (shard.owned) {
+      f->dump_string("Owner", shard.owner);
+      f->dump_string("Owner Address", shard.owner_addr);
+      f->dump_stream("Ownership Expiration") << shard.expiration;
+    }
+    f->close_section();
+  }
+  f->close_section();
   f->close_section();
 }
 
