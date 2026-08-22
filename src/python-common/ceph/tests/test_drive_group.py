@@ -694,6 +694,65 @@ def test_drive_group_seastore_with_crimson_valid():
     spec.validate()
 
 
+def test_drive_group_raw_seastore_rejects_db_devices():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(paths=['/dev/sda']),
+        db_devices=DeviceSelection(paths=['/dev/sdb']),
+        method='raw',
+        objectstore='seastore',
+        osd_type='crimson',
+    )
+    with pytest.raises(DriveGroupValidationError, match='does not support db_devices'):
+        spec.validate()
+
+
+def test_drive_group_raw_seastore_rejects_wal_devices():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(paths=['/dev/sda']),
+        wal_devices=DeviceSelection(paths=['/dev/sdc']),
+        method='raw',
+        objectstore='seastore',
+        osd_type='crimson',
+    )
+    with pytest.raises(DriveGroupValidationError, match='does not support wal_devices'):
+        spec.validate()
+
+
+def test_drive_group_raw_seastore_valid():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(paths=['/dev/sda']),
+        method='raw',
+        objectstore='seastore',
+        osd_type='crimson',
+    )
+    spec.validate()
+
+
+def test_raw_ceph_volume_command_seastore():
+    spec = DriveGroupSpec(
+        placement=PlacementSpec(host_pattern='*'),
+        service_id='foobar',
+        data_devices=DeviceSelection(rotational=True),
+        method='raw',
+        objectstore='seastore',
+        osd_type='crimson',
+    )
+    spec.validate()
+    inventory = _mk_inventory(_mk_device(rotational=True) + _mk_device(rotational=True))
+    sel = drive_selection.DriveSelection(spec, inventory)
+    cmds = translate.to_ceph_volume(sel, []).run()
+    assert cmds == [
+        'raw prepare --objectstore seastore --data /dev/sda --osd-type crimson',
+        'raw prepare --objectstore seastore --data /dev/sdb --osd-type crimson',
+    ]
+
+
 def test_drive_group_osd_type_invalid():
     spec = DriveGroupSpec(
         placement=PlacementSpec(host_pattern='*'),

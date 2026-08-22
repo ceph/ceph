@@ -141,24 +141,25 @@ class TestOsdMkfs(object):
         assert '--keyfile' not in fake_call.calls[0]['args'][0]
 
     def test_wal_is_added(self, fake_call, monkeypatch, objectstore, factory):
-        args = factory(objecstore='bluestore',
+        args = factory(objectstore='bluestore',
                        osd_id='1',
-                       osd_fid='asdf',
+                       osd_fsid='asdf',
                        wal_device_path='/dev/smm1',
                        cephx_secret='foo',
                        dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
         o = BaseObjectStore(args)
+        o.objectstore = 'bluestore'
         o.wal_device_path = '/dev/smm1'
         o.osd_mkfs()
         assert '--bluestore-block-wal-path' in fake_call.calls[2]['args'][0]
         assert '/dev/smm1' in fake_call.calls[2]['args'][0]
 
     def test_db_is_added(self, fake_call, monkeypatch, factory):
-        args = factory(dmcrypt=False)
+        args = factory(objectstore='bluestore', dmcrypt=False)
         monkeypatch.setattr(system, 'chown', lambda path: True)
         o = BaseObjectStore(args)
-        o.args = args
+        o.objectstore = 'bluestore'
         o.db_device_path = '/dev/smm2'
         o.osd_mkfs()
         assert '--bluestore-block-db-path' in fake_call.calls[2]['args'][0]
