@@ -121,6 +121,151 @@ class Pipeline {
     bool pipeline_mode{false};
 };
 
+// Result type for lease check operations
+// Distinguishes between "lease not active" and "database error"
+struct LeaseCheckResult {
+  bool active = false;    // true if an active lease exists/is valid
+  int error = 0;          // 0 = success, -EIO = database error, etc.
+
+  // Convenience: explicit conversion to bool for simple checks
+  // Returns true only if active AND no error occurred
+  explicit operator bool() const {
+    return active && error == 0;
+  }
+
+  // Check if operation succeeded (regardless of active status)
+  bool succeeded() const {
+    return error == 0;
+  }
+
+  // Check if a database/network error occurred
+  bool has_error() const {
+    return error != 0;
+  }
+};
+
+// Distributed lease/lock interface for coordinating access to resources
+//
+// Provides time-bound exclusive access to resources with support for:
+// - Hierarchical resource naming (bucket/object/version/operation)
+//   Components are URL-encoded to handle '/' in S3 object names
+// - Nanosecond-precision TTL for fine-grained control
+// - Token-based ownership validation
+// - Renewal with tick limits
+// - Opportunistic cleanup of expired leases
+//
+// Return code semantics:
+//   acquire():
+//     0       : Lease successfully acquired (or already owned by caller - idempotent)
+//     -EEXIST : Lease held by another holder
+//     -EINVAL : Invalid parameters (empty strings, zero TTL)
+//     -EIO    : Database/network error
+//
+//   renew():
+//     0       : Lease successfully renewed (or already renewed - idempotent)
+//     -ENOENT : Lease not found or expired
+//     -EACCES : Ownership validation failed (wrong holder_id or token)
+//     -EINVAL : Max ticks limit reached (lease still held - caller decides next action)
+//     -EIO    : Database/network error
+//
+//   release():
+//     0       : Lease successfully released (or already released - idempotent)
+//     -EACCES : Ownership validation failed
+//     -EIO    : Database/network error
+//
+//   is_active():
+//     true    : Lease exists, not expired, and owned by caller
+//     false   : Lease not found, expired, owned by someone else, or DB error
+//
+//   any_active():
+//     true    : At least one active lease exists with matching prefix
+//     false   : No active leases found or DB error
+//
+// Transaction safety note:
+//   If is_active() authorizes a later FDB update, consider sharing the transaction:
+//   read the lease key in the update transaction itself - FDB will retry if it changes.
+//
+class Lease {
+  public:
+    Lease() = default;
+    virtual ~Lease() = default;
+
+    // Acquire a lease for a resource
+    //
+    // resource_name: hierarchical identifier (e.g., "bucket/object/version")
+    // holder_id: identifier of the lease holder (e.g., node ID, process ID)
+    // token: unique token for this lease acquisition (prevents conflicts)
+    // ttl_nanoseconds: time-to-live for the lease in nanoseconds
+    //
+    // Idempotent: returns 0 if already acquired by same holder_id + token
+    virtual int acquire(const DoutPrefixProvider* dpp,
+                        const std::string& resource_name,
+                        const std::string& holder_id,
+                        const std::string& token,
+                        uint64_t ttl_nanoseconds) = 0;
+
+    // Renew an existing lease
+    //
+    // Must provide matching resource_name, holder_id, and token from acquire
+    // max_ticks: optional limit on renewal attempts (0 = unlimited)
+    //
+    // Idempotent: returns 0 if already renewed
+    virtual int renew(const DoutPrefixProvider* dpp,
+                      const std::string& resource_name,
+                      const std::string& holder_id,
+                      const std::string& token,
+                      uint64_t ttl_nanoseconds,
+                      uint64_t max_ticks = 0) = 0;
+
+    // Release a lease
+    //
+    // Must provide matching resource_name, holder_id, and token from acquire
+    //
+    // Idempotent: returns 0 if already released
+    virtual int release(const DoutPrefixProvider* dpp,
+                        const std::string& resource_name,
+                        const std::string& holder_id,
+                        const std::string& token) = 0;
+
+    // Check if any active lease exists for a resource (supports prefix matching)
+    //
+    // resource_prefix: hierarchical prefix (e.g., "bucket" matches "bucket/obj1", "bucket/obj2")
+    //
+    // Returns: LeaseCheckResult with:
+    //   - active: true if any active lease found
+    //   - error: 0 on success, -EIO on database/network error
+    //
+    // Usage:
+    //   auto result = lease->any_active(dpp, "bucket");
+    //   if (result.has_error()) { /* database error */ }
+    //   else if (result.active) { /* lease exists */ }
+    //   else { /* no active lease */ }
+    //
+    // Side effect: opportunistically deletes expired leases during scan
+    virtual LeaseCheckResult any_active(const DoutPrefixProvider* dpp,
+                                        const std::string& resource_prefix) = 0;
+
+    // Check if a specific lease is still active and owned by the caller
+    //
+    // Validates: lease exists, not expired, matches holder_id and token
+    //
+    // Returns: LeaseCheckResult with:
+    //   - active: true if lease is valid and owned by caller
+    //   - error: 0 on success, -EIO on database/network error
+    //
+    // Usage:
+    //   auto result = lease->is_active(dpp, resource, holder, token);
+    //   if (result.has_error()) { /* database error */ }
+    //   else if (result.active) { /* lease is valid */ }
+    //   else { /* lease not active/expired/wrong owner */ }
+    //
+    // Side effect: opportunistically deletes expired lease if found
+    virtual LeaseCheckResult is_active(const DoutPrefixProvider* dpp,
+                                       const std::string& resource_name,
+                                       const std::string& holder_id,
+                                       const std::string& token) = 0;
+};
+
 template<typename T>
 concept SeqContainer =
 requires(T& t, typename T::value_type v) {
