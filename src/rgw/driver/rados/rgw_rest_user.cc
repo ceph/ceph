@@ -412,21 +412,31 @@ void RGWOp_User_Modify::execute(optional_yield y)
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.name = default_placement_str;
-    if (!default_storage_class_str.empty()){
-      target_rule.storage_class = default_storage_class_str;
-    }
+    target_rule.storage_class = default_storage_class_str;
     if (!driver->valid_placement(target_rule)) {
       ldpp_dout(this, 0) << "NOTICE: invalid dest placement: " << target_rule.to_str() << dendl;
       op_ret = -EINVAL;
       return;
     }
     op_state.set_default_placement(target_rule);
+  } else if (!default_storage_class_str.empty()) {
+    // a storage class is validated against its placement target, so it cannot
+    // be given on its own
+    ldpp_dout(this, 0) << "NOTICE: default-storage-class requires default-placement" << dendl;
+    op_ret = -EINVAL;
+    return;
+  } else if (s->info.args.exists("default-placement")) {
+    // explicitly empty: clear the rule, storage class included
+    op_state.set_default_placement(rgw_placement_rule());
   }
 
   if (!placement_tags_str.empty()) {
     list<string> placement_tags_list;
     get_str_list(placement_tags_str, ",", placement_tags_list);
     op_state.set_placement_tags(placement_tags_list);
+  } else if (s->info.args.exists("placement-tags")) {
+    // explicitly empty: clear the tag list
+    op_state.set_placement_tags(std::list<std::string>());
   }
   
   if (!s->penv.site->is_meta_master()) {
