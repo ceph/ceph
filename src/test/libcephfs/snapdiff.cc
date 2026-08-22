@@ -527,6 +527,11 @@ public:
   void prepareBlockDiffChangedBlockWithChangedHead(interval_set<uint64_t> *expected);
   void prepareBlockDiffChangedBlockWithTruncatedBlock(interval_set<uint64_t> *expected);
   void prepareBlockDiffChangedBlockWithCustomObjectSize(interval_set<uint64_t> *expected);
+  void prepareBlockDiffChangedBlockWithStripedLayout(interval_set<uint64_t> *expected);
+  void prepareBlockDiffStripedSpanningWrite(interval_set<uint64_t> *expected);
+  void prepareBlockDiffStripedManyRowsPerObject(interval_set<uint64_t> *expected);
+  void set_striped_layout(const char* relpath, uint64_t stripe_unit,
+                          uint64_t stripe_count, uint64_t object_size);
   void prepareHugeSnapDiff(const std::string& name_prefix_start,
                            const std::string& name_prefix_bulk,
                            const std::string& name_prefix_end,
@@ -688,6 +693,105 @@ void TestMount::prepareBlockDiffChangedBlockWithCustomObjectSize(interval_set<ui
 
   std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
     std::make_tuple(0, 40 * BLOCK_SIZE_FACTOR, false),
+  };
+  write_blocks(changes, expected);
+  ASSERT_EQ(0, mksnap("snap2"));
+}
+
+void TestMount::set_striped_layout(const char* relpath, uint64_t stripe_unit,
+				   uint64_t stripe_count, uint64_t object_size)
+{
+  auto file_path = make_file_path(relpath);
+  ASSERT_EQ(0, ceph_mknod(cmount, file_path.c_str(), 0666, 0));
+  std::string val = "stripe_unit=" + std::to_string(stripe_unit) +
+    " stripe_count=" + std::to_string(stripe_count) +
+    " object_size=" + std::to_string(object_size);
+  ASSERT_EQ(0, ceph_setxattr(cmount, file_path.c_str(), "ceph.file.layout", val.c_str(),
+			     val.size(), 0));
+
+  // read it back: the tests prove nothing if the striping is not in effect
+  char buf[256];
+  std::string expected = val + " pool=";
+  int len = ceph_getxattr(cmount, file_path.c_str(), "ceph.file.layout",
+			  buf, sizeof(buf));
+  ASSERT_LE((int)expected.size(), len);
+  ASSERT_EQ(expected, std::string(buf, expected.size()));
+}
+
+void TestMount::prepareBlockDiffChangedBlockWithStripedLayout(interval_set<uint64_t> *expected)
+{
+  // a striped layout: each object holds object_size/stripe_unit stripe units
+  // that are interleaved with those of the other objects in its object set,
+  // so an object does not back a contiguous run of the file.
+  const uint64_t stripe_unit = BLOCK_SIZE_FACTOR;
+  const uint64_t stripe_count = 4;
+  const uint64_t object_size = 4 * BLOCK_SIZE_FACTOR;
+  const uint64_t write_size = 4096;
+
+  //************ snap1 *************
+  set_striped_layout("fileA", stripe_unit, stripe_count, object_size);
+
+  ASSERT_LE(0, write_random("fileA", 8, object_size));
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  //************ snap2 *************
+  // Straddle a stripe unit boundary, a complete stripe cycle boundary and the
+  // point where every object of the stripe set has consumed object_size. Each
+  // write lands in two different objects, and in the latter two cases at a
+  // non-zero offset within them.
+  std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
+    std::make_tuple(stripe_unit - write_size / 2, write_size, false),
+    std::make_tuple(stripe_unit * stripe_count - write_size / 2, write_size, false),
+    std::make_tuple(object_size * stripe_count - write_size / 2, write_size, false),
+  };
+  write_blocks(changes, expected);
+  ASSERT_EQ(0, mksnap("snap2"));
+}
+
+void TestMount::prepareBlockDiffStripedSpanningWrite(interval_set<uint64_t> *expected)
+{
+  const uint64_t stripe_unit = BLOCK_SIZE_FACTOR;
+  const uint64_t stripe_count = 4;
+  const uint64_t object_size = 4 * BLOCK_SIZE_FACTOR;
+
+  //************ snap1 *************
+  set_striped_layout("fileA", stripe_unit, stripe_count, object_size);
+  ASSERT_LE(0, write_random("fileA", 8, object_size));
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  //************ snap2 *************
+  // The write covers the last two stripe units of one row and all four
+  // units of the next row. Objects 2 and 3 therefore contribute two
+  // disjoint file extents, while objects 0 and 1 contribute one each.
+  std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
+    std::make_tuple(2 * stripe_unit, 6 * stripe_unit, false),
+  };
+  write_blocks(changes, expected);
+  ASSERT_EQ(0, mksnap("snap2"));
+}
+
+void TestMount::prepareBlockDiffStripedManyRowsPerObject(interval_set<uint64_t> *expected)
+{
+  const uint64_t stripe_unit = BLOCK_SIZE_FACTOR / 4;
+  const uint64_t stripe_count = 2;
+  const uint64_t object_size = 4 * BLOCK_SIZE_FACTOR;
+  const uint64_t row = stripe_unit * stripe_count;
+  const uint64_t write_size = 4096;
+
+  //************ snap1 *************
+  // object_size/stripe_unit is 16 here, so one object spans sixteen stripe
+  // rows and its bytes are spread far apart in the file.
+  set_striped_layout("fileA", stripe_unit, stripe_count, object_size);
+  ASSERT_LE(0, write_random("fileA", 4, object_size));
+  ASSERT_EQ(0, mksnap("snap1"));
+
+  //************ snap2 *************
+  // three rows of the first object plus one row of the second
+  std::vector<std::tuple<int64_t,uint64_t,bool>> changes{
+    std::make_tuple(0, write_size, false),
+    std::make_tuple(3 * row, write_size, false),
+    std::make_tuple(7 * row, write_size, false),
+    std::make_tuple(5 * row + stripe_unit, write_size, false),
   };
   write_blocks(changes, expected);
   ASSERT_EQ(0, mksnap("snap2"));
@@ -2159,6 +2263,57 @@ TEST(LibCephFS, SnapDiffChangedBlockWithCustomObjectSize)
   test_mount.prepareBlockDiffChangedBlockWithCustomObjectSize(&expected);
   std::cout << "expected=" << expected << std::endl;
   test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2", &expected);
+  ASSERT_TRUE(expected.empty());
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffStripedSpanningWrite)
+{
+  TestMount test_mount;
+
+  interval_set<uint64_t> expected;
+  test_mount.prepareBlockDiffStripedSpanningWrite(&expected);
+  std::cout << "expected=" << expected << std::endl;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2",
+						  &expected));
+  ASSERT_TRUE(expected.empty());
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffStripedManyRowsPerObject)
+{
+  TestMount test_mount;
+
+  interval_set<uint64_t> expected;
+  test_mount.prepareBlockDiffStripedManyRowsPerObject(&expected);
+  std::cout << "expected=" << expected << std::endl;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2",
+						  &expected));
+  ASSERT_TRUE(expected.empty());
+
+  std::cout << "------------- closing -------------" << std::endl;
+  ASSERT_EQ(0, test_mount.purge_dir(""));
+  ASSERT_EQ(0, test_mount.rmsnap("snap1"));
+  ASSERT_EQ(0, test_mount.rmsnap("snap2"));
+}
+
+TEST(LibCephFS, SnapDiffChangedBlockWithStripedLayout)
+{
+  TestMount test_mount;
+
+  interval_set<uint64_t> expected;
+  test_mount.prepareBlockDiffChangedBlockWithStripedLayout(&expected);
+  std::cout << "expected=" << expected << std::endl;
+  ASSERT_EQ(0, test_mount.for_each_file_blockdiff("fileA", "snap1", "snap2",
+						  &expected));
   ASSERT_TRUE(expected.empty());
 
   std::cout << "------------- closing -------------" << std::endl;
