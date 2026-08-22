@@ -24,6 +24,7 @@ def task(ctx, config):
             continue
         devs = teuthology.get_scratch_devices(remote)
         devs_by_remote[remote] = devs
+        existing_nvme_devs = set(discover_devs_via_sysfs(remote))
         base = '/sys/kernel/config/nvmet'
         remote.run(
             args=[
@@ -75,20 +76,48 @@ def task(ctx, config):
         # identify nvme_loops devices
         old_scratch_by_remote[remote] = remote.read_file('/scratch_devs')
 
+        new_devs = []
+        json_failures = 0
+        # after this many consecutive `nvme list -o json` crashes, stop
+        # retrying the (apparently broken) command and fall back to
+        # discovering devices directly via sysfs instead.
+        max_json_failures = 5
+
         with contextutil.safe_while(sleep=1, tries=15) as proceed:
             while proceed():
                 remote.run(args=['lsblk'], stdout=StringIO())
+
+                if json_failures >= max_json_failures:
+                    log.warning(
+                        f'nvme list -o json crashed {json_failures} times '
+                        'in a row; falling back to sysfs-based discovery'
+                    )
+                    new_devs = sorted(
+                        set(discover_devs_via_sysfs(remote))
+                        - existing_nvme_devs
+                    )
+                    for dev in new_devs:
+                        bluestore_zap(remote, dev)
+                    log.info(f'new_devs (sysfs fallback) {new_devs}')
+                    assert len(new_devs) <= len(devs)
+                    if len(new_devs) == len(devs):
+                        break
+                    continue
+
                 try:
                     p = remote.run(
                         args=['sudo', 'nvme', 'list', '-o', 'json'],
                         stdout=StringIO(),
                     )
                 except CommandCrashedError:
+                    json_failures += 1
                     log.warning(
-                        'nvme list -o json command failed, retrying...'
+                        f'nvme list -o json command failed '
+                        f'({json_failures}/{max_json_failures}), retrying...'
                     )
                     continue
 
+                json_failures = 0
                 new_devs = []
                 # `nvme list -o json` will return one of the following output:
                 '''{
@@ -249,6 +278,36 @@ def task(ctx, config):
                 data=old_scratch_by_remote[remote],
                 sudo=True
             )
+
+
+def discover_devs_via_sysfs(remote) -> list:
+    """
+    Return visible NVMe namespace block devices from /sys/class/block.
+
+    Walking /sys/class/nvme/nvmeX/nvmeXnY is not reliable with native
+    NVMe multipath, where controller-path and namespace-head devices can
+    use different names. Only namespace-head devices (nvmeXnY) are
+    returned; partitions and controller-path devices are ignored.
+    """
+    out = StringIO()
+    remote.run(
+        args=[
+            'bash', '-c',
+            'for d in /sys/class/block/nvme*n*; do '
+            '[ -e "$d" ] || continue; '
+            'n=$(basename "$d"); '
+            '[[ "$n" =~ ^nvme[0-9]+n[0-9]+$ ]] && echo "/dev/$n"; '
+            'done'
+        ],
+        stdout=out,
+        check_status=False,
+    )
+    return [
+        line.strip()
+        for line in out.getvalue().splitlines()
+        if line.strip()
+    ]
+
 
 def bluestore_zap(remote, device: str) -> None:
     for offset in [0, 1073741824, 10737418240]:
