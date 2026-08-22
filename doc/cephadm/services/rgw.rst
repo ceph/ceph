@@ -102,6 +102,42 @@ example spec file:
 	  ``rgw_frontend_extra_args`` into a single space-separated arguments list
 	  which is used to set the value of the ``rgw_frontends`` configuration parameter.
 
+Adding a second port to accept HTTP traffic
+-------------------------------------------
+
+The RGW service specification can be used to configure a second port on the frontend by
+using the ``rgw_frontend_secondary_port`` parameter. This port is defined as an integer
+value and can only be used to accept HTTP traffic when HTTPS traffic is enabled.
+
+Example spec file:
+
+.. code-block:: yaml
+
+    service_type: rgw
+    service_id: foo
+    placement:
+      label: rgw
+      count_per_host: 2
+    spec:
+      rgw_realm: myrealm
+      rgw_zone: myzone
+      rgw_frontend_type: "beast"
+      rgw_frontend_port: 443
+      rgw_frontend_secondary_port: 8080
+      ssl: true
+      generate_cert: true
+
+.. note::
+   ``cephadm`` combines the arguments from the ``spec`` section with those from
+   ``rgw_frontend_extra_args`` into a single space-separated argument list
+   which is used to set the value of the ``rgw_frontends`` configuration parameter.
+
+   If a TCP and an SSL port are also defined within the ``rgw_frontend_extra_args``,
+   the Beast frontend will accept HTTP traffic on both the ``rgw_frontend_secondary_port``
+   and the extra HTTP port defined there, as well as HTTPS traffic on both the
+   ``rgw_frontend_port`` and the extra SSL port defined there.
+
+
 Multisite zones
 ---------------
 
@@ -355,7 +391,7 @@ balancing on a floating virtual IP.
 
 If the RGW service is configured with SSL enabled, then the ingress service
 will use the `ssl` and `verify none` options in the backend configuration.
-Trust verification is disabled because the backends are accessed by IP 
+Trust verification is disabled because the backends are accessed by IP
 address instead of FQDN.
 
 .. image:: ../../images/HAProxy_for_RGW.svg
