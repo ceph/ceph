@@ -22,6 +22,7 @@
 #include "common/Throttle.h"
 #include "common/BackTrace.h"
 #include "common/ceph_time.h"
+#include "perfglue/heap_profiler.h"
 #include "common/async/blocked_completion.h"
 
 #include "rgw_asio_thread.h"
@@ -971,6 +972,7 @@ void RGWIndexCompletionManager::process()
 
     {
       std::unique_lock l{retry_completions_lock};
+      ceph_heap_mark_thread_temporarily_idle();
       cond.wait(l, [this](){return _stop || !retry_completions.empty();});
       if (_stop) {
         return;
