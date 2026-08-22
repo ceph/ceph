@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 
 from cephadm.services.service_registry import service_registry
 from cephadm.module import CephadmOrchestrator
-from ceph.deployment.service_spec import RGWSpec, CertificateSource
+from ceph.deployment.service_spec import RGWSpec, CertificateSource, SpecValidationError
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm
 from cephadm.tlsobject_types import TLSCredentials
 
@@ -532,3 +532,25 @@ class TestRGWService:
                         assert kwargs == {
                             'custom_sans': ['s3.example.com', '*.s3.example.com'],
                         }
+
+    @pytest.mark.parametrize(
+        "extra_args, expected",
+        [
+            (None, False),
+            ([], False),
+            (['tcp_nodelay=1'], False),
+            (['so_reuseport=1'], True),
+            (['so_reuseport=1', 'tcp_nodelay=1'], True),
+        ]
+    )
+    def test_rgw_allow_port_reuse(self, extra_args, expected):
+        s = RGWSpec(service_id='foo', rgw_frontend_extra_args=extra_args)
+        assert s.allow_port_reuse() == expected
+
+    def test_rgw_allow_port_reuse_conflicting_values(self):
+        s = RGWSpec(
+            service_id='foo',
+            rgw_frontend_extra_args=['so_reuseport=1', 'so_reuseport=0'],
+        )
+        with pytest.raises(SpecValidationError, match='mutually exclusive'):
+            s.validate()

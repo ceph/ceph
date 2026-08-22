@@ -369,7 +369,10 @@ class HostAssignment(object):
                             r.extend([dp.renumber_ports(i) for dp in ls])
                     return r
             for offset in range(num):
-                r.extend([dp.renumber_ports(offset) for dp in ls])
+                # Check if spec allows port offset incrementing
+                # (e.g., RGW with so_reuseport=1 disables port incrementing)
+                port_offset = offset if not self.spec.allow_port_reuse() else 0
+                r.extend([dp.renumber_ports(port_offset) for dp in ls])
             return r
 
         # consider enough slots to fulfill target count-per-host or count
