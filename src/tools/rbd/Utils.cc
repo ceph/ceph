@@ -925,7 +925,8 @@ int init_and_open_image(const std::string &pool_name,
                         const std::string &image_id,
                         const std::string &snap_name, bool read_only,
                         librados::Rados *rados, librados::IoCtx *io_ctx,
-                        librbd::Image *image) {
+                        librbd::Image *image,
+                        bool all_snaps) {
   int r = init(pool_name, namespace_name, rados, io_ctx);
   if (r < 0) {
     return r;
@@ -941,7 +942,7 @@ int init_and_open_image(const std::string &pool_name,
   }
 
   if (!snap_name.empty()) {
-    r = snap_set(*image, snap_name);
+    r = snap_set(*image, snap_name, all_snaps);
     if (r < 0) {
       return r;
     }
@@ -950,8 +951,12 @@ int init_and_open_image(const std::string &pool_name,
   return 0;
 }
 
-int snap_set(librbd::Image &image, const std::string &snap_name) {
-  int r = image.snap_set(snap_name.c_str());
+int snap_set(
+  librbd::Image &image,
+  const std::string &snap_name,
+  bool all_snaps)
+{
+  int r = image.snap_set(snap_name.c_str(), all_snaps);
   if (r < 0) {
     std::cerr << "error setting snapshot context: " << cpp_strerror(r)
               << std::endl;
