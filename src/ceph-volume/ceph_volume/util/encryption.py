@@ -292,7 +292,7 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     name = 'client.osd-lockbox.%s' % osd_fsid
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
-    mlogger.info(f'Running ceph config-key get {config_key}')
+    mlogger.debug(f'Running ceph config-key get {config_key}')
     stdout, stderr, returncode = process.call(
         [
             'ceph',
