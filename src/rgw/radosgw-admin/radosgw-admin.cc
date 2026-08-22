@@ -5602,9 +5602,11 @@ int main(int argc, const char **argv)
 	  cerr << "rename failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-        cout << "Realm name updated. Note that this change only applies to "
-            "the current cluster, so this command must be run separately "
-            "on each of the realm's other clusters." << std::endl;
+        cout << "Realm name updated. Note that the realm name is not carried "
+            "by the period, so this change does not propagate on its own. On "
+            "each of the realm's other clusters, either run this command "
+            "again or run 'radosgw-admin realm pull' to pick up the new name."
+            << std::endl;
       }
       break;
     case OPT::REALM_SET:

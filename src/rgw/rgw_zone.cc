@@ -1112,9 +1112,33 @@ int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
 
   // create the realm
   std::unique_ptr<sal::RealmWriter> writer;
-  int r = cfgstore->create_realm(dpp, y, exclusive, info, &writer);
-  if (r < 0) {
-    return r;
+  int r = 0;
+
+  // read the existing realm to detect renames
+  RGWRealm existing_realm;
+  std::unique_ptr<sal::RealmWriter> existing_writer;
+  if (!exclusive &&
+      cfgstore->read_realm_by_id(dpp, y, info.id, existing_realm,
+                                 &existing_writer) == 0 &&
+      existing_realm.name != info.name) {
+    // if the name changed, call rename() instead of create so that the old
+    // name is unlinked
+    RGWRealm new_realm = info;
+    std::string new_name = std::move(new_realm.name);
+    new_realm.name = existing_realm.name; // rename() expects current name in info
+    r = existing_writer->rename(dpp, y, new_realm, new_name);
+    if (r < 0) {
+      ldpp_dout(dpp, -1) << __func__ << " failed to rename realm from "
+          << existing_realm.name << " to " << new_name
+          << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+    writer = std::move(existing_writer);
+  } else {
+    r = cfgstore->create_realm(dpp, y, exclusive, info, &writer);
+    if (r < 0) {
+      return r;
+    }
   }
 
   if (!period) {
