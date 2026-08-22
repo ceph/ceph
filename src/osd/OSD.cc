@@ -4906,9 +4906,15 @@ int OSD::update_crush_location()
       derr << "statfs: " << cpp_strerror(r) << dendl;
       return r;
     }
+    // Weight the OSD by its data device only.  store_statfs_t::total folds in
+    // any dedicated block.db/block.wal device, so weighting by total skews
+    // placement toward DB-heavy OSDs when DB:data ratios are non-uniform.
+    // data_total excludes the metadata device(s); fall back to total for
+    // stores that do not populate it.
+    uint64_t data_total = st.data_total ? st.data_total : st.total;
     snprintf(weight, sizeof(weight), "%.4lf",
 	     std::max(.00001,
-		      double(st.total) /
+		      double(data_total) /
 		      double(1ull << 40 /* TB */)));
   }
 
