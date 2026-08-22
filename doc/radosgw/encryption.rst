@@ -94,6 +94,30 @@ This is implemented in S3 according to the `Amazon SSE-C`_ specification.
 As all key management is handled by the client, no special Ceph configuration
 is needed to support this encryption mode.
 
+A bucket can refuse new SSE-C uploads through the ``BlockedEncryptionTypes``
+element of its encryption configuration::
+
+  <ServerSideEncryptionConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Rule>
+      <BlockedEncryptionTypes>
+        <EncryptionType>SSE-C</EncryptionType>
+      </BlockedEncryptionTypes>
+    </Rule>
+  </ServerSideEncryptionConfiguration>
+
+Set :confval:`rgw_s3_block_sse_c_by_default` to ``true`` to apply this
+configuration to all newly created buckets. It defaults to ``false`` and does
+not affect existing buckets. A subsequent ``PutBucketEncryption`` request can
+change the setting for an individual bucket. Configure the option consistently
+on all RGW daemons, including across zones in a multisite deployment.
+
+While SSE-C is blocked, PutObject, CopyObject, PostObject and multipart upload
+requests that ask for SSE-C are rejected with ``403 AccessDenied``. An SSE-C
+multipart upload started before the block can no longer upload parts or
+complete; abort it instead. Objects that were encrypted before the block are
+still readable with their key. Pass ``NONE`` instead of ``SSE-C`` to allow
+SSE-C uploads again.
+
 Key Management Service
 ======================
 
