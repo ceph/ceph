@@ -1028,6 +1028,25 @@ void rgw_apply_default_account_quota(RGWQuotaInfo& quota, const ConfigProxy& con
   }
 }
 
+void RGWStorageClassQuota::dump(Formatter *f) const
+{
+  f->dump_bool("enabled", enabled);
+  f->dump_int("max_size", max_size);
+  f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
+  f->dump_int("max_objects", max_objects);
+}
+
+void RGWStorageClassQuota::decode_json(JSONObj *obj)
+{
+  if (!JSONDecoder::decode_json("max_size", max_size, obj)) {
+    int64_t max_size_kb = 0;
+    JSONDecoder::decode_json("max_size_kb", max_size_kb, obj);
+    max_size = max_size_kb * 1024;
+  }
+  JSONDecoder::decode_json("max_objects", max_objects, obj);
+  JSONDecoder::decode_json("enabled", enabled, obj);
+}
+
 void RGWQuotaInfo::dump(Formatter *f) const
 {
   f->dump_bool("enabled", enabled);
@@ -1036,6 +1055,19 @@ void RGWQuotaInfo::dump(Formatter *f) const
   f->dump_int("max_size", max_size);
   f->dump_int("max_size_kb", rgw_rounded_kb(max_size));
   f->dump_int("max_objects", max_objects);
+  
+  if (!storage_class_quotas.empty() ||
+      enforcement_mode != RGWQuotaEnforcementMode::LEGACY) {
+    f->dump_string("enforcement_mode", to_string(enforcement_mode));
+    f->open_array_section("storage_class_quotas");
+    for (const auto& [key, q] : storage_class_quotas) {
+      f->open_object_section("entry");
+      f->dump_string("key", key);
+      q.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+  }
 }
 
 std::list<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()
@@ -1047,6 +1079,15 @@ std::list<RGWQuotaInfo> RGWQuotaInfo::generate_test_instances()
   o.back().check_on_raw = true;
   o.back().max_size = 1024;
   o.back().max_objects = 1;
+  o.emplace_back();
+  o.back().enabled = true;
+  o.back().max_size = 10ULL << 30;          // 10 GiB global
+  o.back().max_objects = 1'000'000;
+  o.back().enforcement_mode = RGWQuotaEnforcementMode::HYBRID;
+  o.back().storage_class_quotas[rgw_sc_quota_key("default-placement", "SSD")] =
+    RGWStorageClassQuota{ 1LL << 30, 100'000, true };
+  o.back().storage_class_quotas[rgw_sc_quota_key("default-placement", "GLACIER")] =
+    RGWStorageClassQuota{ 100LL << 30, -1, true };
   return o;
 }
 
@@ -1063,5 +1104,28 @@ void RGWQuotaInfo::decode_json(JSONObj *obj)
 
   JSONDecoder::decode_json("check_on_raw", check_on_raw, obj);
   JSONDecoder::decode_json("enabled", enabled, obj);
+  
+  std::string mode_str;
+  if (JSONDecoder::decode_json("enforcement_mode", mode_str, obj)) {
+    RGWQuotaEnforcementMode parsed;
+    if (parse_quota_enforcement_mode(mode_str, parsed)) {
+      enforcement_mode = parsed;
+    }
+  }
+
+  JSONObj *sc_arr = obj->find_obj("storage_class_quotas");
+  if (sc_arr) {
+    storage_class_quotas.clear();
+    auto iter = sc_arr->find_first();
+    for (; !iter.end(); ++iter) {
+      JSONObj *entry = *iter;
+      std::string key;
+      JSONDecoder::decode_json("key", key, entry);
+      if (key.empty()) continue;
+      RGWStorageClassQuota q;
+      q.decode_json(entry);
+      storage_class_quotas.emplace(std::move(key), std::move(q));
+    }
+  }
 }
 
