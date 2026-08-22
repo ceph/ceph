@@ -8550,7 +8550,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   // For Crimson - only EC-optimized pools are supported.
   if (pi->is_erasure()) {
     if (crimson) {
-      if (auto r = enable_pool_ec_optimizations(*pi, true); !r) {
+      if (auto r = enable_pool_ec_optimizations(*pi, true, false); !r) {
         // for Crimson - failure is not an option
         *ss << r.error().message;
         return r.error().error;
@@ -8558,7 +8558,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     } else {
       if (cct->_conf.get_val<bool>("osd_pool_default_flag_ec_optimizations")) {
         // Silently fail if the pool cannot support ec optimizations.
-        std::ignore = enable_pool_ec_optimizations(*pi, true);
+        std::ignore = enable_pool_ec_optimizations(*pi, true, false);
       }
     }
   }
@@ -8604,7 +8604,8 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
 }
 
 tl::expected<void, ErrorNMessage>
-OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable)
+OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable,
+                                         bool yes_i_really_mean_it)
 {
   if (!p.is_erasure()) {
     return tl::unexpected(ErrorNMessage{
@@ -8635,6 +8636,12 @@ OSDMonitor::enable_pool_ec_optimizations(pg_pool_t &p, bool enable)
       return tl::unexpected(ErrorNMessage{
 	  -EINVAL,
 	  "ec optimizations not currently supported for pool profile."});
+    } else if (!yes_i_really_mean_it && (erasure_code->get_supported_optimizations() &
+        ErasureCodeInterface::FLAG_EC_PLUGIN_OPTIMIZED_EXPERIMENTAL) != 0) {
+        return tl::unexpected(ErrorNMessage{
+	  -EINVAL,
+	  "This is experimental for use in test and development and is not a "
+                  "supported configuration."});
     }
 
     if ((chunk_size % 4096) != 0) {
@@ -9244,7 +9251,9 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       return -EINVAL;
     }
     bool was_enabled = p.allows_ecoptimizations();
-    if (auto r = enable_pool_ec_optimizations(p, enable); !r) {
+    bool force = false;
+    cmd_getval(cmdmap, "yes_i_really_mean_it", force);
+    if (auto r = enable_pool_ec_optimizations(p, enable, force); !r) {
       ss << r.error().message;
       return r.error().error;
     }
@@ -15940,7 +15949,7 @@ void OSDMonitor::try_enable_stretch_mode(stringstream& ss, bool *okay,
     ss << "the 2 " << dividing_bucket
        << "instances in the cluster have differing weights "
        << weight1 << " and " << weight2
-       << " but stretch mode currently" 
+       << " but stretch mode currently"
        <<" requires the difference to be no greater than "
        << stretch_max_weight_delta * 100 << "%";
     *errcode = -EINVAL;
