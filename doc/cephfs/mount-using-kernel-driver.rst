@@ -185,8 +185,8 @@ helper will attempt to find a secret for the given ``name`` in one of the
 configured keyrings.
 
 See `User Management`_ for details on CephX user management and the mount.ceph_
-manual for a list of the options it recognizes. For troubleshooting, see
-:ref:`kernel_mount_debugging`.
+manual for a list of the options it recognizes, including the ``lazyio`` mount
+option. For troubleshooting, see :ref:`kernel_mount_debugging`.
 
 .. _fstab: ../fstab/#kernel-driver
 .. _Mount CephFS\: Prerequisites: ../mount-prerequisites
