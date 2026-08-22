@@ -15,8 +15,6 @@ import { ToastrModule } from 'ngx-toastr';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { RbdService } from '~/app/shared/api/rbd.service';
-import { SettingsService } from '~/app/shared/api/settings.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { ExecutingTask } from '~/app/shared/models/executing-task';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -49,7 +47,27 @@ describe('NotificationsSidebarComponent', () => {
       ClickOutsideModule
     ],
     declarations: [NotificationsSidebarComponent],
-    providers: [PrometheusService, SettingsService, SummaryService, NotificationService, RbdService]
+    providers: [
+      {
+        provide: PrometheusService,
+        useValue: {
+          setSilence: jasmine.createSpy('setSilence'),
+          expireSilence: jasmine.createSpy('expireSilence')
+        }
+      },
+      {
+        provide: PrometheusAlertService,
+        useValue: {
+          refresh: jasmine.createSpy('refresh')
+        }
+      },
+      {
+        provide: PrometheusNotificationService,
+        useValue: {
+          refresh: jasmine.createSpy('refresh')
+        }
+      }
+    ]
   });
 
   beforeEach(() => {
@@ -87,15 +105,11 @@ describe('NotificationsSidebarComponent', () => {
     };
 
     beforeEach(() => {
-      spyOn(TestBed.inject(PrometheusService), 'ifAlertmanagerConfigured').and.callFake((fn) =>
-        fn()
-      );
-
       prometheusAlertService = TestBed.inject(PrometheusAlertService);
-      spyOn(prometheusAlertService, 'refresh').and.stub();
-
       prometheusNotificationService = TestBed.inject(PrometheusNotificationService);
-      spyOn(prometheusNotificationService, 'refresh').and.stub();
+
+      (prometheusAlertService.refresh as jasmine.Spy).calls.reset();
+      (prometheusNotificationService.refresh as jasmine.Spy).calls.reset();
     });
 
     it('should not refresh prometheus services if not allowed', () => {

@@ -5,6 +5,7 @@ import { PrometheusService } from '~/app/shared/api/prometheus.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helper';
+import { TableComponent } from '~/app/shared/datatable/table/table.component';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
@@ -32,6 +33,7 @@ const SeverityMap = {
 export class ActiveAlertListComponent extends PrometheusListHelper implements OnInit {
   @ViewChild('externalLinkTpl', { static: true })
   externalLinkTpl: TemplateRef<any>;
+  @ViewChild(TableComponent) table: TableComponent;
   columns: CdTableColumn[];
   innerColumns: CdTableColumn[];
   tableActions: CdTableAction[];
@@ -162,6 +164,14 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
     this.route.queryParams.subscribe((params) => {
       const severity = params['severity'];
       this.filters[1].filterInitValue = SeverityMap[severity];
+      if (params['search']) {
+        setTimeout(() => {
+          if (this.table) {
+            this.table.search = params['search'];
+            this.table.updateFilter();
+          }
+        });
+      }
     });
   }
 

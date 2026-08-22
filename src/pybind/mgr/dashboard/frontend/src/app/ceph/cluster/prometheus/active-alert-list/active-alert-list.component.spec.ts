@@ -8,7 +8,6 @@ import { ToastrModule } from 'ngx-toastr';
 
 import { CephModule } from '~/app/ceph/ceph.module';
 import { ClusterModule } from '~/app/ceph/cluster/cluster.module';
-import { DashboardModule } from '~/app/ceph/dashboard/dashboard.module';
 import { CoreModule } from '~/app/core/core.module';
 import { TableActionsComponent } from '~/app/shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -30,7 +29,6 @@ describe('ActiveAlertListComponent', () => {
       ToastrModule.forRoot(),
       SharedModule,
       ClusterModule,
-      DashboardModule,
       CephModule,
       CoreModule
     ]

@@ -123,9 +123,13 @@ export enum Icons {
   vmdkDisk = 'vmdk-disk',
   checkMarkOutline = 'checkmark--outline',
   warningAlt = 'warning--alt',
+  arrowRight = 'arrow--right',
   arrowUpRight = 'arrow--up-right',
   inProgress = 'in-progress',
-  arrowDown = 'arrow--down'
+  arrowDown = 'arrow--down',
+  locked = 'locked', // Access denied, locked state
+  cloudMonitoring = 'cloud--monitoring',
+  temperature = 'temperature'
 }
 
 export enum IconSize {
@@ -162,13 +166,30 @@ export const ICON_TYPE = {
   vmdkDisk: 'vmdk-disk',
   warningAlt: 'warning--alt',
   checkMarkOutline: 'checkmark--outline',
+  arrowRight: 'arrow--right',
   arrowUpRight: ' arrow--up-right',
+  right: 'arrow--right',
   inProgress: 'in-progress',
   arrowDown: 'arrow--down',
-  warning: 'warning'
+  destroy: 'close',
+  launch: 'launch',
+  cubes: 'cube',
+  angleDoubleLeft: 'chevron--left',
+  angleDoubleRight: 'chevron--right',
+  leftArrow: 'caret--left',
+  rightArrow: 'caret--right',
+  locked: 'locked',
+  cloudMonitoring: 'cloud--monitoring',
+  trash: 'trash-can',
+  temperature: 'temperature',
+  warning: 'warning',
+  ibmCloudDedicatedHost: 'ibm-cloud--dedicated-host',
+  ibmCloudBareMetalServer: 'ibm-cloud--bare-metal-server',
+  clusterIcon: 'web-services--cluster'
 } as const;
 
 export const EMPTY_STATE_IMAGE = {
   default: 'assets/empty-state.png',
-  search: 'assets/empty-state-search.png'
+  search: 'assets/empty-state-search.png',
+  locked: 'assets/locked.png'
 } as const;
