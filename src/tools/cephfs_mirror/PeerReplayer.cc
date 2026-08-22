@@ -2280,13 +2280,13 @@ int PeerReplayer::sync_perms(const std::string& path) {
   r = ceph_statx(m_local_mount, path.c_str(), &tstx, CEPH_STATX_MODE,
 		 AT_STATX_DONT_SYNC | AT_SYMLINK_NOFOLLOW);
   if (r < 0) {
-    derr << ": failed to fetch stat for local path: "
+    derr << ": failed to fetch stat for local path=" << path << ": "
 	 << cpp_strerror(r) << dendl;
     return r;
   }
   r = ceph_chmod(m_remote_mount, path.c_str(), tstx.stx_mode);
   if (r < 0) {
-    derr << ": failed to set mode for remote path: "
+    derr << ": failed to set mode for remote path=" << path << ": "
 	 << cpp_strerror(r) << dendl;
     return r;
   }
