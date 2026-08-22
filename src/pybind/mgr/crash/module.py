@@ -233,6 +233,7 @@ class Module(MgrModule):
         return 0, val, ''
 
     @CrashCLICommand('crash post')
+    @with_crashes
     def do_post(self, inbuf: str) -> Tuple[int, str, str]:
         """
         Add a crash dump (use -i <jsonfile>)
@@ -255,8 +256,6 @@ class Module(MgrModule):
         return 0, '', ''
 
     def ls(self) -> Tuple[int, str, str]:
-        if not self.crashes:
-            self._load_crashes()
         return self.do_ls_all('')
 
     def _do_ls(self, t: Iterable[CrashT], format: Optional[str]) -> Tuple[int, str, str]:
