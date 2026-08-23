@@ -2648,6 +2648,8 @@ struct extent_info_t {
 std::ostream &operator<<(std::ostream &out, const extent_info_t &header);
 
 using segment_nonce_t = uint32_t;
+inline constexpr segment_nonce_t SEGMENT_NONCE_MASK =
+  (std::numeric_limits<segment_nonce_t>::max() >> 1) + 1;
 
 /**
  * Segment header
