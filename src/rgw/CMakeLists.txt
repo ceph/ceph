@@ -40,10 +40,6 @@ endfunction()
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
-  spdk/crc64.c
-  madler/crc64nvme.c
-  madler/crc32iso_hdlc.c
-  madler/crc32iscsi.c
   rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
