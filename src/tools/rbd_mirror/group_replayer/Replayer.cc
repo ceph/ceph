@@ -587,7 +587,7 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
     return;
   }
 
-  m_prune_group_snap = nullptr;
+  const cls::rbd::GroupSnapshot* prune_mirror_group_snap = nullptr;
   auto prune_creating_group_snaps =
     std::make_shared<std::vector<cls::rbd::GroupSnapshot>>();
   m_last_local_snap = nullptr;
@@ -615,8 +615,8 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
         last_complete_local_snap = &local_snap;
 
         // oldest complete non-primary snapshot
-        if (!m_prune_group_snap) {
-          m_prune_group_snap = &local_snap;
+        if (!prune_mirror_group_snap) {
+          prune_mirror_group_snap = &local_snap;
         }
       } else if (m_check_creating_snaps &&
         local_snap.state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATING) {
@@ -626,8 +626,8 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
   }
 
   // retain newest complete non-primary snapshot
-  if (m_prune_group_snap == last_complete_local_snap) {
-    m_prune_group_snap = nullptr;
+  if (prune_mirror_group_snap == last_complete_local_snap) {
+    prune_mirror_group_snap = nullptr;
   }
 
   // We must determine whether the local group is already primary here.
@@ -665,6 +665,11 @@ void Replayer<I>::handle_load_local_group_snapshots(int r) {
   }
 
   m_check_creating_snaps = false;
+  if (prune_mirror_group_snap) {
+    prune_mirror_group_snapshot(&locker, prune_mirror_group_snap);
+    return;
+  }
+
   if (m_resync_requested) {
     m_resync_requested = false;
     check_local_group_snapshots(&locker);
@@ -719,26 +724,6 @@ void Replayer<I>::check_local_group_snapshots(
   if (m_retry_validate_snap) {
     locker->unlock();
     schedule_load_group_snapshots();
-    return;
-  }
-
-  int r = prune_group_snapshots(locker);
-  if (r == -EAGAIN) { // retry later
-    m_refresh_snaps = false;
-    locker->unlock();
-    // Allow some time for the ImageReplayer to complete pending prune operations before retrying.
-    schedule_load_group_snapshots();
-    return;
-  }
-
-  if (r < 0) {
-    derr << "failed to prune group snapshots" << cpp_strerror(r) << dendl;
-    // ignore
-  }
-
-  if (m_refresh_snaps) {
-    m_refresh_snaps = false;
-    load_replayer(locker); // immediately reload
     return;
   }
 
@@ -809,9 +794,9 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
     m_update_group_state = false;
   }
   bool found = false;
-  bool is_mirror_snap_exist = false;
+  m_mirror_snap_to_sync = nullptr;
   std::vector<std::string> unlink_snap_uuids;
-  std::vector<cls::rbd::GroupSnapshot> user_snapshots;
+  m_user_snapshots.clear();
   auto snap = m_remote_group_snaps.end();
   for (auto remote_snap = m_remote_group_snaps.begin();
       remote_snap != m_remote_group_snaps.end(); ++remote_snap) {
@@ -829,7 +814,7 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
           if (snap->state == cls::rbd::GROUP_SNAPSHOT_STATE_CREATED) {
             dout(10) << "found remote user group snapshot: "
                      << snap->id << dendl;
-            user_snapshots.push_back(*snap);
+            m_user_snapshots.push_back(*snap);
             continue;
           }
         } else if (next_remote_snap_ns->is_primary()) {
@@ -837,7 +822,7 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
                                                 next_remote_snap_ns->complete)) {
             dout(10) << "found primary remote mirror group snapshot: "
                      << snap->id << dendl;
-            is_mirror_snap_exist = true;
+            m_mirror_snap_to_sync = &(*snap);
             break;
           }
         } else {
@@ -884,12 +869,9 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
     return;
   }
 
-  if (is_mirror_snap_exist) {
-    if (!user_snapshots.empty()) {
-      create_user_group_snapshots(locker, &(*snap), user_snapshots);
-    } else {
-      create_mirror_group_snapshot(locker, &(*snap));
-    }
+  if (m_mirror_snap_to_sync) {
+    prune_user_group_snapshots(locker);
+    return;
   } else {
     dout(10) << "all remote mirror snapshots synced: idling waiting for new "
              << "mirror snapshot" << dendl;
@@ -901,20 +883,92 @@ void Replayer<I>::scan_for_unsynced_group_snapshots(
 }
 
 template <typename I>
+void Replayer<I>::prune_user_group_snapshots(
+    std::unique_lock<ceph::mutex>* locker) {
+  dout(20) << dendl;
+  m_refresh_snaps = false;
+  std::unordered_set<std::string> remote_snap_ids;
+  for (const auto& remote_snap : m_remote_group_snaps) {
+    remote_snap_ids.insert(remote_snap.id);
+  }
+
+  // prune all eligible user snapshots in a single replayer cycle
+  int r = 0;
+  for (auto& local_snap : m_local_group_snaps) {
+    auto snap_type = cls::rbd::get_group_snap_namespace_type(
+        local_snap.snapshot_namespace);
+    if (snap_type != cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
+      continue;
+    }
+
+    if (remote_snap_ids.contains(local_snap.id)) {
+      continue;
+    }
+
+    dout(10) << "pruning user group snap in-progress: " << local_snap.name
+             << ", with id: " << local_snap.id << dendl;
+    m_in_flight_op_tracker.start_op();
+    r = prune_group_snapshot(&local_snap, locker);
+    m_in_flight_op_tracker.finish_op();
+    if (r != 0) {
+      break;
+    }
+  }
+  /*
+  * r == 0 && m_refresh_snaps == true
+  *   One or more group snapshots were successfully removed.
+  *   Reload local and remote snapshots.
+  *
+  * r == 0 && m_refresh_snaps == false
+  *   No snapshot state changes occurred.
+  *   Continue syncing the next snapshots.
+  *
+  * r == -EAGAIN
+  *   Snapshot pruning is still in progress
+  *   (typically waiting for image snapshot pruning).
+  *   Reload local and remote snapshots and retry.
+  *
+  */
+  if (r == -EAGAIN) { // retry later
+    locker->unlock();
+    // Allow some time for the ImageReplayer to complete pending prune operations before retrying.
+    schedule_load_group_snapshots();
+    return;
+  }
+
+  if (r < 0) {
+    derr << "failed to prune group snapshots" << cpp_strerror(r) << dendl;
+    handle_replay_complete(locker, r, "failed to prune user group snapshots");
+    return;
+  }
+
+  if (m_refresh_snaps) {
+    m_refresh_snaps = false;
+    load_replayer(locker); // immediately reload
+    return;
+  }
+
+  create_user_group_snapshots(locker);
+}
+
+template <typename I>
 void Replayer<I>::create_user_group_snapshots(
-    std::unique_lock<ceph::mutex>* locker,
-    cls::rbd::GroupSnapshot* mirror_snap,
-    std::vector<cls::rbd::GroupSnapshot>& user_snapshots) {
+    std::unique_lock<ceph::mutex>* locker) {
+  if (m_user_snapshots.empty()) {
+    create_mirror_group_snapshot(locker);
+    return;
+  }
+
   dout(10) << dendl;
 
-  auto ctx = new LambdaContext([this, mirror_snap](int r) {
-    handle_create_user_group_snapshots(r, mirror_snap);
+  auto ctx = new LambdaContext([this](int r) {
+    handle_create_user_group_snapshots(r);
     m_in_flight_op_tracker.finish_op();
   });
 
   auto gather_ctx = new C_Gather(g_ceph_context, ctx);
   m_in_flight_op_tracker.start_op();
-  for (auto& user_snap : user_snapshots) {
+  for (auto& user_snap : m_user_snapshots) {
     create_user_group_snapshot(&user_snap, gather_ctx->new_sub());
   }
   locker->unlock();
@@ -922,8 +976,7 @@ void Replayer<I>::create_user_group_snapshots(
 }
 
 template <typename I>
-void Replayer<I>::handle_create_user_group_snapshots(
-    int r, cls::rbd::GroupSnapshot *mirror_snap) {
+void Replayer<I>::handle_create_user_group_snapshots(int r) {
   dout(10) << dendl;
   std::unique_lock locker{m_lock};
 
@@ -937,13 +990,13 @@ void Replayer<I>::handle_create_user_group_snapshots(
     return;
   }
 
-  create_mirror_group_snapshot(&locker, mirror_snap);
+  create_mirror_group_snapshot(&locker);
 }
 
 template <typename I>
 void Replayer<I>::create_mirror_group_snapshot(
-    std::unique_lock<ceph::mutex>* locker, cls::rbd::GroupSnapshot *snap) {
-  auto group_snap_id = snap->id;
+    std::unique_lock<ceph::mutex>* locker) {
+  auto group_snap_id = m_mirror_snap_to_sync->id;
   dout(10) << group_snap_id << dendl;
 
   if (m_snapshot_start.is_zero()) {
@@ -951,7 +1004,7 @@ void Replayer<I>::create_mirror_group_snapshot(
   }
 
   const auto& snap_ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
-      snap->snapshot_namespace);
+      m_mirror_snap_to_sync->snapshot_namespace);
 
   auto snap_state =
     snap_ns.state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ?
@@ -1018,8 +1071,8 @@ void Replayer<I>::create_mirror_group_snapshot(
                                                          group_snap_id);
 
   auto comp = create_rados_callback(
-      new LambdaContext([this, snap](int r) {
-        handle_create_mirror_group_snapshot(r, snap);
+      new LambdaContext([this](int r) {
+        handle_create_mirror_group_snapshot(r);
         m_in_flight_op_tracker.finish_op();
         }));
 
@@ -1033,9 +1086,9 @@ void Replayer<I>::create_mirror_group_snapshot(
 }
 
 template <typename I>
-void Replayer<I>::handle_create_mirror_group_snapshot(
-    int r, cls::rbd::GroupSnapshot *snap) {
-  dout(10) << "group_snap_id=" << snap->id << ", r=" << r << dendl;
+void Replayer<I>::handle_create_mirror_group_snapshot(int r) {
+  auto group_snap_id = m_mirror_snap_to_sync->id;
+  dout(10) << "group_snap_id=" << group_snap_id << ", r=" << r << dendl;
   std::unique_lock locker{m_lock};
 
   if (is_replay_interrupted(&locker)) {
@@ -1043,32 +1096,32 @@ void Replayer<I>::handle_create_mirror_group_snapshot(
   }
 
   if (r < 0) {
-    derr << "failed to create mirror snapshot: " << snap->id
+    derr << "failed to create mirror snapshot: " << group_snap_id
          << ", error: " << cpp_strerror(r) << dendl;
     handle_replay_complete(&locker, r, "failed to create mirror snapshot");
     return;
   }
 
   m_retry_validate_snap = true;
-  update_local_group_state(&locker, snap);
+  update_local_group_state(&locker);
 }
 
 template <typename I>
-void Replayer<I>::update_local_group_state(std::unique_lock<ceph::mutex>* locker,
-                                           cls::rbd::GroupSnapshot* snap) {
+void Replayer<I>::update_local_group_state(
+    std::unique_lock<ceph::mutex>* locker) {
   dout(10) << dendl;
   if (!m_update_group_state) {
     // if m_replayer in the ImageReplayer is null this cannot be forwarded.
     // May be we should retry this setting in the validate_image_snaps_sync_complete().
     // Same for image_replayer->prune_snapshot(); setting actually!!!!
-    set_image_replayer_limits("", snap, locker);
+    set_image_replayer_limits("", m_mirror_snap_to_sync, locker);
     locker->unlock();
     schedule_load_group_snapshots();
     return;
   }
 
-  auto ctx = new LambdaContext([this, snap](int r) {
-    handle_update_local_group_state(r, snap);
+  auto ctx = new LambdaContext([this](int r) {
+    handle_update_local_group_state(r);
      m_in_flight_op_tracker.finish_op();
   });
 
@@ -1083,8 +1136,7 @@ void Replayer<I>::update_local_group_state(std::unique_lock<ceph::mutex>* locker
 }
 
 template <typename I>
-void Replayer<I>::handle_update_local_group_state(int r,
-    cls::rbd::GroupSnapshot* snap) {
+void Replayer<I>::handle_update_local_group_state(int r) {
   std::unique_lock locker{m_lock};
   dout(10) << dendl;
   if (is_replay_interrupted(&locker)) {
@@ -1098,7 +1150,7 @@ void Replayer<I>::handle_update_local_group_state(int r,
   }
 
   m_update_group_state = false;
-  set_image_replayer_limits("", snap, &locker);
+  set_image_replayer_limits("", m_mirror_snap_to_sync, &locker);
   locker.unlock();
   schedule_load_group_snapshots();
 }
@@ -1255,12 +1307,17 @@ void Replayer<I>::post_mirror_snapshot_created(
     }
   }
 
-  // Old synced user snap is removed and not yet reflecting locally, wait for it.
   bool prune_user_snap = false ;
   std::unordered_set<std::string> remote_snap_ids;
   remote_snap_ids.reserve(m_remote_group_snaps.size());
   for (const auto& remote_snap : m_remote_group_snaps) {
     remote_snap_ids.insert(remote_snap.id);
+  }
+
+  std::unordered_set<std::string> current_user_snap_ids;
+  current_user_snap_ids.reserve(m_user_snapshots.size());
+  for (const auto& user_snap : m_user_snapshots) {
+    current_user_snap_ids.insert(user_snap.id);
   }
 
   for (auto& local_snap : m_local_group_snaps) {
@@ -1273,8 +1330,17 @@ void Replayer<I>::post_mirror_snapshot_created(
     if (remote_snap_ids.contains(local_snap.id)) {
       continue;
     }
+    if (!current_user_snap_ids.contains(local_snap.id)) {
+      continue;
+    }
 
-    // there is a user group snap removed on remote, so lets wait for it to removed locally
+    // FIXME: with the current group replayer code, we may end up with
+    // image user snapshots without a corresponding user group snapshot
+    // because of this pruning. Need to decide whether to keep this pruning
+    // or not after analyzing standalone images behavior.
+
+    // user group snap associated with the in-sync mirror group snapshot
+    // removed on remote, so prune it locally
     prune_user_snap = true;
     int r = prune_group_snapshot(&local_snap, &locker);
     if (r != 0) {
@@ -2062,87 +2128,30 @@ void Replayer<I>::handle_prune_creating_group_snapshots(
   load_replayer(&locker);
 }
 
-/* prune_group_snapshots() semantics:
- *
- * r == 0 && m_refresh_snaps == true
- *   One or more group snapshots were successfully removed.
- *   Reload local and remote snapshots.
- *
- * r == 0 && m_refresh_snaps == false
- *   No snapshot state changes occurred.
- *   Continue syncing the next snapshots.
- *
- * r == -EAGAIN
- *   Snapshot pruning is still in progress
- *   (typically waiting for image snapshot pruning).
- *   Reload local and remote snapshots and retry.
- *
- * r < 0 && r != -EAGAIN
- *   Return the errno to caller.
- */
-
 template <typename I>
-int Replayer<I>::prune_group_snapshots(
-    std::unique_lock<ceph::mutex>* locker) {
-  dout(10) << dendl;
-
-  m_refresh_snaps = false;
-  int r = prune_user_group_snapshots(locker);
-  if (r != 0) {
-    return r;
-  }
-
-  return prune_mirror_group_snapshot(locker);
-}
-
-template <typename I>
-int Replayer<I>::prune_user_group_snapshots(
-    std::unique_lock<ceph::mutex>* locker) {
-  dout(20) << dendl;
-
-  std::unordered_set<std::string> remote_snap_ids;
-  for (const auto& remote_snap : m_remote_group_snaps) {
-    remote_snap_ids.insert(remote_snap.id);
-  }
-
-  // prune all eligible user snapshots in a single replayer cycle
-  for (auto& local_snap : m_local_group_snaps) {
-    auto snap_type = cls::rbd::get_group_snap_namespace_type(
-        local_snap.snapshot_namespace);
-    if (snap_type != cls::rbd::GROUP_SNAPSHOT_NAMESPACE_TYPE_USER) {
-      continue;
-    }
-
-    if (remote_snap_ids.contains(local_snap.id)) {
-      continue;
-    }
-
-    dout(10) << "pruning user group snap in-progress: " << local_snap.name
-             << ", with id: " << local_snap.id << dendl;
-    int r = prune_group_snapshot(&local_snap, locker);
-    if (r != 0) {
-      return r;
-    }
-  }
-
-  return 0;
-}
-
-template <typename I>
-int Replayer<I>::prune_mirror_group_snapshot(
-    std::unique_lock<ceph::mutex>* locker) {
-  dout(20) << dendl;
-
+void Replayer<I>::prune_mirror_group_snapshot(
+    std::unique_lock<ceph::mutex>* locker,
+    const cls::rbd::GroupSnapshot* snap) {
   // prune only a single mirror snapshot per replayer cycle
-  if (!m_prune_group_snap) {
-    return 0;
+  dout(10) << "pruning mirror group snap in-progress: "
+           << snap->name << ", with id: " << snap->id << dendl;
+  m_in_flight_op_tracker.start_op();
+  int r = prune_group_snapshot(snap, locker);
+  m_in_flight_op_tracker.finish_op();
+  if (r == -EAGAIN) { // retry later
+    locker->unlock();
+    // Allow some time for the ImageReplayer to complete pending prune operations before retrying.
+    schedule_load_group_snapshots();
+    return;
   }
 
-  dout(10) << "pruning mirror group snap in-progress: "
-           << m_prune_group_snap->name << ", with id: "
-           << m_prune_group_snap->id << dendl;
+  if (r < 0) {
+    derr << "failed to prune mirror group snapshot" << dendl;
+    handle_replay_complete(locker, r, "failed to prune mirror group snapshot");
+    return;
+  }
 
-  return prune_group_snapshot(m_prune_group_snap, locker);
+  load_replayer(locker);
 }
 
 template <typename I>
