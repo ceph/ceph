@@ -10718,7 +10718,6 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
     ceph_assert(ctx->new_obs.oi.soid.snap == CEPH_NOSNAP);
     ctx->new_snapset = SnapSet();
     ctx->new_snapset.from_snap_set(cb->results->snapset, false);
-    ctx->obc->ssc->snapset = ctx->new_snapset;
     if (cb->pool_migration) {
       // During pool migration there may be snaps that are pending
       // a trim in the source pool that will make it unnecessary
@@ -10761,6 +10760,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
         ++it;
       }
     }
+    ctx->obc->ssc->snapset = ctx->new_snapset;
   }
 
   if (cb->results->has_omap) {
