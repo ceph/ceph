@@ -9350,13 +9350,13 @@ void PrimaryLogPG::apply_stats(
 
 #ifdef WITH_OSD_CUOBJ
 bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
-			       std::vector<uint64_t>& oob)
+			       std::vector<ceph::rdma::oob_result_t>& oob)
 {
   auto m = ctx->op->get_req<MOSDOp>();
   const auto& d = m->get_rdma_delivery();
-  if (d.flags != 0) {
-    // reserved flag bits we do not implement: deliver inline so
-    // future semantics degrade safely
+  if (d.flags & ~ceph::rdma::delivery_t::KNOWN_FLAGS) {
+    // flag bits we do not implement: deliver inline so future
+    // semantics degrade safely
     return false;
   }
   // a resent op could double-execute against client memory while the
@@ -9459,7 +9459,7 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
     encode(sparse_extents, data_op->outdata);
     encode(bufferlist(), data_op->outdata);
   }
-  oob[data_idx] = static_cast<uint64_t>(pushed);
+  oob[data_idx].bytes = static_cast<uint64_t>(pushed);
   return true;
 }
 #endif // WITH_OSD_CUOBJ
@@ -9491,9 +9491,9 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
     // reply's own copy via the claim_ops swap.
     std::vector<OSDOp> rops;
     reply->claim_ops(rops);
-    std::vector<uint64_t> oob(rops.size(), 0);
+    std::vector<ceph::rdma::oob_result_t> oob(rops.size());
     if (deliver_oob(ctx, rops, oob)) {
-      reply->set_oob_bytes(std::move(oob));
+      reply->set_oob_results(std::move(oob));
     }
     reply->claim_ops(rops);
   }

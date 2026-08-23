@@ -8772,10 +8772,11 @@ int RGWRados::get_obj_iterate_cb(const DoutPrefixProvider *dpp,
     // reports the byte count through the slot; any other OSD returns
     // the data inline, which flush_rdma treats as the fallback signal
     op.read(read_ofs, len, nullptr, nullptr);
-    d->rdma_slots.emplace_back(0);
+    d->rdma_slots.emplace_back();
     op.set_rdma_delivery(d->rdma_token,
                          uint64_t(obj_ofs) - d->rdma_range_start,
-                         d->rdma_lease_ms, &d->rdma_slots.back());
+                         d->rdma_lease_ms, d->rdma_flags,
+                         &d->rdma_slots.back());
     d->rdma_ops_sent = true;
   } else {
     op.read(read_ofs, len, nullptr, nullptr);
@@ -8836,8 +8837,8 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
   if (data.rdma && params.rdma_bytes) {
     // all completions are drained, so every slot is final
     uint64_t total = 0;
-    for (auto b : data.rdma_slots) {
-      total += b;
+    for (const auto& r : data.rdma_slots) {
+      total += r.bytes;
     }
     *params.rdma_bytes = total;
   }

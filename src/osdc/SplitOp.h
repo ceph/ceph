@@ -276,8 +276,8 @@ class SplitOp {
     mini_flat_map<int, Details> details;
     int rc = -EIO;
     std::optional<InternalVersion> internal_version;
-    /// bytes this sub-read's OSD delivered out of band (rdma delivery)
-    uint64_t oob = 0;
+    /// this sub-read's out-of-band delivery result (rdma delivery)
+    ceph::rdma::oob_result_t oob;
 
     SubRead(int count) : details(count) {}
   };

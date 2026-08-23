@@ -3974,12 +3974,18 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
 
-  if (op->rdma_oob_bytes) {
-    uint64_t oob_total = 0;
-    for (auto b : m->get_oob_bytes()) {
-      oob_total += b;
+  if (op->rdma_oob_result) {
+    // at most one data op goes out of band per operation, so at most
+    // one entry carries a crc; bytes sum across entries regardless
+    ceph::rdma::oob_result_t res;
+    for (const auto& r : m->get_oob_results()) {
+      res.bytes += r.bytes;
+      if (r.flags & ceph::rdma::oob_result_t::FLAG_CRC64NVME) {
+	res.crc64 = r.crc64;
+	res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME;
+      }
     }
-    *op->rdma_oob_bytes = oob_total;
+    *op->rdma_oob_result = res;
   }
 
   bs::error_code handler_error = process_op_reply_handlers(op, out_ops);
