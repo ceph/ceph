@@ -6034,7 +6034,7 @@ INSTANTIATE_TEST_SUITE_P(
     { "max_size", "1048576" },
     { "alignment", "16" },
     { "bluestore_csum_type", "crc32c", "crc32c_16", "crc32c_8", "xxhash32",
-      "xxhash64", "none" },
+      "xxhash64", "crc64nvme", "none" },
     { "bluestore_default_buffered_write", "false" }
   }))
 );
