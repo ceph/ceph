@@ -15,7 +15,9 @@
 #include <ctype.h>
 #include <sstream>
 #include "ObjectStore.h"
+#include "common/Checksummer.h"
 #include "common/Formatter.h"
+#include "common/crc64nvme.h"
 #include "common/safe_io.h"
 
 #include "memstore/MemStore.h"
@@ -55,6 +57,30 @@ std::unique_ptr<ObjectStore> ObjectStore::create(
   return create(cct, type, data);
 }
 
+
+int ObjectStore::read_range_checksum(
+  CollectionHandle& c,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t len,
+  int csum_type,
+  uint64_t* out_csum,
+  const ceph::buffer::list* data)
+{
+  if (!data) {
+    return -EOPNOTSUPP;
+  }
+  switch (csum_type) {
+  case Checksummer::CSUM_CRC64NVME:
+    *out_csum = ceph::crc64nvme(*data);
+    return 1;
+  case Checksummer::CSUM_CRC32C:
+    *out_csum = data->crc32c(-1);
+    return 1;
+  default:
+    return -EOPNOTSUPP;
+  }
+}
 
 int ObjectStore::probe_block_device_fsid(
   CephContext *cct,

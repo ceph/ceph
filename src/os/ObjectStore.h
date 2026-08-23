@@ -513,6 +513,43 @@ public:
 		      uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
+   * read_range_checksum -- checksum of an object range, served from
+   * stored checksum metadata where possible
+   *
+   * The result equals the checksum of the bytes read(offset, len) would
+   * return (the range is clamped at the object size and holes count as
+   * zeros), under the requested algorithm's convention: crc64nvme values
+   * are the canonical CRC-64/NVME, crc32c values are seeded with -1.
+   *
+   * Backends that store combinable per-block checksums of the requested
+   * type covering the whole range derive the result from metadata alone
+   * and return 0 -- no data is read. Otherwise, if the caller supplies
+   * the bytes of the range in @c data (typically the bufferlist a read
+   * it already issued returned; no payload is copied), the checksum is
+   * computed over them and 1 is returned. With no data to fall back on
+   * the call is a pure metadata probe: -EOPNOTSUPP tells the caller to
+   * choose its own fallback. Only crc32c and crc64nvme are served --
+   * xxhash values do not combine, and the truncated crc32c variants do
+   * not store enough state to be extended.
+   *
+   * @param c collection for object
+   * @param oid oid of object
+   * @param offset location offset of first byte of the range
+   * @param len number of bytes in the range
+   * @param csum_type requested algorithm (Checksummer::CSumType)
+   * @param out_csum the checksum value
+   * @param data optionally, the bytes read(offset, len) returns, to
+   *        compute over when metadata cannot serve the value
+   * @returns 0 if derived from metadata, 1 if computed over @c data,
+   *          -EOPNOTSUPP if neither is possible, other negative error
+   *          code on failure.
+   */
+  virtual int read_range_checksum(CollectionHandle& c, const ghobject_t& oid,
+				  uint64_t offset, size_t len,
+				  int csum_type, uint64_t* out_csum,
+				  const ceph::buffer::list* data = nullptr);
+
+  /**
    * readv -- read specfic intervals from an object;
    * caller must call fiemap to fill in the extent-map first.
    *
