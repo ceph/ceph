@@ -6,6 +6,7 @@
 #include <fmt/chrono.h>
 #include <seastar/core/metrics.hh>
 
+#include "crimson/common/coroutine.h"
 #include "crimson/os/seastore/logging.h"
 
 #include "crimson/os/seastore/async_cleaner.h"
@@ -1568,94 +1569,85 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
   register_metrics();
 
   INFO("{} segments", segments.get_num_segments());
-  return crimson::do_for_each(
-    segments.begin(),
-    segments.end(),
-    [this, FNAME](auto& it)
-  {
-    auto segment_id = it.first;
-    return sm_group->read_segment_header(
-      segment_id
-    ).safe_then([segment_id, this, FNAME](auto header) {
-      DEBUG("segment_id={} -- {}", segment_id, header);
-      auto s_type = header.get_type();
-      if (s_type == segment_type_t::NULL_SEG) {
-        ERROR("got null segment, segment_id={} -- {}", segment_id, header);
-        ceph_abort();
-      }
-      return sm_group->read_segment_tail(
-        segment_id
-      ).safe_then([this, FNAME, segment_id, header](auto tail)
-        -> scan_extents_ertr::future<> {
-	bool tail_valid = (tail.segment_nonce == header.segment_nonce);
-        if (!tail_valid && header.type == segment_type_t::JOURNAL) {
-          return scan_no_tail_segment(header, segment_id);
-        }
-        ceph_assert(header.get_type() == tail.get_type() || !tail_valid);
-
-	sea_time_point header_time = mod_to_timepoint(header.modify_time);
-	if (tail_valid) {
-	  sea_time_point tail_time = mod_to_timepoint(tail.modify_time);
-	  std::size_t num_extents = tail.num_extents;
-	  DEBUG("updating modify time for segment {}, "
-		"mod time {}-{}, num_extents {}",
-		segment_id, header_time, tail_time, num_extents);
-	  if (num_extents == 0) {
-	    ceph_assert(tail_time == NULL_TIME);
-	  } else {
-	    ceph_assert(header_time != NULL_TIME);
-	    ceph_assert(tail_time != NULL_TIME);
-	    sea_time_point avg_time = get_average_time(
-	      header_time, 1, tail_time, 1);
-	    segments.update_modify_time(segment_id, avg_time, num_extents);
-	  }
-	} else {
-	  DEBUG("updating modify time for segment {}, mod time {}, without tail",
-		segment_id, header_time);
-	  segments.init_modify_time(segment_id, header_time);
-	}
-
-        init_mark_segment_closed(
-          segment_id,
-          header.segment_seq,
-          header.type,
-          header.category,
-          header.generation);
-        return seastar::now();
-      }).handle_error(
-        crimson::ct_error::enodata::handle(
-          [this, header, segment_id, FNAME](auto) {
-	  if (header.type == segment_type_t::JOURNAL) {
-	    return scan_no_tail_segment(header, segment_id);
-	  } else {
-	    sea_time_point modify_time = mod_to_timepoint(header.modify_time);
-	    DEBUG("updating modify time for segment {}, mod time {}",
-	      segment_id, modify_time);
-	    segments.init_modify_time(segment_id, modify_time);
-	    init_mark_segment_closed(
-	      segment_id,
-	      header.segment_seq,
-	      header.type,
-	      header.category,
-	      header.generation);
-	    return scan_extents_ertr::now();
-	  }
-        }),
-        crimson::ct_error::pass_further_all{}
-      );
-    }).handle_error(
+  for (auto &[segment_id, _] : segments) {
+    auto header = co_await sm_group->read_segment_header(segment_id
+    ).handle_error(
       crimson::ct_error::enoent::handle([](auto) {
-        return mount_ertr::now();
+        return mount_ertr::make_ready_future<
+          segment_header_t>(NULL_SEGMENT_HEADER);
       }),
       crimson::ct_error::enodata::handle([](auto) {
-        return mount_ertr::now();
+        return mount_ertr::make_ready_future<
+          segment_header_t>(NULL_SEGMENT_HEADER);
       }),
       crimson::ct_error::input_output_error::pass_further{},
       crimson::ct_error::assert_all("unexpected error")
     );
-  }).safe_then([this, FNAME] {
-    INFO("done, {}", segments);
-  });
+    DEBUG("segment_id={} -- {}", segment_id, header);
+    auto s_type = header.get_type();
+    if (s_type == segment_type_t::NULL_SEG) {
+      ERROR("got null segment, segment_id={} -- {}", segment_id, header);
+      ceph_abort();
+    }
+    auto tail = co_await sm_group->read_segment_tail(segment_id
+    ).handle_error(
+      crimson::ct_error::enodata::handle([](auto) {
+        return mount_ertr::make_ready_future<
+          segment_tail_t>(NULL_SEGMENT_TAIL);
+      }),
+      crimson::ct_error::enoent::handle([](auto) {
+        return mount_ertr::make_ready_future<
+          segment_tail_t>(NULL_SEGMENT_TAIL);
+      }),
+      crimson::ct_error::pass_further_all{}
+    );
+    bool tail_valid = (tail.segment_nonce == header.segment_nonce);
+    if (!tail_valid && header.type == segment_type_t::JOURNAL) {
+      co_await scan_no_tail_segment(header, segment_id
+      ).handle_error(
+        crimson::ct_error::enoent::handle([](auto) {
+          return mount_ertr::now();
+        }),
+        crimson::ct_error::enodata::handle([](auto) {
+          return mount_ertr::now();
+        }),
+        crimson::ct_error::input_output_error::pass_further{},
+        crimson::ct_error::assert_all("unexpected error")
+      );
+    } else {
+      ceph_assert(header.get_type() == tail.get_type() || !tail_valid);
+
+      sea_time_point header_time = mod_to_timepoint(header.modify_time);
+      if (tail_valid) {
+        sea_time_point tail_time = mod_to_timepoint(tail.modify_time);
+        std::size_t num_extents = tail.num_extents;
+        DEBUG("updating modify time for segment {}, "
+              "mod time {}-{}, num_extents {}",
+              segment_id, header_time, tail_time, num_extents);
+        if (num_extents == 0) {
+          ceph_assert(tail_time == NULL_TIME);
+        } else {
+          ceph_assert(header_time != NULL_TIME);
+          ceph_assert(tail_time != NULL_TIME);
+          sea_time_point avg_time = get_average_time(
+            header_time, 1, tail_time, 1);
+          segments.update_modify_time(segment_id, avg_time, num_extents);
+        }
+      } else {
+        DEBUG("updating modify time for segment {}, mod time {}, without tail",
+              segment_id, header_time);
+        segments.init_modify_time(segment_id, header_time);
+      }
+
+      init_mark_segment_closed(
+        segment_id,
+        header.segment_seq,
+        header.type,
+        header.category,
+        header.generation);
+    }
+  }
+  INFO("done, {}", segments);
 }
 
 SegmentCleaner::scan_extents_ret SegmentCleaner::scan_no_tail_segment(
