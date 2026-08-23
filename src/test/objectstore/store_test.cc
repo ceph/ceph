@@ -37,6 +37,8 @@
 #include "include/Context.h"
 #include "common/buffer_instrumentation.h"
 #include "common/ceph_argparse.h"
+#include "common/Checksummer.h"
+#include "common/crc64nvme.h"
 #include "common/admin_socket.h"
 #include "global/global_init.h"
 #include "common/ceph_mutex.h"
@@ -7489,6 +7491,158 @@ TEST_P(StoreTest, TryMoveRename) {
 }
 
 #if defined(WITH_BLUESTORE)
+TEST_P(StoreTestSpecificAUSize, ReadRangeChecksum) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  StartDeferred(4096);
+  SetVal(g_conf(), "bluestore_csum_type", "crc64nvme");
+  g_conf().apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("rangecsum", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  // 64K of data at 0, a 64K hole, 32K of data at 128K
+  std::string pat1(0x10000, 0), pat2(0x8000, 0);
+  for (size_t i = 0; i < pat1.size(); i++)
+    pat1[i] = char(i * 31 + 7);
+  for (size_t i = 0; i < pat2.size(); i++)
+    pat2[i] = char(i * 131 + 3);
+  {
+    ObjectStore::Transaction t;
+    bufferlist b1, b2;
+    b1.append(pat1);
+    b2.append(pat2);
+    t.write(cid, hoid, 0, b1.length(), b1);
+    t.write(cid, hoid, 0x20000, b2.length(), b2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  auto expect_range = [&](uint64_t off, uint64_t len) {
+    bufferlist bl;
+    r = store->read(ch, hoid, off, len, bl);
+    ASSERT_GE(r, 0);
+    uint64_t crc = 1;
+    ASSERT_EQ(0, store->read_range_checksum(
+		ch, hoid, off, len, Checksummer::CSUM_CRC64NVME, &crc));
+    ASSERT_EQ(ceph::crc64nvme(bl), crc) << std::hex << off << "~" << len;
+  };
+  expect_range(0, 0x28000);        // whole object
+  expect_range(0x1000, 0xe000);    // aligned sub-range of one blob
+  expect_range(0x11000, 0x4000);   // inside the hole
+  expect_range(0xc000, 0x1c000);   // data + hole + data
+  expect_range(0x20000, 0x10000);  // clamped at object size
+  expect_range(0x30000, 0x1000);   // entirely past eof (empty)
+
+  uint64_t crc;
+  // partially covered csum blocks are not derivable
+  ASSERT_EQ(-EOPNOTSUPP, store->read_range_checksum(
+	      ch, hoid, 100, 0x1000, Checksummer::CSUM_CRC64NVME, &crc));
+  ASSERT_EQ(-EOPNOTSUPP, store->read_range_checksum(
+	      ch, hoid, 0, 100, Checksummer::CSUM_CRC64NVME, &crc));
+  // the requested type must match what the blob stores
+  ASSERT_EQ(-EOPNOTSUPP, store->read_range_checksum(
+	      ch, hoid, 0, 0x1000, Checksummer::CSUM_CRC32C, &crc));
+  ASSERT_EQ(-ENOENT, store->read_range_checksum(
+	      ch, ghobject_t(hobject_t(sobject_t("nope", CEPH_NOSNAP))),
+	      0, 0x1000, Checksummer::CSUM_CRC64NVME, &crc));
+
+  // with the caller's read data supplied, non-derivable requests are
+  // computed over it (return 1); derivable ones still prefer metadata
+  // (return 0); errors are not papered over by the fallback
+  {
+    bufferlist bl;
+    r = store->read(ch, hoid, 100, 0x1000, bl);
+    ASSERT_EQ(0x1000, r);
+    ASSERT_EQ(1, store->read_range_checksum(
+		ch, hoid, 100, 0x1000, Checksummer::CSUM_CRC64NVME, &crc, &bl));
+    ASSERT_EQ(ceph::crc64nvme(bl), crc);
+    ASSERT_EQ(1, store->read_range_checksum(
+		ch, hoid, 100, 0x1000, Checksummer::CSUM_CRC32C, &crc, &bl));
+    ASSERT_EQ(uint64_t(bl.crc32c(-1)), crc);
+    // xxhash is never served: it neither combines nor computes here
+    ASSERT_EQ(-EOPNOTSUPP, store->read_range_checksum(
+		ch, hoid, 100, 0x1000, Checksummer::CSUM_XXHASH64, &crc, &bl));
+    bufferlist bl2;
+    r = store->read(ch, hoid, 0, 0x1000, bl2);
+    ASSERT_EQ(0x1000, r);
+    ASSERT_EQ(0, store->read_range_checksum(
+		ch, hoid, 0, 0x1000, Checksummer::CSUM_CRC64NVME, &crc, &bl2));
+    ASSERT_EQ(ceph::crc64nvme(bl2), crc);
+    ASSERT_EQ(-ENOENT, store->read_range_checksum(
+		ch, ghobject_t(hobject_t(sobject_t("nope", CEPH_NOSNAP))),
+		0, 0x1000, Checksummer::CSUM_CRC64NVME, &crc, &bl2));
+  }
+
+  // crc32c blobs derive with the same walk, folded with the zeros
+  // operator; values follow the Checksummer convention (seed -1)
+  SetVal(g_conf(), "bluestore_csum_type", "crc32c");
+  g_conf().apply_changes(nullptr);
+  ghobject_t hoid32(hobject_t(sobject_t("rangecsum32", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    bufferlist b1, b2;
+    b1.append(pat1);
+    b2.append(pat2);
+    t.write(cid, hoid32, 0, b1.length(), b1);
+    t.write(cid, hoid32, 0x20000, b2.length(), b2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  auto expect_range32 = [&](uint64_t off, uint64_t len) {
+    bufferlist bl;
+    r = store->read(ch, hoid32, off, len, bl);
+    ASSERT_GE(r, 0);
+    uint64_t crc32 = 1;
+    ASSERT_EQ(0, store->read_range_checksum(
+		ch, hoid32, off, len, Checksummer::CSUM_CRC32C, &crc32));
+    ASSERT_EQ(uint64_t(bl.crc32c(-1)), crc32) << std::hex << off << "~" << len;
+  };
+  expect_range32(0, 0x28000);        // whole object
+  expect_range32(0x1000, 0xe000);    // aligned sub-range of one blob
+  expect_range32(0x11000, 0x4000);   // inside the hole
+  expect_range32(0xc000, 0x1c000);   // data + hole + data
+  expect_range32(0x20000, 0x10000);  // clamped at object size
+  expect_range32(0x30000, 0x1000);   // entirely past eof (empty)
+  ASSERT_EQ(-EOPNOTSUPP, store->read_range_checksum(
+	      ch, hoid32, 0, 0x1000, Checksummer::CSUM_CRC64NVME, &crc));
+
+  SetVal(g_conf(), "bluestore_csum_type", "none");
+  g_conf().apply_changes(nullptr);
+  {
+    ObjectStore::Transaction t;
+    bufferlist b1, b2;
+    b1.append(std::string(0x1000, 'x'));
+    b2.append(std::string(0x1000, 'y'));
+    // in-place overwrite: the existing blob keeps (and recalculates)
+    // its crc64nvme metadata regardless of the current store setting
+    t.write(cid, hoid, 0, b1.length(), b1);
+    // fresh region: a new blob, written without checksums
+    t.write(cid, hoid, 0x40000, b2.length(), b2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  expect_range(0, 0x2000);         // overwritten blocks still derive
+  ASSERT_EQ(-EOPNOTSUPP, store->read_range_checksum(
+	      ch, hoid, 0x40000, 0x1000, Checksummer::CSUM_CRC64NVME, &crc));
+  {
+    // ... but the caller's data still yields a value for it
+    bufferlist bl;
+    r = store->read(ch, hoid, 0x40000, 0x1000, bl);
+    ASSERT_EQ(0x1000, r);
+    ASSERT_EQ(1, store->read_range_checksum(
+		ch, hoid, 0x40000, 0x1000, Checksummer::CSUM_CRC64NVME,
+		&crc, &bl));
+    ASSERT_EQ(ceph::crc64nvme(bl), crc);
+  }
+}
+
 TEST_P(StoreTest, BluestoreOnOffCSumTest) {
   if (string(GetParam()) != "bluestore")
     return;

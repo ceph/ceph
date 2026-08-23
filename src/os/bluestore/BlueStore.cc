@@ -43,6 +43,8 @@
 #include "include/stringify.h"
 #include "include/str_map.h"
 #include "include/util.h"
+#include "common/crc64nvme.h"
+#include "include/crc32c.h"
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/JSONFormatter.h"
@@ -13554,6 +13556,130 @@ int BlueStore::fiemap(
     destmap = std::move(m).detach();
   }
   return r;
+}
+
+int BlueStore::read_range_checksum(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t length,
+  int csum_type,
+  uint64_t* out_csum,
+  const ceph::buffer::list* data)
+{
+  int r = _derive_range_checksum(c_, oid, offset, length, csum_type, out_csum);
+  if (r == -EOPNOTSUPP) {
+    // not derivable from metadata; compute over the caller-provided
+    // bytes, if any (other errors, e.g. ENOENT, propagate: stale data
+    // must not paper over them)
+    r = ObjectStore::read_range_checksum(c_, oid, offset, length,
+					 csum_type, out_csum, data);
+  }
+  return r;
+}
+
+int BlueStore::_derive_range_checksum(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  uint64_t offset,
+  size_t length,
+  int csum_type,
+  uint64_t* out_csum)
+{
+  const bool is64 = (csum_type == Checksummer::CSUM_CRC64NVME);
+  if (!is64 && csum_type != Checksummer::CSUM_CRC32C) {
+    // xxhash values do not combine; the truncated crc32c variants do
+    // not store enough state to be extended
+    return -EOPNOTSUPP;
+  }
+  Collection *c = static_cast<Collection *>(c_.get());
+  if (!c->exists)
+    return -ENOENT;
+  std::shared_lock l(c->lock);
+
+  OnodeRef o = c->get_onode(oid, false);
+  if (!o || !o->exists) {
+    return -ENOENT;
+  }
+  dout(15) << __func__ << " 0x" << std::hex << offset << "~" << length
+	   << " size 0x" << o->onode.size << std::dec << dendl;
+
+  if (offset >= o->onode.size) {
+    length = 0;
+  } else if (offset + length > o->onode.size) {
+    length = o->onode.size - offset;
+  }
+  // checksum of the empty string: canonical crc64nvme seeds with 0,
+  // crc32c follows the Checksummer convention of seeding with -1
+  uint64_t crc = is64 ? 0 : 0xffffffff;
+  // crc32c: advance the running value over len zero bytes
+  // (ceph_crc32c_zeros takes a 32-bit length)
+  auto crc32c_zeros64 = [](uint32_t crc32, uint64_t len) {
+    while (len) {
+      unsigned n = std::min<uint64_t>(len, 0x80000000u);
+      crc32 = ceph_crc32c_zeros(crc32, n);
+      len -= n;
+    }
+    return crc32;
+  };
+  if (length > 0) {
+    o->extent_map.fault_range(db, offset, length);
+  }
+  auto eend = o->extent_map.extent_map.end();
+  auto ep = o->extent_map.seek_lextent(offset);
+  while (length > 0) {
+    if (ep != eend && ep->logical_offset + ep->length <= offset) {
+      ++ep;
+      continue;
+    }
+    uint64_t x_len = length;
+    if (ep != eend && ep->logical_offset <= offset) {
+      const bluestore_blob_t& b = ep->blob->get_blob();
+      uint64_t x_off = offset - ep->logical_offset;
+      x_len = std::min<uint64_t>(x_len, ep->length - x_off);
+      if (b.is_compressed() || b.csum_type != csum_type) {
+	return -EOPNOTSUPP;
+      }
+      uint64_t cs = b.get_csum_chunk_size();
+      uint64_t b_off = ep->blob_offset + x_off;
+      if (b_off % cs || x_len % cs) {
+	// a partially covered csum block cannot be derived: the stored
+	// value also covers blob bytes outside the logical range
+	return -EOPNOTSUPP;
+      }
+      for (uint64_t i = b_off / cs; i < (b_off + x_len) / cs; i++) {
+	if (is64) {
+	  crc = ceph::crc64nvme_combine(crc, b.get_csum_item(i), cs);
+	} else {
+	  // crc32c(R, block) = stored ^ zeros(R ^ -1, len), the same
+	  // identity bufferlist's cached-crc combine relies on
+	  crc = b.get_csum_item(i) ^
+	    crc32c_zeros64(uint32_t(crc) ^ 0xffffffffu, cs);
+	}
+      }
+      offset += x_len;
+      length -= x_len;
+      if (x_off + x_len == ep->length) {
+	++ep;
+      }
+      continue;
+    }
+    if (ep != eend &&
+	ep->logical_offset > offset &&
+	ep->logical_offset - offset < x_len) {
+      x_len = ep->logical_offset - offset;
+    }
+    // hole: reads as zeros
+    if (is64) {
+      crc = ceph::crc64nvme_combine(crc, ceph::crc64nvme_zeros(x_len), x_len);
+    } else {
+      crc = crc32c_zeros64(uint32_t(crc), x_len);
+    }
+    offset += x_len;
+    length -= x_len;
+  }
+  *out_csum = crc;
+  return 0;
 }
 
 int BlueStore::readv(
