@@ -563,14 +563,6 @@ void AbstractWriteLog<I>::pwl_init(Context *on_finish, DeferredContexts &later) 
   // Start the thread
   m_thread_pool.start();
 
-  /* Do these after we drop lock */
-  later.add(new LambdaContext([this](int r) {
-      /* Log stats for the first time */
-      periodic_stats();
-      /* Arm periodic stats logging for the first time */
-      std::lock_guard timer_locker(*m_timer_lock);
-      arm_periodic_stats();
-    }));
   m_image_ctx.op_work_queue->queue(on_finish, 0);
 }
 
@@ -626,9 +618,18 @@ void AbstractWriteLog<I>::init(Context *on_finish) {
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
       if (r >= 0) {
+        Context *ctx = new LambdaContext(
+          [this, on_finish](int r) {
+            if (r >= 0) {
+              /* Arm periodic stats logging for the first time */
+              std::lock_guard timer_locker(*m_timer_lock);
+              arm_periodic_stats();
+            }
+            on_finish->complete(r);
+          });
         std::unique_lock locker(m_lock);
         update_image_cache_state();
-        m_cache_state->write_image_cache_state(locker, on_finish);
+        m_cache_state->write_image_cache_state(locker, ctx);
       } else {
         on_finish->complete(r);
       }
