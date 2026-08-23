@@ -41,8 +41,12 @@
   release, feature absent or disabled, expired delivery lease, retransmitted
   request) returns the data inline as a normal read, so mixed-version clusters
   degrade transparently to ordinary behavior. librados gains
-  ``ObjectReadOperation::set_rdma_delivery()``. See
-  ``doc/radosgw/s3-rdma.rst``.
+  ``ObjectReadOperation::set_rdma_delivery()``. OSDs can additionally
+  checksum (CRC64-NVME) each stripe as it is RDMA-written, and the gateway
+  verifies whole-object GETs against the stored full-object ``crc64nvme``
+  checksum before responding (``rgw_cuobj_crc64nvme``, on by default),
+  giving end-to-end integrity across client memory, the fabric and the
+  storage node. See ``doc/radosgw/s3-rdma.rst``.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on

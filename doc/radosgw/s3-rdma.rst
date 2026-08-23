@@ -117,6 +117,15 @@ Gateway (staged mode and protocol handling):
   ``rgw_cuobj_buffer_size``, ``rgw_cuobj_buffer_count``,
   ``rgw_cuobj_num_dcis`` — the staged-mode ``cuObjServer``.
 * ``rgw_cuobj_osd_passthrough`` — enable OSD-direct delivery for GET.
+* ``rgw_cuobj_crc64nvme`` — ask the OSDs to CRC64-NVME each stripe as
+  it is RDMA-written; the gateway combines the per-stripe values in
+  logical order and, for whole-object GETs, verifies the result
+  against the object's stored full-object ``crc64nvme`` checksum
+  before responding. This is end-to-end integrity across client
+  memory, the fabric and the storage node — corruption anywhere on
+  that path fails the GET instead of reaching the application. On by
+  default; per-stripe checksums are computed with carry-less-multiply
+  accelerated tables.
 * ``rgw_cuobj_lease_ms`` — lease carried on each stripe operation; an
   OSD refuses to *start* an RDMA write later than this after receiving
   the op and returns the data inline instead.
@@ -177,6 +186,20 @@ Deployment notes
   erasure-coded direct reads (currently delivered inline); and
   eliminating the OSD's staging copy by registering the BlueStore
   hugepage read-buffer pool with the RDMA NIC.
+
+Integrity
+=========
+
+Because the gateway never touches passthrough data, verification moves
+to where the data actually is: each OSD checksums (CRC64-NVME) the
+exact bytes it pushed, after they crossed the fabric, and the gateway
+folds the per-stripe values with the same combining math S3 uses for
+multipart full-object checksums. Whole-object GETs of objects that
+carry a stored full-object ``crc64nvme`` checksum (the AWS
+``x-amz-checksum-crc64nvme`` type) are verified before any response
+bytes are committed. Erasure-coded *direct* (split) reads and sparse
+reads currently omit per-stripe checksums — their interleaved layouts
+do not concatenation-combine — and simply skip verification.
 
 Accounting
 ==========

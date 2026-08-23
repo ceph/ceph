@@ -2989,6 +2989,7 @@ void RGWGetObj::execute(optional_yield y)
   if (rdma_mode == RdmaMode::PASSTHROUGH) {
     read_op->params.rdma_token = rdma_token;
     read_op->params.rdma_bytes = &rdma_bytes;
+    read_op->params.rdma_crc64 = &rdma_crc64;
   }
 
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
@@ -3024,7 +3025,9 @@ void RGWGetObj::execute(optional_yield y)
     }
     read_op->params.rdma_token.clear();
     read_op->params.rdma_bytes = nullptr;
+    read_op->params.rdma_crc64 = nullptr;
     rdma_bytes = 0;
+    rdma_crc64.reset();
     select_rdma_mode(false);
     op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
   }
@@ -3046,6 +3049,40 @@ void RGWGetObj::execute(optional_yield y)
       goto done_err;
     }
     s->rdma_bytes_transferred = rdma_bytes;
+
+    // end-to-end integrity: the OSDs checksummed each stripe after the
+    // RDMA write; for a whole-object GET the combined value must match
+    // the object's stored full-object checksum. No HTTP bytes are
+    // committed yet, so a mismatch can still fail the request cleanly.
+    if (rdma_crc64 && ofs == 0 && total_len == s->obj_size) {
+      if (auto it = attrs.find(RGW_ATTR_CKSUM); it != attrs.end()) {
+        try {
+          rgw::cksum::Cksum stored;
+          auto bp = it->second.cbegin();
+          decode(stored, bp);
+          if (stored.type == rgw::cksum::Type::crc64nvme &&
+              !stored.composite()) {
+            // mirror combine_crc_cksum's at-rest byte order handling
+            uint64_t swapped = rgw::digest::byteswap(*rdma_crc64);
+            rgw::cksum::Cksum computed(rgw::cksum::Type::crc64nvme,
+                                       reinterpret_cast<char*>(&swapped),
+                                       rgw::cksum::Cksum::CtorStyle::raw);
+            if (computed.to_armor() != stored.to_armor()) {
+              ldpp_dout(this, 0) << "ERROR: rdma passthrough crc64nvme "
+                                 << "mismatch: delivered " << computed.to_armor()
+                                 << " != stored " << stored.to_armor() << dendl;
+              op_ret = -EIO;
+              goto done_err;
+            }
+            ldpp_dout(this, 20) << "rdma passthrough crc64nvme verified: "
+                                << computed.to_armor() << dendl;
+          }
+        } catch (const buffer::error&) {
+          ldpp_dout(this, 5) << "WARNING: undecodable cksum attr, skipping "
+                             << "rdma crc verification" << dendl;
+        }
+      }
+    }
   }
 
   op_ret = send_response_data(bl, 0, 0);

@@ -799,6 +799,7 @@ public:
         // OSD-direct RDMA passthrough; see rgw::sal::Object::ReadOp
         std::string rdma_token;
         uint64_t *rdma_bytes = nullptr;
+        std::optional<uint64_t> *rdma_crc64 = nullptr;
         bool rdma_submitted = false; // out: descriptor-bearing ops reached OSDs
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),

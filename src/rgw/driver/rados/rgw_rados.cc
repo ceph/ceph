@@ -30,6 +30,7 @@
 #include "rgw_zone.h"
 #include "rgw_cache.h"
 #include "rgw_acl.h"
+#include "common/crc64nvme.h"
 #include "rgw_acl_s3.h" /* for dumping s3policy in debug log */
 #include "rgw_aio_throttle.h"
 #include "driver/rados/rgw_bucket.h"
@@ -8814,6 +8815,10 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
     data.rdma_range_start = ofs;
     data.rdma_lease_ms = static_cast<uint32_t>(
       cct->_conf.get_val<uint64_t>("rgw_cuobj_lease_ms"));
+    if (cct->_conf.get_val<bool>("rgw_cuobj_crc64nvme")) {
+      data.rdma_flags |=
+        librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64;
+    }
   }
 
   if (state.obj.empty()) {
@@ -8841,6 +8846,25 @@ int RGWRados::Object::Read::iterate(const DoutPrefixProvider *dpp, int64_t ofs, 
       total += r.bytes;
     }
     *params.rdma_bytes = total;
+  }
+  if (data.rdma && params.rdma_crc64) {
+    // slots were pushed in logical stripe order, so folding them with
+    // the concatenation combine yields the checksum of the whole
+    // delivered range; usable only when every stripe reported one
+    std::optional<uint64_t> combined;
+    for (const auto& r : data.rdma_slots) {
+      if (!(r.flags &
+            librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID)) {
+        combined.reset();
+        break;
+      }
+      if (!combined) {
+        combined = r.crc64;
+      } else {
+        combined = ceph::crc64nvme_combine(*combined, r.crc64, r.bytes);
+      }
+    }
+    *params.rdma_crc64 = combined;
   }
   return 0;
 }
