@@ -28,6 +28,38 @@
   restore status in listing responses. Restore status is stored in the bucket
   index, so only objects written or restored after this upgrade will populate
   the field. Existing objects are unaffected.
+
+* RGW/RADOS: S3 objects can now be served over RDMA using the NVIDIA cuObject
+  library (``x-amz-rdma-token``). In addition to the gateway-staged mode
+  (``WITH_RADOSGW_CUOBJ`` + ``rgw_cuobj_enabled``), a new OSD passthrough mode
+  (``rgw_cuobj_osd_passthrough`` with OSDs built with ``WITH_OSD_CUOBJ`` and
+  ``osd_cuobj_enabled``) forwards the client's RDMA descriptor to the OSDs as
+  an advisory delivery field on the RADOS request, so GET data is DMA-written
+  directly from each OSD into client (or client GPU) memory without traversing
+  the gateway; replicated and erasure-coded pools are supported, including a
+  shard-direct interleave for EC split reads. Any OSD that cannot push (older
+  release, feature absent or disabled, expired delivery lease, retransmitted
+  request) returns the data inline as a normal read, so mixed-version clusters
+  degrade transparently to ordinary behavior. librados gains
+  ``ObjectReadOperation::set_rdma_delivery()``. OSDs can additionally
+  checksum (CRC64-NVME) each stripe as it is RDMA-written, and the gateway
+  verifies whole-object GETs against the stored full-object ``crc64nvme``
+  checksum before responding (``rgw_cuobj_crc64nvme``, on by default),
+  giving end-to-end integrity across client memory, the fabric and the
+  storage node. See ``doc/radosgw/s3-rdma.rst``.
+* RADOS: BlueStore gains a new data checksum algorithm, ``crc64nvme``
+  (``bluestore_csum_type`` or per-pool ``csum_type``). It stores the canonical
+  CRC-64/NVME value of each checksum block (8 bytes per block, like
+  ``xxhash64``), the same checksum family used by S3 full-object checksums
+  and NVMe 64-bit protection-information guard tags; per-block values combine
+  linearly, so range checksums can be derived from stored metadata without
+  rereading data. Checksumming uses isa-l's carry-less-multiply kernels where
+  available. The 8-byte values double BlueStore's per-block checksum metadata
+  relative to ``crc32c``, growing onodes by roughly one third; metadata-
+  sensitive pools can raise ``csum_min_block`` to checksum in larger chunks.
+  Data written with ``crc64nvme`` is not readable by OSDs older
+  than this release (reads fail rather than skip verification), so only
+  enable it once a downgrade is off the table.
 * RGW: New S3 Control APIs to apply PublicAccessBlock configuration to User Accounts.
 * ceph-volume: Raw BlueStore OSD preparation now pre-formats NVMe devices and
   skips the slower BlueStore discard phase,reducing mkfs time on

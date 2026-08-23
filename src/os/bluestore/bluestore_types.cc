@@ -928,6 +928,10 @@ void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
     Checksummer::calculate<Checksummer::crc32c_8>(
       get_csum_chunk_size(), b_off, bl.length(), bl, &csum_data);
     break;
+  case Checksummer::CSUM_CRC64NVME:
+    Checksummer::calculate<Checksummer::crc64nvme>(
+      get_csum_chunk_size(), b_off, bl.length(), bl, &csum_data);
+    break;
   }
 }
 
@@ -958,6 +962,10 @@ int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
     break;
   case Checksummer::CSUM_CRC32C_8:
     *b_bad_off = Checksummer::verify<Checksummer::crc32c_8>(
+      get_csum_chunk_size(), b_off, bl.length(), bl, csum_data, bad_csum);
+    break;
+  case Checksummer::CSUM_CRC64NVME:
+    *b_bad_off = Checksummer::verify<Checksummer::crc64nvme>(
       get_csum_chunk_size(), b_off, bl.length(), bl, csum_data, bad_csum);
     break;
   default:
