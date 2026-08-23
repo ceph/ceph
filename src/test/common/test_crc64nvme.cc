@@ -9,6 +9,7 @@
 #include "gtest/gtest.h"
 
 extern "C" {
+#include "common/madler/crc64nvme.h"
 #include "common/spdk/crc64.h"
 }
 
@@ -40,6 +41,29 @@ TEST(Crc64Nvme, MatchesSpdk)
 		     buf.size()}) {
     EXPECT_EQ(spdk_crc64_nvme(buf.data(), len, 0),
 	      ceph::crc64nvme(0, buf.data(), len)) << "len=" << len;
+  }
+}
+
+TEST(Crc64Nvme, MatchesMadler)
+{
+  // ceph::crc64nvme may be backed by isa-l's SIMD implementation; it
+  // must agree with the portable madler tables at every length,
+  // alignment and chaining seed
+  std::mt19937_64 rng(3);
+  std::vector<char> buf((1 << 16) + 64);
+  for (auto& c : buf) {
+    c = static_cast<char>(rng());
+  }
+  for (size_t off : {size_t(0), size_t(1), size_t(3), size_t(7)}) {
+    for (size_t len : {size_t(0), size_t(1), size_t(7), size_t(15),
+		       size_t(63), size_t(64), size_t(65), size_t(255),
+		       size_t(4096), size_t(1 << 16)}) {
+      for (uint64_t seed : {uint64_t(0), CHECK_123456789, ~uint64_t(0)}) {
+	EXPECT_EQ(crc64nvme_word(seed, buf.data() + off, len),
+		  ceph::crc64nvme(seed, buf.data() + off, len))
+	  << "off=" << off << " len=" << len << " seed=" << seed;
+      }
+    }
   }
 }
 

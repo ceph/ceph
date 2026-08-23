@@ -637,6 +637,12 @@ if(HAVE_RDMACM)
   list(APPEND ceph_common_deps RDMA::RDMAcm)
 endif()
 
+if(WITH_EC_ISA_PLUGIN)
+  # accelerated crc64nvme backend (common/crc64nvme.cc); the target is
+  # created by src/erasure-code/isa
+  list(APPEND ceph_common_deps ISAL::ISAL)
+endif()
+
 if(NOT WITH_SYSTEM_BOOST)
   list(APPEND ceph_common_deps ${ZLIB_LIBRARIES})
 endif()
