@@ -2694,6 +2694,19 @@ struct segment_header_t {
 };
 std::ostream &operator<<(std::ostream &out, const segment_header_t &header);
 
+inline constexpr segment_header_t NULL_SEGMENT_HEADER =
+  segment_header_t{
+    std::numeric_limits<mod_time_point_t>::max(),
+    NULL_SEG_SEQ,
+    NULL_SEG_ID,
+    JOURNAL_SEQ_NULL,
+    JOURNAL_SEQ_NULL,
+    0,
+    segment_type_t::NULL_SEG,
+    data_category_t::NUM,
+    NULL_GENERATION
+  };
+
 struct segment_tail_t {
   segment_seq_t segment_seq;
   segment_id_t physical_segment_id; // debugging
@@ -2721,6 +2734,16 @@ struct segment_tail_t {
   }
 };
 std::ostream &operator<<(std::ostream &out, const segment_tail_t &tail);
+
+inline constexpr segment_tail_t NULL_SEGMENT_TAIL =
+  segment_tail_t{
+    NULL_SEG_SEQ,
+    NULL_SEG_ID,
+    0,
+    segment_type_t::NULL_SEG,
+    std::numeric_limits<mod_time_point_t>::max(),
+    0
+  };
 
 enum class transaction_type_t : uint8_t {
   MUTATE = 0,
