@@ -68,6 +68,19 @@ then you just add a line saying ::
 
 using your real name (sorry, no pseudonyms or anonymous contributions).
 
+Git can sign off on your behalf
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Please note that git makes it trivially easy to sign commits. First, set the
+following config options::
+
+    $ git config --list | grep user
+    user.email=my_real_email_address@example.com
+    user.name=My Real Name
+
+Then just remember to use ``git commit -s``. Git will add the ``Signed-off-by``
+line automatically.
+
 AI Assistance Disclosure
 ^^^^^^^^^^^^^^^^^^^^^^^^
 

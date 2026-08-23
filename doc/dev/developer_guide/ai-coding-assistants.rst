@@ -1,3 +1,8 @@
+.. Changes to this document must be approved by the Ceph Steering
+   Committee. Raise a PR with the changes and then raise a motion
+   to approve the change on the tracker
+   https://tracker.ceph.com/projects/csc-floor/issues
+
 .. This document is inspired by the Linux kernel's equivalent policy at
    Documentation/process/coding-assistants.rst (GPL-2.0). The content
    has been independently written for Ceph.
@@ -80,3 +85,16 @@ Examples::
     Assisted-by: Claude-v2.1.199:claude-4-5-sonnet clang-tidy
     Assisted-by: IBM-Bob-v2.0.1 clangd
 
+Transcripts
+-----------
+
+Transcripts of interactions with AI tools do not need to be
+submitted with a change, it is expected that the contents of
+the change including any documentation updates can be
+understood and reviewed on its own.
+
+Reviews
+-------
+
+Reviews of changes using AI tools are permitted, but a review by a
+human is also required before a change will be accepted and merged.
