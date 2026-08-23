@@ -1583,6 +1583,9 @@ SegmentCleaner::mount_ret SegmentCleaner::mount()
       crimson::ct_error::input_output_error::pass_further{},
       crimson::ct_error::assert_all("unexpected error")
     );
+    if (header == NULL_SEGMENT_HEADER) {
+      continue;
+    }
     DEBUG("segment_id={} -- {}", segment_id, header);
     auto s_type = header.get_type();
     if (s_type == segment_type_t::NULL_SEG) {
