@@ -202,6 +202,13 @@ if(WITH_EVENTTRACE)
   list(APPEND common_srcs EventTrace.cc)
 endif()
 
+if(WITH_EC_ISA_PLUGIN)
+  # isa-l's crc64_rocksoft_refl is CRC-64/NVME with runtime SIMD dispatch;
+  # ISAL::ISAL is linked into ceph-common by src/CMakeLists.txt
+  set_source_files_properties(crc64nvme.cc PROPERTIES
+    COMPILE_DEFINITIONS HAVE_ISAL_CRC64)
+endif()
+
 add_library(common-common-objs OBJECT
   ${common_srcs})
 # Let's not rely on the default system headers and point Cmake to the
