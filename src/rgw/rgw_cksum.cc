@@ -20,10 +20,10 @@
 #include "rgw_crc_digest.h"
 
 extern "C" {
-#include "madler/crc64nvme.h"
-#include "madler/crc32iso_hdlc.h"
-#include "madler/crc32iscsi.h"
-#include "spdk/crc64.h"
+#include "common/madler/crc64nvme.h"
+#include "common/madler/crc32iso_hdlc.h"
+#include "common/madler/crc32iscsi.h"
+#include "common/spdk/crc64.h"
 } // extern "C"
 
 namespace rgw::cksum {
