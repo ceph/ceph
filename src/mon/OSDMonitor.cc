@@ -10478,6 +10478,25 @@ int OSDMonitor::prepare_command_osd_new(
   return 0;
 }
 
+void OSDMonitor::wait_for_osd_new_applied(
+    MonOpRequestRef op,
+    const map<string,string>& secrets,
+    Context *on_commit)
+{
+  // `osd new` mutates AuthMonitor (and KVMonitor for lockbox) in the same
+  // plugged Paxos transaction.  Refresh order is OSDMAP then AUTH then KV,
+  // so waiting on this service would ack before KeyServer has osd.N.
+  if (secrets.count("cephx_lockbox_secret")) {
+    dout(10) << __func__ << " waiting for kvmon commit" << dendl;
+    mon.kvmon()->wait_for_commit(op, on_commit);
+  } else if (secrets.count("cephx_secret")) {
+    dout(10) << __func__ << " waiting for authmon commit" << dendl;
+    mon.authmon()->wait_for_commit(op, on_commit);
+  } else {
+    wait_for_commit(op, on_commit);
+  }
+}
+
 bool OSDMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
@@ -13612,7 +13631,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    wait_for_commit(op,
+    wait_for_osd_new_applied(
+        op, param_map,
         new Monitor::C_Command(mon, op, 0, rs, rdata,
                                get_last_committed() + 1));
     force_immediate_propose();

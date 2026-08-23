@@ -158,9 +158,7 @@ void PaxosService::refresh(bool *need_bootstrap)
   // update cached versions
   auto first_committed = mon.store->get(get_service_name(), first_committed_name);
   auto last_committed = mon.store->get(get_service_name(), last_committed_name);
-  if (last_committed > cached_last_committed) {
-    finish_contexts(g_ceph_context, waiting_for_commit, 0);
-  }
+  const bool committed = last_committed > cached_last_committed;
   cached_first_committed = first_committed;
   cached_last_committed = last_committed;
 
@@ -171,8 +169,14 @@ void PaxosService::refresh(bool *need_bootstrap)
   }
   format_version = new_format;
 
-
+  // Apply committed state before waking waiters.  Otherwise a client can
+  // observe the command ack and immediately use the new value (e.g. cephx
+  // authenticate as a just-created osd after `osd new`) while KeyServer /
+  // OSDMap is still at the previous version.
   _update_from_paxos(need_bootstrap);
+  if (committed) {
+    finish_contexts(g_ceph_context, waiting_for_commit, 0);
+  }
 }
 
 void PaxosService::post_refresh()

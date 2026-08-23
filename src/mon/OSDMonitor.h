@@ -757,6 +757,11 @@ public:
       const std::map<std::string,std::string>& secrets,
       std::stringstream &ss,
       ceph::Formatter *f);
+  /// Wait until auth (and lockbox kv, if any) is readable by cephx.
+  void wait_for_osd_new_applied(
+      MonOpRequestRef op,
+      const std::map<std::string,std::string>& secrets,
+      Context *on_commit);
 
   tl::expected<void, ErrorNMessage>
   enable_pool_ec_optimizations(pg_pool_t &pool, bool enable);
