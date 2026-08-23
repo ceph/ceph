@@ -47,4 +47,25 @@ uint64_t crc64nvme_combine(uint64_t crc_a, uint64_t crc_b, uint64_t len_b)
   return crc64nvme_comb(crc_a, crc_b, len_b);
 }
 
+uint64_t crc64nvme_zeros(uint64_t len)
+{
+  // binary decomposition: zero runs are order-independent, so fold in
+  // a 2^k-byte run for each set bit of len, doubling as we go
+  static const char zero = 0;
+  uint64_t acc = 0;  // checksum of the empty string
+  uint64_t run_crc = crc64nvme_impl(0, &zero, 1);
+  uint64_t run_len = 1;
+  while (len) {
+    if (len & 1) {
+      acc = crc64nvme_comb(acc, run_crc, run_len);
+    }
+    len >>= 1;
+    if (len) {
+      run_crc = crc64nvme_comb(run_crc, run_crc, run_len);
+      run_len <<= 1;
+    }
+  }
+  return acc;
+}
+
 } // namespace ceph

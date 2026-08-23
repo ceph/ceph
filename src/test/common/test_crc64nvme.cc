@@ -95,6 +95,21 @@ TEST(Crc64Nvme, CombineProperty)
   EXPECT_EQ(whole, acc);
 }
 
+TEST(Crc64Nvme, Zeros)
+{
+  std::vector<char> z(1 << 20, 0);
+  for (uint64_t len : {uint64_t(0), uint64_t(1), uint64_t(2), uint64_t(3),
+		       uint64_t(511), uint64_t(512), uint64_t(4096),
+		       uint64_t(4097), uint64_t(1 << 20)}) {
+    EXPECT_EQ(ceph::crc64nvme(0, z.data(), len), ceph::crc64nvme_zeros(len))
+      << "len=" << len;
+  }
+  // combine identities with the empty string on either side
+  const uint64_t b = ceph::crc64nvme(0, "abc", 3);
+  EXPECT_EQ(b, ceph::crc64nvme_combine(0, b, 3));
+  EXPECT_EQ(b, ceph::crc64nvme_combine(b, 0, 0));
+}
+
 TEST(Crc64Nvme, Checksummer)
 {
   EXPECT_EQ(Checksummer::CSUM_CRC64NVME,

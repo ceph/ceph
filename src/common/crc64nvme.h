@@ -24,4 +24,7 @@ uint64_t crc64nvme(const ceph::buffer::list& bl);
 /// checksum of the concatenation A||B given crc(A), crc(B) and len(B)
 uint64_t crc64nvme_combine(uint64_t crc_a, uint64_t crc_b, uint64_t len_b);
 
+/// checksum of len zero bytes in O(log len) time
+uint64_t crc64nvme_zeros(uint64_t len);
+
 } // namespace ceph
