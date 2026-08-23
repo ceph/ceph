@@ -2678,6 +2678,8 @@ struct segment_header_t {
     return type;
   }
 
+  bool operator==(const segment_header_t &) const = default;
+
   DENC(segment_header_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.modify_time, p);
