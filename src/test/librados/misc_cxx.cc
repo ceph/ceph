@@ -900,16 +900,20 @@ TEST_P(LibRadosMiscPP, RdmaDeliveryInlineFallbackPP) {
   const std::string token =
     "0102030405060708:01020304:0102aabb:0102:010203:1:"
     "0102030405060708090a0b0c0d0e0f10";
-  uint64_t oob = 42;
+  ObjectReadOperation::rdma_delivery_result res;
+  res.bytes = 42;
+  res.flags = 7;
   int op_rval = 0;
   bufferlist read_bl;
   ObjectReadOperation op;
   op.read(0, payload.size(), &read_bl, &op_rval);
-  op.set_rdma_delivery(token, 0, 5000, &oob);
+  op.set_rdma_delivery(token, 0, 5000,
+                       ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64, &res);
   int r = ioctx.operate("rdma_delivery_obj", &op, nullptr);
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, op_rval);
-  ASSERT_EQ(0u, oob);  // nothing was delivered out of band
+  ASSERT_EQ(0u, res.bytes);  // nothing was delivered out of band
+  ASSERT_EQ(0u, res.flags);  // and no crc came back
   bufferlist expected;
   expected.append(payload);
   ASSERT_TRUE(read_bl.contents_equal(expected));  // data arrived inline

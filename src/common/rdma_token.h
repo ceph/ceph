@@ -45,11 +45,18 @@ std::optional<token_window> parse_rdma_token(std::string_view token);
  * in-band data.
  */
 struct delivery_t {
+  /// request the canonical CRC-64/NVME of the delivered bytes in the
+  /// reply's oob result (linear placements only; best effort - check
+  /// oob_result_t::FLAG_CRC64NVME)
+  static constexpr uint32_t FLAG_CRC64NVME = 1u << 0;
+  /// flag bits the OSD understands; unknown bits deliver inline
+  static constexpr uint32_t KNOWN_FLAGS = FLAG_CRC64NVME;
+
   std::string token;      ///< opaque cuObject RDMA descriptor
   uint64_t base_offset = 0; ///< client-window offset for the read's first byte
   uint32_t lease_ms = 0;  ///< do not START an RDMA write later than this after
                           ///< op receipt; 0 = no lease
-  uint32_t flags = 0;     ///< reserved; OSDs deliver inline when nonzero
+  uint32_t flags = 0;     ///< FLAG_* above; OSDs deliver inline on unknown bits
 
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(1, 1, bl);
@@ -69,5 +76,36 @@ struct delivery_t {
   }
 };
 WRITE_CLASS_ENCODER(delivery_t)
+
+/**
+ * Per-op out-of-band delivery result carried on the MOSDOpReply.
+ * bytes is how much of the op's data went out of band (0 = inline);
+ * crc64 is the canonical CRC-64/NVME of exactly those bytes, valid
+ * only when FLAG_CRC64NVME is set (the OSD computes it on request for
+ * linear placements).
+ */
+struct oob_result_t {
+  static constexpr uint32_t FLAG_CRC64NVME = 1u << 0; ///< crc64 is valid
+
+  uint64_t bytes = 0;
+  uint64_t crc64 = 0;
+  uint32_t flags = 0;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    ceph::encode(bytes, bl);
+    ceph::encode(crc64, bl);
+    ceph::encode(flags, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    ceph::decode(bytes, p);
+    ceph::decode(crc64, p);
+    ceph::decode(flags, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(oob_result_t)
 
 } // namespace ceph::rdma

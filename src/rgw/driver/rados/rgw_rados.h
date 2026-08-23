@@ -1792,8 +1792,10 @@ struct get_obj_data {
   std::string rdma_token;
   uint64_t rdma_range_start = 0; // logical offset of the range start
   uint32_t rdma_lease_ms = 0;
+  uint32_t rdma_flags = 0;       // delivery request flags (e.g. want-crc64)
   bool rdma_ops_sent = false;    // at least one descriptor-bearing op issued
-  std::deque<uint64_t> rdma_slots; // per-stripe oob byte counts (stable addrs)
+  // per-stripe oob results, pushed in logical stripe order (stable addrs)
+  std::deque<librados::ObjectReadOperation::rdma_delivery_result> rdma_slots;
 
   int flush(rgw::AioResultList&& results);
   int flush_rdma(rgw::AioResultList&& results);

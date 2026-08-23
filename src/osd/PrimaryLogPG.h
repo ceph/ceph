@@ -1327,7 +1327,7 @@ protected:
    * carries the data inline. Returns true iff anything was pushed.
    */
   bool deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
-		   std::vector<uint64_t>& oob);
+		   std::vector<ceph::rdma::oob_result_t>& oob);
 #endif
 
   // pg on-disk content

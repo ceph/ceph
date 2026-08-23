@@ -48,6 +48,37 @@ TEST(RdmaDelivery, WireFormat)
   EXPECT_TRUE(p.end());
 }
 
+TEST(RdmaDelivery, OobResultWireFormat)
+{
+  ceph::rdma::oob_result_t r;
+  r.bytes = 0x0102030405060708ull;
+  r.crc64 = 0xae8b14860a799888ull;
+  r.flags = ceph::rdma::oob_result_t::FLAG_CRC64NVME;
+
+  bufferlist bl;
+  encode(r, bl);
+  // ENCODE_START(1,1) header, le64 bytes, le64 crc64, le32 flags
+  static const unsigned char expected_bytes[] = {
+    0x01, 0x01, 0x14, 0x00, 0x00, 0x00,              // v1, compat 1, len 20
+    0x08, 0x07, 0x06, 0x05, 0x04, 0x03, 0x02, 0x01,  // bytes (le64)
+    0x88, 0x98, 0x79, 0x0a, 0x86, 0x14, 0x8b, 0xae,  // crc64 (le64)
+    0x01, 0x00, 0x00, 0x00,                          // flags (le32)
+  };
+  bufferlist expected;
+  expected.append(reinterpret_cast<const char*>(expected_bytes),
+                  sizeof(expected_bytes));
+  EXPECT_TRUE(bl.contents_equal(expected))
+    << "oob result layout changed; this is a wire format break";
+
+  ceph::rdma::oob_result_t out;
+  auto p = bl.cbegin();
+  decode(out, p);
+  EXPECT_EQ(r.bytes, out.bytes);
+  EXPECT_EQ(r.crc64, out.crc64);
+  EXPECT_EQ(r.flags, out.flags);
+  EXPECT_TRUE(p.end());
+}
+
 TEST(RdmaDelivery, OptionalRoundTrip)
 {
   // the field rides as a std::optional on the MOSDOp tail

@@ -541,7 +541,7 @@ void SplitOp::complete() {
   if (rc >= 0 && oob_fanned_out) {
     bool any_inline = false;
     for (auto& [index, sub_read] : sub_reads) {
-      oob_total += sub_read.oob;
+      oob_total += sub_read.oob.bytes;
       if (sub_read.details.contains(oob_ops_index) &&
           sub_read.details.at(oob_ops_index).bl.length()) {
         any_inline = true;
@@ -557,8 +557,10 @@ void SplitOp::complete() {
 
   if (rc >= 0) {
 
-    if (orig_op->rdma_oob_bytes) {
-      *orig_op->rdma_oob_bytes = oob_total;
+    if (orig_op->rdma_oob_result) {
+      // sub-read CRCs are not requested (interleaved shard data does
+      // not concatenate-combine), so the aggregate carries bytes only
+      *orig_op->rdma_oob_result = ceph::rdma::oob_result_t{oob_total, 0, 0};
     }
 
     // In a "normal" completion, out_ops is generated in the MOSDOpReply reply
@@ -1137,8 +1139,11 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
         }
       }
       d.base_offset += sub_ofs - orig_ofs;  // zero shift for EC-direct subs
+      // per-sub CRCs of interleaved shard chunks cannot be combined
+      // into the parent's checksum; don't request them
+      d.flags &= ~ceph::rdma::delivery_t::FLAG_CRC64NVME;
       sub_op->rdma_delivery = std::move(d);
-      sub_op->rdma_oob_bytes = &sub_read.oob;
+      sub_op->rdma_oob_result = &sub_read.oob;
     }
 
     auto &st = sub_op->target;
