@@ -258,6 +258,13 @@ add_executable(unittest_bit_vector
 add_ceph_unittest(unittest_bit_vector)
 target_link_libraries(unittest_bit_vector ceph-common)
 
+# unittest_crc64nvme
+add_executable(unittest_crc64nvme
+  test_crc64nvme.cc
+  )
+add_ceph_unittest(unittest_crc64nvme)
+target_link_libraries(unittest_crc64nvme ceph-common)
+
 # unittest_rdma_token
 add_executable(unittest_rdma_token
   test_rdma_token.cc

@@ -95,6 +95,11 @@ set(common_srcs
   perf_histogram.cc
   pick_address.cc
   prime.cc
+  madler/crc32iscsi.c
+  madler/crc32iso_hdlc.c
+  madler/crc64nvme.c
+  spdk/crc64.c
+  crc64nvme.cc
   random_string.cc
   rdma_token.cc
   reverse.c
