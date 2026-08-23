@@ -66,6 +66,7 @@
 #ifdef WITH_OSD_CUOBJ
 #include "osd_cuobj.h"
 #include "osd/oob_placement.h"
+#include "common/crc64nvme.h"
 #endif
 
 // required includes order:
@@ -9400,6 +9401,7 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
   const bool ec_direct = ctx->op->ec_direct_read();
   ceph::osd::oob::placement_plan plan;
   bufferlist payload;  // the bytes the plan indexes
+  bool linear = false; // payload is one contiguous logical extent
   std::map<uint64_t, uint64_t> sparse_extents;
   if (data_op->op.op == CEPH_OSD_OP_SPARSE_READ) {
     if (ec_direct) {
@@ -9440,6 +9442,7 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
     plan = ceph::osd::oob::linear_plan(d.base_offset,
 				       data_op->outdata.length());
     payload = data_op->outdata;
+    linear = true;
   }
   if (plan.empty()) {
     return false;
@@ -9460,6 +9463,15 @@ bool PrimaryLogPG::deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
     encode(bufferlist(), data_op->outdata);
   }
   oob[data_idx].bytes = static_cast<uint64_t>(pushed);
+  if ((d.flags & ceph::rdma::delivery_t::FLAG_CRC64NVME) && linear) {
+    // checksum the exact bytes that went out of band, at the storage
+    // node, after they crossed the fabric - the client (RGW) combines
+    // per-stripe values in logical order for end-to-end verification.
+    // Non-linear placements (EC-direct interleave, sparse extents) do
+    // not concatenate-combine, so the crc is best-effort omitted.
+    oob[data_idx].crc64 = ceph::crc64nvme(payload);
+    oob[data_idx].flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME;
+  }
   return true;
 }
 #endif // WITH_OSD_CUOBJ
