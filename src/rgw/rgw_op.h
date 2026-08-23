@@ -476,6 +476,9 @@ protected:
   std::string rdma_token;  ///< x-amz-rdma-token header, empty if absent
   RdmaMode rdma_mode = RdmaMode::NONE;
   uint64_t rdma_bytes = 0; ///< bytes delivered out of band (passthrough)
+  /// combined CRC64-NVME of the delivered bytes, when every stripe
+  /// reported one (passthrough verification)
+  std::optional<uint64_t> rdma_crc64;
   /// staged-mode buffer (an RGWCuObjServer::RDMABufEntry*), reserved at
   /// mode-selection time because staging failures cannot be signalled
   /// once response headers are out
