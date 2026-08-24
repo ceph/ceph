@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(MGR_DOWN\)
+      - \(MGR_INFLUX_NO_SERVER\)
+      - "Module 'influx' has failed dependency"
+tasks:
+- mgr_thrash:
+    revive_delay: 20
+    thrash_delay: 1
+    selftest_modules: [crash, devicehealth]
+    test_remote_dispatch: true
+    module_load_delay_ms: 500
