@@ -25,7 +25,7 @@
 #include <atomic>
 #include <tuple>
 
-#include <boost/asio/deadline_timer.hpp>
+#include <boost/asio/steady_timer.hpp>
 
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
@@ -597,7 +597,7 @@ public:
     CephContext *cct;
     RGWLC *lc;
     int ix;
-    boost::asio::deadline_timer timer;
+    boost::asio::steady_timer timer;
     /* save the target bucket names created as part of object transition
      * to cloud. This list is maintained for the duration of each RGWLC::process()
      * post which it is discarded. */
@@ -665,7 +665,7 @@ public:
 		       int& index);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once, boost::asio::yield_context yield);
-  int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
+  void bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
 		     rgw::sal::LCEntry& entry, int& result, LCWorker* worker);

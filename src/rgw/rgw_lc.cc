@@ -318,7 +318,7 @@ void RGWLC::LCWorker::run(boost::asio::yield_context yield) {
 
     ldpp_dout(dpp, 5) << "schedule life cycle next start time="
 		      << rgw_to_asctime(next) << " worker=" << ix << dendl;
-    timer.expires_from_now(boost::posix_time::seconds(secs));
+    timer.expires_after(std::chrono::seconds(secs));
     timer.async_wait(yield);
   } while (!lc->going_down());
 }
@@ -2327,29 +2327,20 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   return ret;
 }
 
-int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
+void RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 			     time_t stop_at, bool once)
 {
-  int ret = 0;
-
   // spawn a coroutine for bucket_lc_process() so it can use spawn_throttle
   // for concurrent operations
   boost::asio::spawn(io_ctx,
       [this, &shard_id, worker, stop_at, once] (boost::asio::yield_context yield) {
         return bucket_lc_process(shard_id, worker, stop_at, once, yield);
       },
-      [&ret] (std::exception_ptr eptr, int result) {
+      [] (std::exception_ptr eptr, int result) {
         if (eptr) {
           std::rethrow_exception(eptr);
-        } else {
-          ret = result;
         }
       });
-
-  // warn about any blocking operations called from this coroutine
-  auto enable_warnings = warn_about_blocking_in_scope{};
-
-  return ret;
 }
 
 class SimpleBackoff
@@ -2675,7 +2666,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     << dendl;
 
   lock.unlock();
-  ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
+  bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
   ldpp_dout(this, 5) << "RGWLC::process_bucket(): END entry 2: " << entry
     << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
   bucket_lc_post(index, max_lock_secs, entry, ret, worker);
@@ -2973,7 +2964,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     /* drop lock so other instances can make progress while this
      * bucket is being processed */
     lock->unlock(this, yield);
-    ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
+    bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
     ldpp_dout(this, 5) << "RGWLC::process(): END entry 2: " << entry
       << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
 
@@ -3042,6 +3033,9 @@ void RGWLC::start_processor()
         }); // spawn
   }
 
+  // NOTE: No io_context work guard is needed since LCWorker coroutines
+  // always runs until RGWLC goes down.
+
   auto maxth = cct->_conf->rgw_lc_max_threads;
   threadpool.reserve(maxth);
   for (int ix = 0; ix < maxth; ++ix) {
@@ -3049,6 +3043,9 @@ void RGWLC::start_processor()
         std::thread(
           [this, ix] () {
             ceph_pthread_setname((string{"rgw_lc_"} + to_string(ix)).c_str());
+            // warn about any blocking operations called from this thread
+            auto enable_warnings = warn_about_blocking_in_scope{};
+
             io_ctx.run();
           }
         )
@@ -3059,14 +3056,18 @@ void RGWLC::start_processor()
 void RGWLC::stop_processor()
 {
   down_flag = true;
+
   for (auto& worker : workers) {
     worker->stop();
   }
-  workers.clear();
+
+  io_ctx.stop();
 
   for (auto& thr : threadpool) {
     thr.join();
   }
+
+  workers.clear();
   threadpool.clear();
 }
 
@@ -3082,6 +3083,7 @@ std::ostream& RGWLC::gen_prefix(std::ostream& out) const
 
 void RGWLC::LCWorker::stop()
 {
+  timer.cancel();
 }
 
 bool RGWLC::going_down()

@@ -470,7 +470,8 @@ options:
   fmt_desc: This option specifies the number of LCWorker tasks
     to run in parallel, thereby processing bucket and index
     shards simultaneously.
-  default: 6
+  default: 3
+  min: 1
   services:
   - rgw
   with_legacy: true
