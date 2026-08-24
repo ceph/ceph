@@ -5,6 +5,7 @@
 
 #include <chrono>
 #include <iostream>
+#include <memory_resource>
 
 #include <boost/intrusive/list.hpp>
 
@@ -101,7 +102,7 @@ struct btree_cursor_stats_t {
 
 struct rbm_pending_ool_t {
   bool is_conflicted = false;
-  std::list<CachedExtentRef> pending_extents;
+  std::vector<CachedExtentRef> pending_extents;
 };
 
 /**
@@ -313,8 +314,9 @@ public:
     }
   }
 
-  auto get_delayed_alloc_list() {
-    std::list<CachedExtentRef> ret;
+  std::vector<CachedExtentRef> get_delayed_alloc_list() {
+    std::vector<CachedExtentRef> ret;
+    ret.reserve(delayed_alloc_list.size());
     for (auto& extent : delayed_alloc_list) {
       // delayed extents may be invalidated
       if (extent->is_valid()) {
@@ -327,8 +329,9 @@ public:
     return ret;
   }
 
-  auto get_valid_pre_alloc_list() {
-    std::list<CachedExtentRef> ret;
+  std::vector<CachedExtentRef> get_valid_pre_alloc_list() {
+    std::vector<CachedExtentRef> ret;
+    ret.reserve(pre_alloc_list.size() + pre_inplace_rewrite_list.size());
     assert(num_allocated_invalid_extents == 0);
     for (auto& extent : pre_alloc_list) {
       if (extent->is_valid()) {
@@ -340,7 +343,7 @@ public:
     for (auto& extent : pre_inplace_rewrite_list) {
       if (extent->is_valid()) {
 	ret.push_back(extent);
-      } 
+      }
     }
     return ret;
   }
@@ -942,33 +945,47 @@ private:
 
   /**
    * lists of fresh blocks, holds refcounts, subset of write_set
+   *
+   * Backed by a small inline arena so that typical transactions
+   * (fewer than ~200 total entries across all lists) never touch
+   * the heap for list storage.  The monotonic_buffer_resource falls
+   * back to upstream (new/delete) for very large transactions.
    */
   io_stat_t fresh_block_stats;
   uint64_t num_delayed_invalid_extents = 0;
   uint64_t num_allocated_invalid_extents = 0;
+
+  static constexpr std::size_t BLOCK_LIST_ARENA_BYTES = 4096;
+  alignas(std::max_align_t)
+    std::byte block_list_arena_[BLOCK_LIST_ARENA_BYTES];
+  std::pmr::monotonic_buffer_resource block_list_mr_{
+    block_list_arena_, BLOCK_LIST_ARENA_BYTES};
+
   /// fresh blocks with delayed allocation,
   /// may become inline_block_list or ool_block_list below
-  std::list<CachedExtentRef> delayed_alloc_list;
+  std::pmr::vector<CachedExtentRef> delayed_alloc_list{&block_list_mr_};
   /// fresh blocks with pre-allocated addresses with RBM,
   /// should be released upon conflicts,
   /// will be added to ool_block_list below
-  std::list<CachedExtentRef> pre_alloc_list;
+  std::pmr::vector<CachedExtentRef> pre_alloc_list{&block_list_mr_};
   /// dirty blocks for inplace rewrite with RBM,
   /// will be added to inplace inplace_ool_block_list below
-  std::list<LogicalCachedExtentRef> pre_inplace_rewrite_list;
+  std::pmr::vector<LogicalCachedExtentRef>
+    pre_inplace_rewrite_list{&block_list_mr_};
 
   /// fresh blocks that will be committed with inline journal record
-  std::list<CachedExtentRef> inline_block_list;
+  std::pmr::vector<CachedExtentRef> inline_block_list{&block_list_mr_};
   /// fresh blocks that will be committed with out-of-line record
-  std::list<CachedExtentRef> ool_block_list;
+  std::pmr::vector<CachedExtentRef> ool_block_list{&block_list_mr_};
   /// dirty blocks that will be committed out-of-line with inplace rewrite
-  std::list<LogicalCachedExtentRef> inplace_ool_block_list;
+  std::pmr::vector<LogicalCachedExtentRef>
+    inplace_ool_block_list{&block_list_mr_};
 
   /// list of mutated blocks, holds refcounts, subset of write_set
-  std::list<CachedExtentRef> mutated_block_list;
+  std::pmr::vector<CachedExtentRef> mutated_block_list{&block_list_mr_};
 
   /// partial blocks of extents on disk, with data and refcounts
-  std::list<CachedExtentRef> existing_block_list;
+  std::pmr::vector<CachedExtentRef> existing_block_list{&block_list_mr_};
   existing_block_stats_t existing_block_stats;
 
   std::list<view_ref> views;

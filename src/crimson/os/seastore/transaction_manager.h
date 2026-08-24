@@ -1828,7 +1828,7 @@ private:
   using update_lba_mappings_ret = LBAManager::update_mappings_ret;
   update_lba_mappings_ret update_lba_mappings(
     Transaction &t,
-    std::list<CachedExtentRef> &pre_allocated_extents);
+    std::vector<CachedExtentRef> &pre_allocated_extents);
 
   /**
    * pin_to_extent

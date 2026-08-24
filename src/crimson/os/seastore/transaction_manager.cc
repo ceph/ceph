@@ -680,7 +680,7 @@ TransactionManager::submit_transaction_direct(
 TransactionManager::update_lba_mappings_ret
 TransactionManager::update_lba_mappings(
   Transaction &t,
-  std::list<CachedExtentRef> &pre_allocated_extents)
+  std::vector<CachedExtentRef> &pre_allocated_extents)
 {
   LOG_PREFIX(TransactionManager::update_lba_mappings);
   SUBTRACET(seastore_t, "update extent lba mappings", t);
