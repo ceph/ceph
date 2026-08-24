@@ -3301,6 +3301,27 @@ class CephManager:
             self.make_admin_daemon_dir(remote)
         self.ctx.daemons.get_daemon('mon', mon, self.cluster).restart()
 
+    def kill_mgr(self, mgr):
+        """
+        Kill the manager by either power cycling (if the config says so),
+        or by doing a stop.
+        """
+        if self.config.get('powercycle'):
+            remote = self.find_remote('mgr', mgr)
+            self.log('kill_mgr on mgr.{m} doing powercycle of {s}'.
+                     format(m=mgr, s=remote.name))
+            self._assert_ipmi(remote)
+            remote.console.power_off()
+        else:
+            self.ctx.daemons.get_daemon('mgr', mgr, self.cluster).stop()
+
+    def fail_mgr(self, mgr):
+        """
+        Force the active manager to fail over, without killing the daemon
+        process itself.
+        """
+        self.raw_cluster_cmd('mgr', 'fail', mgr)
+
     def revive_mgr(self, mgr):
         """
         Restart by either power cycling (if the config says so),
