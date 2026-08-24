@@ -1,3 +1,10 @@
+>=22.0.0
+
+* RGW: The default value of ``rgw_rest_conn_connect_to_resolved_ips`` changed
+  from ``false`` to ``true``.
+* RGW: The default value of ``rgw_rest_conn_ip_fail_timeout_secs`` changed
+  from ``2`` to ``30`` seconds.
+
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
