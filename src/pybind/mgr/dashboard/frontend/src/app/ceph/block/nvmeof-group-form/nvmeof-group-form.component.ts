@@ -50,6 +50,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   currentCertificate: CephServiceCertificate = null;
   currentSpecCertificateSource = '';
   showCertSourceChangeWarning = false;
+  showEncryptionDisableWarning = false;
+  showMtlsDisableWarning = false;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -131,22 +133,25 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
         encryptionConfigControl?.setValidators(null);
         encryptionKeyControl?.updateValueAndValidity({ emitEvent: false });
         encryptionConfigControl?.updateValueAndValidity({ emitEvent: false });
+        this.showEncryptionDisableWarning = this.editing;
         return;
       }
 
-      // Encryption enabled — the key is required (backend rejects empty encryption_key).
-      // Both fields mirror each other; only encryptionKey is surfaced in the template,
-      // so only that control needs the required validator on the user-visible form path.
+      this.showEncryptionDisableWarning = false;
+
       encryptionKeyControl?.setValidators([Validators.required]);
       encryptionKeyControl?.updateValueAndValidity({ emitEvent: false });
-      // Keep encryptionConfig in sync but do NOT add required to it;
-      // it is an internal mirror and never shown to the user.
+
       if (!encryptionKeyControl?.value && encryptionConfigControl?.value) {
         encryptionKeyControl.setValue(encryptionConfigControl.value, { emitEvent: false });
       }
       if (!encryptionConfigControl?.value && encryptionKeyControl?.value) {
         encryptionConfigControl.setValue(encryptionKeyControl.value, { emitEvent: false });
       }
+    });
+
+    this.groupForm.get('enableMtls')?.valueChanges.subscribe((enabled) => {
+      this.showMtlsDisableWarning = !enabled && this.editing;
     });
   }
 
