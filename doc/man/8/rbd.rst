@@ -610,6 +610,21 @@ Commands
   Rebuild an invalid object map for the specified image. An image snapshot can be
   specified to rebuild an invalid object map for a snapshot.
 
+:command:`perf image iostat` [-p | --pool *pool-name*] [--namespace *namespace*] [--iterations *iterations*] [--sort-by *sort-by*] [--format *format*] [--pretty-format] [*pool-spec*]
+  Display image IO statistics. The output shows per-image write/read
+  operations, bytes, and latency.
+
+  The pool/pool-spec refers to the pool where image data is stored (the data
+  pool for images created with ``--data-pool``, otherwise the pool where the
+  image is defined).
+
+:command:`perf image iotop` [-p | --pool *pool-name*] [--namespace *namespace*] [*pool-spec*]
+  Display a top-like IO monitor.
+  
+  The pool/pool-spec refers to the pool where image data is stored (the data
+  pool for images created with ``--data-pool``, otherwise the pool where the
+  image is defined).
+
 :command:`pool init` [*pool-name*] [--force]
   Initialize pool for use by RBD. Newly created pools must be initialized
   prior to use.
