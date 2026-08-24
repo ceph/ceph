@@ -50,6 +50,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   currentCertificate: CephServiceCertificate = null;
   currentSpecCertificateSource = '';
   showCertSourceChangeWarning = false;
+  showEncryptionDisableWarning = false;
+  showMtlsDisableWarning = false;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -134,8 +136,11 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
         encryptionConfigControl?.setValidators(null);
         encryptionKeyControl?.updateValueAndValidity({ emitEvent: false });
         encryptionConfigControl?.updateValueAndValidity({ emitEvent: false });
+        this.showEncryptionDisableWarning = this.editing;
         return;
       }
+
+      this.showEncryptionDisableWarning = false;
 
       // Encryption enabled — the key is required (backend rejects empty encryption_key).
       // Both fields mirror each other; only encryptionKey is surfaced in the template,
@@ -150,6 +155,10 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       if (!encryptionConfigControl?.value && encryptionKeyControl?.value) {
         encryptionConfigControl.setValue(encryptionKeyControl.value, { emitEvent: false });
       }
+    });
+
+    this.groupForm.get('enableMtls')?.valueChanges.subscribe((enabled) => {
+      this.showMtlsDisableWarning = !enabled && this.editing;
     });
   }
 
