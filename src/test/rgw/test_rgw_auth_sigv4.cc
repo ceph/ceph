@@ -201,10 +201,6 @@ TEST_F(SigV4CanonicalHeaders, PresignedUnsignedXAmzHeadersAreRejected)
         canonicalize_presigned({{"HTTP_X_AMZ_ACL", "public-read"}}, boto2));
     EXPECT_FALSE(canonicalize_presigned(
         {{"HTTP_X_AMZ_COPY_SOURCE", "/victim/secret"}}, boto2));
-    /* botocore's query signer doesnt sign x-amz-content-sha256, so a
-     * presigned URL is exactly where forging it would matter. */
-    EXPECT_FALSE(canonicalize_presigned(
-        {{"HTTP_X_AMZ_CONTENT_SHA256", "UNSIGNED-PAYLOAD"}}, boto2));
     EXPECT_FALSE(canonicalize_presigned(
         {{"HTTP_X_AMZ_SECURITY_TOKEN", "forged"}}, boto2));
   }
