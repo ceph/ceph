@@ -17,6 +17,11 @@
 #include "auth/DummyAuth.h"
 #include "ring_buffer.h"
 
+#include <algorithm>
+#include <cerrno>
+#include <utility>
+#include <vector>
+
 #include <fio.h>
 #include <flist.h>
 #include <optgroup.h>
@@ -44,6 +49,15 @@ struct ceph_msgr_options {
   const char *hostname;
   const char *conffile;
   enum ceph_msgr_type ms_type;
+  /* Split the send payload into N non-owning bufferptrs to mimic
+   * RGW-multipart / EC scatter. */
+  unsigned int payload_frags;
+  unsigned int payload_frag_unalign;
+  /* verify_echo: round-trip the payload (receiver echoes it in the
+   * reply; the sender compares crc32c+length against a pre-send
+   * snapshot) to detect corrupted/stale sends. Default off so
+   * throughput runs stay lean and unidirectional. */
+  unsigned int verify_echo;
 };
 
 class FioDispatcher;
@@ -73,6 +87,12 @@ struct ceph_msgr_io {
   struct ceph_msgr_data *data;
   struct io_u *io_u;
   MOSDOp *req_msg; /** Cached request, valid only for sender */
+  /* verify_echo: crc32c + length of the payload snapshotted just
+   * before send, compared against the echoed reply.
+   * fio's native verify is medium/offset-keyed and cannot gate this
+   * storageless io_u-pointer-keyed pipe, so the engine self-checks. */
+  uint32_t echo_crc;
+  uint64_t echo_len;
 };
 
 struct ceph_msgr_reply_io {
@@ -123,6 +143,9 @@ static void create_or_get_ceph_context(struct ceph_msgr_options *o)
 
   common_init_finish(g_ceph_context);
   g_ceph_context->_conf.apply_changes(NULL);
+  /* Account bufferlist CRC cache hits/misses so the copy baseline can
+   * quantify CRC-scan recomputation. */
+  ceph::buffer::track_cached_crc(true);
   g_dummy_auth = new DummyAuthClientServer(g_ceph_context);
   g_dummy_auth->auth_registry.refresh_config();
 }
@@ -140,6 +163,25 @@ static void put_ceph_context(void)
     f->flush(ostr);
     ostr << ">>>>>>>>>>>>>  PERFCOUNTERS END  <<<<<<<<<<<<" << std::endl;
 
+    /* Histograms (e.g. msgr_send_iov_segments) are excluded from the
+     * regular dump_formatted path and need an explicit call. */
+    g_ceph_context->get_perfcounters_collection()->dump_formatted_histograms(
+	f, false);
+    ostr << ">>>>>>>>>>>>> PERF HISTOGRAMS BEGIN <<<<<<<<<<<<" << std::endl;
+    f->flush(ostr);
+    ostr << ">>>>>>>>>>>>>  PERF HISTOGRAMS END  <<<<<<<<<<<<" << std::endl;
+
+    /* Bufferlist CRC cache accounting. These are process-global
+     * atomics, not perfcounters, so emit them alongside. */
+    ostr << ">>>>>>>>>>>>> BUFFER CRC CACHE BEGIN <<<<<<<<<<<<" << std::endl;
+    ostr << "buffer_cached_crc: "
+	 << ceph::buffer::get_cached_crc() << std::endl;
+    ostr << "buffer_cached_crc_adjusted: "
+	 << ceph::buffer::get_cached_crc_adjusted() << std::endl;
+    ostr << "buffer_missed_crc: "
+	 << ceph::buffer::get_missed_crc() << std::endl;
+    ostr << ">>>>>>>>>>>>>  BUFFER CRC CACHE END  <<<<<<<<<<<<" << std::endl;
+
     delete f;
     delete g_dummy_auth;
     dout(0) <<  ostr.str() << dendl;
@@ -148,7 +190,7 @@ static void put_ceph_context(void)
   g_ceph_context->put();
 }
 
-static void ceph_msgr_sender_on_reply(const object_t &oid)
+static void ceph_msgr_sender_on_reply(MOSDOpReply *rep)
 {
   struct ceph_msgr_data *data;
   struct ceph_msgr_io *io;
@@ -160,8 +202,39 @@ static void ceph_msgr_sender_on_reply(const object_t &oid)
    * to search for reply, just send a pointer and get it back.
    */
 
-  io = (decltype(io))str_to_ptr(oid.name);
+  io = (decltype(io))str_to_ptr(rep->get_oid().name);
   data = io->data;
+
+  if (data->o->verify_echo) {
+    /* verify_echo gate: the receiver echoed the bytes it actually
+     * received; compare crc32c + length against what we snapshotted
+     * just before send. A mismatch means the wire bytes differed from
+     * the payload at queue time — corruption, truncation/partial send,
+     * or (with zero-copy sends) a buffer mutated/retired before the
+     * kernel finished sending, or recycled by another in-flight
+     * request. Fail the
+     * io_u so fio aborts the run (continue_on_error defaults off).
+     * Not for bandwidth runs: the reply carries a full echo. */
+    ceph::buffer::list &bl = rep->get_data();
+    uint64_t got_len = bl.length();
+    uint32_t got_crc = bl.crc32c(0);
+    if (getenv("CEPH_MSGR_VERIFY_ECHO_DEBUG"))
+      fprintf(stderr,
+              "fio: verify_echo DEBUG io=%p: sent len=%llu crc=%08x, "
+              "echoed len=%llu crc=%08x\n",
+              (void *)io,
+              (unsigned long long)io->echo_len, io->echo_crc,
+              (unsigned long long)got_len, got_crc);
+    if (got_len != io->echo_len || got_crc != io->echo_crc) {
+      fprintf(stderr,
+              "fio: verify_echo MISMATCH io=%p: sent len=%llu crc=%08x, "
+              "echoed len=%llu crc=%08x\n",
+              (void *)io,
+              (unsigned long long)io->echo_len, io->echo_crc,
+              (unsigned long long)got_len, got_crc);
+      io->io_u->error = EILSEQ;
+    }
+  }
   ring_buffer_enqueue(&data->io_completed_q, (void *)io);
 }
 
@@ -188,6 +261,21 @@ static void ceph_msgr_receiver_on_request(struct ceph_msgr_data *data,
 
   rep = new MOSDOpReply(req, 0, 0, 0, false);
   rep->set_connection(req->get_connection());
+
+  if (data->o->verify_echo && !req->ops.empty()) {
+    /* verify_echo: echo the received write payload back as the reply's op
+     * out-data so the sender can self-check the round-tripped bytes.
+     * MOSDOp::write() carries the payload in the message data
+     * bufferlist (per-op indata stays empty, payload_len 0), so source
+     * the echo from req->get_data(), not ops[].indata. The MOSDOpReply
+     * ctor copied req->ops so sizes match for claim_op_out_data; put
+     * the whole payload on op 0 (the engine only ever issues one write
+     * op). Refcounted bufferlist copy — no payload memcpy on the
+     * receiver. */
+    std::vector<OSDOp> echo_ops = req->ops;
+    echo_ops[0].outdata = req->get_data();
+    rep->claim_op_out_data(echo_ops);
+  }
 
   pthread_spin_lock(&data->spin);
   if (data->io_inflight_nr) {
@@ -262,7 +350,7 @@ public:
        */
 
       rep = static_cast<MOSDOpReply*>(m);
-      ceph_msgr_sender_on_reply(rep->get_oid());
+      ceph_msgr_sender_on_reply(rep);
     }
     m->put();
   }
@@ -482,20 +570,84 @@ static void fio_ceph_msgr_io_u_free(struct thread_data *td, struct io_u *io_u)
 static enum fio_q_status ceph_msgr_sender_queue(struct thread_data *td,
 						struct io_u *io_u)
 {
+  struct ceph_msgr_options *o = (decltype(o))td->eo;
   struct ceph_msgr_data *data;
   struct ceph_msgr_io *io;
 
-  bufferlist buflist = bufferlist::static_from_mem(
-    (char *)io_u->buf, io_u->buflen);
+  char *buf = (char *)io_u->buf;
+  const size_t total = io_u->buflen;
+  unsigned nfrags = o->payload_frags;
+
+  bufferlist buflist;
+  if (nfrags <= 1 || total < nfrags) {
+    /* Single contiguous non-owning ptr (original behavior). */
+    buflist = bufferlist::static_from_mem(buf, total);
+  } else {
+    /* N non-owning ptrs carved from io_u->buf, summing to total. No
+     * allocation or memcpy of payload — only small raw_static wrappers,
+     * exactly as static_from_mem does for the single-ptr case. */
+    const size_t base = total / nfrags;
+    /* Skew the first boundary so subsequent ptr starts are not
+     * page-aligned, mimicking odd RGW part sizes. Only applied when
+     * the fragments are big enough to give the skew back: otherwise
+     * the first fragment borrows more than the remaining ones have,
+     * and the last length underflows. */
+    const size_t skew =
+      (o->payload_frag_unalign && base + (total % nfrags) >= 17) ? 17 : 0;
+    size_t off = 0;
+    for (unsigned i = 0; i < nfrags; i++) {
+      size_t len;
+      if (i == nfrags - 1)
+        len = total - off;                 /* last absorbs remainder */
+      else
+        len = base + (i == 0 ? skew : 0);
+      ceph_assert(off + len <= total);
+      buflist.push_back(ceph::buffer::ptr_node::create(
+        ceph::buffer::create_static(len, buf + off)));
+      off += len;
+    }
+    ceph_assert(off == total);
+  }
 
   io = (decltype(io))io_u->engine_data;
   data = (decltype(data))td->io_ops_data;
+
+  if (o->verify_echo) {
+    /* Snapshot the payload crc32c + length BEFORE handing it to the
+     * messenger; the reply path compares the echo against this. The
+     * non-owning buflist still aliases io_u->buf here, so a Phase-1
+     * bug that mutates the buffer after this point but before the
+     * kernel finishes sending will change the wire bytes and be
+     * caught. (CRC scan — verify_echo is not a bandwidth run.) */
+    io->echo_len = buflist.length();
+    io->echo_crc = buflist.crc32c(0);
+  }
 
   /* No handy method to clear ops before reusage? Ok */
   io->req_msg->ops.clear();
 
   /* Here we do not care about direction, always send as write */
   io->req_msg->write(0, io_u->buflen, buflist);
+
+  /* Built-in gate self-test: with CEPH_MSGR_VERIFY_ECHO_CORRUPT set,
+   * mutate one payload byte AFTER the integrity snapshot but before
+   * the send, modelling the Phase-1 defect class — a buffer changed
+   * out from under an in-flight send. invalidate_crc() is required:
+   * the snapshot's buflist.crc32c() cached crc(original) on the
+   * non-owning raw, and an external pointer write does NOT invalidate
+   * it, so without this the messenger ships a STALE data-CRC and the
+   * receiver rejects the frame (no round trip — the corruption is
+   * caught, but as a wire-CRC error, not a content MISMATCH; see
+   * plan §2.4 / Phase-1 design problem 5). Invalidating forces the
+   * messenger to CRC the corrupted bytes, so the frame round-trips
+   * and the echo self-check catches the content divergence cleanly.
+   * Clean run (env unset) must pass; this run must MISMATCH + abort.
+   * No rebuild needed to flip between the two. */
+  if (o->verify_echo && getenv("CEPH_MSGR_VERIFY_ECHO_CORRUPT")) {
+    ((char *)io_u->buf)[0] ^= 0xff;
+    io->req_msg->get_data().invalidate_crc();
+  }
+
   /* Keep message alive */
   io->req_msg->get();
   io->req_msg->get_connection()->send_message(io->req_msg);
@@ -670,6 +822,38 @@ static std::vector<fio_option> options {
     o.type  = FIO_OPT_STR_STORE;
     o.off1  = offsetof(struct ceph_msgr_options, conffile);
     o.help  = "Path to CEPH configuration file";
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "payload_frags";
+    o.lname  = "Payload fragment count";
+    o.type   = FIO_OPT_INT;
+    o.off1   = offsetof(struct ceph_msgr_options, payload_frags);
+    o.help   = "Split each send payload into N non-owning bufferptrs "
+               "(0/1 = single contiguous ptr) to mimic RGW-multipart / "
+               "EC scatter";
+    o.def    = "0";
+    o.minval = 0;
+  }),
+  make_option([] (fio_option& o) {
+    o.name  = "payload_frag_unalign";
+    o.lname = "Skew fragment boundaries off page alignment";
+    o.type  = FIO_OPT_BOOL;
+    o.off1  = offsetof(struct ceph_msgr_options, payload_frag_unalign);
+    o.help  = "When set, offset fragment boundaries so ptrs are not "
+              "page-aligned";
+    o.def   = "0";
+  }),
+  make_option([] (fio_option& o) {
+    o.name  = "verify_echo";
+    o.lname = "Round-trip the payload and self-check it";
+    o.type  = FIO_OPT_BOOL;
+    o.off1  = offsetof(struct ceph_msgr_options, verify_echo);
+    o.help  = "Receiver echoes the payload in the reply and the sender "
+              "compares crc32c+length against a pre-send snapshot, "
+              "failing the io_u on mismatch. Must be set on BOTH jobs. "
+              "Needs ms_crc_data=false to report mismatches rather than "
+              "stall. Not for bandwidth runs (full reply payload + scan)";
+    o.def   = "0";
   }),
   {} /* Last NULL */
 };

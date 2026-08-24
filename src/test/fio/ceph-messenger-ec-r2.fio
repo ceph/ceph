@@ -1,0 +1,51 @@
+# Messenger send-shape model — EC read, R2 "horizontal gather"
+# (companion to ceph-messenger-ec-r1.fio).
+#
+# Models the MOSDOpReply the primary OSD sends back to RGW for an EC
+# object read when the read op is the full stripe width:
+#
+#   profile 6+2, stripe_unit 1M  =>  stripe_width = k*stripe_unit = 6M
+#   rgw_obj_stripe_size = rgw_max_chunk_size = 6M
+#   rgw_get_obj_max_req_size = 6M  (= stripe_width)
+#
+# With rgw_get_obj_max_req_size = stripe_width, every read spans all
+# k=6 data shards: the primary gathers the shards and the reply to RGW
+# is the reassembled logical 6M buffer — a concatenation of 6 x 1M
+# per-shard contributions, i.e. a fragmented, multi-segment send. This
+# is the read < write asymmetry's reply-fragmentation component.
+#
+# What this measures: the l_msgr_send_iov_segments histogram on the
+# sender Worker should shift UP versus R1 (single-shard), tracking
+# the k-way fan-out. payload_frags=6 models the per-shard segmentation
+# of one stripe; payload_frag_unalign models shard boundaries that are
+# not page-aligned. Run R1 and R2 back to back and diff the histogram —
+# that delta is the EC reply-fragmentation cost.
+#
+# Not a verify job and not an EC cluster — a send-path shape proxy.
+
+[global]
+bs=6m
+size=24g
+iodepth=128
+
+ioengine=libfio_ceph_messenger.so
+#ceph_conf_file=ceph-messenger.conf
+
+hostname=127.0.0.1
+port=5555
+
+ms_type=async+posix
+
+# R2: one 6M stripe per op, segmented into k=6 x 1M per-shard pieces.
+payload_frags=6
+# Shard boundaries in a real reassembled EC buffer are not page
+# aligned; uncomment to model that skew.
+#payload_frag_unalign=1
+
+[client]
+receiver=0
+rw=write
+
+[server]
+receiver=1
+rw=read
