@@ -63,21 +63,22 @@ export type CephfsDetail = {
     info: Record<string, any>;
     fs_name: string;
     enabled: boolean;
+    created?: string;
     [key: string]: any;
   };
   mirror_info?: {
     peers?: Record<string, string>;
   };
-  cephfs: {
+  cephfs?: {
     id: number;
     name: string;
+    enabled?: boolean;
     pools: CephfsPool[];
-    flags?: {
-      enabled?: boolean;
-    };
+    flags?: Record<string, any>;
     mirror_info?: {
       peers?: Record<string, unknown>;
     };
+    [key: string]: any;
   };
 };
 
