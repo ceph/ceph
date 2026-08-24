@@ -3,6 +3,12 @@
   ``$GETOPT`` environment override so GNU getopt can be selected
   (``brew install bash gnu-getopt``).
 
+* CephFS: The random ephemeral pinning mechanism (``ceph.dir.pin.random``) has
+  been redesigned to operate at the directory fragment (dirfrag) level using
+  consistent hashing rather than pinning child subdirectories. This allows large,
+  heavily-fragmented directories to distribute fragments across active MDS ranks
+  proportionally according to the configured pinning percentage.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
