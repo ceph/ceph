@@ -28,6 +28,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import { getUnmanagedDisable } from '../cephfs-utils';
 
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
@@ -113,14 +114,16 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         name: this.actionLabels.CLONE,
         permission: 'create',
         icon: Icons.clone,
-        disable: () => !this.selection.hasSingleSelection,
+        disable: (selection: CdTableSelection) =>
+          getUnmanagedDisable(selection, $localize`snapshot`),
         click: () => this.cloneModal()
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
-        disable: () => !this.selection.hasSingleSelection,
+        disable: (selection: CdTableSelection) =>
+          getUnmanagedDisable(selection, $localize`snapshot`),
         click: () => this.deleteSnapshot()
       }
     ];

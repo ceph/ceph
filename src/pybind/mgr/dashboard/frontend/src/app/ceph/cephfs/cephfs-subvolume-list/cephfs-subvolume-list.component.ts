@@ -36,6 +36,12 @@ import _ from 'lodash';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { DEFAULT_SUBVOLUME_GROUP } from '~/app/shared/constants/cephfs.constant';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
+import {
+  createRecreateAction,
+  getUnmanagedDisable,
+  UNMANAGED_STATE,
+  unmanagedRecreateHint
+} from '../cephfs-utils';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -85,6 +91,9 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
   subVolumesList: CephfsSubvolume[] = [];
 
   activeGroupName: string = '';
+
+  unmanagedState = UNMANAGED_STATE;
+  unmanagedHint = unmanagedRecreateHint($localize`subvolume`);
 
   constructor(
     private cephfsSubVolumeService: CephfsSubvolumeService,
@@ -150,17 +159,21 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         icon: Icons.add,
         click: () => this.openModal()
       },
+      createRecreateAction(this.actionLabels, () => this.openModal(false, true)),
       {
         name: this.actionLabels.EDIT,
         permission: 'update',
         icon: Icons.edit,
-        click: () => this.openModal(true)
+        click: () => this.openModal(true),
+        disable: (selection: CdTableSelection) =>
+          getUnmanagedDisable(selection, $localize`subvolume`)
       },
       {
         name: this.actionLabels.ATTACH,
         permission: 'read',
         icon: Icons.bars,
-        disable: () => !this.selection?.hasSelection,
+        disable: (selection: CdTableSelection) =>
+          getUnmanagedDisable(selection, $localize`subvolume`),
         click: () => this.showAttachInfo()
       },
       {
@@ -173,13 +186,16 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
           _.isEmpty(this.activeGroupName) ? DEFAULT_SUBVOLUME_GROUP : this.activeGroupName,
           { subvolume: this.selection?.first()?.name }
         ],
-        disable: () => !this.selection?.hasSingleSelection
+        disable: (selection: CdTableSelection) =>
+          getUnmanagedDisable(selection, $localize`subvolume`)
       },
       {
         name: this.actionLabels.REMOVE,
         permission: 'delete',
         icon: Icons.destroy,
-        click: () => this.removeSubVolumeModal()
+        click: () => this.removeSubVolumeModal(),
+        disable: (selection: CdTableSelection) =>
+          getUnmanagedDisable(selection, $localize`subvolume`)
       }
     ];
 
@@ -231,13 +247,14 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
     });
   }
 
-  openModal(edit = false) {
+  openModal(edit = false, recreate = false) {
     this.modalService.show(CephfsSubvolumeFormComponent, {
       fsName: this.fsName,
       subVolumeName: this.selection?.first()?.name,
       subVolumeGroupName: this.activeGroupName,
       pools: this.pools,
-      isEdit: edit
+      isEdit: edit,
+      isRecreate: recreate
     });
   }
 

@@ -1,15 +1,43 @@
 # -*- coding: utf-8 -*-
 
 import datetime
+import errno
 import logging
 import os
 from contextlib import contextmanager, suppress
+from typing import Any, Dict
 
 import cephfs
 
 from .. import mgr
+from ..exceptions import DashboardException
 
 logger = logging.getLogger(__name__)
+
+
+def is_unmanaged_volume_entry(error_code: int, err: str) -> bool:
+    """
+    Detect entries whose metadata xattrs are missing/unreadable.
+    """
+    return (
+        error_code in (-errno.EINVAL, -errno.ENODATA)
+        and 'getxattr' in (err or '').lower()
+    )
+
+
+def unmanaged_volume_info() -> Dict[str, Any]:
+    return {'state': 'unmanaged'}
+
+
+def get_subvolumegroup_path(vol_name: str, group_name: str) -> str:
+    error_code, out, err = mgr.remote(
+        'volumes', '_cmd_fs_subvolumegroup_getpath',
+        None, {'vol_name': vol_name, 'group_name': group_name})
+    if error_code != 0:
+        raise DashboardException(
+            f'Failed to get path for subvolume group {group_name}: {err}'
+        )
+    return out
 
 
 class CephFS(object):
