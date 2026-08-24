@@ -1317,3 +1317,4 @@ Further Reading
 
 * :ref:`ceph-volume`
 * :ref:`rados-index`
+* :ref:`adding-and-removing-osds` (clusters not managed by cephadm)

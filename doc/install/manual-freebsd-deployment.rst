@@ -1,6 +1,14 @@
+.. _manual-freebsd-deployment:
+
 ==============================
  Manual Deployment on FreeBSD
 ==============================
+
+.. note:: cephadm is not available on FreeBSD, so manual deployment
+   is necessary on that platform. Note that FreeBSD is not supported
+   by the core Ceph effort. On Linux, the recommended method is
+   :ref:`cephadm <cephadm_deploying_new_cluster>` instead of the
+   procedures described here.
 
 This a largely a copy of the regular Manual Deployment with FreeBSD specifics.
 The difference lies in two parts: the underlying disk format, and the way to use
