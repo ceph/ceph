@@ -116,8 +116,8 @@ describe('NotificationAreaComponent', () => {
     const items = fixture.debugElement.queryAll(By.css('cd-notification-item'));
     expect(items.length).toBe(2);
 
-    expect(items[0].attributes['ng-reflect-type']).toBe('2');
-    expect(items[1].attributes['ng-reflect-type']).toBe('0');
+    expect(items[0].componentInstance.type).toBe(2);
+    expect(items[1].componentInstance.type).toBe(0);
   });
 
   it('should render notification dividers between items', () => {

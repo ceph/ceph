@@ -79,6 +79,8 @@
               "base": "dist",
               "browser": ""
             },
+            "prerender": false,
+            "ssr": false,
             "index": "src/index.html",
             "tsConfig": "tsconfig.app.json",
             "polyfills": [
