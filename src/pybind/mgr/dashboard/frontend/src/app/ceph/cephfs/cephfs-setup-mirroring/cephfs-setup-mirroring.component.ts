@@ -25,6 +25,7 @@ export class CephfsSetupMirroringComponent extends CdForm implements OnInit {
   setupForm: CdFormGroup;
   filesystems: { id: number; name: string }[] = [];
   isSubmitting = false;
+  hasMirrorDaemon = false;
 
   private cephfsService = inject(CephfsService);
   private cephServiceService = inject(CephServiceService);
@@ -44,6 +45,7 @@ export class CephfsSetupMirroringComponent extends CdForm implements OnInit {
       filesystems: this.cephfsService.list(),
       daemons: this.cephfsService.listDaemonStatus().pipe(catchError(() => of([] as Daemon[])))
     }).subscribe(({ filesystems, daemons }) => {
+      this.hasMirrorDaemon = (daemons || []).length > 0;
       const mirroredNames = this.getMirroredFilesystem(daemons, filesystems as CephfsDetail[]);
       this.filesystems = (filesystems as CephfsDetail[])
         .map((fs) => ({
@@ -64,10 +66,16 @@ export class CephfsSetupMirroringComponent extends CdForm implements OnInit {
     this.isSubmitting = true;
     const { filesystem, token } = this.setupForm.value;
 
+    const deployDaemon$ = this.hasMirrorDaemon
+      ? of(null)
+      : this.cephServiceService.create({ service_type: 'cephfs-mirror' }).pipe(
+          // vstart / test_orchestrator cannot deploy cephfs-mirror; a daemon may
+          // already be running, so continue with enable + import on failure.
+          catchError(() => of(null))
+        );
+
     const apiActionsObs = concat(
-      this.cephServiceService.create({
-        service_type: 'cephfs-mirror'
-      }),
+      deployDaemon$,
       this.cephfsService.enableMirror(filesystem),
       this.cephfsService.createBootstrapPeer(filesystem, token.replace(/\s/g, '')).pipe(
         catchError((err) =>
