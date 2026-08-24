@@ -90,7 +90,18 @@ using neorados::cls::fifo::entry;
 auto cct = new CephContext(CEPH_ENTITY_TYPE_CLIENT);
 const DoutPrefix dp(cct, 1, "test legacy cls fifo: ");
 
-CORO_TEST_F(cls_fifo, create, NeoRadosTest)
+class TestNeoClsFifo : public NeoRadosPoolTypeTest {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TestNeoClsFifo,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return info.param == PoolType::REPLICATED ? "Replicated" : "FastEC";
+    });
+
+CORO_TEST_P(TestNeoClsFifo, cls_fifo_create)
 {
   std::string_view fifo_id = "fifo";
 
@@ -127,7 +138,7 @@ CORO_TEST_F(cls_fifo, create, NeoRadosTest)
   EXPECT_FALSE(ec);
 }
 
-CORO_TEST_F(cls_fifo, get_info, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, cls_fifo_get_info)
 {
   auto r = rados();
   std::string_view fifo_id = "fifo";
@@ -161,7 +172,7 @@ CORO_TEST_F(cls_fifo, get_info, NeoRadosTest)
     }, sys::system_error);
 }
 
-CORO_TEST_F(fifo, open_default, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_open_default)
 {
   std::string_view fifo_id = "fifo";
 
@@ -173,7 +184,7 @@ CORO_TEST_F(fifo, open_default, NeoRadosTest)
   EXPECT_EQ(info.id, fifo_id);
 }
 
-CORO_TEST_F(fifo, open_params, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_open_params)
 {
   std::string_view fifo_id = "fifo";
 
@@ -207,7 +218,7 @@ inline T decode_entry(const entry& entry)
   return std::move(val);
 }
 
-CORO_TEST_F(fifo, push_list_trim, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_push_list_trim)
 {
   std::string_view fifo_id = "fifo";
 
@@ -269,7 +280,7 @@ CORO_TEST_F(fifo, push_list_trim, NeoRadosTest)
   }
 }
 
-CORO_TEST_F(fifo, push_too_big, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_push_too_big)
 {
   static constexpr auto max_part_size = 2048ull;
   static constexpr auto max_entry_size = 128ull;
@@ -290,7 +301,7 @@ CORO_TEST_F(fifo, push_too_big, NeoRadosTest)
   EXPECT_EQ(sys::errc::argument_list_too_long, ec);
 }
 
-CORO_TEST_F(fifo, multiple_parts, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_multiple_parts)
 {
   static constexpr auto max_part_size = 2048ull;
   static constexpr auto max_entry_size = 128ull;
@@ -394,7 +405,7 @@ CORO_TEST_F(fifo, multiple_parts, NeoRadosTest)
   co_await FIFOtest::get_part_info(*f, info.tail_part_num, asio::use_awaitable);
 }
 
-CORO_TEST_F(fifo, two_pushers, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_two_pushers)
 {
   static constexpr auto max_part_size = 2048ull;
   static constexpr auto max_entry_size = 128ull;
@@ -443,7 +454,7 @@ CORO_TEST_F(fifo, two_pushers, NeoRadosTest)
   }
 }
 
-CORO_TEST_F(fifo, two_pushers_trim, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_two_pushers_trim)
 {
   static constexpr auto max_part_size = 2048ull;
   static constexpr auto max_entry_size = 128ull;
@@ -506,7 +517,7 @@ CORO_TEST_F(fifo, two_pushers_trim, NeoRadosTest)
   }
 }
 
-CORO_TEST_F(fifo, push_batch, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_push_batch)
 {
   static constexpr auto max_part_size = 2048ull;
   static constexpr auto max_entry_size = 128ull;
@@ -549,7 +560,7 @@ CORO_TEST_F(fifo, push_batch, NeoRadosTest)
   EXPECT_EQ(info.head_part_num, 4);
 }
 
-CORO_TEST_F(fifo, trim_exclusive, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_trim_exclusive)
 {
   std::string_view fifo_id = "fifo";
   auto f = co_await FIFO::create(&dp, rados(), fifo_id, pool(),
@@ -590,7 +601,7 @@ CORO_TEST_F(fifo, trim_exclusive, NeoRadosTest)
   EXPECT_EQ(max_entries - 1, val);
 }
 
-CORO_TEST_F(fifo, trim_all, NeoRadosTest)
+CORO_TEST_P(TestNeoClsFifo, fifo_trim_all)
 {
   std::string_view fifo_id = "fifo";
   auto f = co_await FIFO::create(&dp, rados(), fifo_id, pool(),

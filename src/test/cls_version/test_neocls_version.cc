@@ -39,7 +39,18 @@ using neorados::WriteOp;
 using boost::system::error_code;
 using boost::system::errc::operation_canceled;
 
-CORO_TEST_F(neocls_version, test_version_inc_read, NeoRadosTest)
+class TestNeoClsVersion : public NeoRadosPoolTypeTest {
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    ,
+    TestNeoClsVersion,
+    ::testing::Values(PoolType::REPLICATED, PoolType::FAST_EC),
+    [](const ::testing::TestParamInfo<PoolType>& info) {
+      return info.param == PoolType::REPLICATED ? "Replicated" : "FastEC";
+    });
+
+CORO_TEST_P(TestNeoClsVersion, test_version_inc_read)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
@@ -69,7 +80,7 @@ CORO_TEST_F(neocls_version, test_version_inc_read, NeoRadosTest)
   co_return;
 }
 
-CORO_TEST_F(neocls_version, test_version_set, NeoRadosTest)
+CORO_TEST_P(TestNeoClsVersion, test_version_set)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
@@ -91,7 +102,7 @@ CORO_TEST_F(neocls_version, test_version_set, NeoRadosTest)
   co_return;
 }
 
-CORO_TEST_F(neocls_version, test_version_inc_cond, NeoRadosTest)
+CORO_TEST_P(TestNeoClsVersion, test_version_inc_cond)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);
@@ -152,7 +163,7 @@ CORO_TEST_F(neocls_version, test_version_inc_cond, NeoRadosTest)
                    .exec(version::inc(cond_ver, VER_COND_TAG_EQ)));
 }
 
-CORO_TEST_F(neocls_version, test_version_inc_check, NeoRadosTest)
+CORO_TEST_P(TestNeoClsVersion, test_version_inc_check)
 {
   std::string_view oid = "obj";
   co_await create_obj(oid);

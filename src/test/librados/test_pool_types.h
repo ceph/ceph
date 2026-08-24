@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "include/rados/librados.hpp"
+#include "include/scope_guard.h"
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
@@ -109,22 +110,22 @@ class PoolTypeTestFixture : public ::testing::TestWithParam<PoolType> {
 
   void turn_balancing_off();
   void turn_balancing_on();
-  
+
   int request_osd_map(
       const std::string& oid,
       ceph::messaging::osd::OSDMapReply* reply);
-  
+
   int set_osd_upmap(
       const std::string& pgid,
       const std::vector<int>& up_osds);
-  
+
   int wait_for_upmap(
       const std::string& oid,
       int desired_primary,
       std::chrono::seconds timeout);
-  
+
   void print_osd_map(const std::string& message, const std::vector<int>& osd_vec);
-  
+
   void setup_and_trigger_recovery(
       const std::string& oid,
       int& new_primary,
@@ -138,15 +139,76 @@ class PoolTypeTestFixture : public ::testing::TestWithParam<PoolType> {
   bool balancing_disabled = false;
 };
 
+using ClsTestFixture = PoolTypeTestFixture;
+
 // Base class for EC-only tests
 class ECOnlyTestFixture : public ::testing::Test {
  protected:
   static librados::Rados rados;
+  static std::string static_pool_name;
   librados::IoCtx ioctx;
   std::string pool_name;
+  std::string nspace;
+
+  static std::string pool_name_prefix() {
+    return "ec_only_test_";
+  }
+
+  static void after_pool_create(const std::string& pool_name,
+                                librados::Rados& cluster) {
+  }
+
+  static void cleanup_namespace(librados::Rados& cluster,
+                                librados::IoCtx& ioctx,
+                                const std::string& ns) {
+    ioctx.snap_set_read(librados::SNAP_HEAD);
+    ioctx.set_namespace(ns);
+
+    int tries = 20;
+    while (--tries) {
+      int got_enoent = 0;
+      for (librados::NObjectIterator it = ioctx.nobjects_begin();
+           it != ioctx.nobjects_end(); ++it) {
+        ioctx.locator_set_key(it->get_locator());
+        librados::ObjectWriteOperation op;
+        op.remove();
+        librados::AioCompletion* completion = cluster.aio_create_completion();
+        auto sg = make_scope_guard([&] { completion->release(); });
+        ASSERT_EQ(0, ioctx.aio_operate(it->get_oid(), completion, &op,
+                                       librados::OPERATION_IGNORE_CACHE));
+        completion->wait_for_complete();
+        if (completion->get_return_value() == -ENOENT) {
+          ++got_enoent;
+        } else {
+          ASSERT_EQ(0, completion->get_return_value());
+        }
+      }
+      if (!got_enoent) {
+        break;
+      }
+      sleep(1);
+    }
+  }
+
+  static void SetUpTestSuite() {
+    ASSERT_EQ("", connect_cluster_pp(rados));
+
+    static_pool_name = get_temp_pool_name(
+      pool_name_prefix() + pool_type_name(PoolType::FAST_EC) + "_");
+    ASSERT_EQ("", create_pool_by_type(static_pool_name, rados, PoolType::FAST_EC));
+    after_pool_create(static_pool_name, rados);
+  }
+
+  static void TearDownTestSuite() {
+    ASSERT_EQ(0, destroy_pool_by_type(static_pool_name, rados, PoolType::FAST_EC));
+    static_pool_name.clear();
+    rados.shutdown();
+  }
 
   void SetUp() override;
   void TearDown() override;
 };
+
+using ClsTestFixtureEC = ECOnlyTestFixture;
 
 } // namespace ceph::test
