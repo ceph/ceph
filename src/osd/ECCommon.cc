@@ -2005,3 +2005,109 @@ ECTransaction::WritePlan ECCommon::get_write_plan(
 
 
 END_IGNORE_DEPRECATED
+
+// ---------------------------------------------------------------------------
+// EC sparse-read / mapext helper functions that depend on ECCommon types.
+// ---------------------------------------------------------------------------
+namespace ECUtil {
+
+std::optional<ECCommon::read_request_t> prepare_sparse_read_request(
+    const hobject_t &hoid,
+    const std::list<ec_align_t> &to_read,
+    uint64_t object_size,
+    bool for_mapext,
+    ECCommon::ReadPipeline &pipeline,
+    bool &out_needs_reconstruct,
+    int &out_r)
+{
+  const stripe_info_t &sinfo = pipeline.sinfo;
+
+  shard_extent_set_t want_shard_reads(sinfo.get_k_plus_m());
+  pipeline.get_want_to_read_shards(to_read, want_shard_reads);
+
+  ECCommon::read_request_t req(
+      to_read, want_shard_reads,
+      ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No,
+      ECCommon::WantOmapKeys::No, "", 0, object_size);
+  req.want_sparse_read = true;
+
+  if (for_mapext) {
+    req.drop_data = true;
+  }
+
+  out_r = pipeline.get_min_avail_to_read_shards(hoid, false, false, req);
+  if (out_r < 0) {
+    out_needs_reconstruct = false;
+    return std::nullopt;
+  }
+
+  out_needs_reconstruct = false;
+  for (auto &&[shard, want_extents] : req.shard_want_to_read) {
+    if ((int)shard >= (int)sinfo.get_k()) {
+      continue;
+    }
+    if (!req.shard_reads.contains(shard) &&
+        !req.zeros_for_decode.contains(shard)) {
+      out_needs_reconstruct = true;
+      break;
+    }
+  }
+
+  if (out_needs_reconstruct) {
+    req.drop_data = false;
+  }
+
+  out_r = 0;
+  return req;
+}
+
+int ec_sparse_finish_read(
+    const stripe_info_t &sinfo,
+    ECCommon::read_result_t &res,
+    ECCommon::read_request_t &req,
+    uint64_t offset,
+    uint64_t length,
+    bool needs_reconstruct,
+    const ceph::ErasureCodeInterfaceRef &ec_impl,
+    const interval_set<uint64_t> &force_allocated_extents,
+    std::map<uint64_t, uint64_t> &out_map,
+    ceph::bufferlist *out_bl,
+    DoutPrefixProvider *dpp)
+{
+  const uint64_t req_end = std::min(offset + length, req.object_size);
+
+  if (needs_reconstruct) {
+    int r = ec_sparse_decode(res.buffers_read, req.shard_want_to_read,
+                             req.zeros_for_decode, ec_impl, req.object_size, dpp);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (!needs_reconstruct) {
+    // Good path: clip the raw fiemap map directly — no interval_set needed.
+    out_map = ec_sparse_clip_to_map(
+        merge_shard_extent_maps(res.sparse_extents_read, sinfo),
+        offset, req_end);
+  } else {
+    interval_set<uint64_t> combined =
+        ec_sparse_merge_ro_fiemap(res.sparse_extents_read, sinfo);
+    const uint64_t scan_start = p2align(offset, FAE_BLOCK_SIZE);
+    const uint64_t scan_end = std::min(p2roundup(offset + length, FAE_BLOCK_SIZE),
+                                       req.object_size);
+    combined.union_of(ec_sparse_scan_ro_blocks(res.buffers_read,
+                                               force_allocated_extents,
+                                               scan_start, scan_end));
+    out_map = ec_sparse_clip_to_map(combined, offset, req_end);
+  }
+
+  if (out_bl != nullptr) {
+    for (auto &&[ext_off, ext_len] : out_map) {
+      out_bl->append(res.buffers_read.get_ro_buffer(ext_off, ext_len));
+    }
+  }
+
+  return 0;
+}
+
+} // namespace ECUtil

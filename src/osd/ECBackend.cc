@@ -1608,16 +1608,22 @@ namespace {
 struct SparseReadCompleter final : ECCommon::ReadCompleter {
   SparseReadCompleter(ECCommon::ReadPipeline &read_pipeline,
                       const ECUtil::stripe_info_t &sinfo,
+                      uint64_t offset,
+                      uint64_t length,
                       std::map<uint64_t, uint64_t> *out_map,
                       ceph::buffer::list *out_bl,
                       Context *on_complete,
-                      interval_set<uint64_t> force_allocated_extents)
+                      interval_set<uint64_t> force_allocated_extents,
+                      bool needs_reconstruct)
     : read_pipeline(read_pipeline),
       sinfo(sinfo),
+      offset(offset),
+      length(length),
       out_map(out_map),
       out_bl(out_bl),
       on_complete(on_complete),
-      force_allocated_extents(std::move(force_allocated_extents)) {}
+      force_allocated_extents(std::move(force_allocated_extents)),
+      needs_reconstruct(needs_reconstruct) {}
 
   void finish_single_request(
       const hobject_t &hoid,
@@ -1625,126 +1631,20 @@ struct SparseReadCompleter final : ECCommon::ReadCompleter {
       ECCommon::read_request_t &req) override {
     auto *dpp = read_pipeline.get_parent()->get_dpp();
     ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-      << " ro_read=[" << req.to_read.front().offset
-      << "~" << req.to_read.front().size << "]"
+      << " ro_read=[" << offset << "~" << length << "]"
+      << " needs_reconstruct=" << needs_reconstruct
       << " sparse_extents_read (per shard, shard-space)="
       << res.sparse_extents_read << dendl;
     if (res.r < 0) {
       result = res.r;
       return;
     }
-    *out_map = ECUtil::merge_shard_extent_maps(res.sparse_extents_read, sinfo);
+    result = ECUtil::ec_sparse_finish_read(
+        sinfo, res, req, offset, length, needs_reconstruct,
+        read_pipeline.ec_impl, force_allocated_extents,
+        *out_map, out_bl, dpp);
     ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-      << " merged RO extent map (pre-clip)=" << *out_map << dendl;
-    // Clip the full-object extent map to the requested [offset, length] window,
-    // also clip the extent map to the logical object size.
-    {
-      const uint64_t req_offset = req.to_read.front().offset;
-      const uint64_t req_end    = std::min(req_offset + req.to_read.front().size,
-                                           req.object_size);
-      auto it = out_map->begin();
-      while (it != out_map->end()) {
-        const uint64_t ext_end = it->first + it->second;
-        if (ext_end <= req_offset || it->first >= req_end) {
-          // Entirely outside the requested range — drop it.
-          it = out_map->erase(it);
-        } else {
-          // Clip start if needed.
-          if (it->first < req_offset) {
-            const uint64_t new_len = it->second - (req_offset - it->first);
-            it = out_map->emplace_hint(out_map->erase(it),
-                                       req_offset, new_len);
-          }
-          // Clip end if needed.
-          if (it->first + it->second > req_end) {
-            it->second = req_end - it->first;
-          }
-          ++it;
-        }
-      }
-    }
-    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-      << " merged+clipped RO extent map=" << *out_map
-      << " for ro_read=[" << req.to_read.front().offset
-      << "~" << req.to_read.front().size << "]" << dendl;
-    if (out_map->empty()) {
-      return;
-    }
-    // Zero-fill intra-object holes in the shard data (sparse objects have
-    // unallocated extents within the requested range that are not returned
-    // by fiemap; the EC decode requires a dense stripe, so we must pad them
-    // to zeros before decoding).
-    res.buffers_read.zero_pad(req.shard_want_to_read);
-    res.buffers_read.add_zero_padding_for_decode(req.zeros_for_decode);
-    int r = res.buffers_read.decode(read_pipeline.ec_impl,
-                                    req.shard_want_to_read,
-                                    req.object_size,
-                                    read_pipeline.get_parent()->get_dpp());
-    if (r < 0) {
-      result = r;
-      return;
-    }
-    for (auto &&[shard, want_extents] : req.shard_want_to_read) {
-      if ((int)shard >= (int)sinfo.get_k()) {
-        continue;
-      }
-      if (res.sparse_extents_read.contains(shard)) {
-        continue;
-      }
-      interval_set<uint64_t> shard_fae =
-        sinfo.ro_intervals_to_shard_intervals(force_allocated_extents, shard);
-      interval_set<uint64_t> iset;
-      ceph::buffer::list dummy_bl;
-      res.buffers_read.get_sparse_buffer(
-        shard, dummy_bl, iset,
-        shard_fae.empty() ? nullptr : &shard_fae);
-      std::map<uint64_t, uint64_t> shard_map;
-      for (auto [off, len] : iset) {
-        shard_map.emplace(off, len);
-      }
-      ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-        << " shard=" << shard
-        << " synthesised fiemap from decoded buffer: " << shard_map << dendl;
-      res.sparse_extents_read.emplace(shard, std::move(shard_map));
-    }
-    *out_map = ECUtil::merge_shard_extent_maps(res.sparse_extents_read, sinfo);
-    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-      << " merged RO extent map (pre-clip)=" << *out_map << dendl;
-    // Clip the full-object extent map to the requested [offset, length] window,
-    // also clip the extent map to the logical object size.
-    {
-      const uint64_t req_offset = req.to_read.front().offset;
-      const uint64_t req_end    = std::min(req_offset + req.to_read.front().size,
-                                           req.object_size);
-      auto it = out_map->begin();
-      while (it != out_map->end()) {
-        const uint64_t ext_end = it->first + it->second;
-        if (ext_end <= req_offset || it->first >= req_end) {
-          // Entirely outside the requested range — drop it.
-          it = out_map->erase(it);
-        } else {
-          // Clip start if needed.
-          if (it->first < req_offset) {
-            const uint64_t new_len = it->second - (req_offset - it->first);
-            it = out_map->emplace_hint(out_map->erase(it),
-                                       req_offset, new_len);
-          }
-          // Clip end if needed.
-          if (it->first + it->second > req_end) {
-            it->second = req_end - it->first;
-          }
-          ++it;
-        }
-      }
-    }
-    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-      << " merged+clipped RO extent map=" << *out_map
-      << " for ro_read=[" << req.to_read.front().offset
-      << "~" << req.to_read.front().size << "]" << dendl;
-    // Collect data for each allocated object-space extent
-    for (auto &&[ext_off, ext_len] : *out_map) {
-      out_bl->append(res.buffers_read.get_ro_buffer(ext_off, ext_len));
-    }
+      << " final RO extent map=" << *out_map << dendl;
   }
 
   void finish(int priority) && override {
@@ -1753,10 +1653,13 @@ struct SparseReadCompleter final : ECCommon::ReadCompleter {
 
   ECCommon::ReadPipeline &read_pipeline;
   const ECUtil::stripe_info_t &sinfo;
+  uint64_t offset;
+  uint64_t length;
   std::map<uint64_t, uint64_t> *out_map;
   ceph::buffer::list *out_bl;
   Context *on_complete;
   interval_set<uint64_t> force_allocated_extents;
+  bool needs_reconstruct;
   int result = 0;
 };
 
@@ -1788,59 +1691,16 @@ struct ECMapextCompleter final : ECCommon::ReadCompleter {
       return;
     }
     ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
+      << " ro_range=[" << offset << "~" << length << "]"
+      << " needs_reconstruct=" << needs_reconstruct
       << " sparse_extents_read (per shard, shard-space)="
       << res.sparse_extents_read << dendl;
-    if (needs_reconstruct) {
-      res.buffers_read.zero_pad(req.shard_want_to_read);
-      res.buffers_read.add_zero_padding_for_decode(req.zeros_for_decode);
-      int r = res.buffers_read.decode(read_pipeline.ec_impl,
-                                      req.shard_want_to_read,
-                                      req.object_size,
-                                      read_pipeline.get_parent()->get_dpp());
-      if (r < 0) {
-        result = r;
-        return;
-      }
-      for (auto &&[shard, want_extents] : req.shard_want_to_read) {
-        if ((int)shard >= (int)sinfo.get_k()) {
-          continue;
-        }
-        if (res.sparse_extents_read.contains(shard)) {
-          continue;
-        }
-        interval_set<uint64_t> shard_fae =
-          sinfo.ro_intervals_to_shard_intervals(force_allocated_extents, shard);
-        interval_set<uint64_t> iset;
-        ceph::buffer::list dummy_bl;
-        res.buffers_read.get_sparse_buffer(
-          shard, dummy_bl, iset,
-          shard_fae.empty() ? nullptr : &shard_fae);
-        std::map<uint64_t, uint64_t> shard_map;
-        for (auto [off, len] : iset) {
-          shard_map.emplace(off, len);
-        }
-        ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-          << " shard=" << shard
-          << " synthesised fiemap from decoded buffer: " << shard_map << dendl;
-        res.sparse_extents_read.emplace(shard, std::move(shard_map));
-      }
-    }
-    auto merged = ECUtil::merge_shard_extent_maps(res.sparse_extents_read, sinfo);
+    result = ECUtil::ec_sparse_finish_read(
+        sinfo, res, req, offset, length, needs_reconstruct,
+        read_pipeline.ec_impl, force_allocated_extents,
+        *out_map, nullptr, dpp);
     ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-      << " merged RO extent map=" << merged << dendl;
-    // Clip the full-object extent map to the requested [offset, length] window,
-    // also clip the extent map to the logical object size.
-    const uint64_t q_end = std::min(offset + length, req.object_size);
-    for (auto &[ext_off, ext_len] : merged) {
-      const uint64_t ext_end = ext_off + ext_len;
-      if (ext_off >= q_end || ext_end <= offset)
-        continue;
-      const uint64_t clamp_off = std::max(ext_off, offset);
-      const uint64_t clamp_end = std::min(ext_end, q_end);
-      out_map->emplace(clamp_off, clamp_end - clamp_off);
-    }
-    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
-      << " clamped RO extent map=" << *out_map << dendl;
+      << " final RO extent map=" << *out_map << dendl;
   }
 
   void finish(int priority) && override {
@@ -1879,34 +1739,20 @@ int ECBackend::objects_sparse_read_async(
            << " object_size=" << object_size << dendl;
 
   std::list<ec_align_t> to_read = {{offset, length, op_flags}};
-  // For sparse reads we need each OSD to fiemap its full shard extent so that
-  // merge_shard_extent_maps produces a complete, accurate RO extent map.
-  // Using the partial shard ranges derived from [offset, length] would cause
-  // each shard's fiemap to cover only a sub-range, leaving real data appearing
-  // as holes in the merged map and causing data-corruption false positives.
-  ECUtil::shard_extent_set_t want_shard_reads(sinfo.get_k_plus_m());
-  sinfo.ro_size_to_read_mask(object_size, want_shard_reads);
-
-  dout(20) << __func__ << ": want_shard_reads (full object, for fiemap)="
-           << want_shard_reads << dendl;
-
-  read_request_t read_request(
-    to_read, want_shard_reads,
-    ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No,
-    ECCommon::WantOmapKeys::No, "", 0, object_size);
-  read_request.want_sparse_read = true;
-
-  const int r = read_pipeline.get_min_avail_to_read_shards(
-    hoid, false, false, read_request);
-  if (r < 0) {
+  bool needs_reconstruct = false;
+  int r = 0;
+  auto req_opt = ECUtil::prepare_sparse_read_request(
+      hoid, to_read, object_size, /*for_mapext=*/false,
+      read_pipeline, needs_reconstruct, r);
+  if (!req_opt) {
     return r;
   }
 
-  dout(20) << __func__ << ": shard_reads after get_min_avail="
-           << read_request.shard_reads << dendl;
+  dout(20) << __func__ << ": needs_reconstruct=" << needs_reconstruct
+           << " shard_reads=" << req_opt->shard_reads << dendl;
 
   map<hobject_t, read_request_t> for_read_op;
-  for_read_op.emplace(hoid, std::move(read_request));
+  for_read_op.emplace(hoid, std::move(*req_opt));
 
   read_pipeline.start_read_op(
     CEPH_MSG_PRIO_DEFAULT,
@@ -1914,8 +1760,8 @@ int ECBackend::objects_sparse_read_async(
     false,
     false,
     std::make_unique<SparseReadCompleter>(
-      read_pipeline, sinfo, out_map, out_bl, on_complete,
-      force_allocated_extents));
+      read_pipeline, sinfo, offset, length, out_map, out_bl, on_complete,
+      force_allocated_extents, needs_reconstruct));
 
   return 0;
 }
@@ -1935,44 +1781,22 @@ int ECBackend::objects_mapext_async(
   }
 
   std::list<ec_align_t> to_read = {{offset, length, op_flags}};
-  ECUtil::shard_extent_set_t want_shard_reads(sinfo.get_k_plus_m());
-  read_pipeline.get_want_to_read_shards(to_read, want_shard_reads);
-
-  read_request_t read_request(
-    to_read, want_shard_reads,
-    ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No,
-    ECCommon::WantOmapKeys::No, "", 0, object_size);
-  read_request.want_sparse_read = true;
-  read_request.drop_data = true;
-
-  const int r = read_pipeline.get_min_avail_to_read_shards(
-    hoid, false, false, read_request);
-  if (r < 0) {
-    return r;
-  }
-
   bool needs_reconstruct = false;
-  for (auto &&[shard, want_extents] : read_request.shard_want_to_read) {
-    if ((int)shard >= (int)sinfo.get_k()) {
-      continue;
-    }
-    if (!read_request.shard_reads.contains(shard) &&
-        !read_request.zeros_for_decode.contains(shard)) {
-      needs_reconstruct = true;
-      break;
-    }
-  }
-  if (needs_reconstruct) {
-    read_request.drop_data = false;
+  int r = 0;
+  auto req_opt = ECUtil::prepare_sparse_read_request(
+      hoid, to_read, object_size, /*for_mapext=*/true,
+      read_pipeline, needs_reconstruct, r);
+  if (!req_opt) {
+    return r;
   }
 
   dout(20) << __func__ << ": hoid=" << hoid
            << " ro_range=[" << offset << "~" << length << "]"
            << " needs_reconstruct=" << needs_reconstruct
-           << " shard_reads=" << read_request.shard_reads << dendl;
+           << " shard_reads=" << req_opt->shard_reads << dendl;
 
   map<hobject_t, read_request_t> for_read_op;
-  for_read_op.emplace(hoid, std::move(read_request));
+  for_read_op.emplace(hoid, std::move(*req_opt));
 
   read_pipeline.start_read_op(
     CEPH_MSG_PRIO_DEFAULT,

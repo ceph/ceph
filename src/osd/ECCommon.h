@@ -1047,3 +1047,91 @@ void ECCommon::ReadPipeline::filter_read_op(
     on_schedule_recovery(op);
   }
 }
+
+// ---------------------------------------------------------------------------
+// EC sparse-read / mapext helper functions
+// ---------------------------------------------------------------------------
+namespace ECUtil {
+
+/**
+ * ec_sparse_decode - zero-pad and EC-decode a shard_extent_map_t.
+ */
+int ec_sparse_decode(
+    shard_extent_map_t &buffers_read,
+    const shard_extent_set_t &shard_want_to_read,
+    shard_extent_set_t &zeros_for_decode,
+    const ceph::ErasureCodeInterfaceRef &ec_impl,
+    uint64_t object_size,
+    DoutPrefixProvider *dpp);
+
+/**
+ * ec_sparse_merge_ro_fiemap - project healthy shard fiemaps into RO space.
+ */
+interval_set<uint64_t> ec_sparse_merge_ro_fiemap(
+    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
+    const stripe_info_t &sinfo);
+
+/**
+ * ec_sparse_scan_ro_blocks - scan decoded RO bytes at FAE_BLOCK_SIZE
+ * granularity to determine which 4 KiB blocks are allocated.
+ */
+interval_set<uint64_t> ec_sparse_scan_ro_blocks(
+    const shard_extent_map_t &buffers_read,
+    const interval_set<uint64_t> &force_allocated_extents,
+    uint64_t scan_start,
+    uint64_t scan_end);
+
+/**
+ * ec_sparse_clip_to_map - clip an interval_set or std::map of extents to
+ * [offset, req_end) and return as std::map<uint64_t, uint64_t>.
+ * Templated so both containers can be used without conversion overhead.
+ */
+template <typename ExtentContainer>
+std::map<uint64_t, uint64_t> ec_sparse_clip_to_map(
+    const ExtentContainer &extents,
+    uint64_t offset,
+    uint64_t req_end)
+{
+  std::map<uint64_t, uint64_t> out;
+  for (auto [ext_off, ext_len] : extents) {
+    const uint64_t ext_end = ext_off + ext_len;
+    if (ext_off >= req_end || ext_end <= offset) continue;
+    const uint64_t clamp_off = std::max(ext_off, offset);
+    const uint64_t clamp_end = std::min(ext_end, req_end);
+    out.emplace(clamp_off, clamp_end - clamp_off);
+  }
+  return out;
+}
+
+/**
+ * prepare_sparse_read_request - build a read_request_t and determine whether
+ * EC reconstruction will be needed.
+ */
+std::optional<ECCommon::read_request_t> prepare_sparse_read_request(
+    const hobject_t &hoid,
+    const std::list<ec_align_t> &to_read,
+    uint64_t object_size,
+    bool for_mapext,
+    ECCommon::ReadPipeline &pipeline,
+    bool &out_needs_reconstruct,
+    int &out_r);
+
+/**
+ * ec_sparse_finish_read - produce the final RO extent map (and optional data)
+ * for a sparse read or mapext operation.
+ * Pass out_bl=nullptr for mapext.
+ */
+int ec_sparse_finish_read(
+    const stripe_info_t &sinfo,
+    ECCommon::read_result_t &res,
+    ECCommon::read_request_t &req,
+    uint64_t offset,
+    uint64_t length,
+    bool needs_reconstruct,
+    const ceph::ErasureCodeInterfaceRef &ec_impl,
+    const interval_set<uint64_t> &force_allocated_extents,
+    std::map<uint64_t, uint64_t> &out_map,
+    ceph::bufferlist *out_bl,
+    DoutPrefixProvider *dpp);
+
+} // namespace ECUtil
