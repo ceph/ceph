@@ -6933,10 +6933,10 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         primary_zone_cluster_conn.cluster.admin(["bilog", "trim", "--bucket", bucket.name])
         log.info("set rgw_inject_delay_sec and rgw_inject_delay_pattern to slow down bucket full sync")
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "set", "client.rgw", "rgw_inject_delay_sec", str(bucket_full_sync_listing_inject_delay_sec)]
+            ["config", "set", "client", "rgw_inject_delay_sec", str(bucket_full_sync_listing_inject_delay_sec)]
         )
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "set", "client.rgw", "rgw_inject_delay_pattern", bucket_full_sync_listing_inject_delay_pattern]
+            ["config", "set", "client", "rgw_inject_delay_pattern", bucket_full_sync_listing_inject_delay_pattern]
         )
         log.info("enable bucket sync to initiate full sync")
         enable_bucket_sync(realm.meta_master_zone(), bucket.name)
@@ -6982,10 +6982,10 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
             "removing rgw_inject_delay_sec and rgw_inject_delay_pattern to allow bucket full sync to run normally to the completion"
         )
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "rm", "client.rgw", "rgw_inject_delay_sec"]
+            ["config", "rm", "client", "rgw_inject_delay_sec"]
         )
         secondary_zone_cluster_conn.cluster.ceph_admin(
-            ["config", "rm", "client.rgw", "rgw_inject_delay_pattern"]
+            ["config", "rm", "client", "rgw_inject_delay_pattern"]
         )
         time.sleep(
             bucket_full_sync_listing_inject_delay_sec
@@ -7014,10 +7014,10 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         )
         try:
             secondary_zone_cluster_conn.cluster.ceph_admin(
-                ["config", "rm", "client.rgw", "rgw_inject_delay_sec"]
+                ["config", "rm", "client", "rgw_inject_delay_sec"]
             )
             secondary_zone_cluster_conn.cluster.ceph_admin(
-                ["config", "rm", "client.rgw", "rgw_inject_delay_pattern"]
+                ["config", "rm", "client", "rgw_inject_delay_pattern"]
             )
         except:
             pass
