@@ -602,7 +602,7 @@ TEST_P(OmapTest, NoOmapRecoveryDoesErrorInject) {
   EXPECT_EQ(0, memcmp(bl_read.c_str(), "ceph", 4));
 }
 
-TEST_P(OmapTest, NoOmapRecoveryZeroSized) {
+TEST_P(OmapTest, NoOmapRecoveryZeroSizedDoesErrorInject) {
   SKIP_IF_CRIMSON();
   turn_balancing_off();
   bufferlist bl_write;
