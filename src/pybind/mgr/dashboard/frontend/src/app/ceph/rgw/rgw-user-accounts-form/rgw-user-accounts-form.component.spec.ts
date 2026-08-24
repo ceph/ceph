@@ -12,6 +12,7 @@ import { ModalModule } from 'carbon-components-angular';
 import { ReactiveFormsModule } from '@angular/forms';
 import { RgwUserAccountsComponent } from '../rgw-user-accounts/rgw-user-accounts.component';
 import { DUE_TIMER } from '~/app/shared/forms/cd-validators';
+import { NoopAnimationsModule } from '@angular/platform-browser/animations';
 
 class MockRgwUserAccountsService {
   create = jest.fn().mockReturnValue(of(null));
@@ -37,7 +38,8 @@ describe('RgwUserAccountsFormComponent', () => {
           { path: 'rgw/accounts', component: RgwUserAccountsComponent }
         ]),
         ModalModule,
-        ReactiveFormsModule
+        ReactiveFormsModule,
+        NoopAnimationsModule
       ],
       providers: [{ provide: RgwUserAccountsService, useClass: MockRgwUserAccountsService }]
     }).compileComponents();
