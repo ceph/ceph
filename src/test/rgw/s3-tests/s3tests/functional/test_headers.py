@@ -712,6 +712,38 @@ def test_sigv4_missing_header():
     assert(resp.status_code == 403)
 
 @pytest.mark.auth_aws4
+def test_sigv4_with_signed_content_sha256():
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(method="GET", url=get_config_endpoint() + "/")
+    signer.add_auth(req)
+    assert req.url is not None
+    assert 'x-amz-content-sha256' in req.headers
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
+def test_sigv4_without_signed_content_sha256():
+    # custom signer that excludes x-amz-content-sha256 from signed-headers
+    class CustomAuth(S3SigV4Auth):
+        def headers_to_sign(self, request):
+            saved = request.headers['x-amz-content-sha256']
+            del request.headers['x-amz-content-sha256']
+            result = super().headers_to_sign(request)
+            request.headers['x-amz-content-sha256'] = saved
+            return result
+
+    creds = Credentials(access_key=get_main_aws_access_key(),
+                        secret_key=get_main_aws_secret_key())
+    signer = CustomAuth(credentials=creds, service_name="s3",
+                        region_name=get_main_api_name())
+    req = AWSRequest(method="GET", url=get_config_endpoint() + "/")
+    signer.add_auth(req)
+    assert req.url is not None
+    assert 'x-amz-content-sha256' in req.headers
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
 def test_sigv4_xgoog_signed():
     signer = _get_s3sigv4_signer()
     req = AWSRequest(
