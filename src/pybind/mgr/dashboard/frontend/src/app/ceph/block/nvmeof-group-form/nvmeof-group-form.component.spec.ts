@@ -478,6 +478,37 @@ describe('NvmeofGroupFormComponent', () => {
       expect(form.valid).toBe(true);
     });
 
+    it('should show encryption disable warning when unchecking encryption in edit mode', () => {
+      // Already editing with encryption enabled (loaded by beforeEach)
+      expect(component.showEncryptionDisableWarning).toBe(false);
+
+      form.controls.enableEncryption.setValue(false);
+      expect(component.showEncryptionDisableWarning).toBe(true);
+    });
+
+    it('should hide encryption disable warning when re-enabling encryption in edit mode', () => {
+      form.controls.enableEncryption.setValue(false);
+      expect(component.showEncryptionDisableWarning).toBe(true);
+
+      form.controls.enableEncryption.setValue(true);
+      expect(component.showEncryptionDisableWarning).toBe(false);
+    });
+
+    it('should show mTLS disable warning when unchecking mTLS in edit mode', () => {
+      expect(component.showMtlsDisableWarning).toBe(false);
+
+      form.controls.enableMtls.setValue(false);
+      expect(component.showMtlsDisableWarning).toBe(true);
+    });
+
+    it('should hide mTLS disable warning when re-enabling mTLS in edit mode', () => {
+      form.controls.enableMtls.setValue(false);
+      expect(component.showMtlsDisableWarning).toBe(true);
+
+      form.controls.enableMtls.setValue(true);
+      expect(component.showMtlsDisableWarning).toBe(false);
+    });
+
     it('should NOT set enableEncryption when ssl:true but encryption_key is absent (cephadm-internal ssl)', () => {
       // cephadm sets ssl:true internally for cert-managed services.
       // Without an explicit encryption_key the user did not enable the toggle.
