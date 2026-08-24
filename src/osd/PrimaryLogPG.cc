@@ -1729,7 +1729,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
         if (pool_migration_reservations_granted_target) {
           dout(20) << __func__ << " reservations already granted, returning success to source PG" << dendl;
           pg_t source_pg = get_source_pg_from_hash(start_obj);
-          pool_migration_target_delete(source_pg, start_obj, op);
+          pool_migration_target_delete(source_pg, start_obj);
           result = 0;
           break;
         }
@@ -15868,9 +15868,8 @@ bool PrimaryLogPG::pool_migration_source_delete(hobject_t oid)
   return true;
 }
 
-bool PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
-                                                const hobject_t &watermark,
-                                                OpRequestRef& op)
+void PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
+                                                const hobject_t &watermark)
 {
   dout(20) << __func__ << " deleting objects with watermark >= " << watermark << dendl;
 
@@ -15938,13 +15937,6 @@ bool PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
 
       OpContextUPtr ctx = simple_opc_create(obc);
 
-      if (!ctx->lock_manager.get_pool_migration_write(obj, obc, op)) {
-        dout(20) << __func__ << " could not get lock on " << obj
-                 << ", op will be retried" << dendl;
-        close_op_ctx(ctx.release());
-        return false;
-      }
-
       ctx->at_version = get_next_version();
       int ret = _delete_oid(ctx.get(), true, false, true);
       ceph_assert(ret == 0);
@@ -15964,7 +15956,6 @@ bool PrimaryLogPG::pool_migration_target_delete(const pg_t &source_pg,
   }
 
   dout(20) << __func__ << " deleted " << deleted << " stale objects" << dendl;
-  return true;
 }
 
 void PrimaryLogPG::handle_pool_migration_quiesce_complete()
@@ -16571,10 +16562,7 @@ void PrimaryLogPG::on_pool_migration_target_reserved() {
     }
   }
   pg_t source_pg = get_source_pg_from_hash(start_obj);
-  if (!pool_migration_target_delete(source_pg, start_obj, retry_op)) {
-    dout(20) << __func__ << " failed to clean up stale objects on target PG" << dendl;
-    return;
-  }
+  pool_migration_target_delete(source_pg, start_obj);
 
   int result = 0;
   for (auto& op : pending_pool_migration_reservation_ops) {
