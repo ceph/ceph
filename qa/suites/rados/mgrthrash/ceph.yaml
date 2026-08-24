@@ -1,0 +1,10 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MGR_DOWN\)
+      - MGR_DOWN
+      - no active mgr
+tasks:
+- install:
+- ceph:
