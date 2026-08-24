@@ -90,12 +90,13 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
       const initiatorList = normalizeInitiators(initiators);
       this.buildDetails(
         getSubsystemAuthStatus(this.subsystem, initiatorList),
-        isSubsystemAllowAllHosts(this.subsystem, initiatorList)
+        isSubsystemAllowAllHosts(this.subsystem, initiatorList),
+        initiatorList.length
       );
     });
   }
 
-  private buildDetails(authStatus: string, allowAllHosts: boolean) {
+  private buildDetails(authStatus: string, allowAllHosts: boolean, initiatorCount: number = 0) {
     this.details = [
       {
         label: $localize`Serial number`,
@@ -118,7 +119,7 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
       },
       {
         label: $localize`Host access`,
-        value: this.getHostAccessLabel(allowAllHosts),
+        value: this.getHostAccessLabel(allowAllHosts, initiatorCount),
         type: 'host-access',
         row: 2
       },
@@ -176,8 +177,10 @@ export class NvmeofSubsystemOverviewComponent implements OnInit, OnDestroy {
   }
 
   /** Host access is configuration text, not a health state. */
-  getHostAccessLabel(allowAllHosts: boolean): string {
-    return allowAllHosts ? $localize`Allow all hosts` : $localize`Restrict to specific hosts`;
+  getHostAccessLabel(allowAllHosts: boolean, initiatorCount: number = 0): string {
+    if (allowAllHosts) return $localize`Allow all hosts`;
+    if (initiatorCount === 0) return $localize`N/A`;
+    return $localize`Restrict to specific hosts`;
   }
 
   getAuthStatusIcon(authStatus: string): keyof typeof ICON_TYPE {
