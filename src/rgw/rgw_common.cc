@@ -714,6 +714,25 @@ parse_key_value(const std::string_view& in_str)
   return parse_key_value(in_str, "=");
 }
 
+int rgw_apply_tenant_to_uid(const string& tenant, const string& uid_str,
+                            rgw_user& uid, string& err_msg)
+{
+  if (tenant.empty()) {
+    return 0;
+  }
+  if (uid_str.empty()) {
+    err_msg = "tenant requires uid";
+    return -EINVAL;
+  }
+  if (uid.tenant.empty()) {
+    uid.tenant = tenant;
+  } else if (uid.tenant != tenant) {
+    err_msg = "tenant " + tenant + " conflicts with tenant of uid " + uid_str;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int parse_time(const char *time_str, real_time *time)
 {
   struct tm tm;

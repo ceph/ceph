@@ -322,6 +322,13 @@ target_include_directories(unittest_rgw_http_errors
   SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
 target_link_libraries(unittest_rgw_http_errors rgw_common ${UNITTEST_LIBS})
 
+# unittest_rgw_user
+add_executable(unittest_rgw_user test_rgw_user.cc)
+add_ceph_unittest(unittest_rgw_user)
+target_include_directories(unittest_rgw_user
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+target_link_libraries(unittest_rgw_user rgw_common ${UNITTEST_LIBS})
+
 # unittest_rgw_dmclock_queue
 add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_dmclock_scheduler)

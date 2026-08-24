@@ -82,6 +82,13 @@
     Configuration file syntax follows the OpenSSL standard (see https://github.com/openssl/openssl/blob/master/doc/man5/config.pod).
     If the default provider is required when also using custom providers,
     it must be explicitly loaded in the configuration file or code (see https://github.com/openssl/openssl/blob/master/README-PROVIDERS.md).
+* RGW: The Admin Ops user API now accepts the ``tenant`` request parameter on
+  user info, modify and remove, as user create already does. A tenant may
+  still be embedded in ``uid`` (``tenant$uid``) on all operations; if the
+  parameter and ``uid`` name different tenants, the request now fails with
+  ``EINVAL`` rather than one spelling being silently ignored. User create's
+  existing behavior (the parameter overwrites the tenant embedded in ``uid``)
+  is unchanged.
 * RGW: Fixed bucket notification events so the 'x_amz_request_id' in NotificationEvent now matches the 'x_amz_request_id' returned by the corresponding S3 operation.
 * RGW: The rgw_gc_max_deferred and rgw_gc_max_deferred_entries_size options have been removed, as they did not do anything.
   - Updated the default for rgw_gc_max_queue_size to account for the extra space from removing rgw_gc_max_deferred_entries_size.
