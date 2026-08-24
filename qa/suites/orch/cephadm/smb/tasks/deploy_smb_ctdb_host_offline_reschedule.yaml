@@ -1,0 +1,91 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+- - host.b
+  - mon.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+overrides:
+  ceph:
+    log-ignorelist:
+      - CEPHADM_STRAY_HOST
+      - CEPHADM_STRAY_DAEMON
+      - CEPHADM_FAILED_DAEMON
+      - OSD_DOWN
+      - OSD_HOST_DOWN
+      - MON_DOWN
+      - mons down
+      - mon down
+      - out of quorum
+    log-only-match:
+      - CEPHADM_
+tasks:
+- pexec:
+    all:
+      - sudo setsebool -P virt_sandbox_use_netlink 1 || true
+- cephadm:
+
+- cephadm.shell:
+    host.a:
+      - ceph fs volume create cephfs
+- cephadm.wait_for_service:
+    service: mds.cephfs
+
+- cephadm.shell:
+    host.a:
+      # add subvolgroup & subvolume for test
+      - cmd: ceph fs subvolumegroup create cephfs smb
+      - cmd: ceph fs subvolume create cephfs sv1 --group-name=smb --mode=0777
+      # set up smb cluster and share. count:2 across 3 eligible hosts
+      # (a/b/c) leaves one host free for cephadm to reschedule onto.
+      - cmd: ceph mgr module enable smb
+      - cmd: sleep 30
+      - cmd: >
+          ceph smb cluster create hoffl1 user
+          --define-user-pass=user1%t3stP4ss1
+          --placement=count:2
+          --clustering=default
+      - cmd: ceph smb share create hoffl1 share1 cephfs / --subvolume=smb/sv1
+- cephadm.wait_for_service:
+    service: smb.hoffl1
+
+# verify CTDB is healthy, cluster well formed across both initial hosts.
+# Doesn't use smb.workunit's ctdb_healthy check here because that assumes
+# admin_role also runs the daemon, which count:2 across 3 hosts doesn't
+# guarantee.
+- smb.wait_for_ctdb_healthy:
+    admin_role: host.a
+    cluster_id: hoffl1
+    node_count: 2
+
+# power off whichever host is currently running an smb daemon for this cluster except host.a
+- smb.power_off_smb_daemon_host:
+    admin_role: host.a
+    cluster_id: hoffl1
+
+# Wait for the smb service to redeploy the relocated rank
+- cephadm.wait_for_service:
+    service: smb.hoffl1
+
+# verify CTDB relocated the rank onto the spare host and two healthy nodes again
+- smb.wait_for_ctdb_healthy:
+    admin_role: host.a
+    cluster_id: hoffl1
+    node_count: 2
+
+# bring the host back so job teardown can reach it normally
+- smb.power_on_smb_offline_host:
+
+- cephadm.shell:
+    host.a:
+      - cmd: ceph smb share rm hoffl1 share1
+      - cmd: ceph smb cluster rm hoffl1
+- cephadm.wait_for_service_not_present:
+    service: smb.hoffl1
