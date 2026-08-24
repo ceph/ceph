@@ -107,7 +107,7 @@ public:
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
       ceph::os::Transaction&& txn,
-      bool* ever_lba_conflicted_address = nullptr) override final;
+      transaction_exec_info_t* exec_info = nullptr) override final;
 
     read_errorator::future<std::map<uint64_t, uint64_t>>
     fiemap(

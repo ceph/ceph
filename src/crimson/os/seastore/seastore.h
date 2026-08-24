@@ -73,6 +73,7 @@ public:
     ceph::os::Transaction txn;
     seastar::promise<> pr;
     bool batchable = true;
+    transaction_exec_info_t* exec_info = nullptr;
   };
   std::deque<batch_entry_t> pending_txns;
   bool collection_in_flight = false;
@@ -191,7 +192,7 @@ public:
     seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
       ceph::os::Transaction&& txn,
-      bool* ever_lba_conflicted_address = nullptr) override final;
+      transaction_exec_info_t* exec_info = nullptr) override final;
 
     /* Note, flush() machinery must go through the same pipeline
      * stages and locks as do_transaction. */
@@ -286,8 +287,9 @@ public:
     seastar::future<> dispatch_collection(CollectionRef ch);
     ceph::os::Transaction build_next_batch(
       SeastoreCollection& coll,
-      std::vector<seastar::promise<>>& pending_txns_promises);
-    seastar::future<> run_one_batch(CollectionRef ch, ceph::os::Transaction&& t);
+      std::vector<seastar::promise<>>& pending_txns_promises,
+      std::vector<transaction_exec_info_t*>& pending_txns_exec_infos);
+    seastar::future<bool> run_one_batch(CollectionRef ch, ceph::os::Transaction&& t);
 
     TransactionManager::read_extent_iertr::future<std::optional<unsigned>>
     get_coll_bits(CollectionRef ch, Transaction &t) const;

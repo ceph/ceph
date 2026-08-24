@@ -89,7 +89,7 @@ public:
   seastar::future<> do_transaction_no_callbacks(
     CollectionRef c,
     ceph::os::Transaction&& txn,
-    bool* ever_lba_conflicted_address = nullptr) override;
+    transaction_exec_info_t* exec_info = nullptr) override;
 
   // error injection
   seastar::future<> inject_data_error(const ghobject_t& o) override;

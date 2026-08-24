@@ -459,7 +459,7 @@ AlienStore::omap_iterate(CollectionRef ch,
 seastar::future<> AlienStore::do_transaction_no_callbacks(
   CollectionRef ch,
   ceph::os::Transaction&& txn,
-  bool*)
+  transaction_exec_info_t*)
 {
   logger().debug("{}", __func__);
   auto id = seastar::this_shard_id();

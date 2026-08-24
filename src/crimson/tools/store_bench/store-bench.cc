@@ -720,12 +720,12 @@ seastar::future<results_t> RandomWriteWorkload::run(
     ceph::os::Transaction &&t) -> seastar::future<> {
     ++running;
     co_await sem.wait(1);
-    bool* ever_lba_conflicted_address = new bool(false);
+    auto exec_info = new crimson::os::transaction_exec_info_t();
     std::ignore = local_store.do_transaction(
       col_ref,
       std::move(t),
-      ever_lba_conflicted_address
-    ).finally([&, op_start = ceph::mono_clock::now(), ever_lba_conflicted_address] {
+      exec_info
+    ).finally([&, op_start = ceph::mono_clock::now(), exec_info] {
       --running;
       if (running == 0 && complete) {
         complete->set_value();
@@ -738,9 +738,9 @@ seastar::future<results_t> RandomWriteWorkload::run(
         std::chrono::duration<double> elapsed = now - loop_start;
         std::chrono::duration<double> latency = now - op_start;
         raw_conflict_file << elapsed.count() << "," << latency.count() << ","
-                           << (*ever_lba_conflicted_address ? 1 : 0) << "\n";
+                           << (exec_info->lba_conflicted ? 1 : 0) << "\n";
       }
-      delete ever_lba_conflicted_address;
+      delete exec_info;
     });
   };
 

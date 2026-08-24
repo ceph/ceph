@@ -561,7 +561,7 @@ auto CyanStore::Shard::omap_get_header(
 seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
   CollectionRef ch,
   ceph::os::Transaction&& t,
-  bool*)
+  transaction_exec_info_t*)
 {
   assert(store_active);
   using ceph::os::Transaction;
