@@ -293,14 +293,14 @@ bool RGWLifecycleConfiguration::valid()
   return true;
 }
 
-void *RGWLC::LCWorker::entry() {
+void RGWLC::LCWorker::run(boost::asio::yield_context yield) {
   do {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
       lc_start_time = time(nullptr);
       ldpp_dout(dpp, 2) << "life cycle: start worker=" << ix << dendl;
-      int r = lc->process(this, all_buckets, false /* once */);
+      int r = lc->process(this, all_buckets, false /* once */, yield);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "ERROR: do life cycle process() returned error r="
 			  << r << " worker=" << ix << dendl;
@@ -318,12 +318,9 @@ void *RGWLC::LCWorker::entry() {
 
     ldpp_dout(dpp, 5) << "schedule life cycle next start time="
 		      << rgw_to_asctime(next) << " worker=" << ix << dendl;
-
-    std::unique_lock l{lock};
-    cond.wait_for(l, std::chrono::seconds(secs));
+    timer.expires_from_now(boost::posix_time::seconds(secs));
+    timer.async_wait(yield);
   } while (!lc->going_down());
-
-  return NULL;
 }
 
 void RGWLC::initialize(CephContext *_cct, rgw::sal::Driver* _driver) {
@@ -940,7 +937,7 @@ public:
 
 RGWLC::LCWorker::LCWorker(const DoutPrefixProvider* dpp, CephContext *cct,
 			  RGWLC *lc, int ix)
-  : dpp(dpp), cct(cct), lc(lc), ix(ix)
+  : dpp(dpp), cct(cct), lc(lc), ix(ix), timer(lc->get_io_context())
 {
 }
 
@@ -2337,8 +2334,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 
   // spawn a coroutine for bucket_lc_process() so it can use spawn_throttle
   // for concurrent operations
-  boost::asio::io_context context;
-  boost::asio::spawn(context,
+  boost::asio::spawn(io_ctx,
       [this, &shard_id, worker, stop_at, once] (boost::asio::yield_context yield) {
         return bucket_lc_process(shard_id, worker, stop_at, once, yield);
       },
@@ -2352,8 +2348,6 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 
   // warn about any blocking operations called from this coroutine
   auto enable_warnings = warn_about_blocking_in_scope{};
-
-  context.run();
 
   return ret;
 }
@@ -2524,7 +2518,8 @@ static std::string get_bucket_lc_key(const rgw_bucket& bucket){
 
 int RGWLC::process(LCWorker* worker,
 		   const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
-		   bool once = false)
+		   bool once,
+                   optional_yield yield)
 {
   int ret = 0;
   int max_secs = cct->_conf->rgw_lc_lock_max_time;
@@ -2536,7 +2531,7 @@ int RGWLC::process(LCWorker* worker,
      * for this bucket) */
     auto bucket_lc_key = get_bucket_lc_key(optional_bucket->get_key());
     auto index = get_lc_index(driver->ctx(), bucket_lc_key);
-    ret = process_bucket(index, max_secs, worker, bucket_lc_key, once);
+    ret = process_bucket(index, max_secs, worker, bucket_lc_key, once, yield);
     return ret;
   } else {
     /* generate an index-shard sequence unrelated to any other
@@ -2544,13 +2539,13 @@ int RGWLC::process(LCWorker* worker,
     std::string all_buckets{""};
     vector<int> shard_seq = random_sequence(max_objs);
     for (auto index : shard_seq) {
-      ret = process(index, max_secs, worker, once);
+      ret = process(index, max_secs, worker, once, yield);
       if (ret < 0)
 	return ret;
     }
   }
 
-  ret = driver->process_expired_objects(this, null_yield);
+  ret = driver->process_expired_objects(this, yield);
   if (ret < 0) {
     ldpp_dout(this, 5) << "RGWLC::process_expired_objects: failed, "
 	          << " worker ix: " << worker->ix << dendl;
@@ -2607,7 +2602,8 @@ struct LCLockAdapter {
 
 int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 			  const std::string& bucket_entry_marker,
-			  bool once = false)
+			  bool once,
+                          optional_yield yield)
 {
   ldpp_dout(this, 5) << "RGWLC::process_bucket(): ENTER: "
 	  << "index: " << index << " worker ix: " << worker->ix
@@ -2616,13 +2612,13 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   int ret = 0;
   std::unique_ptr<rgw::sal::LCSerializer> serializer =
     sal_lc->get_serializer(lc_index_lock_name, obj_names[index],
-			   worker->thr_name());
+			   worker->name());
   if (max_lock_secs <= 0) {
     return -EAGAIN;
   }
 
   const ceph::timespan time = std::chrono::seconds(max_lock_secs);
-  ret = serializer->try_lock(this, time, null_yield);
+  ret = serializer->try_lock(this, time, yield);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
     ldpp_dout(this, 0) << "RGWLC::process_bucket() failed to acquire lock on "
@@ -2632,11 +2628,11 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   if (ret < 0)
     return 0;
 
-  auto lock_adapter = LCLockAdapter{*serializer, this, null_yield};
+  auto lock_adapter = LCLockAdapter{*serializer, this, yield};
   std::unique_lock<LCLockAdapter> lock(lock_adapter, std::adopt_lock);
 
   rgw::sal::LCEntry entry;
-  ret = sal_lc->get_entry(this, null_yield, obj_names[index],
+  ret = sal_lc->get_entry(this, yield, obj_names[index],
                           bucket_entry_marker, entry);
   if (ret >= 0) {
     if (entry.status == lc_processing) {
@@ -2666,7 +2662,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     << dendl;
 
   entry.status = lc_processing;
-  ret = sal_lc->set_entry(this, null_yield, obj_names[index], entry);
+  ret = sal_lc->set_entry(this, yield, obj_names[index], entry);
   if (ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::process_bucket() failed to set obj entry "
 		       << obj_names[index] << entry.bucket << entry.status
@@ -2729,12 +2725,13 @@ static inline bool already_run_today(CephContext* cct, time_t start_date)
 inline int RGWLC::advance_head(const std::string& lc_shard,
 			       rgw::sal::LCHead& head,
 			       const rgw::sal::LCEntry& entry,
-			       time_t start_date)
+			       time_t start_date,
+                               optional_yield yield)
 {
   int ret{0};
   rgw::sal::LCEntry next_entry;
 
-  ret = sal_lc->get_next_entry(this, null_yield, lc_shard,
+  ret = sal_lc->get_next_entry(this, yield, lc_shard,
                                entry.bucket, next_entry);
   if (ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::process() failed to get obj entry "
@@ -2746,7 +2743,7 @@ inline int RGWLC::advance_head(const std::string& lc_shard,
   head.marker = next_entry.bucket;
   head.start_date = start_date;
 
-  ret = sal_lc->put_head(this, null_yield, lc_shard, head);
+  ret = sal_lc->put_head(this, yield, lc_shard, head);
   if (ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
 		       << lc_shard
@@ -2783,11 +2780,12 @@ inline int RGWLC::check_if_shard_done(const std::string& lc_shard,
 inline int RGWLC::update_head(const std::string& lc_shard,
 			       rgw::sal::LCHead& head,
 			       rgw::sal::LCEntry& entry,
-			       time_t start_date, int worker_ix)
+			       time_t start_date, int worker_ix,
+                               optional_yield yield)
 {
   int ret{0};
 
-	ret = advance_head(lc_shard, head, entry, start_date);
+	ret = advance_head(lc_shard, head, entry, start_date, yield);
     if (ret != 0) {
       ldpp_dout(this, 0) << "RGWLC::update_head() failed to advance head "
 		         << lc_shard
@@ -2807,7 +2805,7 @@ exit:
 }
 
 int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
-		   bool once = false)
+		   bool once, optional_yield yield)
 {
   int ret{0};
   const auto& lc_shard = obj_names[index];
@@ -2820,11 +2818,11 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  << dendl;
 
   std::unique_ptr<rgw::sal::LCSerializer> lock =
-    sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->thr_name());
+    sal_lc->get_serializer(lc_index_lock_name, lc_shard, worker->name());
 
   const ceph::timespan lock_for_s = std::chrono::seconds(max_lock_secs);
   const auto& lock_lambda = [&]() {
-    int ret = lock->try_lock(this, lock_for_s, null_yield);
+    int ret = lock->try_lock(this, lock_for_s, yield);
     if (ret == 0) {
       return true;
     }
@@ -2849,7 +2847,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     utime_t now = ceph_clock_now();
 
     /* preamble: find an inital bucket/marker */
-    ret = sal_lc->get_head(this, null_yield, lc_shard, head);
+    ret = sal_lc->get_head(this, yield, lc_shard, head);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to get obj head "
           << lc_shard << ", ret=" << ret << dendl;
@@ -2868,7 +2866,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			 << dendl;
 
       vector<rgw::sal::LCEntry> entries;
-      int ret = sal_lc->list_entries(this, null_yield, lc_shard,
+      int ret = sal_lc->list_entries(this, yield, lc_shard,
                                      head.marker, 1, entries);
       if (ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::process() sal_lc->list_entries(lc_shard, head.marker, 1, "
@@ -2888,14 +2886,14 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			 << dendl;
 
       /* fetches the entry pointed to by head.bucket */
-      ret = sal_lc->get_entry(this, null_yield, lc_shard,
+      ret = sal_lc->get_entry(this, yield, lc_shard,
                               head.marker, entry);
       if (ret == -ENOENT) {
         /* skip to next entry */
         rgw::sal::LCEntry tmp_entry;
         tmp_entry.bucket = head.marker;
 
-        if (update_head(lc_shard, head, tmp_entry, now, worker->ix) != 0) {
+        if (update_head(lc_shard, head, tmp_entry, now, worker->ix, yield) != 0) {
           break;
         }
         continue;
@@ -2919,7 +2917,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
               << "RGWLC::process(): ACTIVE entry: " << entry
               << " index: " << index << " worker ix: " << worker->ix << dendl;
 	  /* skip to next entry */
-	  if (update_head(lc_shard, head, entry, now, worker->ix) != 0) {
+	  if (update_head(lc_shard, head, entry, now, worker->ix, yield) != 0) {
             break;
           }
           continue;
@@ -2931,7 +2929,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 			     << " SKIP processing for already-processed bucket " << entry.bucket
 			     << dendl;
 	  /* skip to next entry */
-	      if (update_head(lc_shard, head, entry, now, worker->ix) != 0) {
+	      if (update_head(lc_shard, head, entry, now, worker->ix, yield) != 0) {
             break;
           }
           continue;
@@ -2956,7 +2954,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     entry.status = lc_processing;
     entry.start_time = now;
 
-    ret = sal_lc->set_entry(this, null_yield, lc_shard, entry);
+    ret = sal_lc->set_entry(this, yield, lc_shard, entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::process() failed to set obj entry "
 	      << lc_shard << entry.bucket << entry.status << dendl;
@@ -2964,7 +2962,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     }
 
     /* advance head for next waiter, then process */
-    if (advance_head(lc_shard, head, entry, now) < 0) {
+    if (advance_head(lc_shard, head, entry, now, yield) < 0) {
       break;
     }
 
@@ -2974,7 +2972,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 
     /* drop lock so other instances can make progress while this
      * bucket is being processed */
-    lock->unlock(this, null_yield);
+    lock->unlock(this, yield);
     ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
     ldpp_dout(this, 5) << "RGWLC::process(): END entry 2: " << entry
       << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
@@ -2992,7 +2990,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       /* XXXX are we SURE the only way result could == ENOENT is when
        * there is no such bucket?  It is currently the value returned
        * from bucket_lc_process(...) */
-      ret = sal_lc->rm_entry(this, null_yield, lc_shard, entry);
+      ret = sal_lc->rm_entry(this, yield, lc_shard, entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::process() failed to remove entry "
 			   << lc_shard << " (nonfatal)"
@@ -3005,7 +3003,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       } else {
         entry.status = lc_complete;
       }
-      ret = sal_lc->set_entry(this, null_yield, lc_shard, entry);
+      ret = sal_lc->set_entry(this, yield, lc_shard, entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on lc_shard="
                            << lc_shard << " entry=" << entry
@@ -3020,7 +3018,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     }
   } while(1 && !once && !going_down());
 
-  lock->unlock(this, null_yield);
+  lock->unlock(this, yield);
   return 0;
 }
 
@@ -3031,8 +3029,30 @@ void RGWLC::start_processor()
   for (int ix = 0; ix < maxw; ++ix) {
     auto worker  =
       std::make_unique<RGWLC::LCWorker>(this /* dpp */, cct, this, ix);
-    worker->create((string{"rgw_lc_"} + to_string(ix)).c_str());
     workers.emplace_back(std::move(worker));
+    boost::asio::spawn(io_ctx,
+        [worker=workers.back().get()] (boost::asio::yield_context yield) {
+          worker->run(yield);
+          return 0;
+        },
+        [] (std::exception_ptr eptr, int result) {
+          if (eptr) {
+            std::rethrow_exception(eptr);
+          }
+        }); // spawn
+  }
+
+  auto maxth = cct->_conf->rgw_lc_max_threads;
+  threadpool.reserve(maxth);
+  for (int ix = 0; ix < maxth; ++ix) {
+    threadpool.emplace_back(
+        std::thread(
+          [this, ix] () {
+            ceph_pthread_setname((string{"rgw_lc_"} + to_string(ix)).c_str());
+            io_ctx.run();
+          }
+        )
+      );
   }
 }
 
@@ -3041,9 +3061,13 @@ void RGWLC::stop_processor()
   down_flag = true;
   for (auto& worker : workers) {
     worker->stop();
-    worker->join();
   }
   workers.clear();
+
+  for (auto& thr : threadpool) {
+    thr.join();
+  }
+  threadpool.clear();
 }
 
 unsigned RGWLC::get_subsys() const
@@ -3058,8 +3082,6 @@ std::ostream& RGWLC::gen_prefix(std::ostream& out) const
 
 void RGWLC::LCWorker::stop()
 {
-  std::lock_guard l{lock};
-  cond.notify_all();
 }
 
 bool RGWLC::going_down()

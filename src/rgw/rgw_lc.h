@@ -25,6 +25,8 @@
 #include <atomic>
 #include <tuple>
 
+#include <boost/asio/deadline_timer.hpp>
+
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
 static std::string lc_oid_prefix = "lc";
@@ -585,17 +587,17 @@ class RGWLC : public DoutPrefixProvider {
   std::string *obj_names{nullptr};
   std::atomic<bool> down_flag = { false };
   std::string cookie;
+  boost::asio::io_context io_ctx;
 
 public:
 
-  class LCWorker : public Thread
+  class LCWorker
   {
     const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
     int ix;
-    std::mutex lock;
-    std::condition_variable cond;
+    boost::asio::deadline_timer timer;
     /* save the target bucket names created as part of object transition
      * to cloud. This list is maintained for the duration of each RGWLC::process()
      * post which it is discarded. */
@@ -610,16 +612,16 @@ public:
 	     int ix);
     RGWLC* get_lc() { return lc; }
 
-    std::string thr_name() {
+    std::string name() {
       return std::string{"lc_thrd: "} + std::to_string(ix);
     }
 
-    void *entry() override;
+    void run(boost::asio::yield_context yield);
     void stop();
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
     std::set<std::string>& get_cloud_targets() { return cloud_targets; }
-    virtual ~LCWorker() override;
+    virtual ~LCWorker();
 
     friend class RGWRados;
     friend class RGWLC;
@@ -628,6 +630,7 @@ public:
   friend class RGWRados;
 
   std::vector<std::unique_ptr<RGWLC::LCWorker>> workers;
+  std::vector<std::thread> threadpool;
 
   RGWLC() : cct(nullptr), driver(nullptr) {}
   virtual ~RGWLC() override;
@@ -637,21 +640,24 @@ public:
 
   int process(LCWorker* worker,
 	      const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
-	      bool once);
+	      bool once,
+              optional_yield yield);
   int advance_head(const std::string& lc_shard,
 		   rgw::sal::LCHead& head,
 		   const rgw::sal::LCEntry& entry,
-		   time_t start_date);
+		   time_t start_date,
+                   optional_yield yield);
   int check_if_shard_done(const std::string& lc_shard,
  			 rgw::sal::LCHead& head,
        int worker_ix);
   int update_head(const std::string& lc_shard,
 			 rgw::sal::LCHead& head,
 			 rgw::sal::LCEntry& entry,
-			 time_t start_date, int worker_ix);
-  int process(int index, int max_lock_secs, LCWorker* worker, bool once);
+			 time_t start_date, int worker_ix,
+                         optional_yield yield);
+  int process(int index, int max_lock_secs, LCWorker* worker, bool once, optional_yield yield);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
-		     const std::string& bucket_entry_marker, bool once);
+		     const std::string& bucket_entry_marker, bool once, optional_yield yield);
   bool expired_session(time_t started, time_t lc_start_time);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
@@ -676,6 +682,7 @@ public:
                            rgw::sal::Bucket* bucket, bool update_attrs);
 
   CephContext *get_cct() const override { return cct; }
+  boost::asio::io_context& get_io_context() { return io_ctx; }
   rgw::sal::Lifecycle* get_lc() const { return sal_lc.get(); }
   rgw::sal::Restore* get_restore() const { return sal_restore.get(); }
   unsigned get_subsys() const;

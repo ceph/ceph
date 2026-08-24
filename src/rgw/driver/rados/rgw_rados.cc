@@ -10854,7 +10854,20 @@ int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucke
   RGWLC lc;
   lc.initialize(cct, this->driver);
   RGWLC::LCWorker worker(&lc, cct, &lc, 0);
-  auto ret = lc.process(&worker, optional_bucket, true /* once */);
+  int ret = 0;
+  boost::asio::spawn(lc.get_io_context(),
+    [&worker, &lc, &optional_bucket](boost::asio::yield_context yield) {
+      return lc.process(&worker, optional_bucket, true /* once */, yield);
+    },
+    [&ret] (std::exception_ptr eptr, int result) {
+      if (eptr) {
+        std::rethrow_exception(eptr);
+      } else {
+        ret = result;
+      }
+    });
+  lc.get_io_context().run(); // Run to completion
+
   lc.stop_processor(); // sets down_flag, but returns immediately
   return ret;
 }
