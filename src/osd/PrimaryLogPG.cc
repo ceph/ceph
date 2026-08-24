@@ -17894,7 +17894,9 @@ bool PrimaryLogPG::SnapTrimmer::permit_trim() {
   return
     pg->is_clean() &&
     !pg->is_scrub_queued_or_active() &&
-    !pg->snap_trimq.empty();
+    !pg->snap_trimq.empty() &&
+    !pg->state_test(PG_STATE_MIGRATION_WAIT) &&
+    !pg->state_test(PG_STATE_MIGRATION_TOOFULL);
 }
 
 /*---SnapTrimmer states---*/
