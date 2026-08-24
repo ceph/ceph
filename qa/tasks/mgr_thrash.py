@@ -87,6 +87,19 @@ class MgrThrasher(ThrasherGreenlet):
                          active mgr's own admin socket (perf dump), to
                          catch a hung or unresponsive mgr process on
                          whichever one just took over. (default: True)
+    check_module_option   Set the selftest module's rwoption6 to a
+                         non-default value up front, then after every
+                         iteration assert the current active mgr still
+                         reads it, so module options survive failover.
+                         Enables the 'selftest' module. (default: True)
+    check_module_errors   After every iteration, assert there is no
+                         MGR_MODULE_ERROR health check, i.e. no module
+                         failed to load or crashed on the new active
+                         mgr. (default: True)
+    check_osd_reports     After every iteration, wait until every up
+                         OSD has sent stats to the current active mgr,
+                         to catch OSDs that never reconnect to a new
+                         active mgr. (default: True)
 
     For example::
 
@@ -140,12 +153,16 @@ class MgrThrasher(ThrasherGreenlet):
             'module_load_delay_name',
             self.selftest_modules[0] if self.selftest_modules else 'devicehealth')
         self.check_admin_socket = self.config.get('check_admin_socket', True)
+        self.check_module_option = self.config.get('check_module_option', True)
+        self.check_module_errors = self.config.get('check_module_errors', True)
+        self.check_osd_reports = self.config.get('check_osd_reports', True)
         self.failover_timeout = self._get_beacon_grace() * 2
 
         assert self.max_killable() > 0, \
             'Unable to kill at least one manager with the current config.'
 
-        if self.selftest_modules or self.test_remote_dispatch:
+        if (self.selftest_modules or self.test_remote_dispatch or
+                self.check_module_option):
             self._load_module('selftest')
             for module_name in self.selftest_modules:
                 self._load_module(module_name)
@@ -168,6 +185,13 @@ class MgrThrasher(ThrasherGreenlet):
             self.log('injecting {d}ms load delay into mgr module {m} on '
                       'every startup'.format(d=self.module_load_delay_ms,
                                               m=self.module_load_delay_name))
+
+        if self.check_module_option:
+            # rwoption6 defaults to True and nothing else touches it.
+            self.manager.raw_cluster_cmd(
+                'config', 'set', 'mgr', 'mgr/selftest/rwoption6', 'false')
+            self.log('set mgr/selftest/rwoption6=false, will check it '
+                     'survives failover')
 
     def log(self, x):
         """
@@ -317,6 +341,50 @@ class MgrThrasher(ThrasherGreenlet):
         proc = self.manager.admin_socket('mgr', active, ['perf', 'dump'])
         json.loads(proc.stdout.getvalue())
 
+    def _check_module_option(self):
+        """
+        Assert the selftest module on the current active mgr still
+        reads the non-default rwoption6 set at startup.
+        """
+        val = self.manager.raw_cluster_cmd(
+            'mgr', 'self-test', 'config', 'get', 'rwoption6').strip()
+        assert val == 'False', \
+            'mgr/selftest/rwoption6 reads {v!r} after thrashing, ' \
+            'expected False'.format(v=val)
+
+    def _check_module_errors(self):
+        """
+        Assert no mgr module failed on the current active mgr. Modules
+        still loading are left out of MGR_MODULE_ERROR by the mgr.
+        """
+        checks = self.manager.get_mon_health(detail=True)['checks']
+        assert 'MGR_MODULE_ERROR' not in checks, \
+            'mgr module failed after thrashing: {c}'.format(
+                c=checks.get('MGR_MODULE_ERROR'))
+
+    def _wait_for_osd_reports(self, timeout=120):
+        """
+        Wait until every up OSD shows up in the current active mgr's
+        'pg dump osds', i.e. has sent it stats. A new active mgr starts
+        with no OSD stats, so this catches an OSD that never reconnects.
+        pg_ready is not enough: the mgr sets it after 4 *
+        mgr_stats_period even if some OSDs never reported.
+        """
+        with safe_while(sleep=3, tries=timeout // 3,
+                        action='wait for up OSDs to report to the '
+                               'active mgr') as proceed:
+            while proceed():
+                up = {o['osd'] for o in self.manager.get_osd_dump()
+                      if o['up']}
+                out = self.manager.raw_cluster_cmd(
+                    'pg', 'dump', 'osds', '--format=json')
+                dump = json.loads(out[out.index('{'):])
+                missing = up - {s['osd'] for s in dump['osd_stats']}
+                if not missing:
+                    break
+                self.log('OSDs not reporting to the active mgr yet: '
+                         '{m}'.format(m=sorted(missing)))
+
     def _validate_modules(self):
         if self.check_enabled_modules:
             self._check_enabled_modules()
@@ -326,6 +394,12 @@ class MgrThrasher(ThrasherGreenlet):
             self._run_remote_dispatch_selftest()
         if self.check_admin_socket:
             self._check_admin_socket()
+        if self.check_module_option:
+            self._check_module_option()
+        if self.check_module_errors:
+            self._check_module_errors()
+        if self.check_osd_reports:
+            self._wait_for_osd_reports()
 
     def _run(self):
         """
@@ -468,4 +542,7 @@ def task(ctx, config):
         if thrash_proc.module_load_delay_ms > 0:
             for opt in ('mgr_module_load_delay', 'mgr_module_load_delay_name'):
                 manager.raw_cluster_cmd('config', 'rm', 'mgr', opt)
+        if thrash_proc.check_module_option:
+            manager.raw_cluster_cmd(
+                'config', 'rm', 'mgr', 'mgr/selftest/rwoption6')
         manager.wait_for_mgr_available(timeout=60)

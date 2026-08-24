@@ -1,0 +1,41 @@
+overrides:
+  ceph:
+    # thrashosds marks OSDs down/out and changes pg_num. Same entries
+    # rados/thrash carries in thrashosds-health.yaml, minus its
+    # cephsqlite error injection, which would make modules fail on
+    # purpose and trip check_module_errors.
+    log-ignorelist:
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(OBJECT_
+      - \(SMALLER_PGP_NUM\)
+      - \(TOO_FEW_PGS\)
+      - \(REQUEST_SLOW\)
+      - SLOW_OPS
+      - slow request
+      - but it is still running
+      - objects unfound and apparently lost
+      - timeout on replica
+      - late reservation from
+      - is down
+      - Degraded data redundancy
+    conf:
+      osd:
+        osd max markdown count: 1000
+# mgr_thrash listed first so its one-time setup runs before thrashosds
+# starts.
+tasks:
+- mgr_thrash:
+    revive_delay: 20
+    thrash_delay: 1
+    selftest_modules: [crash, devicehealth, prometheus]
+    test_remote_dispatch: true
+    module_load_delay_ms: 500
+- thrashosds:
+    timeout: 1200
+    min_in: 2
+    chance_pgnum_grow: 1
+    chance_pgnum_shrink: 1
+    chance_pgpnum_fix: 1
