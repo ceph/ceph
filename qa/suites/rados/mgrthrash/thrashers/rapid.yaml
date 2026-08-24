@@ -1,7 +1,10 @@
 tasks:
 - mgr_thrash:
-    revive_delay: 20
-    thrash_delay: 1
+    revive_delay: 3
+    thrash_delay: 0
+    thrash_many: true
+    kill_active_probability: 100
+    fail_probability: 50
     selftest_modules: [crash, devicehealth, prometheus]
     test_remote_dispatch: true
     module_load_delay_ms: 500

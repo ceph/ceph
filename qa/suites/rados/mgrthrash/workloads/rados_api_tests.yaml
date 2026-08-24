@@ -15,6 +15,9 @@ overrides:
         debug objecter: 20
         debug rados: 20
         debug ms: 1
+      client:
+        rados_mon_op_timeout: 300
+        rados_osd_op_timeout: 300
       mon:
         mon warn on pool no app: false
       osd:
