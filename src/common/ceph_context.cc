@@ -1028,6 +1028,19 @@ AdminSocket *CephContext::get_admin_socket()
   return _admin_socket;
 }
 
+void CephContext::drop_temp_messenger_obj()
+{
+  auto i = associated_objs.begin();
+  while (i != associated_objs.end()) {
+    if (i->first.first.find("AsyncMessenger::NetworkStack") != std::string::npos) {
+      i = associated_objs.erase(i);
+      break;
+    } else {
+      ++i;
+    }
+  }
+}
+
 void CephContext::notify_pre_fork()
 {
   {
