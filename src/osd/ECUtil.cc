@@ -1,13 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 
 #include "ECUtil.h"
+#include "ECCommon.h"
 
 #include <sstream>
+#include <optional>
 
 #include <errno.h>
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
+#include "include/intarith.h"
 
 using namespace std;
 using ceph::bufferlist;
@@ -1230,4 +1233,54 @@ std::map<uint64_t, uint64_t> merge_shard_extent_maps(
   }
   return result;
 }
+
+// ---------------------------------------------------------------------------
+// EC sparse-read / mapext helper functions
+// ---------------------------------------------------------------------------
+int ec_sparse_decode(
+    shard_extent_map_t &buffers_read,
+    const shard_extent_set_t &shard_want_to_read,
+    shard_extent_set_t &zeros_for_decode,
+    const ErasureCodeInterfaceRef &ec_impl,
+    uint64_t object_size,
+    DoutPrefixProvider *dpp)
+{
+  buffers_read.zero_pad(shard_want_to_read);
+  buffers_read.add_zero_padding_for_decode(zeros_for_decode);
+  return buffers_read.decode(ec_impl, shard_want_to_read, object_size, dpp);
 }
+
+interval_set<uint64_t> ec_sparse_merge_ro_fiemap(
+    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
+    const stripe_info_t &sinfo)
+{
+  interval_set<uint64_t> result;
+  for (auto &[ro_off, ro_len] : merge_shard_extent_maps(sparse_extents_read, sinfo)) {
+    result.insert(ro_off, ro_len);
+  }
+  return result;
+}
+
+interval_set<uint64_t> ec_sparse_scan_ro_blocks(
+    const shard_extent_map_t &buffers_read,
+    const interval_set<uint64_t> &force_allocated_extents,
+    uint64_t scan_start,
+    uint64_t scan_end)
+{
+  interval_set<uint64_t> allocated;
+
+  for (uint64_t block = scan_start; block < scan_end; block += FAE_BLOCK_SIZE) {
+    const uint64_t read_len = std::min(FAE_BLOCK_SIZE, scan_end - block);
+    bufferlist bl = buffers_read.get_ro_buffer(block, read_len);
+
+    if (!bl.is_zero()) {
+      allocated.insert(block, read_len);
+    } else if (force_allocated_extents.intersects(block, read_len)) {
+      allocated.insert(block, read_len);
+    }
+  }
+
+  return allocated;
+}
+
+} // namespace ECUtil
