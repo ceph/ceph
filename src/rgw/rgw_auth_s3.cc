@@ -807,6 +807,12 @@ get_v4_canonical_headers(CephContext* cct,
         boost::container::small_vector<char, 64> buf(env_key.size());
         lowercase_dash_transform(env_key, buf.begin(), true);
         std::string_view lower_key{buf.data(), buf.size()};
+        // S3 has an exception for x-amz-content-sha256 because it's already
+        // signed as part of the HashedPayload
+        // TODO: make this specific to CredentialScope:service == s3
+        if (lower_key == "x-amz-content-sha256") {
+          continue;
+        }
         if (!canonical_hdrs_map.contains(lower_key)) {
         dout(5) << "Signature rejected: '" << lower_key
         << "' supplied, but not in CanonicalHeaders." << dendl;
