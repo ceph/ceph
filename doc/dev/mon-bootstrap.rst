@@ -1,3 +1,5 @@
+.. _dev-monitor-bootstrap:
+
 ===================
  Monitor bootstrap
 ===================
