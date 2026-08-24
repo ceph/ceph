@@ -57,7 +57,7 @@ export enum MultiClusterPromqlsForPoolUtilization {
   POOL_THROUGHPUT_UTILIZATION = 'topk(5, (irate(ceph_pool_rd_bytes[1m]) + irate(ceph_pool_wr_bytes[1m])) * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata )'
 }
 
-export const AllStoragetypesQueries = {
+export const BlockStorageQueries = {
   READIOPS: `sum(rate(ceph_osd_op_r[1m]))`,
 
   WRITEIOPS: `sum(rate(ceph_osd_op_w[1m]))`,
@@ -66,7 +66,45 @@ export const AllStoragetypesQueries = {
 
   WRITECLIENTTHROUGHPUT: `sum(rate(ceph_osd_op_w_in_bytes[1m]))`,
 
-  READLATENCY: 'avg_over_time(ceph_osd_apply_latency_ms[1m])',
+  LATENCYP99: 'quantile(0.99, ceph_osd_apply_latency_ms)',
 
-  WRITELATENCY: 'avg_over_time(ceph_osd_commit_latency_ms[1m])'
+  LATENCYP95: 'quantile(0.95, ceph_osd_apply_latency_ms)',
+
+  LATENCYMEDIAN: 'quantile(0.50, ceph_osd_apply_latency_ms)'
 };
+
+export const FilesystemStorageQueries = {
+  READIOPS: 'sum(rate(ceph_pool_rd[1m]))',
+
+  WRITEIOPS: 'sum(rate(ceph_pool_wr[1m]))',
+
+  READCLIENTTHROUGHPUT: 'sum(rate(ceph_pool_rd_bytes[1m]))',
+
+  WRITECLIENTTHROUGHPUT: 'sum(rate(ceph_pool_wr_bytes[1m]))',
+
+  LATENCYP99: 'quantile(0.99, ceph_osd_apply_latency_ms)',
+
+  LATENCYP95: 'quantile(0.95, ceph_osd_apply_latency_ms)',
+
+  LATENCYMEDIAN: 'quantile(0.50, ceph_osd_apply_latency_ms)'
+};
+
+export const ObjectStorageQueries = {
+  READIOPS: 'sum(rate(ceph_pool_rd[1m]))',
+
+  WRITEIOPS: 'sum(rate(ceph_pool_wr[1m]))',
+
+  READCLIENTTHROUGHPUT: 'sum(rate(ceph_pool_rd_bytes[1m]))',
+
+  WRITECLIENTTHROUGHPUT: 'sum(rate(ceph_pool_wr_bytes[1m]))',
+
+  LATENCYP99:
+    '(sum(rate(ceph_rgw_op_get_obj_lat_sum[1m])) / sum(rate(ceph_rgw_op_get_obj_lat_count[1m]))) * 1000',
+
+  LATENCYP95:
+    '(sum(rate(ceph_rgw_op_put_obj_lat_sum[1m])) / sum(rate(ceph_rgw_op_put_obj_lat_count[1m]))) * 1000',
+
+  LATENCYMEDIAN: '0'
+};
+
+export const AllStoragetypesQueries = BlockStorageQueries;

@@ -95,7 +95,9 @@ import {
   LayoutModule,
   SkeletonModule,
   TilesModule,
-  ContentSwitcherModule
+  ContentSwitcherModule,
+  PopoverModule,
+  LayerModule
 } from 'carbon-components-angular';
 import EditIcon from '@carbon/icons/es/edit/16';
 import ScalesIcon from '@carbon/icons/es/scales/20';
@@ -138,6 +140,7 @@ import { RgwTopicFormComponent } from './rgw-topic-form/rgw-topic-form.component
 import { RgwBucketNotificationListComponent } from './rgw-bucket-notification-list/rgw-bucket-notification-list.component';
 import { RgwNotificationFormComponent } from './rgw-notification-form/rgw-notification-form.component';
 import { ComponentsModule } from '~/app/shared/components/components.module';
+import { OverviewAlertsCardComponent } from '../overview/alerts-card/overview-alerts-card.component';
 import { RgwAccountRolesListComponent } from './rgw-account-roles-list/rgw-account-roles-list.component';
 import { RgwAccountRoleFormComponent } from './rgw-account-role-form/rgw-account-role-form.component';
 import { RgwBucketResourceSidebarComponent } from './rgw-bucket-resource-sidebar/rgw-bucket-resource-sidebar.component';
@@ -189,7 +192,10 @@ import { RgwBucketTagsTableComponent } from './rgw-bucket-tags-table/rgw-bucket-
     TimePickerComponent,
     AreaChartComponent,
     ComponentsModule,
-    ContentSwitcherModule
+    ContentSwitcherModule,
+    PopoverModule,
+    OverviewAlertsCardComponent,
+    LayerModule
   ],
   exports: [
     RgwDaemonResourcePageComponent,

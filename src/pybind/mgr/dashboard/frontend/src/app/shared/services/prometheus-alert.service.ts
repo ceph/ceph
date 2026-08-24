@@ -20,6 +20,8 @@ export class PrometheusAlertService {
   private canAlertsBeNotified = false;
   private rulesSubject = new BehaviorSubject<PrometheusRule[]>([]);
   rules$ = this.rulesSubject.asObservable();
+  private alertsSubject = new BehaviorSubject<AlertmanagerAlert[]>([]);
+  alerts$ = this.alertsSubject.asObservable();
   alerts: AlertmanagerAlert[] = [];
   activeAlerts: number;
   activeCriticalAlerts: number;
@@ -124,6 +126,7 @@ export class PrometheusAlertService {
     this.alerts = alerts
       .reverse()
       .sort((a, b) => a.labels.severity.localeCompare(b.labels.severity));
+    this.alertsSubject.next(this.alerts);
 
     this.canAlertsBeNotified = true;
   }
