@@ -7,6 +7,7 @@
 #include <iostream>
 #include <memory_resource>
 
+#include <boost/container/flat_set.hpp>
 #include <boost/intrusive/list.hpp>
 
 #include "crimson/common/log.h"
@@ -1005,10 +1006,10 @@ private:
   /// be unlinked by conflict handling.
   struct retired_leaf_notebook_t {
     struct other_edit_t {
-      std::set<laddr_t> keys;
+      boost::container::flat_set<laddr_t> keys;
       transaction_type_t src;
     };
-    std::set<laddr_t> committer_keys;
+    boost::container::flat_set<laddr_t> committer_keys;
     std::map<transaction_id_t, other_edit_t> other_keys;
   };
   std::map<CachedExtent*, retired_leaf_notebook_t> keys_touched_in_retired_leaf;

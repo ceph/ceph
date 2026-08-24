@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <boost/container/flat_set.hpp>
+
 #include "seastar/core/shared_future.hh"
 
 #include "include/buffer.h"
@@ -2101,14 +2103,14 @@ void stage_visibility_handoff(Transaction& t,
   /// simple check: are the two sets disjoint or not. used by both replace
   /// and retire paths.
   static bool are_keys_disjoint(
-    const std::set<laddr_t> &a,
-    const std::set<laddr_t> &b);
+    const boost::container::flat_set<laddr_t> &a,
+    const boost::container::flat_set<laddr_t> &b);
 
   /// only used by the replace path, since this does a live lookup of
   /// original_node: does `txn` currently have its own pending edited copy
   /// of it, and if so what keys did it touch. if no copy was ever created,
   /// we mark it as a read-only conflict (nullopt).
-  std::optional<std::set<laddr_t>> find_own_edit_keys(
+  std::optional<boost::container::flat_set<laddr_t>> find_own_edit_keys(
     CachedExtent &original_node,
     Transaction &txn);
 
@@ -2130,7 +2132,7 @@ void stage_visibility_handoff(Transaction& t,
   /// only its already-extracted keys survive, in keys_touched_in_retired_leaf.
   bool count_lba_traversal_conflict_mergeability(
     CachedExtent &original_node,
-    const std::set<laddr_t> &committer_keys,
+    const boost::container::flat_set<laddr_t> &committer_keys,
     Transaction &conflicting_txn);
 
   /// we already have both sets of keys from capture_retired_leaf_keys.
@@ -2138,8 +2140,8 @@ void stage_visibility_handoff(Transaction& t,
   /// counter.
   void count_lba_retire_conflict_mergeability(
     extent_types_t ext_type,
-    const std::set<laddr_t> &committer_keys,
-    const std::set<laddr_t> &other_keys,
+    const boost::container::flat_set<laddr_t> &committer_keys,
+    const boost::container::flat_set<laddr_t> &other_keys,
     Transaction::src_t conflicting_txn_src);
 
   /// for the retire path (split case): if `ref` is an LBA leaf about to be

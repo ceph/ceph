@@ -7,6 +7,7 @@
 #include <sstream>
 #include <string_view>
 
+#include <boost/container/flat_set.hpp>
 #include <seastar/core/metrics.hh>
 
 #include "crimson/os/seastore/logging.h"
@@ -1130,18 +1131,21 @@ namespace {
 // returns the set of laddr keys touched by whichever transaction owns
 // this specific node copy (its edits are recorded in its delta_buffer).
 // nullopt if `node_own_copy` isn't an LBA leaf/internal node.
-std::optional<std::set<laddr_t>> get_touched_lba_keys(
+std::optional<boost::container::flat_set<laddr_t>> get_touched_lba_keys(
     CachedExtent &node_own_copy) {
-  std::set<laddr_t> keys;
+  // collect into a plain vector first and bulk-construct the flat_set from
+  // it (one sort) rather than calling insert() once per key (each of which
+  // would shift the underlying contiguous storage).
+  std::vector<laddr_t> keys;
   switch (node_own_copy.get_type()) {
   case extent_types_t::LADDR_LEAF:
     static_cast<lba::LBALeafNode&>(node_own_copy).delta_buffer.for_each(
-      [&keys](auto &d) { keys.insert(laddr_t(d.key)); });
-    return keys;
+      [&keys](auto &d) { keys.push_back(laddr_t(d.key)); });
+    return boost::container::flat_set<laddr_t>(keys.begin(), keys.end());
   case extent_types_t::LADDR_INTERNAL:
     static_cast<lba::LBAInternalNode&>(node_own_copy).delta_buffer.for_each(
-      [&keys](auto &d) { keys.insert(laddr_t(d.key)); });
-    return keys;
+      [&keys](auto &d) { keys.push_back(laddr_t(d.key)); });
+    return boost::container::flat_set<laddr_t>(keys.begin(), keys.end());
   default:
     return std::nullopt;
   }
@@ -1190,8 +1194,8 @@ void Cache::capture_retired_leaf_keys(Transaction &t, CachedExtent &ref) {
 }
 
 bool Cache::are_keys_disjoint(
-    const std::set<laddr_t> &a,
-    const std::set<laddr_t> &b)
+    const boost::container::flat_set<laddr_t> &a,
+    const boost::container::flat_set<laddr_t> &b)
 {
   // both sets are sorted, so walk them together instead of searching one
   // set on every element of the other.
@@ -1209,7 +1213,7 @@ bool Cache::are_keys_disjoint(
   return true;
 }
 
-std::optional<std::set<laddr_t>> Cache::find_own_edit_keys(
+std::optional<boost::container::flat_set<laddr_t>> Cache::find_own_edit_keys(
     CachedExtent &original_node,
     Transaction &txn)
 {
@@ -1268,7 +1272,7 @@ bool Cache::count_lba_conflict_mergeability(
 //    check against the committer's edited keys.
 bool Cache::count_lba_traversal_conflict_mergeability(
     CachedExtent &original_node,
-    const std::set<laddr_t> &committer_keys,
+    const boost::container::flat_set<laddr_t> &committer_keys,
     Transaction &conflicting_txn)
 {
   bool overlapping = false;
@@ -1319,8 +1323,8 @@ bool Cache::count_lba_traversal_conflict_mergeability(
 
 void Cache::count_lba_retire_conflict_mergeability(
     extent_types_t ext_type,
-    const std::set<laddr_t> &committer_keys,
-    const std::set<laddr_t> &other_keys,
+    const boost::container::flat_set<laddr_t> &committer_keys,
+    const boost::container::flat_set<laddr_t> &other_keys,
     Transaction::src_t conflicting_txn_src)
 {
   // committer_keys and other_keys were already snapshotted at retire time
