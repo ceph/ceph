@@ -242,9 +242,11 @@ test_images_in_latest_synced_group ${CLUSTER1} ${POOL}/${group} 1
 testlog "TEST: test group rename"
 new_name="${group}_RENAMED"
 group_rename ${CLUSTER2} ${POOL}/${group} ${POOL}/${new_name}
+mirror_group_snapshot ${CLUSTER2} ${POOL}/${new_name}
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${new_name} 1
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${new_name} 'up+replaying' 1
 group_rename ${CLUSTER2} ${POOL}/${new_name} ${POOL}/${group}
+mirror_group_snapshot ${CLUSTER2} ${POOL}/${group}
 wait_for_group_replay_started ${CLUSTER1} ${POOL}/${group} 1
 wait_for_group_status_in_pool_dir ${CLUSTER1} ${POOL}/${group} 'up+replaying' 1
 
