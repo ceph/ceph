@@ -17,6 +17,7 @@
 
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
+#include "BlueStore_inlines.h"
 #include "os/bluestore/bluestore_types.h"
 #include "os/kv.h"
 #include "common/pretty_binary.h"
