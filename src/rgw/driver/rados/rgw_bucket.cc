@@ -356,6 +356,19 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
   formatter->close_section();
 }
 
+static void dump_storage_class_usage(
+    const std::map<std::string, RGWStorageClassStats>& sc_stats,
+    Formatter* formatter)
+{
+  formatter->open_object_section("rgw.storage_classes");
+  for (const auto& [name, s] : sc_stats) {
+    formatter->open_object_section(name);
+    s.dump(formatter);
+    formatter->close_section();
+  }
+  formatter->close_section();
+}
+
 #ifdef WITH_RADOSGW_RADOS
 static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats,
         map<RGWObjCategory, RGWStorageStats> calculated_stats,
@@ -1632,9 +1645,75 @@ static int bucket_restore_stats(rgw::sal::Driver* driver,
   return 0;
 }
 
+// Scan the bucket index and aggregate sizes by storage class.
+// This is an O(objects) operation; only call when explicitly requested.
+// Works for all buckets including those created before this feature was added.
+#ifdef WITH_RADOSGW_RADOS
+static int read_storage_class_stats(
+    const DoutPrefixProvider* dpp, optional_yield y,
+    rgw::sal::RadosStore* rados_store,
+    rgw::sal::Bucket* bucket,
+    std::map<std::string, RGWStorageClassStats>& sc_stats)
+{
+  RGWRados* store = rados_store->getRados();
+  const RGWBucketInfo& bucket_info = bucket->get_info();
+  const auto& index = bucket_info.get_current_index();
+  const int num_shards = std::max(1, (int)rgw::num_shards(index.layout.normal));
+
+  for (int shard = 0; shard < num_shards; ++shard) {
+    RGWRados::BucketShard bs(store);
+    int ret = bs.init(dpp, bucket_info, index, shard, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR read_storage_class_stats: bs.init shard=" << shard
+                         << " ret=" << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+
+    std::string marker;
+    bool is_truncated = true;
+    while (is_truncated) {
+      std::list<rgw_cls_bi_entry> entries;
+      ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, false, y);
+      if (ret < 0) {
+        ldpp_dout(dpp, -1) << "ERROR read_storage_class_stats: bi_list shard=" << shard
+                           << " ret=" << cpp_strerror(-ret) << dendl;
+        return ret;
+      }
+      for (const auto& raw_entry : entries) {
+        marker = raw_entry.idx;
+        if (raw_entry.type != BIIndexType::Plain) {
+          continue;
+        }
+        rgw_bucket_dir_entry dir_entry;
+        auto iiter = raw_entry.data.cbegin();
+        try {
+          decode(dir_entry, iiter);
+        } catch (const buffer::error& err) {
+          ldpp_dout(dpp, 0) << "WARNING read_storage_class_stats: failed to decode entry idx="
+                            << raw_entry.idx << ", skipping" << dendl;
+          continue;
+        }
+        if (!dir_entry.exists) {
+          continue;
+        }
+        const std::string& sc =
+            rgw_placement_rule::get_canonical_storage_class(dir_entry.meta.storage_class);
+        RGWStorageClassStats& s = sc_stats[sc];
+        s.size += dir_entry.meta.accounted_size;
+        s.size_rounded += cls_rgw_get_rounded_size(dir_entry.meta.accounted_size);
+        s.size_utilized += dir_entry.meta.size;
+        s.num_objects++;
+      }
+    }
+  }
+  return 0;
+}
+#endif // WITH_RADOSGW_RADOS
+
 static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
                         const std::string& tenant_name, const std::string& bucket_name,
-                        bool dump_restore_stats, Formatter* formatter,
+                        bool dump_restore_stats, bool show_storage_classes,
+                        Formatter* formatter,
                         const DoutPrefixProvider* dpp, optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -1663,6 +1742,20 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     if (ret < 0) {
       cerr << "error getting bucket stats bucket=" << bucket->get_name() << " ret=" << ret << std::endl;
       return ret;
+    }
+  }
+
+  std::map<std::string, RGWStorageClassStats> sc_stats;
+  if (show_storage_classes && has_index) {
+    auto* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (rados_store) {
+      ret = read_storage_class_stats(dpp, y, rados_store, bucket.get(), sc_stats);
+      if (ret < 0) {
+        cerr << "warning: could not read storage class stats for bucket="
+             << bucket->get_name() << " ret=" << ret << std::endl;
+        // non-fatal: continue and omit the section
+        sc_stats.clear();
+      }
     }
   }
 
@@ -1697,6 +1790,9 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     formatter->dump_string("master_ver", master_ver);
     formatter->dump_string("max_marker", max_marker);
     dump_bucket_usage(stats, formatter);
+    if (!sc_stats.empty()) {
+      dump_storage_class_usage(sc_stats, formatter);
+    }
   }
   ut.gmtime(formatter->dump_stream("mtime"));
   ctime_ut.gmtime(formatter->dump_stream("creation_time"));
@@ -1898,7 +1994,7 @@ static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
 
     for (const auto& ent : listing.buckets) {
       if (show_stats) {
-        bucket_stats(driver, site, tenant, ent.bucket.name, false, formatter, dpp, y);
+        bucket_stats(driver, site, tenant, ent.bucket.name, false, false, formatter, dpp, y);
       } else {
         formatter->dump_string("bucket", ent.bucket.name);
       }
@@ -1954,7 +2050,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
   if (!bucket_name.empty()) {
-    ret = bucket_stats(driver, site, user_id.tenant, bucket_name, op_state.restore_stats, formatter, dpp, y);
+    ret = bucket_stats(driver, site, user_id.tenant, bucket_name, op_state.restore_stats, op_state.show_storage_classes, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
@@ -2018,7 +2114,7 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       for (const auto& bucket_name : buckets) {
         if (show_stats) {
           bucket_stats(driver, site, user_id.tenant, bucket_name,
-                       op_state.restore_stats, formatter, dpp, y);
+                       op_state.restore_stats, op_state.show_storage_classes, formatter, dpp, y);
 	} else {
           formatter->dump_string("bucket", bucket_name);
 	}
