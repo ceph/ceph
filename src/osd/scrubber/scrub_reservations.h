@@ -12,11 +12,25 @@
 #include "messages/MOSDScrubReserve.h"
 #include "osd/scrubber_common.h"
 
+#ifdef WITH_CRIMSON
+#include "crimson/osd/scrub/scrub_queue.h"
+namespace crimson::osd {
+  class PG;
+}
+namespace crimson::osd::scrub {
+  class PGScrubber;
+}
+#else
 #include "osd_scrub_sched.h"
 #include "scrub_machine_lstnr.h"
+class PG;
+#endif
 
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+#else
 namespace Scrub {
-
+#endif
 using reservation_nonce_t = MOSDScrubReserve::reservation_nonce_t;
 
 /**
@@ -65,14 +79,21 @@ using reservation_nonce_t = MOSDScrubReserve::reservation_nonce_t;
  * do not need or use that field.
  */
 class ReplicaReservations {
+#ifdef WITH_CRIMSON
+  crimson::osd::scrub::PGScrubber& m_scrubber;
+  crimson::osd::PG* m_pg;
+#else
   ScrubMachineListener& m_scrubber;
   PG* m_pg;
+#endif
 
   /// shorthand for m_scrubber.get_spgid().pgid
   const pg_t m_pgid;
 
   /// for dout && when queueing messages to the FSM
+#ifndef WITH_CRIMSON
   OSDService* m_osds;
+#endif
 
   /// the acting set (not including myself), sorted by pg_shard_t
   std::vector<pg_shard_t> m_sorted_secondaries;
@@ -99,11 +120,16 @@ class ReplicaReservations {
   std::optional<ScrubTimePoint> m_process_started_at;
 
  public:
+#ifdef WITH_CRIMSON
+   ReplicaReservations(crimson::osd::scrub::PGScrubber& scrubber,
+                       reservation_nonce_t& nonce,
+                       const ScrubCounterSet& pc);
+#else
   ReplicaReservations(
       ScrubMachineListener& scrubber,
       reservation_nonce_t& nonce,
       const ScrubCounterSet& pc);
-
+#endif
   ~ReplicaReservations();
 
   /**

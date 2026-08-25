@@ -1007,6 +1007,7 @@ OSD::do_ms_dispatch(
       conn, boost::static_pointer_cast<MOSDScrub2>(m));
   case MSG_OSD_REP_SCRUB:
   case MSG_OSD_REP_SCRUBMAP:
+  case MSG_OSD_SCRUB_RESERVE:
     return handle_scrub_message(
       conn,
       boost::static_pointer_cast<MOSDFastDispatchOp>(m));

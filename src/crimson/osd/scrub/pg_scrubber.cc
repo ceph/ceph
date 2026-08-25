@@ -18,8 +18,12 @@ void PGScrubber::dump_detail(Formatter *f) const
 {
   f->dump_stream("pgid") << pg.get_pgid();
 }
+spg_t PGScrubber::get_pg_id() const
+{
+  return pg.get_pgid();
+}
 
-PGScrubber::PGScrubber(PG &pg) : pg(pg), dpp(pg), machine(*this)
+PGScrubber::PGScrubber(PG &pg) : pg(pg), dpp(pg), machine(*this, this)
 {
   m_scrub_job.emplace(pg.pgid, pg.pg_whoami.osd);
 }
@@ -47,12 +51,29 @@ void PGScrubber::on_interval_change()
    * released on the other side) */
   handle_event(events::reset_t{});
   waiting_for_update = std::nullopt;
-  ceph_assert(!blocked);
+}
+
+void PGScrubber::flag_reservations_failure()
+{
+  LOG_PREFIX(PGScrubber::flag_reservations_failure);
+  DEBUGDPP("", pg);
+  // delay the next invocation of the scrubber on this target
+  if (m_active_target) {
+    requeue_penalized(
+        m_active_target->level(), delay_both_targets_t::yes,
+        delay_cause_t::replicas, ceph_clock_now());
+  }
+}
+
+[[nodiscard]] bool PGScrubber::is_reservation_required() const
+{
+  ceph_assert(m_active_target);
+  return ScrubJob::requires_reservation(m_active_target->urgency());
 }
 
 void PGScrubber::on_log_update(eversion_t v)
 {
-  LOG_PREFIX(PGScrubber::on_interval_change);
+  LOG_PREFIX(PGScrubber::on_log_update);
   if (waiting_for_update && v >= *waiting_for_update) {
     DEBUGDPP("waiting_for_update: {}, v: {}", pg, *waiting_for_update, v);
     handle_event(await_update_complete_t{});
@@ -423,16 +444,64 @@ void PGScrubber::handle_scrub_message(Message &_m)
       });
     break;
   }
+  case MSG_OSD_SCRUB_RESERVE:
+    handle_scrub_reserve_msgs(_m);
+    break;
+
   default:
     DEBUGDPP("invalid message: {}", pg, _m);
     ceph_assert(is_scrub_message(_m));
   }
 }
 
+bool PGScrubber::should_drop_message(Message &m) const
+{
+  auto &scrub_msg = static_cast<MOSDScrubReserve&>(m);
+  if (scrub_msg.map_epoch >= pg.get_same_interval_since()) {
+    return false;
+  } else {
+    LOG_PREFIX(PGScrubber::should_drop_message);
+    DEBUGDPP("discarding message from prior interval, epoch {}, current history.same_interval_since: {}",
+       pg, scrub_msg.map_epoch, pg.get_same_interval_since());
+    return true;
+  }
+}
+
+void PGScrubber::handle_scrub_reserve_msgs(Message &_m)
+{
+  LOG_PREFIX(PGScrubber::handle_scrub_reserve_msgs);
+  auto &m = *static_cast<MOSDScrubReserve*>(&_m);
+  DEBUGDPP("type: {}, from: {}, epoch: {}", pg, m.type, m.from, m.map_epoch);
+
+  if (should_drop_message(m)) {
+    return;
+  }
+  switch (m.type) {
+    case MOSDScrubReserve::REQUEST:
+      handle_event(events::replica_reserve_request_t{m, m.from});
+      break;
+    case MOSDScrubReserve::GRANT:
+      handle_event(events::replica_grant_t{m, m.from});
+      break;
+    case MOSDScrubReserve::REJECT:
+      handle_event(events::replica_reject_t{m, m.from});
+      break;
+    case MOSDScrubReserve::RELEASE:
+      handle_event(events::replica_release_t{m, m.from});
+      break;
+  }
+}
 void PGScrubber::handle_op_stats(
   const hobject_t &on_object,
   object_stat_sum_t delta_stats) {
   handle_event(events::op_stats_t{on_object, delta_stats});
+}
+
+void PGScrubber::send_granted_by_reserver(const AsyncScrubResData& res_data)
+{
+  LOG_PREFIX(PGScrubber::send_granted_by_reserver);
+  DEBUGDPP("reservation granted by reserver: {}", pg, res_data);
+  handle_event(events::reserver_granted_t{res_data});
 }
 
 PGScrubber::ifut<> PGScrubber::wait_scrub(

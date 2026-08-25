@@ -45,6 +45,7 @@ add_executable(crimson-osd
   scrub/scrub_queue.cc
   scrub/scrub_scheduler.cc
   ${PROJECT_SOURCE_DIR}/src/osd/scrubber/scrub_resources.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/scrubber/scrub_reservations.cc
   osdmap_gate.cc
   pg_activation_blocker.cc
   pg_map.cc

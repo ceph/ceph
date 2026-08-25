@@ -272,7 +272,11 @@ OSDSingletonState::OSDSingletonState(
     snap_reserver(
       &cct,
       &finisher,
-      crimson::common::local_conf()->osd_max_trimming_pgs)
+      crimson::common::local_conf()->osd_max_trimming_pgs),
+    scrub_reserver(
+      &cct,
+      &finisher,
+      crimson::common::local_conf()->osd_max_scrubs)
 {
   crimson::common::local_conf().add_observer(this);
   osdmaps[0] = boost::make_local_shared<OSDMap>();

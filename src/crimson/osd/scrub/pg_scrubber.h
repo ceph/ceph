@@ -106,11 +106,14 @@ public:
   static constexpr const char *type_name = "PGScrubber";
   using Blocker = PGScrubber;
   void dump_detail(Formatter *f) const;
+  spg_t get_pg_id() const;
+  PG& get_pg() { return pg; }
 
   static inline bool is_scrub_message(Message &m) {
     switch (m.get_type()) {
     case MSG_OSD_REP_SCRUB:
     case MSG_OSD_REP_SCRUBMAP:
+    case MSG_OSD_SCRUB_RESERVE:
       return true;
     default:
       return false;
@@ -145,6 +148,9 @@ public:
   /// handle scrub request
   void handle_scrub_requested(bool deep);
 
+  /// is this scrub's urgency high enough, or must it reserve its replicas?
+  [[nodiscard]] bool is_reservation_required() const;
+
 
   /// handle other scrub message
   void handle_scrub_message(Message &m);
@@ -153,6 +159,12 @@ public:
   void handle_op_stats(
     const hobject_t &on_object,
     object_stat_sum_t delta_stats);
+
+  /// async scrub reservation granted by singleton-side reserver callback
+  void send_granted_by_reserver(const AsyncScrubResData& res_data);
+
+  /// delay next retry of this PG after a replica reservation failure
+  void flag_reservations_failure();
 
   /// maybe block an op trying to mutate hoid until chunk is complete
   ifut<> wait_scrub(
@@ -220,6 +232,9 @@ private:
   void clear_pgscrub_state();
   void reset_internal_state();
   std::string_view registration_state() const;
+  bool should_drop_message(Message &m) const;
+  void handle_scrub_reserve_msgs(Message &m);
+
 };
 
 } // namespace crimson::osd::scrub
