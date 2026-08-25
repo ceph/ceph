@@ -1026,7 +1026,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     return device_facts
 
 def has_bluestore_label(device_path: str) -> bool:
-    logger.info("opening device {} to check for BlueStore label".format(device_path))
+    logger.debug("opening device {} to check for BlueStore label".format(device_path))
     sig_len = len(BLUESTORE_BDEV_LABEL_SIGNATURE)
     try:
         with open(device_path, "rb") as fd:
@@ -1047,7 +1047,7 @@ def has_bluestore_label(device_path: str) -> bool:
                 if signature == BLUESTORE_BDEV_LABEL_SIGNATURE:
                     return True
     except IsADirectoryError:
-        logger.info(f'{device_path} is a directory, skipping.')
+        logger.debug(f'{device_path} is a directory, skipping.')
 
     return False
 
