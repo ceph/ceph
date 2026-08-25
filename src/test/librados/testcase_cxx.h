@@ -214,9 +214,8 @@ protected:
   void wait_for_stable_acting_set(const std::string &objname);
 
   // Returns true if the cluster has at least two CRUSH datacenter buckets.
-  // Used as a precondition assertion for zone-aware split-read tests;
-  // tests FAIL (not skip) when the cluster topology is missing.
-  bool has_two_zone_topology() const;
+  // Checked once in SetUpTestCase() to decide whether to create the stretch pool.
+  static bool has_two_zone_topology();
 
   std::string pool_name;
   void SetUp() override;

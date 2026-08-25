@@ -393,14 +393,16 @@ void RadosTestECPP::SetUpTestCase()
   auto pool_prefix = fmt::format("{}_", ::testing::UnitTest::GetInstance()->current_test_case()->name());
   pool_name_default = get_temp_pool_name(pool_prefix);
   pool_name_fast = get_temp_pool_name(pool_prefix);
-  pool_name_stretch = get_temp_pool_name(pool_prefix);
   std::map<std::string, std::string> config = {{"rados_replica_read_policy", "default"}};
   ASSERT_EQ("", connect_cluster_pp(s_cluster, config));
   ASSERT_EQ("", create_ec_pool_pp(pool_name_default, s_cluster, false));
   ASSERT_EQ("", create_ec_pool_pp(pool_name_fast, s_cluster, true));
-  ASSERT_EQ("", create_ec_pool_pp(pool_name_stretch, s_cluster,
-                                   /*optimised_ec=*/true, /*enable_omap=*/false,
-                                   /*k_per_zone=*/2, /*m_per_zone=*/1));
+  if (has_two_zone_topology()) {
+    pool_name_stretch = get_temp_pool_name(pool_prefix);
+    ASSERT_EQ("", create_ec_pool_pp(pool_name_stretch, s_cluster,
+                                     /*optimised_ec=*/true, /*enable_omap=*/false,
+                                     /*k_per_zone=*/2, /*m_per_zone=*/1));
+  }
   s_cluster.wait_for_latest_osdmap();
 }
 
@@ -409,7 +411,10 @@ void RadosTestECPP::TearDownTestCase()
   SKIP_IF_CRIMSON();
   ASSERT_EQ(0, destroy_pool_pp(pool_name_default, s_cluster));
   ASSERT_EQ(0, destroy_pool_pp(pool_name_fast, s_cluster));
-  ASSERT_EQ(0, destroy_pool_pp(pool_name_stretch, s_cluster));
+  if (!pool_name_stretch.empty()) {
+    ASSERT_EQ(0, destroy_pool_pp(pool_name_stretch, s_cluster));
+    pool_name_stretch.clear();
+  }
   s_cluster.shutdown();
 }
 
@@ -718,7 +723,7 @@ void RadosTestECPP::clear_ec_read_error_on_shard(const std::string &objname,
   ASSERT_EQ(0, rc);
 }
 
-bool RadosTestECPP::has_two_zone_topology() const
+bool RadosTestECPP::has_two_zone_topology()
 {
   // Ask the monitor for the CRUSH map and count datacenter-type buckets.
   // Returns true only when there are at least two, which is the minimum
