@@ -55,6 +55,13 @@ describe('SilenceListComponent', () => {
     expect(component).toBeTruthy();
   });
 
+  it('should create for read-only prometheus users', () => {
+    (authStorageService.getPermissions as jasmine.Spy).and.callFake(() => ({
+      prometheus: new Permission(['read'])
+    }));
+    expect(() => TestBed.createComponent(SilenceListComponent)).not.toThrow();
+  });
+
   it('should test all TableActions combinations', () => {
     const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
     const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(

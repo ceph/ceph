@@ -176,6 +176,33 @@ export class OverviewComponent {
     shareReplay({ bufferSize: 1, refCount: true })
   );
 
+  /* EMPTY STATE DATA */
+  readonly isPromethuesConfigured$ = timer(0, PROMETHUES_CONFIG_POLL_INTERVAL).pipe(
+    switchMap(() => this.prometheusService.refreshPrometheusUsable()),
+    distinctUntilChanged(),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly hasNoOSDs$ = this.healthData$.pipe(
+    map((data: HealthSnapshotMap) => {
+      if (data?.osdmap == null) {
+        return false;
+      }
+      return data.osdmap.num_osds === 0;
+    }),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly storageEmptyState$ = this.hasNoOSDs$.pipe(startWith(false)).pipe(
+    map((hasNoOSDs) => hasNoOSDs),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
+  readonly prometheusEmptyState$ = this.isPromethuesConfigured$.pipe(
+    map((isPromethuesConfigured) => !isPromethuesConfigured),
+    shareReplay({ bufferSize: 1, refCount: true })
+  );
+
   /* STORAGE CARD DATA */
 
   readonly storageVm$ = this.healthData$.pipe(
