@@ -394,6 +394,56 @@ namespace rgw::dedup {
 
     rados = store->getRados();
     rados_handle = rados->get_rados_handle();
+
+    // Detect whether the data pool supports truncate (needed for split-head).
+    // EC pools without allow_ec_overwrites reject TRUNCATE with -EOPNOTSUPP.
+    // We only check the default placement pool because the BI filter applies
+    // exclusively to RGW_STORAGE_CLASS_STANDARD objects, which always reside
+    // in the default placement's data pool. Non-default storage classes have
+    // an empty head and skip the filter entirely.
+    d_pool_supports_truncate = true;
+    const auto& zone_params = store->svc()->zone->get_zone_params();
+    const auto& zonegroup = store->svc()->zone->get_zonegroup();
+    const std::string& default_placement_name = zonegroup.default_placement.name;
+    auto it = zone_params.placement_pools.find(default_placement_name);
+    if (it != zone_params.placement_pools.end()) {
+      const rgw_pool& data_pool = it->second.get_standard_data_pool();
+      if (!data_pool.name.empty()) {
+        librados::IoCtx data_ioctx;
+        int ret = rgw_init_ioctx(dpp, rados_handle, data_pool, data_ioctx);
+        if (ret < 0) {
+          ldpp_dout(dpp, 5) << __func__ << "::failed to open default data pool "
+                            << data_pool.name << ": " << cpp_strerror(-ret) << dendl;
+          return ret;
+        }
+
+        bool requires_alignment = false;
+        ret = data_ioctx.pool_requires_alignment2(&requires_alignment);
+        if (ret < 0) {
+          ldpp_dout(dpp, 1) << __func__ << "::ERR: pool_requires_alignment2() failed on "
+                            << data_pool.name << ": " << cpp_strerror(-ret) << dendl;
+          return ret;
+        }
+
+        if (requires_alignment) {
+          d_pool_supports_truncate = false;
+          ldpp_dout(dpp, 5) << __func__ << "::default data pool " << data_pool.name
+                            << " is EC without allow_ec_overwrites, "
+                            << "disabling split-head" << dendl;
+        }
+      }
+      else {
+        ldpp_dout(dpp, 1) << __func__ << "::ERR: empty data-pool name for default-placement("
+                          << default_placement_name << ")" << dendl;
+        return -ENOENT;
+      }
+    }
+    else {
+      ldpp_dout(dpp, 1) << __func__ << "::ERR: default_placement("
+                        << default_placement_name << ") has no valid pool" << dendl;
+      return -ENOENT;
+    }
+
     if (init_pool) {
       int ret = init_dedup_pool_ioctx(store, dpp, d_dedup_cluster_ioctx);
       display_ioctx_state(dpp, d_dedup_cluster_ioctx, __func__);
@@ -620,8 +670,15 @@ namespace rgw::dedup {
   }
 
   //---------------------------------------------------------------------------
-  inline bool Background::should_split_head(const RGWObjManifest& manifest)
+  inline bool Background::should_split_head(const RGWObjManifest& manifest,
+                                            md5_stats_t *p_stats)
   {
+    if (!d_pool_supports_truncate) {
+      // we can't split-head without atomic truncate
+      p_stats->split_head_skip_no_truncate++;
+      return false;
+    }
+
     // Split-head is only applicable for single-part objects with a non-empty head.
     // To avoid issues with manifests created via append (specifically for Alibaba Cloud OSS),
     //    we should disable split-head whenever the manifest contains an override_prefix in the rules.
@@ -1242,7 +1299,7 @@ namespace rgw::dedup {
         return -ENOTSUP;
       }
 
-      need_to_split_head = should_split_head(manifest);
+      need_to_split_head = should_split_head(manifest, p_stats);
 
       // force explicit tail_placement as the dedup could be on another bucket
       const rgw_bucket_placement& tail_placement = manifest.get_tail_placement();
@@ -1830,7 +1887,7 @@ namespace rgw::dedup {
     // we might still need to split-head here when hash is valid
     // can happen if we failed compare before (md5-collison) and stored the src hash
     // in the obj-attributes
-    if (should_split_head(src_manifest)) {
+    if (should_split_head(src_manifest, p_stats)) {
       ret = split_head_object(p_src_rec, src_manifest, p_tgt_rec, p_stats);
       // compare_strong_hash() is called internally by split_head_object()
       return (ret == 0);
@@ -2311,8 +2368,21 @@ namespace rgw::dedup {
       p_worker_stats->non_default_storage_class_objs_bytes += ondisk_byte_size;
     }
 
+    const bool multipart_object = (parsed_etag.num_parts > 0);
+    if (entry.meta.size <= d_head_object_size       &&
+        !d_pool_supports_truncate                   &&
+        storage_class == RGW_STORAGE_CLASS_STANDARD &&
+        !multipart_object) {
+      // small objects dedup uses split-head which is dependent on truncate support
+      ldpp_dout(dpp, 20) << __func__ << "::ingress_skip_no_truncate_support::"
+                         << entry.meta.size << dendl;
+      p_worker_stats->ingress_skip_no_truncate_support++;
+      p_worker_stats->ingress_skip_no_truncate_support_bytes += ondisk_byte_size;
+      return 0;
+    }
+
     if (ondisk_byte_size < d_min_obj_size_for_dedup) {
-      if (parsed_etag.num_parts == 0) {
+      if (!multipart_object) {
         // dedup is only applied to objects larger than the configured minimum size
         // `rgw_dedup_min_obj_size_for_dedup`
         p_worker_stats->ingress_skip_too_small++;
@@ -2326,7 +2396,7 @@ namespace rgw::dedup {
       }
     }
     // multipart/single_part counters are for objects being fully processed
-    if (parsed_etag.num_parts > 0) {
+    if (multipart_object) {
       p_worker_stats->multipart_objs++;
     }
     else {

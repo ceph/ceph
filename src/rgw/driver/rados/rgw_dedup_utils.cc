@@ -384,6 +384,8 @@ namespace rgw::dedup {
     this->ingress_skip_too_small += other.ingress_skip_too_small;
     this->ingress_skip_filtered_bucket += other.ingress_skip_filtered_bucket;
     this->ingress_skip_filtered_storage_class += other.ingress_skip_filtered_storage_class;
+    this->ingress_skip_no_truncate_support += other.ingress_skip_no_truncate_support;
+    this->ingress_skip_no_truncate_support_bytes += other.ingress_skip_no_truncate_support_bytes;
 
     return *this;
   }
@@ -456,6 +458,12 @@ namespace rgw::dedup {
         f->dump_unsigned("Ingress skipped filtered storage class, num objects skipped",
                          this->ingress_skip_filtered_storage_class);
       }
+      if (this->ingress_skip_no_truncate_support) {
+        f->dump_unsigned("Ingress skip: EC no truncate support",
+                         this->ingress_skip_no_truncate_support);
+        f->dump_unsigned("Ingress skip: EC no truncate support bytes",
+                         this->ingress_skip_no_truncate_support_bytes);
+      }
     }
 
     {
@@ -503,11 +511,12 @@ namespace rgw::dedup {
     encode(w.non_default_storage_class_objs_bytes, bl);
 
     encode(w.ingress_corrupted_etag, bl);
-
-    encode(w.ingress_skip_too_small_bytes, bl);
     encode(w.ingress_skip_too_small, bl);
+    encode(w.ingress_skip_too_small_bytes, bl);
     encode(w.ingress_skip_filtered_bucket, bl);
     encode(w.ingress_skip_filtered_storage_class, bl);
+    encode(w.ingress_skip_no_truncate_support, bl);
+    encode(w.ingress_skip_no_truncate_support_bytes, bl);
 
     encode(w.duration, bl);
     ENCODE_FINISH(bl);
@@ -533,10 +542,12 @@ namespace rgw::dedup {
     decode(w.non_default_storage_class_objs, bl);
     decode(w.non_default_storage_class_objs_bytes, bl);
     decode(w.ingress_corrupted_etag, bl);
-    decode(w.ingress_skip_too_small_bytes, bl);
     decode(w.ingress_skip_too_small, bl);
+    decode(w.ingress_skip_too_small_bytes, bl);
     decode(w.ingress_skip_filtered_bucket, bl);
     decode(w.ingress_skip_filtered_storage_class, bl);
+    decode(w.ingress_skip_no_truncate_support, bl);
+    decode(w.ingress_skip_no_truncate_support_bytes, bl);
 
     decode(w.duration, bl);
     DECODE_FINISH(bl);
@@ -580,6 +591,7 @@ namespace rgw::dedup {
     this->singleton_after_purge         += other.singleton_after_purge;
     this->shared_manifest_after_purge   += other.shared_manifest_after_purge;
     this->split_head_no_tail_placement  += other.split_head_no_tail_placement;
+    this->split_head_skip_no_truncate   += other.split_head_skip_no_truncate;
     this->illegal_rec_id                += other.illegal_rec_id;
     this->missing_last_block_marker     += other.missing_last_block_marker;
 
@@ -802,6 +814,10 @@ namespace rgw::dedup {
         f->dump_unsigned("No Tail Placement during Split-Head processing",
                          this->split_head_no_tail_placement);
       }
+      if (this->split_head_skip_no_truncate) {
+        f->dump_unsigned("Split-Head skipped: EC no truncate support",
+                         this->split_head_skip_no_truncate);
+      }
     }
   }
 
@@ -845,6 +861,7 @@ namespace rgw::dedup {
     encode(m.singleton_after_purge, bl);
     encode(m.shared_manifest_after_purge, bl);
     encode(m.split_head_no_tail_placement, bl);
+    encode(m.split_head_skip_no_truncate, bl);
     encode(m.illegal_rec_id, bl);
     encode(m.missing_last_block_marker, bl);
 
@@ -915,6 +932,7 @@ namespace rgw::dedup {
     decode(m.singleton_after_purge, bl);
     decode(m.shared_manifest_after_purge, bl);
     decode(m.split_head_no_tail_placement, bl);
+    decode(m.split_head_skip_no_truncate, bl);
     decode(m.illegal_rec_id, bl);
     decode(m.missing_last_block_marker, bl);
 
