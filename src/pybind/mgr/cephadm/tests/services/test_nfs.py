@@ -1087,3 +1087,33 @@ def test_nfs_choose_next_action_detects_explicit_value_change():
         last_deps=['tls_ktls: False'],
     )
     assert step.action is utils.Action.REDEPLOY
+
+
+def test_nfs_choose_next_action_grpc_deps_no_action_during_upgrade():
+    """gRPC deps introduced during MGR upgrade must not trigger any action."""
+    nfs_svc = service_registry.get_service('nfs')
+    nfs_svc.mgr.upgrade.upgrade_state = MagicMock()
+
+    last_deps = ['enable_rdma: False', 'tls_ktls: False']
+    curr_deps = ['enable_rdma: False', 'tls_ktls: False',
+                 'grpc_certificate_source: cephadm-signed']
+
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION, 'nfs', None, curr_deps, last_deps)
+
+    assert step.action is utils.Action.NO_ACTION
+    nfs_svc.mgr.upgrade.upgrade_state = None
+
+
+def test_nfs_choose_next_action_grpc_source_change_triggers_redeploy():
+    """Changing grpc_certificate_source outside upgrade must trigger REDEPLOY."""
+    nfs_svc = service_registry.get_service('nfs')
+    nfs_svc.mgr.upgrade.upgrade_state = None
+
+    step = nfs_svc.choose_next_action(
+        utils.Action.NO_ACTION, 'nfs', None,
+        curr_deps=['grpc_certificate_source: cephadm-signed'],
+        last_deps=['grpc_certificate_source: inline'],
+    )
+
+    assert step.action is utils.Action.REDEPLOY

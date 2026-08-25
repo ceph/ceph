@@ -806,6 +806,11 @@ class NFSService(CephService):
         }
         if not sym_diff:
             return utils.NextDaemonStep(scheduled_action)
+        # Skip NFS actions when only gRPC deps change during upgrade
+        upgrade_in_progress = self.mgr.upgrade.upgrade_state is not None
+        only_grpc_changed = all(s.startswith('grpc_') for s in sym_diff)
+        if upgrade_in_progress and only_grpc_changed:
+            return utils.NextDaemonStep(scheduled_action)
         logger.info(
             'Reconfigure wanted %s: deps %r -> %r (diff %r)',
             spec.service_name() if spec else daemon_type,
