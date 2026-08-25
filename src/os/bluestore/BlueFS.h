@@ -721,14 +721,14 @@ private:
   void _wait_for_aio(FileWriter *h);  // safe to call without a lock
 #endif
 
-  int64_t _maybe_extend_log();
-  void _extend_log(uint64_t amount);
-  uint64_t _log_advance_seq();
+  uint64_t _need_extend_log();
+  void _extend_log(uint64_t seq, uint64_t amount);
+  void _log_advance_seq_live();
   void _consume_dirty(uint64_t seq);
   void _clear_dirty_set_stable_D(uint64_t seq_stable);
   void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
 
-  void _flush_and_sync_log_core();
+  void _flush_and_sync_log_core(uint64_t seq);
   int _flush_and_sync_log_jump_D(uint64_t jump_to);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
@@ -746,8 +746,7 @@ private:
     RENAME_SLOW2DB = 4,
     RENAME_DB2SLOW = 8,
   };
-  void _compact_log_dump_metadata_NF(uint64_t start_seq,
-                                     bluefs_transaction_t *t,
+  void _compact_log_dump_metadata_NF(bluefs_transaction_t *t,
 				     int flags,
 				     uint64_t capture_before_seq);
 
