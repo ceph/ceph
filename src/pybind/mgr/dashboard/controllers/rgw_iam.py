@@ -1,10 +1,11 @@
-from typing import Optional
+from typing import Dict, List, Optional
 
 from ..controllers.rgw import RgwRESTController
 from ..exceptions import DashboardException
 from ..rest_client import RequestException
 from ..security import Scope
 from ..services.rgw_iam import RgwAccounts
+from ..services.rgw_iam_policy import RgwIamPolicies
 from ..tools import str_to_bool
 from . import APIDoc, APIRouter, EndpointDoc, RESTController, allow_empty_body
 
@@ -192,3 +193,123 @@ class RgwUserAccountsController(RgwRESTController):
         :rtype: Dict[str, Any]
         """
         return RgwAccounts.set_quota_status(quota_type, account_id, quota_status)
+
+
+@APIRouter('/rgw/accounts/{account_id}/policies', Scope.RGW)
+@APIDoc("RGW IAM Managed Policies API", "RgwIamPolicy")
+class RgwAccountPoliciesController(RESTController):
+    RESOURCE_ID = 'policy_name'
+    def list(self, account_id: str, daemon_name=None):
+        """
+        List managed policies for an account.
+        """
+        return RgwIamPolicies.list_policies(account_id)
+
+    @EndpointDoc("Create managed policy",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_name': (str, 'Policy name'),
+                             'policy_doc': (str, 'Policy document JSON'),
+                             'path': (str, 'Policy path'),
+                             'description': (str, 'Policy description')})
+    @allow_empty_body
+    def create(self, account_id: str, policy_name: str, policy_doc: str,
+               path: str = '/', description: str = '', daemon_name=None):
+        """
+        Create a customer managed policy.
+        """
+        return RgwIamPolicies.create_policy(
+            policy_name, policy_doc, account_id=account_id,
+            path=path, description=description)
+
+    @EndpointDoc("Get managed policy by ARN",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN')})
+    @RESTController.Collection(method='GET', path='/get')
+    def get_policy(self, account_id: str, policy_arn: str, daemon_name=None):
+        """
+        Get policy details and document.
+        """
+        return RgwIamPolicies.get_policy(policy_arn)
+
+    @EndpointDoc("Delete managed policy",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_name': (str, 'Policy name')})
+    def delete(self, account_id: str, policy_name: str, daemon_name=None):
+        """
+        Delete a managed policy.
+        """
+        return RgwIamPolicies.delete_policy_by_name(account_id, policy_name)
+
+    @EndpointDoc("List policy versions",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN')})
+    @RESTController.Collection(method='GET', path='/versions')
+    def list_versions(self, account_id: str, policy_arn: str, daemon_name=None):
+        return RgwIamPolicies.list_policy_versions(policy_arn)
+
+    @EndpointDoc("Get policy version",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN'),
+                             'version_id': (str, 'Version ID')})
+    @RESTController.Collection(method='GET', path='/versions/get')
+    def get_version(self, account_id: str, policy_arn: str, version_id: str,
+                    daemon_name=None):
+        return RgwIamPolicies.get_policy_version(policy_arn, version_id)
+
+    @EndpointDoc("Create policy version",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN'),
+                             'policy_doc': (str, 'Policy document JSON'),
+                             'set_as_default': (bool, 'Set as default version')})
+    @RESTController.Collection(method='POST', path='/versions')
+    @allow_empty_body
+    def create_version(self, account_id: str, policy_arn: str, policy_doc: str,
+                       set_as_default: bool = False, daemon_name=None):
+        return RgwIamPolicies.create_policy_version(
+            policy_arn, policy_doc, set_as_default)
+
+    @EndpointDoc("Delete policy version",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN'),
+                             'version_id': (str, 'Version ID')})
+    @RESTController.Collection(method='DELETE', path='/versions')
+    def remove_version(self, account_id: str, policy_arn: str, version_id: str,
+                       daemon_name=None):
+        return RgwIamPolicies.delete_policy_version(policy_arn, version_id)
+
+    @EndpointDoc("Set default policy version",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN'),
+                             'version_id': (str, 'Version ID')})
+    @RESTController.Collection(method='PUT', path='/versions/default')
+    @allow_empty_body
+    def set_default_version(self, account_id: str, policy_arn: str, version_id: str,
+                            daemon_name=None):
+        return RgwIamPolicies.set_default_policy_version(policy_arn, version_id)
+
+    @EndpointDoc("List policy tags",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN')})
+    @RESTController.Collection(method='GET', path='/tags')
+    def list_tags(self, account_id: str, policy_arn: str, daemon_name=None):
+        return RgwIamPolicies.list_policy_tags(policy_arn)
+
+    @EndpointDoc("Tag policy",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN'),
+                             'tags': (list, 'Policy tags')})
+    @RESTController.Collection(method='POST', path='/tags')
+    @allow_empty_body
+    def add_tags(self, account_id: str, policy_arn: str,
+                 tags: List[Dict[str, str]], daemon_name=None):
+        return RgwIamPolicies.tag_policy(policy_arn, tags)
+
+    @EndpointDoc("Untag policy",
+                 parameters={'account_id': (str, 'Account ID'),
+                             'policy_arn': (str, 'Policy ARN'),
+                             'tag_keys': (str, 'Comma-separated tag keys')})
+    @RESTController.Collection(method='DELETE', path='/tags')
+    def remove_tags(self, account_id: str, policy_arn: str, tag_keys: str,
+                    daemon_name=None):
+        keys = [key.strip() for key in tag_keys.split(',') if key.strip()]
+        return RgwIamPolicies.untag_policy(policy_arn, keys)

@@ -52,6 +52,11 @@ export class RgwUserAccountsResourceSidebarComponent implements OnInit, OnDestro
         label: $localize`Roles`,
         route: [this.basePath, this.accountNameRoute, 'roles'],
         routerLinkActiveOptions: { exact: true }
+      },
+      {
+        label: $localize`Policies`,
+        route: [this.basePath, this.accountNameRoute, 'policies'],
+        routerLinkActiveOptions: { exact: true }
       }
     ];
   }
