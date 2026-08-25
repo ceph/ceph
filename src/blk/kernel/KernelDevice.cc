@@ -73,6 +73,11 @@ using ceph::make_timespan;
 using ceph::mono_clock;
 using ceph::operator <<;
 
+// the device whose externally-completed (outer) queue this thread
+// reaps; such a thread must never submit write aio to THAT device.
+// Compared only, never dereferenced.
+static thread_local const void *tl_outer_reaper_dev = nullptr;
+
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
@@ -92,7 +97,7 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   if (use_ioring && ioring_queue_t::supported()) {
     bool use_ioring_hipri = cct->_conf.get_val<bool>("bdev_ioring_hipri");
     bool use_ioring_sqthread_poll = cct->_conf.get_val<bool>("bdev_ioring_sqthread_poll");
-    io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
+    inner_io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
   } else {
     static bool once;
     if (use_ioring && !once) {
@@ -100,7 +105,8 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
            << dendl;
       once = true;
     }
-    io_queue = std::make_unique<aio_queue_t>(iodepth);
+    inner_io_queue = std::make_unique<aio_queue_t>(iodepth);
+    inner_is_libaio = true;
   }
 
   char name[128];
@@ -392,6 +398,10 @@ void KernelDevice::close()
     VOID_TEMP_FAILURE_RETRY(::close(fd_buffereds[i]));
     fd_buffereds[i] = -1;
   }
+  // the eventfd is borrowed, not owned; dropping the outer queue also
+  // drops our reference to it, and a re-opened device is back in
+  // normal mode unless the owner installs an eventfd again
+  outer_io_queue.reset();
   path.clear();
 }
 
@@ -566,17 +576,27 @@ int KernelDevice::_aio_start()
 {
   if (aio) {
     dout(10) << __func__ << dendl;
-    int r = io_queue->init(fd_directs);
-    if (r < 0) {
-      if (r == -EAGAIN) {
-	derr << __func__ << " io_setup(2) failed with EAGAIN; "
-	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
-      } else {
-	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+    for (auto q : {inner_io_queue.get(), outer_io_queue.get()}) {
+      if (!q) {
+	continue;
       }
-      return r;
+      int r = q->init(fd_directs);
+      if (r < 0) {
+	if (r == -EAGAIN) {
+	  derr << __func__ << " io_setup(2) failed with EAGAIN; "
+	       << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+	} else {
+	  derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+	}
+	if (q != inner_io_queue.get()) {
+	  inner_io_queue->shutdown();
+	}
+	return r;
+      }
     }
-    aio_thread.create("bstore_aio", io_queue.get());
+    // inner queue processes reads only if external completions are enabled
+    aio_thread.create(outer_io_queue ? "bstore_aio_rd" : "bstore_aio",
+      inner_io_queue.get());
   }
   return 0;
 }
@@ -586,9 +606,20 @@ void KernelDevice::_aio_stop()
   if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
-    _aio_thread_wake(io_queue.get(), aio_thread);
+    if (outer_io_queue) {
+      // the owner must have stopped submitting by now, but
+      // completions may still sit unreaped in the write ring - drain
+      // them here rather than letting io_destroy discard them (their
+      // callbacks would never run)
+      while (_reap_completions(outer_io_queue.get(), 0,
+			       cct->_conf->bdev_aio_reap_max) > 0) {}
+    }
+    _aio_thread_wake(inner_io_queue.get(), aio_thread);
     aio_stop = false;
-    io_queue->shutdown();
+    if (outer_io_queue) {
+      outer_io_queue->shutdown();
+    }
+    inner_io_queue->shutdown();
   }
 }
 
@@ -792,6 +823,52 @@ int KernelDevice::_reap_completions(io_queue_t *q, int timeout_ms, int max)
     }
   }
   return r;
+}
+
+// Must be called before open(); the fd is borrowed from the caller
+// (never closed here) and stays installed for the device's whole open
+// lifetime - there is no mode switching on an open device.  Writes
+// only: reads move to a dedicated ring whose completion thread this
+// device keeps, so read completion latency never couples to the
+// owner's schedule.
+int KernelDevice::set_completion_eventfd(int fd)
+{
+#if defined(HAVE_LIBAIO)
+  ceph_assert(!aio_thread.is_started());
+  ceph_assert(fd >= 0);
+  ceph_assert(!outer_io_queue);
+  if (!inner_is_libaio) {
+    // bdev_ioring: keep the whole device on io_uring rather than
+    // silently moving writes to a libaio ring - the mode is libaio only
+    return -EOPNOTSUPP;
+  }
+  // eventfd support implies libaio, so the outer ring is plain aio
+  outer_io_queue = std::make_unique<aio_queue_t>(
+    cct->_conf->bdev_aio_max_queue_depth);
+
+  int r = outer_io_queue->set_notify_eventfd(fd);
+  if (r < 0) {
+    outer_io_queue.reset();
+    return r;
+  }
+  dout(5) << __func__ << " efd " << fd << dendl;
+  return 0;
+#else
+  return -EOPNOTSUPP;
+#endif
+}
+
+// drain the WRITE ring; a no-op unless in external-completion mode
+int KernelDevice::reap_completions(int max)
+{
+  if (!aio || !outer_io_queue) {
+    return 0;
+  }
+  // the calling thread is this device's outer-queue owner and only
+  // drain, for good; internal teardown drains do not mark their
+  // caller, so a thread that merely closed a device stays free
+  tl_outer_reaper_dev = this;
+  return _reap_completions(outer_io_queue.get(), 0, max);
 }
 
 void KernelDevice::_aio_thread(io_queue_t *q)
@@ -1102,6 +1179,13 @@ bool KernelDevice::_aio_lone_waiter_sync(IOContext *ioc)
 
 void KernelDevice::aio_submit(IOContext *ioc)
 {
+  // A thread that reaps this device's outer queue is that queue's
+  // only drain: if it submitted write aio here and slept in the
+  // submit EAGAIN retry, nobody would free the ring slots it is
+  // waiting for.  Reads are exempt (the device's own thread serves
+  // them), as are its submissions to other devices (BlueFS flushes
+  // from the kv sync thread land on BlueFS's own devices).
+  ceph_assert(tl_outer_reaper_dev != this || ioc->writes.pending.empty());
   dout(20) << __func__ << " ioc " << ioc
 	   << " pending " << ioc->num_pending.load()
 	   << " running " << ioc->num_running.load()
@@ -1150,14 +1234,19 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << " bdev_aio_submit_retry_max " << retry_max
 	   << " bdev_aio_submit_retry_initial_delay_us " << initial_delay_us
 	   << dendl;
+  // reads ride the inner queue unless this device runs in
+  // external-completion mode, where they have their own ring
+  io_queue_t *wq = outer_io_queue ? outer_io_queue.get()
+				  : inner_io_queue.get();
   int r = 0, retries = 0;
   if (ioc->writes.running.begin() != we) {
-    r = io_queue->submit_batch(ioc->writes.running.begin(), we,
-			       priv, &retries, retry_max, initial_delay_us);
+    r = wq->submit_batch(ioc->writes.running.begin(), we,
+				     priv, &retries, retry_max,
+				     initial_delay_us);
   }
   if (r >= 0 && ioc->reads.running.begin() != re) {
-    r = io_queue->submit_batch(ioc->reads.running.begin(), re,
-			       priv, &retries, retry_max, initial_delay_us);
+    r = inner_io_queue->submit_batch(ioc->reads.running.begin(), re,
+      priv, &retries, retry_max, initial_delay_us);
   }
 
   if (retries)
