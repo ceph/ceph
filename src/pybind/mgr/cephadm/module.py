@@ -4152,14 +4152,17 @@ Then run the following:
                 'certificate': self.cert_mgr.get_root_ca()}
 
     @handle_orch_error
-    def cert_store_cert_ls(self,
-                        filter_by: str = '',
-                        show_details: bool = False,
-                        include_cephadm_signed: bool = False) -> Dict[str, Any]:
+    def cert_store_cert_ls(
+        self,
+        filter_by: str = '',
+        show_details: bool = False,
+        include_cephadm_signed: bool = False
+    ) -> Dict[str, Any]:
         return self.cert_mgr.cert_ls(
             filter_by, show_details, include_cephadm_signed
         )
 
+    @handle_orch_error
     def show_agent_config(self) -> Dict[str, str]:
         agent = self.http_server.agent
         return {
@@ -4168,7 +4171,7 @@ Then run the following:
             'agent_initial_startup_delay_max': str(agent.get_initial_delay()),
             'agent_jitter_seconds': str(agent.get_jitter()),
             'agent_down_multiplier': str(self.agent_down_multiplier),
-            'agent_starting_port': str(self.agent_starting_port)
+            'agent_starting_port': str(self.agent_starting_port),
         }
 
     @handle_orch_error

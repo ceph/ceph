@@ -1,5 +1,4 @@
 import gzip
-import json
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 from typing import Optional, Any, Tuple
@@ -13,7 +12,7 @@ def make_json_request(url: str, json_bytes: bytes, compress: bool) -> Optional[R
     Create a JSON POST request, optionally gzip-compressed. `json_bytes` must be JSON-encoded bytes.
     """
     if not json_bytes:
-        logger.error("Cannot send empty JSON payload — returning empty Request.")
+        logger.error('Cannot send empty JSON payload — returning empty Request.')
         return None
 
     if compress:
@@ -21,7 +20,7 @@ def make_json_request(url: str, json_bytes: bytes, compress: bool) -> Optional[R
         json_bytes = gzip.compress(json_bytes)
         compressed_size = len(json_bytes)
         compression_ratio = 100 * (1 - compressed_size / original_size)
-        logger.debug(f"Compression reduced payload size by {compression_ratio:.1f}% ({original_size} → {compressed_size} bytes)")
+        logger.debug(f'Compression reduced payload size by {compression_ratio:.1f}% ({original_size} → {compressed_size} bytes)')
         headers = {
             'Content-Type': 'application/json',
             'Content-Encoding': 'gzip',
@@ -57,7 +56,7 @@ def http_query(
                 response_str = response.read()
                 response_status = response.status
         else:
-            return (-1, "Empty payload — request not sent")
+            return (-1, 'Empty payload — request not sent')
 
     except HTTPError as e:
         logger.debug(f'{e.code} {e.reason}')

@@ -1737,7 +1737,7 @@ class CephadmAgent(DaemonForm):
                 self.jitter_seconds = int(config.get('jitter_seconds', 0))
                 self.host = config['host']
                 use_lsm = config['device_enhanced_scan']
-                logger.info(f"Agent configuration at startup: {config}")
+                logger.info(f'Agent configuration at startup: {config}')
         except Exception as e:
             self.shutdown()
             raise Error(f'Failed to get agent target ip and port from config: {e}')
@@ -1764,7 +1764,7 @@ class CephadmAgent(DaemonForm):
         # Introduce the randomness in the initialization (up to initial_startup_delay_max delay)
         if self.initial_startup_delay_max:
             delay = random.uniform(0, self.initial_startup_delay_max)
-            logger.debug(f"Delaying startup for {delay} seconds.")
+            logger.debug(f'Delaying startup for {delay} seconds.')
             time.sleep(delay)
 
         try:
