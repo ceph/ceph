@@ -2331,24 +2331,6 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   return ret;
 }
 
-#if 0
-void RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
-			     time_t stop_at, bool once)
-{
-  // spawn a coroutine for bucket_lc_process() so it can use spawn_throttle
-  // for concurrent operations
-  boost::asio::spawn(io_ctx,
-      [this, &shard_id, worker, stop_at, once] (boost::asio::yield_context yield) {
-        return bucket_lc_process(shard_id, worker, stop_at, once, yield);
-      },
-      [] (std::exception_ptr eptr, int result) {
-        if (eptr) {
-          std::rethrow_exception(eptr);
-        }
-      });
-}
-#endif
-
 class SimpleBackoff
 {
   const int max_retries;
@@ -2783,13 +2765,13 @@ inline int RGWLC::update_head(const std::string& lc_shard,
 {
   int ret{0};
 
-	ret = advance_head(lc_shard, head, entry, start_date, yield);
-    if (ret != 0) {
-      ldpp_dout(this, 0) << "RGWLC::update_head() failed to advance head "
-		         << lc_shard
-		         << dendl;
-	  goto exit;
-	}
+  ret = advance_head(lc_shard, head, entry, start_date, yield);
+  if (ret != 0) {
+    ldpp_dout(this, 0) << "RGWLC::update_head() failed to advance head "
+                       << lc_shard
+                       << dendl;
+    goto exit;
+  }
 
   ret = check_if_shard_done(lc_shard, head, worker_ix, yield);
   if (ret < 0) {
@@ -3031,9 +3013,13 @@ void RGWLC::start_processor()
           worker->run(yield);
           return 0;
         },
-        [] (std::exception_ptr eptr, int result) {
+        [dpp=this] (std::exception_ptr eptr, int result) {
           if (eptr) {
-            std::rethrow_exception(eptr);
+            try {
+              std::rethrow_exception(eptr);
+            } catch (const std::exception& e) {
+              ldpp_dout(dpp, 0) << "ERROR: LCWorker coroutine threw: " << e.what() << dendl;
+            }
           }
         }); // spawn
   }
@@ -3066,8 +3052,6 @@ void RGWLC::stop_processor()
     worker->stop();
   }
 
-  io_ctx.stop();
-
   for (auto& thr : threadpool) {
     thr.join();
   }
@@ -3088,7 +3072,7 @@ std::ostream& RGWLC::gen_prefix(std::ostream& out) const
 
 void RGWLC::LCWorker::stop()
 {
-  timer.cancel();
+  boost::asio::post(lc->get_io_context(), [this] { timer.cancel(); });
 }
 
 bool RGWLC::going_down()

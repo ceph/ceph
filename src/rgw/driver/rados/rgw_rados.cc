@@ -10866,7 +10866,8 @@ int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucke
         ret = result;
       }
     });
-  lc.get_io_context().run(); // Run to completion
+  // Run to completion. No thread pool is needed for one-shot run.
+  lc.get_io_context().run();
 
   return ret;
 }

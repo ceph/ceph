@@ -479,11 +479,10 @@ options:
   type: int
   level: advanced
   desc: Number of lifecycle worker threads that will be run in parallel
-  long_desc: Number of lifecycle worker threads that will run in parallel--used to permit >1
-    bucket/index shards to be processed simultaneously
+  long_desc: Number of lifecycle worker threads that will run in parallel to drive
+    all LCWorker tasks.
   fmt_desc: This option specifies the number of lifecycle worker threads
-    to run in parallel, thereby processing bucket and index
-    shards simultaneously.
+    to run in parallel.
   default: 3
   min: 1
   services:

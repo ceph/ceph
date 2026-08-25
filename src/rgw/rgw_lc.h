@@ -662,8 +662,6 @@ public:
 		       int& index);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once, boost::asio::yield_context yield);
-//  void bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
-//			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
 		     rgw::sal::LCEntry& entry, int& result, LCWorker* worker, boost::asio::yield_context yield);
   bool going_down();
