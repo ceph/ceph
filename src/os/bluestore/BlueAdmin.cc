@@ -28,8 +28,8 @@ static void take_cache_snapshot(BlueStore& store) {
   snap.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
   snap.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
   snap.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
-  snap.buffer_hits = store.logger->get(l_bluestore_buffer_hits);
-  snap.buffer_misses = store.logger->get(l_bluestore_buffer_miss_lat + 1);
+  snap.buffer_hits = store.logger->get(l_bluestore_buffer_hit_bytes);
+  snap.buffer_misses = store.logger->get(l_bluestore_buffer_miss_bytes);
   snap.buffer_miss_latency_sum = store.logger->get(l_bluestore_buffer_miss_lat);
   
   store.cache_stats_snapshots.push_back(snap);
@@ -58,8 +58,8 @@ static bool get_snapshot_windows(BlueStore& store,
   current.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
   current.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
   current.onode_shard_miss_latency_sum = store.logger->get(l_bluestore_onode_shard_miss_lat);
-  current.buffer_hits = store.logger->get(l_bluestore_buffer_hits);
-  current.buffer_misses = store.logger->get(l_bluestore_buffer_miss_lat + 1);
+  current.buffer_hits = store.logger->get(l_bluestore_buffer_hit_bytes);
+  current.buffer_misses = store.logger->get(l_bluestore_buffer_miss_bytes);
   current.buffer_miss_latency_sum = store.logger->get(l_bluestore_buffer_miss_lat);
   
   if(store.cache_stats_snapshots.size() >= 2) {
@@ -432,16 +432,18 @@ int BlueStore::SocketHook::call(
     }
     f->close_section();
     
-    uint64_t buffer_hits = store.logger->get(l_bluestore_buffer_hits);
-    f->dump_unsigned("hits", buffer_hits);
-    f->dump_unsigned("misses", buffer_misses);
+    uint64_t buffer_hits = store.logger->get(l_bluestore_buffer_hit_bytes);
+    buffer_misses = store.logger->get(l_bluestore_buffer_miss_bytes);
+
+    f->dump_unsigned("hit bytes", buffer_hits);
+    f->dump_unsigned("miss bytes", buffer_misses);
     uint64_t buffer_total = buffer_hits + buffer_misses;
-    f->dump_unsigned("total_accesses", buffer_total);
+    f->dump_unsigned("total byte accesses", buffer_total);
     if (buffer_total > 0) {
       double buffer_hit_ratio = static_cast<double>(buffer_hits) / static_cast<double>(buffer_total);
-      f->dump_float("hit_ratio", buffer_hit_ratio);
+      f->dump_float("byte_hit_ratio", buffer_hit_ratio);
     } else {
-      f->dump_float("hit_ratio", 0.0);
+      f->dump_float("byte_hit_ratio", 0.0);
     }
     
     f->close_section();
@@ -496,13 +498,13 @@ int BlueStore::SocketHook::call(
         uint64_t delta_buffer_misses = current.buffer_misses - most_recent.buffer_misses;
         uint64_t delta_buffer_lat = current.buffer_miss_latency_sum - most_recent.buffer_miss_latency_sum;
         uint64_t delta_buffer_total = delta_buffer_hits + delta_buffer_misses;
-        f->dump_unsigned("hits", delta_buffer_hits);
-        f->dump_unsigned("misses", delta_buffer_misses);
-        f->dump_unsigned("total", delta_buffer_total);
+        f->dump_unsigned("hit bytes", delta_buffer_hits);
+        f->dump_unsigned("miss bytes", delta_buffer_misses);
+        f->dump_unsigned("total bytes", delta_buffer_total);
         if (delta_buffer_total > 0) {
-          f->dump_float("hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_total);
+          f->dump_float("byte_hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_total);
         } else {
-          f->dump_float("hit_ratio", 0.0);
+          f->dump_float("byte_hit_ratio", 0.0);
         }
         if (delta_buffer_misses > 0) {
           f->dump_float("avg_miss_latency_us", (double)delta_buffer_lat / (double)delta_buffer_misses / 1000.0);
@@ -562,14 +564,14 @@ int BlueStore::SocketHook::call(
         uint64_t delta_buffer_lat = current.buffer_miss_latency_sum - oldest.buffer_miss_latency_sum;
         uint64_t delta_buffer_total = delta_buffer_hits + delta_buffer_misses;
         
-        f->dump_unsigned("hits", delta_buffer_hits);
-        f->dump_unsigned("misses", delta_buffer_misses);
+        f->dump_unsigned("hit bytes", delta_buffer_hits);
+        f->dump_unsigned("miss bytes", delta_buffer_misses);
         f->dump_unsigned("total", delta_buffer_total);
         if (delta_buffer_total > 0) {
-          f->dump_float("hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_total);
+          f->dump_float("byte_hit_ratio", (double)delta_buffer_hits / (double)delta_buffer_total);
           f->dump_float("accesses_per_second", (double)delta_buffer_total / oldest_duration);
         } else {
-          f->dump_float("hit_ratio", 0.0);
+          f->dump_float("byte_hit_ratio", 0.0);
           f->dump_float("accesses_per_second", 0.0);
         }
         if (delta_buffer_misses > 0) {

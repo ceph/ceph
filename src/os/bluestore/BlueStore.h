@@ -196,7 +196,6 @@ enum {
   l_bluestore_buffer_bytes,
   l_bluestore_buffer_hit_bytes,
   l_bluestore_buffer_miss_bytes,
-  l_bluestore_buffer_hits,
   l_bluestore_buffer_miss_lat, ////cost per miss
   //****************************************
 

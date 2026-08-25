@@ -6601,9 +6601,6 @@ void BlueStore::_init_logger()
      NULL,
      PerfCountersBuilder::PRIO_DEBUGONLY,
      unit_t(UNIT_BYTES));
-  b.add_u64_counter(l_bluestore_buffer_hits, "buffer_hits",
-     "Count of buffer cache lookup hits",
-     "b_ht");
   //****************************************
 
   // internal stats
@@ -13222,8 +13219,6 @@ int BlueStore::_do_read(
     ioc.aio_wait();
     if (is_miss) {
       logger->tinc(l_bluestore_buffer_miss_lat, ceph::mono_clock::now() - miss_start_time);
-    } else {
-      logger->inc(l_bluestore_buffer_hits);
     }
 
     r = ioc.get_return_value();
@@ -13648,9 +13643,7 @@ int BlueStore::_do_readv(
       ceph_assert(r == -EIO); // no other errors allowed
       return -EIO;
     }
-  } else {
-    logger->inc(l_bluestore_buffer_hits);
-  }
+  } 
   if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
     log_latency_fn_scrub(__func__,
       l_bluestore_read_wait_aio_lat,
