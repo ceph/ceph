@@ -6,19 +6,26 @@
 #include <functional>
 #include <string>
 
+#ifndef WITH_CRIMSON
 #include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
+#endif
 #include "common/Formatter.h"
 #include "osd/osd_types.h"
 
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+#else
 namespace Scrub {
-
+#endif
 /**
  * an interface allowing the ScrubResources to log directly into its
  * owner's log. This way, we do not need the full dout() mechanism
  * (prefix func, OSD id, etc.)
  */
+#ifndef WITH_CRIMSON
 using log_upwards_t = std::function<void(std::string msg)>;
+#endif
 class LocalResourceWrapper;
 
 /**
@@ -38,23 +45,26 @@ class ScrubResources {
    * regular scrubs will be allowed to start.
    */
   int scrubs_local{0};
-
+#ifndef WITH_CRIMSON
   mutable ceph::mutex resource_lock =
       ceph::make_mutex("ScrubQueue::resource_lock");
 
   log_upwards_t log_upwards;  ///< access into the owner's dout()
 
   const ceph::common::ConfigProxy& conf;
-
+#endif
   /// an aux used to check available local scrubs. Must be called with
   /// the resource lock held.
   bool can_inc_local_scrubs_unlocked() const;
 
  public:
+#ifdef WITH_CRIMSON
+   ScrubResources() = default;
+#else
   explicit ScrubResources(
       log_upwards_t log_access,
       const ceph::common::ConfigProxy& config);
-
+#endif
   /**
    * \returns true if the number of concurrent scrubs is
    *  below osd_max_scrubs
