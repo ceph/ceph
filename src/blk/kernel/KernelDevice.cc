@@ -686,6 +686,47 @@ static bool is_expected_ioerr(const int r)
 	  );
 }
 
+// Common error taxonomy for one finished aio: pass EIO through when the
+// caller allows it, record and abort on any other device error, abort on
+// short I/O.  Returns only if the result is fully accounted for.  Log
+// lines carry the caller's name so the error's origin stays visible.
+void KernelDevice::_aio_check_completion(const char *caller, aio_t *aio,
+					 IOContext *ioc, long r)
+{
+  if (r < 0) {
+    derr << caller << " got r=" << r << " (" << cpp_strerror(r) << ")"
+	 << dendl;
+    if (ioc->allow_eio && is_expected_ioerr(r)) {
+      derr << caller << " translating the error to EIO for upper layer"
+	   << dendl;
+      ioc->set_return_value(-EIO);
+      return;
+    }
+    if (is_expected_ioerr(r)) {
+      note_io_error_event(
+	devname.c_str(),
+	path.c_str(),
+	r,
+#if defined(HAVE_POSIXAIO)
+	aio->aio.aiocb.aio_lio_opcode,
+#else
+	aio->iocb.aio_lio_opcode,
+#endif
+	aio->offset,
+	aio->length);
+    }
+    ceph_abort_msg(
+      "Unexpected IO error. "
+      "This may suggest a hardware issue. "
+      "Please check your kernel log!");
+  } else if (aio->length != (uint64_t)r) {
+    derr << caller << " aio to 0x" << std::hex << aio->offset
+	 << "~" << aio->length << std::dec
+	 << " but returned: " << r << dendl;
+    ceph_abort_msg("unexpected aio return value: does not match length");
+  }
+}
+
 void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
@@ -719,41 +760,7 @@ void KernelDevice::_aio_thread()
 	io_since_flush.store(true);
 
 	long r = aio[i]->get_return_value();
-        if (r < 0) {
-          derr << __func__ << " got r=" << r << " (" << cpp_strerror(r) << ")"
-	       << dendl;
-          if (ioc->allow_eio && is_expected_ioerr(r)) {
-            derr << __func__ << " translating the error to EIO for upper layer"
-		 << dendl;
-            ioc->set_return_value(-EIO);
-          } else {
-	    if (is_expected_ioerr(r)) {
-	      note_io_error_event(
-		devname.c_str(),
-		path.c_str(),
-		r,
-#if defined(HAVE_POSIXAIO)
-                aio[i]->aio.aiocb.aio_lio_opcode,
-#else
-                aio[i]->iocb.aio_lio_opcode,
-#endif
-		aio[i]->offset,
-		aio[i]->length);
-	      ceph_abort_msg(
-		"Unexpected IO error. "
-		"This may suggest a hardware issue. "
-		"Please check your kernel log!");
-	    }
-	    ceph_abort_msg(
-	      "Unexpected IO error. "
-	      "This may suggest HW issue. Please check your dmesg!");
-          }
-        } else if (aio[i]->length != (uint64_t)r) {
-          derr << "aio to 0x" << std::hex << aio[i]->offset
-	       << "~" << aio[i]->length << std::dec
-               << " but returned: " << r << dendl;
-          ceph_abort_msg("unexpected aio return value: does not match length");
-        }
+	_aio_check_completion(__func__, aio[i], ioc, r);
 
         dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
                  << " ioc " << ioc

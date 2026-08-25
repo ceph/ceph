@@ -108,6 +108,8 @@ private:
 
   void _aio_log_start(IOContext *ioc, uint64_t offset, uint64_t length);
   void _aio_log_finish(IOContext *ioc, uint64_t offset, uint64_t length);
+  void _aio_check_completion(const char *caller, aio_t *aio,
+			     IOContext *ioc, long r);
 
   int _sync_write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint);
 
