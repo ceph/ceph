@@ -542,8 +542,16 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_u64_counter(rs_update_stats_invalidated, "update_stats_invalidated", "Number of times pg stats received invalidations during stats updates");
   rs_perf.add_u64_counter(rs_append_log_stats_invalidated, "append_log_stats_invalidated", "Number of times pg stats received invalidations when appending new log entries");
   rs_perf.add_u64_counter(rs_merge_log_stats_invalidated, "merge_log_stats_invalidated", "Number of times pg stats received invalidations during merging of log entries");
-  rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_rebuild_duration",
-    "Average PG rebuild duration on this OSD (primary role only)",
+  rs_perf.add_time_avg(rs_pg_rebuild_duration, "pg_vulnerability_duration",
+    "Average PG vulnerability duration on this OSD (primary role only), "
+    "i.e. time exposed to redundancy loss -- not literal rebuild/"
+    "data-movement time, which this interim counter does not separately "
+    "track; also counts misplacement-only episodes (e.g. benign CRUSH "
+    "rebalancing) indistinguishable from genuine failures, and excludes "
+    "windows where the PG never had data recovered or lost (e.g. an "
+    "empty PG); a primary handover mid-window is recorded as a separate "
+    "sample per OSD segment, so avgcount can exceed the true number of "
+    "distinct redundancy-loss incidents",
     NULL, PerfCountersBuilder::PRIO_USEFUL);
 
   return rs_perf.create_perf_counters();
