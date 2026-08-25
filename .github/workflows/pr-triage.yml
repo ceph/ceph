@@ -12,12 +12,12 @@ jobs:
     steps:
       - name: Assign labels based on modified files
         # https://github.com/marketplace/actions/labeler?version=v6.1.0
-        uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213
+        uses: actions/labeler@f27b608878404679385c85cfa523b85ccb86e213 # v6.1.0
         with:
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
       - name: Assign to Dashboard project
         # https://github.com/marketplace/actions/add-to-project?version=v2.0.0
-        uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd
+        uses: actions/add-to-project@5afcf98fcd03f1c2f92c3c83f58ae24323cc57fd # v2.0.0
         with:
           project-url: https://github.com/orgs/ceph/projects/2
           github-token: ${{ secrets.ADD_TO_PROJECT_PAT }}
@@ -25,7 +25,7 @@ jobs:
       - name: Assign milestone based on target branch name
         # https://github.com/marketplace/actions/pull-request-milestone?version=v1.4.0
         # Still node20; runs on Node 24 via FORCE_JAVASCRIPT_ACTIONS_TO_NODE24 until upstream ships node24.
-        uses: iyu/actions-milestone@f55ad3e690fadc4ee0afd8f660a43ca71715379d
+        uses: iyu/actions-milestone@f55ad3e690fadc4ee0afd8f660a43ca71715379d # v1.4.0
         env:
           FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
         with:
