@@ -2656,7 +2656,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   lock.unlock();
   ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once, yield);
   ldpp_dout(this, 5) << "RGWLC::process_bucket(): END entry 2: " << entry
-    << " index: " << index << " worker ix: " << worker->ix << dendl;
+    << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
   bucket_lc_post(index, max_lock_secs, entry, ret, worker, yield);
 
   return ret;
@@ -2955,7 +2955,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     lock->unlock(this, yield);
     ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once, yield);
     ldpp_dout(this, 5) << "RGWLC::process(): END entry 2: " << entry
-      << " index: " << index << " worker ix: " << worker->ix << dendl;
+      << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
 
     if (! shard_lock.wait_backoff(lock_lambda)) {
       ldpp_dout(this, 0) << "RGWLC::process(): failed to acquire lock on "
@@ -3008,7 +3008,8 @@ void RGWLC::start_processor()
     auto worker  =
       std::make_unique<RGWLC::LCWorker>(this /* dpp */, cct, this, ix);
     workers.emplace_back(std::move(worker));
-    boost::asio::spawn(io_ctx,
+    auto strand = boost::asio::make_strand(io_ctx);
+    boost::asio::spawn(strand,
         [worker=workers.back().get()] (boost::asio::yield_context yield) {
           worker->run(yield);
           return 0;
