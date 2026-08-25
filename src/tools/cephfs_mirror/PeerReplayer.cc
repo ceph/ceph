@@ -1272,20 +1272,21 @@ int PeerReplayer::try_lock_directory(const std::string &dir_root,
   int fd = r;
   r = ceph_flock(m_remote_mount, fd, LOCK_EX | LOCK_NB, (uint64_t)replayer->get_thread_id());
   if (r != 0) {
-    if (r == -EWOULDBLOCK) {
+    int flock_err = r;
+    if (flock_err == -EWOULDBLOCK) {
       dout(5) << ": dir_root=" << dir_root << " is locked by cephfs-mirror, "
               << "will retry again" << dendl;
     } else {
-      derr << ": failed to lock dir_root=" << dir_root << ": " << cpp_strerror(r)
+      derr << ": failed to lock dir_root=" << dir_root << ": " << cpp_strerror(flock_err)
            << dendl;
     }
 
-    r = ceph_close(m_remote_mount, fd);
-    if (r < 0) {
+    int close_err = ceph_close(m_remote_mount, fd);
+    if (close_err < 0) {
       derr << ": failed to close (cleanup) remote dir_root=" << dir_root << ": "
-           << cpp_strerror(r) << dendl;
+           << cpp_strerror(close_err) << dendl;
     }
-    return r;
+    return flock_err;
   }
 
   dout(10) << ": dir_root=" << dir_root << " locked" << dendl;

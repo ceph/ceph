@@ -527,7 +527,7 @@ class TestMirroring(CephFSTestCase):
                 if p.returncode != 0:
                     return
 
-    def restart_mirror_daemon(self):
+    def restart_mirror_daemon(self, sig=signal.SIGTERM):
         # daemon.start() always calls restart(), which skips stop() once proc
         # is cleared.  Stop the real cephfs-mirror via its pid file first so
         # the new instance can take the pidfile lock.
@@ -539,13 +539,23 @@ class TestMirroring(CephFSTestCase):
             self.primary_fs_name, self.primary_fs_id)
         pid = self.get_mirror_daemon_pid()
 
-        log.debug(f'SIGTERM to cephfs-mirror pid {pid}')
+        if sig == signal.SIGKILL:
+            sig_arg = '-KILL'
+            sig_name = 'SIGKILL'
+        elif sig == signal.SIGTERM:
+            sig_arg = '-TERM'
+            sig_name = 'SIGTERM'
+        else:
+            sig_arg = f'-{sig}'
+            sig_name = str(sig)
+
+        log.debug(f'{sig_name} to cephfs-mirror pid {pid}')
         if daemon.running():
             try:
-                daemon.signal(signal.SIGTERM, silent=True)
+                daemon.signal(sig, silent=True)
             except Exception as e:
                 log.debug(f'failed to signal cephfs-mirror via teuthology: {e}')
-        self.mount_a.run_shell(['kill', '-TERM', pid])
+        self.mount_a.run_shell(['kill', sig_arg, pid], check_status=False)
         self.wait_for_mirror_daemon_stop(pid)
 
         if daemon.running():
@@ -569,6 +579,26 @@ class TestMirroring(CephFSTestCase):
                         break
                 except CommandFailedError:
                     pass
+
+    def get_mirror_daemon_log_path(self):
+        pid = self.get_mirror_daemon_pid()
+        cluster = self.mount_a.cluster_name
+        candidates = [
+            f'/var/log/ceph/{cluster}-client.mirror.{pid}.log',
+            f'/var/log/ceph/ceph-client.mirror.{pid}.log',
+        ]
+        for path in candidates:
+            p = self.mount_a.run_shell(['test', '-f', path], check_status=False)
+            if p.returncode == 0:
+                return path
+        self.fail(f'cephfs-mirror log for pid {pid} not found')
+
+    def assert_mirror_log_lacks_pattern(self, pattern):
+        log_path = self.get_mirror_daemon_log_path()
+        p = self.mount_a.run_shell(['cat', log_path])
+        self.assertNotRegex(
+            p.stdout.getvalue(), pattern,
+            msg=f'unexpected pattern {pattern!r} in cephfs-mirror log')
 
     def wait_for_mirror_daemon_recovery(self, fs_name, fs_id, dir_name, peer_uuid):
         # A new rados_inst alone does not mean mirroring is ready: wait until the
@@ -682,6 +712,23 @@ class TestMirroring(CephFSTestCase):
             dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
             self.assertTrue(dir_stat['last_synced_snap']['name'] == expected_snap_name)
             self.assertTrue(dir_stat['snaps_synced'] == expected_snap_count)
+        except RETRY_EXCEPTIONS as e:
+            e.res = res
+            raise
+
+    @retry_assert(timeout=1800, interval=10)
+    def check_peer_status_after_sigkill_recovery(self, fs_name, fs_id, peer_spec,
+                                                 dir_name, expected_snap_name,
+                                                 expected_snap_count):
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        res = self.mirror_daemon_command(f'peer status for fs: {fs_name}',
+                                         'fs', 'mirror', 'peer', 'status',
+                                         f'{fs_name}@{fs_id}', peer_uuid)
+        try:
+            dir_stat = self.peer_dir_status(res, dir_name, peer_uuid)
+            self.assertEqual(dir_stat['state'], 'idle')
+            self.assertEqual(dir_stat['last_synced_snap']['name'], expected_snap_name)
+            self.assertEqual(dir_stat['snaps_synced'], expected_snap_count)
         except RETRY_EXCEPTIONS as e:
             e.res = res
             raise
@@ -1818,6 +1865,45 @@ class TestMirroring(CephFSTestCase):
         self.assertGreater(vafter["counters"]["snaps_synced"], vbefore["counters"]["snaps_synced"])
 
         self.remove_directory(self.primary_fs_name, self.primary_fs_id, '/d0')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+    def test_cephfs_mirror_sigkill_during_sync_recovers(self):
+        """Mirror recovers after SIGKILL during snapshot sync without EBADF."""
+        self.setup_mount_b(mds_perm='rw')
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id, peer_spec,
+                      self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
+
+        log.debug('writing 10 x 1GB files on primary')
+        for i in range(10):
+            self.mount_a.write_n_mb(os.path.join(dir_name, f'file.{i}'), 1024)
+
+        snap_name = 'snap0'
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/{snap_name}'])
+
+        self.check_peer_snap_in_progress(
+            self.primary_fs_name, self.primary_fs_id, peer_spec,
+            f'/{dir_name}', snap_name)
+
+        self.restart_mirror_daemon(sig=signal.SIGKILL)
+
+        peer_uuid = self.get_peer_uuid(peer_spec)
+        self.wait_for_mirror_daemon_recovery(
+            self.primary_fs_name, self.primary_fs_id, f'/{dir_name}', peer_uuid)
+
+        self.check_peer_status_after_sigkill_recovery(
+            self.primary_fs_name, self.primary_fs_id, peer_spec,
+            f'/{dir_name}', snap_name, expected_snap_count=1)
+        self.verify_snapshot(dir_name, snap_name)
+
+        self.assert_mirror_log_lacks_pattern(r'Bad file descriptor')
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id, f'/{dir_name}')
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
     def test_cephfs_mirror_failed_sync_with_correction(self):
