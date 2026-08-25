@@ -1021,6 +1021,64 @@ void KernelDevice::_aio_log_finish(
   }
 }
 
+// Fast path: a lone aio on a waiter-style IOContext (priv == NULL,
+// i.e. the caller blocks in aio_wait() rather than consuming a
+// completion callback) is one contiguous preadv/pwritev whose
+// submitter is about to wait for it - asynchrony buys nothing, so
+// execute it synchronously in the caller and skip the whole aio
+// completion round trip (ring, completion-thread wakeup, waiter
+// wakeup); aio_wait() then falls straight through.  This covers the
+// common single-extent read from _do_read and every single-segment
+// BlueFS flush (the WAL append on the commit path most importantly).
+// Callback-style IOContexts (txc data writes, deferred batches) are
+// not eligible: their callers do not wait, the pipeline consumes
+// their completions asynchronously.  Returns true if the io was
+// executed here.  (Never during _aio_stop: its wakeup ctx is a
+// single read that must reach the ring to unblock the completion
+// thread.)
+bool KernelDevice::_aio_lone_waiter_sync(IOContext *ioc)
+{
+#if defined(HAVE_LIBAIO)
+  if (!aio || aio_stop || ioc->priv != nullptr ||
+      ioc->num_pending.load() != 1) {
+    return false;
+  }
+  const bool is_read = !ioc->reads.pending.empty();
+  aio_t& a = is_read ? ioc->reads.pending.back()
+		     : ioc->writes.pending.back();
+  dout(20) << __func__ << " sync " << (is_read ? "read" : "write")
+	   << " 0x" << std::hex << a.offset << "~"
+	   << a.length << std::dec << dendl;
+  ssize_t r;
+  if (is_read) {
+    r = ::preadv(a.fd, a.iov.data(), a.iov.size(), a.offset);
+  } else {
+    r = ::pwritev(a.fd, a.iov.data(), a.iov.size(), a.offset);
+    // as in _sync_write/reap: arm the next flush() BEFORE anything
+    // can observe the write as complete
+    io_since_flush.store(true);
+  }
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " sync " << (is_read ? "preadv" : "pwritev")
+	 << " 0x" << std::hex << a.offset << "~" << a.length
+	 << std::dec << " got " << cpp_strerror(r) << dendl;
+  }
+  // same rules as the completion thread's
+  _aio_check_completion(__func__, &a, ioc, r);
+  _aio_log_finish(ioc, a.offset, a.length);
+  ioc->num_pending--;
+  if (is_read) {
+    ioc->reads.pending.clear();
+  } else {
+    ioc->writes.pending.clear();
+  }
+  return true;
+#else
+  return false;
+#endif
+}
+
 void KernelDevice::aio_submit(IOContext *ioc)
 {
   dout(20) << __func__ << " ioc " << ioc
@@ -1029,6 +1087,10 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << dendl;
 
   if (ioc->num_pending.load() == 0) {
+    return;
+  }
+
+  if (_aio_lone_waiter_sync(ioc)) {
     return;
   }
 
