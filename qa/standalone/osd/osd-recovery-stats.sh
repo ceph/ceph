@@ -853,18 +853,21 @@ function TEST_rebuild_perf_ec_increments() {
            perf dump) || return 1
 
     local rebuild_avgcount
-    rebuild_avgcount=$(jq '.recoverystate_perf.pg_rebuild_duration.avgcount' \
-      <<< "$dump")
+    rebuild_avgcount=$(\
+      jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' <<< "$dump")
     test "$rebuild_avgcount" -ge 1 || {
-      echo "FAIL: expected pg_rebuild_duration.avgcount>=1, got $rebuild_avgcount"
+      echo "FAIL: expected pg_vulnerability_duration.avgcount>=1," \
+           "got $rebuild_avgcount"
       return 1
     }
 
     local rebuild_sum
-    rebuild_sum=$(jq '.recoverystate_perf.pg_rebuild_duration.sum' <<< "$dump")
+    rebuild_sum=$(\
+      jq '.recoverystate_perf.pg_vulnerability_duration.sum' <<< "$dump")
     echo "$dump" | \
-      jq -e '.recoverystate_perf.pg_rebuild_duration.sum > 0' > /dev/null || {
-      echo "FAIL: expected pg_rebuild_duration.sum>0, got $rebuild_sum"
+      jq -e '.recoverystate_perf.pg_vulnerability_duration.sum > 0' \
+      > /dev/null || {
+      echo "FAIL: expected pg_vulnerability_duration.sum>0, got $rebuild_sum"
       return 1
     }
 
@@ -878,18 +881,275 @@ function TEST_rebuild_perf_ec_increments() {
     }
 
     # The recorded duration must cover at least the deliberate gap held
-    # before the second restart i.e., $gap_secs. pg_rebuild_duration.sum is
+    # before the second restart i.e., $gap_secs. pg_vulnerability_duration.sum is
     # reported in fractional seconds.
     echo "$dump" | \
-      jq -e ".recoverystate_perf.pg_rebuild_duration.sum >= ${gap_secs}" \
+      jq -e ".recoverystate_perf.pg_vulnerability_duration.sum >= ${gap_secs}" \
       > /dev/null || {
-      echo "FAIL: expected pg_rebuild_duration.sum >= ${gap_secs}s" \
+      echo "FAIL: expected pg_vulnerability_duration.sum >= ${gap_secs}s" \
            "(the ${gap_secs}s gap held before the second interval restart)," \
            "got ${rebuild_sum}s -- duration looks truncated"
       return 1
     }
 
     delete_pool $ecpoolname
+    kill_daemons $dir || return 1
+}
+
+# Test to verify the following:
+# 1. A forced, deterministic two primary handover chain within ONE continuous
+#    vulnerability episode, confirming the departing primary's own segment is
+#    recorded on each handover and that this holds across a genuine multi-hop
+#    chain, not just a single one.
+# 2. The test also observes (without asserting either way) whether the
+#    returning OSDs show any activity of their own once brought back.
+function TEST_rebuild_perf_multihop_handover() {
+    local dir=$1
+    local OSDS=4
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
+    done
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 4 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+
+    for i in $(seq 1 5)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+    wait_for_clean || return 1
+
+    local PG
+    PG=$(get_pg $poolname obj1)
+    local primary_a
+    primary_a=$(get_primary $poolname obj1)
+
+    # --- Hop 0: kill the original primary A. Primary hands to a survivor B.
+    ceph osd set noup || return 1
+    ceph osd down osd.${primary_a} || return 1
+
+    local primary_b=""
+    for i in $(seq 1 30)
+    do
+      primary_b=$(get_primary $poolname obj1)
+      test "$primary_b" != "$primary_a" && break
+      sleep 1
+    done
+    test "$primary_b" != "$primary_a" -a -n "$primary_b" || {
+      echo "FAIL: primary never changed after osd.${primary_a} went down"
+      return 1
+    }
+    local log_b=$dir/osd.${primary_b}.log
+
+    local latched_b=0
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      grep -q "rebuild-stats: latched failure start for ${PG} " $log_b && {
+        latched_b=1
+        break
+      }
+      sleep 1
+    done
+    test "$latched_b" = 1 || {
+      echo "FAIL: osd.${primary_b} never latched after taking over primary"
+      return 1
+    }
+
+    for i in $(seq 6 10)
+    do
+      rados -p $poolname put obj$i /etc/hostname || return 1
+    done
+
+    # --- Hop 1: kill B too, before anything has a chance to recover.
+    # osd.${primary_a} is still merely down (not out); so nothing has backfilled
+    ceph osd down osd.${primary_b} || return 1
+
+    local primary_c=""
+    for i in $(seq 1 30)
+    do
+      primary_c=$(get_primary $poolname obj1)
+      test "$primary_c" != "$primary_a" -a "$primary_c" != "$primary_b" && break
+      sleep 1
+    done
+    test -n "$primary_c" -a "$primary_c" != "$primary_a" -a "$primary_c" != "$primary_b" || {
+      echo "FAIL: primary never changed to a third OSD after osd.${primary_b} went down"
+      return 1
+    }
+    local log_c=$dir/osd.${primary_c}.log
+
+    local recorded_b=0
+    for i in $(seq 1 30)
+    do
+      flush_pg_stats || return 1
+      grep -q "rebuild-stats: recorded rebuild for ${PG} .*reason=handover-away" $log_b && {
+        recorded_b=1
+        break
+      }
+      sleep 1
+    done
+    test "$recorded_b" = 1 || {
+      echo "FAIL: osd.${primary_b}'s segment was not recorded on its own handover-away"
+      return 1
+    }
+
+    local latched_c=0
+    for i in $(seq 1 30)
+    do
+      grep -q "rebuild-stats: latched failure start for ${PG} " $log_c && {
+        latched_c=1
+        break
+      }
+      sleep 1
+    done
+    test "$latched_c" = 1 || {
+      echo "FAIL: osd.${primary_c} never latched after taking over primary" \
+           "(the multi-hop chain, requires a fresh arming of the latch here)"
+      return 1
+    }
+
+    # --- Bring both A and B back and let the episode resolve. Which OSD
+    # ends up recording the eventual "reached-clean" segment, and how many
+    # more handovers happen in between, is deliberately not predicted here.
+    ceph osd unset noup || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    local final_primary
+    final_primary=$(get_primary $poolname obj1)
+    local log_final=$dir/osd.${final_primary}.log
+    grep -q "rebuild-stats: recorded rebuild for ${PG} .*reason=reached-clean" $log_final || {
+      echo "FAIL: no OSD recorded a reached-clean segment once the PG went clean" \
+           "(checked the final primary, osd.${final_primary})"
+      return 1
+    }
+
+    # Soft observation (not asserted either way): did osd.a or osd.b show any
+    # of their own rebuild-stats activity after coming back up? Either outcome
+    # is informative and is just logged here. A genuinely open, likely
+    # timing-dependent question with no settled answer (whether the
+    # async-recovery quick-promotion ever arms a spurious segment that gets
+    # recorded or discarded before being demoted again). The following 2 checks
+    # will confirm this observation:
+    #
+    # 1. A "discarded rebuild" line for this PG on ANY of the four OSDs is
+    #    unambiguous: A discarded line can only be residue of an UNPLANNED
+    #    arm-then-filtered-out cycle, exactly the quick-promotion signature,
+    #    regardless of which OSD ends up primary or how many real handovers occur.
+    for osd in 0 1 2 3
+    do
+      if grep -q "rebuild-stats: discarded rebuild for ${PG} " $dir/osd.${osd}.log
+      then
+        echo "OBSERVATION: osd.${osd} shows a DISCARDED rebuild-stats segment" \
+             "for ${PG}; likely evidence of the async-recovery quick-promotion" \
+             "arming and then being filtered out at record time"
+      fi
+    done
+
+    # 2. Total "latched failure start" lines for this PG, across all four
+    # OSDs, as a coarser but still useful signal: exactly 2 are
+    # structurally guaranteed by this test's design (primary_b's and
+    # primary_c's own arms), plus one more if whichever OSD ends up as
+    # final_primary needed a fresh arm of its own (i.e. a third real
+    # handover happened beyond the two this test forces). A count higher than
+    # that baseline would mean an extra, unplanned arm occurred somewhere --
+    # whether or not it went on to be recorded or discarded.
+    local total_latches
+    total_latches=$(grep -h "rebuild-stats: latched failure start for ${PG} " \
+      $dir/osd.*.log | wc -l)
+    echo "OBSERVATION: ${total_latches} total 'latched' lines for ${PG} across" \
+         "all four OSDs this run (2 expected structurally, 3 if the final" \
+         "primary needed its own fresh arm; more than that would mean an" \
+         "extra, unplanned arm occurred)"
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
+# Test that verifies that an empty PG (no objects ever written) going
+# undersized+degraded and back to active+clean must not be recorded at all --
+# the interim solution's documented, deliberately-unfixed limitation.
+function TEST_rebuild_perf_empty_pg_not_counted() {
+    local dir=$1
+    local OSDS=4
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
+    done
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    wait_for_clean || return 1
+    # Deliberately no rados put here -- this PG must stay empty throughout.
+
+    local primary
+    primary=$(get_primary $poolname dummyname)
+    local PG
+    PG=$(get_pg $poolname dummyname)
+    local otherosd
+    otherosd=$(get_not_primary $poolname dummyname)
+    local log=$dir/osd.${primary}.log
+
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+
+    for i in $(seq 1 10)
+    do
+      flush_pg_stats || return 1
+      sleep 1
+    done
+
+    # Confirm the latch actually armed (state genuinely went
+    # undersized) before checking it was correctly discarded -- a test
+    # that just sees "nothing recorded" without this is equally
+    # consistent with the mechanism never engaging at all.
+    grep -q "rebuild-stats: latched failure start for ${PG} " $log || {
+      echo "FAIL: the latch never armed at all -- test setup didn't" \
+           "actually make the PG undersized, this isn't testing what" \
+           "it claims to"
+      return 1
+    }
+
+    ceph osd unset noup || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    if grep -q "rebuild-stats: recorded rebuild for ${PG} " $log
+    then
+      echo "FAIL: an empty PG's undersized/degraded window was recorded --" \
+           "this is supposed to remain a known, unfixed limitation"
+      return 1
+    fi
+
+    grep -q "rebuild-stats: discarded rebuild for ${PG} .*delta_recovered=0 had_redundancy_loss=0" $log || {
+      echo "FAIL: expected a 'discarded' line confirming the filter" \
+           "correctly rejected this empty-PG episode, found none"
+      return 1
+    }
+
+    local dump
+    dump=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
+           perf dump) || return 1
+    local avgcount
+    avgcount=$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' \
+      <<< "$dump")
+    test "$avgcount" = "0" || {
+      echo "FAIL: expected pg_vulnerability_duration.avgcount=0 for an" \
+           "empty-PG episode, got $avgcount"
+      return 1
+    }
+
+    delete_pool $poolname
     kill_daemons $dir || return 1
 }
 
