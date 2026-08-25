@@ -46,7 +46,8 @@ import {
   ThemeModule,
   MenuButtonModule,
   ContextMenuModule,
-  BreadcrumbModule
+  BreadcrumbModule,
+  SkeletonModule
 } from 'carbon-components-angular';
 import { ProductiveCardComponent } from './productive-card/productive-card.component';
 import EditIcon from '@carbon/icons/es/edit/16';
@@ -198,7 +199,8 @@ import { OverviewComponent } from './resource-overview-card/resource-overview-ca
     ProductiveCardComponent,
     MenuButtonModule,
     ContextMenuModule,
-    BreadcrumbModule
+    BreadcrumbModule,
+    SkeletonModule
   ],
   declarations: [
     SparklineComponent,

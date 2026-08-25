@@ -2,6 +2,7 @@ import { ChangeDetectorRef, Component, OnDestroy, OnInit, ViewEncapsulation } fr
 import { ActivatedRoute, ParamMap } from '@angular/router';
 
 import { Subscription } from 'rxjs';
+import { finalize } from 'rxjs/operators';
 import * as xml2js from 'xml2js';
 import { ContentSwitcherOption } from 'carbon-components-angular';
 
@@ -27,6 +28,7 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
   owner = '';
   section = '';
   selection: Bucket | undefined;
+  isOverviewLoading = false;
 
   lifecycleProgress: { bucket: string; status: string; started: string } = {
     bucket: '',
@@ -87,21 +89,29 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
 
   updateBucketDetails() {
     if (!this.bid) {
+      this.isOverviewLoading = false;
       this.selection = undefined;
       this.overviewFields = [];
       this.configurationSummaryFields = [];
       return;
     }
 
+    this.isOverviewLoading = true;
+
     this.sub.add(
-      this.rgwBucketService.get(this.bid).subscribe((bucket: Bucket) => {
-        const bucketDetails = {
-          ...bucket,
-          lock_retention_period_days: this.rgwBucketService.getLockDays(bucket)
-        };
-        this.selection = bucketDetails;
-        this.extractDetailsFromResponse();
-      })
+      this.rgwBucketService
+        .get(this.bid)
+        .pipe(finalize(() => (this.isOverviewLoading = false)))
+        .subscribe({
+          next: (bucket: Bucket) => {
+            const bucketDetails = {
+              ...bucket,
+              lock_retention_period_days: this.rgwBucketService.getLockDays(bucket)
+            };
+            this.selection = bucketDetails;
+            this.extractDetailsFromResponse();
+          }
+        })
     );
   }
 

@@ -2,7 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import { HttpParams } from '@angular/common/http';
 import { ActivatedRoute, ParamMap } from '@angular/router';
 import { Subscription } from 'rxjs';
-import { mergeMap } from 'rxjs/operators';
+import { finalize, mergeMap } from 'rxjs/operators';
 import { HostService } from '~/app/shared/api/host.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
@@ -21,6 +21,7 @@ export class HostResourcePageComponent implements OnInit, OnDestroy {
   hostname = '';
   section = '';
   permissions: Permissions;
+  isOverviewLoading = false;
   hostOverviewFields: OverviewField[] = [];
 
   constructor(
@@ -49,6 +50,7 @@ export class HostResourcePageComponent implements OnInit, OnDestroy {
 
   private loadOverview(): void {
     if (!this.hostname) {
+      this.isOverviewLoading = false;
       this.hostOverviewFields = [];
       return;
     }
@@ -58,6 +60,7 @@ export class HostResourcePageComponent implements OnInit, OnDestroy {
     params = params.set('limit', '1');
     params = params.set('search', this.hostname);
     params = params.set('sort', '+hostname');
+    this.isOverviewLoading = true;
 
     this.sub.add(
       this.orchService
@@ -66,6 +69,9 @@ export class HostResourcePageComponent implements OnInit, OnDestroy {
           mergeMap((orchStatus) => {
             const factsAvailable = this.hostService.checkHostsFactsAvailable(orchStatus);
             return this.hostService.list(params, factsAvailable.toString());
+          }),
+          finalize(() => {
+            this.isOverviewLoading = false;
           })
         )
         .subscribe({

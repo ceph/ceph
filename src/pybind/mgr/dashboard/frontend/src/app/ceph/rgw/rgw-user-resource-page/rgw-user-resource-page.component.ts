@@ -43,6 +43,7 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
   user?: ExtendedRgwUser;
   selection?: ExtendedRgwUser;
   notFound = false;
+  isOverviewLoading = true;
   keys: KeyRow[] = [];
   keysColumns: CdTableColumn[] = [];
   userQuota: Record<string, string | number> = {};
@@ -78,6 +79,7 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
 
     this.sub.add(
       this.route.parent?.data.subscribe((data) => {
+        this.isOverviewLoading = false;
         this.applyUser(data?.user ?? null);
       })
     );
