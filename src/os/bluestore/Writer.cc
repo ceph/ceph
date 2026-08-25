@@ -18,6 +18,7 @@
 #include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
 #include "os/bluestore/BlueStore_objects.h"
+#include "os/bluestore/BlueStore_inlines.h"
 
 std::ostream& operator<<(std::ostream& out, const BlueStore::Writer::blob_data_printer& printer)
 {
