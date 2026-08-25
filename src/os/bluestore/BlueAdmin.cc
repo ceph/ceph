@@ -3,6 +3,7 @@
 
 #include "BlueAdmin.h"
 #include "BlueStore_objects.h"
+#include "BlueStore_inlines.h"
 #include "Compression.h"
 #include "common/errno.h"
 #include "common/pretty_binary.h"

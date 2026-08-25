@@ -35,6 +35,7 @@
 
 #include "BlueStore.h"
 #include "BlueStore_objects.h"
+#include "BlueStore_inlines.h"
 #include "bluestore_common.h"
 #include "os/bluestore/bluestore_types.h"
 #include "simple_bitmap.h"
@@ -2180,37 +2181,6 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.sharedblobset(" << this << ") "
 
-BlueStore::SharedBlobRef BlueStore::SharedBlobSet::lookup(uint64_t sbid) {
-  std::lock_guard l(lock);
-  auto p = sb_map.find(sbid);
-  if (p == sb_map.end() ||
-p->second->nref == 0) {
-    return nullptr;
-  }
-  return p->second;
-}
-
-void BlueStore::SharedBlobSet::add(Collection* coll, SharedBlob *sb) {
-  std::lock_guard l(lock);
-  sb_map[sb->get_sbid()] = sb;
-  sb->collection = coll;
-}
-
-bool BlueStore::SharedBlobSet::remove(SharedBlob *sb, bool verify_nref_is_zero) {
-  std::lock_guard l(lock);
-  ceph_assert(sb->get_parent() == this);
-  if (verify_nref_is_zero && sb->nref != 0) {
-    return false;
-  }
-  // only remove if it still points to us
-  auto p = sb_map.find(sb->get_sbid());
-  if (p != sb_map.end() &&
-       p->second == sb) {
-    sb_map.erase(p);
-  }
-  return true;
-}
-
 template <int LogLevelV = 30>
 void BlueStore::SharedBlobSet::dump(CephContext *cct)
 {
@@ -2378,12 +2348,6 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 #endif
 
 // Collection
-
-BlueStore::BlobRef BlueStore::Collection::new_blob() {
-  BlobRef b = new Blob(this);
-  b->get_cache()->add_blob();
-  return b;  
-}
 
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
@@ -18187,41 +18151,6 @@ void BlueStore::ExtentDecoderPartial::reset(const ghobject_t _oid,
   std::swap(blobs, empty);
   std::swap(spanning_blobs, empty2);
 }
-
-void BlueStore::_buffer_cache_write(
-  TransContext *txc,
-  OnodeRef onode,
-  uint32_t offset,
-  ceph::buffer::list&& bl,
-  unsigned flags) {
-  onode->bc.write(onode->c->cache,
-                  txc, offset, std::move(bl),
-      flags);
-}
-
-void BlueStore::_buffer_cache_write(
-  TransContext *txc,
-  OnodeRef onode,
-  uint32_t offset,
-  ceph::buffer::list& bl,
-  unsigned flags) {
-  onode->bc.write(onode->c->cache,
-                  txc, offset, bl,
-      flags);
-}
-
-void BlueStore::debug_punch_hole(
-  CollectionRef& c,
-  OnodeRef& o,
-  uint32_t off,
-  uint32_t len) {
-  BlueStore::TransContext txc(cct, c.get(), nullptr, nullptr);
-  BlueStore::WriteContext wctx;
-  o->extent_map.punch_hole(c, off, len, &wctx.old_extents);
-  _wctx_finish(&txc, c, o, &wctx, nullptr);
-}
-
-
 
 int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats_t& stats)
 {
