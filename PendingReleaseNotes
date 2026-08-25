@@ -93,6 +93,9 @@
   Sigv4 requests with `host` and `x-amz-` headers not included in the
   signed subset. Unfortunately, the REST client used in multisite was
   generating such improperly signed requests.
+* RGW: New CephX profile ``profile rgw`` grants a Ceph Object Gateway the
+  permissions it needs. Create keys with
+  ``mon 'profile rgw' osd 'profile rgw'``.
 
   If you are running multisite, you must set the
   ``rgw_sigv4_insecure`` option to true before you begin to
