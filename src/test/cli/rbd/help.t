@@ -810,7 +810,8 @@
   rbd help export-diff
   usage: rbd export-diff [--pool <pool>] [--namespace <namespace>] 
                          [--image <image>] [--snap <snap>] [--path <path>] 
-                         [--from-snap <from-snap>] [--whole-object] 
+                         [--snap-id <snap-id>] [--from-snap <from-snap>] 
+                         [--from-snap-id <from-snap-id>] [--whole-object] 
                          [--no-progress] 
                          <source-image-or-snap-spec> <path-name> 
   
@@ -829,7 +830,9 @@
     --image arg                  source image name
     --snap arg                   source snapshot name
     --path arg                   export file (or '-' for stdout)
+    --snap-id arg                snapshot id
     --from-snap arg              snapshot starting point
+    --from-snap-id arg           snapshot starting id
     --whole-object               compare whole object
     --no-progress                disable progress output
   
