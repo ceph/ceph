@@ -153,6 +153,8 @@ public:
 class BlockDevice {
 public:
   CephContext* cct;
+  /// upper bound on completions processed by one reap pass
+  static constexpr int REAP_BATCH_MAX = 1024;
   typedef void (*aio_callback_t)(void *handle, void *aio);
   virtual void collect_alerts(osd_alert_list_t& alerts, const std::string& device_name);
 

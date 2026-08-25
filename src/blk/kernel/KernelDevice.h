@@ -95,6 +95,10 @@ private:
   virtual void  _pre_close() { }  // hook for child implementations
 
   void _aio_thread();
+  // one reap pass: get_next_completed(timeout_ms) + full completion
+  // processing (shared by the completion thread and any other caller
+  // driving completions)
+  int _reap_completions(int timeout_ms, int max);
   void _discard_thread(DiscardThread* thr);
   bool _queue_discard(interval_set<uint64_t> &to_release);
   int _discard(uint64_t offset, uint64_t len);
