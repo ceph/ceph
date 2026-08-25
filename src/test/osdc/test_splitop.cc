@@ -91,7 +91,7 @@ pg_pool_t make_replicated_pool(int size = 3, uint64_t extra_flags = 0)
 // SplitOp::validate_flags() is a public static method that checks whether a
 // combination of operation flags and pool properties permits a split read.
 // It rejects operations that:
-//   - lack BALANCE_READS or LOCALIZE_READS
+//   - lack BALANCE_READS, and LOCALIZE_READS on a multi-zone pool
 //   - are flagged as WRITE
 //   - target a Crimson pool
 // ===========================================================================
@@ -99,12 +99,15 @@ pg_pool_t make_replicated_pool(int size = 3, uint64_t extra_flags = 0)
 class TestValidateFlags : public ::testing::Test {
 protected:
   pg_pool_t ec_pool;
+  pg_pool_t ec_zones_pool;
   pg_pool_t ec_crimson_pool;
   pg_pool_t rep_pool;
   CephContext *cct = g_ceph_context;
 
   void SetUp() override {
     ec_pool        = make_ec_pool(4, 2, 4096);
+    ec_zones_pool  = make_ec_pool(4, 2, 4096);
+    ec_zones_pool.opts.set(pool_opts_t::NUM_ZONES, static_cast<int64_t>(2));
     ec_crimson_pool = make_ec_pool(4, 2, 4096, pg_pool_t::FLAG_CRIMSON);
     rep_pool       = make_replicated_pool();
   }
@@ -117,11 +120,21 @@ TEST_F(TestValidateFlags, BalanceReadsAccepted)
     &ec_pool, CEPH_OSD_FLAG_BALANCE_READS, cct));
 }
 
-// LOCALIZE_READS alone is also sufficient.
-TEST_F(TestValidateFlags, LocalizeReadsAccepted)
+// LOCALIZE_READS alone is sufficient for a multi-zone pool.
+TEST_F(TestValidateFlags, LocalizeReadsAcceptedMultiZone)
 {
   EXPECT_TRUE(SplitOp::validate_flags(
+    &ec_zones_pool, CEPH_OSD_FLAG_LOCALIZE_READS, cct));
+}
+
+// On a single-zone pool LOCALIZE_READS alone must not split: the read goes
+// to the nearest replica instead.
+TEST_F(TestValidateFlags, LocalizeReadsRejectedSingleZone)
+{
+  EXPECT_FALSE(SplitOp::validate_flags(
     &ec_pool, CEPH_OSD_FLAG_LOCALIZE_READS, cct));
+  EXPECT_FALSE(SplitOp::validate_flags(
+    &rep_pool, CEPH_OSD_FLAG_LOCALIZE_READS, cct));
 }
 
 // Both flags together must also pass.
