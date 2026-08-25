@@ -255,7 +255,7 @@ export class ActionLabelsI18n {
     this.RECONNECT = $localize`Reconnect`;
     this.ADD_STORAGE = $localize`Add Storage`;
 
-    this.NFS_EXPORT = $localize`Create NFS Export`;
+    this.NFS_EXPORT = $localize`Create NFS share`;
     this.VIEW = $localize`View`;
   }
 }
