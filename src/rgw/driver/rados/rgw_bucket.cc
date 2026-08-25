@@ -5,6 +5,7 @@
 #include "common/JSONFormatter.h"
 #include "common/errno.h"
 #include "include/function2.hpp"
+#include <limits>
 #include "rgw_acl_s3.h"
 #include "rgw_tag_s3.h"
 
@@ -1646,10 +1647,25 @@ static int bucket_restore_stats(rgw::sal::Driver* driver,
 }
 
 #ifdef WITH_RADOSGW_RADOS
-// Scan the bucket index and aggregate sizes by storage class.
+// Scan the bucket index Plain namespace and aggregate sizes by storage class.
 // O(objects); only call when explicitly requested.
-// Uses the current index generation; during resharding, objects being
-// migrated may be temporarily undercounted. Consistent with read_stats behavior.
+//
+// Index entry semantics:
+// - BIIndexType::Plain covers all data entries: regular objects (all versions),
+//   delete markers (category=None, exists=false, skipped below), and in-progress
+//   multipart metadata/parts (category=MultiMeta/MultiPart). Completed multipart
+//   objects appear as regular Main entries.
+// - BIIndexType::Instance is a secondary lookup index for versioned objects and
+//   must NOT be scanned here to avoid double-counting.
+// - BIIndexType::OLH entries are version-pointer records with no data size.
+//
+// Accounting: num_objects counts every Plain entry with exists=true, including
+// historical versions and multipart parts. It is not equivalent to the number of
+// user-visible S3 objects. size/size_actual/size_utilized follow the same
+// semantics as RGWStorageStats.
+//
+// Resharding: uses the current index generation. Objects being migrated may be
+// temporarily undercounted. Consistent with read_stats() behavior.
 static int read_storage_class_stats(
     const DoutPrefixProvider* dpp, optional_yield y,
     rgw::sal::RadosStore* rados_store,
@@ -1692,9 +1708,10 @@ static int read_storage_class_stats(
         try {
           decode(dir_entry, iiter);
         } catch (const buffer::error& err) {
-          ldpp_dout(dpp, 0) << "WARNING: failed to decode bi entry idx="
-                            << raw_entry.idx << ", skipping" << dendl;
-          continue;
+          ldpp_dout(dpp, -1) << "ERROR: failed to decode bi entry idx="
+                             << raw_entry.idx << " in shard=" << shard
+                             << ": " << err.what() << dendl;
+          return -EIO;
         }
         if (!dir_entry.exists) {
           continue;
@@ -1754,10 +1771,9 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     if (rados_store) {
       ret = read_storage_class_stats(dpp, y, rados_store, bucket.get(), sc_stats);
       if (ret < 0) {
-        cerr << "warning: could not read storage class stats for bucket="
-             << bucket->get_name() << " ret=" << ret << std::endl;
-        // non-fatal: continue and omit the section
-        sc_stats.clear();
+        ldpp_dout(dpp, -1) << "ERROR: storage class stats scan failed for bucket="
+                           << bucket->get_name() << " ret=" << ret << dendl;
+        return ret;
       }
     }
   }
