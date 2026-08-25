@@ -56,7 +56,17 @@ private:
   std::atomic<bool> io_since_flush = {false};
   ceph::mutex flush_mutex = ceph::make_mutex("KernelDevice::flush_mutex");
 
-  std::unique_ptr<io_queue_t> io_queue;
+  // The inner queue is served by the device's own completion thread
+  // and always exists; it carries everything in normal mode, and only
+  // reads when the owner installed a completion eventfd.  The outer
+  // queue exists only in that external-completion mode: it carries
+  // the writes, its completions signal the owner's eventfd, and the
+  // owner drains it via reap_completions().  Either way at most one
+  // completion thread runs per device.
+  std::unique_ptr<io_queue_t> inner_io_queue;
+  bool inner_is_libaio = false;  ///< external completions need libaio
+  // write completions reaped externally via the owner's eventfd
+  std::unique_ptr<io_queue_t> outer_io_queue;
   aio_callback_t discard_callback;
   void *discard_callback_priv;
   bool aio_stop;
@@ -178,6 +188,8 @@ public:
 		bool buffered,
 		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
+  int set_completion_eventfd(int fd) override;
+  int reap_completions(int max) override;
 
   bool try_discard(interval_set<uint64_t> &to_release,
                    bool async = true,
