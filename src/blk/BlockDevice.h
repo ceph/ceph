@@ -96,8 +96,11 @@ public:
 #endif
 
 #if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
-  std::list<aio_t> pending_aios;    ///< not yet submitted
-  std::list<aio_t> running_aios;    ///< submitting or submitted
+  // Reads and writes are tracked on separate lanes so nothing ever
+  // has to inspect an aio's direction: aio_read()/aio_write() know it
+  // statically, and submission moves each lane wholesale.
+  aio_lane writes;
+  aio_lane reads;
 #endif
   std::atomic_int num_pending = {0};
   std::atomic_int num_running = {0};

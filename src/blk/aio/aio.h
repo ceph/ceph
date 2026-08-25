@@ -94,6 +94,12 @@ typedef boost::intrusive::list<
     boost::intrusive::list_member_hook<>,
     &aio_t::queue_item> > aio_list_t;
 
+/// one direction's aios of an IOContext
+struct aio_lane {
+  std::list<aio_t> pending;  ///< not yet submitted
+  std::list<aio_t> running;  ///< submitting or submitted
+};
+
 struct io_queue_t {
   typedef std::list<aio_t>::iterator aio_iter;
 
