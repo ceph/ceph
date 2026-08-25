@@ -13,6 +13,7 @@
  *
  */
 
+#include <algorithm>
 #include <cerrno>
 #include <limits>
 #include <unistd.h>
@@ -727,58 +728,68 @@ void KernelDevice::_aio_check_completion(const char *caller, aio_t *aio,
   }
 }
 
+int KernelDevice::_reap_completions(int timeout_ms, int max)
+{
+  // max sizes the VLA below (and an io_event array of the same length
+  // inside get_next_completed), so bound it regardless of what the
+  // caller derived from configuration; the surplus is picked up by
+  // the caller's next pass
+  max = std::clamp(max, 1, REAP_BATCH_MAX);
+  aio_t *aio[max];
+  int r = io_queue->get_next_completed(timeout_ms, aio, max);
+  if (r < 0) {
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+    ceph_abort_msg("got unexpected error from io_getevents");
+  }
+  if (r > 0) {
+    dout(30) << __func__ << " got " << r << " completed aios" << dendl;
+    for (int i = 0; i < r; ++i) {
+      IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
+      _aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
+      if (aio[i]->queue_item.is_linked()) {
+	std::lock_guard l(debug_queue_lock);
+	debug_aio_unlink(*aio[i]);
+      }
+
+      // set flag indicating new ios have completed.  we do this *before*
+      // any completion or notifications so that any user flush() that
+      // follows the observed io completion will include this io.  Note
+      // that an earlier, racing flush() could observe and clear this
+      // flag, but that also ensures that the IO will be stable before the
+      // later flush() occurs.
+      io_since_flush.store(true);
+
+      long res = aio[i]->get_return_value();
+      _aio_check_completion(__func__, aio[i], ioc, res);
+
+      dout(10) << __func__ << " finished aio " << aio[i] << " r " << res
+	       << " ioc " << ioc
+	       << " with " << (ioc->num_running.load() - 1)
+	       << " aios left" << dendl;
+
+      // NOTE: once num_running and we either call the callback or
+      // call aio_wake we cannot touch ioc or aio[] as the caller
+      // may free it.
+      if (ioc->priv) {
+	if (--ioc->num_running == 0) {
+	  aio_callback(aio_callback_priv, ioc->priv);
+	}
+      } else {
+	ioc->try_aio_wake();
+      }
+    }
+  }
+  return r;
+}
+
 void KernelDevice::_aio_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    int max = cct->_conf->bdev_aio_reap_max;
-    aio_t *aio[max];
-    int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
-					 aio, max);
-    if (r < 0) {
-      derr << __func__ << " got " << cpp_strerror(r) << dendl;
-      ceph_abort_msg("got unexpected error from io_getevents");
-    }
-    if (r > 0) {
-      dout(30) << __func__ << " got " << r << " completed aios" << dendl;
-      for (int i = 0; i < r; ++i) {
-	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
-	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
-	if (aio[i]->queue_item.is_linked()) {
-	  std::lock_guard l(debug_queue_lock);
-	  debug_aio_unlink(*aio[i]);
-	}
-
-	// set flag indicating new ios have completed.  we do this *before*
-	// any completion or notifications so that any user flush() that
-	// follows the observed io completion will include this io.  Note
-	// that an earlier, racing flush() could observe and clear this
-	// flag, but that also ensures that the IO will be stable before the
-	// later flush() occurs.
-	io_since_flush.store(true);
-
-	long r = aio[i]->get_return_value();
-	_aio_check_completion(__func__, aio[i], ioc, r);
-
-        dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
-                 << " ioc " << ioc
-                 << " with " << (ioc->num_running.load() - 1)
-                 << " aios left" << dendl;
-
-	// NOTE: once num_running and we either call the callback or
-	// call aio_wake we cannot touch ioc or aio[] as the caller
-	// may free it.
-	if (ioc->priv) {
-	  if (--ioc->num_running == 0) {
-	    aio_callback(aio_callback_priv, ioc->priv);
-	  }
-	} else {
-          ioc->try_aio_wake();
-	}
-      }
-    }
+    _reap_completions(cct->_conf->bdev_aio_poll_ms,
+		      cct->_conf->bdev_aio_reap_max);
     if (cct->_conf->bdev_debug_aio) {
       utime_t now = ceph_clock_now();
       std::lock_guard l(debug_queue_lock);
