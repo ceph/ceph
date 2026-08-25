@@ -2116,13 +2116,14 @@ class AgentCache():
         return True
 
     def agent_config_successfully_delivered(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
-        # agent successfully received new config (HTTP ACK or successful SSH
+        # Agent successfully received new config (HTTP ACK or successful SSH
         # deploy/reconfig). Only call this after confirmed delivery so
         # last_deps tracks what the agent actually has.
+        # Agent_timestamp get refreshed in handle_metadata(). This HTTP/SSH
+        # config delivery means the agent got new deps, not that it is reporting.
         assert daemon_spec.daemon_type == 'agent'
         self.update_agent_config_deps(
             daemon_spec.host, daemon_spec.deps, datetime_now())
-        self.agent_timestamp[daemon_spec.host] = datetime_now()
         self.agent_counter[daemon_spec.host] = 1
         self.save_agent(daemon_spec.host)
         self.mgr.log.debug(
