@@ -6435,12 +6435,36 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ss.str());
     } else {
       if (f)
-	f->open_array_section("pools");
+ f->open_array_section("pools");
       for (auto &[pid, pdata] : osdmap.get_pools()) {
+	// For plain and JSON listing, only show the tip of each migration
+	// chain (the latest target pool, which has no migration_target set)
+	// and non-migrating pools. All intermediate/source pools in a chain
+	// are suppressed — the tip represents the whole chain.
+	if (pdata.is_migration_src()) {
+	  continue;
+	}
 	if (f) {
 	  if (detail == "detail") {
+	    // For detail, show tip name/stats but use the root pool's ID
+	    // so operators see the original pool ID that clients reference.
+	    // The root is the pool with the lowest ID that has migration_target
+	    // pointing at this tip (completed stubs have migration_src cleared
+	    // so we cannot walk backwards — scan forward instead).
+	    // Find the root pool ID: scan for the lowest-ID pool whose
+	    // migration_target points at this tip. We cannot rely on
+	    // migration_src being set on the tip — it is cleared when
+	    // each segment completes. Any pool pointing here is a chain member.
+	    int64_t root_pid = pid;
+	    for (auto &[scan_pid, scan_pool] : osdmap.get_pools()) {
+	      if (scan_pool.migration_target.has_value() &&
+		  *scan_pool.migration_target == pid &&
+		  scan_pid < root_pid) {
+		root_pid = scan_pid;
+	      }
+	    }
 	    f->open_object_section("pool");
-	    f->dump_int("pool_id", pid);
+	    f->dump_int("pool_id", root_pid);
 	    f->dump_string("pool_name", osdmap.get_pool_name(pid));
 	    pdata.dump(f.get(), osdmap.crush.get(), show_rule_names);
 	    osdmap.dump_read_balance_score(cct, pid, pdata, f.get());
@@ -6453,8 +6477,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	}
       }
       if (f) {
-	f->close_section();
-	f->flush(rdata);
+ f->close_section();
+ f->flush(rdata);
       }
     }
 

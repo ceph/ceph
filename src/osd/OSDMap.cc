@@ -4426,6 +4426,12 @@ void OSDMap::print_pools(CephContext *cct, ostream& out,
 {
   const CrushWrapper *crush_for_names = show_rule_names ? crush.get() : nullptr;
   for (const auto &[pid, pdata] : pools) {
+    // Only show the tip of each migration chain (pool with no migration_target)
+    // and non-migrating pools. Source/intermediate pools are suppressed.
+    if (pdata.is_migration_src()) {
+      continue;
+    }
+
     std::string name("<unknown>");
     const auto &pni = pool_name.find(pid);
     if (pni != pool_name.end())
@@ -4440,7 +4446,25 @@ void OSDMap::print_pools(CephContext *cct, ostream& out,
 		  " read_balance_score %.2f", rb_info.acting_adj_score);
     }
 
-    out << "pool " << pid << " '" << name << "' ";
+    // For migration targets, show the tip's name and stats but print the
+    // root pool's ID (the original source that clients still reference).
+    // Completed stubs have migration_src cleared so we cannot walk
+    // backwards — instead scan all pools for the lowest ID that has
+    // migration_target pointing at this tip.
+    // Find the root pool ID: scan for the lowest-ID pool whose
+    // migration_target points at this tip. We cannot rely on
+    // migration_src being set on the tip — it is cleared when
+    // each segment completes. Any pool pointing here is a chain member.
+    int64_t display_pid = pid;
+    for (const auto &[scan_pid, scan_pool] : pools) {
+      if (scan_pool.migration_target.has_value() &&
+          *scan_pool.migration_target == pid &&
+          scan_pid < display_pid) {
+        display_pid = scan_pid;
+      }
+    }
+
+    out << "pool " << display_pid << " '" << name << "' ";
     pdata.print(out, crush_for_names);
     out << rb_score_str << "\n";
     if (rb_info.err_msg.length() > 0) {
