@@ -17,18 +17,20 @@ options:
   type: size
   level: advanced
   desc: the amount of data (in bytes) in a data chunk, per stripe
-  fmt_desc: Sets the default size, in bytes, of a chunk of an object
-    stripe for erasure-coded pools. Every object of size S
-    will be stored as N stripes, with each data chunk
-    receiving ``stripe_unit`` bytes. Each stripe of ``N *
-    stripe_unit`` bytes will be encoded/decoded individually.
-    A value of 0 causes the code to select either a 4KB or 16KB
-    stripe_unit depending on whether ``allow_ec_optimizations``
-    is enabled.  If enabled, ``stripe_unit`` is set to 16KB, otherwise it
-    is set to 4KB. This option can be overridden by the ``stripe_unit``
-    setting in an erasure code profile.
-  long_desc: A value of 0 causes the code to select either a 4KB or 16KB stripe_unit
-    depending on whether allow_ec_optimizations is enabled.
+  fmt_desc: Sets the default size, in bytes, of a chunk of an object stripe for erasure-coded
+    pools. Every object of size S will be stored as N stripes, with each data chunk
+    receiving ``stripe_unit`` bytes. Each stripe of ``N * stripe_unit`` bytes will
+    be encoded/decoded individually. A value of 0 causes the code to select either
+    a 4KB or 16KB ``stripe_unit`` depending on whether ``allow_ec_optimizations`` is enabled.  If
+    enabled, ``stripe_unit`` is set to 16KB, otherwise it is set to 4KB. This option
+    can be overridden by the ``stripe_unit`` setting in an erasure code profile.
+  long_desc: Sets the default size, in bytes, of a chunk of an object stripe for erasure-coded
+    pools. Every object of size S will be stored as N stripes, with each data chunk
+    receiving stripe_unit bytes. Each stripe of N * stripe_unit bytes will be encoded/decoded
+    individually. A value of 0 causes the code to select either a 4KB or 16KB stripe_unit
+    depending on whether allow_ec_optimizations is enabled. If enabled, stripe_unit
+    is set to 16KB, otherwise it is set to 4KB. This option can be overridden by the
+    stripe_unit setting in an erasure code profile.
   default: 0
   services:
   - mon
@@ -217,19 +219,21 @@ options:
 - name: mon_cluster_log_file
   type: str
   level: advanced
-  desc: File(s) to write cluster log to
-  long_desc: This can either be a simple file name to receive all messages, or a list
-    of key/value pairs where the key is the log channel and the value is the filename,
-    which may include $cluster and $channel metavariables
-  fmt_desc: |
-    The locations of the cluster's log files. There are two channels in
-    Ceph: ``cluster`` and ``audit``. This option represents a mapping
-    from channels to log files, where the log entries of that
-    channel are sent to. The ``default`` entry is a fallback
-    mapping for channels not explicitly specified. So, the following
-    default setting will send cluster log to ``$cluster.log``, and
-    send audit log to ``$cluster.audit.log``, where ``$cluster`` will
-    be replaced with the actual cluster name.
+  desc: File(s) that receive the cluster log.
+  long_desc: Where the cluster log is written. This may be a single filename that receives
+    all messages, or a space-separated list of channel=filename pairs mapping each
+    log channel (such as cluster and audit) to a file. A default= entry is the fallback
+    for channels not named explicitly. Filenames may include the $cluster and $channel
+    metavariables. For example, the default configuration sends the cluster channel
+    to $cluster.log and the audit channel to $cluster.audit.log, with $cluster replaced
+    by the actual cluster name.
+  fmt_desc: Where the cluster log is written. This may be a single filename that receives
+    all messages, or a space-separated list of ``channel=filename`` pairs mapping each
+    log channel (such as ``cluster`` and ``audit``) to a file. A ``default`` entry
+    is the fallback for channels not named explicitly. Filenames may include the ``$cluster``
+    and ``$channel`` metavariables. For example, the default configuration sends the
+    ``cluster`` channel to ``$cluster.log`` and the ``audit`` channel to ``$cluster.audit.log``,
+    with ``$cluster`` replaced by the actual cluster name.
   default: default=/var/log/ceph/$cluster.$channel.log cluster=/var/log/ceph/$cluster.log
   services:
   - mon
@@ -448,10 +452,10 @@ options:
 - name: mon_lease
   type: float
   level: advanced
-  desc: lease interval between quorum monitors (seconds)
-  long_desc: This setting controls how sensitive your mon quorum is to intermittent
-    network issues or other failures.
-  fmt_desc: The length (in seconds) of the lease on the monitor's versions.
+  desc: Length of the Paxos version lease, in seconds.
+  long_desc: The length, in seconds, of the lease the leader grants on the Monitors'
+    versions. It controls how sensitive the Monitor quorum is to intermittent network issues
+    or other failures.
   default: 5
   services:
   - mon
@@ -459,13 +463,13 @@ options:
 - name: mon_lease_renew_interval_factor
   type: float
   level: advanced
-  desc: multiple of mon_lease for the lease renewal interval
-  long_desc: Leases must be renewed before they time out.  A smaller value means frequent
-    renewals, while a value close to 1 makes a lease expiration more likely.
-  fmt_desc: |
-    ``mon_lease`` \* ``mon_lease_renew_interval_factor`` will be the
-    interval for the Leader to renew the other monitor's leases. The
-    factor should be less than ``1.0``.
+  desc: Multiple of mon_lease giving the lease-renewal interval.
+  long_desc: The leader renews the other Monitors' leases every mon_lease * mon_lease_renew_interval_factor
+    seconds, before they time out. The factor must be less than 1.0; a smaller value
+    renews more often, while a value close to 1 makes lease expiration more likely.
+  fmt_desc: The leader renews the other Monitors' leases every ``mon_lease`` \* ``mon_lease_renew_interval_factor``
+    seconds, before they time out. The factor must be less than ``1.0``; a smaller
+    value renews more often, while a value close to 1 makes lease expiration more likely.
   default: 0.6
   services:
   - mon
@@ -596,15 +600,15 @@ options:
 - name: mon_warn_on_osd_down_out_interval_zero
   type: bool
   level: advanced
-  desc: issue OSD_NO_DOWN_OUT_INTERVAL health warning if mon_osd_down_out_interval
-    is zero
-  long_desc: Having mon_osd_down_out_interval set to 0 means that down OSDs are not
-    marked out automatically and the cluster does not heal itself without administrator
-    intervention.
-  fmt_desc: Raise ``HEALTH_WARN`` when ``mon_osd_down_out_interval`` is zero. Having this
-    option set to zero on the leader acts much like the ``noout`` flag. It's hard to figure
-    out what's going wrong with clusters without the ``noout`` flag set but acting like that
-    just the same, so we report a warning in this case.
+  desc: Warn (OSD_NO_DOWN_OUT_INTERVAL) when mon_osd_down_out_interval is zero.
+  long_desc: Raise a health warning when mon_osd_down_out_interval is zero. With it
+    at zero, down OSDs are never automatically marked out, so the cluster does not
+    heal itself without administrator intervention, effectively behaving like the noout
+    flag. Because that silent behavior is hard to diagnose, a warning is reported.
+  fmt_desc: Raise a health warning when ``mon_osd_down_out_interval`` is zero. With
+    it at zero, down OSDs are never automatically marked out, so the cluster does not
+    heal itself without administrator intervention, effectively behaving like the ``noout``
+    flag. Because that silent behavior is hard to diagnose, a warning is reported.
   default: true
   services:
   - mon
@@ -959,11 +963,15 @@ options:
 - name: mon_osd_laggy_weight
   type: float
   level: advanced
-  desc: how heavily to weight OSD marking itself back up in overall laggy_probability
-  long_desc: 1.0 means that an OSD marking itself back up (because it was marked down
-    but not actually dead) means a 100% laggy_probability; 0.0 effectively disables
-    tracking of laggy_probability.
-  fmt_desc: The weight for new samples in laggy estimation decay.
+  desc: Weight given to each new sample in the laggy_probability estimate.
+  long_desc: The weight given to a new sample (an OSD marking itself back up after
+    being marked down, implying it was laggy rather than dead) in the decaying laggy_probability
+    estimate. 1.0 makes a single such event imply a 100% laggy_probability; 0.0 effectively
+    disables laggy_probability tracking.
+  fmt_desc: The weight given to a new sample (an OSD marking itself back up after being
+    marked down, implying it was laggy rather than dead) in the decaying ``laggy_probability``
+    estimate. 1.0 makes a single such event imply a 100% ``laggy_probability``; 0.0
+    effectively disables ``laggy_probability`` tracking.
   default: 0.3
   services:
   - mon
@@ -985,15 +993,19 @@ options:
 - name: mon_osd_adjust_heartbeat_grace
   type: bool
   level: advanced
-  desc: increase OSD heartbeat grace if peers appear to be laggy
-  long_desc: If an OSD is marked down but then marks itself back up, it implies it
-    wasn't actually down but was unable to respond to heartbeats.  If this option
-    is true, we can use the laggy_probability and laggy_interval values calculated
-    to model this situation to increase the heartbeat grace period for this OSD so
-    that it isn't marked down again.  laggy_probability is an estimated probability
-    that the given OSD is down because it is laggy (not actually down), and laggy_interval
-    is an estimate on how long it stays down when it is laggy.
-  fmt_desc: If set to ``true``, Ceph will scale based on laggy estimations.
+  desc: Extend an OSD's heartbeat grace period when it appears laggy rather than down.
+  long_desc: When an OSD is marked down but then marks itself back up, it was likely
+    laggy (unable to respond to heartbeats) rather than actually down. If set, Ceph
+    uses the computed laggy_probability and laggy_interval to lengthen that OSD's heartbeat
+    grace period so it is not marked down again. laggy_probability estimates the chance
+    the OSD was merely laggy, and laggy_interval estimates how long it stays unresponsive
+    when laggy.
+  fmt_desc: When an OSD is marked down but then marks itself back up, it was likely
+    laggy (unable to respond to heartbeats) rather than actually down. If set, Ceph
+    uses the computed ``laggy_probability`` and ``laggy_interval`` to lengthen that
+    OSD's heartbeat grace period so it is not marked down again. ``laggy_probability``
+    estimates the chance the OSD was merely laggy, and ``laggy_interval`` estimates
+    how long it stays unresponsive when laggy.
   default: true
   services:
   - mon
