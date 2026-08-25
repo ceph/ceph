@@ -593,7 +593,7 @@ void KernelDevice::_aio_stop()
     aio_thread.join();
 
     if (cct->_conf->bdev_debug_aio) {
-      for (auto& i: wakeup_ctx.running_aios) {
+      for (auto& i: wakeup_ctx.reads.running) {
 	debug_aio_unlink(i);
       }
     }
@@ -1032,24 +1032,31 @@ void KernelDevice::aio_submit(IOContext *ioc)
     return;
   }
 
-  // move these aside, and get our end iterator position now, as the
+  // move these aside, and get our end iterator positions now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
-  list<aio_t>::iterator e = ioc->running_aios.begin();
-  ioc->running_aios.splice(e, ioc->pending_aios);
+  list<aio_t>::iterator we = ioc->writes.running.begin();
+  ioc->writes.running.splice(we, ioc->writes.pending);
+  list<aio_t>::iterator re = ioc->reads.running.begin();
+  ioc->reads.running.splice(re, ioc->reads.pending);
 
   int pending = ioc->num_pending.load();
   ioc->num_running += pending;
   ioc->num_pending -= pending;
   ceph_assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
-  ceph_assert(ioc->pending_aios.size() == 0);
+  ceph_assert(ioc->writes.pending.empty());
+  ceph_assert(ioc->reads.pending.empty());
 
   if (cct->_conf->bdev_debug_aio) {
-    list<aio_t>::iterator p = ioc->running_aios.begin();
-    while (p != e) {
+    for (auto p = ioc->writes.running.begin(); p != we; ++p) {
       dout(30) << __func__ << " " << *p << dendl;
       std::lock_guard l(debug_queue_lock);
-      debug_aio_link(*p++);
+      debug_aio_link(*p);
+    }
+    for (auto p = ioc->reads.running.begin(); p != re; ++p) {
+      dout(30) << __func__ << " " << *p << dendl;
+      std::lock_guard l(debug_queue_lock);
+      debug_aio_link(*p);
     }
   }
 
@@ -1060,9 +1067,15 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << " bdev_aio_submit_retry_max " << retry_max
 	   << " bdev_aio_submit_retry_initial_delay_us " << initial_delay_us
 	   << dendl;
-  int r, retries = 0;
-  r = io_queue->submit_batch(ioc->running_aios.begin(), e,
-			     priv, &retries, retry_max, initial_delay_us);
+  int r = 0, retries = 0;
+  if (ioc->writes.running.begin() != we) {
+    r = io_queue->submit_batch(ioc->writes.running.begin(), we,
+			       priv, &retries, retry_max, initial_delay_us);
+  }
+  if (r >= 0 && ioc->reads.running.begin() != re) {
+    r = io_queue->submit_batch(ioc->reads.running.begin(), re,
+			       priv, &retries, retry_max, initial_delay_us);
+  }
 
   if (retries)
     derr << __func__ << " retries " << retries << dendl;
@@ -1200,9 +1213,9 @@ int KernelDevice::aio_write(
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
-      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+      ioc->reads.pending.push_back(aio_t(ioc, choose_fd(false, write_hint)));
       ++ioc->num_pending;
-      auto& aio = ioc->pending_aios.back();
+      auto& aio = ioc->reads.pending.back();
       aio.bl.push_back(
         ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len)));
       aio.bl.prepare_iov(&aio.iov);
@@ -1211,9 +1224,9 @@ int KernelDevice::aio_write(
     } else {
       if (bl.length() <= RW_IO_MAX) {
 	// fast path (non-huge write)
-	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	ioc->writes.pending.push_back(aio_t(ioc, choose_fd(false, write_hint)));
 	++ioc->num_pending;
-	auto& aio = ioc->pending_aios.back();
+	auto& aio = ioc->writes.pending.back();
 	bl.prepare_iov(&aio.iov);
 	aio.bl.claim_append(bl);
 	aio.pwritev(off, len);
@@ -1231,9 +1244,9 @@ int KernelDevice::aio_write(
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }
 	  auto len = tmp.length();
-	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	  ioc->writes.pending.push_back(aio_t(ioc, choose_fd(false, write_hint)));
 	  ++ioc->num_pending;
-	  auto& aio = ioc->pending_aios.back();
+	  auto& aio = ioc->writes.pending.back();
 	  tmp.prepare_iov(&aio.iov);
 	  aio.bl.claim_append(tmp);
 	  aio.pwritev(off + prev_len, len);
@@ -1510,9 +1523,9 @@ int KernelDevice::aio_read(
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
+    ioc->reads.pending.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
     ++ioc->num_pending;
-    aio_t& aio = ioc->pending_aios.back();
+    aio_t& aio = ioc->reads.pending.back();
     aio.bl.push_back(
       ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc)));
     aio.bl.prepare_iov(&aio.iov);
