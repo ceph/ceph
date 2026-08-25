@@ -1283,4 +1283,75 @@ interval_set<uint64_t> ec_sparse_scan_ro_blocks(
   return allocated;
 }
 
+void ec_recovery_compute_shard_push(
+    shard_extent_map_t &returned_data,
+    shard_id_t shard,
+    uint64_t chunk_size,
+    const interval_set<uint64_t> *shard_fae,
+    bufferlist &out_data,
+    interval_set<uint64_t> &out_data_included)
+{
+  ceph_assert(chunk_size > 0);
+  const uint64_t scan_stride = std::min(chunk_size, FAE_BLOCK_SIZE);
+  if (returned_data.extent_maps.contains(shard)) {
+    for (auto iter = returned_data.extent_maps.at(shard).begin();
+         iter != returned_data.extent_maps.at(shard).end(); ++iter) {
+      const uint64_t ext_off = iter.get_off();
+      const uint64_t ext_len = iter.get_len();
+      bufferlist &ext_bl = iter.get_val();
+
+      uint64_t block = ext_off;
+      const uint64_t ext_end = ext_off + ext_len;
+
+      while (block < ext_end) {
+        const uint64_t block_len = std::min(scan_stride, ext_end - block);
+        const uint64_t in_ext = block - ext_off;
+
+        bool allocated;
+        if (shard_fae && shard_fae->intersects(block, block_len)) {
+          allocated = true;
+        } else {
+          // Stage 1: test first word.
+          bufferlist block_bl;
+          block_bl.substr_of(ext_bl, in_ext, block_len);
+          const auto &first_ptr = block_bl.front();
+          if (first_ptr.length() >= sizeof(uint64_t) &&
+              !mem_is_zero(first_ptr.c_str(), sizeof(uint64_t))) {
+            allocated = true;
+          } else {
+            // Stage 2: full scan.
+            allocated = !block_bl.is_zero();
+          }
+        }
+
+        if (allocated) {
+          out_data_included.insert(block, block_len);
+          bufferlist tmp;
+          tmp.substr_of(ext_bl, in_ext, block_len);
+          out_data.append(tmp);
+        }
+        block += block_len;
+      }
+    }
+  }
+
+  // Synthesise explicit zeros for any FAE intervals that were not covered by
+  // a decoded extent (the shard was absent for those regions entirely).
+  if (shard_fae) {
+    for (auto [fae_off, fae_len] : *shard_fae) {
+      interval_set<uint64_t> fae_interval;
+      fae_interval.insert(fae_off, fae_len);
+      interval_set<uint64_t> covered;
+      covered.intersection_of(fae_interval, out_data_included);
+      fae_interval.subtract(covered);
+      for (auto [off, len] : fae_interval) {
+        out_data_included.insert(off, len);
+        out_data.append_zero(len);
+      }
+    }
+  }
+
+  ceph_assert(out_data.length() == out_data_included.size());
+}
+
 } // namespace ECUtil
