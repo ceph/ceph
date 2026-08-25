@@ -3,6 +3,15 @@
   ``$GETOPT`` environment override so GNU getopt can be selected
   (``brew install bash gnu-getopt``).
 
+* MGR: Several commands described a required argument to the monitor as optional.
+  They now describe it as required, so the monitor rejects a call that omits it
+  instead of handing the call to the manager module to fail on. The affected
+  commands include most of ``ceph nvmeof``, the ``ceph dashboard ac-role-*`` and
+  ``ceph dashboard ac-user-*`` families, ``ceph dashboard set-rgw-hostname``,
+  ``ceph dashboard set-cross-origin-url``, ``ceph dashboard iscsi-gateway-rm``,
+  the ``ceph fs snapshot mirror`` subcommands and ``ceph insights prune-health``.
+  Omitting these arguments has never worked, so no working command line changes.
+
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
   this option could be changed at runtime, but changes had no effect on opened file
