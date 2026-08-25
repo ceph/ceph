@@ -985,8 +985,12 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph-syn DESTINATION bin)
   if(LINUX)
     add_subdirectory(mount)
+    # libcephfsd shares one libcephfs mount between processes over a Unix
+    # socket, for the container cases that want it, and is written to Linux
+    # throughout - fscrypt's UAPI structures, O_TMPFILE, linkat(AT_EMPTY_PATH),
+    # MSG_CMSG_CLOEXEC.
+    add_subdirectory(libcephfs_proxy)
   endif()
-  add_subdirectory(libcephfs_proxy)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_LIBCEPHSQLITE)

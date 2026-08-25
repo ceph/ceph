@@ -7,9 +7,7 @@
 #include <string.h>
 #include <stdarg.h>
 
-#ifdef __linux__
 #include <linux/fscrypt.h>
-#endif
 
 #include "proxy_manager.h"
 #include "proxy_link.h"
@@ -1824,11 +1822,6 @@ done:
 	return CEPH_COMPLETE(client, err, ans);
 }
 
-/* The fscrypt operations marshal Linux UAPI structs by size, so they are only
- * built where those definitions exist. The dispatch table below then holds
- * NULL for them, which serve_binary() already answers with -EOPNOTSUPP, so a
- * client asking for one gets a clear refusal rather than a protocol error. */
-#ifdef __linux__
 static int32_t libcephfsd_add_fscrypt_key(proxy_client_t *client,
 					  proxy_req_t *req, const void *data,
 					  int32_t data_size)
@@ -2012,8 +2005,6 @@ static int32_t libcephfsd_ll_is_encrypted(proxy_client_t *client,
 
 	return CEPH_COMPLETE(client, err, ans);
 }
-
-#endif /* __linux__ */
 
 static void libcephfsd_ll_nonblocking_fsync_cbk(struct ceph_ll_io_info *cb_info)
 {
@@ -2234,7 +2225,6 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_LL_RELEASEDIR] = libcephfsd_ll_releasedir,
 	[LIBCEPHFSD_OP_MOUNT_PERMS] = libcephfsd_mount_perms,
 	[LIBCEPHFSD_OP_LL_NONBLOCKING_RW] = libcephfsd_ll_nonblocking_rw,
-#ifdef __linux__
 	[LIBCEPHFSD_OP_ADD_FSCRYPT_KEY] = libcephfsd_add_fscrypt_key,
 	[LIBCEPHFSD_OP_REMOVE_FSCRYPT_KEY] = libcephfsd_remove_fscrypt_key,
 	[LIBCEPHFSD_OP_GET_FSCRYPT_KEY_STATUS] =
@@ -2244,7 +2234,6 @@ static proxy_handler_t libcephfsd_handlers[LIBCEPHFSD_OP_TOTAL_OPS] = {
 	[LIBCEPHFSD_OP_LL_GET_FSCRYPT_POLICY_V2] =
 		libcephfsd_ll_get_fscrypt_policy_v2,
 	[LIBCEPHFSD_OP_LL_IS_ENCRYPTED] = libcephfsd_ll_is_encrypted,
-#endif
 	[LIBCEPHFSD_OP_LL_NONBLOCKING_FSYNC] = libcephfsd_ll_nonblocking_fsync,
 	[LIBCEPHFSD_OP_BATCH_READDIR] = libcephfsd_batch_readdir,
 };

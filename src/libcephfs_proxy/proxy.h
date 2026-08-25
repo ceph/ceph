@@ -8,13 +8,6 @@
 #include <stdint.h>
 #include <stdbool.h>
 
-#ifdef __APPLE__
-/* Darwin still names these struct stat fields the way they were spelled
- * before POSIX 2008 settled on st_ctim and st_mtim. */
-#define st_ctim st_ctimespec
-#define st_mtim st_mtimespec
-#endif
-
 #define LIBCEPHFSD_MAJOR 0
 
 // Legacy version without negotiation support
