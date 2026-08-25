@@ -43,16 +43,6 @@ using ceph::Formatter;
 
 // Extent
 
-bluestore::Extent::~Extent() {
-  if (blob) {
-    blob->get_cache()->rm_extent();
-  }
-}
-
-uint32_t bluestore::Extent::blob_end() const {
-  return blob_start() + blob->get_blob().get_logical_length();
-}
-
 void bluestore::Extent::dump(Formatter* f) const
 {
   f->dump_unsigned("logical_offset", logical_offset);
@@ -68,10 +58,4 @@ ostream& operator<<(ostream& out, const bluestore::Extent& e)
 	     << ": 0x" << e.blob_offset << "~" << e.length << std::dec
 	     << " " << *e.blob;
 }
-}
-
-void bluestore::Extent::assign_blob(const BlueStore::BlobRef& b) {
-  ceph_assert(!blob);
-  blob = b;
-  blob->get_cache()->add_extent();
 }
