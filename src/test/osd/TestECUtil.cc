@@ -1858,37 +1858,15 @@ TEST(ECUtil, get_sparse_buffer_absent_shard)
   ASSERT_TRUE(iset.empty());
 }
 
-namespace {
-std::pair<interval_set<uint64_t>, bufferlist>
-recovery_push_data(ECUtil::shard_extent_map_t &sem,
-                   shard_id_t shard,
-                   const interval_set<uint64_t> *force_alloc_ptr)
-{
-  bufferlist data;
-  interval_set<uint64_t> data_included;
-  sem.get_sparse_buffer(shard, data, data_included, force_alloc_ptr);
-
-  if (force_alloc_ptr && !force_alloc_ptr->empty()) {
-    interval_set<uint64_t> missing_fae;
-    missing_fae.union_of(*force_alloc_ptr);
-    missing_fae.subtract(data_included);
-    for (auto [off, len] : missing_fae) {
-      data_included.insert(off, len);
-      data.append_zero(len);
-    }
-  }
-
-  return {data_included, data};
-}
-}
-
 TEST(ECUtil, subtask4_absent_shard_no_fae)
 {
   int k = 2, m = 1, chunk_size = 4096;
   stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
   shard_extent_map_t sem(&sinfo);
 
-  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), nullptr);
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, nullptr, data, iset);
   ASSERT_TRUE(iset.empty());
   ASSERT_EQ(0u, data.length());
 }
@@ -1902,7 +1880,9 @@ TEST(ECUtil, subtask4_absent_shard_full_fae)
   interval_set<uint64_t> force_alloc;
   force_alloc.insert(0, (uint64_t)chunk_size);
 
-  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
 
   // The entire force-allocated range must appear in data_included.
   ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
@@ -1924,7 +1904,9 @@ TEST(ECUtil, subtask4_absent_shard_sparse_fae)
   force_alloc.insert(0, (uint64_t)chunk_size);
   force_alloc.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);
 
-  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
 
   ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
   ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
@@ -1945,13 +1927,16 @@ TEST(ECUtil, subtask4_partial_data_plus_fae)
   sem.insert_in_shard(shard_id_t(0), 0, real_data);
 
   // FAE covers [0, chunk_size) AND [2*chunk_size, 3*chunk_size).
-  // get_sparse_buffer will already return [0, chunk_size) because it is
-  // non-zero.  The synthesiser must only add [2*chunk_size, 3*chunk_size).
+  // [0, chunk_size) is non-zero so the scan includes it directly.
+  // [2*chunk_size, 3*chunk_size) has no decoded extent; the FAE synthesis
+  // path appends zeros for it.
   interval_set<uint64_t> force_alloc;
   force_alloc.insert(0, (uint64_t)chunk_size);
   force_alloc.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);
 
-  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
 
   ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
   ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
@@ -1975,12 +1960,357 @@ TEST(ECUtil, subtask4_fae_fully_covered_by_data)
   interval_set<uint64_t> force_alloc;
   force_alloc.insert(0, (uint64_t)chunk_size);
 
-  auto [iset, data] = recovery_push_data(sem, shard_id_t(0), &force_alloc);
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &force_alloc, data, iset);
 
   // Only one interval — no synthetic zeros added.
   ASSERT_EQ(1u, iset.num_intervals());
   ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
   ASSERT_EQ((uint64_t)chunk_size, data.length());
+}
+
+// ---------------------------------------------------------------------------
+// ec_recovery_compute_shard_push — multi-chunk tests
+//
+// Each test uses k=4, m=2, chunk_size=4096 and exercises shard 0 at three
+// distinct shard-space offsets: chunk 0 = [0, cs), chunk 1 = [cs, 2cs),
+// chunk 2 = [2cs, 3cs).  These correspond to the same shard across three
+// consecutive stripes.
+//
+// "data"  = non-zero bufferlist (append(std::string(cs, 'X')))
+// "zeros" = decoded-zero bufferlist (append_zero(cs)) — what the EC decoder
+//           actually produces; treated as a sparse hole unless in FAE.
+// ---------------------------------------------------------------------------
+
+// chunk 0 and 2 have real data; chunk 1 is absent.
+// Expected: chunks 0 and 2 allocated, chunk 1 absent.
+TEST(ECUtil, recovery_push_data_at_0_and_2)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist d0, d2;
+  d0.append(std::string(chunk_size, 'A'));
+  d2.append(std::string(chunk_size, 'B'));
+  sem.insert_in_shard(shard_id_t(0), 0, d0);
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, d2);
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, nullptr, data, iset);
+
+  ASSERT_EQ(2u, iset.num_intervals());
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects((uint64_t)chunk_size, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)(2 * chunk_size), data.length());
+  ASSERT_EQ(data.length(), iset.size());
+}
+
+// chunk 0 and 2 have decoded-zero content; no FAE.
+// Expected: all chunks unallocated.
+TEST(ECUtil, recovery_push_zeros_at_0_and_2_no_fae)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist z0, z2;
+  z0.append_zero(chunk_size);
+  z2.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, z0);
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, z2);
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, nullptr, data, iset);
+
+  ASSERT_TRUE(iset.empty());
+  ASSERT_EQ(0u, data.length());
+}
+
+// chunk 0 and 2 have decoded-zero content; only chunk 0 is in FAE.
+// Expected: chunk 0 allocated (zero data via FAE intersect path), chunk 2 unallocated.
+TEST(ECUtil, recovery_push_zeros_at_0_and_2_fae_covers_0_only)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist z0, z2;
+  z0.append_zero(chunk_size);
+  z2.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, z0);
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, z2);
+
+  interval_set<uint64_t> fae;
+  fae.insert(0, (uint64_t)chunk_size);   // chunk 0 only
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+  bufferlist expected;
+  expected.append_zero(chunk_size);
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+// chunk 0 and 2 have decoded-zero content; only chunk 2 is in FAE.
+// Expected: chunk 2 allocated (zero data via FAE intersect path), chunk 0 unallocated.
+TEST(ECUtil, recovery_push_zeros_at_0_and_2_fae_covers_2_only)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist z0, z2;
+  z0.append_zero(chunk_size);
+  z2.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, z0);
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, z2);
+
+  interval_set<uint64_t> fae;
+  fae.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size);  // chunk 2 only
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects(0, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+  bufferlist expected;
+  expected.append_zero(chunk_size);
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+// chunk 0 has decoded-zero content, chunk 2 has real data; no FAE.
+// Expected: only chunk 2 allocated.
+TEST(ECUtil, recovery_push_zero_at_0_data_at_2_no_fae)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist z0, d2;
+  z0.append_zero(chunk_size);
+  d2.append(std::string(chunk_size, 'C'));
+  sem.insert_in_shard(shard_id_t(0), 0, z0);
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, d2);
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, nullptr, data, iset);
+
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects(0, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+}
+
+// chunk 0 has decoded-zero content (in FAE), chunk 2 has real data; no chunk 1.
+// Expected: chunk 0 allocated (zero data via FAE intersect path), chunk 1 absent,
+//           chunk 2 allocated (real data via non-zero scan).
+TEST(ECUtil, recovery_push_zero_at_0_fae_data_at_2)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist z0, d2;
+  z0.append_zero(chunk_size);
+  d2.append(std::string(chunk_size, 'D'));
+  sem.insert_in_shard(shard_id_t(0), 0, z0);
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, d2);
+
+  interval_set<uint64_t> fae;
+  fae.insert(0, (uint64_t)chunk_size);  // chunk 0 in FAE
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  ASSERT_EQ(2u, iset.num_intervals());
+  ASSERT_TRUE(iset.contains(0, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects((uint64_t)chunk_size, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)(2 * chunk_size), data.length());
+  ASSERT_EQ(data.length(), iset.size());
+}
+
+// chunk 0 has real data, chunk 2 has decoded-zero content (in FAE);
+// FAE also covers chunk 1 which has no decoded extent at all.
+// Expected: chunk 0 (real data) + chunk 1 (synthesised zeros, absent from
+//           extent_map) + chunk 2 (zero data from extent_map, FAE-covered).
+TEST(ECUtil, recovery_push_data_at_0_fae_at_1_and_2_zeros_at_2)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  bufferlist d0, z2;
+  d0.append(std::string(chunk_size, 'E'));
+  z2.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, d0);
+  sem.insert_in_shard(shard_id_t(0), 2 * chunk_size, z2);
+  // chunk 1 has no entry in sem at all.
+
+  interval_set<uint64_t> fae;
+  fae.insert((uint64_t)chunk_size, (uint64_t)chunk_size);       // chunk 1
+  fae.insert((uint64_t)(2 * chunk_size), (uint64_t)chunk_size); // chunk 2
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  // All three adjacent chunks merge into a single contiguous interval.
+  ASSERT_TRUE(iset.contains(0, (uint64_t)(3 * chunk_size)));
+  ASSERT_EQ((uint64_t)(3 * chunk_size), iset.size());
+  ASSERT_EQ((uint64_t)(3 * chunk_size), data.length());
+}
+
+// FAE covers chunk 1 but no data exists anywhere in the shard.
+// Expected: only chunk 1 (synthesised zeros), chunks 0 and 2 absent.
+TEST(ECUtil, recovery_push_absent_shard_fae_middle_chunk_only)
+{
+  int k = 4, m = 2, chunk_size = 4096;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  interval_set<uint64_t> fae;
+  fae.insert((uint64_t)chunk_size, (uint64_t)chunk_size);  // chunk 1 only
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size, &fae, data, iset);
+
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects(0, (uint64_t)chunk_size));
+  ASSERT_TRUE(iset.contains((uint64_t)chunk_size, (uint64_t)chunk_size));
+  ASSERT_FALSE(iset.intersects((uint64_t)(2 * chunk_size), (uint64_t)chunk_size));
+  ASSERT_EQ((uint64_t)chunk_size, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+  bufferlist expected;
+  expected.append_zero(chunk_size);
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+// ---------------------------------------------------------------------------
+// ec_recovery_compute_shard_push — chunk_size > FAE_BLOCK_SIZE tests
+//
+// These tests use chunk_size = 2 * FAE_BLOCK_SIZE (8 KiB) so that each shard
+// chunk spans two 4 KiB FAE sub-blocks.  They verify that the scan_stride is
+// FAE_BLOCK_SIZE (not chunk_size) in this regime, so that:
+//   - FAE coverage of only part of a chunk forces only that sub-block.
+//   - A zero sub-block inside an otherwise-non-zero chunk is excluded.
+// ---------------------------------------------------------------------------
+
+// chunk_size = 8 KiB; only the first 4 KiB sub-block of chunk 0 is in FAE;
+// the entire chunk is decoded zeros.
+// Expected: only [0, FAE_BLOCK_SIZE) allocated (via FAE), second half excluded.
+TEST(ECUtil, recovery_push_large_chunk_fae_half_of_chunk)
+{
+  const uint64_t fae = FAE_BLOCK_SIZE;            // 4096
+  const uint64_t chunk_size = 2 * fae;            // 8192
+  int k = 2, m = 1;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Whole chunk is decoded zeros (matches what _decode() actually produces).
+  bufferlist z;
+  z.append_zero(chunk_size);
+  sem.insert_in_shard(shard_id_t(0), 0, z);
+
+  // FAE only covers the first 4 KiB sub-block of the chunk.
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(0, fae);
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size,
+                                         &force_alloc, data, iset);
+
+  // Only the FAE-covered sub-block should be included.
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_TRUE(iset.contains(0, fae));
+  ASSERT_FALSE(iset.intersects(fae, fae));     // second half excluded
+  ASSERT_EQ(fae, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+  // Data must be all zeros.
+  bufferlist expected;
+  expected.append_zero(fae);
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+// chunk_size = 8 KiB; first sub-block zero, second sub-block non-zero; no FAE.
+// Expected: only the second sub-block [FAE_BLOCK_SIZE, 2*FAE_BLOCK_SIZE) allocated.
+TEST(ECUtil, recovery_push_large_chunk_zero_then_data_no_fae)
+{
+  const uint64_t fae = FAE_BLOCK_SIZE;
+  const uint64_t chunk_size = 2 * fae;
+  int k = 2, m = 1;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);
+
+  // Build one shard extent: first half zero, second half non-zero.
+  bufferlist bl;
+  bl.append_zero(fae);
+  bl.append(std::string(fae, 'X'));
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size,
+                                         nullptr, data, iset);
+
+  // Only the non-zero second sub-block must be included.
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects(0, fae));
+  ASSERT_TRUE(iset.contains(fae, fae));
+  ASSERT_EQ(fae, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+  bufferlist expected;
+  expected.append(std::string(fae, 'X'));
+  ASSERT_TRUE(data.contents_equal(expected));
+}
+
+// chunk_size = 8 KiB; absent shard (no extent_map), FAE covers only second
+// sub-block of chunk 0.
+// Expected: only [FAE_BLOCK_SIZE, 2*FAE_BLOCK_SIZE) synthesised as zeros.
+TEST(ECUtil, recovery_push_large_chunk_absent_shard_fae_second_half)
+{
+  const uint64_t fae = FAE_BLOCK_SIZE;
+  const uint64_t chunk_size = 2 * fae;
+  int k = 2, m = 1;
+  stripe_info_t sinfo(k, m, chunk_size * k, vector<shard_id_t>(0));
+  shard_extent_map_t sem(&sinfo);  // shard absent from sem
+
+  interval_set<uint64_t> force_alloc;
+  force_alloc.insert(fae, fae);   // second sub-block only
+
+  bufferlist data;
+  interval_set<uint64_t> iset;
+  ECUtil::ec_recovery_compute_shard_push(sem, shard_id_t(0), chunk_size,
+                                         &force_alloc, data, iset);
+
+  ASSERT_EQ(1u, iset.num_intervals());
+  ASSERT_FALSE(iset.intersects(0, fae));
+  ASSERT_TRUE(iset.contains(fae, fae));
+  ASSERT_EQ(fae, data.length());
+  ASSERT_EQ(data.length(), iset.size());
+  bufferlist expected;
+  expected.append_zero(fae);
+  ASSERT_TRUE(data.contents_equal(expected));
 }
 
 TEST(ECUtil, ro_intervals_to_shard_intervals_empty)

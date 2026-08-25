@@ -1741,27 +1741,10 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           }
         }
 
-        op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data,
-                                            pop.data_included, force_alloc_ptr);
-        ceph_assert(pop.data.length() == pop.data_included.size());
-
-        if (force_alloc_ptr && !force_alloc_ptr->empty()) {
-          interval_set<uint64_t> missing_fae;
-          missing_fae.union_of(*force_alloc_ptr);
-          interval_set<uint64_t> covered;
-          covered.intersection_of(missing_fae, pop.data_included);
-          missing_fae.subtract(covered);
-          if (!missing_fae.empty()) {
-            dout(20) << __func__ << ": shard=" << pg_shard.shard
-                     << " synthesising zeros for missing force-allocated extents "
-                     << missing_fae << dendl;
-            for (auto [off, len] : missing_fae) {
-              pop.data_included.insert(off, len);
-              pop.data.append_zero(len);
-            }
-          }
-        }
-        ceph_assert(pop.data.length() == pop.data_included.size());
+        ECUtil::ec_recovery_compute_shard_push(*op.returned_data, pg_shard.shard,
+                                               sinfo.get_chunk_size(),
+                                               force_alloc_ptr,
+                                               pop.data, pop.data_included);
 
         dout(10) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
