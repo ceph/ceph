@@ -424,36 +424,40 @@ gRPC Parameters
 Accessing gRPC Client Certificates
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Cephadm deploys a client cert bundle for every NFS service to all manager hosts,
-regardless of the certificate source. Each service gets its own sub-directory:
+Cephadm automatically deploys a client certificate bundle for every NFS service
+to all admin nodes (hosts with the ``_admin`` label). Each service gets its own
+sub-directory under the following path on the admin node:
 
 .. code-block:: text
 
-   /var/lib/ceph/<fsid>/nfs_grpc-client-certs/
-   ├── nfs.<svc_id1>/
-   │   ├── ca.crt
-   │   ├── client.crt
-   │   └── client.key
-   └── nfs.<svc_id2>/
-       ├── ca.crt
-       ├── client.crt
-       └── client.key
+   /var/lib/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/
 
-Inside a cephadm shell the base path is mounted at ``/srv/ceph/``:
+The directory contains the following files:
+
+.. code-block:: text
+
+   ca.crt      # CA certificate (cluster root CA)
+   client.crt  # Client certificate
+   client.key  # Client private key
+
+Inside a ``cephadm shell`` the path is accessible under ``/srv/ceph/``:
 
 .. prompt:: bash #
 
    cephadm shell
-   ls /srv/ceph/<fsid>/nfs_grpc-client-certs/
-   # nfs.mynfs/
+   ls /srv/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/
+   # ca.crt  client.crt  client.key
 
-   grpcurl \
-     --cacert /srv/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/ca.crt \
-     --cert   /srv/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/client.crt \
-     --key    /srv/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/client.key \
-     <nfs-host>:<grpc-port> list
+Use the certificates with ``grpcurl`` to connect to the NFS gRPC server:
+
+.. prompt:: bash #
+
+   cd /srv/ceph/<fsid>/nfs_grpc-client-certs/nfs.<svc_id>/
+   grpcurl -cacert ca.crt -cert client.crt -key client.key <NFS-Node-IP>:50051 list
 
 .. note::
+   Certificates are deployed to all admin nodes automatically. No manual
+   certificate setup is needed when using the default ``cephadm-signed`` mode.
    For ``reference`` mode the bundle is only deployed when the client cert and CA
    have been pre-loaded into certmgr. If they are absent the folder is not created
    and the admin should use their own cert files directly.
