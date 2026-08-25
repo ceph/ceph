@@ -276,8 +276,9 @@ class SplitOp {
     mini_flat_map<int, Details> details;
     int rc = -EIO;
     std::optional<InternalVersion> internal_version;
+    shard_id_t abs_shard; ///< absolute shard index into the acting set (relative shard + zone_offset)
 
-    SubRead(int count) : details(count) {}
+    SubRead(int count, shard_id_t abs_shard) : details(count), abs_shard(abs_shard) {}
   };
 
   /**
@@ -306,13 +307,21 @@ class SplitOp {
   virtual void init_read(OSDOp &op, bool sparse, int ops_index) = 0;
   virtual bool version_mismatch() const = 0;
   virtual void init_reference_sub_read() = 0;
-  void init(OSDOp &op, int ops_index);
+  virtual void init(OSDOp &op, int ops_index);
+
+  /**
+   * @brief Return the absolute shard id to use when emplacing the reference
+   * sub-read entry for pass-thru ops (stat, getxattr, etc.).
+   */
+  virtual shard_id_t abs_shard_for_reference() const {
+    return reference_sub_read.shard;
+  }
 
   Objecter::Op *orig_op;
   Objecter &objecter;
   mini_flat_map<int, SubRead> sub_reads;
   CephContext *cct;
-  
+
   /**
    * Abort flag pattern for split operation creation:
    *
@@ -341,7 +350,8 @@ class SplitOp {
    */
   bool abort = false;
   int flags = 0;
-  int reference_sub_read = -1;
+  pg_shard_t reference_sub_read;
+  int reference_sub_read_key = -1; ///< key into sub_reads for the reference entry
   std::map<int, std::vector<int>> op_offset_map;
 
  public:
@@ -353,9 +363,9 @@ class SplitOp {
   * @param count Number of sub-operations to create
   */
  SplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count) : orig_op(op), objecter(objecter), sub_reads(count), cct(cct) {}
- 
+
  virtual ~SplitOp() = default;
- 
+
  /**
   * @brief Complete the split operation by assembling results.
   *
@@ -364,7 +374,7 @@ class SplitOp {
   * the original operation's completion handlers.
   */
  void complete();
- 
+
  /**
   * @brief Prepare a single-chunk operation for direct execution.
   *
@@ -377,7 +387,7 @@ class SplitOp {
   * @param cct CephContext for logging
   */
  static void prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContext *cct);
- 
+
  /**
   * @brief Add version tracking to sub-operations for consistency.
   *
@@ -385,7 +395,7 @@ class SplitOp {
   * internal version queries. If versions mismatch, the operation is retried.
   */
  void protect_torn_reads();
- 
+
  /**
   * @brief Create and initialize a split operation.
   *
@@ -406,6 +416,27 @@ class SplitOp {
   */
  static bool create(Objecter::Op *op, Objecter &objecter,
    shunique_lock<ceph::shared_mutex>& sul, CephContext *cct);
+
+ /// @brief Test-accessible flag validation for split-op eligibility.
+ static bool validate_flags(const pg_pool_t *pi, int flags, CephContext *cct);
+
+ /**
+  * @brief Identify the nearest zone for the given acting set.
+  *
+  * Scores each zone by picking one representative OSD and calling
+  * get_common_ancestor_distance() against the client crush_location.
+  * Returns the zone index with the lowest (nearest) score, or 0 as the
+  * safe default when zone information is unavailable.
+  *
+  * Shared between ECSplitOp and ReplicaSplitOp.
+  */
+ static int local_zone_for_acting_set(
+     const std::vector<int>& acting,
+     int num_zones,
+     int zone_size,
+     CrushWrapper* crush,
+     CephContext* cct,
+     const std::multimap<std::string, std::string>& crush_location);
 };
 
 /**
@@ -428,8 +459,10 @@ class SplitOp {
  */
 class ECSplitOp : public SplitOp{
  public:
-  using SplitOp::SplitOp;
-  
+  ECSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int count,
+            bool localize)
+    : SplitOp(op, objecter, cct, count), localize(localize) {}
+
   /**
    * @brief Initialize reference_sub_read to primary shard.
    *
@@ -437,7 +470,7 @@ class ECSplitOp : public SplitOp{
    * primary shard. Must be called after _calc_target() populates the acting set.
    */
   void init_reference_sub_read();
-  
+
   /**
    * @brief Assemble sparse read results from EC shards.
    *
@@ -448,7 +481,7 @@ class ECSplitOp : public SplitOp{
    * @return Pair of extent set and assembled buffer
    */
   std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const override;
-  
+
   /**
    * @brief Assemble dense read results from EC shards.
    *
@@ -459,7 +492,7 @@ class ECSplitOp : public SplitOp{
    * @param ops_index Index of the operation in the operation list
    */
   void assemble_buffer_read(bufferlist &bl_out, int ops_index) const override;
-  
+
   /**
    * @brief Initialize read sub-operations for EC pool.
    *
@@ -472,7 +505,7 @@ class ECSplitOp : public SplitOp{
    * @param ops_index Index of the operation in the operation list
    */
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
-  
+
   /**
    * @brief Check for version mismatches across EC shards.
    *
@@ -483,10 +516,25 @@ class ECSplitOp : public SplitOp{
    * @return true if versions mismatch, false if consistent
    */
   bool version_mismatch() const override;
-  
+
   ~ECSplitOp() {
     complete();
   }
+
+  // local_zone_for_acting_set() is now on the SplitOp base class so that
+  // ReplicaSplitOp can also use it without a cross-class dependency.
+  // ECSplitOp callers still use ECSplitOp::local_zone_for_acting_set() for
+  // backwards compatibility with existing unit-test call sites.
+  using SplitOp::local_zone_for_acting_set;
+
+  /// Set to true when LOCALIZE_READS was requested; used by init_read() to
+  /// mark sub-reads that are dispatched to non-local zones.
+  const bool localize;
+
+  /// The zone index selected by init_read() for this operation.
+  /// Set once on the first init_read() call and reused by init() for
+  /// non-read ops (stat, getxattr, etc.) that also target reference_sub_read.
+  int local_zone_index = 0;
 };
 
 /**
@@ -508,8 +556,7 @@ class ECSplitOp : public SplitOp{
  */
 class ReplicaSplitOp : public SplitOp {
  public:
-  using SplitOp::SplitOp;
-  
+
   /**
    * @brief Assemble sparse read results from replicas.
    *
@@ -520,7 +567,7 @@ class ReplicaSplitOp : public SplitOp {
    * @return Pair of extent set and assembled buffer
    */
   std::pair<extent_set, bufferlist> assemble_buffer_sparse_read(int ops_index) const override;
-  
+
   /**
    * @brief Assemble dense read results from replicas.
    *
@@ -531,7 +578,7 @@ class ReplicaSplitOp : public SplitOp {
    * @param ops_index Index of the operation in the operation list
    */
   void assemble_buffer_read(bufferlist &bl_out, int ops_index) const override;
-  
+
   /**
    * @brief Initialize read sub-operations for replicated pool.
    *
@@ -544,7 +591,7 @@ class ReplicaSplitOp : public SplitOp {
    * @param ops_index Index of the operation in the operation list
    */
   void init_read(OSDOp &op, bool sparse, int ops_index) override;
-  
+
   /**
    * @brief Check for version mismatches across replicas.
    *
@@ -555,19 +602,25 @@ class ReplicaSplitOp : public SplitOp {
    * @return true if versions mismatch, false if consistent
    */
   bool version_mismatch() const override;
-  
+
   void init_reference_sub_read() override;
-  
+
   /**
    * @brief Construct a ReplicaSplitOp.
    * @param op Original operation to be split
    * @param objecter Objecter instance
    * @param cct CephContext for logging
    * @param pool_size Number of replicas in the pool
+   * @param localize When true, restrict sub-reads to the client's local zone.
+   *                 When false (BALANCE_READS), spread across all replicas.
    */
-  ReplicaSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct, int pool_size) :
-    SplitOp(op, objecter, cct, pool_size) {}
-  
+  ReplicaSplitOp(Objecter::Op *op, Objecter &objecter, CephContext *cct,
+                 int pool_size, bool localize)
+    : SplitOp(op, objecter, cct, pool_size), localize(localize) {}
+
+  /// Set to true when LOCALIZE_READS was requested.
+  const bool localize;
+
   ~ReplicaSplitOp() {
     complete();
   }
