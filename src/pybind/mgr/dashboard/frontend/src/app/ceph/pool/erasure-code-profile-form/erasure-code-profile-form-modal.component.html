@@ -40,7 +40,8 @@
             id="name"
             type="text"
             formControlName="name"
-            placeholder="Add issue title"
+            placeholder="Profile name"
+            i18n-placeholder
           />
         </cds-text-label>
         <ng-template
@@ -671,82 +672,6 @@
       </div>
       }
 
-      <!-- Technique -->
-      @if ([PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.CLAY].includes(plugin)) {
-      <div
-        class="form-item"
-      >
-        <cds-select
-          label="Technique"
-          id="technique"
-          formControlName="technique"
-          [helperText]="tooltips.plugins[plugin]?.technique"
-          i18n
-        >
-          @for (technique of techniques; track technique) {
-          <option
-            [value]="technique"
-          >
-            {{ technique }}
-          </option>
-          }
-        </cds-select>
-      </div>
-      }
-
-      <!-- Packetsize -->
-      @if (plugin === PLUGIN.JERASURE) {
-      <div
-        cdsrow
-        class="form-item"
-      >
-        <cds-number
-          id="packetSize"
-          label="Packetsize"
-          [helperText]="tooltips.plugins.jerasure.packetSize"
-          [invalid]="form.controls.packetSize.invalid && form.controls.packetSize.dirty"
-          [invalidText]="packetSizeError"
-          formControlName="packetSize"
-          min="1"
-          i18n
-        >
-        </cds-number>
-        <ng-template
-          #packetSizeError
-        >
-          @if (form.showError('packetSize', formDir, 'min')) {
-          <span
-            class="invalid-feedback"
-            i18n
-          >
-            Must be equal to or greater than 1.
-          </span>
-          }
-        </ng-template>
-      </div>
-      }
-
-      <!-- Crush root -->
-      @if ([PLUGIN.JERASURE, PLUGIN.ISA, PLUGIN.CLAY].includes(plugin)) {
-      <div
-        class="form-item"
-      >
-        <cds-dropdown
-          label="Crush root"
-          id="crushRoot"
-          formControlName="crushRoot"
-          [placeholder]="'Select crush root...'"
-          [helperText]="tooltips.crushRoot"
-          i18n-label
-        >
-          <cds-dropdown-list
-            [items]="buckets"
-          >
-          </cds-dropdown-list>
-        </cds-dropdown>
-      </div>
-      }
-
       <!-- Crush device class -->
       <div
         class="form-item"
@@ -783,24 +708,6 @@
           >
           </cd-helper>
         </ng-template>
-      </div>
-
-      <!-- Directory -->
-      <div
-        class="form-item"
-      >
-        <cds-text-label
-          [helperText]="tooltips.directory"
-        >
-          Directory
-          <input
-            cdsText
-            id="directory"
-            type="text"
-            formControlName="directory"
-            placeholder="Path..."
-          />
-        </cds-text-label>
       </div>
     </form>
   </div>
