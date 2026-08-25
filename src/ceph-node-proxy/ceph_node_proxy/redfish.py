@@ -309,7 +309,7 @@ def get_component_data(
                 if attribute is None:
                     data = ep.get_members_data()
                 else:
-                    data = ep.data
+                    data = ep.get_data()
                 result[member] = build_data(
                     data=data, fields=fields, log=log, attribute=attribute
                 )
