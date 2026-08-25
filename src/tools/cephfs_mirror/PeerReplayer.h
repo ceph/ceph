@@ -161,7 +161,7 @@ private:
   };
 
   struct DirRegistry {
-    int fd;
+    int fd = -1;
     bool canceled = false;
     SnapshotReplayerThread *replayer;
   };
