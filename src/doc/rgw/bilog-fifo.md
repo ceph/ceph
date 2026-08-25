@@ -13,7 +13,7 @@ Design:
 ### 1. Backend selection
 
 Backends are selected at bucket-creation time via the config option
-`rgw_default_bucket_bilog_type` (`inindex` / `fifo`. default is `inindex`).
+`rgw_default_bucket_bilog_type` (`inindex` / `fifo`. default is `fifo`).
 The chosen type is stored as a `BucketLogType` in `bucket_info.layout.logs[0]`.
 Once written, the bucket uses that backend for its lifetime until explicitly migrated.
 
@@ -69,11 +69,15 @@ A central template method `RGWRados::with_bilog<OpType>()` selects the
 appropriate handler at the call site:
 
 ```
-is_inindex && log_data   → OpIssuer(log_data=true)  + BILogNopHandler
-is_inindex && !log_data  → OpIssuer(log_data=false) + BILogNopHandler
-is_fifo   && log_data    → OpIssuer(log_data=false) + RGWBILogUpdateBatch
-is_fifo   && !log_data   → OpIssuer(log_data=false) + BILogNopHandler
+is_inindex && log_data                     → OpIssuer(log_data=true)  + BILogNopHandler
+is_inindex && !log_data                    → OpIssuer(log_data=false) + BILogNopHandler
+is_fifo   && log_data && fifo_sync_enabled → OpIssuer(log_data=false) + RGWBILogUpdateBatch
+is_fifo   && (!log_data || !fifo_sync_enabled) → OpIssuer(log_data=false) + BILogNopHandler
 ```
+
+`fifo_sync_enabled` reflects `bucket_info.datasync_flag_enabled()`: a FIFO
+bucket with sync disabled falls through to the NOP handler even when
+`log_data` is set, since there's nothing to sync.
 
 `BILogNopHandler` is a NOP with the same interface as
 `RGWBILogUpdateBatch`.
@@ -90,7 +94,7 @@ buckets, the service layer builds markers of the form
 InIndex format.
 
 Multi-generation markers use the format
-`G{gen:020}@{inner_marker}` from `rgw_log_backing.h`.
+`("G{:0>20}@{}", gen_id, cursor)` from `rgw_log_backing.h`.
 
 ---
 
@@ -112,25 +116,14 @@ Multi-generation markers use the format
 - FIFO batch cache - `shared_ptr<RGWBILogFIFO>` cached in `RGWRados` by `(bucket_id, gen)`
 - New bucket FIFO start with `init_default_bucket_layout()` with configurable `rgw_default_bucket_bilog_type`
 - `commit_target_layout` preserves FIFO backend type through reshard
+- InIndex → FIFO migration on reshard - `commit_target_layout` upgrades an
+  InIndex bucket's next log generation to FIFO when
+  `rgw_default_bucket_bilog_type = fifo`, unless the zone doesn't need to log
+  data (`need_to_log_data()`). Buckets stay on InIndex until their next reshard.
 - basic `CORO_TEST_F` tests in `test/rgw/test_bilog.cc`
 
 ## Remaining Work
 
-### InIndex → FIFO migration
-Existing buckets created before `rgw_default_bucket_bilog_type = fifo` remain
-on InIndex indefinitely. Migration requires something similar to multi-generation
- `log_list` cursor that walks [InIndex, FIFO] in order using cursorgen used
- by datalog.
-
 ### Write batching
 
-Currently one FIFO push per bucket operation, Batching multiple entries into a single `fifo_push` call could be beneficial at high write rates. can it be
-made crash-consistent?
-
-###  Functional testing
-
-- multisite sync verification with FIFO-backed buckets
-- sync catch-up after zone outage
-- reshard of FIFO bucket with sync veriification
-- radosgw-admin bilog commands (`list`, `trim`, `status`)
-- upgrade path: InIndex bucket continues working after upgrade
+Currently one FIFO push per bucket operation, Batching multiple entries into a single `fifo_push` call could be beneficial at high write rates. It's scoped for later enhancement.

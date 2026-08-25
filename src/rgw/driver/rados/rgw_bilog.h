@@ -15,6 +15,8 @@
 #include <boost/asio/awaitable.hpp>
 #include <boost/asio/spawn.hpp>
 
+#include <fmt/format.h>
+
 #include "include/neorados/RADOS.hpp"
 #include "include/buffer.h"
 
@@ -39,9 +41,7 @@ inline std::string bilog_fifo_oid(std::string_view bucket_id,
                                    uint64_t log_gen,
                                    int shard_id)
 {
-  return std::string{bucket_id} + '.' +
-         std::to_string(log_gen) + '.' +
-         std::to_string(shard_id) + ".bilog";
+  return fmt::format("{}.{}.{}.bilog", bucket_id, log_gen, shard_id);
 }
 
 // per-bucket FIFO bilog: one LazyFIFO per bilog shard, stored in the log pool.
