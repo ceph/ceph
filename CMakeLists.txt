@@ -294,15 +294,8 @@ if(WITH_RBD AND LINUX)
 endif()
 
 # libnbd
-if(WITH_RBD AND NOT WIN32)
-  if(LINUX)
-    find_package(libnbd 1.0 REQUIRED)
-  else()
-    # librbd guards its NBD migration stream on HAVE_LIBNBD, so libnbd is only
-    # really mandatory where rbd-nbd is built.  There is no libnbd on Darwin
-    # (and Findlibnbd only looks for libnbd.so anyway).
-    find_package(libnbd 1.0)
-  endif()
+if(WITH_RBD AND NOT WIN32 AND NOT APPLE)
+  find_package(libnbd 1.0 REQUIRED)
   set(HAVE_LIBNBD ${LIBNBD_FOUND})
 endif()
 
