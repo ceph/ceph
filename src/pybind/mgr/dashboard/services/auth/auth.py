@@ -227,16 +227,19 @@ class JwtManager(object):
     def get_user(cls, token):
         try:
             dtoken = cls.decode_token(token)
-            if 'jti' in dtoken and not cls.is_blocklisted(dtoken['jti']):
-                user = AuthManager.get_user(dtoken['username'])
-                if 'iat' in dtoken and user.last_update <= dtoken['iat']:
-                    return user
-                cls.logger.debug(  # type: ignore
-                    "user info changed after token was issued, iat=%s last_update=%s",
-                    dtoken['iat'], user.last_update
-                )
+            if 'jti' in dtoken:
+                if not cls.is_blocklisted(dtoken['jti']):
+                    user = AuthManager.get_user(dtoken['username'])
+                    if 'iat' in dtoken and user.last_update <= dtoken['iat']:
+                        return user
+                    cls.logger.debug(  # type: ignore
+                        "user info changed after token was issued, iat=%s last_update=%s",
+                        dtoken['iat'], user.last_update
+                    )
+                else:
+                    cls.logger.debug('Token is block-listed')  # type: ignore
             else:
-                cls.logger.debug('Token is block-listed')  # type: ignore
+                cls.logger.debug('Missing jti claim in token')  # type: ignore
         except ExpiredSignatureError:
             cls.logger.debug("Token has expired")  # type: ignore
         except InvalidTokenError:
