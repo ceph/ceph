@@ -279,7 +279,8 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
-  if (size >= block_size) {
+  // the completion thread's stop wakeup reads two distinct blocks
+  if (size >= 2 * block_size) {
     r = _aio_start();
     if (r < 0) {
       goto out_fail;
@@ -575,7 +576,7 @@ int KernelDevice::_aio_start()
       }
       return r;
     }
-    aio_thread.create("bstore_aio");
+    aio_thread.create("bstore_aio", io_queue.get());
   }
   return 0;
 }
@@ -585,22 +586,33 @@ void KernelDevice::_aio_stop()
   if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
-
-    IOContext wakeup_ctx(cct, nullptr, false);
-    bufferlist bl;
-    aio_read(0, block_size, &bl, &wakeup_ctx);
-    aio_submit(&wakeup_ctx);
-
-    aio_thread.join();
-
-    if (cct->_conf->bdev_debug_aio) {
-      for (auto& i: wakeup_ctx.reads.running) {
-	debug_aio_unlink(i);
-      }
-    }
-
+    _aio_thread_wake(io_queue.get(), aio_thread);
     aio_stop = false;
     io_queue->shutdown();
+  }
+}
+
+// Stop one completion thread: unblock it from get_next_completed() by
+// submitting harmless reads, then join it.  Two reads, on distinct
+// blocks, so the batch neither takes the single-aio sync fast path
+// nor overlaps itself in the bdev_debug_inflight_ios tracking;
+// aio_submit() routes them to the ring this thread serves.  The
+// thread can exit on its poll timeout without ever reaping the
+// wakeup, so drain the queue afterwards until it is accounted for -
+// only then may the buffers go out of scope, and no stale interval is
+// left to trip the inflight tracking on a later stop cycle.
+void KernelDevice::_aio_thread_wake(io_queue_t *q, AioCompletionThread &thread)
+{
+  IOContext ioc(cct, nullptr, false);
+  bufferlist bl;
+  aio_read(0, block_size, &bl, &ioc);
+  aio_read(block_size, block_size, &bl, &ioc);
+  aio_submit(&ioc);
+
+  thread.join();
+
+  while (ioc.num_running.load() > 0) {
+    _reap_completions(q, cct->_conf->bdev_aio_poll_ms, 1);
   }
 }
 
@@ -728,7 +740,7 @@ void KernelDevice::_aio_check_completion(const char *caller, aio_t *aio,
   }
 }
 
-int KernelDevice::_reap_completions(int timeout_ms, int max)
+int KernelDevice::_reap_completions(io_queue_t *q, int timeout_ms, int max)
 {
   // max sizes the VLA below (and an io_event array of the same length
   // inside get_next_completed), so bound it regardless of what the
@@ -736,7 +748,7 @@ int KernelDevice::_reap_completions(int timeout_ms, int max)
   // the caller's next pass
   max = std::clamp(max, 1, REAP_BATCH_MAX);
   aio_t *aio[max];
-  int r = io_queue->get_next_completed(timeout_ms, aio, max);
+  int r = q->get_next_completed(timeout_ms, aio, max);
   if (r < 0) {
     derr << __func__ << " got " << cpp_strerror(r) << dendl;
     ceph_abort_msg("got unexpected error from io_getevents");
@@ -782,13 +794,13 @@ int KernelDevice::_reap_completions(int timeout_ms, int max)
   return r;
 }
 
-void KernelDevice::_aio_thread()
+void KernelDevice::_aio_thread(io_queue_t *q)
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    _reap_completions(cct->_conf->bdev_aio_poll_ms,
+    _reap_completions(q, cct->_conf->bdev_aio_poll_ms,
 		      cct->_conf->bdev_aio_reap_max);
     if (cct->_conf->bdev_debug_aio) {
       utime_t now = ceph_clock_now();
@@ -1044,13 +1056,11 @@ void KernelDevice::_aio_log_finish(
 // Callback-style IOContexts (txc data writes, deferred batches) are
 // not eligible: their callers do not wait, the pipeline consumes
 // their completions asynchronously.  Returns true if the io was
-// executed here.  (Never during _aio_stop: its wakeup ctx is a
-// single read that must reach the ring to unblock the completion
-// thread.)
+// executed here.
 bool KernelDevice::_aio_lone_waiter_sync(IOContext *ioc)
 {
 #if defined(HAVE_LIBAIO)
-  if (!aio || aio_stop || ioc->priv != nullptr ||
+  if (!aio || ioc->priv != nullptr ||
       ioc->num_pending.load() != 1) {
     return false;
   }
