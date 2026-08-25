@@ -585,7 +585,7 @@ void usage()
   cout << "                                 use together with --marker to paginate through versioned buckets\n";
   cout << "                                 example: --marker=obj1 --object-version=abc123def456\n";
   cout << "   --show-restore-stats          if the flag is in present it will show restores stats in the bucket stats command\n";
-  cout << "   --show-storage-classes        show per-storage-class size and object counts in bucket stats (requires index scan)\n";
+  cout << "   --show-storage-classes        show per-storage-class stats; scans entire bucket index (O(objects))\n";
   cout << "\n";
   generic_client_usage();
 }

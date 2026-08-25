@@ -923,6 +923,12 @@ Options
 
    Shows restore stats in a bucket stat command. Here the bucket name need be provided.
 
+.. option:: --show-storage-classes
+
+   Show per-storage-class size and object counts in bucket stats output.
+   Triggers a full index scan (O(n) in object count); intended for billing
+   or quota reporting, not real-time queries. Requires ``--bucket``.
+
 Quota Options
 =============
 

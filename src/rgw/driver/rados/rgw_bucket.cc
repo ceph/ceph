@@ -356,6 +356,7 @@ static void dump_bucket_usage(map<RGWObjCategory, RGWStorageStats>& stats, Forma
   formatter->close_section();
 }
 
+#ifdef WITH_RADOSGW_RADOS
 static void dump_storage_class_usage(
     const std::map<std::string, RGWStorageClassStats>& sc_stats,
     Formatter* formatter)
@@ -369,7 +370,6 @@ static void dump_storage_class_usage(
   formatter->close_section();
 }
 
-#ifdef WITH_RADOSGW_RADOS
 static void dump_index_check(map<RGWObjCategory, RGWStorageStats> existing_stats,
         map<RGWObjCategory, RGWStorageStats> calculated_stats,
         Formatter *formatter)
@@ -1645,10 +1645,11 @@ static int bucket_restore_stats(rgw::sal::Driver* driver,
   return 0;
 }
 
-// Scan the bucket index and aggregate sizes by storage class.
-// This is an O(objects) operation; only call when explicitly requested.
-// Works for all buckets including those created before this feature was added.
 #ifdef WITH_RADOSGW_RADOS
+// Scan the bucket index and aggregate sizes by storage class.
+// O(objects); only call when explicitly requested.
+// Uses the current index generation; during resharding, objects being
+// migrated may be temporarily undercounted. Consistent with read_stats behavior.
 static int read_storage_class_stats(
     const DoutPrefixProvider* dpp, optional_yield y,
     rgw::sal::RadosStore* rados_store,
@@ -1658,24 +1659,26 @@ static int read_storage_class_stats(
   RGWRados* store = rados_store->getRados();
   const RGWBucketInfo& bucket_info = bucket->get_info();
   const auto& index = bucket_info.get_current_index();
-  const int num_shards = std::max(1, (int)rgw::num_shards(index.layout.normal));
+  const uint32_t num_shards = std::max(1u, rgw::num_shards(index.layout.normal));
 
-  for (int shard = 0; shard < num_shards; ++shard) {
+  for (uint32_t shard = 0; shard < num_shards; ++shard) {
     RGWRados::BucketShard bs(store);
-    int ret = bs.init(dpp, bucket_info, index, shard, y);
+    int ret = bs.init(dpp, bucket_info, index, static_cast<int>(shard), y);
     if (ret < 0) {
-      ldpp_dout(dpp, -1) << "ERROR read_storage_class_stats: bs.init shard=" << shard
+      ldpp_dout(dpp, -1) << "ERROR: bs.init failed for shard=" << shard
                          << " ret=" << cpp_strerror(-ret) << dendl;
       return ret;
     }
 
     std::string marker;
-    bool is_truncated = true;
-    while (is_truncated) {
+    bool is_truncated = false;
+    do {
       std::list<rgw_cls_bi_entry> entries;
-      ret = store->bi_list(bs, "", marker, -1, &entries, &is_truncated, false, y);
+      // UINT32_MAX: cls_rgw caps the page size internally
+      ret = store->bi_list(bs, "", marker, std::numeric_limits<uint32_t>::max(),
+                           &entries, &is_truncated, false, y);
       if (ret < 0) {
-        ldpp_dout(dpp, -1) << "ERROR read_storage_class_stats: bi_list shard=" << shard
+        ldpp_dout(dpp, -1) << "ERROR: bi_list() failed for shard=" << shard
                            << " ret=" << cpp_strerror(-ret) << dendl;
         return ret;
       }
@@ -1689,7 +1692,7 @@ static int read_storage_class_stats(
         try {
           decode(dir_entry, iiter);
         } catch (const buffer::error& err) {
-          ldpp_dout(dpp, 0) << "WARNING read_storage_class_stats: failed to decode entry idx="
+          ldpp_dout(dpp, 0) << "WARNING: failed to decode bi entry idx="
                             << raw_entry.idx << ", skipping" << dendl;
           continue;
         }
@@ -1704,7 +1707,7 @@ static int read_storage_class_stats(
         s.size_utilized += dir_entry.meta.size;
         s.num_objects++;
       }
-    }
+    } while (is_truncated);
   }
   return 0;
 }
