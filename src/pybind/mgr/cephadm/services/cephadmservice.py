@@ -2343,6 +2343,7 @@ class CephadmAgent(CephService):
             self.mgr, spec, daemon_spec.daemon_type)
 
 
+
 def next_action_for_mgmt_stack_service(
     scheduled_action: utils.Action,
     daemon_type: Optional[str],

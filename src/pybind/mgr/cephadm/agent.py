@@ -18,7 +18,6 @@ from cephadm.services.service_registry import service_registry
 from cephadm.services.cephadmservice import CephadmAgent
 from cephadm.tlsobject_types import TLSCredentials
 from cephadm.utils import get_node_proxy_status_value
-import cephadm.cherrypy_compression_in
 
 from urllib.error import HTTPError, URLError
 from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping, IO, Tuple
