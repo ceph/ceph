@@ -138,5 +138,28 @@
   },
   "cypress-cucumber-preprocessor": {
     "stepDefinitions": "cypress/e2e/common"
+  },
+  "allowScripts": {
+    "cypress@12.17.4": true,
+    "esbuild@0.28.1": true,
+    "lmdb@3.4.2": true,
+    "msgpackr-extract@3.0.4": true,
+    "@parcel/watcher@2.6.0": true,
+    "@scarf/scarf": false,
+    "@carbon/charts": false,
+    "@carbon/colors": false,
+    "@carbon/feature-flags": false,
+    "@carbon/grid": false,
+    "@carbon/icons": false,
+    "@carbon/layout": false,
+    "@carbon/motion": false,
+    "@carbon/styles": false,
+    "@carbon/themes": false,
+    "@carbon/type": false,
+    "@carbon/utils-position": false,
+    "carbon-components-angular": false,
+    "core-js": false,
+    "cucumber-expressions": false,
+    "es5-ext": false
   }
 }
