@@ -76,8 +76,7 @@
             ],
             "i18nMissingTranslation": "ignore",
             "outputPath": {
-              "base": "dist",
-              "browser": ""
+              "base": "dist"
             },
             "prerender": false,
             "ssr": false,
