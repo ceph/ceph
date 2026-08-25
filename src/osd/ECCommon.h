@@ -1134,4 +1134,15 @@ int ec_sparse_finish_read(
     ceph::bufferlist *out_bl,
     DoutPrefixProvider *dpp);
 
+/**
+ * Compute the data and interval set to push to a recovering shard.
+ */
+void ec_recovery_compute_shard_push(
+    shard_extent_map_t &returned_data,
+    shard_id_t shard,
+    uint64_t chunk_size,
+    const interval_set<uint64_t> *shard_fae,
+    ceph::bufferlist &out_data,
+    interval_set<uint64_t> &out_data_included);
+
 } // namespace ECUtil
