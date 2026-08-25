@@ -1253,11 +1253,11 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                             fill_cache_cb_t &cb, uint32_t flags)
 {
-  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  int ret = FSEnt::fill_cache(dpp, y, cb, flags);
   if (ret < 0)
     return ret;
 
-  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  return Directory::fill_cache(dpp, y, cb, flags);
 }
 
 int VersionedDirectory::open(const DoutPrefixProvider* dpp)
@@ -1393,6 +1393,10 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
   if (ret < 0)
     return ret;
 
+  if (force) {
+    cur_version.reset();
+  }
+
   if (cur_version) {
     /* Already have a File for the current version, use it */
     ret = cur_version->stat(dpp);
@@ -1439,10 +1443,12 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
       uint16_t flags = 0;
       ceph::decode(flags, bl);
       if (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
-        ldpp_dout(dpp, 0) << "ERROR: a delete marker, returning ENOENT "
+        ldpp_dout(dpp, 0) << "INFO: found a delete marker, "
                           << get_name() << dendl;
-        cur_version.reset();
-        return -ENOENT;
+       // cur_version.reset();
+       // return -ENOENT;
+        curr_is_dm = true;
+        return 0;
       }
     }
   }
@@ -1717,6 +1723,7 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
     cur_version = std::move(f);
+    curr_is_dm = true;
     return 0;
   } else {
     /* Delete specific version */
@@ -1783,6 +1790,11 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     if (ret < 0) {
       return ret;
     }
+    ret = f->stat(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+
     ret = set_cur_version_ent(dpp, f.get());
     if (ret < 0) {
       return ret;
