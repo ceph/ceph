@@ -264,8 +264,8 @@ Build the Project
 ~~~~~~~~~~~~~~~~~
 
 Run ``npm run build`` to build the project. The build artifacts will be
-stored in the ``dist/`` directory. Use the ``--prod`` flag for a
-production build (``npm run build -- --prod``). Navigate to ``https://localhost:8443``.
+stored in the ``dist/browser/`` directory. Use the ``--configuration=production`` flag for a
+production build (``npm run build -- --configuration=production``). Navigate to ``https://localhost:8443``.
 
 Build the Code Documentation
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
