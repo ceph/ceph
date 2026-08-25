@@ -123,8 +123,9 @@ private:
 
 
 int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
-		   const char *endsnapname, bool whole_object,
-		   int fd, bool no_progress, int export_format)
+                      const char *endsnapname, uint64_t from_snap_id,
+                      uint64_t snap_id, bool whole_object, int fd,
+                      bool no_progress, int export_format)
 {
   int r;
   librbd::image_info_t info;
@@ -195,7 +196,14 @@ int do_export_diff_fd(librbd::Image& image, const char *fromsnapname,
   ExportDiffContext edc(&image, fd, info.size,
                         g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
                         no_progress, export_format);
-  r = image.diff_iterate2(fromsnapname, 0, info.size, true, whole_object,
+  uint32_t flags = RBD_DIFF_ITERATE_FLAG_INCLUDE_PARENT;
+  if (whole_object) {
+    flags |= RBD_DIFF_ITERATE_FLAG_WHOLE_OBJECT;
+  }
+  if (from_snap_id > CEPH_MAXSNAP) {
+    from_snap_id = 0;
+  }
+  r = image.diff_iterate3(from_snap_id, 0, info.size, flags,
                           &C_ExportDiff::export_diff_cb, (void *)&edc);
   if (r < 0) {
     goto out;
@@ -223,8 +231,9 @@ out:
 }
 
 int do_export_diff(librbd::Image& image, const char *fromsnapname,
-                const char *endsnapname, bool whole_object,
-                const char *path, bool no_progress)
+                   const char *endsnapname, uint64_t from_snap_id,
+                   uint64_t snap_id, bool whole_object, const char *path,
+                   bool no_progress)
 {
   int r;
   int fd;
@@ -236,7 +245,8 @@ int do_export_diff(librbd::Image& image, const char *fromsnapname,
   if (fd < 0)
     return -errno;
 
-  r = do_export_diff_fd(image, fromsnapname, endsnapname, whole_object, fd, no_progress, 1);
+  r = do_export_diff_fd(image, fromsnapname, endsnapname, from_snap_id,
+                        snap_id, whole_object, fd, no_progress, 1);
 
   if (fd != 1)
     close(fd);
@@ -257,9 +267,12 @@ void get_arguments_diff(po::options_description *positional,
                                      at::ARGUMENT_MODIFIER_SOURCE);
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
+  at::add_snap_id_option(options, at::ARGUMENT_MODIFIER_DEST);
   options->add_options()
     (at::FROM_SNAPSHOT_NAME.c_str(), po::value<std::string>(),
      "snapshot starting point")
+    (at::FROM_SNAPSHOT_ID.c_str(), po::value<uint64_t>(),
+     "snapshot starting id")
     (at::WHOLE_OBJECT.c_str(), po::bool_switch(), "compare whole object");
   at::add_no_progress_option(options);
 }
@@ -290,18 +303,79 @@ int execute_diff(const po::variables_map &vm,
     from_snap_name = vm[at::FROM_SNAPSHOT_NAME].as<std::string>();
   }
 
+  uint64_t from_snap_id = CEPH_NOSNAP;
+  if (vm.count(at::FROM_SNAPSHOT_ID)) {
+    if (!from_snap_name.empty()) {
+      std::cerr << "--from-snap and --from-snap-id can't be set at the same time"
+        << std::endl;
+      return -EINVAL;
+    }
+    from_snap_id = vm[at::FROM_SNAPSHOT_ID].as<uint64_t>();
+    if (from_snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --from-snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
+  uint64_t snap_id = CEPH_NOSNAP;
+  if (vm.count(at::SNAPSHOT_ID)) {
+    if (!snap_name.empty()) {
+      std::cerr << "--snap and --snap-id can't be set at the same time"
+        << std::endl;
+      return -EINVAL;
+    }
+    snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
+    if (snap_id >= CEPH_MAXSNAP) {
+      std::cerr << "invalid --snap-id" << std::endl;
+      return -EINVAL;
+    }
+  }
+
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
-                                 snap_name, true, &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name,
+                                 image_name, "",
+                                 snap_name, true, &rados,
+                                 &io_ctx, &image, snap_id);
   if (r < 0) {
     return r;
+  }
+
+  if (!from_snap_name.empty()) {
+    ceph_assert(from_snap_id == 0);
+    r = image.snap_get_id(from_snap_name, &from_snap_id);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (!snap_name.empty()) {
+    ceph_assert(snap_id == CEPH_NOSNAP);
+    r = image.snap_get_id(snap_name, &snap_id);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (from_snap_id != CEPH_NOSNAP) {
+    r = image.snap_get_name(from_snap_id, &from_snap_name);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (snap_id != CEPH_NOSNAP) {
+    r = image.snap_get_name(snap_id, &snap_name);
+    if (r < 0) {
+      return r;
+    }
   }
 
   r = do_export_diff(image,
                      from_snap_name.empty() ? nullptr : from_snap_name.c_str(),
                      snap_name.empty() ? nullptr : snap_name.c_str(),
+                     from_snap_id, snap_id,
                      vm[at::WHOLE_OBJECT].as<bool>(), path.c_str(),
                      vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
@@ -499,17 +573,23 @@ static int do_export_v2(librbd::Image& image, librbd::image_info_t &info, int fd
   }
 
   const char *last_snap = NULL;
+  uint64_t last_snap_id = CEPH_NOSNAP;
   for (size_t i = 0; i < snaps.size(); ++i) {
     utils::snap_set(image, snaps[i].name.c_str());
-    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(), false, fd, true, 2);
+    utils::snap_set(image, snaps[i].id);
+    r = do_export_diff_fd(image, last_snap, snaps[i].name.c_str(),
+                          last_snap_id, snaps[i].id, false, fd, true, 2);
     if (r < 0) {
       return r;
     }
     pc.update_progress(i, snaps.size() + 1);
     last_snap = snaps[i].name.c_str();
+    last_snap_id = snaps[i].id;
   }
   utils::snap_set(image, std::string(""));
-  r = do_export_diff_fd(image, last_snap, nullptr, false, fd, true, 2);
+  utils::snap_set(image, CEPH_NOSNAP);
+  r = do_export_diff_fd(image, last_snap, nullptr, last_snap_id,
+                        CEPH_NOSNAP, false, fd, true, 2);
   if (r < 0) {
     return r;
   }
