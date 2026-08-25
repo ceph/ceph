@@ -10868,7 +10868,6 @@ int RGWRados::process_lc(const std::unique_ptr<rgw::sal::Bucket>& optional_bucke
     });
   lc.get_io_context().run(); // Run to completion
 
-  lc.stop_processor(); // sets down_flag, but returns immediately
   return ret;
 }
 

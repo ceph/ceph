@@ -478,7 +478,7 @@ options:
 - name: rgw_lc_max_threads
   type: int
   level: advanced
-  desc: Number of lifecycle worker threads will be run in parallel
+  desc: Number of lifecycle worker threads that will be run in parallel
   long_desc: Number of lifecycle worker threads that will run in parallel--used to permit >1
     bucket/index shards to be processed simultaneously
   fmt_desc: This option specifies the number of lifecycle worker threads

@@ -319,7 +319,11 @@ void RGWLC::LCWorker::run(boost::asio::yield_context yield) {
     ldpp_dout(dpp, 5) << "schedule life cycle next start time="
 		      << rgw_to_asctime(next) << " worker=" << ix << dendl;
     timer.expires_after(std::chrono::seconds(secs));
-    timer.async_wait(yield);
+    boost::system::error_code ec; // error-code form to avoid exception caused by timer.cancel()
+    timer.async_wait(yield[ec]);
+    if (ec == boost::asio::error::operation_aborted) {
+      break;
+    }
   } while (!lc->going_down());
 }
 
@@ -2327,6 +2331,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   return ret;
 }
 
+#if 0
 void RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
 			     time_t stop_at, bool once)
 {
@@ -2342,6 +2347,7 @@ void RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
         }
       });
 }
+#endif
 
 class SimpleBackoff
 {
@@ -2378,7 +2384,7 @@ public:
 
 int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 			  rgw::sal::LCEntry& entry, int& result,
-			  LCWorker* worker)
+			  LCWorker* worker, boost::asio::yield_context yield)
 {
   const ceph::timespan lock_duration =
       std::chrono::seconds(cct->_conf->rgw_lc_lock_max_time);
@@ -2391,7 +2397,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 	  << dendl;
 
   do {
-    int ret = lock->try_lock(this, lock_duration, null_yield);
+    int ret = lock->try_lock(this, lock_duration, yield);
     if (ret == -EBUSY || ret == -EEXIST) {
       /* already locked by another lc processor */
       ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to acquire lock on "
@@ -2409,7 +2415,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       /* XXXX are we SURE the only way result could == ENOENT is when
        * there is no such bucket?  It is currently the value returned
        * from bucket_lc_process(...) */
-      ret = sal_lc->rm_entry(this, null_yield, obj_names[index], entry);
+      ret = sal_lc->rm_entry(this, yield, obj_names[index], entry);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to remove entry "
             << obj_names[index] << dendl;
@@ -2421,13 +2427,13 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
       entry.status = lc_complete;
     }
 
-    ret = sal_lc->set_entry(this, null_yield, obj_names[index], entry);
+    ret = sal_lc->set_entry(this, yield, obj_names[index], entry);
     if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to set entry on "
           << obj_names[index] << dendl;
     }
 clean:
-    lock->unlock(this, null_yield);
+    lock->unlock(this, yield);
     ldpp_dout(this, 20) << "RGWLC::bucket_lc_post() unlock "
 			<< obj_names[index] << dendl;
     return 0;
@@ -2510,7 +2516,7 @@ static std::string get_bucket_lc_key(const rgw_bucket& bucket){
 int RGWLC::process(LCWorker* worker,
 		   const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
 		   bool once,
-                   optional_yield yield)
+                   boost::asio::yield_context yield)
 {
   int ret = 0;
   int max_secs = cct->_conf->rgw_lc_lock_max_time;
@@ -2594,7 +2600,7 @@ struct LCLockAdapter {
 int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 			  const std::string& bucket_entry_marker,
 			  bool once,
-                          optional_yield yield)
+                          boost::asio::yield_context yield)
 {
   ldpp_dout(this, 5) << "RGWLC::process_bucket(): ENTER: "
 	  << "index: " << index << " worker ix: " << worker->ix
@@ -2666,10 +2672,10 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 		     << dendl;
 
   lock.unlock();
-  bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
+  ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once, yield);
   ldpp_dout(this, 5) << "RGWLC::process_bucket(): END entry 2: " << entry
-    << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
-  bucket_lc_post(index, max_lock_secs, entry, ret, worker);
+    << " index: " << index << " worker ix: " << worker->ix << dendl;
+  bucket_lc_post(index, max_lock_secs, entry, ret, worker, yield);
 
   return ret;
 } /* RGWLC::process_bucket */
@@ -2717,7 +2723,7 @@ inline int RGWLC::advance_head(const std::string& lc_shard,
 			       rgw::sal::LCHead& head,
 			       const rgw::sal::LCEntry& entry,
 			       time_t start_date,
-                               optional_yield yield)
+                               boost::asio::yield_context yield)
 {
   int ret{0};
   rgw::sal::LCEntry next_entry;
@@ -2746,7 +2752,8 @@ exit:
 } /* advance head */
 
 inline int RGWLC::check_if_shard_done(const std::string& lc_shard,
-				rgw::sal::LCHead& head, int worker_ix)
+				rgw::sal::LCHead& head, int worker_ix,
+                                boost::asio::yield_context yield)
 {
   int ret{0};
 
@@ -2757,7 +2764,7 @@ inline int RGWLC::check_if_shard_done(const std::string& lc_shard,
        << lc_shard << " worker=" << worker_ix
        << dendl;
       head.shard_rollover_date = ceph_clock_now();
-      ret = sal_lc->put_head(this, null_yield, lc_shard, head);
+      ret = sal_lc->put_head(this, yield, lc_shard, head);
       if (ret < 0) {
         ldpp_dout(this, 0) << "RGWLC::process() failed to put head "
                            << lc_shard
@@ -2772,7 +2779,7 @@ inline int RGWLC::update_head(const std::string& lc_shard,
 			       rgw::sal::LCHead& head,
 			       rgw::sal::LCEntry& entry,
 			       time_t start_date, int worker_ix,
-                               optional_yield yield)
+                               boost::asio::yield_context yield)
 {
   int ret{0};
 
@@ -2784,7 +2791,7 @@ inline int RGWLC::update_head(const std::string& lc_shard,
 	  goto exit;
 	}
 
-  ret = check_if_shard_done(lc_shard, head, worker_ix);
+  ret = check_if_shard_done(lc_shard, head, worker_ix, yield);
   if (ret < 0) {
       ldpp_dout(this, 0) << "RGWLC::update_head() failed to check if shard is done "
 		         << lc_shard
@@ -2796,7 +2803,7 @@ exit:
 }
 
 int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
-		   bool once, optional_yield yield)
+		   bool once, boost::asio::yield_context yield)
 {
   int ret{0};
   const auto& lc_shard = obj_names[index];
@@ -2964,12 +2971,10 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     /* drop lock so other instances can make progress while this
      * bucket is being processed */
     lock->unlock(this, yield);
-    bucket_lc_process(entry.bucket, worker, thread_stop_at(), once);
+    ret = bucket_lc_process(entry.bucket, worker, thread_stop_at(), once, yield);
     ldpp_dout(this, 5) << "RGWLC::process(): END entry 2: " << entry
-      << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
+      << " index: " << index << " worker ix: " << worker->ix << dendl;
 
-    /* postamble */
-    //bucket_lc_post(index, max_lock_secs, entry, ret, worker);
     if (! shard_lock.wait_backoff(lock_lambda)) {
       ldpp_dout(this, 0) << "RGWLC::process(): failed to acquire lock on "
 			 << lc_shard << " after " << shard_lock.get_retries()
@@ -3004,7 +3009,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       }
     }
 
-    if (check_if_shard_done(lc_shard, head, worker->ix) != 0) {
+    if (check_if_shard_done(lc_shard, head, worker->ix, yield) != 0) {
       break;
     }
   } while(1 && !once && !going_down());
@@ -3154,10 +3159,6 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 
   return secs > 0 ? secs : secs + secs_in_a_day;
 }
-
-RGWLC::LCWorker::~LCWorker()
-{
-} /* ~LCWorker */
 
 list<RGWLifecycleConfiguration> RGWLifecycleConfiguration::generate_test_instances()
 {

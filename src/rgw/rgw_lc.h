@@ -605,8 +605,6 @@ public:
     time_t lc_start_time;
 
    public:
-    using lock_guard = std::lock_guard<std::mutex>;
-    using unique_lock = std::unique_lock<std::mutex>;
 
     LCWorker(const DoutPrefixProvider* dpp, CephContext *_cct, RGWLC *_lc,
 	     int ix);
@@ -621,7 +619,6 @@ public:
     bool should_work(utime_t& now);
     int schedule_next_start_time(utime_t& start, utime_t& now);
     std::set<std::string>& get_cloud_targets() { return cloud_targets; }
-    virtual ~LCWorker();
 
     friend class RGWRados;
     friend class RGWLC;
@@ -641,23 +638,23 @@ public:
   int process(LCWorker* worker,
 	      const std::unique_ptr<rgw::sal::Bucket>& optional_bucket,
 	      bool once,
-              optional_yield yield);
+              boost::asio::yield_context yield);
   int advance_head(const std::string& lc_shard,
 		   rgw::sal::LCHead& head,
 		   const rgw::sal::LCEntry& entry,
 		   time_t start_date,
-                   optional_yield yield);
+                   boost::asio::yield_context yield);
   int check_if_shard_done(const std::string& lc_shard,
  			 rgw::sal::LCHead& head,
-       int worker_ix);
+                         int worker_ix, boost::asio::yield_context yield);
   int update_head(const std::string& lc_shard,
 			 rgw::sal::LCHead& head,
 			 rgw::sal::LCEntry& entry,
 			 time_t start_date, int worker_ix,
-                         optional_yield yield);
-  int process(int index, int max_lock_secs, LCWorker* worker, bool once, optional_yield yield);
+                         boost::asio::yield_context yield);
+  int process(int index, int max_lock_secs, LCWorker* worker, bool once, boost::asio::yield_context yield);
   int process_bucket(int index, int max_lock_secs, LCWorker* worker,
-		     const std::string& bucket_entry_marker, bool once, optional_yield yield);
+		     const std::string& bucket_entry_marker, bool once, boost::asio::yield_context yield);
   bool expired_session(time_t started, time_t lc_start_time);
   time_t thread_stop_at();
   int list_lc_progress(std::string& marker, uint32_t max_entries,
@@ -665,10 +662,10 @@ public:
 		       int& index);
   int bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
 			bool once, boost::asio::yield_context yield);
-  void bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
-			bool once);
+//  void bucket_lc_process(std::string& shard_id, LCWorker* worker, time_t stop_at,
+//			bool once);
   int bucket_lc_post(int index, int max_lock_sec,
-		     rgw::sal::LCEntry& entry, int& result, LCWorker* worker);
+		     rgw::sal::LCEntry& entry, int& result, LCWorker* worker, boost::asio::yield_context yield);
   bool going_down();
   void start_processor();
   void stop_processor();
