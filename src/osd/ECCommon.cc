@@ -1887,33 +1887,18 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
           }
         }
 
-        op.returned_data->get_sparse_buffer(rel_shard, pop.data,
-                                            pop.data_included, force_alloc_ptr);
-        ceph_assert(pop.data.length() == pop.data_included.size());
+        ECUtil::ec_recovery_compute_shard_push(*op.returned_data, rel_shard,
+                                               sinfo.get_chunk_size(),
+                                               force_alloc_ptr,
+                                               pop.data, pop.data_included);
 
-        if (force_alloc_ptr && !force_alloc_ptr->empty()) {
-          interval_set<uint64_t> missing_fae;
-          missing_fae.union_of(*force_alloc_ptr);
-          interval_set<uint64_t> covered;
-          covered.intersection_of(missing_fae, pop.data_included);
-          missing_fae.subtract(covered);
-          if (!missing_fae.empty()) {
-            dout(20) << __func__ << ": shard=" << pg_shard.shard
-                     << " synthesising zeros for missing force-allocated extents "
-                     << missing_fae << dendl;
-            for (auto [off, len] : missing_fae) {
-              pop.data_included.insert(off, len);
-              pop.data.append_zero(len);
-            }
-          }
-        }
-        ceph_assert(pop.data.length() == pop.data_included.size());
         if (is_cross_zone(get_parent(), sinfo, pg_shard)) {
           get_parent()->get_perf_logger().inc(l_osd_stretch_cross_zone_recovery_push_ops);
           get_parent()->get_perf_logger().inc(l_osd_stretch_cross_zone_recovery_push_bytes,
                                           pop.data.length());
           op.cross_zone_recovery_push_dispatch_time[pg_shard] = ceph_clock_now();
         }
+
         dout(10) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
                  << ", before_progress=" << op.recovery_progress
