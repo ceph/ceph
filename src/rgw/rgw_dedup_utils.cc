@@ -25,14 +25,116 @@ namespace rgw::dedup {
     else if (dedup_type == dedup_req_type_t::DEDUP_TYPE_ESTIMATE) {
       out << "DEDUP_TYPE_ESTIMATE";
     }
-    else if (dedup_type == dedup_req_type_t::DEDUP_TYPE_FULL) {
-      out << "DEDUP_TYPE_FULL";
+    else if (dedup_type == dedup_req_type_t::DEDUP_TYPE_EXEC) {
+      out << "DEDUP_TYPE_EXEC (full dedup)";
     }
     else {
       out << "\n*** unexpected dedup_type ***\n";
     }
 
     return out;
+  }
+
+  //---------------------------------------------------------------------------
+  void validate_max_calls_offset()
+  {
+    // max_calls must be the first data member to guarantee 8 Bytes alignment
+    // this will allow us to avoid using std::atomic (which is expensive)
+    static_assert(offsetof(Throttle, max_calls) == 0);
+  }
+
+  //---------------------------------------------------------------------------
+  void encode(const Throttle& t, ceph::bufferlist& bl)
+  {
+    ENCODE_START(1, 1, bl);
+    encode(t.get_max_calls_per_second(), bl);
+    ENCODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
+  void decode(Throttle& t, ceph::bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    size_t max_calls_per_sec;
+    decode(max_calls_per_sec, bl);
+    t.set_max_calls_per_sec(max_calls_per_sec);
+    DECODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const throttle_action_t& msg)
+  {
+    if (msg.op_type == BUCKET_INDEX_OP) {
+      out << "Set Bucket Index Throttling to ";
+      if (msg.limit) {
+        out << msg.limit << " IOPS";
+      }
+      else {
+        out << "unlimited IOPS";
+      }
+    }
+    else if (msg.op_type == METADATA_ACCESS_OP) {
+      out << "Set Metadata Throttling to ";
+      if (msg.limit) {
+        out << msg.limit << " IOPS";
+      }
+      else {
+        out << "unlimited IOPS";
+      }
+    }
+    else if (msg.op_type == DATA_READ_WRITE_OP) {
+      out << "Set Read/Write Throttling to " << msg.limit << " MB/sec";
+    }
+    else {
+      out << "\n*** unexpected throttling type ***\n";
+    }
+
+    return out;
+  }
+
+  //---------------------------------------------------------------------------
+  std::ostream& operator<<(std::ostream &out, const throttle_msg_t& msg)
+  {
+    for (auto action : msg.vec) {
+      out << action << " :: ";
+    }
+    return out;
+  }
+
+  //---------------------------------------------------------------------------
+  void encode(const throttle_action_t& m, ceph::bufferlist& bl)
+  {
+    ENCODE_START(1, 1, bl);
+    encode((int)m.op_type, bl);
+    encode(m.limit, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
+  void decode(throttle_action_t& m, ceph::bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    int tmp;
+    decode(tmp, bl);
+    m.op_type = (op_type_t)tmp;
+    decode(m.limit, bl);
+    DECODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
+  void encode(const throttle_msg_t& m, ceph::bufferlist& bl)
+  {
+    ENCODE_START(1, 1, bl);
+    encode(m.vec, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  //---------------------------------------------------------------------------
+  void decode(throttle_msg_t& m, ceph::bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    decode(m.vec, bl);
+    DECODE_FINISH(bl);
   }
 
   //---------------------------------------------------------------------------
@@ -244,6 +346,7 @@ namespace rgw::dedup {
     "URGENT_MSG_PASUE",
     "URGENT_MSG_RESUME",
     "URGENT_MSG_RESTART",
+    "URGENT_MSG_THROTTLE",
     "URGENT_MSG_INVALID"
   };
 
@@ -266,6 +369,9 @@ namespace rgw::dedup {
     this->egress_records += other.egress_records;
     this->egress_blocks += other.egress_blocks;
     this->egress_slabs += other.egress_slabs;
+    this->write_slab_failure += other.write_slab_failure;
+    this->bidx_throttle_sleep_events += other.bidx_throttle_sleep_events;
+    this->bidx_throttle_sleep_time_usec += other.bidx_throttle_sleep_time_usec;
     this->single_part_objs += other.single_part_objs;
     this->multipart_objs += other.multipart_objs;
     this->small_multipart_obj += other.small_multipart_obj;
@@ -302,22 +408,34 @@ namespace rgw::dedup {
 
     {
       Formatter::ObjectSection notify(*f, "notify");
+      if (this->bidx_throttle_sleep_events) {
+        f->dump_unsigned("Bucket-Index Throttle Sleep Events",
+                         this->bidx_throttle_sleep_events);
+        f->dump_unsigned("Bucket-Index Throttle Sleep Time (sec)",
+                         this->bidx_throttle_sleep_time_usec/MICROSECONDS_PER_SECOND);
+      }
 
-      if(this->non_default_storage_class_objs) {
+      if (this->non_default_storage_class_objs) {
         f->dump_unsigned("non default storage class objs",
                          this->non_default_storage_class_objs);
         f->dump_unsigned("non default storage class objs bytes",
                          this->non_default_storage_class_objs_bytes);
       }
       else {
-        ceph_assert(this->default_storage_class_objs == this->ingress_obj);
-        ceph_assert(this->default_storage_class_objs_bytes == this->ingress_obj_bytes);
+        if (this->default_storage_class_objs != this->ingress_obj) {
+          f->dump_unsigned("default storage class objs",
+                           this->default_storage_class_objs);
+        }
+        if (this->default_storage_class_objs_bytes != this->ingress_obj_bytes) {
+          f->dump_unsigned("default storage class objs bytes",
+                           this->default_storage_class_objs_bytes);
+        }
       }
     }
 
     {
       Formatter::ObjectSection skipped(*f, "skipped");
-      if(this->ingress_skip_too_small) {
+      if (this->ingress_skip_too_small) {
         f->dump_unsigned("Ingress skip: too small objs",
                          this->ingress_skip_too_small);
         f->dump_unsigned("Ingress skip: too small bytes",
@@ -334,7 +452,10 @@ namespace rgw::dedup {
 
     {
       Formatter::ObjectSection failed(*f, "failed");
-      if(this->ingress_corrupted_etag) {
+      if (this->write_slab_failure) {
+        f->dump_unsigned("Write SLAB failures", this->write_slab_failure);
+      }
+      if (this->ingress_corrupted_etag) {
         f->dump_unsigned("Corrupted ETAG", this->ingress_corrupted_etag);
       }
     }
@@ -360,6 +481,9 @@ namespace rgw::dedup {
     encode(w.egress_records, bl);
     encode(w.egress_blocks, bl);
     encode(w.egress_slabs, bl);
+    encode(w.write_slab_failure, bl);
+    encode(w.bidx_throttle_sleep_events, bl);
+    encode(w.bidx_throttle_sleep_time_usec, bl);
 
     encode(w.single_part_objs, bl);
     encode(w.multipart_objs, bl);
@@ -391,6 +515,9 @@ namespace rgw::dedup {
     decode(w.egress_records, bl);
     decode(w.egress_blocks, bl);
     decode(w.egress_slabs, bl);
+    decode(w.write_slab_failure, bl);
+    decode(w.bidx_throttle_sleep_events, bl);
+    decode(w.bidx_throttle_sleep_time_usec, bl);
     decode(w.single_part_objs, bl);
     decode(w.multipart_objs, bl);
     decode(w.small_multipart_obj, bl);
@@ -413,6 +540,7 @@ namespace rgw::dedup {
   {
     this->small_objs_stat               += other.small_objs_stat;
     this->big_objs_stat                 += other.big_objs_stat;
+    this->ingress_slabs                 += other.ingress_slabs;
     this->ingress_failed_load_bucket    += other.ingress_failed_load_bucket;
     this->ingress_failed_get_object     += other.ingress_failed_get_object;
     this->ingress_failed_get_obj_attrs  += other.ingress_failed_get_obj_attrs;
@@ -432,15 +560,15 @@ namespace rgw::dedup {
     this->skipped_source_record   += other.skipped_source_record;
     this->duplicate_records       += other.duplicate_records;
     this->size_mismatch           += other.size_mismatch;
-    this->sha256_mismatch         += other.sha256_mismatch;
+    this->hash_mismatch           += other.hash_mismatch;
     this->failed_src_load         += other.failed_src_load;
     this->failed_rec_load         += other.failed_rec_load;
     this->failed_block_load       += other.failed_block_load;
 
-    this->valid_sha256_attrs      += other.valid_sha256_attrs;
-    this->invalid_sha256_attrs    += other.invalid_sha256_attrs;
-    this->set_sha256_attrs        += other.set_sha256_attrs;
-    this->skip_sha256_cmp         += other.skip_sha256_cmp;
+    this->valid_hash_attrs        += other.valid_hash_attrs;
+    this->invalid_hash_attrs      += other.invalid_hash_attrs;
+    this->set_hash_attrs          += other.set_hash_attrs;
+    this->skip_hash_cmp           += other.skip_hash_cmp;
 
     this->set_shared_manifest_src += other.set_shared_manifest_src;
     this->loaded_objects          += other.loaded_objects;
@@ -451,6 +579,8 @@ namespace rgw::dedup {
     this->dup_head_bytes          += other.dup_head_bytes;
 
     this->failed_dedup            += other.failed_dedup;
+    this->md_throttle_sleep_events    += other.md_throttle_sleep_events;
+    this->md_throttle_sleep_time_usec += other.md_throttle_sleep_time_usec;
     this->failed_table_load       += other.failed_table_load;
     this->failed_map_overflow     += other.failed_map_overflow;
     return *this;
@@ -476,6 +606,7 @@ namespace rgw::dedup {
 
       f->dump_unsigned("Total processed objects", this->processed_objects);
       f->dump_unsigned("Loaded objects", this->loaded_objects);
+      f->dump_unsigned("Ingress Slabs", this->ingress_slabs);
       f->dump_unsigned("Set Shared-Manifest SRC", this->set_shared_manifest_src);
       f->dump_unsigned("Deduped Obj (this cycle)", this->deduped_objects);
       f->dump_unsigned("Deduped Bytes(this cycle)", this->deduped_objects_bytes);
@@ -507,6 +638,12 @@ namespace rgw::dedup {
 
     {
       Formatter::ObjectSection notify(*f, "notify");
+      if (this->md_throttle_sleep_events) {
+        f->dump_unsigned("Metadata Throttle Sleep Events", this->md_throttle_sleep_events);
+        f->dump_unsigned("Metadata Throttle Sleep Time (sec)",
+                         this->md_throttle_sleep_time_usec/MICROSECONDS_PER_SECOND);
+      }
+
       if (this->failed_table_load) {
         f->dump_unsigned("Failed Table Load", this->failed_table_load);
       }
@@ -514,15 +651,15 @@ namespace rgw::dedup {
         f->dump_unsigned("Failed Remap Overflow", this->failed_map_overflow);
       }
 
-      f->dump_unsigned("Valid SHA256 attrs", this->valid_sha256_attrs);
-      f->dump_unsigned("Invalid SHA256 attrs", this->invalid_sha256_attrs);
+      f->dump_unsigned("Valid HASH attrs", this->valid_hash_attrs);
+      f->dump_unsigned("Invalid HASH attrs", this->invalid_hash_attrs);
 
-      if (this->set_sha256_attrs) {
-        f->dump_unsigned("Set SHA256", this->set_sha256_attrs);
+      if (this->set_hash_attrs) {
+        f->dump_unsigned("Set HASH", this->set_hash_attrs);
       }
 
-      if (this->skip_sha256_cmp) {
-        f->dump_unsigned("Can't run SHA256 compare", this->skip_sha256_cmp);
+      if (this->skip_hash_cmp) {
+        f->dump_unsigned("Can't run HASH compare", this->skip_hash_cmp);
       }
     }
 
@@ -582,8 +719,8 @@ namespace rgw::dedup {
 
     {
       Formatter::ObjectSection logical_failures(*f, "logical failures");
-      if (this->sha256_mismatch) {
-        f->dump_unsigned("SHA256 mismatch", this->sha256_mismatch);
+      if (this->hash_mismatch) {
+        f->dump_unsigned("HASH mismatch", this->hash_mismatch);
       }
       if (this->duplicate_records) {
         f->dump_unsigned("Duplicate SRC/TGT", this->duplicate_records);
@@ -601,6 +738,7 @@ namespace rgw::dedup {
 
     encode(m.small_objs_stat, bl);
     encode(m.big_objs_stat, bl);
+    encode(m.ingress_slabs, bl);
     encode(m.ingress_failed_load_bucket, bl);
     encode(m.ingress_failed_get_object, bl);
     encode(m.ingress_failed_get_obj_attrs, bl);
@@ -620,15 +758,15 @@ namespace rgw::dedup {
     encode(m.skipped_source_record, bl);
     encode(m.duplicate_records, bl);
     encode(m.size_mismatch, bl);
-    encode(m.sha256_mismatch, bl);
+    encode(m.hash_mismatch, bl);
     encode(m.failed_src_load, bl);
     encode(m.failed_rec_load, bl);
     encode(m.failed_block_load, bl);
 
-    encode(m.valid_sha256_attrs, bl);
-    encode(m.invalid_sha256_attrs, bl);
-    encode(m.set_sha256_attrs, bl);
-    encode(m.skip_sha256_cmp, bl);
+    encode(m.valid_hash_attrs, bl);
+    encode(m.invalid_hash_attrs, bl);
+    encode(m.set_hash_attrs, bl);
+    encode(m.skip_hash_cmp, bl);
     encode(m.set_shared_manifest_src, bl);
 
     encode(m.loaded_objects, bl);
@@ -638,6 +776,8 @@ namespace rgw::dedup {
     encode(m.deduped_objects_bytes, bl);
     encode(m.dup_head_bytes, bl);
     encode(m.failed_dedup, bl);
+    encode(m.md_throttle_sleep_events, bl);
+    encode(m.md_throttle_sleep_time_usec, bl);
     encode(m.failed_table_load, bl);
     encode(m.failed_map_overflow, bl);
 
@@ -651,6 +791,7 @@ namespace rgw::dedup {
     DECODE_START(1, bl);
     decode(m.small_objs_stat, bl);
     decode(m.big_objs_stat, bl);
+    decode(m.ingress_slabs, bl);
     decode(m.ingress_failed_load_bucket, bl);
     decode(m.ingress_failed_get_object, bl);
     decode(m.ingress_failed_get_obj_attrs, bl);
@@ -670,15 +811,15 @@ namespace rgw::dedup {
     decode(m.skipped_source_record, bl);
     decode(m.duplicate_records, bl);
     decode(m.size_mismatch, bl);
-    decode(m.sha256_mismatch, bl);
+    decode(m.hash_mismatch, bl);
     decode(m.failed_src_load, bl);
     decode(m.failed_rec_load, bl);
     decode(m.failed_block_load, bl);
 
-    decode(m.valid_sha256_attrs, bl);
-    decode(m.invalid_sha256_attrs, bl);
-    decode(m.set_sha256_attrs, bl);
-    decode(m.skip_sha256_cmp, bl);
+    decode(m.valid_hash_attrs, bl);
+    decode(m.invalid_hash_attrs, bl);
+    decode(m.set_hash_attrs, bl);
+    decode(m.skip_hash_cmp, bl);
     decode(m.set_shared_manifest_src, bl);
 
     decode(m.loaded_objects, bl);
@@ -688,6 +829,8 @@ namespace rgw::dedup {
     decode(m.deduped_objects_bytes, bl);
     decode(m.dup_head_bytes, bl);
     decode(m.failed_dedup, bl);
+    decode(m.md_throttle_sleep_events, bl);
+    decode(m.md_throttle_sleep_time_usec, bl);
     decode(m.failed_table_load, bl);
     decode(m.failed_map_overflow, bl);
 
