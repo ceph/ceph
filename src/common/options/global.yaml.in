@@ -426,10 +426,18 @@ options:
 - name: fatal_signal_handlers
   type: bool
   level: advanced
-  desc: Whether to register signal handlers for SIGABRT etc. that dump a stack trace
-  long_desc: This is normally true for daemons and false for libraries.
-  fmt_desc: If set, we will install signal handlers for SEGV, ABRT, BUS, ILL,
-    FPE, XCPU, XFSZ, SYS signals to generate a useful log message
+  desc: Install fatal-signal handlers that log a stack trace.
+  long_desc: If set, Ceph installs handlers for the SEGV, ABRT, BUS, ILL, FPE, XCPU,
+    XFSZ, and SYS signals to emit a useful log message (including a stack trace). Enabled
+    by default, but the handlers are installed only by global_init(), so they apply
+    to daemons and CLI tools; code that embeds Ceph as a library (for example librados)
+    never reaches that path and installs no handlers regardless of this setting.
+  fmt_desc: If set, Ceph installs handlers for the ``SEGV``, ``ABRT``, ``BUS``, ``ILL``,
+    ``FPE``, ``XCPU``, ``XFSZ``, and ``SYS`` signals to emit a useful log message (including
+    a stack trace). Enabled by default, but the handlers are installed only by ``global_init()``,
+    so they apply to daemons and CLI tools; code that embeds Ceph as a library (for
+    example ``librados``) never reaches that path and installs no handlers regardless
+    of this setting.
   default: true
   tags:
   - service
@@ -529,11 +537,13 @@ options:
 - name: log_to_stderr
   type: bool
   level: basic
-  desc: send log lines to stderr
-  long_desc: When Ceph runs as a library (e.g., librados), the default value set to false because
-    stderr may not be writable by the application. For daemons, the daemon_default of false is used
-    instead.
-  fmt_desc: Determines if logging messages should appear in ``stderr``.
+  desc: Whether log messages are written to stderr.
+  long_desc: Whether log messages are written to stderr. The base default is true,
+    but the daemon default is false, and when Ceph runs as a library (for example librados)
+    the default is also false because the application's stderr may not be writable.
+  fmt_desc: Whether log messages are written to ``stderr``. The base default is true,
+    but the daemon default is false, and when Ceph runs as a library (for example ``librados``)
+    the default is also false because the application's ``stderr`` may not be writable.
   default: true
   daemon_default: false
   with_legacy: true
@@ -860,10 +870,13 @@ options:
 - name: key
   type: str
   level: advanced
-  desc: Authentication key
-  long_desc: A CephX authentication key, base64 encoded.  It normally looks something
-    like 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='.
-  fmt_desc: The key (i.e., the text string of the key itself). Not recommended.
+  desc: CephX authentication key, given inline.
+  long_desc: A base64-encoded CephX authentication key supplied directly (the key text
+    itself), for example 'AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag=='. Supplying the
+    key inline is not recommended; use keyfile instead.
+  fmt_desc: A base64-encoded CephX authentication key supplied directly (the key text
+    itself), for example ``AQAtut9ZdMbNJBAAHz6yBAWyJyz2yYRyeMWDag==``. Supplying the
+    key inline is not recommended; use ``keyfile`` instead.
   see_also:
   - keyfile
   - keyring
@@ -874,10 +887,9 @@ options:
 - name: keyfile
   type: str
   level: advanced
-  desc: Path to a file containing a key
-  long_desc: The file should contain a CephX authentication key and optionally a trailing
-    newline, but nothing else.
-  fmt_desc: The path to a key file (i.e,. a file containing only the key).
+  desc: Path to a file containing a CephX authentication key.
+  long_desc: The path to a file containing a CephX authentication key. The file should
+    hold only the key, optionally followed by a trailing newline, and nothing else.
   see_also:
   - key
   flags:
@@ -1671,11 +1683,10 @@ options:
 - name: mon_globalid_prealloc
   type: uint
   level: advanced
-  desc: number of globalid values to preallocate
-  long_desc: This setting caps how many new clients can authenticate with the cluster
-    before the monitors have to perform a write to preallocate more.  Large values
-    burn through the 64-bit ID space more quickly.
-  fmt_desc: The number of global IDs to pre-allocate for clients and daemons in the cluster.
+  desc: Number of global IDs to preallocate for clients and daemons.
+  long_desc: The number of global IDs preallocated for clients and daemons. It caps
+    how many can authenticate before the Monitors must perform a write to preallocate
+    more; larger values reduce those writes but consume the 64-bit ID space more quickly.
   default: 10000
   services:
   - mon
@@ -2585,14 +2596,18 @@ options:
   level: advanced
   desc: The minimum number of copies allowed to write to a degraded pool for new replicated
     pools
-  long_desc: 0 means no specific default; Ceph will use size-size/2
-  fmt_desc: Sets the minimum number of written replicas for objects in the
-    pool in order to acknowledge an I/O operation to the client.  If
-    minimum is not met, Ceph will not acknowledge the I/O to the
-    client, **which may result in data loss**. This setting ensures
-    a minimum number of replicas when operating in ``degraded`` mode.
-    The default value is ``0`` which means no particular minimum. If ``0``,
-    minimum is ``size - (size / 2)``.
+  long_desc: Sets the minimum number of written replicas for objects in the pool in
+    order to acknowledge an I/O operation to the client. If minimum is not met, Ceph
+    will not acknowledge the I/O to the client, which may result in data loss. This
+    setting ensures a minimum number of replicas when operating in degraded mode. The
+    default value is 0 which means no particular minimum. If 0, minimum is size - (size
+    / 2).
+  fmt_desc: Sets the minimum number of written replicas for objects in the pool in
+    order to acknowledge an I/O operation to the client.  If minimum is not met, Ceph
+    will not acknowledge the I/O to the client, **which may result in data loss**.
+    This setting ensures a minimum number of replicas when operating in ``degraded``
+    mode. The default value is ``0`` which means no particular minimum. If ``0``, minimum
+    is ``size - (size / 2)``.
   default: 0
   services:
   - mon
@@ -2605,12 +2620,18 @@ options:
 - name: osd_pool_default_pg_num
   type: uint
   level: advanced
-  desc: number of PGs for new pools
-  fmt_desc: The default number of placement groups for a pool. The default
-    value is the same as ``pg_num`` with ``mkpool``.
-  long_desc: With default value of `osd_pool_default_pg_autoscale_mode` being
-    `on` the number of PGs for new pools will start out with 1 PG, unless the
-    user specifies the pg_num.
+  desc: Default number of PGs for new RADOS pools (overridden by the PG autoscaler
+    when it is enabled).
+  fmt_desc: The default number of placement groups for new RADOS pools as they are
+    created. Because ``osd_pool_default_pg_autoscale_mode`` defaults to ``on``, each
+    such pool instead is created with 1 PG and is then sized by the autoscaler, unless
+    ``pg_num`` is specified explicitly at creation. This value is used only when the
+    autoscaler is off.
+  long_desc: The default number of placement groups for new RADOS pools as they are
+    created. Because osd_pool_default_pg_autoscale_mode defaults to on, each such pool
+    instead is created with 1 PG and is then sized by the autoscaler, unless pg_num
+    is specified explicitly at creation. This value is used only when the autoscaler
+    is off.
   default: 32
   services:
   - mon
@@ -3010,10 +3031,9 @@ options:
 - name: osd_mon_heartbeat_stat_stale
   type: int
   level: advanced
-  desc: Stop reporting on heartbeat ping times not updated for this many seconds.
-  long_desc: Stop reporting on old heartbeat information unless this is set to zero
-  fmt_desc: Stop reporting on heartbeat ping times which haven't been updated for
-    this many seconds. Set to 0 to disable this action.
+  desc: Stop logging heartbeat ping times not updated for this many seconds.
+  long_desc: Stop logging heartbeat ping times which haven't been updated for this
+    many seconds. Set to 0 to disable this action.
   default: 1_hr
 # failures, up_thru, boot.
 - name: osd_mon_report_interval
@@ -3200,12 +3220,12 @@ options:
   type: float
   level: advanced
   desc: Maximum multiple of mon_max_pg_per_osd PGs an OSD will allow
-  long_desc: An OSD will refuse to instantiate a PG if the number of PGs it serves exceeds
-    this number.
-  fmt_desc: The ratio of number of PGs per OSD allowed by the cluster before the
-    OSD refuses to create new PGs. An OSD stops creating new PGs if the number
-    of PGs it serves exceeds
-    ``osd_max_pg_per_osd_hard_ratio`` \* ``mon_max_pg_per_osd``.
+  long_desc: The ratio of number of PGs per OSD allowed by the cluster before the OSD
+    refuses to create new PGs. An OSD stops creating new PGs if the number of PGs it
+    serves exceeds osd_max_pg_per_osd_hard_ratio * mon_max_pg_per_osd.
+  fmt_desc: The ratio of number of PGs per OSD allowed by the cluster before the OSD
+    refuses to create new PGs. An OSD stops creating new PGs if the number of PGs it
+    serves exceeds ``osd_max_pg_per_osd_hard_ratio`` \* ``mon_max_pg_per_osd``.
   default: 3
   see_also:
   - mon_max_pg_per_osd
@@ -3589,16 +3609,16 @@ options:
   type: uint
   level: advanced
   desc: Number of bits per key to use for RocksDB's bloom filters.
-  long_desc: 'RocksDB bloom filters can be used to quickly answer the question of
+  long_desc: '''RocksDB bloom filters can be used to quickly answer the question of
     whether or not a key may exist or definitely does not exist in a given RocksDB
     SST file without having to read all keys into memory.  Using a higher bit value
-    decreases the likelihood of false positives at the expense of additional disk
-    space and memory consumption when the filter is loaded into RAM.  The current
-    default value of 20 was found to provide significant performance gains when getattr
-    calls are made (such as during new object creation in BlueStore) without significant
-    memory overhead or cache pollution when combined with rocksdb partitioned index
+    decreases the likelihood of false positives at the expense of additional disk space
+    and memory consumption when the filter is loaded into RAM.  The current default
+    value of 20 was found to provide significant performance gains when getattr calls
+    are made (such as during new object creation in BlueStore) without significant
+    memory overhead or cache pollution when combined with RocksDB partitioned index
     filters.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
-    for more information.'
+    for more information.'''
   default: 20
 - name: rocksdb_cache_index_and_filter_blocks
   type: bool
@@ -3609,9 +3629,8 @@ options:
     memory consumption by indices and bloom filters is directly tied to the number
     of concurrent SST files allowed to be kept open.  This option instead stores cached
     indicies and filters in the block cache where they directly compete with other
-    cached data.  By default we set this option to true to better account for and
-    bound rocksdb memory usage and keep filters in memory even when an SST file is
-    closed.
+    cached data.  By default we set this option to true to better account for and bound
+    RocksDB memory usage and keep filters in memory even when an SST file is closed.
   default: true
 - name: rocksdb_cache_index_and_filter_blocks_with_high_priority
   type: bool
@@ -3655,7 +3674,7 @@ options:
 - name: rocksdb_metadata_block_size
   type: size
   level: dev
-  desc: The block size for index partitions. (0 = rocksdb default)
+  desc: The block size for index partitions. (0 = RocksDB default)
   default: 4_K
 # osd_*_priority adjust the relative priority of client I/O, recovery I/O,
 # snaptrim I/O, etc
@@ -3773,9 +3792,10 @@ options:
   type: uint
   level: advanced
   desc: Priority of recovery in the work queue
-  long_desc: Not related to a pool's recovery_priority
-  fmt_desc: The default priority set for recovery work queue.  Not
-    related to a pool's ``recovery_priority``.
+  long_desc: The default priority set for recovery work queue. Not related to a pool's
+    recovery_priority.
+  fmt_desc: The default priority set for recovery work queue.  Not related to a pool's
+    ``recovery_priority``.
   default: 5
   with_legacy: true
 # set default cost equal to 20MB I/O
@@ -3935,21 +3955,21 @@ options:
 - name: osd_memory_target
   type: size
   level: basic
-  desc: When TCMalloc and cache autotuning are enabled, try to keep this many bytes
-    mapped in memory.
-  long_desc: The minimum value must be at least equal to osd_memory_base + osd_memory_cache_min.
-  fmt_desc: |
-    When TCMalloc is available and cache autotuning is enabled, try to
-    keep this many bytes mapped in memory. Note: This may not exactly
-    match the RSS memory usage of the process.  While the total amount
-    of heap memory mapped by the process should usually be close
-    to this target, there is no guarantee that the kernel will actually
-    reclaim  memory that has been unmapped.  During initial development,
-    it was found that some kernels result in the OSD's RSS memory
-    exceeding the mapped memory by up to 20%.  It is hypothesised
-    however, that the kernel generally may be more aggressive about
-    reclaiming unmapped memory when there is a high amount of memory
-    pressure.  Your mileage may vary.
+  desc: Target mapped memory per OSD when TCMalloc and cache autotuning are enabled.
+  long_desc: 'When TCMalloc is available and cache autotuning is enabled, the OSD tries
+    to keep this many bytes mapped in memory. The value must be at least osd_memory_base
+    + osd_memory_cache_min. Note that this may not exactly match the process''s RSS:
+    although the total heap memory mapped is usually close to this target, the kernel
+    is not guaranteed to reclaim unmapped memory. Some kernels have been observed to
+    let the OSD''s RSS exceed the mapped memory by up to 20%, though kernels may reclaim
+    more aggressively under memory pressure. Your mileage may vary.'
+  fmt_desc: 'When TCMalloc is available and cache autotuning is enabled, the OSD tries
+    to keep this many bytes mapped in memory. The value must be at least ``osd_memory_base``
+    + ``osd_memory_cache_min``. Note that this may not exactly match the process''s
+    RSS: although the total heap memory mapped is usually close to this target, the
+    kernel is not guaranteed to reclaim unmapped memory. Some kernels have been observed
+    to let the OSD''s RSS exceed the mapped memory by up to 20%, though kernels may
+    reclaim more aggressively under memory pressure. Your mileage may vary.'
   default: 4_G
   see_also:
   - bluestore_cache_autotune
@@ -4126,21 +4146,26 @@ options:
 - name: bdev_read_preallocated_huge_buffers
   type: str
   level: advanced
-  desc: description of pools arrangement for huge page-based read buffers
-  long_desc: Arrangement of preallocated, huge pages-based pools for reading
-    from a KernelDevice. Applied to minimize size of scatter-gather lists
-    sent to NICs. Targets really  big buffers (>= 2 or 4 MBs).
-    Keep in mind the system must be configured accordingly (see /proc/sys/vm/nr_hugepages).
-    Otherwise the OSD wil fail early.
-    Beware that BlueStore, by default, stores large chunks across many smaller blobs.
-    Increasing bluestore_max_blob_size changes that, and thus allows the data to
-    be read back into small number of huge page-backed buffers.
-  fmt_desc: List of key=value pairs delimited by comma, semicolon or tab.
-    key specifies the targeted read size and must be expressed in bytes.
-    value specifies the number of preallocated buffers.
-    For instance, to preallocate 64 buffers that will be used to serve
-    2 MB-sized read requests and 128 for 4 MB, someone needs to set
-    "2097152=64,4194304=128".
+  desc: Preallocated huge-page read-buffer pools for a KernelDevice.
+  long_desc: Arrangement of preallocated huge-page buffer pools used when reading from
+    a KernelDevice, which minimizes the size of the scatter-gather lists sent to NICs;
+    it targets very large buffers (>= 2-4 MiB). Specify a list of key=value pairs delimited
+    by comma, semicolon, or tab, where key is the targeted read size in bytes and value
+    is the number of preallocated buffers. For example, '2097152=64,4194304=128' preallocates
+    64 buffers for 2 MiB reads and 128 for 4 MiB. The system must have enough huge
+    pages configured (see /proc/sys/vm/nr_hugepages) or the OSD fails early. Note that
+    BlueStore by default spreads large chunks across many smaller blobs; raising bluestore_max_blob_size
+    lets data be read back into a small number of huge-page-backed buffers.
+  fmt_desc: Arrangement of preallocated huge-page buffer pools used when reading from
+    a KernelDevice, which minimizes the size of the scatter-gather lists sent to NICs;
+    it targets very large buffers (>= 2-4 MiB). Specify a list of ``key=value`` pairs
+    delimited by comma, semicolon, or tab, where key is the targeted read size in bytes
+    and value is the number of preallocated buffers. For example, ``2097152=64,4194304=128``
+    preallocates 64 buffers for 2 MiB reads and 128 for 4 MiB. The system must have
+    enough huge pages configured (see ``/proc/sys/vm/nr_hugepages``) or the OSD fails
+    early. Note that BlueStore by default spreads large chunks across many smaller
+    blobs; raising ``bluestore_max_blob_size`` lets data be read back into a small
+    number of huge-page-backed buffers.
   see_also:
   - bluestore_max_blob_size
 - name: bdev_debug_aio
@@ -4668,10 +4693,14 @@ options:
 - name: bluestore_csum_type
   type: str
   level: advanced
-  desc: Default checksum algorithm to use
-  long_desc: Algorithms crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants
-    use only a subset of the bits for more compact (but less reliable) checksumming.
-  fmt_desc: The default checksum algorithm to use.
+  desc: Default data checksum algorithm.
+  long_desc: The default checksum algorithm BlueStore uses. Available algorithms are
+    crc32c, xxhash32, and xxhash64; the _16 and _8 variants (for example, crc32c_16,
+    crc32c_8) use only a subset of the bits for a more compact but less reliable checksum.
+  fmt_desc: The default checksum algorithm BlueStore uses. Available algorithms are
+    ``crc32c``, ``xxhash32``, and ``xxhash64``; the ``_16`` and ``_8`` variants (for
+    example, ``crc32c_16``, ``crc32c_8``) use only a subset of the bits for a more
+    compact but less reliable checksum.
   default: crc32c
   enum_values:
   - none
@@ -4803,18 +4832,17 @@ options:
   type: str
   level: advanced
   desc: Default policy for using compression when pool does not specify
-  long_desc: '''none'' means never use compression.  ''passive'' means use compression
-    when clients hint that data is compressible.  ''aggressive'' means use compression
-    unless clients hint that data is not compressible.  This option is used when the
-    per-pool property for the compression mode is not present.'
-  fmt_desc: The default policy for using compression if the per-pool property
-    ``compression_mode`` is not set. ``none`` means never use
-    compression. ``passive`` means use compression when
-    :c:func:`clients hint <rados_set_alloc_hint>` that data is
-    compressible.  ``aggressive`` means use compression unless
-    clients hint that data is not compressible.  ``force`` means use
-    compression under all circumstances even if the clients hint that
-    the data is not compressible.
+  long_desc: The default policy for using compression if the per-pool property compression_mode
+    is not set. none means never use compression. passive means use compression when
+    clients hint that data is compressible. aggressive means use compression unless
+    clients hint that data is not compressible. force means use compression under all
+    circumstances even if the clients hint that the data is not compressible.
+  fmt_desc: The default policy for using compression if the per-pool property ``compression_mode``
+    is not set. ``none`` means never use compression. ``passive`` means use compression
+    when :c:func:`clients hint <rados_set_alloc_hint>` that data is compressible.  ``aggressive``
+    means use compression unless clients hint that data is not compressible.  ``force``
+    means use compression under all circumstances even if the clients hint that the
+    data is not compressible.
   default: none
   enum_values:
   - none
@@ -4828,13 +4856,12 @@ options:
   type: str
   level: advanced
   desc: Default compression algorithm to use when writing object data
-  long_desc: This controls the default compressor to use (if any) if the per-pool
-    property is not set.  Note that zstd is *not* recommended for BlueStore due to
-    high CPU overhead when compressing small amounts of data.
-  fmt_desc: The default compressor to use (if any) if the per-pool property
-    ``compression_algorithm`` is not set. Note that ``zstd`` is *not*
-    recommended for BlueStore due to high CPU overhead when
-    compressing small amounts of data.
+  long_desc: The default compressor to use (if any) if the per-pool property compression_algorithm
+    is not set. Note that zstd is not recommended for BlueStore due to high CPU overhead
+    when compressing small amounts of data.
+  fmt_desc: The default compressor to use (if any) if the per-pool property ``compression_algorithm``
+    is not set. Note that ``zstd`` is *not* recommended for BlueStore due to high CPU
+    overhead when compressing small amounts of data.
   default: snappy
   enum_values:
   - ''
@@ -4848,12 +4875,11 @@ options:
 - name: bluestore_compression_min_blob_size
   type: size
   level: advanced
-  desc: Maximum chunk size to apply compression to when random access is expected
-    for an object.
-  long_desc: Chunks larger than this are broken into smaller chunks before being compressed
-  fmt_desc: Chunks smaller than this are never compressed.
-    The per-pool property ``compression_min_blob_size`` overrides
-    this setting.
+  desc: Chunks smaller than this are never compressed.
+  long_desc: Chunks smaller than this are never compressed. The per-pool property compression_min_blob_size
+    overrides this setting.
+  fmt_desc: Chunks smaller than this are never compressed. The per-pool property ``compression_min_blob_size``
+    overrides this setting.
   default: 0
   flags:
   - runtime
@@ -4888,11 +4914,12 @@ options:
   level: advanced
   desc: Maximum chunk size to apply compression to when non-random access is expected
     for an object.
-  long_desc: Chunks larger than this are broken into smaller chunks before being compressed
+  long_desc: Chunks larger than this value are broken into smaller blobs of at most
+    bluestore_compression_max_blob_size bytes before being compressed. The per-pool
+    property compression_max_blob_size overrides this setting.
   fmt_desc: Chunks larger than this value are broken into smaller blobs of at most
-    ``bluestore_compression_max_blob_size`` bytes before being compressed.
-    The per-pool property ``compression_max_blob_size`` overrides
-    this setting.
+    ``bluestore_compression_max_blob_size`` bytes before being compressed. The per-pool
+    property ``compression_max_blob_size`` overrides this setting.
   default: 0
   flags:
   - runtime
@@ -4925,12 +4952,17 @@ options:
 - name: bluestore_recompression_min_gain
   type: float
   level: advanced
-  desc: Required estimated gain for accepting extents for recompressing.
-  long_desc: Partial writes over compressed blobs have high cost. New data requires
-    new allocation units, but whole old blob must remain. To combat it BlueStore
-    looks around write position to find blobs that will make it profitable to read
-    and recompress.
-  fmt_desc: A float value, (size_exact_released / size_expected_after_compression).
+  desc: Minimum estimated gain required to recompress extents.
+  long_desc: The minimum estimated gain, expressed as the ratio size_exact_released
+    / size_expected_after_compression, required before BlueStore recompresses extents.
+    Partial writes over compressed blobs are costly because new data needs new allocation
+    units while the whole old blob must remain, so BlueStore looks around the write
+    position for blobs that are profitable to read back and recompress.
+  fmt_desc: The minimum estimated gain, expressed as the ratio ``size_exact_released
+    / size_expected_after_compression``, required before BlueStore recompresses extents.
+    Partial writes over compressed blobs are costly because new data needs new allocation
+    units while the whole old blob must remain, so BlueStore looks around the write
+    position for blobs that are profitable to read back and recompress.
   default: 1.2
   see_also:
   - bluestore_compression_max_blob_size
@@ -5021,11 +5053,8 @@ options:
   type: float
   level: advanced
   desc: Compression ratio required to store compressed data
-  long_desc: If we compress data and get less than this we discard the result and
-    store the original uncompressed data.
-  fmt_desc: The ratio of the size of the data chunk after
-    compression relative to the original size must be at
-    least this small in order to store the compressed
+  long_desc: The ratio of the size of the data chunk after compression relative to
+    the original size must be at least this small in order to store the compressed
     version.
   default: 0.875
   flags:
@@ -5106,12 +5135,13 @@ options:
 - name: bluestore_cache_size
   type: size
   level: dev
-  desc: Cache size (in bytes) for BlueStore
-  long_desc: This includes data and metadata cached by BlueStore as well as memory
-    devoted to rocksdb's cache(s).
-  fmt_desc: The amount of memory BlueStore will use for its cache.  If zero,
-    ``bluestore_cache_size_hdd`` or ``bluestore_cache_size_ssd`` will
-    be used instead.
+  desc: Memory BlueStore uses for its cache (bytes; 0 = use per-media default).
+  long_desc: The amount of memory BlueStore uses for its cache, covering cached data
+    and metadata as well as RocksDB's cache(s). If zero, bluestore_cache_size_hdd or
+    bluestore_cache_size_ssd is used instead.
+  fmt_desc: The amount of memory BlueStore uses for its cache, covering cached data
+    and metadata as well as RocksDB's cache(s). If zero, ``bluestore_cache_size_hdd``
+    or ``bluestore_cache_size_ssd`` is used instead.
   default: 0
   with_legacy: true
 - name: bluestore_cache_size_hdd
@@ -5153,7 +5183,7 @@ options:
 - name: bluestore_cache_kv_onode_ratio
   type: float
   level: dev
-  desc: Ratio of BlueStore cache to devote to key/value onode column family (rocksdb)
+  desc: Ratio of BlueStore cache to devote to key/value onode column family (RocksDB)
   default: 0.04
   see_also:
   - bluestore_cache_size
@@ -5432,16 +5462,23 @@ options:
 - name: bluestore_rocksdb_cfs
   type: str
   level: dev
-  desc: Definition of column families and their sharding
-  long_desc: 'Space separated list of elements: column_def [ ''='' rocksdb_options
-    ]. column_def := column_name [ ''('' shard_count [ '','' hash_begin ''-'' [ hash_end
-    ] ] '')'' ]. Example: ''I=write_buffer_size=1048576 O(6) m(7,10-)''. Interval
-    [hash_begin..hash_end) defines characters to use for hash calculation. Recommended
-    hash ranges: O(0-13) P(0-8) m(0-16). Sharding of S,T,C,M,B prefixes is inadvised'
-  fmt_desc: Definition of BlueStore's RocksDB sharding.
-    The optimal value depends on multiple factors, and modification is inadvisable.
-    This setting is used only when OSD is doing ``--mkfs``.
-    Next runs of OSD retrieve sharding from disk.
+  desc: Definition of BlueStore's RocksDB column families and their sharding.
+  long_desc: 'Defines BlueStore''s RocksDB sharding as a space-separated list of elements:
+    column_def [ ''='' rocksdb_options ], where column_def := column_name [ ''('' shard_count
+    [ '','' hash_begin ''-'' [ hash_end ] ] '')'' ]. The interval [hash_begin..hash_end)
+    selects the characters used for hash calculation. Example: ''I=write_buffer_size=1048576
+    O(6) m(7,10-)''. Recommended hash ranges: O(0-13) P(0-8) m(0-16); sharding of the
+    S, T, C, M, and B prefixes is inadvised. The optimal value depends on many factors
+    and changing it is inadvisable. This setting is applied only when the OSD runs
+    --mkfs; later starts read the sharding from disk.'
+  fmt_desc: 'Defines BlueStore''s RocksDB sharding as a space-separated list of elements:
+    ``column_def [ ''='' rocksdb_options ]``, where ``column_def := column_name [ ''(''
+    shard_count [ '','' hash_begin ''-'' [ hash_end ] ] '')'' ]``. The interval [hash_begin..hash_end)
+    selects the characters used for hash calculation. Example: ``I=write_buffer_size=1048576
+    O(6) m(7,10-)``. Recommended hash ranges: O(0-13) P(0-8) m(0-16); sharding of the
+    S, T, C, M, and B prefixes is inadvised. The optimal value depends on many factors
+    and changing it is inadvisable. This setting is applied only when the OSD runs
+    ``--mkfs``; later starts read the sharding from disk.'
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
 - name: bluestore_async_db_compaction
   type: bool
