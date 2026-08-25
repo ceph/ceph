@@ -112,6 +112,7 @@ private:
 			     IOContext *ioc, long r);
 
   int _sync_write(uint64_t off, ceph::buffer::list& bl, bool buffered, int write_hint);
+  bool _aio_lone_waiter_sync(IOContext *ioc);
 
   int _lock();
 
