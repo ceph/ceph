@@ -1204,11 +1204,12 @@ TransactionManager::move_region(
         dst = co_await resolve_cursor_to_mapping(t, std::move(ret.dest));
       } else {
         using namespace crimson::os::seastore::omap_manager;
+        auto this_dst_key = calc_dst_key();
         switch (src.get_extent_type()) {
         case extent_types_t::OBJECT_DATA_BLOCK:
           {
             auto maybe_indirect_extent = co_await read_pin<ObjectDataBlock>(
-              t, src, src.get_intermediate_offset(), src.get_length());
+              t, src);
             auto extents = co_await alloc_data_extents<ObjectDataBlock>(
               t,
               laddr_hint_t::create_as_fixed(calc_dst_key()),
@@ -1217,10 +1218,10 @@ TransactionManager::move_region(
             ).handle_error_interruptible(
               move_region_iertr::pass_further(),
               crimson::ct_error::assert_all("invalid error"));
+            // alloc_data_extents() above inserted a new mapping
+            src = co_await src.refresh();
             [[maybe_unused]] auto off = 0;
-            auto bl = maybe_indirect_extent.get_range(
-              src.get_intermediate_offset(),
-              src.get_length());
+            auto bl = maybe_indirect_extent.get_bl();
             auto iter = bl.begin();
             for (auto &extent : extents) {
               auto &ext = *extent;
@@ -1233,7 +1234,7 @@ TransactionManager::move_region(
         case extent_types_t::OMAP_LEAF:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapLeafNode>(
-              t, src, src.get_intermediate_offset(), src.get_length());
+              t, src);
             auto extent = co_await alloc_non_data_extent<OMapLeafNode>(
               t,
               laddr_hint_t::create_as_fixed(calc_dst_key()),
@@ -1247,7 +1248,7 @@ TransactionManager::move_region(
         case extent_types_t::OMAP_INNER:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapInnerNode>(
-              t, src, src.get_intermediate_offset(), src.get_length());
+              t, src);
             auto extent = co_await alloc_non_data_extent<OMapInnerNode>(
               t,
               laddr_hint_t::create_as_fixed(calc_dst_key()),
@@ -1267,8 +1268,22 @@ TransactionManager::move_region(
         ).handle_error_interruptible(
           move_region_iertr::pass_further(),
           crimson::ct_error::assert_all("invalid error"));
+        // Mirror _remove: decrement the target direct's refcount too,
+        // undoing the increment that clone_mapping did when creating this indirect.
+        co_await src.direct_cursor->refresh();
+        co_await remove(t, src.direct_cursor->get_laddr()
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
         src = co_await resolve_cursor_to_mapping(t, std::move(cursor));
-        dst = co_await dst.refresh();
+        // dst can alias src's own entry (just erased above via the
+        // update_mapping_refcount() call) whenever src and dst are the
+        // only two related mappings in the tree.
+        auto fresh_dst = co_await get_pin(t, this_dst_key
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
+        dst = co_await fresh_dst.next();
       }
     } else if (!src.is_zero_reserved()) {
       auto laddr = calc_dst_key();

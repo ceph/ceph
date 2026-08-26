@@ -466,6 +466,10 @@ public:
       pin = co_await complete_mapping(t, std::move(pin));
     }
 
+    // for an indirect pin, the intermediate offset is applied internally below.
+    // A caller passing an intermediate/direct offset here would double-apply it.
+    assert(partial_off + partial_len <= pin.get_length());
+
     extent_len_t direct_partial_off = partial_off;
     bool is_clone = pin.is_clone();
     std::optional<indirect_info_t> maybe_indirect_info;
