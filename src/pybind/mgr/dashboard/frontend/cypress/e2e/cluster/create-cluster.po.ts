@@ -7,12 +7,25 @@ const pages = {
   index: { url: '#/add-storage?welcome=true', id: 'cd-create-cluster' }
 };
 export class CreateClusterWizardHelper extends PageHelper {
+  [x: string]: any;
   pages = pages;
 
-  createCluster() {
-    cy.get('cd-create-cluster').should('contain.text', 'Please expand your cluster first');
-    cy.get('[name=add-storage]').click();
-    cy.get('cd-wizard').should('exist');
+  onboarding() {
+    cy.get('cd-create-cluster').should('contain.text', 'Welcome to Ceph Dashboard');
+    cy.get('[aria-label="Add Storage"]').first().click({ force: true });
+    cy.get('cd-tearsheet').should('exist');
+  }
+
+  selectStep(stepLabel: string) {
+    cy.get('cd-tearsheet cds-progress-indicator').contains(stepLabel).click();
+  }
+
+  clickNext() {
+    cy.get('cd-tearsheet').contains('button', 'Next').click();
+  }
+
+  submitStorage() {
+    cy.get('cd-tearsheet .tearsheet-footer-submit').click();
   }
 
   doSkip() {

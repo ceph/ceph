@@ -1,73 +1,70 @@
 import {
-  AfterViewInit,
-  ChangeDetectorRef,
   Component,
-  EventEmitter,
   OnDestroy,
   OnInit,
-  Output,
   TemplateRef,
-  ViewChild
+  ViewChild,
+  ViewEncapsulation
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { forkJoin, Subscription } from 'rxjs';
+import { forkJoin } from 'rxjs';
 import { finalize } from 'rxjs/operators';
+import { Step } from 'carbon-components-angular';
 
 import { ClusterService } from '~/app/shared/api/cluster.service';
 import { HostService } from '~/app/shared/api/host.service';
 import { OsdService } from '~/app/shared/api/osd.service';
 import { ConfirmationModalComponent } from '~/app/shared/components/confirmation-modal/confirmation-modal.component';
-import { ActionLabelsI18n, AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
+import { TearsheetComponent } from '~/app/shared/components/tearsheet/tearsheet.component';
+import { AppConstants, URLVerbs } from '~/app/shared/constants/app.constants';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { DeploymentOptions } from '~/app/shared/models/osd-deployment-options';
 import { Permissions } from '~/app/shared/models/permissions';
-import { WizardStepModel } from '~/app/shared/models/wizard-steps';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-import { WizardStepsService } from '~/app/shared/services/wizard-steps.service';
-import { DriveGroup } from '../osd/osd-form/drive-group.model';
-import { Location } from '@angular/common';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
-import { Step } from 'carbon-components-angular';
+import { DriveGroup } from '../osd/osd-form/drive-group.model';
 import { Icons } from '~/app/shared/enum/icons.enum';
+
+const STEP_LABELS = {
+  ADD_HOSTS: $localize`Add Hosts`,
+  CREATE_OSDS: $localize`Create OSDs`,
+  CREATE_SERVICES: $localize`Create Services`,
+  REVIEW: $localize`Review`
+} as const;
 
 @Component({
   selector: 'cd-create-cluster',
   templateUrl: './create-cluster.component.html',
   styleUrls: ['./create-cluster.component.scss'],
-  standalone: false
+  standalone: false,
+  encapsulation: ViewEncapsulation.None
 })
-export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit {
+export class CreateClusterComponent implements OnInit, OnDestroy {
   @ViewChild('skipConfirmTpl', { static: true })
   skipConfirmTpl: TemplateRef<any>;
-  currentStep: WizardStepModel;
-  currentStepSub: Subscription;
+  @ViewChild(TearsheetComponent) tearsheet!: TearsheetComponent;
+
   permissions: Permissions;
   projectConstants: typeof AppConstants = AppConstants;
-  stepTitles: Step[] = [
-    {
-      label: 'Add Hosts'
-    },
-    {
-      label: 'Create OSDs',
-      complete: false
-    },
-    {
-      label: 'Create Services',
-      complete: false
-    },
-    {
-      label: 'Review',
-      complete: false
-    }
+  steps: Step[] = [
+    { label: STEP_LABELS.ADD_HOSTS, invalid: false },
+    { label: STEP_LABELS.CREATE_OSDS, invalid: false },
+    { label: STEP_LABELS.CREATE_SERVICES, invalid: false },
+    { label: STEP_LABELS.REVIEW, invalid: false }
   ];
-  startClusterCreation = false;
+  title = $localize`Add Storage`;
+  description = $localize`Configure hosts, OSDs, and data services for your cluster.`;
+  submitButtonLabel = $localize`Add Storage`;
+  isSubmitLoading = false;
+
+  startClusterCreation = true;
   observables: any = [];
   modalRef: NgbModalRef;
   driveGroup = new DriveGroup();
@@ -78,42 +75,22 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
   stepsToSkip: { [steps: string]: boolean } = {};
   icons = Icons;
 
-  @Output()
-  submitAction = new EventEmitter();
-
   constructor(
     private authStorageService: AuthStorageService,
-    private wizardStepsService: WizardStepsService,
     private router: Router,
     private hostService: HostService,
     private notificationService: NotificationService,
-    private actionLabels: ActionLabelsI18n,
     private clusterService: ClusterService,
     private modalService: ModalCdsService,
     private taskWrapper: TaskWrapperService,
     private osdService: OsdService,
-    private route: ActivatedRoute,
-    private location: Location,
-    private changeDetectorRef: ChangeDetectorRef
+    private route: ActivatedRoute
   ) {
     this.permissions = this.authStorageService.getPermissions();
-    this.currentStepSub = this.wizardStepsService
-      .getCurrentStep()
-      .subscribe((step: WizardStepModel) => {
-        this.currentStep = step;
-      });
-    this.currentStep.stepIndex = 0;
-  }
-  ngAfterViewInit(): void {
-    this.changeDetectorRef.detectChanges();
   }
 
   ngOnInit(): void {
-    this.stepTitles.forEach((steps, index) => {
-      steps.onClick = () => (this.currentStep.stepIndex = index);
-    });
     this.route.queryParams.subscribe((params) => {
-      // reading 'welcome' value true/false to toggle add-storage wizand view and welcome view
       const showWelcomeScreen = params['welcome'];
       if (showWelcomeScreen) {
         this.startClusterCreation = showWelcomeScreen;
@@ -125,13 +102,9 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
       this.selectedOption = { option: options.recommended_option, encrypted: false };
     });
 
-    this.stepTitles.forEach((stepTitle) => {
-      this.stepsToSkip[stepTitle.label] = false;
+    this.steps.forEach((step) => {
+      this.stepsToSkip[step.label] = false;
     });
-  }
-
-  onStepClick(step: WizardStepModel) {
-    this.wizardStepsService.setCurrentStep(step);
   }
 
   createCluster() {
@@ -162,8 +135,34 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
     this.modalService.show(ConfirmationModalComponent, modalVariables);
   }
 
+  onSkipOsdStep() {
+    this.stepsToSkip[STEP_LABELS.CREATE_OSDS] = true;
+    this.tearsheet.onNext();
+  }
+
   onSubmit() {
-    if (!this.stepsToSkip['Add Hosts']) {
+    const osdStepData = this.tearsheet?.getStepValueByLabel<{
+      skipped: boolean;
+      driveGroup: DriveGroup;
+      selectedOption: object;
+      simpleDeployment: boolean;
+    }>(STEP_LABELS.CREATE_OSDS);
+
+    if (osdStepData?.skipped) {
+      this.stepsToSkip[STEP_LABELS.CREATE_OSDS] = true;
+    } else if (osdStepData) {
+      if (osdStepData.driveGroup) {
+        this.driveGroup = osdStepData.driveGroup;
+      }
+      if (osdStepData.selectedOption) {
+        this.selectedOption = osdStepData.selectedOption;
+      }
+      if (osdStepData.simpleDeployment !== undefined) {
+        this.simpleDeployment = osdStepData.simpleDeployment;
+      }
+    }
+
+    if (!this.stepsToSkip[STEP_LABELS.ADD_HOSTS]) {
       const hostContext = new CdTableFetchDataContext(() => undefined);
       this.hostService.list(hostContext.toParams(), 'false').subscribe((hosts) => {
         hosts.forEach((host) => {
@@ -191,7 +190,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
       });
     }
 
-    if (!this.stepsToSkip['Create OSDs']) {
+    if (!this.stepsToSkip[STEP_LABELS.CREATE_OSDS]) {
       if (this.driveGroup) {
         const user = this.authStorageService.getUsername();
         this.driveGroup.setName(`dashboard-${user}-${_.now()}`);
@@ -209,10 +208,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
             call: this.osdService.create([this.selectedOption], trackingId, 'predefined')
           })
           .subscribe({
-            error: (error) => error.preventDefault(),
-            complete: () => {
-              this.submitAction.emit();
-            }
+            error: (error) => error.preventDefault()
           });
       } else {
         if (this.osdService.osdDevices['totalDevices'] > 0) {
@@ -228,7 +224,6 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
             .subscribe({
               error: (error) => error.preventDefault(),
               complete: () => {
-                this.submitAction.emit();
                 this.osdService.osdDevices = [];
               }
             });
@@ -237,55 +232,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
     }
   }
 
-  setDriveGroup(driveGroup: DriveGroup) {
-    this.driveGroup = driveGroup;
-  }
-
-  setDeploymentOptions(option: object) {
-    this.selectedOption = option;
-  }
-
-  setDeploymentMode(mode: boolean) {
-    this.simpleDeployment = mode;
-  }
-
-  onNextStep() {
-    if (!this.wizardStepsService.isLastStep()) {
-      this.wizardStepsService.getCurrentStep().subscribe((step: WizardStepModel) => {
-        this.currentStep = step;
-      });
-      this.wizardStepsService.moveToNextStep();
-    } else {
-      this.onSubmit();
-    }
-  }
-
-  onPreviousStep() {
-    if (!this.wizardStepsService.isFirstStep()) {
-      this.wizardStepsService.moveToPreviousStep();
-    } else {
-      this.location.back();
-    }
-  }
-
-  onSkip() {
-    const stepTitle = this.stepTitles[this.currentStep.stepIndex];
-    this.stepsToSkip[stepTitle.label] = true;
-    this.onNextStep();
-  }
-
-  showSubmitButtonLabel() {
-    return !this.wizardStepsService.isLastStep() ? this.actionLabels.NEXT : $localize`Add Storage`;
-  }
-
-  showCancelButtonLabel() {
-    return !this.wizardStepsService.isFirstStep()
-      ? this.actionLabels.BACK
-      : this.actionLabels.CANCEL;
-  }
-
   ngOnDestroy(): void {
-    this.currentStepSub.unsubscribe();
     this.osdService.selectedFormValues = null;
   }
 }

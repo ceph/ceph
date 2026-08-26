@@ -21,16 +21,12 @@ describe('when cluster creation is completed', () => {
 
     // Explicitly skip OSD Creation Step so that it prevents from
     // deploying OSDs to the hosts automatically.
-    cy.get('cd-wizard').within(() => {
-      cy.get('button').contains('Create OSDs').click();
-    });
-    cy.get('button[aria-label="Skip this step"]').click();
+    createCluster.selectStep('Create OSDs');
+    cy.get('#skipStepBtn').click();
 
-    cy.get('cd-wizard').within(() => {
-      cy.get('button').contains('Review').click();
-    });
-    cy.get('button[aria-label="Next"]').click();
-    cy.get('cd-dashboard').should('exist');
+    createCluster.selectStep('Review');
+    createCluster.submitStorage();
+    cy.get('cd-overview').should('exist');
   });
 
   describe('Hosts page', () => {
