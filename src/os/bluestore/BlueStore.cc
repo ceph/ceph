@@ -4976,7 +4976,7 @@ BlueStore::Onode* BlueStore::Onode::create_decode(
     // initialize extent_map
     if (on->onode.extent_map_shards.empty()) {
       on->extent_map.inline_bl.reassign_to_mempool(
-        mempool::mempool_bluestore_cache_data);
+        mempool::mempool_bluestore_cache_onode);
     } else {
       on->extent_map.init_shards(false, false);
     }
