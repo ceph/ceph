@@ -192,6 +192,14 @@ int get_encryption_defaults(req_state *s)
     }
   }
   if (meta_sse_group & SSE_C_GROUP) {
+    /*
+     * checked here so part uploads are covered; they never reach the
+     * encrypt path that gates a new object write
+     */
+    int r = rgw_s3_check_sse_c_blocked(s);
+    if (r < 0) {
+      return r;
+    }
     ldpp_dout(s, 20) << "get_encryption_defaults: no defaults cause sse-c forced"
 	<< dendl;
     return 0;			// sse-c: no defaults here
