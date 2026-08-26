@@ -18,11 +18,16 @@ sudo podman ps
 nvmeof_cli () {
     local server_ip="$1"
     shift
-    if [ "$NVMEOF_NATIVE_CLI" = "true" ]; then
-        ceph nvmeof --server-address $server_ip "$@"
-    else
-        sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $server_ip --server-port $NVMEOF_SRPORT "$@"
-    fi
+    for attempt in 1 2 3; do
+        if [ "$NVMEOF_NATIVE_CLI" = "true" ]; then
+            ceph nvmeof --server-address $server_ip "$@" && return 0
+        else
+            sudo podman run -it $NVMEOF_CLI_IMAGE --server-address $server_ip --server-port $NVMEOF_SRPORT "$@" && return 0
+        fi
+        echo "[nvmeof_cli] attempt $attempt failed, retrying..." >&2
+        sleep 2
+    done
+    return 1
 }
 
 # some different flags in native CLI and  container CLI
