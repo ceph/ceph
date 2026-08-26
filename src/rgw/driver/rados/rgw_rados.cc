@@ -6207,7 +6207,7 @@ int RGWRados::store_delete_bucket_info_flag(RGWBucketInfo& bucket_info, std::map
   do {
     bucket_info.flags |= BUCKET_DELETED;
     index_log = bucket_info.layout.logs.back();
-    shards_num = rgw::num_shards(index_log.layout.in_index);
+    shards_num = rgw::num_shards(index_log);
     const auto& log = bucket_info.layout.logs.back();
     bucket_info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
     r = ctl.bucket->store_bucket_instance_info(bucket, bucket_info, y, dpp, RGWBucketCtl::BucketInstance::PutParams()

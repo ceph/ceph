@@ -887,10 +887,12 @@ static int commit_reshard(rgw::sal::RadosStore* store,
 
   if (store->svc()->zone->need_to_log_data() && !prev.logs.empty() &&
       prev.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    // write a datalog entry for each shard of the previous index. triggering
-    // sync on the old shards will force them to detect the end-of-log for that
-    // generation, and eventually transition to the next
-    for (uint32_t shard_id = 0; shard_id < rgw::num_shards(prev.current_index.layout.normal); ++shard_id) {
+    // write a datalog entry for each shard of the previous generation's bilog.
+    // triggering sync on the old shards will force them to detect the
+    // end-of-log for that generation, and eventually transition to the next.
+    // use the log layout's own shard count (not the index's): FIFO-backed
+    // logs use an independent shard count that can differ from the index.
+    for (uint32_t shard_id = 0; shard_id < rgw::num_shards(prev.logs.back()); ++shard_id) {
       // This null_yield can stay, for now, since we're in our own thread
       ret = store->svc()->datalog_rados->add_entry(dpp, bucket_info, prev.logs.back(), shard_id,
 						   null_yield);

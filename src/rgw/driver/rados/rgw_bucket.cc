@@ -3139,7 +3139,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     const auto& log = bci.info.layout.logs.back();
     if (bci.info.bucket_deleted() && log.layout.type != rgw::BucketLogType::Deleted) {
       const auto index_log = bci.info.layout.logs.back();
-      const int shards_num = rgw::num_shards(index_log.layout.in_index);
+      const int shards_num = rgw::num_shards(index_log);
       bci.info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
       ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
       for (int i = 0; i < shards_num; ++i) {
