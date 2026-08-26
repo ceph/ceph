@@ -68,6 +68,8 @@ public:
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
 
+  int64_t claim_range(uint64_t offset, uint64_t length,
+                       PExtentVector *extents) override;
   void shutdown() override;
 };
 
