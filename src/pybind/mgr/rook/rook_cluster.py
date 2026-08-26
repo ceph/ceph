@@ -308,7 +308,10 @@ class KubernetesResource(Generic[T]):
         if self.exception:
             e = self.exception
             self.exception = None
-            raise e  # Propagate the exception to the user.
+            if isinstance(e, ApiException) and e.status == 410:
+                self.thread = None
+            else:
+                raise e  # Propagate the exception to the user.
         if not self.thread or not self.thread.is_alive():
             resource_version = self._fetch()
             if _urllib3_supports_read_chunked:
