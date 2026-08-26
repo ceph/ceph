@@ -1,6 +1,14 @@
 import boto3
 import pytest
+import botocore.config
+import requests
+
+from botocore.auth import S3SigV4Auth
+from botocore.auth import S3SigV4QueryAuth
+from botocore.awsrequest import AWSRequest
+from botocore.credentials import Credentials
 from botocore.exceptions import ClientError
+
 from email.utils import formatdate
 
 from .utils import assert_raises
@@ -11,9 +19,14 @@ from . import (
     configfile,
     setup_teardown,
     get_client,
-    get_v2_client,
+    get_config_endpoint,
+    get_main_api_name,
+    get_main_aws_access_key,
+    get_main_aws_secret_key,
     get_new_bucket,
     get_new_bucket_name,
+    get_v2_client,
+    get_config_ssl_verify
     )
 
 def _add_header_create_object(headers, client=None):
@@ -33,7 +46,7 @@ def _add_header_create_object(headers, client=None):
 
 
 def _add_header_create_bad_object(headers, client=None):
-    """ Create a new bucket, add an object with a header. This should cause a failure 
+    """ Create a new bucket, add an object with a header. This should cause a failure
     """
     bucket_name = get_new_bucket()
     if client == None:
@@ -101,7 +114,7 @@ def _add_header_create_bucket(headers, client=None):
 
 
 def _add_header_create_bad_bucket(headers=None, client=None):
-    """ Create a new bucket, w/header customizations that should cause a failure 
+    """ Create a new bucket, w/header customizations that should cause a failure
     """
     bucket_name = get_new_bucket_name()
     if client == None:
@@ -148,6 +161,25 @@ def _remove_header_create_bad_bucket(remove, client=None):
     e = assert_raises(ClientError, client.create_bucket, Bucket=bucket_name)
 
     return e
+
+def _get_s3sigv4_signer():
+    """ Return a Signer object based on default user/secret/region.
+    """
+    creds = Credentials(
+        access_key=get_main_aws_access_key(),
+        secret_key=get_main_aws_secret_key(),
+    )
+    return S3SigV4Auth(credentials=creds, service_name="s3", region_name=get_main_api_name())
+
+def _get_s3sigv4_query_signer():
+    """ Return a query-string (presigning) Signer based on default user/secret/region.
+    """
+    creds = Credentials(
+        access_key=get_main_aws_access_key(),
+        secret_key=get_main_aws_secret_key(),
+    )
+    return S3SigV4QueryAuth(credentials=creds, service_name="s3",
+                            region_name=get_main_api_name(), expires=100000)
 
 #
 # common tests
@@ -570,3 +602,160 @@ def test_bucket_create_bad_date_before_epoch_aws2():
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 403
     assert error_code == 'AccessDenied'
+
+@pytest.mark.auth_aws4
+def test_sigv4_host_good():
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+    )
+    signer.add_auth(req)
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
+def test_sigv4_host_bad():
+    # This passes even without the check in `get_v4_canonical_headers`
+    # since the signatures don't match.
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+    )
+    signer.add_auth(req)
+    authorization = req.headers['Authorization']
+    authorization = authorization.replace("SignedHeaders=host;", "SignedHeaders=")
+    del req.headers['Authorization']
+    req.headers['Authorization'] = authorization
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 403)
+
+@pytest.mark.auth_aws4
+def test_sigv4_xamz_good():
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+        headers={"x-amz-benevolent": "good-header"},
+    )
+    signer.add_auth(req)
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
+def test_sigv4_xamz_bad():
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+        headers={"x-amz-benevolent": "good-header"},
+    )
+    signer.add_auth(req)
+    req.headers['x-amz-malevolent'] = 'evil-header'
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 403)
+
+@pytest.mark.auth_aws4
+def test_sigv4_contenttype_good():
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+        headers={"content-type": "application/octet-stream"},
+    )
+    signer.add_auth(req)
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
+def test_sigv4_contenttype_unsigned():
+    # An unsigned Content-Type must be ACCEPTED: AWS documents it as optional
+    # in the signature, and real S3 accepts it. See the rationale in
+    # get_v4_canonical_headers() (src/rgw/rgw_auth_s3.cc).
+    # test_sigv4_xamz_bad still pins the CVE-2026-54330 behaviour.
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+    )
+    signer.add_auth(req)
+    req.headers["content-type"] = "application/octet-stream"
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
+def test_sigv4_missing_header():
+    # This passes even without the check in `get_v4_canonical_headers`
+    # since the signatures don't match.
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+        headers={"x-amz-problematic": "dubious-header"},
+    )
+    signer.add_auth(req)
+    del req.headers['x-amz-problematic']
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 403)
+
+@pytest.mark.auth_aws4
+def test_sigv4_xgoog_signed():
+    signer = _get_s3sigv4_signer()
+    req = AWSRequest(
+        method="GET",
+        url=get_config_endpoint() + "/",
+        headers={"x-goog-benevolent": "good-header"},
+    )
+    signer.add_auth(req)
+    assert req.url is not None
+    resp = requests.get(req.url, headers=dict(req.headers), verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
+def test_sigv4_presigned_xamz_bad():
+    signer = _get_s3sigv4_query_signer()
+    req = AWSRequest(method="GET", url=get_config_endpoint() + "/")
+    signer.add_auth(req)
+    resp = requests.get(req.url, headers={'x-amz-malevolent': 'evil-header'})
+    assert(resp.status_code == 403)
+
+@pytest.mark.auth_aws4
+def test_sigv4_presigned_contenttype_unsigned():
+    # A presigned URL only signs `host`, so any uploader that sends its own
+    # content-type sends it unsigned. Of course every browser does this, so
+    # thats the most common S3 upload shape in the wild and it has to work.
+    signer = _get_s3sigv4_query_signer()
+    req = AWSRequest(method="GET", url=get_config_endpoint() + "/")
+    signer.add_auth(req)
+    resp = requests.get(req.url, headers={'content-type': 'application/octet-stream'},
+                        verify=get_config_ssl_verify())
+    assert(resp.status_code == 200)
+
+@pytest.mark.auth_aws4
+def test_sigv4_presigned_contenttype_plus_xamz_bad():
+    # ...but an unsigned x-amz- header sitting alongside an unsigned
+    # content-type still has to be rejected. Thats the combination a careless
+    # relaxation of the header checks would let slip through.
+    signer = _get_s3sigv4_query_signer()
+    req = AWSRequest(method="GET", url=get_config_endpoint() + "/")
+    signer.add_auth(req)
+    resp = requests.get(req.url, headers={'content-type': 'application/octet-stream',
+                                          'x-amz-malevolent': 'evil-header'},
+                        verify=get_config_ssl_verify())
+    assert(resp.status_code == 403)
+
+@pytest.mark.auth_aws4
+def test_sigv4_presigned_good():
+    signer = _get_s3sigv4_query_signer()
+    req = AWSRequest(method="GET", url=get_config_endpoint() + "/")
+    signer.add_auth(req)
+    resp = requests.get(req.url)
+    assert(resp.status_code == 200)
