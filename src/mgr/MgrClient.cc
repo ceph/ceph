@@ -65,12 +65,15 @@ void MgrClient::init()
 
   timer.init();
   initialized = true;
+  dead = false;
 }
 
 void MgrClient::shutdown()
 {
   std::unique_lock l(lock);
   ldout(cct, 10) << dendl;
+
+  dead = true;
 
   if (connect_retry_callback) {
     timer.cancel_event(connect_retry_callback);
@@ -104,6 +107,10 @@ void MgrClient::shutdown()
 Dispatcher::dispatch_result_t MgrClient::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
+
+  if (dead) {
+    return false;
+  }
 
   switch(m->get_type()) {
   case MSG_MGR_MAP:

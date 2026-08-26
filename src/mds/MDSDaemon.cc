@@ -783,7 +783,7 @@ void MDSDaemon::handle_command(const cref_t<MCommand> &m)
   auto reply = make_message<MCommandReply>(r, ss.str());
   reply->set_tid(m->get_tid());
   reply->set_data(outbl);
-  m->get_connection()->send_message2(reply);
+  m->get_connection()->send_message2(std::move(reply));
 }
 
 void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
@@ -1267,7 +1267,7 @@ void MDSDaemon::ms_handle_accept(Connection *con)
 
       // send out any queued messages
       while (!s->preopen_out_queue.empty()) {
-	con->send_message2(s->preopen_out_queue.front());
+	con->send_message2(std::move(s->preopen_out_queue.front()));
 	s->preopen_out_queue.pop_front();
       }
     }
