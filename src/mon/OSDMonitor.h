@@ -556,6 +556,7 @@ private:
   int parse_erasure_code_profile(const std::vector<std::string> &erasure_code_profile,
 				 std::map<std::string,std::string> *erasure_code_profile_map,
 				 std::ostream *ss);
+  void maybe_remove_unused_crush_rule(int64_t skip_pool, int old_rule_id);
   int prepare_pool_size(const unsigned pool_type,
 			const std::string &erasure_code_profile,
                         uint8_t repl_size,
@@ -801,6 +802,20 @@ public:
   void maybe_enable_pool_split_ops(pg_pool_t &p);
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                std::stringstream& ss);
+  int prepare_command_pool_set_num_zones(const cmdmap_t& cmdmap,
+                                         int64_t pool,
+                                         const std::string& poolstr,
+                                         int64_t n,
+                                         const std::string& val,
+                                         const std::string& interr,
+                                         pg_pool_t& p,
+                                         std::stringstream& ss);
+  int prepare_command_pool_set_replica(int64_t pool,
+                                       int64_t n,
+                                       const std::string& val,
+                                       const std::string& interr,
+                                       pg_pool_t& p,
+                                       std::stringstream& ss);
 
   int prepare_command_pool_application(const std::string &prefix,
                                        const cmdmap_t& cmdmap,
