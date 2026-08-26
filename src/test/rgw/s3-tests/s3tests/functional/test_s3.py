@@ -10073,7 +10073,7 @@ def test_lifecycle_cloud_multiple_transition():
     assert len(expire1_keys[sc[2]]) == 0
 
     # Wait for next expiration cycle
-    time.sleep(7*lc_interval)
+    time.sleep(5*lc_interval)
     expire1_keys = list_bucket_storage_class(client, bucket_name)
     assert len(expire1_keys['STANDARD']) == 2
     assert len(expire1_keys[sc[1]]) == 0
@@ -10084,7 +10084,7 @@ def test_lifecycle_cloud_multiple_transition():
         assert len(expire1_keys[sc[2]]) == 0
 
     # Wait for final expiration cycle
-    time.sleep(12*lc_interval)
+    time.sleep(6*lc_interval)
     expire3_keys = list_bucket_storage_class(client, bucket_name)
     assert len(expire3_keys['STANDARD']) == 2
     assert len(expire3_keys[sc[1]]) == 0
