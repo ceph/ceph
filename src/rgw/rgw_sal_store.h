@@ -319,14 +319,7 @@ class StoreVectorBucket : public VectorBucket {
 	     (info.bucket.bucket_id == sb.info.bucket.bucket_id);
     }
     virtual bool operator!=(const VectorBucket& b) const override {
-      if (typeid(*this) != typeid(b)) {
-	return false;
-      }
-      const StoreVectorBucket& sb = dynamic_cast<const StoreVectorBucket&>(b);
-
-      return (info.bucket.tenant != sb.info.bucket.tenant) ||
-	     (info.bucket.name != sb.info.bucket.name) ||
-	     (info.bucket.bucket_id != sb.info.bucket.bucket_id);
+      return !(*this == b);
     }
 };
 
