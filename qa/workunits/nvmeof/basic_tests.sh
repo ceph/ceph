@@ -3,9 +3,15 @@
 # https://tracker.ceph.com/issues/74922
 sudo systemctl stop udisks2 2>/dev/null || true
 
+source /etc/os-release
 # install nvme 2.13 (issue with latest nvme version 2.16 with centos9: https://tracker.ceph.com/issues/74615#note-5)
-sudo dnf install nvme-cli-2.13 libnvme-1.13 -y
-sleep 10 
+if [[ "$VERSION_ID" == 9* ]]; then
+    sudo dnf install nvme-cli-2.13 libnvme-1.13 -y
+elif [[ "$VERSION_ID" == 10* ]]; then
+    # reinstall latest nvme-cli to ensure we get version 2.16+ 
+    sudo dnf remove nvme-cli -y
+    sudo dnf install nvme-cli -y
+fi
 sudo modprobe nvme-fabrics
 sudo modprobe nvme-tcp
 nvme version
