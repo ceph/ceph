@@ -4977,12 +4977,13 @@ void RGWPutObj::execute(optional_yield y)
     if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
       dynamic_cast<rgw::sal::D4NFilterWriter*>(processor.get())->set_remote_cache_request();
       rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
-      auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION");
-      if (object_version) {
+      if (auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
         d4n_obj->set_object_version(object_version.get());
       }
-      auto object_dirty = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_DIRTY");
-      if (object_dirty) {
+      if (auto old_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OLD_VERSION"); old_version) {
+        d4n_obj->set_old_version(old_version.get());
+      }
+      if (auto object_dirty = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_DIRTY"); object_dirty) {
         d4n_obj->set_remote_dirty_flag(object_dirty.get() == "true" || object_dirty.get() == "1" );
       }
       if (auto blk_offset = s->info.env->get_optional("HTTP_X_RGW_CACHE_BLK_OFFSET"); blk_offset) {
