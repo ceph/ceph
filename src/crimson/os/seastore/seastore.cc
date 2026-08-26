@@ -2433,6 +2433,9 @@ SeaStore::Shard::_migrate_onode(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
+  ObjectDataHandler objHandler(max_object_size);
+  co_await _maybe_copy_on_write(ctx, *onode, objHandler);
+
   if (auto prefix = onode->get_clone_prefix(); prefix) {
     prefix->set_pool(onode->get_hobj().get_logical_pool());
     auto object_id = prefix->get_local_object_id();
@@ -2440,7 +2443,6 @@ SeaStore::Shard::_migrate_onode(
   }
   auto olayout = onode->get_layout();
   if (!olayout.object_data.get().is_null()) {
-    ObjectDataHandler objHandler(max_object_size);
     co_await objHandler.rename(ObjectDataHandler::context_t{
       *transaction_manager, *ctx.transaction, *onode, d_onode.get()
     });
