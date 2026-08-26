@@ -14577,17 +14577,23 @@ void MDCache::upkeep_main(void)
       lock.lock();
       if (upkeep_trim_shutdown.load())
         return;
-      check_memory_usage();
+      {
+        MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_cache_memory);
+        check_memory_usage();
+      }
       if (mds->is_cache_trimmable()) {
         dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;
         bool active_with_clients = mds->is_active() || mds->is_clientreplay() || mds->is_stopping();
         if (active_with_clients) {
+          MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_client_leases);
           trim_client_leases();
         }
         if (is_ready_to_trim_cache() || mds->is_standby_replay()) {
+          MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_cache_trim);
           trim();
         }
         if (active_with_clients) {
+          MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_client_recall);
           auto recall_flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
           if (cache_toofull()) {
             recall_flags = recall_flags|Server::RecallFlags::TRIM;
@@ -14606,7 +14612,13 @@ void MDCache::upkeep_main(void)
     if (since >= release_interval*.90) {
       /* XXX not necessary once MDCache uses PriorityCache */
       dout(10) << "releasing free memory" << dendl;
-      ceph_heap_release_free_memory();
+      /* NB: unlike the phases above this one runs without mds_lock, so it is
+       * excluded from the lock utilization but still worth accounting for --
+       * a slow tcmalloc release stalls all cache trimming behind it. */
+      {
+        MDSPhaseTracker::Timer phase_timer(&mds->phase_tracker, l_mdsp_heap_release);
+        ceph_heap_release_free_memory();
+      }
       upkeep_last_release = clock::now();
     } else {
       release_interval -= since;

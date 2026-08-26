@@ -482,6 +482,7 @@ MDSRank::MDSRank(
     damage_table(whoami_), sessionmap(this),
     op_tracker(g_ceph_context, g_conf()->mds_enable_op_tracker,
                g_conf()->osd_num_op_tracker_shard),
+    phase_tracker(msgr->cct, mds_lock_),
     progress_thread(this), whoami(whoami_),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
@@ -539,6 +540,8 @@ MDSRank::MDSRank(
                                            cct->_conf->mds_op_history_duration);
   op_tracker.set_history_slow_op_size_and_threshold(cct->_conf->mds_op_history_slow_op_size,
                                                     cct->_conf->mds_op_history_slow_op_threshold);
+
+  phase_tracker.set_enabled(cct->_conf.get_val<bool>("mds_enable_phase_tracker"));
 
   schedule_update_timer_task();
 }
@@ -708,7 +711,13 @@ void MDSRank::set_mdsmap_multimds_snaps_allowed()
 
 void MDSRankDispatcher::tick()
 {
+  MDSPhaseTracker::Timer phase_timer(&phase_tracker, l_mdsp_tick);
+
   heartbeat_reset();
+
+  /* mds_lock accounting is cumulative in the mutex itself; fold it into the
+   * perf counters here rather than on every acquisition. */
+  phase_tracker.update_lock_stats();
 
   if (beacon.is_laggy()) {
     dout(1) << "skipping upkeep work because connection to Monitors appears laggy" << dendl;
@@ -729,6 +738,7 @@ void MDSRankDispatcher::tick()
 
   // ...
   if (is_clientreplay() || is_active() || is_stopping()) {
+    MDSPhaseTracker::Timer locker_timer(&phase_tracker, l_mdsp_locker_tick);
     server->clear_laggy_clients();
     server->find_idle_sessions();
     server->evict_cap_revoke_non_responders();
@@ -745,7 +755,10 @@ void MDSRankDispatcher::tick()
     server->reconnect_tick();
 
   if (is_active()) {
-    balancer->tick();
+    {
+      MDSPhaseTracker::Timer balancer_timer(&phase_tracker, l_mdsp_balancer_tick);
+      balancer->tick();
+    }
     mdcache->find_stale_fragment_freeze();
     mdcache->migrator->find_stale_export_freeze();
 
@@ -1229,6 +1242,9 @@ bool MDSRank::is_valid_message(const cref_t<Message> &m) {
 
 void MDSRank::handle_message(const cref_t<Message> &m)
 {
+  MDSPhaseTracker::Timer phase_timer(
+    &phase_tracker, MDSPhaseTracker::phase_for_message(m->get_type()));
+
   int port = m->get_type() & 0xff00;
 
   switch (port) {
@@ -1321,6 +1337,7 @@ void MDSRank::_advance_queues()
   ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
   if (!finished_queue.empty()) {
+    MDSPhaseTracker::Timer phase_timer(&phase_tracker, l_mdsp_finished_contexts);
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
     while (!finished_queue.empty()) {
       auto fin = finished_queue.front();
@@ -3120,6 +3137,11 @@ void MDSRankDispatcher::handle_asok_command(
     std::lock_guard l(mds_lock);
     mdcache->stray_status(ctx);
     return;
+  } else if (command == "dump phase times") {
+    /* deliberately without mds_lock: the whole point is to report how busy
+     * the lock is, and taking it here would both perturb that and block on
+     * whatever phase we are trying to measure */
+    phase_tracker.dump(f);
   } else if (command == "dump qos") {
     std::lock_guard l(mds_lock);
     mds_dmclock_scheduler->dump(f);
@@ -4165,6 +4187,7 @@ std::vector<std::string> MDSRankDispatcher::get_tracked_keys()
     "mds_dump_cache_threshold_file",
     "mds_dump_cache_threshold_formatter",
     "mds_enable_op_tracker",
+    "mds_enable_phase_tracker",
     "mds_export_ephemeral_distributed",
     "mds_export_ephemeral_random",
     "mds_export_ephemeral_random_max",
@@ -4238,6 +4261,9 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
   }
   if (changed.count("mds_enable_op_tracker")) {
     op_tracker.set_tracking(conf->mds_enable_op_tracker);
+  }
+  if (changed.count("mds_enable_phase_tracker")) {
+    phase_tracker.set_enabled(conf.get_val<bool>("mds_enable_phase_tracker"));
   }
   if (changed.count("mds_extraordinary_events_dump_interval")) {
     reset_event_flags();

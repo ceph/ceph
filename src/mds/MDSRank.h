@@ -28,6 +28,7 @@
 
 #include "DamageTable.h"
 #include "MDSMap.h"
+#include "MDSPhaseTracker.h"
 #include "SessionMap.h"
 #include "PurgeQueue.h"
 #include "MetricsHandler.h"
@@ -438,6 +439,9 @@ class MDSRank {
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
+    /* Time accounting for mds_lock, shared with the subsystems (MDCache,
+     * MDLog, ...) that do their upkeep under it. */
+    MDSPhaseTracker phase_tracker;
 
     std::map<ceph_tid_t, std::unique_ptr<MDSMetaRequest>> internal_client_requests;
 
