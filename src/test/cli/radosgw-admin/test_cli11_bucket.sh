@@ -2432,7 +2432,7 @@ check "list: unknown flag with unparsable int value"           22 "Could not con
 # unknown command: --bucket takes '--banana', leaving 'banana' unresolvable
 check "unknown command: legacy flag takes the next token"      1 "ERROR: Unrecognized argument: 'banana'" \
   banana --bucket --banana
-check "unknown command: unparsable int value"                  22 "Could not convert" \
+check "unknown command: unparsable int value"                  22 "Could not convert: --max-entries = abc" \
   banana --max-entries=abc --banana
 
 # single-dash spellings are not flags
@@ -2488,7 +2488,7 @@ check "unknown command repeated reaches legacy"                1 "ERROR: Unrecog
 # migrated flags stay parse-safe on unmigrated commands
 check_cluster "reshard list: --max-entries=5"                  0 "" -- \
   reshard list --max-entries=5
-check "reshard list: --max-entries=abc rejected"               22 "Could not convert" \
+check "reshard list: --max-entries=abc rejected"               22 "Could not convert: --max-entries = abc" \
   reshard list --max-entries=abc
 check_cluster "reshard list: --bucket takes the next token"    0 "" -- \
   reshard list --bucket --banana
@@ -2621,6 +2621,30 @@ check "check: --fix warns about a non-bool value"              1 \
 check "list: --fix warns about a lone dash value"              22 \
   "Warning: invalid value '-' for --fix, treating as set" \
   bucket list --fix -
+
+# ============================================================
+echo ""
+echo "=== the error names the flag even when a parent caught it ==="
+# ============================================================
+# Every migrated flag is also registered on each parent command, hidden from
+# the help. A flag typed too early, or on a command that does not own it, is
+# caught by that hidden copy, and the error message names it. These rows pin
+# that name: without it the message reads ": 1 required TEXT missing".
+
+check "list: --object missing value is named"           1 "--object: 1 required TEXT missing" \
+  bucket list --object
+check "list: --min-rewrite-size missing value is named" 1 "--min-rewrite-size: 1 required TEXT missing" \
+  bucket list --min-rewrite-size
+check "bucket: --bucket missing value is named"         1 "--bucket: 1 required TEXT missing" \
+  bucket --bucket
+check "list: --num-shards non-integer is named"         22 "Could not convert: --num-shards = abc" \
+  bucket list --num-shards abc
+check "bucket: --max-entries non-integer is named"      22 "Could not convert: --max-entries = abc" \
+  bucket --max-entries abc list
+# control: a real root global was never a hidden copy, so its name never
+# depended on this
+check "bucket: --tenant missing value is named"         1 "--tenant: 1 required TEXT missing" \
+  bucket --tenant
 
 # ============================================================
 echo ""
