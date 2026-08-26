@@ -1320,6 +1320,26 @@ options:
   services:
   - mds
   with_legacy: true
+- name: mds_enable_phase_tracker
+  type: bool
+  level: advanced
+  desc: account for the time mds_lock is held by each kind of upkeep work
+  long_desc: Charge wall time to a phase (client requests, cache trim, client
+    recall, subtree export, log trim, ...) so that "ceph tell mds.X perf dump
+    mds_phase" and "ceph tell mds.X dump phase times" show where a rank spends
+    its time, and how much of the wall clock it spends holding mds_lock. Off by
+    default because the accounting is not free -- two monotonic clock reads per
+    instrumented scope and three per mds_lock acquisition. A client request
+    passes through two of each, so a few hundred nanoseconds of serialized work
+    per request where clock_gettime is a vDSO read, or one to two percent of a
+    rank serving 50k requests per second. It costs considerably more on a host
+    without a usable TSC clocksource. Enable it at runtime when investigating
+    where a rank spends its time.
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 # Max number of completed ops to track
 - name: mds_op_history_size
   type: uint
