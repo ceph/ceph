@@ -1,3 +1,13 @@
+# doc-writers (first for the doc/dev exclusion)
+AUTHORS                                         @ceph/doc-writers
+CodingStyle                                     @ceph/doc-writers
+COPYING*                                        @ceph/doc-writers
+/doc/                                           @ceph/doc-writers
+README*                                         @ceph/doc-writers
+*.rst                                           @ceph/doc-writers
+# do not force-assign doc-writers to developer design docs
+/doc/dev
+
 # Dashboard team to review dashboard related code
 /src/pybind/mgr/dashboard                       @ceph/dashboard
 /qa/suites/rados/dashboard                      @ceph/dashboard
@@ -41,14 +51,6 @@
 # crimson
 /src/crimson                                    @ceph/crimson
 /src/test/crimson                               @ceph/crimson
-
-# doc-writers
-AUTHORS                                         @ceph/doc-writers
-CodingStyle                                     @ceph/doc-writers
-COPYING*                                        @ceph/doc-writers
-/doc/                                           @ceph/doc-writers
-README*                                         @ceph/doc-writers
-*.rst                                           @ceph/doc-writers
 
 # core
 /doc/man/8/ceph-authtool.rst                    @ceph/core @ceph/doc-writers
