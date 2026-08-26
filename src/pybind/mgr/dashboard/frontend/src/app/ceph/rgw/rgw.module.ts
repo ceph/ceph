@@ -298,7 +298,7 @@ const routes: Routes = [
   {
     path: 'daemon/:daemonId',
     component: RgwDaemonResourceSidebarComponent,
-    data: { breadcrumbs: RgwDaemonResourceBreadcrumbResolver },
+    data: { breadcrumbs: RgwDaemonResourceBreadcrumbResolver, showBreadcrumbsLayout: false },
     resolve: {
       daemon: RgwDaemonResourceResolver
     },
