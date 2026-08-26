@@ -649,6 +649,35 @@ bool AuthMonitor::check_health()
     }
   }
 
+  {
+    auto ttl = cct->_conf.get_val<std::chrono::seconds>("mon_auth_pending_key_ttl");
+    auto now = ceph_clock_now();
+    std::vector<std::string> stale_pending_keys;
+    for (auto const& [entity, auth] : mon.get_secrets()) {
+      if (auth.pending_key.empty()) {
+        continue;
+      }
+      if (now < auth.pending_key.get_created()) {
+        continue;
+      }
+      utime_t age = now - auth.pending_key.get_created();
+      if (age.sec() > ttl.count()) {
+        std::ostringstream ss;
+        ss << "entity " << entity << " has had an uncommitted pending key for "
+           << age;
+        stale_pending_keys.push_back(ss.str());
+      }
+    }
+    if (!stale_pending_keys.empty()) {
+      std::ostringstream summary;
+      summary << stale_pending_keys.size() << " auth entities have an uncommitted pending key";
+      auto& check = next.add("AUTH_PENDING_KEY_NOT_COMMITTED", HEALTH_WARN, summary.str(), stale_pending_keys.size());
+      for (auto& detail : stale_pending_keys) {
+        check.detail.push_back(detail);
+      }
+    }
+  }
+
   return next != get_health_checks(); /* should propose */
 }
 
