@@ -22,7 +22,7 @@ Configure a build tree:
 
 ```bash
 cmake --preset client-min-debug
-cmake --build build-client-min-debug
+cmake --build build
 ```
 
 Most IDEs with CMake support (VS Code, CLion, Qt Creator, etc.) will also discover these presets automatically from the project root.
@@ -31,21 +31,28 @@ Most IDEs with CMake support (VS Code, CLion, Qt Creator, etc.) will also discov
 
 ### Base presets
 
-| Preset | Build type | Build directory |
-|--------|------------|-----------------|
-| `debug` | Debug | `build-debug` |
-| `release` | RelWithDebInfo | `build-relwithdebinfo` |
+| Preset | Build type |
+|--------|------------|
+| `debug` | Debug |
+| `release` | RelWithDebInfo |
 
 ### Component presets
 
-| Preset | Description | Build directory |
-|--------|-------------|-----------------|
-| `client-min-debug` | Minimal client build (Debug) | `build-client-min-debug` |
-| `client-min-release` | Minimal client build (Release) | `build-client-min-release` |
-| `rgw-min-dev` | Minimal RGW build for vstart (Debug) | `build-rgw-min-debug` |
-| `rgw-min-release` | Minimal RGW build (Release) | `build-rgw-min-release` |
+| Preset | Description |
+|--------|-------------|
+| `client-min-debug` | Minimal client build (Debug) |
+| `client-min-release` | Minimal client build (Release) |
+| `rgw-min-dev` | Minimal RGW build for vstart (Debug) |
+| `rgw-min-release` | Minimal RGW build (Release) |
 
 Component presets inherit all settings from `debug` or `release` and add their own `WITH_*` cache variables on top.
+
+All presets default to `${sourceDir}/build`, matching `do_cmake.sh`. Override the build directory with `-B`:
+
+```bash
+cmake --preset client-min-debug -B build
+cmake --preset rgw-min-dev -B ../other-build-dir
+```
 
 ## File layout
 
@@ -181,13 +188,11 @@ Follow the pattern used by `client.json` and `rgw.json`:
    ```json
    {
      "name": "mycomponent-min-debug",
-     "inherits": ["debug", "mycomponent-min"],
-     "binaryDir": "${sourceDir}/build-mycomponent-min-debug"
+     "inherits": ["debug", "mycomponent-min"]
    },
    {
      "name": "mycomponent-min-release",
-     "inherits": ["release", "mycomponent-min"],
-     "binaryDir": "${sourceDir}/build-mycomponent-min-release"
+     "inherits": ["release", "mycomponent-min"]
    }
    ```
 
@@ -217,4 +222,4 @@ Follow the pattern used by `client.json` and `rgw.json`:
 - A preset can only inherit from presets defined in the same file or in files that file includes (directly or indirectly). This is why every component file includes `base.json`.
 - When a preset inherits from multiple parents, settings are merged in order; later presets override earlier ones for conflicting fields.
 - Use `"hidden": true` for intermediate presets that should not appear in `--list-presets` output.
-- Always set a unique `binaryDir` for each visible preset to avoid build directory collisions.
+- Presets default to `build/`; use `-B` to target a different directory.

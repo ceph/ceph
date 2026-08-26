@@ -29,13 +29,11 @@
     },
     {
       "name": "client-min-debug",
-      "inherits": ["debug", "client-min"],
-      "binaryDir": "${sourceDir}/build-client-min-debug"
+      "inherits": ["debug", "client-min"]
     },
     {
       "name": "client-min-release",
-      "inherits": ["release", "client-min"],
-      "binaryDir": "${sourceDir}/build-client-min-release"
+      "inherits": ["release", "client-min"]
     }
   ]
 }
