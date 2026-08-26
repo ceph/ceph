@@ -76,7 +76,7 @@ options:
 - name: mon_down_uptime_grace
   type: secs
   level: advanced
-  desc: Period in seconds that the cluster may have a mon down after this (leader) monitor comes up.
+  desc: Period in seconds that the cluster may have a mon down after this (leader) Monitor comes up.
   default: 1_min
   services:
   - mon
@@ -85,7 +85,7 @@ options:
 - name: mon_mgr_beacon_grace
   type: secs
   level: advanced
-  desc: Period in seconds from last beacon to monitor marking a manager daemon as
+  desc: Period in seconds from last beacon to Monitor marking a manager daemon as
     failed
   default: 30
   services:
@@ -93,7 +93,7 @@ options:
 - name: mon_nvmeofgw_beacon_grace
   type: secs
   level: advanced
-  desc: Period in seconds from last beacon to monitor marking a NVMeoF gateway as
+  desc: Period in seconds from last beacon to Monitor marking a NVMeoF gateway as
     failed
   default: 7
   services:
@@ -109,10 +109,10 @@ options:
 - name: mon_nvmeofgw_set_group_id_retry
   type: uint
   level: advanced
-  desc: Retry wait time in microseconds for set group ID between the monitor client
+  desc: Retry wait time in microseconds for set group ID between the Monitor client
     and gateway
-  long_desc: The monitor server determines the gateway's group ID. If the monitor client
-    receives a monitor group ID assignment before the gateway is fully up during
+  long_desc: The Monitor server determines the gateway's group ID. If the Monitor client
+    receives a Monitor group ID assignment before the gateway is fully up during
     initialization, a retry is required.
   default: 1000
 - name: mon_nvmeofgw_beacons_till_ack
@@ -172,7 +172,7 @@ options:
 - name: mon_cluster_log_to_stderr
   type: bool
   level: advanced
-  desc: Make monitor send cluster log messages to stderr (prefixed by channel)
+  desc: Make Monitor send cluster log messages to stderr (prefixed by channel)
   default: false
   services:
   - mon
@@ -184,7 +184,7 @@ options:
 - name: mon_cluster_log_to_syslog
   type: str
   level: advanced
-  desc: Make monitor send cluster log messages to syslog
+  desc: Make Monitor send cluster log messages to syslog
   fmt_desc: Determines if the cluster log should be output to the syslog.
   default: default=false
   services:
@@ -207,7 +207,7 @@ options:
 - name: mon_cluster_log_to_file
   type: bool
   level: advanced
-  desc: Make monitor send cluster log messages to file
+  desc: Make Monitor send cluster log messages to file
   default: true
   services:
   - mon
@@ -259,7 +259,7 @@ options:
 - name: mon_cluster_log_to_graylog
   type: str
   level: advanced
-  desc: Make monitor send cluster log to graylog
+  desc: Make Monitor send cluster log to graylog
   default: 'false'
   services:
   - mon
@@ -293,7 +293,7 @@ options:
 - name: mon_cluster_log_to_journald
   type: str
   level: advanced
-  desc: Make monitor send cluster log to journald
+  desc: Make Monitor send cluster log to journald
   default: 'false'
   services:
   - mon
@@ -334,7 +334,7 @@ options:
 - name: mon_health_to_clog
   type: bool
   level: advanced
-  desc: log monitor health to cluster log
+  desc: log Monitor health to cluster log
   fmt_desc: Enable sending a health summary to the cluster log periodically.
   default: true
   services:
@@ -343,8 +343,8 @@ options:
 - name: mon_health_to_clog_interval
   type: int
   level: advanced
-  desc: frequency to log monitor health to cluster log
-  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
+  desc: frequency to log Monitor health to cluster log
+  fmt_desc: How often (in seconds) the Monitor sends a health summary to the cluster
     log (a non-positive number disables). Monitors will always
     send a summary to the cluster log whether or not it differs from
     the previous summary.
@@ -357,9 +357,9 @@ options:
 - name: mon_health_to_clog_tick_interval
   type: float
   level: dev
-  fmt_desc: How often (in seconds) the monitor sends a health summary to the cluster
+  fmt_desc: How often (in seconds) the Monitor sends a health summary to the cluster
     log (a non-positive number disables). If current health summary
-    is empty or identical to the last time, monitor will not send it
+    is empty or identical to the last time, Monitor will not send it
     to cluster log.
   default: 1_min
   services:
@@ -397,7 +397,7 @@ options:
   level: advanced
   desc: issue MON_DISK_CRIT health error when mon available space below this percentage
   fmt_desc: Raise ``HEALTH_ERR`` status when the filesystem that houses a
-    monitor's data store reports that its available capacity is
+    Monitor's data store reports that its available capacity is
     less than or equal to this percentage.
   default: 5
   services:
@@ -408,7 +408,7 @@ options:
   level: advanced
   desc: issue MON_DISK_LOW health warning when mon available space below this percentage
   fmt_desc: Raise ``HEALTH_WARN`` status when the filesystem that houses a
-    monitor's data store reports that its available capacity is
+    Monitor's data store reports that its available capacity is
     less than or equal to this percentage.
   default: 30
   services:
@@ -418,7 +418,7 @@ options:
   type: size
   level: advanced
   desc: issue MON_DISK_BIG health warning when mon database is above this size
-  fmt_desc: Raise ``HEALTH_WARN`` status when a monitor's data
+  fmt_desc: Raise ``HEALTH_WARN`` status when a Monitor's data
     store grows to be larger than this size, 15GB by default.
   default: 15_G
   services:
@@ -665,7 +665,7 @@ options:
 - name: mon_stretch_recovery_min_wait
   type: float
   level: advanced
-  desc: how long the monitors wait before considering fully-healthy PGs as evidence
+  desc: how long the Monitors wait before considering fully-healthy PGs as evidence
     the stretch mode is repaired
   default: 15
   services:
@@ -717,7 +717,7 @@ options:
 - name: mon_timecheck_interval
   type: float
   level: advanced
-  desc: frequency of clock synchronization checks between monitors (seconds)
+  desc: frequency of clock synchronization checks between Monitors (seconds)
   fmt_desc: The time check interval (clock drift check) in seconds
     for the Leader.
   default: 5_min
@@ -728,7 +728,7 @@ options:
 - name: mon_timecheck_skew_interval
   type: float
   level: advanced
-  desc: frequency of clock synchronization (re)checks between monitors while clocks
+  desc: frequency of clock synchronization (re)checks between Monitors while clocks
     are believed to be skewed (seconds)
   fmt_desc: The time check interval (clock drift check) in seconds when in
     presence of a skew in seconds for the Leader.
@@ -757,7 +757,7 @@ options:
   services:
   - mon
   fmt_desc: The maximum Paxos iterations before we must first sync the
-    monitor data stores. When a monitor finds that its peer is too
+    Monitor data stores. When a Monitor finds that its peer is too
     far ahead of it, it will first sync with data stores before moving
     on.
   with_legacy: true
@@ -873,7 +873,7 @@ options:
   type: bool
   level: advanced
   desc: Whether to parse non-monitor capabilities set by the 'ceph auth ...' commands.
-    Disabling this saves CPU on the monitor, but allows invalid capabilities to be
+    Disabling this saves CPU on the Monitor, but allows invalid capabilities to be
     set, and only be rejected later, when they are used.
   default: true
   services:
@@ -885,7 +885,7 @@ options:
   type: int
   level: dev
   desc: force mons to trim mdsmaps/fsmaps up to this epoch
-  fmt_desc: Force monitor to trim mdsmaps up to but not including this FSMap
+  fmt_desc: Force Monitor to trim mdsmaps up to but not including this FSMap
     epoch. A value of 0 disables (the default) this config. This command is
     potentially dangerous, use with care.
   default: 0
@@ -896,9 +896,9 @@ options:
   type: secs
   level: advanced
   desc: prune fsmap older than this threshold in seconds
-  fmt_desc: The monitors keep historical fsmaps in memory to optimize asking
+  fmt_desc: The Monitors keep historical fsmaps in memory to optimize asking
     when an MDS daemon was last seen in the FSMap. This option controls
-    how far back in time the monitors will look.
+    how far back in time the Monitors will look.
   default: 300
   flags:
   - runtime
@@ -907,9 +907,9 @@ options:
 - name: mds_beacon_mon_down_grace
   type: secs
   level: advanced
-  desc: tolerance in seconds for missed MDS beacons to monitors
+  desc: tolerance in seconds for missed MDS beacons to Monitors
   fmt_desc: The interval without beacons before Ceph declares an MDS laggy
-    when a monitor is down.
+    when a Monitor is down.
   default: 1_min
 # skip safety assertions on FSMap (in case of bugs where we want to continue anyway)
 - name: mon_mds_skip_sanity
@@ -1148,7 +1148,7 @@ options:
   type: float
   level: dev
   desc: maximum time to spend precalculating PG mappings on map change (seconds)
-  fmt_desc: How much time in seconds the monitor should spend trying to prime the
+  fmt_desc: How much time in seconds the Monitor should spend trying to prime the
     PGMap when an out OSD comes back into the cluster.
   default: 0.5
   services:
@@ -1207,7 +1207,7 @@ options:
   type: str
   level: advanced
   desc: path to mon database
-  fmt_desc: The monitor's data location.
+  fmt_desc: The Monitor's data location.
   default: /var/lib/ceph/mon/$cluster-$id
   services:
   - mon
@@ -1303,7 +1303,7 @@ options:
   - mon
   fmt_desc: Compact the database used as Ceph Monitor store on
     ``ceph-mon`` start. A manual compaction helps to shrink the
-    monitor database and improve the performance of it if the regular
+    Monitor database and improve the performance of it if the regular
     compaction fails to work.
   with_legacy: true
 # trigger RocksDB compaction on bootstrap
@@ -1315,7 +1315,7 @@ options:
   - mon
   fmt_desc: Compact the database used as Ceph Monitor store
     on bootstrap. Monitors probe each other to establish
-    a quorum after bootstrap. If a monitor times out before joining the
+    a quorum after bootstrap. If a Monitor times out before joining the
     quorum, it will start over and bootstrap again.
   with_legacy: true
 # compact (a prefix) when we trim old states
@@ -1330,7 +1330,7 @@ options:
 - name: mon_op_complaint_time
   type: secs
   level: advanced
-  desc: time after which to consider a monitor operation blocked after no updates
+  desc: time after which to consider a Monitor operation blocked after no updates
   default: 30
   services:
   - mon
@@ -1489,7 +1489,7 @@ options:
   type: int
   level: advanced
   desc: worker threads for CPU intensive background work
-  fmt_desc: Number of threads for performing CPU intensive work on monitor.
+  fmt_desc: Number of threads for performing CPU intensive work on Monitor.
   default: 4
   services:
   - mon
@@ -1498,7 +1498,7 @@ options:
   type: int
   level: advanced
   desc: interval for internal mon background checks
-  fmt_desc: A monitor's tick interval in seconds.
+  fmt_desc: A Monitor's tick interval in seconds.
   default: 5
   services:
   - mon
@@ -1536,14 +1536,14 @@ options:
   type: secs
   level: advanced
   desc: The duration, expressed in seconds, after which the NVMeoF gateway
-    should trigger a panic if it loses connection to the monitor
+    should trigger a panic if it loses connection to the Monitor
   default: 100
   services:
   - mon
 - name: nvmeof_mon_client_tick_period
   type: secs
   level: advanced
-  desc: Period in seconds of NVMeoF gateway beacon messages to monitor
+  desc: Period in seconds of NVMeoF gateway beacon messages to Monitor
   default: 1
   services:
   - mon
@@ -1561,7 +1561,7 @@ options:
   type: secs
   level: advanced
   desc: The duration, expressed in seconds, after which the NVMeoF gateway
-    should trigger a panic if it does not receive the initial map from the monitor
+    should trigger a panic if it does not receive the initial map from the Monitor
   default: 30
   services:
 - name: mon_netsplit_grace_period
