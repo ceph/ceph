@@ -1084,6 +1084,13 @@ class CephService(CephadmService):
                 'prefix': 'auth get',
                 'entity': entity,
             })
+            # prefer an uncommitted pending key over the still-active one, same
+            # as get_keyring_with_caps()/simplified_keyring(), so a daemon that
+            # gets redeployed while a key rotation is pending actually picks up
+            # the new key instead of continuing to use the one about to be
+            # invalidated by `auth commit-pending`.
+            if keyring:
+                keyring = simplified_keyring(entity, keyring)
         config = self.mgr.get_minimal_ceph_conf()
 
         if extra_ceph_config:
@@ -1127,6 +1134,11 @@ class MonService(CephService):
             'prefix': 'auth get',
             'entity': daemon_spec.entity_name(),
         })
+        # prefer an uncommitted pending key: without this, a mon redeployed
+        # while a key rotation is pending keeps using the key that's about to
+        # be invalidated by `auth commit-pending` once every mon has the new one
+        if keyring:
+            keyring = simplified_keyring(daemon_spec.entity_name(), keyring)
 
         extra_config = '[mon.%s]\n' % name
         if network:
