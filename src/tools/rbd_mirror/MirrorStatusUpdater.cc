@@ -277,7 +277,7 @@ void MirrorStatusUpdater<I>::handle_timer_task(int r) {
 
 template <typename I>
 void MirrorStatusUpdater<I>::queue_update_task(
-  std::unique_lock<ceph::mutex>&& locker) {
+  std::unique_lock<ceph::mutex> locker) {
   if (!m_initialized) {
     return;
   }
