@@ -468,32 +468,45 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                 except FileNotFoundError:
                     log.info("no cluster keyring found; skipping keyring imports")
                 else:
-                    client_keyring = f'/etc/ceph/{cluster}.client.{id_}.keyring'
-                    admin_keyring = f'/etc/ceph/{cluster}.client.admin.keyring'
-                    #tmp_keyring = f'{scratch_tmp}/workunit.client.{id_}.keyring'
-                    tmp_keyring = cluster_keyring
-                    remote.run(
-                        args=[
-                            'sudo',
-                            'ceph-authtool',
-                            tmp_keyring,
-                            '--import-keyring',
-                            client_keyring,
-                        ],
-                    )
-                    # admin_keyring may be a key type not understood
-                    try:
+                    have_authtool = remote.run(
+                        args=['sh', '-c', 'command -v ceph-authtool'],
+                        check_status=False,
+                    ).exitstatus == 0
+                    if not have_authtool:
+                        # workunits that only reach ceph via
+                        # `cephadm shell` (not CEPH_KEYRING/default identity
+                        # resolution on the host) don't need this merge
+                        log.info(
+                            "ceph-authtool not present on host; skipping"
+                            " keyring merge"
+                        )
+                    else:
+                        client_keyring = f'/etc/ceph/{cluster}.client.{id_}.keyring'
+                        admin_keyring = f'/etc/ceph/{cluster}.client.admin.keyring'
+                        #tmp_keyring = f'{scratch_tmp}/workunit.client.{id_}.keyring'
+                        tmp_keyring = cluster_keyring
                         remote.run(
                             args=[
                                 'sudo',
                                 'ceph-authtool',
                                 tmp_keyring,
                                 '--import-keyring',
-                                admin_keyring,
+                                client_keyring,
                             ],
                         )
-                    except:
-                        log.info("admin key type not understood")
+                        # admin_keyring may be a key type not understood
+                        try:
+                            remote.run(
+                                args=[
+                                    'sudo',
+                                    'ceph-authtool',
+                                    tmp_keyring,
+                                    '--import-keyring',
+                                    admin_keyring,
+                                ],
+                            )
+                        except:
+                            log.info("admin key type not understood")
 
                 args = [
                     'cd', '--', scratch_tmp,
