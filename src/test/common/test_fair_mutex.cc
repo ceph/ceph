@@ -66,3 +66,62 @@ TEST(FairMutex, fair)
     completed[team] = std::async(std::launch::async, play, team);
   }
 }
+
+TEST(FairMutex, stats_disabled_by_default)
+{
+  ceph::fair_mutex mutex{"fair::stats_off"};
+  ASSERT_FALSE(mutex.get_track_stats());
+  {
+    std::unique_lock lock{mutex};
+    std::this_thread::sleep_for(std::chrono::milliseconds(2));
+  }
+  auto stats = mutex.get_stats();
+  ASSERT_EQ(0u, stats.acquisitions);
+  ASSERT_EQ(0u, stats.wait_ns);
+  ASSERT_EQ(0u, stats.held_ns);
+}
+
+TEST(FairMutex, stats)
+{
+  ceph::fair_mutex mutex{"fair::stats"};
+  mutex.set_track_stats(true);
+  ASSERT_TRUE(mutex.get_track_stats());
+
+  const auto held = std::chrono::milliseconds(10);
+  {
+    std::unique_lock lock{mutex};
+    std::this_thread::sleep_for(held);
+  }
+  auto stats = mutex.get_stats();
+  ASSERT_EQ(1u, stats.acquisitions);
+  ASSERT_GE(stats.held_ns,
+            std::chrono::nanoseconds(held).count());
+
+  // a contended acquisition accrues wait time
+  {
+    std::unique_lock lock{mutex};
+    std::promise<void> blocking;
+    auto waiter = std::async(std::launch::async, [&] {
+      blocking.set_value();
+      std::unique_lock lock{mutex};
+    });
+    blocking.get_future().wait();
+    std::this_thread::sleep_for(held);
+    lock.unlock();
+    waiter.get();
+  }
+  stats = mutex.get_stats();
+  ASSERT_EQ(3u, stats.acquisitions);
+  ASSERT_GT(stats.wait_ns, 0u);
+
+  // and turning tracking off freezes the counters
+  mutex.set_track_stats(false);
+  {
+    std::unique_lock lock{mutex};
+    std::this_thread::sleep_for(held);
+  }
+  auto after = mutex.get_stats();
+  ASSERT_EQ(stats.acquisitions, after.acquisitions);
+  ASSERT_EQ(stats.wait_ns, after.wait_ns);
+  ASSERT_EQ(stats.held_ns, after.held_ns);
+}
