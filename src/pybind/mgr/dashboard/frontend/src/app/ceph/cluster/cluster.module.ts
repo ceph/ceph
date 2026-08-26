@@ -92,7 +92,8 @@ import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal
 import { PlacementPipe } from './services/placement.pipe';
 import { ServiceDaemonListComponent } from './services/service-daemon-list/service-daemon-list.component';
 import { ServiceCertificateDetailsComponent } from './services/service-cert-details/service-certificate-details.component';
-import { ServiceDetailsComponent } from './services/service-details/service-details.component';
+import { ServiceResourcePageComponent } from './services/service-resource-page/service-resource-page.component';
+import { ServiceResourceSidebarComponent } from './services/service-resource-sidebar/service-resource-sidebar.component';
 import { ServiceFormComponent } from './services/service-form/service-form.component';
 import { ServicesComponent } from './services/services.component';
 import { TelemetryComponent } from './telemetry/telemetry.component';
@@ -186,7 +187,8 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     OsdCreationPreviewModalComponent,
     RulesListComponent,
     ActiveAlertListComponent,
-    ServiceDetailsComponent,
+    ServiceResourcePageComponent,
+    ServiceResourceSidebarComponent,
     ServiceDaemonListComponent,
     ServiceCertificateDetailsComponent,
     TelemetryComponent,

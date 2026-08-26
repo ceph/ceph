@@ -28,6 +28,9 @@ import { RulesListComponent } from './ceph/cluster/prometheus/rules-list/rules-l
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
 import { ServiceFormComponent } from './ceph/cluster/services/service-form/service-form.component';
+import { ServiceResourceBreadcrumbResolver } from './ceph/cluster/services/service-resource-page/service-resource-breadcrumb.resolver';
+import { ServiceResourcePageComponent } from './ceph/cluster/services/service-resource-page/service-resource-page.component';
+import { ServiceResourceSidebarComponent } from './ceph/cluster/services/service-resource-sidebar/service-resource-sidebar.component';
 import { ServicesComponent } from './ceph/cluster/services/services.component';
 import { TelemetryComponent } from './ceph/cluster/telemetry/telemetry.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
@@ -242,6 +245,45 @@ const routes: Routes = [
         path: 'monitor',
         component: MonitorComponent,
         data: { breadcrumbs: 'Cluster/Monitors' }
+      },
+      {
+        path: 'services/:service_name',
+        component: ServiceResourceSidebarComponent,
+        canActivate: [ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            uiApiPath: 'orchestrator',
+            redirectTo: 'error',
+            section: 'orch',
+            section_info: 'Orchestrator',
+            header: 'Orchestrator is not available'
+          },
+          breadcrumbs: ServiceResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: ServiceResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'service-instances',
+            component: ServiceResourcePageComponent,
+            data: { breadcrumbs: 'Service Instances', section: 'service-instances' }
+          },
+          {
+            path: 'certificate',
+            component: ServiceResourcePageComponent,
+            data: { breadcrumbs: 'Certificate', section: 'certificate' }
+          },
+          {
+            path: 'events',
+            component: ServiceResourcePageComponent,
+            data: { breadcrumbs: 'Service Events', section: 'events' }
+          }
+        ]
       },
       {
         path: 'services',
