@@ -2649,6 +2649,8 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
                             const std::map<std::string, bufferlist>& attrs,
                             const std::optional<RGWQuotaInfo>& quota,
                             std::optional<ceph::real_time> creation_time,
+                            std::optional<rgw::BucketIndexType> index_type,
+                            std::optional<uint32_t> index_shards,
                             obj_version* pep_objv,
                             RGWBucketInfo& info)
 {
@@ -2670,6 +2672,12 @@ int RGWRados::create_vector_bucket(const DoutPrefixProvider* dpp,
     info.owner = owner;
     info.zonegroup = zonegroup_id;
     info.placement_rule = placement_rule;
+
+    // vector buckets have no bucket index, so no index is initialized here.
+    // the layout still needs to be filled in, otherwise it defaults to a
+    // Normal index layout that does not exist
+    init_default_bucket_layout(cct, info.layout, svc.zone->get_zone(),
+                               index_type, index_shards);
 
     if (creation_time) {
       info.creation_time = *creation_time;
