@@ -4,7 +4,7 @@ members = [
     "lancedb-rgw-store",
     "rgw-lancedb",
 ]
-resolver = "2"
+resolver = "3"
 
 # prevent pulling in all debug info for lancedb dependencies
 [profile.dev.package."*"]
