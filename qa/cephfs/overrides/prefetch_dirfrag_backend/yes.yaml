@@ -3,4 +3,5 @@ overrides:
     cluster-conf:
       mds:
         mds_dir_prefetch_backend: true
+        mds_dir_prefetch: false
         mds_dir_prefetch_backend_max: 1
