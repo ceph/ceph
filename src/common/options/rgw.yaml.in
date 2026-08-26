@@ -3155,6 +3155,17 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_s3_block_sse_c_by_default
+  type: bool
+  level: advanced
+  desc: Block SSE-C uploads on newly created buckets
+  long_desc: When enabled, RGW configures all newly created buckets to block
+    SSE-C uploads. Existing buckets are not affected. Use PutBucketEncryption
+    to change this setting on a bucket.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
 # base64 encoded key for encryption of rgw objects
 - name: rgw_crypt_default_encryption_key
   type: str
