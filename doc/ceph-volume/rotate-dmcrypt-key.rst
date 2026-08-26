@@ -246,6 +246,11 @@ monitors, stages it and rotates to a further passphrase, which costs one extra
 passphrase but needs no special invocation. For ``raw``, re-running the second
 invocation is idempotent.
 
+Concurrent invocations against the same OSD are refused through a lock file in
+``/run/ceph-volume``. Callers that run ceph-volume in a container have to share
+that directory with the host for the lock to have any effect, or serialize the
+invocations themselves.
+
 ``--force`` is required to rotate a device that has active keyslots other
 than 0 and 1 (ceph-volume never creates those); foreign keyslots are left
 untouched. This check applies to the first invocation only, not to the second.
