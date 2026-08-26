@@ -30,6 +30,7 @@ import {
   TARGET_PATH_TEXT,
   TARGET_REGION_TEXT,
   TARGET_SECRET_KEY_TEXT,
+  LOCATION_CONSTRAINT_TEXT,
   TierTarget,
   TIER_TYPE,
   ZoneGroup,
@@ -160,7 +161,8 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       glacierRestoreTiertypeText: GLACIER_RESTORE_TIER_TYPE_TEXT,
       restoreDaysText: RESTORE_DAYS_TEXT,
       readthroughrestoreDaysText: READTHROUGH_RESTORE_DAYS_TEXT,
-      restoreStorageClassText: RESTORE_STORAGE_CLASS_TEXT
+      restoreStorageClassText: RESTORE_STORAGE_CLASS_TEXT,
+      locationConstraintText: LOCATION_CONSTRAINT_TEXT
     };
     this.storageClassOptions = [
       { value: TIER_TYPE.LOCAL, label: TIER_TYPE_DISPLAY.LOCAL },
@@ -220,6 +222,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
             this.storageClassForm.patchValue({
               zonegroup: this.storageClassInfo?.zonegroup_name,
               region: response?.region,
+              location_constraint: response?.location_constraint ?? '',
               placement_target: this.storageClassInfo?.placement_target,
               storageClassType: this.tierTargetInfo?.val?.tier_type ?? TIER_TYPE.LOCAL,
               target_endpoint: response?.endpoint,
@@ -456,6 +459,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       region: new FormControl('', [
         CdValidators.composeIf({ storageClassType: TIER_TYPE.CLOUD_TIER }, [Validators.required])
       ]),
+      location_constraint: new FormControl(''),
       placement_target: new FormControl('', {
         validators: [Validators.required]
       }),
@@ -755,6 +759,7 @@ export class RgwStorageClassFormComponent extends CdForm implements OnInit {
       retain_head_object,
       allow_read_through: rawFormValue.allow_read_through,
       region: rawFormValue.region,
+      location_constraint: rawFormValue.location_constraint || '',
       multipart_sync_threshold,
       multipart_min_part_size,
       restore_storage_class: rawFormValue.restore_storage_class,

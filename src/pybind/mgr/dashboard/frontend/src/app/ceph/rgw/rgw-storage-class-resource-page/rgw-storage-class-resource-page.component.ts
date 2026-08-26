@@ -18,6 +18,7 @@ import {
   StorageClassDetails,
   TARGET_ACCESS_KEY_TEXT,
   TARGET_PATH_TEXT,
+  LOCATION_CONSTRAINT_TEXT,
   TIER_TYPE,
   TIER_TYPE_DISPLAY,
   ZoneGroupDetails
@@ -269,6 +270,11 @@ export class RgwStorageClassResourcePageComponent implements OnInit, OnDestroy {
         {
           label: $localize`Target Region`,
           value: details?.region
+        },
+        {
+          label: $localize`Location constraint`,
+          value: details?.location_constraint,
+          helperText: LOCATION_CONSTRAINT_TEXT
         },
         {
           label: $localize`Target Endpoint`,
