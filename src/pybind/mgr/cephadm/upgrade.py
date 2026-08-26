@@ -57,7 +57,8 @@ MID_UPGRADE_MUTED_WARNINGS = [
     'AUTH_INSECURE_SERVICE_TICKETS',
     'AUTH_INSECURE_CLIENT_KEY_TYPE',
     'AUTH_INSECURE_SERVICE_KEY_TYPE',
-    'AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE'
+    'AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE',
+    'AUTH_PENDING_KEY_NOT_COMMITTED'
 ]
 
 
@@ -1692,6 +1693,7 @@ class CephadmUpgrade:
                     CephadmDaemonDeploySpec.from_daemon_description(osd_daemon),
                     action='redeploy'
                 )
+                self.mgr.commit_pending_key(CephadmDaemonDeploySpec.from_daemon_description(osd_daemon))
                 rotated_osd_ids.append(str(osd_daemon.daemon_id))
                 unsaved_rotated_osds.append(str(osd_daemon.daemon_id))
                 save_counter += 1
@@ -1719,6 +1721,7 @@ class CephadmUpgrade:
                     CephadmDaemonDeploySpec.from_daemon_description(mds_daemon),
                     action='redeploy'
                 )
+                self.mgr.commit_pending_key(CephadmDaemonDeploySpec.from_daemon_description(mds_daemon))
                 rotated_mds_ids.append(str(mds_daemon.daemon_id))
                 unsaved_rotated_mdss.append(str(mds_daemon.daemon_id))
                 save_counter += 1
@@ -1790,6 +1793,7 @@ class CephadmUpgrade:
                     )
                     logger.info('Redeploying %s with new keyring', dd.name())
                     self.mgr._daemon_action(daemon_spec, action='redeploy')
+                    self.mgr.commit_pending_key(daemon_spec)
                     self.upgrade_state.rotated_mgr_mon_auth_key_daemons.append(daemon_spec.name())
                     self._save_upgrade_state()
                 # mon daemons share a key, only do one key rotation
@@ -1819,6 +1823,14 @@ class CephadmUpgrade:
                     self.mgr._daemon_action(daemon_spec, action='redeploy')
                     self.upgrade_state.rotated_mgr_mon_auth_key_daemons.append(daemon_spec.name())
                     self._save_upgrade_state()
+                # the "mon." key is shared by every monitor, so only commit it once every
+                # mon in mon_daemons has actually been redeployed with the new keyring --
+                # committing early would invalidate the old key while some mons are still
+                # relying on it.
+                if all(dd.name() in self.upgrade_state.rotated_mgr_mon_auth_key_daemons for dd in mon_daemons):
+                    self.mgr.commit_pending_key(
+                        CephadmDaemonDeploySpec.from_daemon_description(mon_daemons[0])
+                    )
             else:
                 self.mgr.log.debug('Skipping mgr/mon key rotation, mons not upgraded')
             if need_rotate_self:
