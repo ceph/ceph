@@ -39,15 +39,13 @@
       "name": "rgw-min-dev",
       "displayName": "Radosgw Development",
       "description": "Minimal configuration to build radosgw targets for vstart",
-      "inherits": ["debug", "rgw-min"],
-      "binaryDir": "${sourceDir}/build-rgw-min-debug"
+      "inherits": ["debug", "rgw-min"]
     },
     {
       "name": "rgw-min-release",
       "displayName": "Radosgw Release",
       "description": "Minimal release configuration to build radosgw targets",
-      "inherits": ["release", "rgw-min"],
-      "binaryDir": "${sourceDir}/build-rgw-min-release"
+      "inherits": ["release", "rgw-min"]
     }
   ]
 }

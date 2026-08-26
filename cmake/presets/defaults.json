@@ -5,7 +5,7 @@
       "name": "_default-debug",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build-debug",
+      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
@@ -14,7 +14,7 @@
       "name": "_default-release",
       "hidden": true,
       "generator": "Ninja",
-      "binaryDir": "${sourceDir}/build-relwithdebinfo",
+      "binaryDir": "${sourceDir}/build",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "RelWithDebInfo"
       }
