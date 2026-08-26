@@ -150,8 +150,9 @@ class LFUDAPolicy : public CachePolicy {
     template<typename T>
     struct ObjectComparator {
       bool operator()(T* const e1, T* const e2) const {
-        // order the min heap using creationTime
-        return e1->creationTime > e2->creationTime;
+        // order the min heap using next_retry_time (which is initialized to creationTime)
+        // This automatically handles retry deferral without explicit wait logic
+        return e1->next_retry_time > e2->next_retry_time;
       }
     };
 
@@ -171,11 +172,13 @@ class LFUDAPolicy : public CachePolicy {
       using handle_type = boost::heap::fibonacci_heap<LFUDAObjEntry*, boost::heap::compare<ObjectComparator<LFUDAObjEntry>>>::handle_type;
       handle_type handle;
       int retry_count = 0;  // Initialize to 0 to track retry attempts
+      ceph::real_time next_retry_time;  // Earliest time to retry after transient error (preserves creationTime for version ordering)
 
       LFUDAObjEntry(const std::string& key, const std::string& version, bool deleteMarker, uint64_t size,
                      ceph::real_time creationTime, const rgw_user& user, const std::string& etag,
                      const std::string& bucket_name, const std::string& bucket_id, const rgw_obj_key& obj_key) : ObjEntry(key, version, deleteMarker, size,
-									    creationTime, user, etag, bucket_name, bucket_id, obj_key) {}
+									    creationTime, user, etag, bucket_name, bucket_id, obj_key),
+                                                                                                                             next_retry_time(creationTime) {}
 
       void set_handle(handle_type handle_) { handle = handle_; }
     };
@@ -308,6 +311,9 @@ class LFUDAPolicy : public CachePolicy {
     void save_y(optional_yield y) { this->y = y; }
     void localweight_writer(const DoutPrefixProvider* dpp);
     int get_age() { return age; }
+
+  private:
+    int mark_local_blocks_clean(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y, bool local_only = false);
 };
 
 class LRUPolicy : public CachePolicy {

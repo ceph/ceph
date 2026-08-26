@@ -3,6 +3,8 @@
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
 #include "rgw_perf_counters.h"
+#include "include/scope_guard.h"
+#include "common/random_string.h"
 
 namespace rgw::d4n {
 
@@ -212,6 +214,10 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
       // version_map is std::map<uint64_t, LFUDAObjEntry*> sorted ascending by
       // creationTime, so begin() is the oldest version — push that to the heap
       LFUDAObjEntry* e = version_map.begin()->second;
+
+      // next_retry_time is initialized to creationTime in constructor
+      // cleaning() will add interval to determine when entry is ready
+
       handle_type handle = object_heap.push(e);
       e->set_handle(handle);
       ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
@@ -306,35 +312,74 @@ int LFUDAPolicy::getMinAvgWeight(const DoutPrefixProvider* dpp, int *minAvgWeigh
  issued on an object and it must be deleted rather than written to the backend. This lazy deletion occurs
  in the Cleaning method and prevents data races during concurrent requests. The method below returns "false"
  if the state has not been set to INVALID, and "true" if it has. The state is not set to INVALID when
- cleaning is in progress, a process which writes the object to the backend store. */
+ cleaning is in progress, a process which writes the object to the backend store.
+
+ After setting state to INVALID, this method also marks all data blocks as invalid by setting the
+ RGW_CACHE_ATTR_INVALID xattr. This is done outside the lock to avoid blocking other cache operations.
+ If a block is not found (due to racing delete in delete_data_blocks), the error is ignored. */
 bool LFUDAPolicy::invalidate_dirty_object(const DoutPrefixProvider* dpp, const std::string& key) {
-  std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
+  LFUDAObjEntry* entry = nullptr;
+  uint64_t obj_size = 0;
+  bool is_delete_marker = false;
 
-  if (o_entries_map.empty())
-    return false;
+  {
+    std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
 
-  auto p = o_entries_map.find(key);
-  if (p == o_entries_map.end()) {
-    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): key=" << key << " not found" << dendl;
-    return false;
-  }
+    if (o_entries_map.empty())
+      return false;
 
-  if (p->second.second == State::INIT) {
-    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Setting State::INVALID for key=" << key << dendl;
-    p->second.second = State::INVALID;
-    //head block is only for delete marker
-    if(p->second.first->delete_marker) {
-      if(int ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_INVALID, "1", y); ret < 0) {
-        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Failed to set xattr, ret=" << ret << dendl;
-        return false;
-      }
+    auto p = o_entries_map.find(key);
+    if (p == o_entries_map.end()) {
+      ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): key=" << key << " not found" << dendl;
+      return false;
     }
-    return true;
-  } else if (p->second.second == State::IN_PROGRESS) {
-    state_cond.wait(l, [this, &key]{ return (o_entries_map.find(key) == o_entries_map.end()); });
+
+    if (p->second.second == State::INIT) {
+      ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Setting State::INVALID for key=" << key << dendl;
+      p->second.second = State::INVALID;
+      entry = p->second.first;
+      obj_size = entry->size;
+      is_delete_marker = entry->delete_marker;
+    } else if (p->second.second == State::IN_PROGRESS) {
+      state_cond.wait(l, [this, &key]{ return (o_entries_map.find(key) == o_entries_map.end()); });
+      return false;
+    } else {
+      return false;
+    }
+  }  // Release lock before marking blocks invalid
+
+  // Mark HEAD block invalid (only for delete markers)
+  if (is_delete_marker) {
+    int ret = cacheDriver->set_attr(dpp, key, RGW_CACHE_ATTR_INVALID, "1", y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Failed to set xattr on HEAD block, ret=" << ret << dendl;
+      // Continue anyway - this is not fatal
+    }
   }
 
-  return false;
+  // Mark all data blocks invalid (outside lock to avoid blocking)
+  if (!is_delete_marker && obj_size > 0) {
+    uint64_t chunk_size = dpp->get_cct()->_conf->rgw_max_chunk_size;
+    const off_t lst = obj_size;
+    off_t fst = 0;
+
+    while (fst < lst) {
+      off_t cur_size = std::min<off_t>(fst + chunk_size, lst);
+      off_t cur_len = cur_size - fst;
+      std::string oid_in_cache = rgw::sal::get_key_in_cache(key, std::to_string(fst), std::to_string(cur_len));
+
+      int ret = cacheDriver->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_INVALID, "1", y);
+      if (ret < 0 && ret != -ENOENT) {
+        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__ << "(): Failed to set xattr on data block"
+                          << " oid=" << oid_in_cache << ", ret=" << ret << dendl;
+        // Continue anyway - racing delete may have removed the block
+      }
+
+      fst += cur_len;
+    }
+  }
+
+  return true;
 }
 
 int LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, CacheBlock* victim, optional_yield y) {
@@ -556,7 +601,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 
 	  /* The following part takes care of updating the weight (globalWeight) of the block if this is the last copy in a remote setup
 	   * and is pushed out to a remote cache where space is available. */
-	  if (block.cacheObj.hostsList.size() == 1 && *(block.cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { // Last copy 
+	  if (block.cacheObj.hostsList.size() == 1 && *(block.cacheObj.hostsList.begin()) == dpp->get_cct()->_conf->rgw_d4n_local_rgw_address) { // Last copy
 		update_global_weight = false;
 		if (block.globalWeight) {
 		  entry.localWeight += block.globalWeight;
@@ -565,18 +610,18 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 
 		if (!remoteCacheAddress.empty()) {
 		  if (entry.localWeight > avgWeight) {
-			// Write the victim block to the remote cache
 			rgw::d4n::RemoteCachePutOp::RemoteCachePutOpData op {
-			  entry.bucketName,
-			  object_name,
-			  block.blockID,
-			  block.size,
-			  block.version,
-              false,
-			  entry.user,
-			  remoteCacheAddress,
-			  block.cacheObj.size,
-              instance_id
+				entry.bucketName,
+				object_name,
+				block.blockID,
+				block.size,
+				block.version,
+				false,
+				entry.user,
+				remoteCacheAddress,
+				block.cacheObj.size,
+				instance_id,
+				"" // old_version - not applicable for eviction
 			};
 			std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op, true);
 			if ((ret = remote_put->send_and_complete_request(dpp, y, &out_bl)) < 0){
@@ -585,12 +630,12 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 			}
 			ldpp_dout(dpp, 20) << __func__ << "(): " << __LINE__ << ": Sending to remote is done." << dendl;
 			update_global_weight = true;
-		  } 
+		  }
 		}
 	  }
     }
 
-    // Only update victim block's global weight if the block wasn't completely evicted; else, delete block from directory 
+	// Only update victim block's global weight if the block wasn't completely evicted; else, delete block from directory
     if (update_global_weight) {
       block.globalWeight += entry.localWeight;
       block.cacheObj.hostsList.clear();
@@ -772,6 +817,10 @@ void LFUDAPolicy::update_dirty_object(const DoutPrefixProvider* dpp, const std::
 
   std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
   LFUDAObjEntry* e = create_obj_entry(dpp, key, version, deleteMarker, size, creationTime, user, etag, bucket_name, bucket_id, obj_key, state);
+
+  // next_retry_time is initialized to creationTime in constructor
+  // cleaning() will add interval to determine when entry is ready
+
   auto& versions = per_obj_versions[e->obj_key.name];
   if (versions.size() == 1) {
     handle_type handle = object_heap.push(e);
@@ -1065,6 +1114,103 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
 	return 0;
 }
 
+/*
+ * mark_local_blocks_clean() - Mark local cache blocks as clean
+ *
+ * This function updates the dirty flag for all local cache blocks to reflect that
+ * the object has been written to the backend and is now clean.
+ *
+ * Parameters:
+ *   local_only: Controls what state to update
+ *     - false (default): Update both LOCAL and SHARED state
+ *       * LOCAL: cache xattr, in-memory metadata
+ *       * SHARED: block directory entries in FDB/Redis
+ *     - true: Update LOCAL state only, skip SHARED directory
+ *       * Used when another RGW already updated SHARED state
+ *
+ * Updates (when local_only=false):
+ * 1. In-memory metadata (entries_map) - via update() call [LOCAL]
+ * 2. Local cache xattr (RGW_CACHE_ATTR_DIRTY) - set to "0" [LOCAL]
+ * 3. Block directory (dirty field) - set to "false" [SHARED - FDB/Redis]
+ *
+ * Updates (when local_only=true):
+ * 1. In-memory metadata (entries_map) - via update() call [LOCAL]
+ * 2. Local cache xattr (RGW_CACHE_ATTR_DIRTY) - set to "0" [LOCAL]
+ * 3. Block directory - SKIPPED (another RGW already updated it)
+ *
+ * Called from:
+ * 1. Normal cleaning path - after successful writeback to backend (local_only=false)
+ * 2. Pre-flight clean detection - when another RGW already cleaned (local_only=true)
+ *
+ */
+int LFUDAPolicy::mark_local_blocks_clean(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, optional_yield y, bool local_only)
+{
+  int ret = 0;
+  uint64_t chunk_size = dpp->get_cct()->_conf->rgw_max_chunk_size;
+
+  // Mark all data blocks clean
+  off_t lst = e->size;
+  off_t fst = 0;
+  while (fst < lst) {
+    off_t cur_size = std::min<off_t>(fst + chunk_size, lst);
+    off_t cur_len = cur_size - fst;
+
+    std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
+    ldpp_dout(dpp, 20) << __func__ << "(): marking clean oid_in_cache=" << oid_in_cache << dendl;
+
+    // Update LOCAL in-memory data structure for each block
+    this->update(dpp, oid_in_cache, 0, 0, e->version, false, e->user, e->bucket_name, 0, y, nullptr);
+
+    // Update LOCAL cache xattr
+    ret = cacheDriver->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_DIRTY, "0", y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty xattr in cache"
+                        << " for oid=" << oid_in_cache << ", ret=" << ret << dendl;
+      // Continue to try updating other blocks even if one fails
+    }
+
+    // Update SHARED block directory (skip if local_only=true)
+    // When local_only=true, another RGW already updated the shared directory
+    if (!local_only) {
+      rgw::d4n::CacheBlock block {
+        .cacheObj = {
+          .objName = e->obj_key.get_oid(),
+          .bucketName = e->bucket_id,
+        },
+        .blockID = static_cast<uint64_t>(fst),
+        .version = e->version,
+        .size = static_cast<uint64_t>(cur_len),
+      };
+      std::string dirty = "false";
+      ret = blockDir.update_field(dpp, y, &block, "dirty", dirty, std::nullopt);
+      if (ret < 0) {
+        ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty flag in block directory"
+                          << " for blockID=" << fst << ", ret=" << ret << dendl;
+      }
+    }
+
+    fst += cur_len;
+  }
+
+  // Mark HEAD block clean (only exists for delete markers)
+  if (e->delete_marker) {
+    ldpp_dout(dpp, 20) << __func__ << "(): marking clean HEAD block for key=" << e->key << dendl;
+
+    // Update in-memory metadata for head
+    this->update(dpp, e->key, 0, 0, e->version, false, e->user, e->bucket_name, 0, y, nullptr);
+
+    // Update cache xattr
+    ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_DIRTY, "0", y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty xattr for HEAD block"
+                        << " key=" << e->key << ", ret=" << ret << dendl;
+    }
+  }
+
+  ldpp_dout(dpp, 10) << __func__ << "(): completed marking blocks clean for key=" << e->key << dendl;
+  return 0;  // Return success even if some individual updates failed
+}
+
 /* As part of the cleaning process, this method reads an object from the cache
  * and writes it to the backend store. It marks the object clean in the directory
  * It is also responsible for correctly updating the version in the directory.
@@ -1073,6 +1219,106 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
 {
   ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
                        << "(): writing back key=" << e->key << dendl;
+
+  // Step 1: Pre-flight check - verify object is still dirty
+  rgw::d4n::CacheBlock ver_head_check {
+    .cacheObj = {
+      .objName = rgw::sal::get_versioned_head_block_name(e->version, e->obj_key.name),
+      .bucketName = e->bucket_id,
+    },
+    .blockID = 0,
+    .size = 0,
+  };
+
+  int ret = blockDir.get(dpp, y, &ver_head_check, std::nullopt);
+  if (ret == 0) {
+    if (!ver_head_check.cacheObj.dirty) {
+      // Object already cleaned by another RGW
+      // The shared versioned HEAD block shows dirty=false, but our local cache
+      // blocks may still have dirty="1" xattr. Mark them clean to maintain
+      // consistency and allow eviction.
+      ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                         << "(): object already clean (cleaned by another RGW)"
+                         << ", marking local blocks clean, version=" << e->version
+                         << ", key=" << e->key << dendl;
+
+      // Use local_only=true since the cleaning RGW already updated the SHARED directory
+      mark_local_blocks_clean(dpp, e, y, true);
+
+      return 0;  // Already cleaned by another RGW
+    }
+  } else if (ret == -ENOENT) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                       << "(): versioned HEAD not found, object may be deleted, key=" << e->key << dendl;
+    return ret;
+  } else {
+    ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                      << "(): Failed to get versioned HEAD, ret=" << ret << dendl;
+    return ret;
+  }
+
+  // Step 2: Check if another RGW is already cleaning this object
+  if (!lease) {
+    ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                      << "(): Lease system not available" << dendl;
+    return -EINVAL;
+  }
+
+  std::string lease_resource = rgw::sal::get_lease_resource_prefix(
+    e->bucket_id,
+    e->obj_key.name,
+    e->version,
+    "CLEAN");
+
+  // Check for existing CLEAN lease first
+  auto lease_check = lease->any_active(dpp, lease_resource);
+  if (lease_check.has_error()) {
+    ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                      << "(): Lease check failed, error=" << lease_check.error
+                      << " for resource=" << lease_resource << dendl;
+    // On database error, be conservative: assume lease exists
+    return -EEXIST;
+  }
+  if (lease_check.active) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                       << "(): Active CLEAN lease exists for resource=" << lease_resource
+                       << " - another RGW is cleaning, key=" << e->key << dendl;
+    return -EEXIST;  // Another RGW is cleaning this object
+  }
+
+  // Step 3: Try to acquire the lease (no active lease found)
+  std::string local_addr = dpp->get_cct()->_conf->rgw_d4n_local_rgw_address;
+  std::string lease_token = gen_rand_alphanumeric_plain(dpp->get_cct(), 16);
+  uint64_t lease_ttl = rgw::sal::D4N_LEASE_TTL_NANOSECONDS;
+
+  ret = lease->acquire(dpp, lease_resource, local_addr, lease_token, lease_ttl);
+  if (ret == -EEXIST) {
+    // Race condition: another RGW acquired between check and acquire
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                       << "(): Race condition - another RGW acquired lease, key=" << e->key << dendl;
+    return ret;
+  } else if (ret < 0) {
+    ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                      << "(): Failed to acquire lease, ret=" << ret << dendl;
+    return ret;
+  }
+
+  ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                     << "(): Acquired cleaning lease for key=" << e->key
+                     << ", token=" << lease_token << dendl;
+
+  // RAII guard to ensure lease is released on all exit paths
+  auto lease_guard = make_scope_guard([&]() {
+    int release_ret = lease->release(dpp, lease_resource, local_addr, lease_token);
+    if (release_ret < 0) {
+      ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                        << "(): Failed to release lease, ret=" << release_ret << dendl;
+    } else {
+      ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                         << "(): Released cleaning lease for key=" << e->key << dendl;
+    }
+  });
+
   rgw::sal::Attrs obj_attrs;
   uint64_t len = 0;
   rgw_user c_rgw_user = e->user; 
@@ -1086,7 +1332,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
   RGWBucketInfo c_bucketinfo;
   c_bucketinfo.bucket = c_rgw_bucket;
   c_bucketinfo.owner = c_rgw_user;
-  int ret = driver->load_bucket(dpp, c_rgw_bucket, &c_bucket, y);
+  ret = driver->load_bucket(dpp, c_rgw_bucket, &c_bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << __func__ << "(): load_bucket() returned ret=" << ret << dendl;
     return ret;
@@ -1165,15 +1411,46 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
     obj_attrs.erase(RGW_CACHE_ATTR_BUCKET_NAME);
     obj_attrs.erase(RGW_CACHE_ATTR_LOCAL_WEIGHT);
 
-    do {
-      ceph::bufferlist data;
-      if (fst >= lst){
-        break;
+    // Calculate number of chunks for lease renewal
+    uint64_t chunk_size = dpp->get_cct()->_conf->rgw_max_chunk_size;
+    uint64_t num_chunks = (e->size + chunk_size - 1) / chunk_size;  // Ceiling division
+
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                       << "(): Object size=" << e->size
+                       << ", chunks=" << num_chunks << dendl;
+
+    uint64_t renewal_count = 0;
+
+    while (fst < lst) {
+      // Renew lease for each chunk
+      ret = lease->renew(dpp, lease_resource, local_addr, lease_token, lease_ttl, num_chunks);
+      renewal_count++;
+
+      if (ret == -EINVAL) {
+        // max_ticks exceeded - should not happen if num_chunks calculated correctly
+        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                          << "(): Lease renewal max_ticks exceeded, stopping writeback" << dendl;
+        return ret;
+      } else if (ret == -ENOENT) {
+        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                          << "(): Lease expired or stolen, stopping writeback" << dendl;
+        return ret;
+      } else if (ret < 0) {
+        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
+                          << "(): Failed to renew lease, ret=" << ret << dendl;
+        return ret;
       }
+
+      ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
+                         << "(): Renewed lease, renewal=" << renewal_count
+                         << "/" << num_chunks << dendl;
+
       off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
       off_t cur_len = cur_size - fst;
       std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
       ldpp_dout(dpp, 10) << __func__ << "(): oid_in_cache=" << oid_in_cache << dendl;
+
+      ceph::bufferlist data;
       rgw::sal::Attrs attrs;
       cacheDriver->get(dpp, oid_in_cache, 0, cur_len, data, attrs, y);
       if (op_ret < 0) {
@@ -1194,7 +1471,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
         return op_ret;
       }
       ofs += len;
-    } while (len > 0);
+    }
 
     op_ret = filter->process({}, ofs);
 
@@ -1209,51 +1486,12 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
       ldpp_dout(dpp, 20) << __func__ << "processor->complete() returned ret=" << op_ret << dendl;
       return op_ret;
     }
-    /* invoke update() with dirty flag set to false, to update in-memory metadata for each block
-        reset values */
-    lst = e->size;
-    fst = 0;
-    do {
-      if (fst >= lst) {
-        break;
-      }
-      off_t cur_size = std::min<off_t>(fst + dpp->get_cct()->_conf->rgw_max_chunk_size, lst);
-      off_t cur_len = cur_size - fst;
 
-      std::string oid_in_cache = rgw::sal::get_key_in_cache(e->key, std::to_string(fst), std::to_string(cur_len));
-      ldpp_dout(dpp, 20) << __func__ << "(): oid_in_cache =" << oid_in_cache << dendl;
-      //Update in-memory data structure for each block
-      this->update(dpp, oid_in_cache, 0, 0, e->version, false, e->user, e->bucket_name, 0, y, nullptr);
+    // Mark all local blocks clean (cache xattr + directory)
+    // This updates both data blocks and HEAD block (if delete marker)
+    mark_local_blocks_clean(dpp, e, y);
 
-      rgw::d4n::CacheBlock block;
-      block.cacheObj.bucketName = c_obj->get_bucket()->get_bucket_id();
-      block.cacheObj.objName = c_obj->get_name();
-      block.size = cur_len;
-      block.blockID = fst;
-      block.version = e->version;
-      if ((op_ret = cacheDriver->set_attr(dpp, oid_in_cache, RGW_CACHE_ATTR_DIRTY, "0", y)) == 0) {
-        std::string dirty = "false";
-    	//auto txn = this->driver->get_txn_factory()->create_transaction(dpp); 
-        op_ret = blockDir.update_field(dpp, y, &block, "dirty", dirty, std::nullopt);
-        if (op_ret < 0) {
-          ldpp_dout(dpp, 0) << __func__ << "updating dirty flag in block directory failed, ret=" << op_ret << dendl;
-        }
-      } else {
-        ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty xattr in cache, ret=" << op_ret << dendl;
-      }
-
-      fst += cur_len;
-    } while(fst < lst);
   } //end-else if delete_marker
-
-  //head block exists only for delete marker
-  if (e->delete_marker) {
-    //invoke update() with dirty flag set to false, to update in-memory metadata for head
-    this->update(dpp, e->key, 0, 0, e->version, false, e->user, e->bucket_name, 0, y, nullptr);
-    if ((ret = cacheDriver->set_attr(dpp, e->key, RGW_CACHE_ATTR_DIRTY, "0", y)) < 0) {
-      ldpp_dout(dpp, 0) << __func__ << "(): Failed to update dirty attr in cache, ret=" << op_ret << dendl;
-    }
-  }
   if (null_instance) {
     //restore instance for directory data processing in later steps
     c_obj->set_instance("null");
@@ -1404,6 +1642,13 @@ static bool is_transient_error(int ret)
     case ECONNREFUSED:
     case EIO:
     case EAGAIN:
+    case EEXIST:
+      // Lease conflict - another RGW is cleaning this object.
+      // This is transient: the other RGW will finish (success or failure),
+      // and our retry will verify completion via pre-flight check.
+      // If object becomes clean → pre-flight returns 0 (verified success)
+      // If lease released but object still dirty → we acquire and clean
+      // If still being cleaned → returns -EEXIST again → retry continues
       return true;
     case ENOENT:
     case EACCES:
@@ -1413,31 +1658,79 @@ static bool is_transient_error(int ret)
   }
 }
 
-/* This method "cleans" and writes back dirty data from the cache to the backend store.
-   It also deletes invalid dirty data from cache backend.
-*/
+/*
+ * cleaning() - Background thread that cleans dirty objects by writing them to backend
+ *
+ * This method processes dirty objects from
+ * the object_heap (min-heap ordered by creationTime). It handles both:
+ * 1. VALID dirty objects -> writeback to backend (do_writeback)
+ * 2. INVALID tombstoned objects -> delete from cache (do_delete)
+ *
+ * Key Features:
+ * - Wait-based scheduling: Holds entries and waits for expiration/watermark
+ * - Retry with deferral: Transient errors retry with time-based backoff
+ * - Lease-based coordination: Prevents multiple RGWs from cleaning same object
+ * - Version promotion: After cleaning one version, promotes next version to heap
+ * - Watermark-aware: Can interrupt waits to clean urgently when cache is full
+ *
+ * State Transitions (in o_entries_map):
+ *   INIT -> IN_PROGRESS -> (success) -> erased
+ *                       -> (retry)   -> INIT -> back to heap
+ *                       -> (failure) -> erased + added to failed_entries
+ *   INVALID -> IN_PROGRESS -> (success) -> erased
+ *                          -> (retry)   -> INVALID -> back to heap
+ *
+ * Lock Pattern:
+ *   1. Acquire lock -> pop entry from heap -> release during waits
+ *   2. Re-acquire lock (via continue) -> check state -> mark IN_PROGRESS -> release
+ *   3. Process WITHOUT lock (do_writeback/do_delete are potentially long operations)
+ *   4. Re-acquire lock for retry/failure handling
+ *   5. Re-acquire lock for version promotion
+ *
+ */
 void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  const int interval = dpp->get_cct()->_conf->rgw_d4n_cache_cleaning_interval;
+  // Entry is held across loop iterations to implement wait-based scheduling:
+  // - Pop entry once, hold it during wait, then process it
+  // - Prevents other threads from picking the same entry
+  // - Reset to nullptr after processing (success/failure/retry)
   std::optional<LFUDAObjEntry*> e;
+
   while(!quit) {
     ldpp_dout(dpp, 20) << __func__ << " : " << " Cache cleaning!" << dendl;
+
+    // Track whether this entry is tombstoned (invalid=true means do_delete, false means do_writeback)
     bool invalid = false;
-  
+
     ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__ << "" << __LINE__ << "(): Before acquiring cleaning-lock" << dendl;
+
+    // Acquire lock for heap and state operations
     std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
-    //saving e till the entry expires and is processed so that the same entry is not picked by another thread
+
+    // Pop entry from heap if we don't already have one
+    // (we hold entry across iterations during wait periods)
     if (!e.has_value()) {
+      // Wait for heap to be non-empty
       while (!quit && object_heap.empty()) {
         boost::system::error_code ec;
         cond->async_wait(l, y.get_yield_context()[ec]);
       }
       if (quit) break;
+
+      // Pop entry with earliest next_retry_time (min-heap ordered by next_retry_time)
+      // next_retry_time is initialized to creationTime, so this gives us age-based ordering
+      // For retried entries, next_retry_time is set to future time for deferral
       e = object_heap.top();
       object_heap.pop();
     }
+
+    // State variable for retry logic - tracks whether entry is INIT or INVALID
+    // This is set to match the entry's state and is used to restore state on retry
     State s = State::INIT;
+
+    // Save obj_name now because we'll need it after e is reset (for version promotion)
     std::string obj_name = (*e)->obj_key.name;
+    // Debug logging for entry details
     ldpp_dout(dpp, 10) <<__LINE__ << " " << __func__ << "(): e->key=" << (*e)->key << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->delete_marker=" << (*e)->delete_marker << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->version=" << (*e)->version << dendl;
@@ -1446,86 +1739,183 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->user=" << (*e)->user << dendl;
     ldpp_dout(dpp, 10) << __LINE__ << " " << __func__ << "(): e->obj_key=" << (*e)->obj_key << dendl;
 
-    int diff = std::chrono::duration_cast<std::chrono::seconds>(
-        ceph::real_clock::now() - (*e)->creationTime).count();
-    bool entry_expired = (diff >= interval);
-    if (!entry_expired && !above_watermark) {
+    // STEP 1: Check if entry is ready to process
+    // For new entries (retry_count == 0): next_retry_time = creationTime, ready when now >= creationTime + interval
+    // For retried entries (retry_count > 0): next_retry_time = target retry time, ready when now >= next_retry_time
+    auto now = ceph::real_clock::now();
+    const int interval = dpp->get_cct()->_conf->rgw_d4n_cache_cleaning_interval;
+
+    // Note: age is calculated from creationTime (actual time since object became dirty)
+    // for informational/logging purposes only. Scheduling decision uses next_retry_time + interval.
+    int age = std::chrono::duration_cast<std::chrono::seconds>(now - (*e)->creationTime).count();
+
+    // Calculate target time when entry should be processed
+    ceph::real_time target_time;
+    if ((*e)->retry_count == 0) {
+      // New entry: ready after cleaning interval from creation
+      target_time = (*e)->next_retry_time + std::chrono::seconds(interval);
+    } else {
+      // Retried entry: next_retry_time already set to target retry time
+      target_time = (*e)->next_retry_time;
+    }
+
+    bool entry_ready = (now >= target_time) || above_watermark;
+
+    // If entry not ready AND cache not full, wait for one of:
+    // - target_time to arrive
+    // - Watermark exceeded (cache full, need urgent cleaning)
+    // - Quit signal
+    if (!entry_ready) {
+      auto wait_duration = std::chrono::duration_cast<std::chrono::seconds>(
+          target_time - now).count();
       ldpp_dout(dpp, 10) << __LINE__ << " " << __func__
-                         << "(): entry not expired and below watermark, waiting on=" << (*e)->key << dendl;
+                         << "(): entry not ready and below watermark, waiting on=" << (*e)->key
+                         << " age=" << age << "s"
+                         << " retry_count=" << (*e)->retry_count
+                         << " target_time=" << target_time
+                         << " wait_seconds=" << wait_duration << dendl;
       l.unlock();
       while (!quit && !above_watermark) {
-        diff = std::chrono::duration_cast<std::chrono::seconds>(
-            ceph::real_clock::now() - (*e)->creationTime).count();
-        if (diff >= interval) break;     // entry expired while we slept
+        now = ceph::real_clock::now();
+        if (now >= target_time) break;  // Target time reached - proceed to clean
 
+        // Sleep until target_time or watermark exceeds
+        // Note: watermark check in loop condition allows early wakeup for urgent cleaning
+        auto remaining = std::chrono::duration_cast<std::chrono::seconds>(
+            target_time - now).count();
         boost::system::error_code ec;
-        watermark_timer->expires_after(std::chrono::seconds(interval - diff));
+        watermark_timer->expires_after(std::chrono::seconds(remaining));
         watermark_timer->async_wait(y.get_yield_context()[ec]);
       }
       continue;
     }
-    //start cleaning, either when entry is expired or when cache filled space is above EVICTION_WATERMARK
-    if (!(*e)->key.empty()) { // if block is dirty and written more than interval seconds ago
-      ldpp_dout(dpp, 10) <<__LINE__ << " " << __func__ << "(): entry has expired= " << (*e)->key << dendl;
+    // STEP 2: Entry is ready to process (next_retry_time arrived or watermark exceeded)
+    if (!(*e)->key.empty()) { // Sanity check - should always be true
+      ldpp_dout(dpp, 10) <<__LINE__ << " " << __func__ << "(): entry ready to process= " << (*e)->key
+                         << " age=" << age << "s" << dendl;
+
+      // Validate entry still exists and check its state
       auto p = o_entries_map.find((*e)->key);
       if (p == o_entries_map.end()) {
-        e.reset();
-	l.unlock();
-	continue;
-      }
-      if (p->second.second == State::INVALID) {
-	invalid = true;
-      } else if (p->second.second == State::IN_PROGRESS) { //already being processed by another thread
         e.reset();
         l.unlock();
         continue;
       }
-      //set to IN_PROGRESS irrespective of INVALID as this indicates that processing is in progress
+
+      // Check state to determine processing type
+      if (p->second.second == State::INVALID) {
+        // Entry is tombstoned (deleted object) - needs cache cleanup (do_delete)
+        invalid = true;
+      } else if (p->second.second == State::IN_PROGRESS) {
+        // NOTE: This should NEVER happen because entry was popped from heap
+        // (only cleaning threads pop from heap, and entry is held in 'e')
+        e.reset();
+        l.unlock();
+        continue;
+      }
+
       p->second.second = State::IN_PROGRESS;
+
+      // Release lock BEFORE processing - do_delete/do_writeback are potentially long operations:
+      // - do_writeback: fetch bucket, acquire lease, read/write chunks, backend PUT
+      // - do_delete: check GET leases, delete data blocks, delete HEAD blocks
+      // Holding lock during these would block all cache operations for seconds/minutes
       l.unlock();
 
+      // STEP 3: Process entry (WITHOUT holding lock)
       int ret = 0;
-      // If the state is invalid, the blocks must be deleted from the cache rather than written to the backend.
       if (invalid) {
+        // Tombstoned entry (object was deleted) - remove from cache
         s = State::INVALID;
         ret = do_delete(dpp, *e, interval, y);
       } else {
+        // Dirty entry (object data cached but not on backend) - writeback to backend
         s = State::INIT;
         ret = do_writeback(dpp, *e, y);
       }
-      //retry logic upon failure
+      // STEP 4: Handle processing result
       if (ret < 0) {
+        // Processing failed - determine if we should retry or mark as permanently failed
+
         if (is_transient_error(ret) && (*e)->retry_count < MAX_CLEANING_RETRY) {
-          std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
-          //reset state
+          // STEP 4a: Transient error - retry with deferral
+          std::unique_lock<std::mutex> retry_lock(lfuda_cleaning_lock);
+
+          // Reset entry state from IN_PROGRESS back to INIT/INVALID
+          // This allows the entry to be processed again when retried
+          // State transition: IN_PROGRESS -> INIT/INVALID (allows re-processing)
           auto p = o_entries_map.find((*e)->key);
           if (p != o_entries_map.end()) {
-            p->second.second = s;
+            p->second.second = s;  // s is INIT (for writeback) or INVALID (for delete)
           }
-          //put it back in heap
+
+          // Set retry deferral time to prevent tight retry loop on small heaps
+          // Why use next_retry_time instead of modifying creationTime?
+          // - creationTime is used as map key in per_obj_versions
+          // - Modifying it would reorder versions incorrectly
+          // - For do_delete, reordering is OK (entry is removed after deletion)
+          // - For do_writeback, reordering is NOT OK (entry is kept as clean)
+          (*e)->next_retry_time = ceph::real_clock::now() + std::chrono::seconds(interval / 2);
+
+          // Re-queue entry for retry
           (*e)->retry_count++;
+          ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
+                             << "() deferring cleaning retry due to transient error ret=" << ret
+                             << " retry_count=" << (*e)->retry_count
+                             << " next_retry_time=" << (*e)->next_retry_time << dendl;
+
           auto handle = object_heap.push(*e);
           (*e)->set_handle(handle);
-          cond->notify(l);
+          cond->notify(retry_lock);
+
+          // Reset e so it will be re-popped from heap on next iteration
+          // The retry deferral wait (STEP 2a) will ensure we don't process it too soon
           e.reset();
           continue;
+
         } else {
-          //queue in failed entries queue
-          std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
+          // STEP 4b: Permanent failure or retry limit exceeded
+          // Action: Save to failed_entries for manual review/debugging
+          // Entry will still be removed from active tracking (erased below)
+
+          std::unique_lock<std::mutex> fail_lock(lfuda_cleaning_lock);
           failed_entries.push_back(*(*e));
+          // Note: Entry falls through to erase_dirty_object below
         }
       }
-      //remove from map and release memory for *e
+      // STEP 5: Cleanup - Remove entry from tracking
+      // erase_dirty_object() acquires its own lock and:
+      // - Removes from o_entries_map
+      // - Removes from per_obj_versions (using creationTime as map key)
+      // - Deletes the LFUDAObjEntry object
       erase_dirty_object(dpp, (*e)->key, y);
+
+      // Clear our local reference since entry is now deleted
       e.reset();
+
+      // STEP 6: Version Promotion - Process next version of same object
+      // Versioned objects have multiple versions tracked in per_obj_versions:
+      // - Map structure: obj_name -> sorted_map<creationTime, LFUDAObjEntry*>
+      // - Only ONE version in heap at a time (to avoid cleaning multiple versions concurrently)
+      // - After cleaning one version, promote the next (oldest) version to heap
       {
         ldpp_dout(dpp, 10) <<__LINE__ << " " << __func__ << "(): promoting next version" << dendl;
-        std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
+        std::unique_lock<std::mutex> promote_lock(lfuda_cleaning_lock);
+
+        // Note: obj_name was saved at the top of the loop before e was reset
         auto v_it = per_obj_versions.find(obj_name);
-        
+
         if (v_it != per_obj_versions.end() && !v_it->second.empty()) {
+          // More versions exist for this object - promote the oldest one
+
+          // begin() returns the entry with smallest creationTime (oldest version)
           auto next_it = v_it->second.begin();
           LFUDAObjEntry* next = next_it->second;
+
+          // next_retry_time is initialized to creationTime in constructor
+          // cleaning() will add interval to determine when entry is ready
+
+          // Add to heap for cleaning
           auto handle = object_heap.push(next);
           next->set_handle(handle);
 
@@ -1535,18 +1925,24 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
                               << " creationTime="
                               << next->creationTime
                               << dendl;
+
+          // Remove from per_obj_versions (now tracked in heap)
           v_it->second.erase(next_it);
-          cond->notify(l);
+
+          // Wake cleaning thread in case it was waiting on empty heap
+          cond->notify(promote_lock);
+
         } else if (v_it != per_obj_versions.end()) {
-          // No more versions — cleanup
+          // No more versions for this object - cleanup the empty map entry
           per_obj_versions.erase(v_it);
           ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
                               << "(): all versions processed for obj="
                               << obj_name << dendl;
         }
+        // else: Object not in per_obj_versions - normal case for non-versioned objects
       }
     } // end-if !e->key.empty()
-  } //end-while true
+  } // end-while !quit
 }
 
 void LFUDAPolicy::localweight_writer(const DoutPrefixProvider* dpp)
