@@ -13,6 +13,7 @@
 #include <unordered_set>
 #include <optional>
 #include <iostream>
+#include <memory>
 #include <CLI/CLI.hpp>
 
 #include <boost/asio/co_spawn.hpp>
@@ -3592,6 +3593,29 @@ void init_realm_param(CephContext *cct, string& var, std::optional<string>& opt_
   }
 }
 
+// Group holding the hidden ancestor copies registered by add_multilevel_*.
+// It must be non-empty: CLI11 returns an empty name for an option whose group
+// is empty (Option::get_name), which drops the flag from its own error message
+// — "--bucket: 1 required TEXT missing" becomes ": 1 required TEXT missing".
+// Keeping the copies out of --help is AncestorCopiesFormatter's job instead.
+constexpr const char* ANCESTOR_COPIES_GROUP = "__ancestor_copies";
+
+// Hides ANCESTOR_COPIES_GROUP from the help output. Every group listing goes
+// through make_group, so overriding it is enough. Must be installed on the
+// root before the first add_subcommand: a subcommand copies the formatter
+// from its parent at construction.
+class AncestorCopiesFormatter : public CLI::Formatter {
+public:
+  std::string make_group(std::string group, bool is_positional,
+                         std::vector<const CLI::Option*> opts) const override {
+    if (group == ANCESTOR_COPIES_GROUP) {
+      return {};
+    }
+    return CLI::Formatter::make_group(std::move(group), is_positional,
+                                      std::move(opts));
+  }
+};
+
 // Registers a value option at every level of the command tree: hidden on all
 // ancestor commands for backward compatibility, visible on cmd. Returns the
 // visible Option* so callers can chain modifiers like ->option_text().
@@ -3612,7 +3636,7 @@ CLI::Option* add_multilevel_option(CLI::App* cmd, const std::string& name, T& va
   const std::string primary = name.substr(0, name.find(','));
   for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
     if (!p->get_option_no_throw(primary)) {
-      auto* opt = p->add_option(name, var)->group("")->take_last();
+      auto* opt = p->add_option(name, var)->group(ANCESTOR_COPIES_GROUP)->take_last();
       if (check) {
         opt->each(check);
       }
@@ -3648,7 +3672,7 @@ CLI::Option* add_multilevel_strict_int(CLI::App* cmd, const std::string& name,
   };
   for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
     if (!p->get_option_no_throw(primary)) {
-      p->add_option(name, setter)->group("")->take_last()
+      p->add_option(name, setter)->group(ANCESTOR_COPIES_GROUP)->take_last()
           ->type_name(CLI::detail::type_name<T>());
     }
   }
@@ -3686,7 +3710,8 @@ CLI::Option* add_multilevel_binary_flag(CLI::App* cmd, const std::string& name,
   };
   for (CLI::App* p = cmd->get_parent(); p; p = p->get_parent()) {
     if (!p->get_option_no_throw(primary)) {
-      p->add_option_function<std::string>(name, setter)->group("")->expected(0, 1)->take_last();
+      p->add_option_function<std::string>(name, setter)
+          ->group(ANCESTOR_COPIES_GROUP)->expected(0, 1)->take_last();
     }
   }
   return cmd->add_option_function<std::string>(name, setter, std::string(desc))->expected(0, 1)->take_last();
@@ -3717,9 +3742,9 @@ static std::string full_command_name(CLI::App* node) {
 // After parsing, warns about flags that a parent command caught instead of the
 // actual command. A correctly-placed flag is caught by the command's own
 // visible option, so it never shows up here; a flag caught by a parent shows up
-// as a hidden group("") copy (added by add_multilevel_option for backward
-// compat) with count() > 0. Whether the command actually has the flag decides
-// the message:
+// as a hidden ANCESTOR_COPIES_GROUP copy (added by add_multilevel_option for
+// backward compat) with count() > 0. Whether the command actually has the flag
+// decides the message:
 //   - the command has it   -> it was just typed too early:
 //                             "should appear after the subcommand".
 //   - the command lacks it -> unrelated flag we accept anyway for backward
@@ -3727,7 +3752,8 @@ static std::string full_command_name(CLI::App* node) {
 // We ask the command itself, not each child. Under fallthrough()
 // get_option_no_throw() climbs to the parent when the command doesn't own the
 // flag, so we also check the returned option's group: a real (visible) option
-// has a named group, while a hidden copy climbed from an ancestor has group "".
+// has its own group, while a hidden copy climbed from an ancestor is in
+// ANCESTOR_COPIES_GROUP.
 void warn_wrong_position_and_unrelated_option(CLI::App* root) {
   // One command is parsed, so follow the parsed chain down to the real command.
   std::vector<CLI::App*> path;
@@ -3745,7 +3771,7 @@ void warn_wrong_position_and_unrelated_option(CLI::App* root) {
   std::set<std::string> warned;
   for (CLI::App* node : path) {
     for (const auto* opt : node->get_options()) {
-      if (!opt->get_group().empty() || opt->count() == 0) {
+      if (opt->get_group() != ANCESTOR_COPIES_GROUP || opt->count() == 0) {
         continue;
       }
       const std::string primary = "--" + opt->get_single_name();
@@ -3754,7 +3780,8 @@ void warn_wrong_position_and_unrelated_option(CLI::App* root) {
       }
       // Does the actual command own this flag as a real (visible) option?
       const CLI::Option* owned = leaf->get_option_no_throw(primary);
-      const bool command_has_flag = owned && !owned->get_group().empty();
+      const bool command_has_flag =
+          owned && owned->get_group() != ANCESTOR_COPIES_GROUP;
       if (command_has_flag) {
         cerr << "Warning: " << option_display_name(opt)
              << " should appear after the subcommand\n";
@@ -4316,6 +4343,11 @@ int main(int argc, const char **argv)
         break;
       }
     }
+
+    // Keeps the hidden ancestor copies out of the help output. Set before the
+    // first add_subcommand below, since each subcommand copies the formatter from
+    // its parent when it is constructed.
+    app.formatter(std::make_shared<AncestorCopiesFormatter>());
 
     // TODO: keep while CLI11 and legacy parsing coexist. After full migration,
     // decide whether to preserve legacy acceptance of known-but-irrelevant
