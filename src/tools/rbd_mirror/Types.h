@@ -156,7 +156,7 @@ struct PeerSpec {
       return cluster_name < rhs.cluster_name;
     } else if (client_name != rhs.client_name) {
       return client_name < rhs.client_name;
-    } else if (mon_host < rhs.mon_host) {
+    } else if (mon_host != rhs.mon_host) {
       return mon_host < rhs.mon_host;
     } else {
       return key < rhs.key;
