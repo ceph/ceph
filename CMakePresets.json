@@ -1,0 +1,8 @@
+{
+  "version": 10,
+  "include": [
+    "cmake/presets/base.json",
+    "cmake/presets/client.json",
+    "cmake/presets/rgw.json"
+  ]
+}

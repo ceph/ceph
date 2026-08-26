@@ -1,0 +1,53 @@
+{
+  "version": 10,
+  "include": [
+    "base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "rgw-min",
+      "hidden": true,
+      "cacheVariables": {
+        "WITH_BOOST_VALGRIND": "ON",
+        "WITH_SYSTEM_ARROW": "ON",
+        "WITH_SYSTEM_GTEST": "ON",
+        "WITH_SYSTEM_LIBURING": "ON",
+        "WITH_SYSTEM_QATLIB": "ON",
+        "WITH_SYSTEM_QATZIP": "ON",
+        "WITH_SYSTEM_UTF8PROC": "ON",
+        "WITH_SYSTEM_ZSTD": "ON",
+        "WITH_CEPHFS": "OFF",
+        "WITH_RBD": "OFF",
+        "WITH_KRBD": "OFF",
+        "WITH_MGR": "OFF",
+        "WITH_RDMA": "OFF",
+        "WITH_JAEGER": "OFF",
+        "WITH_BREAKPAD": "OFF",
+        "WITH_BLKIN": "OFF",
+        "WITH_LTTNG": "OFF",
+        "WITH_BABELTRACE": "OFF",
+        "WITH_RADOSGW_AMQP_ENDPOINT": "OFF",
+        "WITH_RADOSGW_KAFKA_ENDPOINT": "OFF",
+        "WITH_RADOSGW_LUA_PACKAGES": "OFF",
+        "WITH_RADOSGW_D4N": "OFF",
+        "WITH_RADOSGW_DBSTORE": "OFF",
+        "WITH_RADOSGW_POSIX": "OFF",
+        "WITH_RADOSGW_ARROW_FLIGHT": "OFF"
+      }
+    },
+    {
+      "name": "rgw-min-dev",
+      "displayName": "Radosgw Development",
+      "description": "Minimal configuration to build radosgw targets for vstart",
+      "inherits": ["debug", "rgw-min"],
+      "binaryDir": "${sourceDir}/build-rgw-min-debug"
+    },
+    {
+      "name": "rgw-min-release",
+      "displayName": "Radosgw Release",
+      "description": "Minimal release configuration to build radosgw targets",
+      "inherits": ["release", "rgw-min"],
+      "binaryDir": "${sourceDir}/build-rgw-min-release"
+    }
+  ]
+}
