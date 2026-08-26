@@ -1145,8 +1145,8 @@ int FDBObjectDirectory::remove_version_by_creation_time(const DoutPrefixProvider
 
 int FDBObjectDirectory::list_versions(const DoutPrefixProvider* dpp, optional_yield y, const std::string& bucket_id, const std::string& obj_name, const std::string& marker_version, uint64_t count, std::vector<CacheObjectVersion>& obj_versions, std::string& continuation_token, std::optional<std::reference_wrapper<Transaction>> txn)
 {
-  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " obj_name: " << obj_name << dendl;
-  ldpp_dout(dpp, 20) << "D4NFilterBucket::" << __func__ << " marker_version: " << marker_version << dendl;
+  ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " obj_name: " << obj_name << dendl;
+  ldpp_dout(dpp, 20) << "FDBObjectDirectory::" << __func__ << " marker_version: " << marker_version << dendl;
   std::vector<std::string> members;
   auto ret = fdb_revrange(dpp, y, bucket_id, obj_name, marker_version, count, obj_versions, continuation_token, txn);
   if (ret < 0 ) {
@@ -1159,6 +1159,7 @@ int FDBBlockDirectory::exist_key(const DoutPrefixProvider* dpp, optional_yield y
 {
   return fdb_invoke(dpp, txn, [&](auto& tr){
     std::string key = build_index(block);
+    ldpp_dout(dpp, 20) << "FDBBlockDirectory::" << __func__ << " key: " << key << dendl;
     return lfdb::key_exists(tr, key);
   });
 }
