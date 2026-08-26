@@ -10,7 +10,7 @@ categories = ["database", "api-bindings"]
 
 [lib]
 name = "lancedb_rgw_store"
-crate-type = ["cdylib", "staticlib", "rlib"]
+crate-type = ["staticlib", "rlib"]
 
 [dependencies]
 # Both crates are in a Cargo workspace (src/rgw/Cargo.toml) sharing one
