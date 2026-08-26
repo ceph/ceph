@@ -5378,15 +5378,19 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
     list<ceph_filelock> activated_locks;
     MDSContext::vec waiters;
+    bool changed = false;
     if (lock_state->is_waiting(set_lock)) {
       dout(10) << " unlock removing waiting lock " << set_lock << dendl;
       lock_state->remove_waiting(set_lock);
-      cur->take_waiting(CInode::WAIT_FLOCK, waiters);
-    } else if (!interrupt) {
+      changed = true;
+    }
+    if (!interrupt) {
       dout(10) << " unlock attempt on " << set_lock << dendl;
       lock_state->remove_lock(set_lock, activated_locks);
-      cur->take_waiting(CInode::WAIT_FLOCK, waiters);
+      changed = true;
     }
+    if (changed)
+      cur->take_waiting(CInode::WAIT_FLOCK, waiters);
     mds->queue_waiters(waiters);
 
     respond_to_request(mdr, 0);
