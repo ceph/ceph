@@ -1739,10 +1739,10 @@ void BlueStore::BufferSpace::_add_buffer(BufferCacheShard* cache,
   }
   if (add_to_map) {
     ldout(cache->cct, 20) << __func__ << " added " << b << dendl;
-    b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
     b->cache_private = cache_private;
     buffer_map.insert(*b);
     if (!b->is_writing()) {
+      b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
       cache->_add(b, level, near);
     }
   }
