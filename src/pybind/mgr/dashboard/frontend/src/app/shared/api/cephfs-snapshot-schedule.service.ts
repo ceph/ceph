@@ -124,9 +124,12 @@ export class CephfsSnapshotScheduleService {
 
   getSnapshotSchedule(path: string, fs: string, recursive = true): Observable<SnapshotSchedule[]> {
     return this.http
-      .get<SnapshotSchedule[]>(
-        `${this.baseURL}/snapshot/schedule/${fs}?path=${path}&recursive=${recursive}`
-      )
+      .get<SnapshotSchedule[]>(`${this.baseURL}/snapshot/schedule/${fs}`, {
+        params: {
+          path,
+          recursive: String(recursive)
+        }
+      })
       .pipe(
         catchError(() => {
           return of([]);
