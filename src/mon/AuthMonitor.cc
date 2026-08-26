@@ -529,7 +529,27 @@ bool AuthMonitor::check_health()
   std::map<std::string,std::list<std::string>> bad_caps_detail;  // entity -> details
   std::map<EntityName, std::string> bad_key_client_detail;
   std::map<EntityName, std::string> bad_key_service_detail;
+  std::map<EntityName, std::string> stale_pending_key_detail;
+  const auto pending_key_ttl =
+    cct->_conf.get_val<std::chrono::seconds>("mon_auth_pending_key_ttl");
+  const auto now = ceph_clock_now();
+  // a ttl of 0 disables the check
+  auto check_pending_key = [&](const EntityName& entity, const EntityAuth& auth) {
+    stale_pending_key_detail.erase(entity);
+    if (pending_key_ttl.count() == 0 || auth.pending_key.empty()) {
+      return;
+    }
+    const auto created = auth.pending_key.get_created();
+    if (now < created || (now - created).sec() <= pending_key_ttl.count()) {
+      return;
+    }
+    std::ostringstream ss;
+    ss << "entity " << entity << " has an uncommitted pending key created at "
+       << created;
+    stale_pending_key_detail[entity] = ss.str();
+  };
   for (auto const& [entity, auth] : mon.get_secrets()) {
+    check_pending_key(entity, auth);
     for (auto& p : auth.caps) {
       ostringstream ss;
       if (!valid_caps(p.first, p.second, &ss)) {
@@ -561,7 +581,9 @@ bool AuthMonitor::check_health()
 	bad_caps_detail.erase(entity.to_str());
         bad_key_client_detail.erase(entity);
         bad_key_service_detail.erase(entity);
+        stale_pending_key_detail.erase(entity);
       } else if (auth_inc.op == KeyServerData::AUTH_INC_ADD) {
+        check_pending_key(entity, auth);
 	for (auto& p : auth.caps) {
 	  ostringstream ss;
 	  if (!valid_caps(p.first, p.second, &ss)) {
@@ -645,6 +667,15 @@ bool AuthMonitor::check_health()
     summary << bad_rotating_service_keys.size() << " rotating auth service keys using insecure key types";
     auto& check = next.add("AUTH_INSECURE_ROTATING_SERVICE_KEY_TYPE", HEALTH_WARN, summary.str(), bad_rotating_service_keys.size());
     for (auto& detail : bad_rotating_service_keys) {
+      check.detail.push_back(detail);
+    }
+  }
+
+  if (!stale_pending_key_detail.empty()) {
+    std::ostringstream summary;
+    summary << stale_pending_key_detail.size() << " auth entities have an uncommitted pending key";
+    auto& check = next.add("AUTH_PENDING_KEY_NOT_COMMITTED", HEALTH_WARN, summary.str(), stale_pending_key_detail.size());
+    for (auto& [name, detail] : stale_pending_key_detail) {
       check.detail.push_back(detail);
     }
   }
