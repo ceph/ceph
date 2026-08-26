@@ -153,11 +153,18 @@ int MgrStandby::asok_command(std::string_view cmd, const cmdmap_t& cmdmap, Forma
   }
 }
 
+static void handle_standby_mgr_signal(int signum)
+{
+  derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
+  _exit(0);
+}
+
 int MgrStandby::init()
 {
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
-
+  register_async_signal_handler_oneshot(SIGTERM, handle_standby_mgr_signal);
+  register_async_signal_handler_oneshot(SIGINT, handle_standby_mgr_signal);
   cct->_conf.add_observer(this);
 
   std::lock_guard l(lock);
@@ -495,6 +502,8 @@ int MgrStandby::main(vector<const char *> args)
 
   // Disable signal handlers
   unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGTERM, handle_standby_mgr_signal);
+  unregister_async_signal_handler(SIGINT, handle_standby_mgr_signal);
   shutdown_async_signal_handler();
 
   return 0;

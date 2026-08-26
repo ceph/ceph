@@ -314,7 +314,7 @@ void RGWRadosThread::start()
 
 void RGWRadosThread::stop()
 {
-  down_flag = true;
+  set_down_flag();
   stop_process();
   if (worker) {
     worker->signal();
@@ -1022,6 +1022,19 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
+  if (run_sync_thread) {
+    std::lock_guard l{meta_sync_thread_lock};
+    meta_sync_processor_thread->set_down_flag();
+    std::lock_guard dl{data_sync_thread_lock};
+    for (auto iter : data_sync_processor_threads) {
+      RGWDataSyncProcessorThread *thread = iter.second;
+      thread->set_down_flag();
+    }
+    if (sync_log_trimmer) {
+      sync_log_trimmer->set_down_flag();
+    }
+  }
+
   /* Before joining any sync threads, drain outstanding requests &
    * mark the async_processor as going_down() */
   if (svc.async_processor) {
@@ -1239,6 +1252,41 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   auto& zone_params = svc.zone->get_zone_params();
   auto& zone = svc.zone->get_zone();
 
+  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
+  binfo_cache->init(svc.cache);
+
+  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
+  topic_cache->init(svc.cache);
+
+  lc = new RGWLC();
+  lc->initialize(cct, this->driver);
+
+  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
+
+  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
+                             zone.bucket_index_max_shards);
+  if (bucket_index_max_shards > get_max_bucket_shards()) {
+    bucket_index_max_shards = get_max_bucket_shards();
+    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
+      << get_max_bucket_shards() << dendl;
+  }
+  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
+
+  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
+
+  if (need_tombstone_cache) {
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+  }
+
+  reshard_wait = std::make_shared<RGWReshardWait>();
+
+  reshard = new RGWReshard(this->driver);
+
+  // disable reshard thread based on zone/zonegroup support
+  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
+
+  index_completion_manager = new RGWIndexCompletionManager(this);
+
   /* no point of running sync thread if we don't have a master zone configured
     or there is no rest_master_conn */
   if (!svc.zone->need_to_sync()) {
@@ -1317,47 +1365,12 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
     data_notifier->start();
   }
 
-  binfo_cache = new RGWChainedCacheImpl<bucket_info_entry>;
-  binfo_cache->init(svc.cache);
-
-  topic_cache = new RGWChainedCacheImpl<pubsub_bucket_topics_entry>;
-  topic_cache->init(svc.cache);
-
-  lc = new RGWLC();
-  lc->initialize(cct, this->driver);
-
   if (use_lc_thread)
     lc->start_processor();
-
-  quota_handler = RGWQuotaHandler::generate_handler(dpp, this->driver, quota_threads);
-
-  bucket_index_max_shards = (cct->_conf->rgw_override_bucket_index_max_shards ? cct->_conf->rgw_override_bucket_index_max_shards :
-                             zone.bucket_index_max_shards);
-  if (bucket_index_max_shards > get_max_bucket_shards()) {
-    bucket_index_max_shards = get_max_bucket_shards();
-    ldpp_dout(dpp, 1) << __func__ << " bucket index max shards is too large, reset to value: "
-      << get_max_bucket_shards() << dendl;
-  }
-  ldpp_dout(dpp, 20) << __func__ << " bucket index max shards: " << bucket_index_max_shards << dendl;
-
-  bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
-
-  if (need_tombstone_cache) {
-    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
-  }
-
-  reshard_wait = std::make_shared<RGWReshardWait>();
-
-  reshard = new RGWReshard(this->driver);
-
-  // disable reshard thread based on zone/zonegroup support
-  run_reshard_thread = run_reshard_thread && svc.zone->can_reshard();
 
   if (run_reshard_thread)  {
     reshard->start_processor();
   }
-
-  index_completion_manager = new RGWIndexCompletionManager(this);
 
   if (run_notification_thread) {
     if (!rgw::notify::init(dpp, driver, *svc.site)) {
@@ -4875,7 +4888,7 @@ int RGWRados::copy_obj(RGWObjectCtx& src_obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(dest_obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y, astate->accounted_size);
   }
 
   /* This has been in for 2 years, so we can safely assume amanifest is not NULL */
@@ -5045,6 +5058,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                string *petag,
                const DoutPrefixProvider *dpp,
                optional_yield y,
+               uint64_t src_accounted_size,
                bool log_op)
 {
   string tag;
@@ -5104,14 +5118,48 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
       ldpp_dout(dpp, 0) << "ERROR: failed to read compression info" << dendl;
       return ret;
     }
-    // pass original size if compressed
-    accounted_size = compressed ? cs_info.orig_size : ofs;
+    // The bucket index accounted_size must be the object's logical (uncompressed)
+    // size. When the destination is compressed we take it from the compression info.
+    // Otherwise `ofs` is the number of RAW bytes read from the source: but if the source
+    // itself is compressed, the ofs is the *compressed* size, not the logical
+    // size. So, prefer the source's known logical size.
+    accounted_size = compressed ? cs_info.orig_size
+                                : (src_accounted_size ? src_accounted_size : ofs);
   }
 
   const req_context rctx{dpp, y, nullptr};
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
                             nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
                             log_op ? rgw::sal::FLAG_LOG_OP : 0);
+}
+
+int fixup_manifest_to_parts_len(const DoutPrefixProvider *dpp, rgw::sal::Attrs &src_attrs) {
+  auto iter = src_attrs.find(RGW_ATTR_MANIFEST);
+  if (iter == src_attrs.end()) {
+    return 0;
+  }
+
+  bufferlist &manifest_bl { iter->second };
+
+  // if the source object was encrypted, preserve the part lengths from
+  // the original object's manifest in RGW_ATTR_CRYPT_PARTS. if the object
+  // already replicated and has the RGW_ATTR_CRYPT_PARTS attr, preserve it
+  if (src_attrs.count(RGW_ATTR_CRYPT_MODE) &&
+      !src_attrs.count(RGW_ATTR_CRYPT_PARTS)) {
+    std::vector<size_t> parts_len;
+    int r = RGWGetObj_BlockDecrypt::read_manifest_parts(dpp, manifest_bl,
+							parts_len);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to read part lengths from the manifest r=" << r << dendl;
+      return r;
+    }
+    // store the encoded part lenghts in RGW_ATTR_CRYPT_PARTS
+    bufferlist parts_bl;
+    encode(parts_len, parts_bl);
+    src_attrs[RGW_ATTR_CRYPT_PARTS] = std::move(parts_bl);
+  }
+
+  return 0;
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -5137,6 +5185,11 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   read_op.params.obj_size = &obj_size;
 
   int ret = read_op.prepare(y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = fixup_manifest_to_parts_len(dpp, attrs);
   if (ret < 0) {
     return ret;
   }
@@ -5175,6 +5228,7 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       nullptr /* petag */,
                       dpp,
                       y,
+                      0, /* src_accounted_size: unknown here, keep ofs-based size */
                       log_op);
   if (ret < 0) {
     return ret;
@@ -7037,6 +7091,12 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(const DoutPrefixProvider *dpp, 
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      invalidate_bs();
+      continue;
+    }
+
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }
@@ -7735,6 +7795,10 @@ int RGWRados::guard_reshard(const DoutPrefixProvider *dpp,
     }
 
     r = call(bs);
+    if (r == -ENOENT) {
+      ldpp_dout(dpp, 10) << "ENOENT in guard_reshard(), likely bucket resharding, retrying" << dendl;
+      continue;
+    }
     if (r != -ERR_BUSY_RESHARDING) {
       break;
     }

@@ -346,7 +346,7 @@ int main(int argc, const char **argv)
 	keyring.get_auth(ename, eauth)) {
       derr << "already have key in keyring " << keyring_path << dendl;
     } else {
-      eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES);
+      eauth.key.create(g_ceph_context, CEPH_CRYPTO_AES256KRB5);
       keyring.add(ename, eauth);
       bufferlist bl;
       keyring.encode_plaintext(bl);

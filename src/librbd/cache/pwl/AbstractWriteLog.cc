@@ -81,9 +81,7 @@ template <typename I>
 AbstractWriteLog<I>::~AbstractWriteLog() {
   ldout(m_image_ctx.cct, 15) << "enter" << dendl;
   {
-    std::lock_guard timer_locker(*m_timer_lock);
     std::lock_guard locker(m_lock);
-    m_timer->cancel_event(m_timer_ctx);
     m_thread_pool.stop();
     ceph_assert(m_deferred_ios.size() == 0);
     ceph_assert(m_ops_to_flush.size() == 0);
@@ -644,6 +642,11 @@ void AbstractWriteLog<I>::shut_down(Context *on_finish) {
 
   Context *ctx = new LambdaContext(
     [this, on_finish](int r) {
+      {
+        std::lock_guard timer_locker(*m_timer_lock);
+        m_timer->cancel_event(m_timer_ctx);
+        m_timer_ctx = nullptr;
+      }
       if (m_perfcounter) {
         perf_stop();
       }

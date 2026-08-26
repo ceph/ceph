@@ -16,7 +16,6 @@
 #include "CephxProtocol.h"
 
 #include <errno.h>
-#include <sstream>
 
 #include "common/config.h"
 #include "include/ceph_features.h"
@@ -101,27 +100,47 @@ int CephxSessionHandler::_calc_signature(Message *m, uint64_t *psig)
       ceph_le32(header.seq)
     };
 
-    char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
+    if (key.get_type() <= CEPH_CRYPTO_AES) {
+      char exp_buf[CryptoKey::get_max_outbuf_size(sizeof(sigblock))];
 
-    try {
-      const CryptoKey::in_slice_t in {
-	sizeof(sigblock),
-	reinterpret_cast<const unsigned char*>(&sigblock)
-      };
-      const CryptoKey::out_slice_t out {
-	sizeof(exp_buf),
-	reinterpret_cast<unsigned char*>(&exp_buf)
-      };
-      key.encrypt(cct, in, out);
-    } catch (std::exception& e) {
-      lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
-      return -1;
+      try {
+        const CryptoKey::in_slice_t in {
+          sizeof(sigblock),
+            reinterpret_cast<const unsigned char*>(&sigblock)
+        };
+        const CryptoKey::out_slice_t out {
+          sizeof(exp_buf),
+            reinterpret_cast<unsigned char*>(&exp_buf)
+        };
+        key.encrypt(cct, in, out);
+      } catch (std::exception& e) {
+        lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+        return -1;
+      }
+
+      uint64_t blocks[4];
+      static_assert(sizeof(blocks) <= sizeof(exp_buf), "AES encryption output buffer is smaller than block evaluation array");
+      std::memcpy(blocks, exp_buf, sizeof(blocks));
+      *psig = boost::endian::little_to_native(blocks[0] ^ blocks[1] ^ blocks[2] ^ blocks[3]);
+    } else {
+      sha256_digest_t exp_buf;
+
+      try {
+        const CryptoKey::in_slice_t in {
+          sizeof(sigblock),
+            reinterpret_cast<const unsigned char*>(&sigblock)
+        };
+        exp_buf = key.hmac_sha256(cct, in);
+      } catch (std::exception& e) {
+        lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
+        return -1;
+      }
+
+      uint64_t blocks[4];
+      static_assert(sizeof(blocks) == sizeof(sha256_digest_t), "HMAC digest size does not match blocks evaluation array size");
+      std::memcpy(blocks, &exp_buf, sizeof(blocks));
+      *psig = boost::endian::little_to_native(blocks[0] ^ blocks[1] ^ blocks[2] ^ blocks[3]);
     }
-
-    struct enc {
-      ceph_le64 a, b, c, d;
-    } *penc = reinterpret_cast<enc*>(exp_buf);
-    *psig = penc->a ^ penc->b ^ penc->c ^ penc->d;
   }
 
   ldout(cct, 10) << __func__ << " seq " << m->get_seq()
@@ -172,13 +191,17 @@ int CephxSessionHandler::check_message_signature(Message *m)
   if (sig != m->get_footer().sig) {
     // Should have been signed, but signature check failed.  PLR
     if (!(m->get_footer().flags & CEPH_MSG_FOOTER_SIGNED)) {
-      ldout(cct, 0) << "SIGN: MSG " << m->get_seq() << " Sender did not set CEPH_MSG_FOOTER_SIGNED." << dendl;
+      ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << " Sender did not set CEPH_MSG_FOOTER_SIGNED." << dendl;
     }
-    ldout(cct, 0) << "SIGN: MSG " << m->get_seq() << " Message signature does not match contents." << dendl;
-    ldout(cct, 0) << "SIGN: MSG " << m->get_seq() << "Signature on message:" << dendl;
-    ldout(cct, 0) << "SIGN: MSG " << m->get_seq() << "    sig: " << m->get_footer().sig << dendl;
-    ldout(cct, 0) << "SIGN: MSG " << m->get_seq() << "Locally calculated signature:" << dendl;
-    ldout(cct, 0) << "SIGN: MSG " << m->get_seq() << "    sig_check:" << sig << dendl;
+    ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << " Message signature does not match contents." << dendl;
+    ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << " Signature on message:" << dendl;
+    ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << "          sig: " << m->get_footer().sig << dendl;
+    ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << " Locally calculated signature:" << dendl;
+    ldout(cct, 0) << "SIGN: MSG seq " << m->get_seq() << "    sig_check: " << sig << dendl;
+    ldout(cct, 30) << "key: " << key << dendl;
+    ldout(cct, 30) << "protocol: " << protocol << dendl;
+    ldout(cct, 30) << "features: " << features << dendl;
+    ldout(cct, 30) << "message: " << *m << dendl;
 
     // For the moment, printing an error message to the log and
     // returning failure is sufficient.  In the long term, we should

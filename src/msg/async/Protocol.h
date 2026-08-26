@@ -10,6 +10,7 @@
 #include "AsyncConnection.h"
 #include "include/buffer.h"
 #include "include/msgr.h"
+#include "msg/MessageRef.h"
 
 /*
  * Continuation Helper Classes
@@ -17,6 +18,8 @@
 
 #include <memory>
 #include <tuple>
+
+class AsyncConnection;
 
 template <class C>
 class Ct {
@@ -119,12 +122,14 @@ public:
   virtual void accept() = 0;
   // true -> protocol is ready for sending messages
   virtual bool is_connected() = 0;
+  // shutdown connection
+  virtual void shutdown() = 0;
   // stop connection
   virtual void stop() = 0;
   // signal and handle connection failure
   virtual void fault() = 0;
   // send message
-  virtual void send_message(Message *m) = 0;
+  virtual void send_message(MessageRef&& m) = 0;
   // send keepalive
   virtual void send_keepalive() = 0;
 

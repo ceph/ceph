@@ -85,7 +85,7 @@ upgrade a cluster from an old version of Ceph, or use the default
 install/deploy tools, your admin client should get this capability
 automatically. If you use tooling from elsewhere, you may get EACCES errors
 when invoking certain ceph cluster commands.  To fix that, add a ``mgr allow
-\*`` stanza to your client's cephx capabilities by `Modifying User
+\*`` stanza to your client's CephX capabilities by `Modifying User
 Capabilities`_.
 
 High availability
@@ -121,6 +121,26 @@ been a 1.5x improvement enabling the cache.
 Furthermore, you can run ``ceph daemon mgr.${MGRNAME} perf dump`` to retrieve
 perf counters of a mgr module. In ``mgr.cache_hit`` and ``mgr.cache_miss``
 you'll find the hit/miss ratio of the mgr cache.
+
+
+Automatic Stats Period Tuning
+------------------------------
+
+The Manager automatically adjusts :confval:`mgr_stats_period` based on message queue
+depth to prevent overload during high cluster activity. This feature is enabled by
+default and can be controlled with the following settings:
+
+- :confval:`mgr_stats_period_autotune` (boolean, default: true): Enable or disable
+  automatic tuning of the stats period.
+- :confval:`mgr_stats_period_autotune_queue_threshold` (integer, default: 100):
+  The message queue depth threshold that triggers an increase in the stats period.
+
+When the queue depth exceeds this threshold, the stats period is increased to
+reduce load. Conversely, if the queue depth remains low and the stats period is
+above the baseline, the period is decreased to improve responsiveness. In order 
+to ensure timely updates, the effective stats period will not exceed 60 seconds 
+regardless of these settings.
+
 
 Using modules
 -------------
@@ -240,5 +260,8 @@ Configuration
 .. confval:: mgr_data
 .. confval:: mgr_tick_period
 .. confval:: mon_mgr_beacon_grace
+.. confval:: mgr_stats_period
+.. confval:: mgr_stats_period_autotune
+.. confval:: mgr_stats_period_autotune_queue_threshold
 
 .. _Modifying User Capabilities: ../../rados/operations/user-management/#modify-user-capabilities

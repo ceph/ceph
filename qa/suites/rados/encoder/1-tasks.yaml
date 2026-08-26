@@ -1,0 +1,45 @@
+tasks:
+- print: "**** install version -2 (reef) ****"
+- install:
+    branch: reef
+    exclude_packages:
+      - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
+- print: "**** done install task..."
+- print: "**** start dencoder reef... ****"
+- workunit:
+    clients:
+      client.0:
+        - dencoder/test-dencoder.sh
+- print: "**** done end dencoder reef... ****"
+
+- print: "**** installing N-1 version (squid) ****"
+- install:
+    branch: squid
+    exclude_packages:
+      - ceph-volume
+      - ceph-osd-classic
+      - ceph-osd-crimson
+- print: "**** done end installing task..."
+
+- print: "**** start dencoder squid... ****"
+- workunit:
+    clients:
+      client.0:
+        - dencoder/test-dencoder.sh
+- print: "**** done end dencoder squid... ****"
+
+- print: "**** installing N version (Tentacle) ****"
+- install:
+    branch: tentacle
+    exclude_packages:
+      - ceph-volume
+      - ceph-osd-classic
+- print: "**** done end installing task..."
+- print: "**** start dencoder tentacle... ****"
+- workunit:
+    clients:
+      client.0:
+        - dencoder/test-dencoder.sh
+- print: "**** done end dencoder tentacle... ****"

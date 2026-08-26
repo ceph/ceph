@@ -725,7 +725,15 @@ int RGWCoroutinesManager::run(const DoutPrefixProvider *dpp, list<RGWCoroutinesS
       if (ret < 0) {
        ldout(cct, 5) << "completion_mgr.get_next() returned ret=" << ret << dendl;
       }
-      handle_unblocked_stack(context_stacks, scheduled_stacks, io, &blocked_count, &interval_wait_count);
+      // Without this check, `get_next` will error with -ECANCELED and this loop will never exit.
+      if (going_down) {
+        ldout(cct, 5) << __func__ << "(): was stopped, exiting" << dendl;
+        ret = -ECANCELED;
+        canceled = true;
+        break;
+      }
+      handle_unblocked_stack(context_stacks, scheduled_stacks, io,
+                             &blocked_count, &interval_wait_count);
     }
 
 next:

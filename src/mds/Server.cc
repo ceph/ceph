@@ -775,7 +775,8 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
         ceph_assert(r == 0);
         log_session_status("ACCEPTED", "");
       });
-      mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv, client_metadata),
+      mdlog->submit_entry(new ESession(m->get_source_inst(), true, pv,
+      client_metadata, session->info.auth_name),
 				new C_MDS_session_finish(this, session, sseq, true, pv, fin));
       mdlog->flush();
     }
@@ -1485,7 +1486,8 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   } else
     piv = 0;
   
-  auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv, session->delegated_inos);
+  auto le = new ESession(session->info.inst, false, pv, inos_to_free, piv,
+    session->delegated_inos, session->info.auth_name);
   auto fin = new C_MDS_session_finish(this, session, sseq, false, pv, inos_to_free, piv,
 				      session->delegated_inos, mdlog->get_current_segment(), on_safe);
   mdlog->submit_entry(le, fin);
@@ -7197,6 +7199,9 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
       // since we only handle ceph vxattrs here
       r = -ENODATA; // no such attribute
     }
+  } else if (xattr_name == "ceph.dir.subvolume"sv) {
+    const auto* srnode = cur->get_projected_srnode();
+    *css << (srnode && srnode->is_subvolume() ? "1"sv : "0"sv);
   } else {
     // otherwise respond as invalid request
     // since we only handle ceph vxattrs here
@@ -8944,7 +8949,9 @@ bool Server::_dir_has_snaps(const MDRequestRef& mdr, CInode *diri)
   ceph_assert(diri->snaplock.can_read(mdr->get_client()));
 
   SnapRealm *realm = diri->find_snaprealm();
-  return !realm->get_snaps().empty();
+  auto& snaps = realm->get_snaps();
+  auto it = snaps.lower_bound(diri->get_oldest_snap());
+  return it != snaps.end();
 }
 
 bool Server::_dir_is_nonempty(const MDRequestRef& mdr, CInode *in)

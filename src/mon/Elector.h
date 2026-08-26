@@ -16,8 +16,12 @@
 #ifndef CEPH_MON_ELECTOR_H
 #define CEPH_MON_ELECTOR_H
 
+#include <cstdint>
 #include <map>
+#include <set>
+#include <string>
 
+#include "common/Formatter.h"
 #include "include/types.h"
 #include "include/Context.h"
 #include "mon/MonOpRequest.h"

@@ -7,6 +7,7 @@ import errno
 import dateutil.parser
 import re
 import datetime
+import threading
 
 from itertools import combinations
 from itertools import zip_longest
@@ -524,8 +525,12 @@ def check_all_buckets_exist(zone_conn, buckets):
     for b in buckets:
         try:
             zone_conn.get_bucket(b)
-        except:
-            log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
+        except ClientError as e:
+            errcode = e.response['Error']['Code']
+            if errcode in ['404', 'NoSuchBucket']:
+                log.critical('zone %s does not contain bucket %s', zone_conn.zone.name, b)
+            else:
+                log.critical('zone %s unexpected error checking bucket %s: %s', zone_conn.zone.name, b, errcode)
             return False
 
     return True
@@ -534,16 +539,20 @@ def check_all_buckets_dont_exist(zone_conn, buckets):
     if not zone_conn.zone.has_buckets():
         return True
 
+    remaining = []
     for b in buckets:
         try:
             zone_conn.get_bucket(b)
-        except:
-            continue
+        except ClientError as e:
+            errcode = e.response['Error']['Code']
+            if errcode in ['404', 'NoSuchBucket']:
+                continue
+            log.critical('zone %s unexpected error checking bucket %s: %s', zone_conn.zone, b, errcode)
+            return False
+        log.critical('zone %s contains bucket %s', zone_conn.zone, b)
+        remaining.append(b)
 
-        log.critical('zone %s contains bucket %s', zone.zone, b)
-        return False
-
-    return True
+    return len(remaining) == 0
 
 
 def get_topics(zone):
@@ -714,7 +723,7 @@ def test_bucket_remove():
             log.info("Checking zone=%s for deleted buckets", zone.name)
             result = check_all_buckets_dont_exist(zone, buckets)
             if not result:
-                log.error("Zone %s still has buckets: %s", zone.name, buckets)
+                log.error("Zone %s still has buckets", zone.name)
             assert result
 
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
@@ -3806,6 +3815,93 @@ def test_bucket_create_location_constraint():
                 except ClientError as e:
                     assert e.response['ResponseMetadata']['HTTPStatusCode'] == 400
 
+def test_period_update_commit():
+    wkld_concurrency = 25
+    num_objects_to_upload = 2500
+    number_of_period_updates = 5
+    test_passed = False
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary_zone_client_conn = zonegroup_conns.rw_zones[0]
+    secondary_zone_cluster_conn = zonegroup.zones[1]
+
+    bucket = primary_zone_client_conn.create_bucket(gen_bucket_name())
+    log.info(f"created bucket={bucket.name}")
+
+    def run_client_wkld(stop_event: threading.Event, key_range):
+        log.info(f"upload objects within range {key_range} to bucket={bucket.name}")
+        num_uploads = 0
+        while not stop_event.is_set():
+            start, end = key_range
+            for i in range(start, end + 1):
+                try:
+                    primary_zone_client_conn.s3_client.put_object(
+                        Bucket=bucket.name, Key=f"obj-{i:04d}", Body="..."
+                    )
+                    num_uploads += 1
+                except Exception as e:
+                    log.debug(f"failed to upload object to bucket={bucket.name}: {e}")
+        log.info(
+            f"uploaded {num_uploads} times for the range {key_range} to bucket={bucket.name}"
+        )
+
+    try:
+        log.info("verify cluster is healthy before moving on")
+        try:
+            zonegroup_data_checkpoint(zonegroup_conns)
+        except:
+            log.info("restart gateways for a clean start")
+            for z in zonegroup_conns.rw_zones:
+                z.zone.start()
+
+        log.info("start client write-only workload to generate replication traffic")
+        client_write_only_wkld_thread_stop = threading.Event()
+        step = num_objects_to_upload // wkld_concurrency
+        key_ranges = [(i * step, (i + 1) * step - 1) for i in range(wkld_concurrency)]
+        client_write_only_wkld_threads = []
+        for key_range in key_ranges:
+            thread = threading.Thread(
+                target=run_client_wkld,
+                args=(client_write_only_wkld_thread_stop, key_range),
+                daemon=False,
+            )
+            thread.start()
+            client_write_only_wkld_threads.append(thread)
+
+        log.info("run period-update-commits and verify rgw instances reload properly")
+        for _ in range(number_of_period_updates):
+            log.info("issue period update commit")
+            zonegroup.period.update(secondary_zone_cluster_conn, commit=True)
+            log.info("verify data sync is making progress")
+            if not data_sync_making_progress(secondary_zone_cluster_conn):
+                break  # the issue of realm reload freezing reproduced
+        client_write_only_wkld_thread_stop.set()  # stop client wkld
+        zonegroup_data_checkpoint(zonegroup_conns)
+        test_passed = True
+    except Exception as e:
+        log.error(f"test_period_update_commit failed: {e}")
+        raise
+    finally:
+        client_write_only_wkld_thread_stop.set()
+        for t in client_write_only_wkld_threads:
+            t.join()
+
+        # without a fix, an rgw instance may crash or freeze
+        # so restart all instances before further cleaning up
+        if not test_passed:
+            for z in zonegroup_conns.rw_zones:
+                z.zone.start()
+
+        log.info(f"delete {num_objects_to_upload} objects from bucket={bucket.name}")
+        for i in range(num_objects_to_upload):
+            primary_zone_client_conn.s3_client.delete_object(
+                Bucket=bucket.name,
+                Key=f"obj-{i:04d}",
+            )
+        log.info(f"delete bucket={bucket.name}")
+        primary_zone_client_conn.s3_client.delete_bucket(Bucket=bucket.name)
+
 def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
     num_objects_to_upload = (
         3000  # must be more than 1000 to have pagination at full sync
@@ -3948,3 +4044,40 @@ def test_bucket_full_sync_when_the_bucket_is_deleted_in_the_meantime():
         except:
             pass
         raise
+
+def test_object_lock_sync():
+
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    bucket = primary.create_bucket(gen_bucket_name())
+    log.debug('created bucket=%s', bucket.name)
+
+    # enable versioning
+    primary.s3_client.put_bucket_versioning(
+        Bucket=bucket.name,
+        VersioningConfiguration={'Status': 'Enabled'})
+    zonegroup_meta_checkpoint(zonegroup)
+
+    lock_config = {
+    'ObjectLockEnabled': 'Enabled',
+    'Rule': {
+        'DefaultRetention': {
+            'Mode': 'COMPLIANCE',
+            'Days': 1
+            }
+        }
+    }
+
+    # enable object lock on bucket
+    primary.s3_client.put_object_lock_configuration(
+        Bucket=bucket.name,
+        ObjectLockConfiguration = lock_config)
+
+    zonegroup_meta_checkpoint(zonegroup)
+    zone_data_checkpoint(secondary.zone, primary.zone)
+
+    response = secondary.s3_client.get_object_lock_configuration(Bucket=bucket.name)
+    assert(response['ObjectLockConfiguration'] == lock_config)

@@ -259,7 +259,7 @@ def check_backward_compat():
                 version_name = version.name
                 _backward_compat[version_name] = {}
                 type_dir = archive_dir / version_name / "forward_incompat"
-                if type_dir.exists():
+                if type_dir.exists() and type_dir.is_dir():
                     for type_entry in type_dir.iterdir():
                         if type_entry.is_dir():
                             type_name = type_entry.name
