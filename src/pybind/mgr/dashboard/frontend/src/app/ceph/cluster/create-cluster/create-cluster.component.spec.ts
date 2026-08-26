@@ -81,7 +81,7 @@ describe('CreateClusterComponent', () => {
     component.createCluster();
     fixture.detectChanges();
     const heading = fixture.debugElement.query(By.css('.title')).nativeElement;
-    expect(heading.innerHTML).toBe('Add Hosts');
+    expect(heading.innerHTML.trim()).toBe('Add Hosts');
   });
 
   it('should show the host list when cluster creation as first step', () => {
@@ -161,7 +161,7 @@ describe('CreateClusterComponent', () => {
     fixture.detectChanges();
     const skipBtn = fixture.debugElement.query(By.css('#skipStepBtn')).nativeElement;
     expect(skipBtn).not.toBe(null);
-    expect(skipBtn.innerHTML).toBe('Skip');
+    expect(skipBtn.textContent.trim()).toBe('Skip');
   });
 
   it('should skip the Create OSDs Steps', () => {

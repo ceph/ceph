@@ -1,21 +1,31 @@
-<div ngbDropdown
-     placement="bottom-right">
-  <button type="button"
-          [title]="title"
-          class="btn btn-light dropdown-toggle-split"
-          ngbDropdownToggle>
+<div
+  ngbDropdown
+  placement="bottom-right"
+>
+  <button
+    type="button"
+    [title]="title"
+    class="btn btn-light dropdown-toggle-split"
+    ngbDropdownToggle
+  >
     <i [ngClass]="[icons.download]"></i>
   </button>
   <div ngbDropdownMenu>
-    <button ngbDropdownItem
-            (click)="download('json')"
-            *ngIf="objectItem">
+    <button
+      ngbDropdownItem
+      (click)="download('json')"
+      type="button"
+      *ngIf="objectItem"
+    >
       <i [ngClass]="[icons.json]"></i>
       <span>JSON</span>
     </button>
-    <button ngbDropdownItem
-            (click)="download()"
-            *ngIf="textItem">
+    <button
+      ngbDropdownItem
+      (click)="download()"
+      type="button"
+      *ngIf="textItem"
+    >
       <i [ngClass]="[icons.text]"></i>
       <span>Text</span>
     </button>

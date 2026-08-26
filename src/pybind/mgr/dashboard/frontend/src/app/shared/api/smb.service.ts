@@ -28,7 +28,10 @@ export class SmbService {
   modalData$ = this.modalDataSubject.asObservable();
   dataUploader = signal<SMBResource | null>(null);
 
-  constructor(private http: HttpClient, private notificationService: NotificationService) {}
+  constructor(
+    private http: HttpClient,
+    private notificationService: NotificationService
+  ) {}
 
   passData(data: DomainSettings) {
     this.modalDataSubject.next(data);

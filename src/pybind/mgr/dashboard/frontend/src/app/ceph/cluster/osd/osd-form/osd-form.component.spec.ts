@@ -218,8 +218,9 @@ describe('OsdFormComponent', () => {
 
     it('should be a Recommended option only when it is recommended by backend', () => {
       const label = fixtureHelper.getElementByCss('#label_cost_capacity').nativeElement;
-      const throughputLabel = fixtureHelper.getElementByCss('#label_throughput_optimized')
-        .nativeElement;
+      const throughputLabel = fixtureHelper.getElementByCss(
+        '#label_throughput_optimized'
+      ).nativeElement;
 
       expect(label.innerHTML).toContain('Recommended');
       expect(throughputLabel.innerHTML).not.toContain('Recommended');

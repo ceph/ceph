@@ -13,7 +13,10 @@ import { RgwDaemonService } from './rgw-daemon.service';
 export class RgwTopicService extends ApiClient {
   baseURL = 'api/rgw/topic';
 
-  constructor(private http: HttpClient, private rgwDaemonService: RgwDaemonService) {
+  constructor(
+    private http: HttpClient,
+    private rgwDaemonService: RgwDaemonService
+  ) {
     super();
   }
 

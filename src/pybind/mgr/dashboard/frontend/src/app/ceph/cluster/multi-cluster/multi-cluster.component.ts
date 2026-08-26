@@ -460,9 +460,8 @@ export class MultiClusterComponent implements OnInit, OnDestroy {
                     (errorEntry) => errorEntry.url === clusterDetails.url
                   );
                   if (errorIndex !== -1) {
-                    this.prometheusConnectionErrors[
-                      errorIndex
-                    ].reconnectionError = reconnectionError;
+                    this.prometheusConnectionErrors[errorIndex].reconnectionError =
+                      reconnectionError;
                   }
                 },
                 next: (response: any) => {
