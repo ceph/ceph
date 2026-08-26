@@ -1,0 +1,41 @@
+{
+  "version": 10,
+  "include": [
+    "base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "client-min",
+      "hidden": true,
+      "cacheVariables": {
+        "WITH_CEPHFS": "ON",
+        "WITH_RBD": "OFF",
+        "WITH_KRBD": "OFF",
+        "WITH_MGR": "OFF",
+        "WITH_RDMA": "OFF",
+        "WITH_JAEGER": "OFF",
+        "WITH_BREAKPAD": "OFF",
+        "WITH_BLKIN": "OFF",
+        "WITH_LTTNG": "OFF",
+        "WITH_BABELTRACE": "OFF",
+        "WITH_RADOSGW_AMQP_ENDPOINT": "OFF",
+        "WITH_RADOSGW_KAFKA_ENDPOINT": "OFF",
+        "WITH_RADOSGW_LUA_PACKAGES": "OFF",
+        "WITH_RADOSGW_D4N": "OFF",
+        "WITH_RADOSGW_DBSTORE": "OFF",
+        "WITH_RADOSGW_POSIX": "OFF",
+        "WITH_RADOSGW_ARROW_FLIGHT": "OFF"
+      }
+    },
+    {
+      "name": "client-min-debug",
+      "inherits": ["debug", "client-min"],
+      "binaryDir": "${sourceDir}/build-client-min-debug"
+    },
+    {
+      "name": "client-min-release",
+      "inherits": ["release", "client-min"],
+      "binaryDir": "${sourceDir}/build-client-min-release"
+    }
+  ]
+}
