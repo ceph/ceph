@@ -92,11 +92,17 @@ class RemoteCachePutOp : public RemoteCacheOp {
   bool block_only = false; // bypasses head object upload
 
   public:
-    struct RemoteCachePutOpData : RemoteCacheOpData {};
+    struct RemoteCachePutOpData : RemoteCacheOpData {
+      std::string old_version; // Previous version to invalidate (for PUT overwrites in non-versioned buckets)
+    };
 
-    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op, bool block_only = false) : RemoteCacheOp(driver, op), block_only(block_only) {}
+  private:
+    RemoteCachePutOpData put_op; // Store PUT-specific data including old_version
+
+  public:
+    RemoteCachePutOp(rgw::sal::Driver* driver, RemoteCachePutOpData& op, bool block_only = false) : RemoteCacheOp(driver, op), block_only(block_only), put_op(op) {}
     virtual ~RemoteCachePutOp() = default;
- 
+
 	virtual int send_request(const DoutPrefixProvider* dpp, optional_yield& y, bufferlist* bl = nullptr) override;
 };
 
