@@ -52,10 +52,12 @@ doc/ceph-volume/lvm/rotate-dmcrypt-key.rst for the full crash-window
 table.
 """
 import argparse
+import fcntl
 import logging
 import os
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from contextlib import contextmanager
+from typing import Iterator, List, Optional
 
 from ceph_volume import conf, configuration, terminal
 from ceph_volume.api import lvm as api
@@ -72,6 +74,65 @@ LOCKBOX_SECRET_ENV = 'CEPH_VOLUME_CEPHX_LOCKBOX_SECRET'
 
 SLOT_CANONICAL = 0
 SLOT_STAGING = 1
+
+LOCK_DIR = '/run/ceph-volume'
+
+
+def _open_lock_dir() -> int:
+    """
+    Open the directory holding the rotation locks, creating it if absent.
+
+    It lives under /run, which only root can write to, so an unprivileged
+    user can neither pre-create it nor replace it with a symlink. The
+    world-writable /run/lock would allow both. This is the scheme cryptsetup
+    uses for its own LUKS2 header locks (/run/cryptsetup, 0700, O_NOFOLLOW;
+    lib/utils_device_locking.c in the cryptsetup sources).
+    """
+    try:
+        os.mkdir(LOCK_DIR, 0o700)
+    except FileExistsError:
+        pass
+    except OSError as error:
+        raise RuntimeError(f'unable to create the lock directory '
+                           f'{LOCK_DIR}: {error}')
+    try:
+        return os.open(LOCK_DIR,
+                       os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    except OSError as error:
+        raise RuntimeError(f'unable to open the lock directory '
+                           f'{LOCK_DIR}: {error}')
+
+
+@contextmanager
+def _osd_rotation_lock(osd_fsid: str) -> Iterator[None]:
+    """
+    Serialize rotations per OSD with an advisory flock. The kernel releases
+    the lock when the process exits, crash included, so a stale lock cannot
+    occur; a held lock always means another rotation is running right now.
+    """
+    name = f'rotate-dmcrypt-{osd_fsid}.lock'
+    path = os.path.join(LOCK_DIR, name)
+    dir_fd = _open_lock_dir()
+    try:
+        # relative to the directory and O_NOFOLLOW, so a symlink planted at
+        # the lock path fails instead of redirecting the open
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_NOFOLLOW, 0o600,
+                     dir_fd=dir_fd)
+    except OSError as error:
+        raise RuntimeError(f'unable to open the rotation lock {path}: '
+                           f'{error}')
+    finally:
+        os.close(dir_fd)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except OSError:
+            raise RuntimeError(
+                f'another rotate-dmcrypt-key for OSD {osd_fsid} is already '
+                f'running (lock {path})')
+        yield
+    finally:
+        os.close(fd)
 
 
 class KeyCustody(ABC):
@@ -271,6 +332,10 @@ class DmcryptRotator:
         self.new_lockbox_secret = new_lockbox_secret
 
     def rotate(self) -> None:
+        with _osd_rotation_lock(self.target.osd_fsid):
+            self._rotate()
+
+    def _rotate(self) -> None:
         self._refuse_unsupported()
         # apply a rotated lockbox cephx secret before anything reads the
         # config-key store: after `ceph auth rotate client.osd-lockbox.<fsid>`

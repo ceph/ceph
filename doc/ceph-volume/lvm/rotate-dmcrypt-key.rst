@@ -224,6 +224,8 @@ probes the keyslot state with ``cryptsetup --test-passphrase`` and converges.
 interrupted after the new passphrase was already stored — including with
 ``--key-store mon``, where it saves a full second rotation.
 
+Concurrent invocations against the same OSD are refused.
+
 ``--force`` is required to rotate a device that has active keyslots other
 than 0 and 1 (ceph-volume never creates those); foreign keyslots are left
 untouched. This check applies to the main flow only, not to

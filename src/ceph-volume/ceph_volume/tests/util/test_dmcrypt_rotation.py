@@ -1,5 +1,7 @@
 import argparse
+import os
 import pytest
+import stat
 from typing import Dict, List, Optional
 
 from ceph_volume.util import dmcrypt_rotation
@@ -14,6 +16,11 @@ from ceph_volume.util.dmcrypt_rotation import (
     SLOT_STAGING,
     rotate_from_args,
 )
+
+
+@pytest.fixture(autouse=True)
+def lock_dir(tmp_path, monkeypatch):
+    monkeypatch.setattr(dmcrypt_rotation, 'LOCK_DIR', str(tmp_path))
 
 
 class FakeLuks:
@@ -321,6 +328,60 @@ class TestConfigKeyCustody:
         custody = ConfigKeyCustody('0', 'aaaa')
         with pytest.raises(RuntimeError):
             custody.verify_persisted('NEW')
+
+
+class TestRotationLock:
+    def test_concurrent_rotation_refused(self, monkeypatch):
+        luks = FakeLuks({'/dev/foo': {0: 'OLD'}})
+        luks.patch_into(monkeypatch)
+        target = FakeTarget(['/dev/foo'])
+        with dmcrypt_rotation._osd_rotation_lock(target.osd_fsid):
+            with pytest.raises(RuntimeError) as error:
+                DmcryptRotator(target, FakeCustody('OLD')).rotate()
+        assert 'already running' in str(error.value)
+        # nothing was mutated
+        assert luks.devices['/dev/foo'] == {0: 'OLD'}
+
+    def test_lock_released_after_rotation(self, monkeypatch):
+        luks = FakeLuks({'/dev/foo': {0: 'OLD'}})
+        luks.patch_into(monkeypatch)
+        DmcryptRotator(FakeTarget(['/dev/foo']), FakeCustody('OLD')).rotate()
+        # sequential rotations re-acquire the lock without issue
+        DmcryptRotator(FakeTarget(['/dev/foo']),
+                       FakeCustody('NEW', new='NEW-2')).rotate()
+        assert luks.devices['/dev/foo'] == {0: 'NEW-2'}
+
+    def test_lock_directory_created_private(self, monkeypatch, tmp_path):
+        lock_dir = tmp_path / 'ceph-volume'
+        monkeypatch.setattr(dmcrypt_rotation, 'LOCK_DIR', str(lock_dir))
+        with dmcrypt_rotation._osd_rotation_lock('aaaa'):
+            pass
+        assert stat.S_IMODE(lock_dir.stat().st_mode) == 0o700
+        assert (lock_dir / 'rotate-dmcrypt-aaaa.lock').exists()
+
+    def test_symlinked_lock_refused(self, monkeypatch, tmp_path):
+        lock_dir = tmp_path / 'locks'
+        lock_dir.mkdir()
+        victim = tmp_path / 'victim'
+        os.symlink(str(victim), str(lock_dir / 'rotate-dmcrypt-aaaa.lock'))
+        monkeypatch.setattr(dmcrypt_rotation, 'LOCK_DIR', str(lock_dir))
+        with pytest.raises(RuntimeError) as error:
+            with dmcrypt_rotation._osd_rotation_lock('aaaa'):
+                pass
+        assert 'unable to open the rotation lock' in str(error.value)
+        # the symlink target was not created through the lock
+        assert not victim.exists()
+
+    def test_symlinked_lock_directory_refused(self, monkeypatch, tmp_path):
+        real = tmp_path / 'real'
+        real.mkdir()
+        link = tmp_path / 'link'
+        os.symlink(str(real), str(link))
+        monkeypatch.setattr(dmcrypt_rotation, 'LOCK_DIR', str(link))
+        with pytest.raises(RuntimeError) as error:
+            with dmcrypt_rotation._osd_rotation_lock('aaaa'):
+                pass
+        assert 'unable to open the lock directory' in str(error.value)
 
 
 class TestRotateFromArgs:
