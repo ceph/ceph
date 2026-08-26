@@ -28,7 +28,7 @@ describe('Cluster Ceph Users', () => {
 
     it('should create a new user', () => {
       users.navigateTo('create');
-      users.create(entityName, entity, caps);
+      users.create(entityName, entity, caps, 'aes');
       users.existTableCell(entityName, true);
     });
 

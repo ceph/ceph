@@ -1,10 +1,25 @@
-<textarea
-  #textArea
-  [formControl]="formControl"
-  [cols]="props.cols"
-  [rows]="props.rows"
-  class="form-control"
-  [class.is-invalid]="showError"
-  [formlyAttributes]="field"
-  (change)="onChange()"
-></textarea>
+<div class="form-item">
+  <cds-textarea-label
+    [labelInputID]="id"
+    [invalid]="showError"
+    [invalidText]="errorTpl"
+    [helperText]="helper || undefined"
+    [cdRequiredField]="requiredLabel"
+  >
+    <ng-container *ngIf="props.label && props.hideLabel !== true">{{ props.label }}</ng-container>
+    <textarea
+      #textArea
+      cdsTextArea
+      [id]="id"
+      [formControl]="formControl"
+      [cols]="props.cols"
+      [rows]="props.rows"
+      [invalid]="showError"
+      [formlyAttributes]="field"
+      (change)="onChange()"
+    ></textarea>
+  </cds-textarea-label>
+  <ng-template #errorTpl>
+    <formly-validation-message [field]="field"></formly-validation-message>
+  </ng-template>
+</div>

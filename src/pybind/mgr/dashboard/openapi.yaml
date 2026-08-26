@@ -6842,6 +6842,10 @@ paths:
                 import_data:
                   default: ''
                   type: string
+                key_type:
+                  default: ''
+                  description: Key type used to generate the user key (aes or aes256k)
+                  type: string
                 user_entity:
                   default: ''
                   description: Entity to add
