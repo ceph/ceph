@@ -488,6 +488,7 @@ class D4NFilterObject : public FilterObject {
   private:
     D4NFilterDriver* driver;
     std::string version;
+    std::string old_version;  // Previous version to invalidate (for PUT overwrites in non-versioned buckets)
     bool remote_dirty;
     std::string prefix;
     Attrs attrs_d4n;
@@ -648,6 +649,8 @@ class D4NFilterObject : public FilterObject {
 
     void set_object_version(const std::string& version) { this->version = version; }
     const std::string get_object_version() { return this->version; }
+    void set_old_version(const std::string& old_version) { this->old_version = old_version; }
+    const std::string get_old_version() { return this->old_version; }
 
     void set_prefix(const std::string& prefix) { this->prefix = prefix; }
     const std::string get_prefix() { return this->prefix; }
@@ -718,7 +721,7 @@ class D4NFilterWriter : public FilterWriter {
     std::string prev_oid_in_cache;
     std::vector<std::unique_ptr<rgw::d4n::RemoteCachePutOp>> requests;
 
-    static int write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& obj_name, const std::string& version, bool dirty, D4NFilterDriver* driver, optional_yield y);
+    static int write_to_remote_cache(const DoutPrefixProvider* dpp_o, const std::string& prefix, uint64_t size, const rgw_user& user, const std::string& remote_addr, const std::string& bucket_name, const std::string& obj_name, const std::string& version, const std::string& old_version, bool dirty, D4NFilterDriver* driver, optional_yield y);
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
