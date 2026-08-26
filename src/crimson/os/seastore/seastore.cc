@@ -2433,6 +2433,13 @@ SeaStore::Shard::_migrate_onode(
   OnodeRef &onode,
   OnodeRef &d_onode)
 {
+  LOG_PREFIX(SeaStoreS::_migrate_onode);
+  DEBUGT("src_cid={} onode hobj={} need_cow={} data_base={} d_onode hobj={}",
+    *ctx.transaction, src_cid, onode->get_hobj(), onode->need_cow(),
+    onode->get_layout().object_data.get().is_null()
+      ? L_ADDR_NULL
+      : onode->get_layout().object_data.get().get_reserved_data_base(),
+    d_onode->get_hobj());
   ObjectDataHandler objHandler(max_object_size);
   co_await _maybe_copy_on_write(ctx, *onode, objHandler);
 
