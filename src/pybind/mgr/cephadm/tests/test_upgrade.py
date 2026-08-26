@@ -6,6 +6,7 @@ import pytest
 
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec
 from cephadm import CephadmOrchestrator
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.upgrade import (
     CephadmUpgrade,
     OkToUpgradeMonReport,
@@ -1209,3 +1210,115 @@ def test_do_upgrade_limit_exhausted_marks_complete_without_scope_check(
 
     mark_complete.assert_called_once()
     filtered_scope.assert_not_called()
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.mon_command")
+def test_commit_pending_key(mon_command, cephadm_module: CephadmOrchestrator):
+    daemon_spec = CephadmDaemonDeploySpec(
+        host='host1', daemon_id='0', daemon_type='osd', service_name='osd')
+
+    mon_command.return_value = (0, '', '')
+    cephadm_module.commit_pending_key(daemon_spec)
+    mon_command.assert_called_once_with({
+        'prefix': 'auth commit-pending',
+        'entity': 'osd.0',
+        'format': 'json',
+    })
+
+    mon_command.return_value = (1, '', 'no pending key for osd.0')
+    with pytest.raises(OrchestratorError):
+        cephadm_module.commit_pending_key(daemon_spec)
+
+
+def _osd_daemon() -> DaemonDescription:
+    return DaemonDescription(
+        daemon_type='osd', daemon_id='0', hostname='host1', service_name='osd')
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.key_rotate")
+@mock.patch("cephadm.CephadmOrchestrator.commit_pending_key")
+@mock.patch("cephadm.CephadmOrchestrator._daemon_action")
+@mock.patch("cephadm.module.HostCache.get_daemons_by_type")
+@mock.patch("cephadm.upgrade.service_registry")
+@mock.patch.object(CephadmUpgrade, "_detect_need_upgrade")
+def test_osd_key_rotation_commits_only_after_successful_redeploy(
+        _detect_need_upgrade: mock.MagicMock,
+        service_registry_mock: mock.MagicMock,
+        get_daemons_by_type: mock.MagicMock,
+        _daemon_action: mock.MagicMock,
+        commit_pending_key: mock.MagicMock,
+        key_rotate: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    osd_daemon = _osd_daemon()
+    get_daemons_by_type.side_effect = lambda dtype: [osd_daemon] if dtype == 'osd' else []
+    _detect_need_upgrade.return_value = (False, [], [], 0)
+    service_registry_mock.get_service.return_value.ok_to_stop.return_value = mock.MagicMock(retval=0)
+    cephadm_module.upgrade.upgrade_state = UpgradeState('target_image', 'pid')
+
+    # redeploy succeeds -> the rotated key must be committed
+    cephadm_module.upgrade.handle_osd_mds_key_rotation('target_image', [])
+    key_rotate.assert_called_once()
+    _daemon_action.assert_called_once()
+    commit_pending_key.assert_called_once()
+
+    # redeploy fails -> must NOT commit, leaving the old key valid
+    cephadm_module.upgrade._clear_rotated_daemon_entry()
+    key_rotate.reset_mock()
+    _daemon_action.reset_mock()
+    commit_pending_key.reset_mock()
+    _daemon_action.side_effect = OrchestratorError('redeploy failed')
+    with pytest.raises(OrchestratorError):
+        cephadm_module.upgrade.handle_osd_mds_key_rotation('target_image', [])
+    commit_pending_key.assert_not_called()
+
+
+def _mon_daemons(n: int) -> List[DaemonDescription]:
+    return [
+        DaemonDescription(
+            daemon_type='mon', daemon_id=chr(ord('a') + i),
+            hostname=f'host{i}', service_name='mon')
+        for i in range(n)
+    ]
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.CephadmOrchestrator.key_rotate")
+@mock.patch("cephadm.CephadmOrchestrator.commit_pending_key")
+@mock.patch("cephadm.CephadmOrchestrator._daemon_action_set_image")
+@mock.patch("cephadm.CephadmOrchestrator._daemon_action")
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch.object(CephadmUpgrade, "_detect_need_upgrade")
+def test_shared_mon_key_not_committed_until_every_mon_redeployed(
+        _detect_need_upgrade: mock.MagicMock,
+        get_daemons_by_service: mock.MagicMock,
+        _daemon_action: mock.MagicMock,
+        _daemon_action_set_image: mock.MagicMock,
+        commit_pending_key: mock.MagicMock,
+        key_rotate: mock.MagicMock,
+        cephadm_module: CephadmOrchestrator):
+    # the "mon." cephx entity is shared by every monitor: committing the
+    # rotated key must wait until *all* mons have picked up the new keyring,
+    # not just the first one to redeploy.
+    mon_daemons = _mon_daemons(2)
+    get_daemons_by_service.side_effect = lambda service: mon_daemons if service == 'mon' else []
+    _detect_need_upgrade.return_value = (False, [], [], 0)
+    cephadm_module.upgrade.upgrade_state = UpgradeState(
+        'target_image', 'pid',
+        has_set_cephx_allowed_ciphers=True,
+        rotated_mgr_mon_auth_key_daemons=[],
+    )
+
+    # mon.a redeploys fine, mon.b's redeploy fails
+    _daemon_action.side_effect = [None, OrchestratorError('redeploy failed')]
+    with pytest.raises(OrchestratorError):
+        cephadm_module.upgrade._rotate_mgr_mon_auth_keys('target_image', [])
+    commit_pending_key.assert_not_called()
+
+    # retry: mon.a is already done, mon.b now redeploys successfully ->
+    # every mon has the new key, so the commit fires exactly once
+    _daemon_action.side_effect = None
+    _daemon_action.return_value = None
+    cephadm_module.upgrade._rotate_mgr_mon_auth_keys('target_image', [])
+    commit_pending_key.assert_called_once()

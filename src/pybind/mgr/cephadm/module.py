@@ -3133,7 +3133,7 @@ Then run the following:
 
     def key_rotate(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
         rc, out, err = self.mon_command({
-            'prefix': 'auth rotate',
+            'prefix': 'auth rotate-pending',
             'entity': daemon_spec.entity_name(),
             'format': 'json',
             'key_type': utils.ROTATION_CIPHER
@@ -3141,6 +3141,18 @@ Then run the following:
         if rc:
             raise OrchestratorError(
                 f'Failed to rotate daemon key for {daemon_spec.entity_name()}.\n'
+                f'Rc: {rc}\nOut: {out}\nErr: {err}'
+            )
+
+    def commit_pending_key(self, daemon_spec: CephadmDaemonDeploySpec) -> None:
+        rc, out, err = self.mon_command({
+            'prefix': 'auth commit-pending',
+            'entity': daemon_spec.entity_name(),
+            'format': 'json',
+        })
+        if rc:
+            raise OrchestratorError(
+                f'Failed to commit rotated key for {daemon_spec.entity_name()}.\n'
                 f'Rc: {rc}\nOut: {out}\nErr: {err}'
             )
 
