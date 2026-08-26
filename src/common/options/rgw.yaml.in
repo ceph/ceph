@@ -466,7 +466,8 @@ options:
   level: advanced
   desc: Number of LCWorker tasks that will be run in parallel
   long_desc: Number of LCWorker tasks that will run in parallel--used to permit >1
-    bucket/index shards to be processed simultaneously
+    bucket/index shards to be processed simultaneously. It no longer specifies
+    the size of lifecycle thread pool, which is now controlled by rgw_lc_max_threads.
   fmt_desc: This option specifies the number of LCWorker tasks
     to run in parallel, thereby processing bucket and index
     shards simultaneously.

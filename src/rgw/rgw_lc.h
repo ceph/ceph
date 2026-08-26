@@ -16,7 +16,6 @@
 #include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/iso_8601.h"
-#include "common/Thread.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "rgw_tag.h"
@@ -611,7 +610,7 @@ public:
     RGWLC* get_lc() { return lc; }
 
     std::string name() {
-      return std::string{"lc_thrd: "} + std::to_string(ix);
+      return std::string{"lc_worker: "} + std::to_string(ix);
     }
 
     void run(boost::asio::yield_context yield);
