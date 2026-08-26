@@ -199,6 +199,14 @@ int get_encryption_defaults(req_state *s)
     }
   }
   if (meta_sse_group & SSE_C_GROUP) {
+    /*
+     * checked here so part uploads are covered; they never reach the
+     * encrypt path that gates a new object write
+     */
+    int r = rgw_s3_check_sse_c_blocked(s);
+    if (r < 0) {
+      return r;
+    }
     ldpp_dout(s, 20) << "get_encryption_defaults: no defaults cause sse-c forced"
 	<< dendl;
     return 0;			// sse-c: no defaults here
@@ -4833,6 +4841,16 @@ int RGWCompleteMultipart_ObjStore_S3::verify_encryption(map<string, bufferlist>&
 {
   // s3 only needs the sse-c key here for checksummed uploads; verify it whenever it's sent
   const std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
+  if (stored_mode.starts_with("SSE-C")) {
+    /*
+     * an sse-c multipart upload may have started before the bucket
+     * blocked sse-c; refuse to complete it
+     */
+    int res = rgw_s3_check_sse_c_blocked(s);
+    if (res < 0) {
+      return res;
+    }
+  }
   if (stored_mode.starts_with("SSE-C") &&
       cksum_type == rgw::cksum::Type::none &&
       !s->info.env->exists_prefix("HTTP_X_AMZ_SERVER_SIDE_ENCRYPTION_CUSTOMER_")) {
