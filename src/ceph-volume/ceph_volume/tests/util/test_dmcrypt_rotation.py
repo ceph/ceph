@@ -308,8 +308,8 @@ class TestConfigKeyCustody:
     def test_round_trip(self, monkeypatch):
         store = {}
         monkeypatch.setattr(encryption, 'get_dmcrypt_key',
-                            lambda osd_id, osd_fsid, lockbox_keyring=None, name=None: store['key'])
-        def fake_set(osd_id, osd_fsid, key, lockbox_keyring=None, name=None):
+                            lambda osd_id, osd_fsid, **kw: store['key'])
+        def fake_set(osd_id, osd_fsid, key, **kw):
             store['key'] = key
         monkeypatch.setattr(encryption, 'set_dmcrypt_key', fake_set)
         monkeypatch.setattr(encryption, 'create_dmcrypt_key', lambda: 'GENERATED')
@@ -324,10 +324,25 @@ class TestConfigKeyCustody:
 
     def test_verify_detects_mismatch(self, monkeypatch):
         monkeypatch.setattr(encryption, 'get_dmcrypt_key',
-                            lambda osd_id, osd_fsid, lockbox_keyring=None, name=None: 'TAMPERED')
+                            lambda osd_id, osd_fsid, **kw: 'TAMPERED')
         custody = ConfigKeyCustody('0', 'aaaa')
         with pytest.raises(RuntimeError):
             custody.verify_persisted('NEW')
+
+    def test_passes_call_timeout(self, monkeypatch):
+        captured = {}
+        def fake_get(osd_id, osd_fsid, **kw):
+            captured['get'] = kw.get('call_timeout')
+            return 'OLD'
+        def fake_set(osd_id, osd_fsid, key, **kw):
+            captured['set'] = kw.get('call_timeout')
+        monkeypatch.setattr(encryption, 'get_dmcrypt_key', fake_get)
+        monkeypatch.setattr(encryption, 'set_dmcrypt_key', fake_set)
+        custody = ConfigKeyCustody('0', 'aaaa')
+        custody.get_current_key()
+        custody.persist_new_key('NEW')
+        assert captured == {'get': dmcrypt_rotation.MON_CALL_TIMEOUT,
+                            'set': dmcrypt_rotation.MON_CALL_TIMEOUT}
 
 
 class TestRotationLock:
@@ -446,8 +461,8 @@ class TestRotateFromArgs:
         monkeypatch.delenv(dmcrypt_rotation.NEW_KEY_ENV, raising=False)
         store = {'key': 'OLD'}
         monkeypatch.setattr(encryption, 'get_dmcrypt_key',
-                            lambda osd_id, osd_fsid, lockbox_keyring=None, name=None: store['key'])
-        def fake_set(osd_id, osd_fsid, key, lockbox_keyring=None, name=None):
+                            lambda osd_id, osd_fsid, **kw: store['key'])
+        def fake_set(osd_id, osd_fsid, key, **kw):
             store['key'] = key
         monkeypatch.setattr(encryption, 'set_dmcrypt_key', fake_set)
         monkeypatch.setattr(encryption, 'create_dmcrypt_key', lambda: 'GENERATED')

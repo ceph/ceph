@@ -226,6 +226,19 @@ interrupted after the new passphrase was already stored — including with
 
 Concurrent invocations against the same OSD are refused.
 
+Monitor calls are killed after 120 seconds, so an unreachable or wedged
+quorum cannot hang the rotation process; interrupting a rotation at any
+point — including while a monitor call is pending — is safe, per the state
+machine above. S3 does not trust the write: only if the store returns what
+was just written may S4 wipe the previous passphrase. A ``config-key set``
+that fails or never lands therefore aborts the rotation with the previous
+passphrase still in the store, still opening every device. The read-back
+detects a corrupted write as well, but it has no ability to correct one. The
+entry holds a single passphrase, so a system fault that overwrites it with
+garbage loses the previous one. A caller that would rather commit and verify
+on its own terms can use the external two-phase flow and run ``--phase
+finish`` only once it is satisfied.
+
 ``--force`` is required to rotate a device that has active keyslots other
 than 0 and 1 (ceph-volume never creates those); foreign keyslots are left
 untouched. This check applies to the main flow only, not to

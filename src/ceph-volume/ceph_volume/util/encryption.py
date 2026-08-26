@@ -276,7 +276,8 @@ def dmcrypt_close(mapping, skip_path_check=False):
     # don't be strict about the remove call, but still warn on the terminal if it fails
     process.run(['cryptsetup', 'remove', mapping], stop_on_error=False)
 
-def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None, name=None):
+def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None, name=None,
+                    call_timeout=None):
     """
     Retrieve the dmcrypt (secret) key stored initially on the monitor. The key
     is sent initially with JSON, and the Monitor then mangles the name to
@@ -290,6 +291,9 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None, name=None):
     ``name`` allows overriding the cephx entity used for the call (defaults to
     the OSD's lockbox entity), e.g. when a more privileged keyring is used for
     key rotation.
+
+    ``call_timeout`` bounds the whole call (seconds), after which it is
+    killed. Defaults to unbounded to keep activation behavior unchanged.
     """
     if lockbox_keyring is None:
         lockbox_keyring = '/var/lib/ceph/osd/%s-%s/lockbox.keyring' % (conf.cluster, osd_id)
@@ -309,9 +313,15 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None, name=None):
             config_key
         ],
         show_command=True,
-        logfile_verbose=False
+        logfile_verbose=False,
+        timeout=call_timeout
     )
     if returncode != 0:
+        if call_timeout is not None and returncode == -9:
+            raise RuntimeError(
+                f'config-key get timed out after {call_timeout}s waiting '
+                'for the monitors; the rotation is crash-safe and can be '
+                're-run')
         raise RuntimeError('Unable to retrieve dmcrypt secret')
     return ' '.join(stdout).strip()
 
@@ -320,13 +330,16 @@ def set_dmcrypt_key(osd_id: str,
                     osd_fsid: str,
                     key: str,
                     lockbox_keyring: Optional[str] = None,
-                    name: Optional[str] = None) -> None:
+                    name: Optional[str] = None,
+                    call_timeout: Optional[int] = None) -> None:
     """
     Store a (new) dmcrypt key on the monitor at
     ``dm-crypt/osd/<fsid>/luks``, overwriting the previous one. Used when
     rotating the dmcrypt passphrase of an OSD.
 
     The key is passed via stdin so it never shows up on a command line.
+    ``call_timeout`` bounds the whole call (seconds), after which it is
+    killed.
 
     Note: the default lockbox entity is created with a get-only cap on this
     config-key, so this call needs either a lockbox entity whose caps were
@@ -353,9 +366,15 @@ def set_dmcrypt_key(osd_id: str,
         ],
         stdin=key,
         show_command=True,
-        logfile_verbose=False
+        logfile_verbose=False,
+        timeout=call_timeout
     )
     if returncode != 0:
+        if call_timeout is not None and returncode == -9:
+            raise RuntimeError(
+                f'config-key set timed out after {call_timeout}s waiting '
+                'for the monitors; the rotation is crash-safe and can be '
+                're-run')
         error = ' '.join(stderr)
         msg = f'Unable to store dmcrypt secret at {config_key}'
         if 'access denied' in error.lower() or 'permission denied' in error.lower():

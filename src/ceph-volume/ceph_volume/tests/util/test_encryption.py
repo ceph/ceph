@@ -639,3 +639,39 @@ class TestGetDmcryptKeyName(object):
         args = encryption.process.call.call_args[0][0]
         assert 'client.admin' in args
         assert result == 'sekrit'
+
+
+class TestDmcryptKeyTimeouts(object):
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=(['sekrit'], [], 0)))
+    def test_get_without_timeout_by_default(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        encryption.get_dmcrypt_key('0', 'abcd')
+        assert encryption.process.call.call_args[1]['timeout'] is None
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=(['sekrit'], [], 0)))
+    def test_get_forwards_call_timeout(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        encryption.get_dmcrypt_key('0', 'abcd', call_timeout=120)
+        assert encryption.process.call.call_args[1]['timeout'] == 120
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], -9)))
+    def test_get_killed_by_call_timeout_message(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        with pytest.raises(RuntimeError) as error:
+            encryption.get_dmcrypt_key('0', 'abcd', call_timeout=120)
+        assert 'timed out after 120s' in str(error.value)
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_set_forwards_call_timeout(self, conf_ceph_stub, monkeypatch):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        monkeypatch.setattr(encryption.conf, 'cluster', 'ceph')
+        encryption.set_dmcrypt_key('0', 'abcd', 'newkey', call_timeout=120)
+        assert encryption.process.call.call_args[1]['timeout'] == 120
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], -9)))
+    def test_set_killed_by_call_timeout_message(self, conf_ceph_stub, monkeypatch):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        monkeypatch.setattr(encryption.conf, 'cluster', 'ceph')
+        with pytest.raises(RuntimeError) as error:
+            encryption.set_dmcrypt_key('0', 'abcd', 'newkey', call_timeout=120)
+        assert 'timed out after 120s' in str(error.value)

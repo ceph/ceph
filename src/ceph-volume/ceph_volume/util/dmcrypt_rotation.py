@@ -76,6 +76,7 @@ SLOT_CANONICAL = 0
 SLOT_STAGING = 1
 
 LOCK_DIR = '/run/ceph-volume'
+MON_CALL_TIMEOUT = 120
 
 
 def _open_lock_dir() -> int:
@@ -172,20 +173,24 @@ class ConfigKeyCustody(KeyCustody):
         self.keyring = keyring
 
     def get_current_key(self) -> str:
-        return encryption_utils.get_dmcrypt_key(self.osd_id,
-                                                self.osd_fsid,
-                                                lockbox_keyring=self.keyring,
-                                                name=self.name)
+        return encryption_utils.get_dmcrypt_key(
+            self.osd_id,
+            self.osd_fsid,
+            lockbox_keyring=self.keyring,
+            name=self.name,
+            call_timeout=MON_CALL_TIMEOUT)
 
     def get_new_key(self) -> str:
         return encryption_utils.create_dmcrypt_key()
 
     def persist_new_key(self, key: str) -> None:
-        encryption_utils.set_dmcrypt_key(self.osd_id,
-                                         self.osd_fsid,
-                                         key,
-                                         lockbox_keyring=self.keyring,
-                                         name=self.name)
+        encryption_utils.set_dmcrypt_key(
+            self.osd_id,
+            self.osd_fsid,
+            key,
+            lockbox_keyring=self.keyring,
+            name=self.name,
+            call_timeout=MON_CALL_TIMEOUT)
 
     def verify_persisted(self, key: str) -> None:
         stored = self.get_current_key()
