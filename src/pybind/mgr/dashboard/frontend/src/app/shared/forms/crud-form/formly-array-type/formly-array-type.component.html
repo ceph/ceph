@@ -1,7 +1,7 @@
-<div class="mb-3">
+<div class="form-item">
   <legend
     *ngIf="props.label"
-    class="cd-header mt-1"
+    class="form-group-header"
     i18n
   >
     {{ props.label }}
@@ -15,42 +15,57 @@
 
   <div
     *ngFor="let field of field.fieldGroup; let i = index"
-    class="d-flex"
+    class="form-item-append"
   >
     <formly-field
-      class="col"
+      class="flex-grow-1"
       [field]="field"
     ></formly-field>
-    <div class="action-btn">
-      <button
-        class="btn btn-light ms-1"
+    <div class="item-action-btn">
+      <cds-icon-button
+        kind="tertiary"
+        size="sm"
         type="button"
+        [description]="'Add ' + props.label"
+        [attr.aria-label]="'Add ' + props.label"
         (click)="addWrapper()"
       >
-        <i [ngClass]="icons.add"></i>
-      </button>
-      <button
-        class="btn btn-light ms-1"
+        <svg
+          cdsIcon="add"
+          size="16"
+          class="cds--btn__icon"
+        ></svg>
+      </cds-icon-button>
+      <cds-icon-button
+        kind="danger"
+        size="sm"
         type="button"
+        [description]="'Remove ' + props.label"
+        [attr.aria-label]="'Remove ' + props.label"
         (click)="remove(i)"
         *ngIf="field.props.removable !== false"
       >
-        <i [ngClass]="icons.trash"></i>
-      </button>
+        <svg
+          cdsIcon="trash-can"
+          size="16"
+          class="cds--btn__icon"
+        ></svg>
+      </cds-icon-button>
     </div>
   </div>
-  <div
-    *ngIf="field.fieldGroup.length === 0"
-    class="text-right"
-  >
+  <div *ngIf="field.fieldGroup.length === 0">
     <button
-      class="btn btn-light"
+      cdsButton="tertiary"
       type="button"
       (click)="addWrapper()"
       i18n
     >
-      <i [ngClass]="icons.add"></i>
       Add {{ props.label }}
+      <svg
+        cdsIcon="add"
+        size="16"
+        class="cds--btn__icon"
+      ></svg>
     </button>
   </div>
 

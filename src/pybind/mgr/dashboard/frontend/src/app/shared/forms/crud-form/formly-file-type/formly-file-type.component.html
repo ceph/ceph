@@ -1,5 +1,25 @@
-<input
-  type="file"
-  [formControl]="formControl"
-  [formlyAttributes]="field"
-/>
+<div class="form-item">
+  <cds-text-label
+    [labelInputID]="id"
+    [invalid]="showError"
+    [invalidText]="errorTpl"
+    [helperText]="helper ? helperTpl : undefined"
+    [cdRequiredField]="requiredLabel"
+  >
+    <ng-container *ngIf="props.label && props.hideLabel !== true">{{ props.label }}</ng-container>
+    <div>
+      <input
+        type="file"
+        [id]="id"
+        [formControl]="formControl"
+        [formlyAttributes]="field"
+      />
+    </div>
+  </cds-text-label>
+  <ng-template #helperTpl>
+    <span [innerHTML]="helper"></span>
+  </ng-template>
+  <ng-template #errorTpl>
+    <formly-validation-message [field]="field"></formly-validation-message>
+  </ng-template>
+</div>

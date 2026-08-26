@@ -1,7 +1,7 @@
-<div class="mb-3">
+<div>
   <legend
     *ngIf="props.label"
-    class="cd-col-form-label"
+    class="form-group-header"
     i18n
   >
     {{ props.label }}
@@ -13,7 +13,7 @@
     {{ props.description }}
   </p>
   <div
-    class="alert alert-danger"
+    class="cds--form-requirement"
     role="alert"
     *ngIf="showError && formControl.errors"
   >

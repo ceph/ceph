@@ -30,10 +30,14 @@ export class UsersPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.create.url)
-  create(entityName: string, entityType: string, caps: string) {
-    cy.get('#formly_2_string_user_entity_0').type(entityName);
-    cy.get('#formly_5_string_entity_0').type(entityType);
-    cy.get('#formly_5_string_cap_1').type(caps);
+  create(entityName: string, entityType: string, caps: string, keyType?: string) {
+    cy.get('[id*="user_entity"]').type(entityName);
+    cy.get('select').first().should('contain', 'aes').and('contain', 'aes256k');
+    if (keyType) {
+      cy.get('select').first().select(keyType);
+    }
+    cy.get('[id*="string_entity_"]').type(entityType);
+    cy.get('[id*="string_cap_"]').type(caps);
     cy.get("[aria-label='Create User']").should('exist').click();
     cy.get('cd-crud-table').should('exist');
   }

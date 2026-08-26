@@ -1,0 +1,23 @@
+<div class="form-item">
+  <cds-select
+    [formControl]="formControl"
+    [id]="id"
+    [label]="props.label"
+    [invalid]="showError"
+    [invalidText]="errorTpl"
+    [helperText]="helper || undefined"
+    [readonly]="!!props.readonly"
+    [cdRequiredField]="requiredLabel"
+    [ariaLabel]="props.label"
+  >
+    <option
+      *ngFor="let opt of selectOptions"
+      [value]="opt.value"
+    >
+      {{ opt.label }}
+    </option>
+  </cds-select>
+  <ng-template #errorTpl>
+    <formly-validation-message [field]="field"></formly-validation-message>
+  </ng-template>
+</div>

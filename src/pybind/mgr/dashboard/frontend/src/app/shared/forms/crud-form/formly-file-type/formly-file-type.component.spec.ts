@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormControl } from '@angular/forms';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { FormlyModule } from '@ngx-formly/core';
 
 import { FormlyFileTypeComponent } from './formly-file-type.component';
@@ -11,7 +12,8 @@ describe('FormlyFileTypeComponent', () => {
 
   configureTestBed({
     imports: [FormlyModule.forRoot()],
-    declarations: [FormlyFileTypeComponent]
+    declarations: [FormlyFileTypeComponent],
+    schemas: [NO_ERRORS_SCHEMA]
   });
 
   beforeEach(() => {
@@ -22,6 +24,7 @@ describe('FormlyFileTypeComponent', () => {
     const field = {
       key: 'file',
       type: 'file',
+      props: {},
       templateOptions: {},
       get formControl() {
         return formControl;

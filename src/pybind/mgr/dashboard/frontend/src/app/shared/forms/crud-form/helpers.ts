@@ -9,6 +9,17 @@ import {
   formlyRgwRolePath
 } from './validators/rgw-role-validator';
 
+export function getFieldHelper(field: FormlyFieldConfig): string {
+  return getFieldState(field)?.help || '';
+}
+
+export function getFieldRequiredLabel(field: FormlyFieldConfig): string {
+  if (field.props?.required && field.props.hideRequiredMarker !== true) {
+    return field.props.label || '';
+  }
+  return '';
+}
+
 export function getFieldState(field: FormlyFieldConfig, uiSchema: any[] = undefined) {
   const formState: any[] = uiSchema || field.options?.formState;
   if (formState) {

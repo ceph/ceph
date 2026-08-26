@@ -66,3 +66,17 @@ def test_schema():
                        'ah': [{'top': 'foo', 'bottom': 'foo2'}],
                        'oh': {'left': 'foo', 'right': 'foo2'},
                        'ov': {'top': 'foo', 'bottom': True}}, schema=schema['schema'])
+
+
+def test_enum_field_schema():
+    form = Form(path='/cluster/user/create',
+                root_container=VerticalContainer('Create user', key='create_user', fields=[
+                    FormField('Key type', key='key_type', field_type=str,
+                              default_value='aes', enum_values=['aes', 'aes256k']),
+                ]))
+    schema = form.to_dict()['control_schema']
+    key_type = schema['properties']['key_type']
+    assert key_type['enum'] == ['aes', 'aes256k']
+    assert key_type['default'] == 'aes'
+    validate(instance={'key_type': 'aes'}, schema=schema)
+    validate(instance={'key_type': 'aes256k'}, schema=schema)

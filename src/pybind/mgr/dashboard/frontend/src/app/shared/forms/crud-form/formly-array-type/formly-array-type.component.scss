@@ -1,3 +1,8 @@
-.action-btn {
-  margin-top: 2.4rem;
+.form-item-append {
+  gap: var(--cds-spacing-05);
+}
+
+.item-action-btn {
+  display: flex;
+  gap: var(--cds-spacing-03);
 }

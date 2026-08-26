@@ -1,6 +1,6 @@
 import unittest.mock as mock
 
-from jsonschema import validate
+from jsonschema import ValidationError, validate
 
 from ..controllers.ceph_users import CephUser, create_form
 from ..tests import ControllerTestCase
@@ -17,6 +17,11 @@ auth_dump_mock = {"auth_dump": [
      "caps": {"mds": "allow *",
               "osd": "allow *"}}
 ]}
+
+CREATE_USER_PAYLOAD = {
+    'user_entity': 'client.test',
+    'capabilities': [{'entity': 'mon', 'cap': 'allow *'}],
+}
 
 
 class CephUsersControllerTestCase(ControllerTestCase):
@@ -48,5 +53,50 @@ class CephUsersControllerTestCase(ControllerTestCase):
         form_dict = create_form.to_dict()
         schema = {'schema': form_dict['control_schema'], 'layout': form_dict['ui_schema']}
         validate(instance={'user_entity': 'foo',
+                           'key_type': 'aes',
                            'capabilities': [{"entity": "mgr", "cap": "allow *"}]},
                  schema=schema['schema'])
+
+    def test_create_form_key_type_options(self):
+        schema = create_form.to_dict()['control_schema']
+        key_type = schema['properties']['key_type']
+        self.assertEqual(key_type['enum'], ['aes', 'aes256k'])
+        self.assertEqual(key_type['default'], 'aes')
+        self.assertIn('key_type', schema['required'])
+        validate(instance={**CREATE_USER_PAYLOAD, 'key_type': 'aes256k'},
+                 schema=schema)
+        with self.assertRaises(ValidationError):
+            validate(instance={**CREATE_USER_PAYLOAD, 'key_type': 'rsa'},
+                     schema=schema)
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_create_user_without_key_type(self, send_command):
+        send_command.return_value = ''
+        self._post('/api/cluster/user', CREATE_USER_PAYLOAD)
+        self.assertStatus(201)
+        send_command.assert_called_with(
+            'mon', 'auth add', entity='client.test', caps=['mon', 'allow *'])
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_create_user_with_aes(self, send_command):
+        send_command.return_value = ''
+        self._post('/api/cluster/user', {**CREATE_USER_PAYLOAD, 'key_type': 'aes'})
+        self.assertStatus(201)
+        send_command.assert_called_with(
+            'mon', 'auth add', entity='client.test', caps=['mon', 'allow *'],
+            key_type='aes')
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_create_user_with_aes256k(self, send_command):
+        send_command.return_value = ''
+        self._post('/api/cluster/user', {**CREATE_USER_PAYLOAD, 'key_type': 'aes256k'})
+        self.assertStatus(201)
+        send_command.assert_called_with(
+            'mon', 'auth add', entity='client.test', caps=['mon', 'allow *'],
+            key_type='aes256k')
+
+    @mock.patch('dashboard.services.ceph_service.CephService.send_command')
+    def test_create_user_with_invalid_key_type(self, send_command):
+        self._post('/api/cluster/user', {**CREATE_USER_PAYLOAD, 'key_type': 'rsa'})
+        self.assertStatus(400)
+        send_command.assert_not_called()

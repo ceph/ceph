@@ -8,13 +8,12 @@ import { FieldType } from '@ngx-formly/core';
 @Component({
   selector: 'cd-formly-object-type',
   templateUrl: './formly-object-type.component.html',
-  styleUrls: ['./formly-object-type.component.scss'],
   standalone: false
 })
 export class FormlyObjectTypeComponent extends FieldType {
   get inputClass(): string {
     const layoutType = this.props.templateOptions?.layoutType;
-    const defaultFlexClasses = 'd-flex justify-content-center align-content-stretch gap-3';
+    const defaultFlexClasses = 'd-flex align-items-start gap-3';
     if (layoutType == 'row') {
       return defaultFlexClasses + ' flex-row';
     }

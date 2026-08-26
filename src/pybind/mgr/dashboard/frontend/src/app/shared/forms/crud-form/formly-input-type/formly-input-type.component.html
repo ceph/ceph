@@ -1,5 +1,22 @@
-<input
-  [formControl]="formControl"
-  [formlyAttributes]="field"
-  class="form-control col-form-input"
-/>
+<div class="form-item">
+  <cds-text-label
+    [labelInputID]="id"
+    [invalid]="showError"
+    [invalidText]="errorTpl"
+    [helperText]="helper || undefined"
+    [cdRequiredField]="requiredLabel"
+  >
+    <ng-container *ngIf="props.label && props.hideLabel !== true">{{ props.label }}</ng-container>
+    <input
+      cdsText
+      [id]="id"
+      [formControl]="formControl"
+      [formlyAttributes]="field"
+      [invalid]="showError"
+      [readonly]="!!props.readonly"
+    />
+  </cds-text-label>
+  <ng-template #errorTpl>
+    <formly-validation-message [field]="field"></formly-validation-message>
+  </ng-template>
+</div>

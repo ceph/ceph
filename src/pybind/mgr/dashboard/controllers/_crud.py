@@ -121,6 +121,7 @@ class FormField(NamedTuple):
     readonly: bool = False
     help: str = ''
     validators: List[Validator] = []
+    enum_values: Optional[List[str]] = None
 
     def get_type(self):
         _type = ''
@@ -223,6 +224,10 @@ class Container:
                 _type = field.get_type()
                 properties[field.key]['type'] = _type
                 properties[field.key]['title'] = field.name
+                if field.default_value is not None:
+                    properties[field.key]['default'] = field.default_value
+                if field.enum_values:
+                    properties[field.key]['enum'] = field.enum_values
                 field_ui_schema['key'] = field_key
                 field_ui_schema['readonly'] = field.readonly
                 if field.readonly:

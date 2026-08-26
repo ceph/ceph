@@ -13,6 +13,9 @@ from ._crud import ArrayHorizontalContainer, CRUDMeta, Form, FormField, \
 
 logger = logging.getLogger("controllers.ceph_users")
 
+ALLOWED_KEY_TYPES = ('aes', 'aes256k')
+DEFAULT_KEY_TYPE = 'aes'
+
 
 class CephUserCaps(NamedTuple):
     mon: str
@@ -46,7 +49,7 @@ class CephUserEndpoints:
 
     @staticmethod
     def user_create(_, user_entity: str = '', capabilities: Optional[List[Cap]] = None,
-                    import_data: str = ''):
+                    import_data: str = '', key_type: str = ''):
         """
         Add a Ceph user, with its defined capabilities.
         """
@@ -63,9 +66,19 @@ class CephUserEndpoints:
             caps.append(cap['entity'])
             caps.append(cap['cap'])
 
-        logger.debug("Sending command 'auth add' of entity '%s' with caps '%s'",
-                     user_entity, str(caps))
-        CephUserEndpoints._run_auth_command('auth add', entity=user_entity, caps=caps)
+        if key_type and key_type not in ALLOWED_KEY_TYPES:
+            raise DashboardException(
+                msg=f"Invalid key type '{key_type}'. Allowed values: "
+                    f"{', '.join(ALLOWED_KEY_TYPES)}",
+                code=400)
+
+        logger.debug("Sending command 'auth add' of entity '%s' with caps '%s' "
+                     "and key_type '%s'",
+                     user_entity, str(caps), key_type or 'preferred')
+        auth_kwargs = {'entity': user_entity, 'caps': caps}
+        if key_type:
+            auth_kwargs['key_type'] = key_type
+        CephUserEndpoints._run_auth_command('auth add', **auth_kwargs)
 
         return f"Successfully created user '{user_entity}'"
 
@@ -124,6 +137,12 @@ cap_container = ArrayHorizontalContainer('Capabilities', 'capabilities', fields=
 create_container = VerticalContainer('Create User', 'create_user', fields=[
     FormField('User entity', 'user_entity',
               field_type=str),
+    FormField('Key type', 'key_type',
+              field_type=str,
+              default_value=DEFAULT_KEY_TYPE,
+              enum_values=list(ALLOWED_KEY_TYPES),
+              help='Cipher used to generate the user key. aes256k requires an '
+                   'upgraded cluster where all monitors support CephX AES256K.'),
     cap_container,
 ])
 
@@ -196,7 +215,11 @@ edit_form = Form(path='/cluster/user/edit',
                             'capabilities': Param([{
                                 "entity": (str, "Entity to add"),
                                 "cap": (str, "Capability to add; eg. allow *")
-                            }], 'List of capabilities to add to user_entity')
+                            }], 'List of capabilities to add to user_entity'),
+                            "key_type": Param(
+                                str,
+                                "Key type used to generate the user key (aes or aes256k)",
+                                True, '')
                         })
     ),
     edit=CRUDCollectionMethod(
