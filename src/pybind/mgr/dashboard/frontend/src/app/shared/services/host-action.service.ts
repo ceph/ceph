@@ -6,6 +6,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { HostService, HostModalRef } from '~/app/shared/api/host.service';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
@@ -29,7 +30,8 @@ export class HostActionService {
     private hostService: HostService,
     private notificationService: NotificationService,
     private cdsModalService: ModalCdsService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private actionLabels: ActionLabelsI18n
   ) {}
 
   /**
@@ -44,7 +46,7 @@ export class HostActionService {
       this.cdsModalService.show(FormModalComponent, {
         titleText: $localize`Edit Host: ${host.hostname}`,
         fields: [labelsField],
-        submitButtonText: $localize`Save changes`,
+        submitButtonText: this.actionLabels.SAVE_CHANGES,
         onSubmit: (values: { labels: string[] }) => {
           this.submitHostLabelUpdate(host.hostname, values.labels, onSuccess);
         }
