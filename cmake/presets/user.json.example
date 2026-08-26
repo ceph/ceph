@@ -1,0 +1,15 @@
+{
+  "version": 10,
+  "configurePresets": [
+    {
+      "name": "_user-debug",
+      "hidden": true,
+      "cacheVariables": {}
+    },
+    {
+      "name": "_user-release",
+      "hidden": true,
+      "cacheVariables": {}
+    }
+  ]
+}
