@@ -94,6 +94,7 @@ namespace rgw::s3vector {
   // Returns a new session on success, nullptr on failure.
   LanceDBSession* create_rgw_session(const DoutPrefixProvider* dpp,
       rgw::sal::Driver* driver,
+      const std::string& tenant,
       const void* options) {
 #ifdef WITH_RADOSGW_LANCEDB
     if (!driver) {
@@ -107,7 +108,7 @@ namespace rgw::s3vector {
       return nullptr;
     }
 
-    LanceDBObjectStoreProvider* provider = rgw_lancedb_store_create_provider(driver, dpp);
+    LanceDBObjectStoreProvider* provider = rgw_lancedb_store_create_provider(driver, dpp, tenant.c_str());
     if (!provider) {
       ldpp_dout(dpp, 1) << "ERROR: failed to create RGW LanceDB provider" << dendl;
       lancedb_registry_free(registry);
@@ -137,12 +138,27 @@ namespace rgw::s3vector {
 #endif
   }
 
-  // Build RGW backend URI with optional tenant query param
-  std::string make_rgw_uri(const std::string& bucket, const std::string* tenant) {
-    if (!tenant || tenant->empty()) {
-      return fmt::format("{}://{}/", RGW_PROVIDER_SCHEME, bucket);
+  // Build RGW backend URI
+  // the tenant is not part of the URI, it is stored in the session
+  std::string make_rgw_uri(const std::string& bucket) {
+    return fmt::format("{}://{}/", RGW_PROVIDER_SCHEME, bucket);
+  }
+
+  // the tenant of a vector bucket, or an empty string for the default tenant
+  const std::string& tenant_name(const std::string* tenant) {
+    static const std::string default_tenant;
+    return tenant ? *tenant : default_tenant;
+  }
+
+  // the storage of a vector bucket is per tenant, since two tenants may use the
+  // same vector bucket name. tenant names are limited to alphanumeric characters
+  // and "_", so they need no encoding to be used as a path component
+  std::string tenant_qualified_name(const std::string* tenant, const std::string& vector_bucket_name) {
+    const auto& tenant_str = tenant_name(tenant);
+    if (tenant_str.empty()) {
+      return vector_bucket_name;
     }
-    return fmt::format("{}://{}/?tenant={}", RGW_PROVIDER_SCHEME, bucket, *tenant);
+    return fmt::format("{}${}", tenant_str, vector_bucket_name);
   }
 
   // Set S3 storage options (endpoint, region, credentials, allow_http) on a
@@ -228,7 +244,7 @@ namespace rgw::s3vector {
                           << "rgw_s3vector_local_path to be configured" << dendl;
         return nullptr;
       }
-      uri = fmt::format("{}/{}", local_path, vector_bucket_name);
+      uri = fmt::format("{}/{}", local_path, tenant_qualified_name(tenant, vector_bucket_name));
       builder = lancedb_connect(uri.c_str());
       if (!builder) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
@@ -236,7 +252,7 @@ namespace rgw::s3vector {
       }
       ldpp_dout(dpp, 10) << "INFO: s3vector connecting to local backend: " << uri << dendl;
     } else if (is_rgw_backend(backend_type)) {
-      uri = make_rgw_uri(vector_bucket_name, tenant);
+      uri = make_rgw_uri(vector_bucket_name);
       builder = lancedb_connect(uri.c_str());
       if (!builder) {
         ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
@@ -268,7 +284,7 @@ namespace rgw::s3vector {
     LanceDBSessionOptions opts = {1, 1};
     // the RGW backend needs a session with the object store registry of the SAL
     LanceDBSession* session = is_rgw_backend(backend_type) ?
-        create_rgw_session(dpp, driver, &opts) : lancedb_session_new(&opts);
+        create_rgw_session(dpp, driver, tenant_name(tenant), &opts) : lancedb_session_new(&opts);
     if (!session) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create session for: " << uri << dendl;
       lancedb_connect_builder_free(builder);
@@ -310,10 +326,10 @@ namespace rgw::s3vector {
       return {};
     }
 
-    auto session_sp = rgw::s3vector::get_session(dpp, vector_bucket_name);
+    auto session_sp = rgw::s3vector::get_session(dpp, tenant_name(tenant), vector_bucket_name);
     if (!session_sp) {
       // No cached session — create a short-lived connection using caller's driver/dpp
-      rgw::s3vector::notify_session_create(dpp, vector_bucket_name);
+      rgw::s3vector::notify_session_create(dpp, tenant_name(tenant), vector_bucket_name);
       return LanceDBSessionConnHandle{
         .conn = connect(dpp, driver, user, tenant, vector_bucket_name)
       };
@@ -322,9 +338,9 @@ namespace rgw::s3vector {
     std::string uri;
     if (is_local_backend(backend_type)) {
       const std::string local_path = conf.get_val<std::string>("rgw_s3vector_local_path");
-      uri = fmt::format("{}/{}", local_path, vector_bucket_name);
+      uri = fmt::format("{}/{}", local_path, tenant_qualified_name(tenant, vector_bucket_name));
     } else if (is_rgw_backend(backend_type)) {
-      uri = make_rgw_uri(vector_bucket_name, tenant);
+      uri = make_rgw_uri(vector_bucket_name);
     } else {
       uri = fmt::format("s3://{}/", vector_bucket_name);
     }
@@ -1089,7 +1105,7 @@ namespace rgw::s3vector {
       return lancedb_error_to_errno(result);
     } else { // successfully deleted the index
       // we are not failing the operation if we cannot notify the background process on index removal
-      notify_index_remove(dpp, configuration.vector_bucket_name, configuration.index_name);
+      notify_index_remove(dpp, tenant_name(tenant), configuration.vector_bucket_name, configuration.index_name);
     }
     lancedb_connection_free(conn);
     return 0;
@@ -1382,7 +1398,7 @@ namespace rgw::s3vector {
     }
     lancedb_free_table_names(table_names, name_count);
     ldpp_dout(dpp, 20) << "INFO: deleting in-memory session (if it exists) for bucket: " << bucket_name << dendl;
-    rgw::s3vector::notify_session_delete(dpp, bucket_name);
+    rgw::s3vector::notify_session_delete(dpp, tenant_name(tenant), bucket_name);
     lancedb_connection_free(conn);
     ctx->result = 0;
   }
@@ -2019,7 +2035,7 @@ namespace rgw::s3vector {
       return;
     }
     // we are not failing the operation if we cannot notify the background process on index update
-    notify_index_update(dpp, configuration.vector_bucket_name, configuration.index_name);
+    notify_index_update(dpp, tenant_name(tenant), configuration.vector_bucket_name, configuration.index_name);
     lancedb_table_free(table);
     lancedb_connection_free(conn);
     ctx->result = 0;

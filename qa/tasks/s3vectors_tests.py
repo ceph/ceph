@@ -248,7 +248,7 @@ def run_tests(ctx, config):
         (remote,) = ctx.cluster.only(client).remotes.keys()
 
         # test marks to use by default
-        attr = ['vector_bucket_test', 'index_test', 'vector_test']
+        attr = ['vector_bucket_test', 'index_test', 'vector_test', 'tenant_test']
 
         if 'extra_attr' in client_config:
             attr = client_config.get('extra_attr')
