@@ -458,7 +458,9 @@ int rgw_head_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   }
 
   meta->size = obj->get_size();
-  meta->last_modified = ceph::real_clock::to_time_t(obj->get_mtime());
+  const auto mtime = ceph::real_clock::to_timespec(obj->get_mtime());
+  meta->last_modified = mtime.tv_sec;
+  meta->last_modified_ns = mtime.tv_nsec;
 
   const rgw::sal::Attrs& attrs = obj->get_attrs();
 
@@ -556,9 +558,12 @@ int rgw_list_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
       }
       result->entries[i].version_id = obj.key.instance.empty() ?
         nullptr : strdup(obj.key.instance.c_str());
+      result->entries[i].etag = obj.meta.etag.empty() ?
+        nullptr : strndup(obj.meta.etag.c_str(), MAX_ETAG_LEN);
       result->entries[i].size = obj.meta.size;
-      result->entries[i].last_modified =
-        ceph::real_clock::to_time_t(obj.meta.mtime);
+      const auto mtime = ceph::real_clock::to_timespec(obj.meta.mtime);
+      result->entries[i].last_modified = mtime.tv_sec;
+      result->entries[i].last_modified_ns = mtime.tv_nsec;
       i++;
     }
 
@@ -571,8 +576,10 @@ int rgw_list_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
         return -ENOMEM;
       }
       result->entries[i].version_id = nullptr;
+      result->entries[i].etag = nullptr;
       result->entries[i].size = 0;
       result->entries[i].last_modified = time(nullptr);
+      result->entries[i].last_modified_ns = 0;
       i++;
     }
   }
@@ -1087,6 +1094,9 @@ void rgw_free_list_result(CRgwListResult* result) {
         }
         if (result->entries[i].version_id) {
           free(result->entries[i].version_id);
+        }
+        if (result->entries[i].etag) {
+          free(result->entries[i].etag);
         }
       }
       free(result->entries);

@@ -1369,6 +1369,61 @@ def test_delete_index():
     _delete_s3_bucket_for_vector_bucket(bucket_name)
 
 @pytest.mark.index_test
+def test_recreated_index():
+    """An index that is deleted and created again with the same name should be used
+    with its new definition, and not with the one of the index that was deleted"""
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    dimension = 4
+    index_name = 'test-index'
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the vector bucket asks the background manager for a LanceDB session when it is
+    # created. the session must exist before the vectors below are added, so that the
+    # metadata of the index is cached in it, and could be served after it is deleted
+    time.sleep(2)
+
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'genre', 'mustExist': False}]})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=[
+        {'key': 'v1', 'data': generate_data(dimension, 1),
+         'metadata': json.dumps({'genre': 'rock'})}])
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # the index is replaced with one that requires the metadata key. no delay is added
+    # before the vectors are added again, so that the index is replaced within the same
+    # second, when the timestamp of its metadata would not show that it was replaced
+    _ = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=dimension, distanceMetric='euclidean',
+        metadataConfiguration={'filterableMetadataKeys': [
+            {'name': 'genre', 'mustExist': True}]})
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # a vector without the required key should be rejected by the new index
+    assert_put_vectors_validation_error(conn, 'vectors[0].metadata.genre',
+        vectorBucketName=bucket_name, indexName=index_name, vectors=[
+            {'key': 'v2', 'data': generate_data(dimension, 2),
+             'metadata': json.dumps({'other': 'value'})}])
+
+    # and the vectors of the deleted index should not be in the new one
+    result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name, maxResults=100)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['vectors']) == 0
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+
+@pytest.mark.index_test
 def test_list_indexes():
     conn = connection()
     bucket_name = gen_bucket_name()
