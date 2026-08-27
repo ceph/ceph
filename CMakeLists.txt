@@ -648,51 +648,10 @@ if(WITH_RADOSGW)
   message(STATUS "ssl soname: ${LIBSSL_SONAME}")
   message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
   if(WITH_RADOSGW_LANCEDB)
-    find_program(CARGO_EXECUTABLE cargo)
-    if(CARGO_EXECUTABLE)
-      execute_process(
-        COMMAND ${CARGO_EXECUTABLE} --version
-        OUTPUT_VARIABLE CARGO_VERSION_OUTPUT
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-      string(REGEX MATCH "[0-9]+\\.[0-9]+" CARGO_VERSION "${CARGO_VERSION_OUTPUT}")
-      if(CARGO_VERSION VERSION_LESS "1.91")
-        message(STATUS "System cargo ${CARGO_VERSION} is too old for lancedb (need >= 1.91), installing via rustup")
-        unset(CARGO_EXECUTABLE CACHE)
-      endif()
-    endif()
-    if(NOT CARGO_EXECUTABLE)
-      # the cargo code should not be added to the debuginfo of the rpm build
-      # so, moving it to a different directory
-      if(DEFINED ENV{RPM_BUILD_DIR})
-        set(RGW_CARGO_HOME "$ENV{RPM_BUILD_DIR}/.cargo")
-      else()
-        set(RGW_CARGO_HOME "${CMAKE_BINARY_DIR}/.cargo")
-      endif()
-      set(RGW_RUSTUP_HOME "${CMAKE_BINARY_DIR}/.rustup")
-      set(ENV{CARGO_HOME} "${RGW_CARGO_HOME}")
-      set(ENV{RUSTUP_HOME} "${RGW_RUSTUP_HOME}")
-      set(ENV{RUSTUP_INIT_SKIP_PATH_CHECK} "yes")
-      execute_process(
-        COMMAND sh -c "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --no-modify-path --default-toolchain stable"
-        RESULT_VARIABLE RUSTUP_RESULT)
-      if(NOT RUSTUP_RESULT EQUAL 0)
-        message(FATAL_ERROR "Failed to install Rust via rustup. Install cargo >= 1.91 manually or set -DWITH_RADOSGW_LANCEDB=OFF")
-      endif()
-      find_program(CARGO_EXECUTABLE cargo PATHS "${RGW_CARGO_HOME}/bin" NO_DEFAULT_PATH)
-      if(NOT CARGO_EXECUTABLE)
-        message(FATAL_ERROR "rustup installed but cargo still not found")
-      endif()
-      execute_process(
-        COMMAND ${CARGO_EXECUTABLE} --version
-        OUTPUT_VARIABLE CARGO_VERSION_OUTPUT
-        OUTPUT_STRIP_TRAILING_WHITESPACE)
-      message(STATUS "Using rustup-installed cargo: ${CARGO_EXECUTABLE} (${CARGO_VERSION_OUTPUT})")
-      set(RGW_LANCEDB_CARGO_ENV
-        "CARGO_HOME=${RGW_CARGO_HOME}"
-        "RUSTUP_HOME=${RGW_RUSTUP_HOME}"
-        CACHE INTERNAL "extra environment for the rustup-installed cargo")
-    else()
-      set(RGW_LANCEDB_CARGO_ENV "" CACHE INTERNAL "extra environment for the system cargo")
+    find_package(Cargo 1.91)
+    if(NOT Cargo_FOUND)
+      message(FATAL_ERROR "lancedb requires cargo >= 1.91. run install-deps.sh to install it, "
+        "or build with -DWITH_RADOSGW_LANCEDB=OFF")
     endif()
   endif(WITH_RADOSGW_LANCEDB)
 endif (WITH_RADOSGW)
