@@ -562,8 +562,7 @@ def test_vector_buckets_not_synced():
     conn = connection()
     conn2 = connection2()
     if not conn2:
-        log.info("Skipping test_vector_buckets_not_synced since second connection is not configured")
-        return
+        pytest.skip("skipping test_vector_buckets_not_synced since second connection is not configured")
 
     # the backing buckets are regular S3 buckets, and must exist in the zone in
     # which their vector bucket is used
@@ -623,8 +622,7 @@ def test_vector_data_not_synced():
     conn = connection()
     conn2 = connection2()
     if not conn2:
-        log.info("Skipping test_vector_data_not_synced since second connection is not configured")
-        return
+        pytest.skip("skipping test_vector_data_not_synced since second connection is not configured")
 
     dimension = 4
     index_name = 'test-index'

@@ -41,7 +41,9 @@
 #include "rgw_rest_s3control.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
+#ifdef WITH_RADOSGW_LANCEDB
 #include "rgw_rest_s3vector.h"
+#endif
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -6077,6 +6079,7 @@ void parse_post_action(const std::string& post_body, req_state* s)
   }
 }
 
+#ifdef WITH_RADOSGW_LANCEDB
 // s3vector requests looks like bucket POST operations
 // where the "bucket name" is the operation name.
 // with JSON payload
@@ -6093,6 +6096,7 @@ bool is_s3vector_op(const req_state* s) {
     content_type &&
     *content_type == "application/json";
 }
+#endif // WITH_RADOSGW_LANCEDB
 
 RGWRESTMgr_S3::RGWRESTMgr_S3(bool enable_s3control,
                              bool _enable_s3website,
@@ -6102,8 +6106,10 @@ RGWRESTMgr_S3::RGWRESTMgr_S3(bool enable_s3control,
                              bool _enable_s3vector)
   : enable_sts(_enable_sts),
     enable_iam(_enable_iam),
-    enable_pubsub(_enable_pubsub),
-    enable_s3vector(_enable_s3vector)
+    enable_pubsub(_enable_pubsub)
+#ifdef WITH_RADOSGW_LANCEDB
+    , enable_s3vector(_enable_s3vector)
+#endif
 {
   if (enable_s3control) {
     s3control = std::make_unique<RGWRESTMgr_S3Control>();
@@ -6197,6 +6203,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
     return nullptr;
   }
   // has bucket
+#ifdef WITH_RADOSGW_LANCEDB
   if (enable_s3vector && is_s3vector_op(s)) {
     ldpp_dout(s, 20) << "INFO: s3vector op: " << s->init_state.url_bucket << dendl;
     const auto max_size = s->cct->_conf->rgw_max_put_param_size;
@@ -6212,6 +6219,7 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
     }
     return new RGWHandler_REST_s3Vector(auth_registry, data);
   }
+#endif // WITH_RADOSGW_LANCEDB
   return new RGWHandler_REST_Bucket_S3(auth_registry, enable_pubsub);
 }
 

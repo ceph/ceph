@@ -154,19 +154,21 @@ set(librgw_common_srcs
   rgw_bucket_logging.cc
   rgw_rest_bucket_logging.cc
   rgw_bucket_sync.cc
-  rgw_rest_restore.cc
-  rgw_rest_s3vector.cc
-  rgw_s3vector.cc
-  rgw_s3vector_filter.cc
-  rgw_s3vector_background.cc)
+  rgw_rest_restore.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
   driver/json_config/store.cc)
 
+# the s3vectors API is implemented on top of lancedb, and is compiled out
+# together with it
 if(WITH_RADOSGW_LANCEDB)
   list(APPEND librgw_common_srcs
-    rgw_sal_wrapper.cc)
+    rgw_sal_wrapper.cc
+    rgw_rest_s3vector.cc
+    rgw_s3vector.cc
+    rgw_s3vector_filter.cc
+    rgw_s3vector_background.cc)
 endif()
 
 if(WITH_RADOSGW_AMQP_ENDPOINT)
