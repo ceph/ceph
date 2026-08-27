@@ -57,6 +57,13 @@ public:
     const coll_t& cid,
     const ghobject_t& oid,
     const std::string& key);
+  seastar::future<std::string> get_omap_header(
+    const coll_t& cid,
+    const ghobject_t& oid);
+  seastar::future<bool> set_omap_header(
+    const coll_t& cid,
+    const ghobject_t& oid,
+    const std::string& header);
   
   // Object data operations
   seastar::future<std::string> get_bytes(
@@ -103,6 +110,13 @@ public:
   seastar::future<bool> clear_data_digest(
     const coll_t& cid,
     const ghobject_t& oid);
+  seastar::future<bool> corrupt_info(
+    const coll_t& cid,
+    const ghobject_t& oid);
+  seastar::future<bool> clear_snapset(
+    const coll_t& cid,
+    const ghobject_t& oid,
+    const std::string& arg = "");
 
 private:
   seastar::shard_id shard_id = 0;
