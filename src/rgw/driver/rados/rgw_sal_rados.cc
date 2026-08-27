@@ -675,7 +675,13 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
     // of the vector bucket otherwise
     const int r = rgw::s3vector::remove_indexes(dpp, store, &info.bucket.tenant,
                                                 info.bucket.name, delete_children, y);
-    if (r < 0) {
+    if (r == -ENOENT) {
+      // the backend of the vector bucket does not exist. this happens when the bucket
+      // was created, but its backend was never initialized. the metadata should still
+      // be removed, so that the bucket does not stay around forever
+      ldpp_dout(dpp, 5) << "WARNING: s3vector bucket " << info.bucket <<
+        " has no backend. removing its metadata" << dendl;
+    } else if (r < 0) {
       return r;
     }
     // the data of the vector bucket is gone, and so should be its cached session
