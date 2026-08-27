@@ -832,7 +832,9 @@ private:
   const bool enable_sts;
   const bool enable_iam;
   const bool enable_pubsub;
+#ifdef WITH_RADOSGW_LANCEDB
   const bool enable_s3vector;
+#endif
 public:
   RGWRESTMgr_S3(bool enable_s3control, bool _enable_s3website, bool _enable_sts, bool _enable_iam, bool _enable_pubsub, bool _enable_s3vector);
   ~RGWRESTMgr_S3() override;
