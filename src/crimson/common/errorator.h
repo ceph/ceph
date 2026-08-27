@@ -207,21 +207,19 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     }
   };
 
-  class assert_failure {
-    const char* const msg = nullptr;
-  public:
-    assert_failure(const char* msg)
-      : msg(msg) {
-    }
-    assert_failure() = default;
-
-    no_touch_error_marker operator()(const unthrowable_wrapper& raw_error) {
-      handle([this] (auto&& error_v) {
-        ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
+  template <typename... Args>
+  static auto assert_failure(fmt::format_string<Args...> fmt_str, Args&&... args) {
+    fmt::string_view sv = fmt_str;
+    return [sv, ...captured = std::forward<Args>(args)](const unthrowable_wrapper& raw_error) mutable
+        -> no_touch_error_marker {
+      handle([&] (auto&& error_v) {
+        ceph_abort_msg(fmt::format("{}: {}",
+          fmt::vformat(sv, fmt::make_format_args(captured...)),
+          error_v.message()));
       })(raw_error);
       return no_touch_error_marker{};
-    }
-  };
+    };
+  }
 
 private:
   // can be used only to initialize the `instance` member
@@ -287,21 +285,19 @@ struct stateful_error_t : error_t<stateful_error_t<ErrorT>> {
     };
   }
 
-  class assert_failure {
-    const char* const msg = nullptr;
-  public:
-    assert_failure(const char* msg)
-      : msg(msg) {
-    }
-    assert_failure() = default;
-
-    no_touch_error_marker operator()(stateful_error_t<ErrorT>&& raw_error) {
-      handle([this] (auto&& error_v) {
-        ceph_abort_msgf("%s: %s", msg ? msg : "", error_v.message().c_str());
+  template <typename... Args>
+  static auto assert_failure(fmt::format_string<Args...> fmt_str, Args&&... args) {
+    fmt::string_view sv = fmt_str;
+    return [sv, ...captured = std::forward<Args>(args)](stateful_error_t<ErrorT>&& raw_error) mutable
+        -> no_touch_error_marker {
+      handle([&] (auto&& error_v) {
+        ceph_abort_msg(fmt::format("{}: {}",
+          fmt::vformat(sv, fmt::make_format_args(captured...)),
+          error_v.message()));
       })(std::move(raw_error));
       return no_touch_error_marker{};
-    }
-  };
+    };
+  }
 
   auto exception_ptr() {
     return ep;

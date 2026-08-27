@@ -809,55 +809,7 @@ public:
     extent_len_t len,
     LBAMapping pos,
     LBAMapping mapping,
-    bool updateref)
-  {
-    LOG_PREFIX(TransactionManager::clone_range);
-    co_await pos.co_refresh();
-    mapping = co_await mapping.refresh();
-    SUBDEBUGT(seastore_tm,
-      "src_base={}, dst_base={}, {}~{}, mapping={}, pos={}, updateref={}",
-      t, src_base, dst_base, offset, len, mapping, pos, updateref);
-    auto left = len;
-    bool shared_direct = false;
-    auto cloned_to = offset;
-    while (left != 0) {
-      auto src_offset = src_base.template get_byte_distance<
-	extent_len_t>(mapping.get_key());
-      ceph_assert(cloned_to >= src_offset);
-      extent_len_t clone_offset = cloned_to - src_offset;
-      extent_len_t clone_len = mapping.get_length() - clone_offset;
-      clone_len = std::min(clone_len, left);
-      left -= clone_len;
-      if (!mapping.is_indirect() && mapping.get_val().is_zero()) {
-	auto r = co_await reserve_region(
-	  t,
-	  std::move(pos),
-	  (dst_base + cloned_to).checked_to_laddr(),
-	  clone_len,
-	  mapping.get_extent_type()
-	).handle_error_interruptible(
-	  clone_iertr::pass_further{},
-	  crimson::ct_error::assert_all("unexpected error")
-	);
-	assert((dst_base + cloned_to).checked_to_laddr() == r.get_key());
-	cloned_to += clone_len;
-	pos = co_await r.next();
-	mapping = co_await mapping.next();
-	continue;
-      }
-      if (mapping.is_real()) {
-	shared_direct = true;
-      }
-      auto ret = co_await clone_pin(
-	t, std::move(pos), std::move(mapping),
-	(dst_base + cloned_to).checked_to_laddr(),
-	clone_offset, clone_len, updateref);
-      cloned_to += clone_len;
-      pos = co_await ret.cloned_mapping.next();
-      mapping = co_await ret.orig_mapping.next();
-    }
-    co_return clone_range_ret_t{shared_direct, std::move(pos)};
-  }
+    bool updateref);
 
   using move_region_iertr = base_iertr;
   using move_region_ret = move_region_iertr::future<>;
@@ -1004,7 +956,7 @@ public:
     auto cursor = co_await lba_manager->get_cursor(t, extent
     ).handle_error_interruptible(
       crimson::ct_error::input_output_error::pass_further{},
-      crimson::ct_error::enoent::assert_failure{}
+      crimson::ct_error::enoent::assert_failure("unexpected enoent")
     );
     if (cursor->has_shadow_paddr()) {
       if (auto shadow = extent.get_shadow(); shadow) {
@@ -1380,45 +1332,7 @@ public:
     laddr_t start,
     objaddr_t unaligned_len,
     LBAMapping first_mapping,
-    remove_mappings_param_t params)
-  {
-    LOG_PREFIX(TransactionManager::remove_mappings_in_range);
-    auto mapping = co_await first_mapping.refresh();
-    SUBDEBUGT(seastore_tm, "{}~{}, first_mapping: {}",
-      t, start, unaligned_len, mapping);
-    while (!mapping.is_end()) {
-      assert(mapping.get_key() >= start);
-      auto mapping_end = (mapping.get_key() + mapping.get_length()
-	).checked_to_laddr();
-      if (mapping_end > start + unaligned_len) {
-	break;
-      }
-      if (params.skip_direct_mapping && mapping.is_real()) {
-	mapping = co_await mapping.next();
-	continue;
-      }
-      if (params.cascade_remove_on_indirect ||
-	  mapping.is_zero_reserved()) {
-	mapping = co_await remove(t, std::move(mapping)
-	).handle_error_interruptible(
-	  punch_mappings_iertr::pass_further{},
-	  crimson::ct_error::assert_all(
-	    "remove_mappings_in_range hit invalid error"
-	  )
-	);
-      } else {
-	mapping = co_await _remove_indirect_mapping_only(
-	  t, std::move(mapping)
-	).handle_error_interruptible(
-	  punch_mappings_iertr::pass_further{},
-	  crimson::ct_error::assert_all(
-	    "remove_mappings_in_range hit invalid error"
-	  )
-	);
-      }
-    }
-    co_return mapping;
-  }
+    remove_mappings_param_t params);
 
   bool support_logical_bucket() const {
     return epm->has_cold_tier() && logical_bucket != nullptr;
