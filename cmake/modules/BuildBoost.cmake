@@ -113,14 +113,12 @@ function(do_build_boost root_dir version)
   set(user_config ${CMAKE_BINARY_DIR}/user-config.jam)
   # edit the user-config.jam so b2 will be able to use the specified
   # toolset and python
-  set(boost_cxx_command
-    ${CMAKE_CXX_COMPILER_LAUNCHER}
-    ${CMAKE_CXX_COMPILER})
-  string(REPLACE ";" " " boost_cxx_command "${boost_cxx_command}")
+  # b2 emits paths relative to its working directory; launcher daemons may
+  # not share that directory's mount namespace, so use the compiler directly:
   string(CONCAT user_config_content
     "using ${toolset}"
     " : "
-    " : ${boost_cxx_command}"
+    " : ${CMAKE_CXX_COMPILER}"
     " : <compileflags>-fPIC <compileflags>-w <compileflags>-Wno-everything"
     " ;\n")
   if(with_python_version)
