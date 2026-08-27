@@ -29,6 +29,7 @@ class Manager : public DoutPrefixProvider {
 public:
     //message_t -> pass in empty index name for session messages (can extend to per table sessions in the future if needed)
     using table_name_t = std::pair<std::string, std::string>; // pair of vector bucket name and index name
+    using session_name_t = std::pair<std::string, std::string>; // pair of tenant and vector bucket name
     struct message_t {
       enum class Op {
         UPDATE,
@@ -36,8 +37,9 @@ public:
         SESSION_CREATE, 
         SESSION_DELETE
       };
-      message_t(const std::string& bucket_name, const std::string& index_name, Op _type) :
-          table_name(bucket_name, index_name), type(_type) {}
+      message_t(const std::string& tenant, const std::string& bucket_name, const std::string& index_name, Op _type) :
+          session_name(tenant, bucket_name), table_name(bucket_name, index_name), type(_type) {}
+      const session_name_t session_name;
       const table_name_t table_name;
       const Op type;
     };
@@ -64,7 +66,7 @@ private:
   };
   using SessionPtr = std::shared_ptr<LanceDBSession>;
   ceph::shared_mutex sessions_mutex = ceph::make_shared_mutex("s3vector::Manager::sessions_mutex"); 
-  std::unordered_map<std::string, SessionPtr> sessions;
+  std::unordered_map<session_name_t, SessionPtr, boost::hash<session_name_t>> sessions;
   std::unordered_map<table_name_t, ceph::coarse_real_time, boost::hash<table_name_t>> tables;
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
@@ -151,6 +153,7 @@ private:
       const auto message_count = messages.consume_all([&tables_to_process, this](auto message) {
         std::unique_ptr<message_t> message_guard(message);
         const auto table_name = std::move(message->table_name);
+        const auto session_name = std::move(message->session_name);
         switch(message->type) {
           case message_t::Op::REMOVE:
             ldpp_dout(this, 20) << "INFO: received remove message for table: " << table_name.first << "." << table_name.second << dendl;
@@ -180,10 +183,12 @@ private:
             }            
           case message_t::Op::SESSION_CREATE:
             {
-              ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << table_name.first << dendl;
+              ldpp_dout(this, 20) << "INFO: received session create message for bucket: " << session_name.second <<
+                " of tenant: " << session_name.first << dendl;
               std::unique_lock l(sessions_mutex);
-              if (sessions.find(table_name.first) != sessions.end()) {
-                ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << table_name.first << dendl;
+              if (sessions.find(session_name) != sessions.end()) {
+                ldpp_dout(this, 20) << "INFO: session already exists for bucket: " << session_name.second <<
+                  " of tenant: " << session_name.first << dendl;
                 return;
               }
 
@@ -199,27 +204,32 @@ private:
               const LanceDBSessionOptions* options = nullptr;
 
               if (is_rgw_backend(backend_type)) {
-                session = create_rgw_session(this, driver, options);
+                session = create_rgw_session(this, driver, session_name.first, options);
               } else {
                 session = lancedb_session_new(options);
               }
               if (!session) {
-                ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << table_name.first << dendl;
+                ldpp_dout(this, 1) << "ERROR: failed to create session for bucket: " << session_name.second <<
+                  " of tenant: " << session_name.first << dendl;
                 return;
               }
-              ldpp_dout(this, 20) << "INFO: created session for bucket: " << table_name.first << dendl;
+              ldpp_dout(this, 20) << "INFO: created session for bucket: " << session_name.second <<
+                " of tenant: " << session_name.first << dendl;
 
-              sessions[table_name.first] = SessionPtr(session, LanceDBSessionDeleter());
+              sessions[session_name] = SessionPtr(session, LanceDBSessionDeleter());
               return;
             }
           case message_t::Op::SESSION_DELETE:
             {
-              ldpp_dout(this, 20) << "INFO: received session delete message for bucket: " << table_name.first << dendl; 
+              ldpp_dout(this, 20) << "INFO: received session delete message for bucket: " << session_name.second <<
+                " of tenant: " << session_name.first << dendl;
               std::unique_lock l(sessions_mutex);
-              if (sessions.erase(table_name.first) > 0) {
-                ldpp_dout(this, 20) << "INFO: deleted session for bucket: " << table_name.first << dendl;
+              if (sessions.erase(session_name) > 0) {
+                ldpp_dout(this, 20) << "INFO: deleted session for bucket: " << session_name.second <<
+                  " of tenant: " << session_name.first << dendl;
               } else {
-                ldpp_dout(this, 20) << "INFO: session doesn't exist for bucket: " << table_name.first << dendl;
+                ldpp_dout(this, 20) << "INFO: session doesn't exist for bucket: " << session_name.second <<
+                  " of tenant: " << session_name.first << dendl;
               }
               return;
             }
@@ -311,12 +321,13 @@ public:
     ldpp_dout(this, 10) << "INfO: started manager" << dendl;
   }
 
-  bool notify_index(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name, message_t::Op op) {
+  bool notify_index(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name,
+      const std::string& index_name, message_t::Op op) {
     if (shutdown) {
       ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about index: manager is shutting down" << dendl;
       return false;
     }
-    auto message_guard = std::make_unique<message_t>(bucket_name, index_name, op);
+    auto message_guard = std::make_unique<message_t>(tenant, bucket_name, index_name, op);
     if (messages.push(message_guard.get())) {
       std::ignore = message_guard.release(); // ownership transferred to the queue
       ldpp_dout(dpp, 20) << "INFO: notified s3vectors manager about index" << dendl;
@@ -326,12 +337,12 @@ public:
     return false;
   }
 
-  bool notify_session(const DoutPrefixProvider* dpp, const std::string& bucket_name, message_t::Op op) {
+  bool notify_session(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name, message_t::Op op) {
     if (shutdown) {
       ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session: manager is shutting down" << dendl;
       return false;
     }
-    auto message_guard = std::make_unique<message_t>(bucket_name, "", op);
+    auto message_guard = std::make_unique<message_t>(tenant, bucket_name, "", op);
     if (messages.push(message_guard.get())) {
       std::ignore = message_guard.release(); // ownership transferred to the queue
       ldpp_dout(dpp, 20) << "INFO: notified s3vectors manager about session" << dendl;
@@ -341,9 +352,9 @@ public:
     return false;
   }
 
-  std::shared_ptr<const LanceDBSession> get_session(const std::string& bucket_name) {
+  std::shared_ptr<const LanceDBSession> get_session(const std::string& tenant, const std::string& bucket_name) {
     std::shared_lock l(sessions_mutex);
-    auto it = sessions.find(bucket_name);
+    auto it = sessions.find(session_name_t(tenant, bucket_name));
     if (it == sessions.end()) {
       return nullptr;
     }
@@ -384,44 +395,44 @@ void resume(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver) {
   init(dpp, driver);
 }
 
-bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
+bool notify_index_update(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name, const std::string& index_name) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table update: manager is not initialized" << dendl;
     return false;
   }
-  return s_manager->notify_index(dpp, bucket_name, index_name, Manager::message_t::Op::UPDATE);
+  return s_manager->notify_index(dpp, tenant, bucket_name, index_name, Manager::message_t::Op::UPDATE);
 }
 
-bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& bucket_name, const std::string& index_name) {
+bool notify_index_remove(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name, const std::string& index_name) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about table remove: manager is not initialized" << dendl;
     return false;
   }
-  return s_manager->notify_index(dpp, bucket_name, index_name, Manager::message_t::Op::REMOVE);
+  return s_manager->notify_index(dpp, tenant, bucket_name, index_name, Manager::message_t::Op::REMOVE);
 }
 
-std::shared_ptr<const LanceDBSession> get_session(const DoutPrefixProvider* dpp, const std::string& bucket_name) {
+std::shared_ptr<const LanceDBSession> get_session(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to get LanceDB session for bucket: manager is not initialized" << dendl;
     return nullptr;
   }
-  return s_manager->get_session(bucket_name);
+  return s_manager->get_session(tenant, bucket_name);
 }
 
-bool notify_session_create(const DoutPrefixProvider* dpp, const std::string& bucket_name) {
+bool notify_session_create(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session creation: manager is not initialized" << dendl;
     return false; 
   }
-  return s_manager->notify_session(dpp, bucket_name, Manager::message_t::Op::SESSION_CREATE);
+  return s_manager->notify_session(dpp, tenant, bucket_name, Manager::message_t::Op::SESSION_CREATE);
 }
 
-bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& bucket_name) {
+bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& tenant, const std::string& bucket_name) {
   if (!s_manager) {
     ldpp_dout(dpp, 1) << "ERROR: failed to notify s3vectors manager about session deletion: manager is not initialized" << dendl;
     return false;
   }
-  return s_manager->notify_session(dpp, bucket_name, Manager::message_t::Op::SESSION_DELETE);
+  return s_manager->notify_session(dpp, tenant, bucket_name, Manager::message_t::Op::SESSION_DELETE);
 }
 
 

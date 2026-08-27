@@ -206,53 +206,11 @@ def gen_bucket_name():
     return 'kaboom' + run_prefix + '-' + str(num_buckets)
 
 
-def connection(service_name='s3vectors'):
-    hostname = get_config_host()
-    port_no = get_config_port()
-    access_key = get_access_key()
-    secret_key = get_secret_key()
-    if port_no == 443 or port_no == 8443:
-        scheme = 'https://'
-    else:
-        scheme = 'http://'
-
-    client = boto3.client(service_name,
-            endpoint_url=scheme+hostname+':'+str(port_no),
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup())
-
-    return client
-
-def connection2(service_name='s3vectors'):
-    hostname = get_config_host2()
-    if not hostname:
-        log.info("No second host configured")
-        return None
-    port_no = get_config_port2()
-    if not port_no:
-        log.info("No second port configured")
-        return None
-    access_key = get_access_key()
-    secret_key = get_secret_key()
-    if port_no == 443 or port_no == 8443:
-        scheme = 'https://'
-    else:
-        scheme = 'http://'
-
-    client = boto3.client(service_name,
-            endpoint_url=scheme+hostname+':'+str(port_no),
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup())
-
-    return client
-
-
-def service_connection(service_name, access_key, secret_key):
-    """ a connection to the tested zone with the given credentials """
-    hostname = get_config_host()
-    port_no = get_config_port()
+def service_connection(service_name, access_key, secret_key, hostname=None, port_no=None):
+    """ a connection with the given credentials, to the tested zone unless a
+    host and a port are given """
+    hostname = hostname or get_config_host()
+    port_no = port_no or get_config_port()
     if port_no == 443 or port_no == 8443:
         scheme = 'https://'
     else:
@@ -263,6 +221,24 @@ def service_connection(service_name, access_key, secret_key):
             aws_access_key_id=access_key,
             aws_secret_access_key=secret_key,
             region_name=get_config_zonegroup())
+
+
+def connection(service_name='s3vectors'):
+    """ a connection of the main user to the tested zone """
+    return service_connection(service_name, get_access_key(), get_secret_key())
+
+
+def connection2(service_name='s3vectors'):
+    """ a connection of the main user to the second zone, None when it is not configured """
+    hostname = get_config_host2()
+    if not hostname:
+        log.info("No second host configured")
+        return None
+    port_no = get_config_port2()
+    if not port_no:
+        log.info("No second port configured")
+        return None
+    return service_connection(service_name, get_access_key(), get_secret_key(), hostname, port_no)
 
 
 def _wait_for_user(uid, tenant=None, retries=12, delay=5):
@@ -300,15 +276,9 @@ def another_user(tenant=None):
     out, result = admin(args, cluster=master_cluster)
     assert result == 0, f"failed to create user '{uid}': {out}"
     _wait_for_user(uid, tenant)
-    hostname = get_config_host()
-    port_no = get_config_port()
-    if port_no == 443 or port_no == 8443:
-        scheme = 'https://'
-    else:
-        scheme = 'http://'
-
     client = service_connection('s3vectors', access_key, secret_key)
     client.uid = uid
+    client.tenant = tenant
     # the "s3" connection of the same user, to create the backing buckets
     client.s3 = service_connection('s3', access_key, secret_key)
     return client
@@ -386,7 +356,7 @@ def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None, retries=12, de
         except s3conn.exceptions.ClientError as err:
             error_code = err.response['Error']['Code']
             if error_code in ('404', 'NoSuchBucket'):
-                log.info("Creating S3 bucket '%s' for S3/RGW backend", bucket_name)
+                log.info("Creating S3 bucket '%s' for RGW backend", bucket_name)
                 _create_s3bucket(s3conn, bucket_name)
                 return
             if error_code not in ('403', 'AccessDenied', 'Forbidden'):
@@ -442,6 +412,29 @@ def _delete_vector_bucket(conn, bucket_name):
     """Delete a vector bucket together with all of its indexes"""
     _delete_all_indexes(conn, bucket_name)
     return conn.delete_vector_bucket(vectorBucketName=bucket_name)
+
+
+def _create_vector_bucket(conn, bucket_name, s3conn=None):
+    """
+    Create a vector bucket, and its backing bucket. The "s3" connection of the
+    owner must be given when it is not the main user
+    """
+    _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+
+def _cleanup_vector_bucket(conn, bucket_name, s3conn=None):
+    """
+    Best effort deletion of a vector bucket, with its indexes and its backing
+    bucket. The "s3" connection of the owner must be given when it is not the
+    main user
+    """
+    try:
+        _delete_vector_bucket(conn, bucket_name)
+    except conn.exceptions.ClientError as err:
+        log.warning("failed to delete vector bucket '%s': %s", bucket_name, str(err))
+    _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn)
 
 
 def _delete_all_vector_buckets(conn, conn2=None):
@@ -828,7 +821,7 @@ def test_vector_buckets_deletion_with_buckets():
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
     # and an s3 bucket with the same name
     _create_s3bucket(s3conn, bucket_name2)
-    # delete the s3 bucket: for S3/SAL backends, empty it first (LanceDB data files);
+    # delete the s3 bucket: for RGW backend, empty it first (LanceDB data files);
     # for local backend, the bucket is empty since LanceDB uses local filesystem.
     if has_backing_bucket():
         paginator = s3conn.get_paginator('list_objects_v2')
@@ -848,7 +841,9 @@ def test_vector_buckets_deletion_with_buckets():
     log.info("list_vector_buckets result: %s", result)
     vector_bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
     assert bucket_name2 in vector_bucket_names
-    # cleanup
+    # cleanup: recreate the backing bucket, so that the vector bucket can be deleted
+    # TODO: remove this once this is merged: https://github.com/ceph/ceph/pull/71377
+    _ensure_s3_bucket_for_vector_bucket(bucket_name2)
     _delete_all_vector_buckets(conn)
 
 
@@ -3385,13 +3380,13 @@ def test_query_vectors_post_filter_topk():
 def test_sal_error_propagation():
     """Verify that SAL errors propagate through LanceDB back to the S3Vector API.
 
-    For S3/SAL backends: create a vector bucket and index, delete the backing
+    For RGW backend: create a vector bucket and index, delete the backing
     S3 bucket, then attempt put_vectors. The operation should fail because the
     underlying storage is gone. This validates the error chain:
     rgw_sal_wrapper -> store.rs -> LanceDB -> lancedb-c -> rgw_s3vector.cc
     """
     if not has_backing_bucket():
-        pytest.skip("error propagation test only applies to S3/SAL backends")
+        pytest.skip("error propagation test only applies to RGW backend")
 
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -3434,7 +3429,7 @@ def test_cross_owner_vector_bucket():
     """When the S3 bucket owner differs from the vector bucket owner,
     operations should fail without a bucket policy and succeed with one."""
     if not has_backing_bucket():
-        pytest.skip("cross-owner test only applies to backends with a backing bucket")
+        pytest.skip("cross-owner test only applies to backend with a backing bucket")
 
     # user A (config user) creates the S3 bucket
     s3conn = connection('s3')
@@ -3556,11 +3551,7 @@ def test_delete_user_with_vector_buckets():
     finally:
         # best effort cleanup, in case the user was not deleted by the test
         admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
-        try:
-            _delete_vector_bucket(main_conn, bucket_name)
-        except main_conn.exceptions.ClientError as err:
-            log.warning("failed to delete vector bucket '%s': %s", bucket_name, str(err))
-        _delete_s3_bucket_for_vector_bucket(bucket_name)
+        _cleanup_vector_bucket(main_conn, bucket_name)
 
 
 @pytest.mark.vector_bucket_test
@@ -3576,9 +3567,7 @@ def test_account_vector_buckets():
     other = another_account_user(account_id=conn.account_id)
     bucket_name = gen_bucket_name()
     try:
-        _ensure_s3_bucket_for_vector_bucket(bucket_name, conn.s3)
-        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        _create_vector_bucket(conn, bucket_name, conn.s3)
         result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
                                    dataType='float32', dimension=dimension,
                                    distanceMetric='euclidean')
@@ -3611,11 +3600,7 @@ def test_account_vector_buckets():
     finally:
         # best effort cleanup. the account and its users are left behind, as done
         # for the users created by another_user()
-        try:
-            _delete_vector_bucket(other, bucket_name)
-        except other.exceptions.ClientError as err:
-            log.warning("failed to delete vector bucket '%s': %s", bucket_name, str(err))
-        _delete_s3_bucket_for_vector_bucket(bucket_name, other.s3)
+        _cleanup_vector_bucket(other, bucket_name, other.s3)
 
 
 @pytest.mark.vector_bucket_test
@@ -3631,9 +3616,7 @@ def test_delete_account_with_vector_buckets():
     account_id = conn.account_id
     bucket_name = gen_bucket_name()
     try:
-        _ensure_s3_bucket_for_vector_bucket(bucket_name, conn.s3)
-        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        _create_vector_bucket(conn, bucket_name, conn.s3)
         result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
                                    dataType='float32', dimension=dimension,
                                    distanceMetric='euclidean')
@@ -3673,13 +3656,10 @@ def test_delete_user_owning_the_backing_bucket():
     index_name = 'index-over-an-owned-bucket'
     conn = another_user()
     uid = conn.uid
-    s3conn = conn.s3
     bucket_name = gen_bucket_name()
     try:
         # unlike the other tests, the backing bucket belongs to the user under test
-        _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn)
-        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        _create_vector_bucket(conn, bucket_name, conn.s3)
         result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
                                    dataType='float32', dimension=dimension,
                                    distanceMetric='euclidean')
@@ -3696,3 +3676,174 @@ def test_delete_user_owning_the_backing_bucket():
         # best effort cleanup, in case the user was not deleted by the test. the
         # backing bucket belongs to the user, and is purged together with it
         admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
+
+
+###############################
+# multi tenancy isolation tests
+###############################
+
+num_tenants = 0
+
+
+def gen_tenant_name():
+    """ tenant names are limited to alphanumeric characters and "_". the tenant
+    is not part of the API: it is implicit in the credentials of the user, so
+    different tenants may use the same names """
+    global num_tenants
+
+    num_tenants += 1
+    return 'tenant' + run_prefix + '_' + str(num_tenants)
+
+
+@pytest.mark.tenant_test
+def test_tenant_vector_buckets_isolated():
+    """ two tenants may hold a vector bucket with the same name, and each of them
+    sees only its own. they also dont collide with an user without a tenant """
+    bucket_name = gen_bucket_name()
+    conn0 = connection()
+    conn0.tenant = None
+    conn1 = another_user(tenant=gen_tenant_name())
+    conn2 = another_user(tenant=gen_tenant_name())
+    try:
+        _create_vector_bucket(conn0, bucket_name)
+        _create_vector_bucket(conn1, bucket_name, conn1.s3)
+        _create_vector_bucket(conn2, bucket_name, conn2.s3)
+
+        for conn in (conn0, conn1, conn2):
+            result = conn.get_vector_bucket(vectorBucketName=bucket_name)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            result = conn.list_vector_buckets()
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+            assert bucket_names == [bucket_name], \
+                f"tenant '{conn.tenant}' sees the vector buckets: {bucket_names}"
+    finally:
+        _cleanup_vector_bucket(conn0, bucket_name)
+        _cleanup_vector_bucket(conn1, bucket_name, conn1.s3)
+        _cleanup_vector_bucket(conn2, bucket_name, conn2.s3)
+
+
+@pytest.mark.tenant_test
+def test_tenant_indexes_isolated():
+    """ the indexes of a vector bucket of one tenant are not visible in the
+    vector bucket of another tenant that has the same name """
+    dimension = 8
+    bucket_name = gen_bucket_name()
+    index_name1 = 'index-of-tenant-one'
+    index_name2 = 'index-of-tenant-two'
+    conn1 = another_user(tenant=gen_tenant_name())
+    conn2 = another_user(tenant=gen_tenant_name())
+    try:
+        _create_vector_bucket(conn1, bucket_name, conn1.s3)
+        _create_vector_bucket(conn2, bucket_name, conn2.s3)
+
+        for conn, index_name in ((conn1, index_name1), (conn2, index_name2)):
+            result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                       dataType='float32', dimension=dimension,
+                                       distanceMetric='euclidean')
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # each tenant lists only the index it created
+        for conn, index_name in ((conn1, index_name1), (conn2, index_name2)):
+            result = conn.list_indexes(vectorBucketName=bucket_name)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            index_names = [i['indexName'] for i in result['indexes']]
+            assert index_names == [index_name], \
+                f"tenant '{conn.tenant}' sees the indexes: {index_names}"
+
+        # the index of the other tenant cannot be fetched
+        for conn, index_name in ((conn1, index_name2), (conn2, index_name1)):
+            with pytest.raises(conn.exceptions.ClientError) as exc_info:
+                conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
+            assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 404
+    finally:
+        _cleanup_vector_bucket(conn1, bucket_name, conn1.s3)
+        _cleanup_vector_bucket(conn2, bucket_name, conn2.s3)
+
+
+@pytest.mark.tenant_test
+def test_tenant_vectors_isolated():
+    """ the vectors of two tenants that use the same vector bucket name and the
+    same index name are not mixed """
+    dimension = 8
+    num_vectors = 10
+    bucket_name = gen_bucket_name()
+    index_name = 'shared-index-name'
+    conn1 = another_user(tenant=gen_tenant_name())
+    conn2 = another_user(tenant=gen_tenant_name())
+    keys1 = ['tenant-one-vec-' + str(i) for i in range(num_vectors)]
+    keys2 = ['tenant-two-vec-' + str(i) for i in range(num_vectors)]
+    try:
+        for conn, keys in ((conn1, keys1), (conn2, keys2)):
+            _create_vector_bucket(conn, bucket_name, conn.s3)
+            result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                       dataType='float32', dimension=dimension,
+                                       distanceMetric='euclidean')
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            vectors = [{'key': key, 'data': generate_data(dimension, i)}
+                       for i, key in enumerate(keys)]
+            result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                      vectors=vectors)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        for conn, own_keys, other_keys in ((conn1, keys1, keys2), (conn2, keys2, keys1)):
+            # only the vectors of the tenant are listed
+            result = conn.list_vectors(vectorBucketName=bucket_name, indexName=index_name)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            listed_keys = [v['key'] for v in result['vectors']]
+            assert sorted(listed_keys) == sorted(own_keys), \
+                f"tenant '{conn.tenant}' lists the vectors: {listed_keys}"
+
+            # the vectors of the other tenant cannot be fetched by their keys
+            result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                      keys=other_keys, returnData=True)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            assert result['vectors'] == [], \
+                f"tenant '{conn.tenant}' fetched the vectors of the other tenant: {result['vectors']}"
+
+            # a query returns only the vectors of the tenant, even when more
+            # results than it holds are asked for
+            result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                        queryVector=generate_data(dimension, 0),
+                                        topK=2*num_vectors)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            queried_keys = [v['key'] for v in result['vectors']]
+            assert sorted(queried_keys) == sorted(own_keys), \
+                f"tenant '{conn.tenant}' queried the vectors: {queried_keys}"
+    finally:
+        _cleanup_vector_bucket(conn1, bucket_name, conn1.s3)
+        _cleanup_vector_bucket(conn2, bucket_name, conn2.s3)
+
+
+@pytest.mark.tenant_test
+def test_tenant_delete_vector_bucket_isolated():
+    """ an empty vector bucket may be deleted even when another tenant holds
+    indexes in a vector bucket with the same name """
+    dimension = 8
+    bucket_name = gen_bucket_name()
+    index_name = 'index-of-tenant-one'
+    conn1 = another_user(tenant=gen_tenant_name())
+    conn2 = another_user(tenant=gen_tenant_name())
+    try:
+        _create_vector_bucket(conn1, bucket_name, conn1.s3)
+        result = conn1.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                    dataType='float32', dimension=dimension,
+                                    distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # the vector bucket of the second tenant holds no indexes, so it may be deleted
+        _create_vector_bucket(conn2, bucket_name, conn2.s3)
+        result = conn2.delete_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        _delete_s3_bucket_for_vector_bucket(bucket_name, conn2.s3)
+
+        # the index of the first tenant is not affected
+        result = conn1.list_indexes(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        index_names = [i['indexName'] for i in result['indexes']]
+        assert index_names == [index_name], \
+            f"tenant '{conn1.tenant}' sees the indexes: {index_names}"
+    finally:
+        _cleanup_vector_bucket(conn1, bucket_name, conn1.s3)
+
+

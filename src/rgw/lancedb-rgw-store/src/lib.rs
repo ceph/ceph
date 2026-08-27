@@ -56,10 +56,11 @@ pub struct LanceDBObjectStoreProvider {
 /// - `driver` must be a valid, non-null pointer to rgw::sal::Driver
 /// - `dpp` must be a valid, non-null pointer to DoutPrefixProvider
 /// - Both pointers must remain valid for the lifetime of the provider
+/// - `tenant`, when not NULL, must be a valid null-terminated string
 ///
 /// # Returns
 /// Non-null pointer to LanceDBObjectStoreProvider on success, NULL if
-/// either `driver` or `dpp` is NULL.
+/// either `driver` or `dpp` is NULL, or if `tenant` is not valid UTF-8.
 /// Caller must either:
 /// - Pass to lancedb_registry_insert_provider() (transfers ownership), OR
 /// - Free with rgw_lancedb_store_free_provider()
@@ -67,10 +68,21 @@ pub struct LanceDBObjectStoreProvider {
 pub unsafe extern "C" fn rgw_lancedb_store_create_provider(
     driver: *mut CRgwDriver,
     dpp: *const CRgwDoutPrefix,
+    tenant: *const std::os::raw::c_char,
 ) -> *mut LanceDBObjectStoreProvider {
     if driver.is_null() || dpp.is_null() {
         return std::ptr::null_mut();
     }
+
+    // a NULL tenant is the default one
+    let tenant = if tenant.is_null() {
+        String::new()
+    } else {
+        match std::ffi::CStr::from_ptr(tenant).to_str() {
+            Ok(tenant) => tenant.to_string(),
+            Err(_) => return std::ptr::null_mut(),
+        }
+    };
 
     // TODO: convert to compile-time check (e.g., via build.rs with constexpr
     // version constants from the C++ header) instead of runtime verification
@@ -80,7 +92,7 @@ pub unsafe extern "C" fn rgw_lancedb_store_create_provider(
     }
 
     let provider: Arc<dyn lance_io::object_store::ObjectStoreProvider> =
-        Arc::new(RGWStoreProvider::new(driver, dpp));
+        Arc::new(RGWStoreProvider::new(driver, dpp, tenant));
 
     Box::into_raw(Box::new(LanceDBObjectStoreProvider {
         inner: Some(provider),
@@ -167,7 +179,11 @@ mod tests {
     #[test]
     fn test_create_provider_null_args() {
         assert!(unsafe {
-            rgw_lancedb_store_create_provider(std::ptr::null_mut(), std::ptr::null())
+            rgw_lancedb_store_create_provider(
+                std::ptr::null_mut(),
+                std::ptr::null(),
+                std::ptr::null(),
+            )
         }
         .is_null());
     }
@@ -176,12 +192,17 @@ mod tests {
     fn test_provider_lifecycle() {
         let fake_driver = 0x1234usize as *mut CRgwDriver;
         let fake_dpp = 0x5678usize as *const CRgwDoutPrefix;
+        let tenant = std::ffi::CString::new("tenant").unwrap();
 
-        let provider = unsafe { rgw_lancedb_store_create_provider(fake_driver, fake_dpp) };
-        assert!(!provider.is_null());
+        // a provider of the default tenant, and one of a named tenant
+        for tenant in [std::ptr::null(), tenant.as_ptr()] {
+            let provider =
+                unsafe { rgw_lancedb_store_create_provider(fake_driver, fake_dpp, tenant) };
+            assert!(!provider.is_null());
 
-        // Free should not crash
-        unsafe { rgw_lancedb_store_free_provider(provider) };
+            // Free should not crash
+            unsafe { rgw_lancedb_store_free_provider(provider) };
+        }
     }
 
     #[test]
