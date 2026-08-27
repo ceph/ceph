@@ -387,6 +387,28 @@ describe('ConfigurationFormComponent', () => {
         expect(component.availSections).toContain('mgr.ceph-node-00.vfbbqn');
         expect(component.availSections).toContain('osd.0');
       });
+
+      it('should set forceUpdate to true when can_update_at_runtime is false', () => {
+        const response = new ConfigFormModel();
+        response.name = 'public_network';
+        response.type = 'str';
+        response.can_update_at_runtime = false;
+
+        component.setResponse(response);
+
+        expect(component.forceUpdate).toBe(true);
+      });
+
+      it('should set forceUpdate to false when can_update_at_runtime is true', () => {
+        const response = new ConfigFormModel();
+        response.name = 'public_network';
+        response.type = 'str';
+        response.can_update_at_runtime = true;
+
+        component.setResponse(response);
+
+        expect(component.forceUpdate).toBe(false);
+      });
     });
 
     describe('createRequest', () => {
@@ -396,6 +418,17 @@ describe('ConfigurationFormComponent', () => {
         component.response.type = 'str';
         component.response.value = [];
         component.createForm();
+        component.setResponse(component.response);
+      });
+
+      it('should set force_update on request when forceUpdate is true', () => {
+        component.forceUpdate = true;
+        component.configForm.get('values')?.get('global')?.setValue('10.0.0.0/24');
+
+        const request = component.createRequest();
+
+        expect(request).toBeTruthy();
+        expect(request?.force_update).toBe(true);
       });
 
       it('should include client entity configurations in request', () => {
@@ -442,6 +475,30 @@ describe('ConfigurationFormComponent', () => {
         const request = component.createRequest();
 
         expect(request).toBeNull();
+      });
+    });
+
+    describe('getRestartWarningMessage', () => {
+      it('should return specific service restart message when services exist', () => {
+        component.response = new ConfigFormModel();
+        component.response.type = 'str';
+        component.response.services = ['rgw', 'mon'];
+        component.createForm();
+        component.setResponse(component.response);
+
+        const msg = component.getRestartWarningMessage();
+        expect(msg).toContain('rgw, mon');
+      });
+
+      it('should return generic service restart message when services list is empty', () => {
+        component.response = new ConfigFormModel();
+        component.response.type = 'str';
+        component.response.services = [];
+        component.createForm();
+        component.setResponse(component.response);
+
+        const msg = component.getRestartWarningMessage();
+        expect(msg).toContain('affected service(s) or daemon(s)');
       });
     });
   });

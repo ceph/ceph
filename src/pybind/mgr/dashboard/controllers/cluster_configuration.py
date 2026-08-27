@@ -188,18 +188,10 @@ class ClusterConfiguration(RESTController):
         for name in config_option_names:
             config_option = self._get_config_option(name)
 
-            # making rgw configuration to be editable by bypassing 'can_update_at_runtime'
-            # as the same can be done via CLI.
-            if force_update and 'rgw' in name and not config_option['can_update_at_runtime']:
-                break
+            # Allow non-runtime configurations to be updated when force_update is enabled
+            if force_update and not config_option['can_update_at_runtime']:
+                continue
 
-            if force_update and 'rgw' not in name and not config_option['can_update_at_runtime']:
-                raise DashboardException(
-                    msg=f'Only the configuration containing "rgw" can be edited at runtime with'
-                        f' force_update flag, hence not able to update "{name}"',
-                    code='config_option_not_updatable_at_runtime',
-                    component='cluster_configuration'
-                )
             if not config_option['can_update_at_runtime']:
                 not_updateable.append(name)
 
