@@ -566,4 +566,3 @@ int delete_vectors(const delete_vectors_t& configuration, rgw::sal::Driver* driv
 int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors);
 
 }
-
