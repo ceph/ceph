@@ -25,6 +25,7 @@ tasks:
         osd min pg log entries: 5
         crimson cpu num: 2
 - workunit:
+    watchdog: true
     clients:
       client.0:
         - rados/test_pg_merging.sh
