@@ -679,7 +679,7 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
       return r;
     }
     // the data of the vector bucket is gone, and so should be its cached session
-    rgw::s3vector::notify_session_delete(dpp, info.bucket.name);
+    rgw::s3vector::notify_session_delete(dpp, info.bucket.tenant, info.bucket.name);
   }
 #endif
 
