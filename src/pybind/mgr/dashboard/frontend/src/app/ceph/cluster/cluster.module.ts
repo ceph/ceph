@@ -30,7 +30,8 @@ import {
   LayerModule,
   AccordionModule,
   MenuButtonModule,
-  ContextMenuModule
+  ContextMenuModule,
+  NotificationModule
 } from 'carbon-components-angular';
 import Analytics from '@carbon/icons/es/analytics/16';
 import CloseFilled from '@carbon/icons/es/close--filled/16';
@@ -55,6 +56,7 @@ import { CephSharedModule } from '../shared/ceph-shared.module';
 import { ConfigurationResourcePageComponent } from './configuration/configuration-resource-page/configuration-resource-page.component';
 import { ConfigurationResourceSidebarComponent } from './configuration/configuration-resource-sidebar/configuration-resource-sidebar.component';
 import { ConfigurationFormComponent } from './configuration/configuration-form/configuration-form.component';
+import { ConfigOptionRestartModalComponent } from './configuration/configuration-form/config-option-restart-modal/config-option-restart-modal.component';
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { CreateClusterReviewComponent } from './create-cluster/create-cluster-review.component';
 import { CreateClusterStep1Component } from './create-cluster/create-cluster-step-1/create-cluster-step-1.component';
@@ -156,7 +158,8 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     LayerModule,
     AccordionModule,
     MenuButtonModule,
-    ContextMenuModule
+    ContextMenuModule,
+    NotificationModule
   ],
   declarations: [
     MonitorComponent,
@@ -170,6 +173,7 @@ import { TextLabelListComponent } from '~/app/shared/components/text-label-list/
     ConfigurationResourcePageComponent,
     ConfigurationResourceSidebarComponent,
     ConfigurationFormComponent,
+    ConfigOptionRestartModalComponent,
     OsdReweightModalComponent,
     CrushmapComponent,
     LogsComponent,
