@@ -310,6 +310,54 @@ class RbdService(object):
         return total_used_size, snap_map
 
     @classmethod
+    def image_diff(cls, image_spec, from_snapshot=None, snapshot_name=None,
+                   offset=0, length=None, whole_object=False):
+        # type: (str, Optional[str], Optional[str], int, Optional[int], bool) -> Dict
+        """Return the changed extents between two states of an image.
+
+        Wraps ``librbd``'s ``diff_iterate2``. With ``from_snapshot`` set it reports
+        the extents that changed since that snapshot; otherwise it reports every
+        allocated extent (a full-image diff). ``snapshot_name`` selects the target
+        state (a snapshot, or the live image when omitted). ``whole_object`` trades
+        byte precision for speed by reporting whole objects via object-map/fast-diff.
+        """
+        pool_name, namespace, image_name = parse_image_spec(image_spec)
+
+        def _diff(ioctx):
+            with rbd.Image(ioctx, image_name, snapshot=snapshot_name,
+                           read_only=True) as img:
+                size = img.size()
+                start = int(offset)
+                if start < 0 or start > size:
+                    raise DashboardException(
+                        msg='offset {} out of range (image size {})'.format(start, size),
+                        code='invalid_offset', component='rbd')
+                diff_length = size - start if length is None else int(length)
+                diff_length = max(0, min(diff_length, size - start))
+
+                diffs = []  # type: List[Dict]
+
+                def _cb(_offset, _length, exists):
+                    diffs.append({'offset': _offset, 'length': _length,
+                                  'exists': bool(exists)})
+
+                if diff_length > 0:
+                    img.diff_iterate(start, diff_length, from_snapshot, _cb,
+                                     whole_object=whole_object)
+                return {
+                    'image_size': size,
+                    'offset': start,
+                    'length': diff_length,
+                    'from_snapshot': from_snapshot,
+                    'snapshot_name': snapshot_name,
+                    'whole_object': whole_object,
+                    'count': len(diffs),
+                    'diffs': diffs,
+                }
+
+        return rbd_call(pool_name, namespace, _diff)
+
+    @classmethod
     def _rbd_image(cls, ioctx, pool_name, namespace, image_name,  # pylint: disable=R0912
                    omit_usage=False):
         with rbd.Image(ioctx, image_name) as img:

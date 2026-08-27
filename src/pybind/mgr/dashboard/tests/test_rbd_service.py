@@ -177,3 +177,60 @@ class RbdServiceTest(unittest.TestCase):
             # pylint: disable=protected-access
             res = RbdService._rbd_image_refs(ioctx_mock, str(i))
             self.assertEqual(res, images[i*2:(i*2)+2])
+
+    @mock.patch('dashboard.services.rbd.rbd.Image')
+    def test_image_diff(self, rbd_image_mock):
+        mgr.rados = MagicMock()
+        img = MagicMock()
+        img.size.return_value = 64 * 1024 * 1024
+
+        def _diff_iterate(offset, length, from_snap, callback, whole_object=False):
+            callback(0, 4194304, True)
+            callback(33554432, 4194304, True)
+        img.diff_iterate.side_effect = _diff_iterate
+        rbd_image_mock.return_value.__enter__.return_value = img
+
+        result = RbdService.image_diff('rbd/img', from_snapshot='snap1',
+                                       snapshot_name='snap2', whole_object=True)
+
+        # the target snapshot is opened read-only
+        self.assertEqual(rbd_image_mock.call_args[0][1], 'img')
+        self.assertEqual(rbd_image_mock.call_args[1],
+                         {'snapshot': 'snap2', 'read_only': True})
+        # the whole image is walked from the source snapshot at object granularity
+        diff_args = img.diff_iterate.call_args
+        self.assertEqual(diff_args[0][0], 0)
+        self.assertEqual(diff_args[0][1], 64 * 1024 * 1024)
+        self.assertEqual(diff_args[0][2], 'snap1')
+        self.assertTrue(diff_args[1]['whole_object'])
+        self.assertEqual(result, {
+            'image_size': 64 * 1024 * 1024,
+            'offset': 0,
+            'length': 64 * 1024 * 1024,
+            'from_snapshot': 'snap1',
+            'snapshot_name': 'snap2',
+            'whole_object': True,
+            'count': 2,
+            'diffs': [
+                {'offset': 0, 'length': 4194304, 'exists': True},
+                {'offset': 33554432, 'length': 4194304, 'exists': True},
+            ],
+        })
+
+    @mock.patch('dashboard.services.rbd.rbd.Image')
+    def test_image_diff_length_is_clamped_to_image_size(self, rbd_image_mock):
+        mgr.rados = MagicMock()
+        img = MagicMock()
+        img.size.return_value = 16 * 1024 * 1024
+        img.diff_iterate.side_effect = lambda *a, **k: None
+        rbd_image_mock.return_value.__enter__.return_value = img
+
+        # ask for more than the image holds, starting at a non-zero offset
+        result = RbdService.image_diff('rbd/img', offset=8 * 1024 * 1024,
+                                       length=999 * 1024 * 1024)
+
+        self.assertEqual(result['offset'], 8 * 1024 * 1024)
+        self.assertEqual(result['length'], 8 * 1024 * 1024)  # clamped to size - offset
+        self.assertEqual(img.diff_iterate.call_args[0][1], 8 * 1024 * 1024)
+        self.assertIsNone(result['from_snapshot'])
+        self.assertIsNone(result['snapshot_name'])

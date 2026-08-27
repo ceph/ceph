@@ -40,6 +40,22 @@ RBD_TRASH_SCHEMA = [{
     "pool_name": (str, 'pool name')
 }]
 
+RBD_DIFF_SCHEMA = {
+    "image_size": (int, 'Image size in bytes'),
+    "offset": (int, 'Start offset of the diffed region in bytes'),
+    "length": (int, 'Length of the diffed region in bytes'),
+    "from_snapshot": (str, 'Source snapshot name (null means full allocation)'),
+    "snapshot_name": (str, 'Target snapshot name (null means the live image)'),
+    "whole_object": (bool, 'Whether the diff was computed at object granularity'),
+    "count": (int, 'Number of returned extents'),
+    "diffs": ([{
+        "offset": (int, 'Extent start offset in bytes'),
+        "length": (int, 'Extent length in bytes'),
+        "exists": (bool, 'true if the extent holds data (changed/allocated), '
+                         'false if it was deallocated (discarded/zeroed)')
+    }], 'Changed extents, in ascending offset order')
+}
+
 RBD_GROUP_LIST_SCHEMA = [{
     "group": (str, 'group name'),
     "num_images": (int, '')
@@ -224,6 +240,36 @@ class Rbd(RESTController):
         can be moved to the trash and deleted at a later time.
         """
         return RbdService.move_image_to_trash(image_spec, delay)
+
+    @handle_rbd_error()
+    @handle_rados_error('pool')
+    @EndpointDoc("List the changed extents (diff) between two states of an RBD image",
+                 parameters={
+                     'image_spec': (str, 'URL-encoded "pool/namespace/image", e.g. "rbd%2Ffoo"'),
+                     'from_snapshot': (str, 'Report extents that changed since this snapshot. '
+                                            'Omit to report every allocated extent.'),
+                     'snapshot_name': (str, 'Diff up to this snapshot. '
+                                            'Omit to diff up to the live image.'),
+                     'offset': (int, 'Start offset in bytes (default: 0).'),
+                     'length': (int, 'Length in bytes (default: up to the image size).'),
+                     'whole_object': (bool, 'Diff whole objects using object-map/fast-diff: '
+                                            'faster and coarser. Default: false (byte-exact).'),
+                 },
+                 responses={200: RBD_DIFF_SCHEMA})
+    @RESTController.Resource('GET')
+    @ReadPermission
+    def diff(self, image_spec, from_snapshot=None, snapshot_name=None,
+             offset=0, length=None, whole_object=False):
+        """List the extents that differ between two states of an image.
+
+        Mirrors ``rbd diff [--from-snap <from_snapshot>] <image>[@<snapshot_name>]``:
+        it walks the image via ``diff_iterate2`` and returns the changed extents,
+        which is the primitive backup tools need for changed-block tracking (CBT).
+        """
+        return RbdService.image_diff(
+            image_spec, from_snapshot, snapshot_name, int(offset),
+            int(length) if length is not None else None,
+            str_to_bool(whole_object))
 
 
 @UIRouter('/block/rbd')
