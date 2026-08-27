@@ -109,17 +109,21 @@ def set_rgw_config_option(option, value, port=None, cluster=None):
     return out, ret
 
 
+def _configured_local_path(port, cluster):
+    """ the local path of the tested zone. each RGW must have its own directory,
+    otherwise they would share the data, so "<cluster>" and "<port>" are replaced
+    with the values of the tested zone """
+    local_path = get_s3vector_local_path() or '/tmp/rgw-s3vector-<cluster>-<port>'
+    return local_path.replace('<cluster>', cluster).replace('<port>', str(port))
+
+
 def _configure_backend(host, port, cluster):
     """ set the s3vector backend options on an RGW, so that it does not have to
     be started with them """
     backend = get_s3vector_backend()
     options = {'rgw_s3vector_backend': backend}
     if backend == 'local':
-        # each RGW must have its own directory, otherwise they would share the data.
-        # "<cluster>" and "<port>" are replaced with the values of the tested zone
-        local_path = get_s3vector_local_path() or '/tmp/rgw-s3vector-<cluster>-<port>'
-        options['rgw_s3vector_local_path'] = local_path.replace(
-            '<cluster>', cluster).replace('<port>', str(port))
+        options['rgw_s3vector_local_path'] = _configured_local_path(port, cluster)
     elif backend == 's3':
         allow_http = get_s3vector_s3_allow_http()
         # by default, the RGW is sending the S3 requests to itself
@@ -390,6 +394,14 @@ def _delete_vector_bucket(conn, bucket_name):
     return conn.delete_vector_bucket(vectorBucketName=bucket_name)
 
 
+def _vector_bucket_exists(conn, bucket_name):
+    """ whether a vector bucket is listed. this does not use the backend of the
+    bucket, and works also when the backend does not exist """
+    result = conn.list_vector_buckets()
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    return any(b['vectorBucketName'] == bucket_name for b in result['vectorBuckets'])
+
+
 def _delete_all_vector_buckets(conn, conn2=None):
     """
     Delete all vector buckets of a zone, and of the other zone when its
@@ -426,19 +438,98 @@ def test_create_vector_bucket():
     _delete_all_vector_buckets(conn)
 
 
-@pytest.mark.skip(reason="connection does not fail even with permission change")
+def _break_backend():
+    """ point the s3vector backend of the tested zone at a path that cannot be
+    created, so that its initialization fails. the backend is restored with
+    _restore_backend() """
+    set_rgw_config_option('rgw_s3vector_backend', 'local')
+    set_rgw_config_option('rgw_s3vector_local_path', '/proc/no-such-s3vector-path')
+
+
+def _restore_backend():
+    """ set the backend options of the tested zone back to the tested ones """
+    _configure_backend(get_config_host(), get_config_port(), get_config_cluster())
+    # the local path is set back to the one of the tested zone. it is not restored by
+    # _configure_backend() above, which sets it only when the local backend is tested
+    set_rgw_config_option('rgw_s3vector_local_path',
+        _configured_local_path(get_config_port(), get_config_cluster()))
+
+
 @pytest.mark.vector_bucket_test
-def test_create_vector_bucket_bad_path():
+def test_create_vector_bucket_backend_failure():
+    """A vector bucket should not be created when its backend cannot be used, and
+    should be created once the backend is usable again"""
     conn = connection()
     bucket_name = gen_bucket_name()
-    db_path = '/tmp/lancedb/'
-    os.makedirs(db_path, exist_ok=True)
-    original_mode = os.stat(db_path).st_mode
-    os.chmod(db_path, 0o555)
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+
     try:
-        pytest.raises(conn.exceptions.ClientError, conn.create_vector_bucket, vectorBucketName=bucket_name)
+        _break_backend()
+        # the backend cannot be used, so the creation fails
+        pytest.raises(conn.exceptions.ClientError, conn.create_vector_bucket,
+                      vectorBucketName=bucket_name)
+
+        # the backend is verified before the bucket is created, so the failed request
+        # should not leave a bucket behind. listing the buckets does not use the
+        # backend, and works while it is broken
+        assert not _vector_bucket_exists(conn, bucket_name), \
+            "no vector bucket should be created when the backend cannot be used"
     finally:
-        os.chmod(db_path, original_mode)
+        _restore_backend()
+
+    # the same request should succeed once the backend can be used
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert _vector_bucket_exists(conn, bucket_name)
+
+    # and the bucket should be fully functional
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName='test-index',
+        dataType='float32', dimension=4, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # cleanup
+    _ = _delete_vector_bucket(conn, bucket_name)
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+    assert not _vector_bucket_exists(conn, bucket_name)
+
+
+@pytest.mark.vector_bucket_test
+def test_vector_bucket_without_backend():
+    """A vector bucket whose backend does not exist has no indexes, and should still
+    be deleted, so that it does not stay around forever"""
+    if not is_s3_backend():
+        pytest.skip("the backend of the bucket can be removed only when it is a bucket")
+
+    conn = connection()
+    bucket_name = gen_bucket_name()
+    _ensure_s3_bucket_for_vector_bucket(bucket_name)
+    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    index_name = 'test-index'
+    result = conn.create_index(
+        vectorBucketName=bucket_name, indexName=index_name,
+        dataType='float32', dimension=4, distanceMetric='euclidean')
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # remove the bucket holding the data of the vector bucket
+    _delete_s3_bucket_for_vector_bucket(bucket_name)
+
+    # a vector bucket with no backend has no indexes
+    result = conn.list_indexes(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert len(result['indexes']) == 0
+
+    # and an index of such a bucket cannot be deleted, since it does not exist
+    with pytest.raises(conn.exceptions.ClientError) as exc_info:
+        conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 404
+
+    # the metadata of the bucket should be deleted, even without a backend
+    result = conn.delete_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    assert not _vector_bucket_exists(conn, bucket_name), \
+        "a vector bucket with no backend should be deleted"
 
 
 @pytest.mark.vector_bucket_test
@@ -1268,11 +1359,11 @@ def test_delete_index():
     # try to get the index
     with pytest.raises(conn.exceptions.ClientError):
         result = conn.get_index(vectorBucketName=bucket_name, indexName=index_name)
-    # deleting an index that does not exist is not an error
-    result = conn.delete_index(vectorBucketName=bucket_name, indexName=index_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    result = conn.delete_index(vectorBucketName=bucket_name, indexName='no-such-index')
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+    # deleting an index that does not exist should fail
+    for name in (index_name, 'no-such-index'):
+        with pytest.raises(conn.exceptions.ClientError) as exc_info:
+            conn.delete_index(vectorBucketName=bucket_name, indexName=name)
+        assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] == 404
     # cleanup
     _ = _delete_vector_bucket(conn, bucket_name)
     _delete_s3_bucket_for_vector_bucket(bucket_name)

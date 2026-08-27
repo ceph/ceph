@@ -231,31 +231,39 @@ private:
 
   void execute(optional_yield y) override {
     const rgw_bucket bucket_id(s->bucket_tenant, configuration.vector_bucket_name);
-    int ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
-    if (ret != -ENOENT) {
-      // TODO: verify creation parameters are the same as the existing ones. reject if not
+    const int ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << ret << dendl;
       op_ret = ret;
       return;
     }
 
-    const auto& zonegroup = s->penv.site->get_zonegroup();
-
-    rgw::sal::VectorBucket::CreateParams createparams;
-    createparams.owner = s->user->get_id();
-    createparams.zonegroup_id = zonegroup.id;
-    // vector buckets are indexless
-    createparams.index_type = rgw::BucketIndexType::Indexless;
-    createparams.placement_rule.storage_class = s->info.storage_class;
-
-    op_ret = bucket->create(this, createparams, y);
-    if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << ret << dendl;
-      return;
-    }
+    // the backend is verified before the metadata of the bucket is created, so that a
+    // failed request does not leave a bucket behind. it is verified also when the bucket
+    // already exists, so that the request fails if the backend became unusable
     op_ret = rgw::s3vector::create_vector_bucket(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "ERROR: failed to initialize s3vector bucket " << bucket_id << ". error: " << ret << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to initialize the backend of s3vector bucket " << bucket_id <<
+        ". error: " << op_ret << dendl;
       return;
+    }
+
+    // TODO: verify creation parameters are the same as the existing ones. reject if not
+    if (ret == -ENOENT) {
+      const auto& zonegroup = s->penv.site->get_zonegroup();
+
+      rgw::sal::VectorBucket::CreateParams createparams;
+      createparams.owner = s->user->get_id();
+      createparams.zonegroup_id = zonegroup.id;
+      // vector buckets are indexless
+      createparams.index_type = rgw::BucketIndexType::Indexless;
+      createparams.placement_rule.storage_class = s->info.storage_class;
+
+      op_ret = bucket->create(this, createparams, y);
+      if (op_ret < 0) {
+        ldpp_dout(this, 1) << "ERROR: failed to create s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
+        return;
+      }
     }
   }
 
@@ -402,7 +410,13 @@ private:
       return;
     }
     op_ret = rgw::s3vector::delete_vector_bucket(configuration, driver, s->user.get(), &s->bucket_tenant, this, y);
-    if (op_ret < 0) {
+    if (op_ret == -ENOENT) {
+      // the backend of the bucket does not exist. this happens when the bucket was
+      // created, but its backend was never initialized. the metadata should still be
+      // deleted, so that the bucket does not stay around forever
+      ldpp_dout(this, 5) << "WARNING: s3vector bucket " << bucket_id <<
+        " has no backend. deleting its metadata" << dendl;
+    } else if (op_ret < 0) {
       return;
     }
     op_ret = bucket->remove(this, false, y);
@@ -925,6 +939,14 @@ private:
       );
     }
     op_ret = rgw::s3vector::list_indexes(configuration, driver, s->user.get(), &s->bucket_tenant, this, y, reply);
+    if (op_ret == -ENOENT) {
+      // the backend of the bucket does not exist. this happens when the bucket was
+      // created, but its backend was never initialized. such a bucket has no indexes,
+      // so an empty list is returned, and the bucket could still be deleted
+      ldpp_dout(this, 5) << "WARNING: s3vector bucket " << bucket_id <<
+        " has no backend. listing no indexes" << dendl;
+      op_ret = 0;
+    }
   }
 
   void send_response() override {
