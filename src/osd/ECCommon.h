@@ -1060,26 +1060,21 @@ int ec_sparse_decode(
     shard_extent_map_t &buffers_read,
     const shard_extent_set_t &shard_want_to_read,
     shard_extent_set_t &zeros_for_decode,
+    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
     const ceph::ErasureCodeInterfaceRef &ec_impl,
     uint64_t object_size,
     DoutPrefixProvider *dpp);
 
 /**
- * ec_sparse_merge_ro_fiemap - project healthy shard fiemaps into RO space.
+ * ec_sparse_scan_shard_extents - scan a single reconstructed shard's decoded
+ * buffer data and return a map of allocated extents for the shard.
  */
-interval_set<uint64_t> ec_sparse_merge_ro_fiemap(
-    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
-    const stripe_info_t &sinfo);
-
-/**
- * ec_sparse_scan_ro_blocks - scan decoded RO bytes at FAE_BLOCK_SIZE
- * granularity to determine which 4 KiB blocks are allocated.
- */
-interval_set<uint64_t> ec_sparse_scan_ro_blocks(
+std::map<uint64_t, uint64_t> ec_sparse_scan_shard_extents(
     const shard_extent_map_t &buffers_read,
-    const interval_set<uint64_t> &force_allocated_extents,
-    uint64_t scan_start,
-    uint64_t scan_end);
+    shard_id_t shard,
+    const interval_set<uint64_t> &shard_fae,
+    const interval_set<uint64_t> &shard_scan_window,
+    DoutPrefixProvider *dpp);
 
 /**
  * ec_sparse_clip_to_map - clip an interval_set or std::map of extents to

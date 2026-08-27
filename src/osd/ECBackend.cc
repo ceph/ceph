@@ -554,6 +554,11 @@ void ECBackend::handle_sub_read(
         for (auto &&[ext_off, ext_len]: shard_map) {
           reply->sparse_extents_read[hoid][ext_off] = ext_len;
         }
+        // Ensure the hoid key always exists in sparse_extents_read, even when
+        // fiemap returned no extents (sparse hole). This allows the reply
+        // handler to distinguish a healthy shard with an empty fiemap from a
+        // shard that did not reply at all.
+        reply->sparse_extents_read.try_emplace(hoid);
       }
       if (!op.drop_data.count(hoid)) {
         interval_set<uint64_t> fiemap_intervals;
