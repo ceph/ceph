@@ -171,13 +171,13 @@ impl RGWObjectStore {
         path: &Path,
         op: &str,
     ) -> object_store::Error {
-        self.errno_to_error(errno, path, op)
+        Self::errno_to_error(errno, path, op)
     }
 
     /// Convert errno to ObjectStore error.
     /// Common RGW/RADOS codes are mapped explicitly; unmapped codes fall
     /// through to Generic with the raw errno in the message.
-    fn errno_to_error(&self, errno: i32, path: &Path, op: &str) -> object_store::Error {
+    fn errno_to_error(errno: i32, path: &Path, op: &str) -> object_store::Error {
         match errno {
             -2 => object_store::Error::NotFound {
                 // ENOENT
@@ -294,7 +294,7 @@ impl ObjectStore for RGWObjectStore {
                         version: None,
                     })
                 } else {
-                    Err(self.errno_to_error(result, location, "put"))
+                    Err(Self::errno_to_error(result, location, "put"))
                 }
             }
             PutMode::Create => {
@@ -320,7 +320,7 @@ impl ObjectStore for RGWObjectStore {
                 };
 
                 if result != 0 {
-                    return Err(self.errno_to_error(result, location, "put (create)"));
+                    return Err(Self::errno_to_error(result, location, "put (create)"));
                 }
                 if canceled != 0 {
                     return Err(ObjectStoreError::AlreadyExists {
@@ -364,7 +364,7 @@ impl ObjectStore for RGWObjectStore {
                 };
 
                 if result != 0 {
-                    return Err(self.errno_to_error(result, location, "put (update)"));
+                    return Err(Self::errno_to_error(result, location, "put (update)"));
                 }
                 if canceled != 0 {
                     return Err(ObjectStoreError::Precondition {
@@ -448,7 +448,7 @@ impl ObjectStore for RGWObjectStore {
                     )
                 };
                 if result != 0 {
-                    return Err(self.errno_to_error(result, location, "get"));
+                    return Err(Self::errno_to_error(result, location, "get"));
                 }
                 OwnedRGWBuffer(buffer).to_bytes()
             };
@@ -689,11 +689,13 @@ impl ObjectStore for RGWObjectStore {
                 };
 
                 if ret != 0 {
+                    // the errno is mapped to a typed error, so that a caller could tell a
+                    // missing bucket (ENOENT) apart from any other listing failure.
+                    // the bucket is part of the path, since it is the only part of the
+                    // error that lance keeps when it converts a "not found"
+                    let path = Path::from(format!("{}/{}", bucket, prefix_str).as_str());
                     return Some((
-                        vec![Err(object_store::Error::Generic {
-                            store: "rgw",
-                            source: format!("list failed with errno {}", ret).into(),
-                        })],
+                        vec![Err(RGWObjectStore::errno_to_error(ret, &path, "list"))],
                         (String::new(), true),
                     ));
                 }
@@ -797,10 +799,12 @@ impl ObjectStore for RGWObjectStore {
             };
 
             if ret != 0 {
-                return Err(object_store::Error::Generic {
-                    store: "rgw",
-                    source: format!("list_with_delimiter failed with errno {}", ret).into(),
-                });
+                // the errno is mapped to a typed error, so that a caller could tell a
+                // missing bucket (ENOENT) apart from any other listing failure.
+                // the bucket is part of the path, since it is the only part of the
+                // error that lance keeps when it converts a "not found"
+                let path = Path::from(format!("{}/{}", self.bucket, prefix_str).as_str());
+                return Err(Self::errno_to_error(ret, &path, "list_with_delimiter"));
             }
 
             let owned_result = OwnedRGWListResult(result);
@@ -893,7 +897,7 @@ impl ObjectStore for RGWObjectStore {
                 if result == 0 {
                     Ok(())
                 } else {
-                    Err(self.errno_to_error(result, from, "copy"))
+                    Err(Self::errno_to_error(result, from, "copy"))
                 }
             }
             CopyMode::Create => {
@@ -921,7 +925,7 @@ impl ObjectStore for RGWObjectStore {
                         source: "destination already exists".into(),
                     })
                 } else {
-                    Err(self.errno_to_error(result, from, "copy_if_not_exists"))
+                    Err(Self::errno_to_error(result, from, "copy_if_not_exists"))
                 }
             }
         }
@@ -956,7 +960,7 @@ impl ObjectStore for RGWObjectStore {
         };
 
         if result != 0 {
-            return Err(self.errno_to_error(result, location, "init_multipart"));
+            return Err(Self::errno_to_error(result, location, "init_multipart"));
         }
 
         let upload_id_str = unsafe { CStr::from_ptr(upload_id_ptr) }
@@ -1004,7 +1008,7 @@ impl RGWObjectStore {
         };
 
         if result != 0 {
-            return Err(self.errno_to_error(result, location, "head"));
+            return Err(Self::errno_to_error(result, location, "head"));
         }
 
         let owned_meta = OwnedRGWObjectMeta(meta);
