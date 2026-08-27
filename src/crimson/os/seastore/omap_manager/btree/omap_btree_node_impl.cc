@@ -454,7 +454,7 @@ OMapInnerNode::make_split_children(omap_context_t oc)
              interruptible::ready_future_marker{},
              std::make_tuple(left, right, split_into(*left, *right)));
   }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    crimson::ct_error::enospc::assert_failure("unexpected enospc"),
     split_children_iertr::pass_further{}
   );
 }
@@ -474,7 +474,7 @@ OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
         interruptible::ready_future_marker{},
         std::move(replacement));
   }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    crimson::ct_error::enospc::assert_failure("unexpected enospc"),
     full_merge_iertr::pass_further{}
   );
 }
@@ -500,7 +500,7 @@ OMapInnerNode::make_balanced(
                              balance_into_new_nodes(*this, right, pivot_idx,
                                *replacement_left, *replacement_right)));
   }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    crimson::ct_error::enospc::assert_failure("unexpected enospc"),
     make_balanced_iertr::pass_further{}
   );
 }
@@ -969,7 +969,7 @@ OMapLeafNode::make_split_children(omap_context_t oc)
              interruptible::ready_future_marker{},
              std::make_tuple(left, right, split_into(*left, *right)));
   }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    crimson::ct_error::enospc::assert_failure("unexpected enospc"),
     split_children_iertr::pass_further{}
   );
 }
@@ -987,7 +987,7 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
         interruptible::ready_future_marker{},
         std::move(replacement));
   }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    crimson::ct_error::enospc::assert_failure("unexpected enospc"),
     full_merge_iertr::pass_further{}
   );
 }
@@ -1012,7 +1012,7 @@ OMapLeafNode::make_balanced(
                  *this, right, pivot_idx,
                  *replacement_left, *replacement_right)));
   }).handle_error_interruptible(
-    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    crimson::ct_error::enospc::assert_failure("unexpected enospc"),
     make_balanced_iertr::pass_further{}
   );
 }

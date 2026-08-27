@@ -185,9 +185,9 @@ seastar::future<> FSDriver::mkfs()
     uuid_d uuid;
     uuid.generate_random();
     return fs->mkfs(uuid).handle_error(
-      crimson::stateful_ec::assert_failure(fmt::format(
+      crimson::stateful_ec::assert_failure(
         "error creating empty object store in {}",
-        crimson::common::local_conf().get_val<std::string>("osd_data")).c_str())
+        crimson::common::local_conf().get_val<std::string>("osd_data"))
 );
   }).then([this] {
     return fs->stop();
@@ -196,9 +196,9 @@ seastar::future<> FSDriver::mkfs()
   }).then([this] {
     return fs->mount(
     ).handle_error(
-      crimson::stateful_ec::assert_failure(fmt::format(
+      crimson::stateful_ec::assert_failure(
         "error creating empty object store in {}",
-        crimson::common::local_conf().get_val<std::string>("osd_data")).c_str())
+        crimson::common::local_conf().get_val<std::string>("osd_data"))
     );
   }).then([this] {
     return seastar::do_for_each(
@@ -232,9 +232,9 @@ seastar::future<> FSDriver::mount()
   }).then([this] {
     return fs->mount(
     ).handle_error(
-      crimson::stateful_ec::assert_failure(fmt::format(
+      crimson::stateful_ec::assert_failure(
         "error creating empty object store in {}",
-        crimson::common::local_conf().get_val<std::string>("osd_data")).c_str())
+        crimson::common::local_conf().get_val<std::string>("osd_data"))
     );
   }).then([this] {
     return seastar::do_for_each(

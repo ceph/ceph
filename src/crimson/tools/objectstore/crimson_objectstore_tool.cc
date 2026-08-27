@@ -1265,10 +1265,9 @@ int main(int argc, const char* argv[])
               local_conf().get_config_values());
             store->start().get();
             store->mount().handle_error(
-              crimson::stateful_ec::assert_failure(fmt::format(
+              crimson::stateful_ec::assert_failure(
                 "error mounting object store in {}",
-                config.data_path
-              ).c_str())
+                config.data_path)
             ).get();
             StoreTool st(std::move(store));
             auto stop_st = seastar::deferred_stop(st);

@@ -1481,8 +1481,8 @@ SeaStore::Shard::get_attr(
     [this, name](auto &t, auto& onode) {
     return _get_attr(t, onode, name);
   }).handle_error(
-    crimson::ct_error::input_output_error::assert_failure{
-      "EIO when getting attrs"},
+    crimson::ct_error::input_output_error::assert_failure(
+      "EIO when getting attrs"),
     crimson::ct_error::pass_further_all{}
   ).finally([this] {
     assert(shard_stats.pending_read_num);
@@ -1538,8 +1538,8 @@ SeaStore::Shard::get_attrs(
     [this](auto &t, auto& onode) {
     return _get_attrs(t, onode);
   }).handle_error(
-    crimson::ct_error::input_output_error::assert_failure{
-      "EIO when getting attrs"},
+    crimson::ct_error::input_output_error::assert_failure(
+      "EIO when getting attrs"),
     crimson::ct_error::pass_further_all{}
   ).finally([this] {
     assert(shard_stats.pending_read_num);
