@@ -147,6 +147,11 @@ public:
 
   void prune_snapshot(uint64_t snap_id);
   void set_remote_snap_id_end_limit(uint64_t snap_id);
+  void prepare_snapshot(uint64_t remote_snap_id, uint64_t* local_snap_id,
+                        Context* on_finish,
+                        uint64_t updated_local_snap_id = CEPH_NOSNAP);
+  void start_sync(Context* on_finish);
+  void complete_snapshot(Context* on_finish);
   uint64_t get_remote_snap_id_end_limit();
   uint64_t get_last_snapshot_bytes() const;
 

@@ -148,6 +148,112 @@ Replayer<I>::~Replayer() {
 }
 
 template <typename I>
+void Replayer<I>::prepare_snapshot(uint64_t remote_snap_id,
+                                   uint64_t* local_snap_id,
+                                   Context* on_finish,
+                                   uint64_t updated_local_snap_id) {
+  dout(10) << "remote_snap_id=" << remote_snap_id
+           << ", updated_local_snap_id=" << updated_local_snap_id << dendl;
+
+  ceph_assert(remote_snap_id != CEPH_NOSNAP);
+  ceph_assert(local_snap_id != nullptr);
+  ceph_assert(on_finish != nullptr);
+
+  {
+    std::unique_lock locker{m_lock};
+    if (m_state != STATE_IDLE) {
+      locker.unlock();
+      m_threads->work_queue->queue(on_finish, -EBUSY);
+      return;
+    }
+
+    if (m_snapshot_replay_phase != SNAPSHOT_REPLAY_PHASE_NONE) {
+      if (m_remote_group_image_snap_id == remote_snap_id &&
+          (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_PREPARED ||
+           m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_SYNCED)) {
+        ceph_assert(m_local_snap_id_end != CEPH_NOSNAP);
+        *local_snap_id = m_local_snap_id_end;
+        locker.unlock();
+        m_threads->work_queue->queue(on_finish, 0);
+      } else {
+        locker.unlock();
+        m_threads->work_queue->queue(on_finish, -EBUSY);
+      }
+      return;
+    }
+
+    ceph_assert(m_on_prepare_snapshot == nullptr);
+
+    m_remote_group_image_snap_id = remote_snap_id;
+    m_prepared_local_snap_id = local_snap_id;
+    m_updated_local_snap_id = updated_local_snap_id;
+    m_on_prepare_snapshot = on_finish;
+    m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_PREPARING;
+    m_state = STATE_REPLAYING;
+  }
+
+  load_local_image_meta();
+}
+
+template <typename I>
+void Replayer<I>::start_sync(Context* on_finish) {
+  dout(10) << dendl;
+
+  ceph_assert(on_finish != nullptr);
+
+  {
+    std::unique_lock locker{m_lock};
+    if (m_state != STATE_IDLE) {
+      locker.unlock();
+      m_threads->work_queue->queue(on_finish, -EBUSY);
+      return;
+    }
+
+    if (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_SYNCED) {
+      locker.unlock();
+      m_threads->work_queue->queue(on_finish, 0);
+      return;
+    } else if (m_snapshot_replay_phase != SNAPSHOT_REPLAY_PHASE_PREPARED) {
+      locker.unlock();
+      m_threads->work_queue->queue(on_finish, -EAGAIN);
+      return;
+    }
+
+    ceph_assert(m_on_snapshot_sync == nullptr);
+    m_on_snapshot_sync = on_finish;
+    m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_SYNCING;
+    m_state = STATE_REPLAYING;
+  }
+
+  request_sync();
+}
+
+template <typename I>
+void Replayer<I>::complete_snapshot(Context* on_finish) {
+  dout(10) << dendl;
+
+  ceph_assert(on_finish != nullptr);
+
+  std::unique_lock locker{m_lock};
+  if (m_state != STATE_IDLE) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EBUSY);
+    return;
+  }
+  if (m_snapshot_replay_phase != SNAPSHOT_REPLAY_PHASE_SYNCED) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EAGAIN);
+    return;
+  }
+
+  ceph_assert(m_on_complete_snapshot == nullptr);
+  m_on_complete_snapshot = on_finish;
+  m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_COMPLETING;
+  m_state = STATE_REPLAYING;
+  update_non_primary_snapshot(true);
+}
+
+template <typename I>
 void Replayer<I>::init(Context* on_finish) {
   dout(10) << dendl;
 
@@ -528,6 +634,14 @@ void Replayer<I>::scan_local_mirror_snapshots(
         }
       } else if (mirror_ns->last_copied_object_number == 0 &&
                  m_local_snap_id_start > 0) {
+        if (local_snap_id == m_updated_local_snap_id &&
+            mirror_ns->primary_snap_id == m_remote_group_image_snap_id) {
+          // The group snapshot already records this image snapshot id, so its
+          // preparation completed before the daemon stopped.
+          m_local_snap_id_end = local_snap_id;
+          break;
+        }
+
         // snapshot might be missing image state, object-map, etc, so just
         // delete and re-create it if we haven't started copying data
         // objects. Also only prune this snapshot since we will need the
@@ -986,6 +1100,15 @@ void Replayer<I>::handle_get_local_image_state(int r) {
     return;
   }
 
+  {
+    std::unique_lock locker{m_lock};
+    if (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_PREPARING) {
+      locker.unlock();
+      finish_prepare_snapshot(0);
+      return;
+    }
+  }
+
   request_sync();
 }
 
@@ -1091,6 +1214,15 @@ void Replayer<I>::handle_create_non_primary_snapshot(int r) {
 template <typename I>
 void Replayer<I>::update_mirror_image_state() {
   if (m_local_snap_id_start > 0) {
+    {
+      std::unique_lock locker{m_lock};
+      if (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_PREPARING) {
+        locker.unlock();
+        finish_prepare_snapshot(0);
+        return;
+      }
+    }
+
     request_sync();
     return;
   }
@@ -1119,7 +1251,55 @@ void Replayer<I>::handle_update_mirror_image_state(int r) {
     return;
   }
 
+  {
+    std::unique_lock locker{m_lock};
+    if (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_PREPARING) {
+      locker.unlock();
+      finish_prepare_snapshot(0);
+      return;
+    }
+  }
+
   request_sync();
+}
+
+template <typename I>
+void Replayer<I>::finish_prepare_snapshot(int r) {
+  Context* on_finish = nullptr;
+  uint64_t* local_snap_id = nullptr;
+
+  {
+    std::unique_lock locker{m_lock};
+    ceph_assert(m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_PREPARING);
+    ceph_assert(m_on_prepare_snapshot != nullptr);
+
+    if (r == 0) {
+      ceph_assert(m_local_snap_id_end != CEPH_NOSNAP);
+      *m_prepared_local_snap_id = m_local_snap_id_end;
+    }
+
+    local_snap_id = m_prepared_local_snap_id;
+    std::swap(on_finish, m_on_prepare_snapshot);
+    m_prepared_local_snap_id = nullptr;
+    m_updated_local_snap_id = CEPH_NOSNAP;
+    m_snapshot_replay_phase = (r == 0 ? SNAPSHOT_REPLAY_PHASE_PREPARED :
+                                        SNAPSHOT_REPLAY_PHASE_NONE);
+
+    if (r < 0) {
+      m_error_code = r;
+      m_error_description = "failed to prepare local mirror snapshot";
+    }
+
+    if (m_state == STATE_REPLAYING) {
+      m_state = STATE_IDLE;
+      notify_status_updated();
+    }
+  }
+
+  dout(10) << "prepare snapshot complete: r=" << r
+           << ", local_snap_id="
+           << (r == 0 ? *local_snap_id : CEPH_NOSNAP) << dendl;
+  on_finish->complete(r);
 }
 
 template <typename I>
@@ -1284,6 +1464,17 @@ void Replayer<I>::handle_apply_image_state(int r) {
   }
 
   std::unique_lock locker{m_lock};
+  if (m_on_snapshot_sync != nullptr) {
+    ceph_assert(m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_SYNCING);
+    // persist the final progress before completing the snapshot
+    m_local_mirror_snap_ns.last_copied_object_number = m_local_object_count;
+    m_snapshot_sync_complete_pending = true;
+    if (!m_updating_sync_point) {
+      m_snapshot_sync_final_update = true;
+      update_non_primary_snapshot(false);
+    }
+    return;
+  }
   update_non_primary_snapshot(true);
 }
 
@@ -1338,6 +1529,60 @@ void Replayer<I>::handle_update_non_primary_snapshot(bool complete, int r) {
 
     ceph_assert(m_updating_sync_point);
     m_updating_sync_point = false;
+    if (m_snapshot_sync_complete_pending) {
+      bool shut_down_pending = (m_state == STATE_COMPLETE);
+      if (r < 0) {
+        m_snapshot_sync_complete_pending = false;
+        m_snapshot_sync_final_update = false;
+        Context* on_finish = nullptr;
+        std::swap(on_finish, m_on_snapshot_sync);
+        m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_PREPARED;
+        if (!shut_down_pending) {
+          m_state = STATE_IDLE;
+          notify_status_updated();
+        }
+        locker.unlock();
+        on_finish->complete(r);
+        if (shut_down_pending) {
+          unregister_remote_update_watcher();
+        }
+        return;
+      }
+
+      if (!m_snapshot_sync_final_update) {
+        // persist the final object count before reporting sync completion
+        m_snapshot_sync_final_update = true;
+        update_non_primary_snapshot(false);
+        return;
+      }
+
+      m_snapshot_sync_complete_pending = false;
+      m_snapshot_sync_final_update = false;
+      // finish the current sync request before reporting completion
+      if (m_sync_in_progress) {
+        m_sync_in_progress = false;
+        m_instance_watcher->notify_sync_complete(
+          m_state_builder->local_image_ctx->id);
+      }
+      Context* on_finish = nullptr;
+      std::swap(on_finish, m_on_snapshot_sync);
+      m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_SYNCED;
+      if (!shut_down_pending) {
+        m_state = STATE_IDLE;
+        notify_status_updated();
+      }
+      locker.unlock();
+      on_finish->complete(r);
+      if (shut_down_pending) {
+        unregister_remote_update_watcher();
+      }
+    }
+    return;
+  }
+
+  if (m_on_complete_snapshot != nullptr) {
+    // refresh snap_info before reporting completion
+    notify_image_update();
     return;
   }
 
@@ -1359,6 +1604,30 @@ void Replayer<I>::handle_notify_image_update(int r) {
 
   if (r < 0) {
     derr << "failed to notify local image update: " << cpp_strerror(r) << dendl;
+  }
+
+  {
+    std::unique_lock locker{m_lock};
+    if (m_on_complete_snapshot != nullptr) {
+      bool shut_down_pending = (m_state == STATE_COMPLETE);
+      bool image_updated = m_image_updated;
+      Context* on_finish = nullptr;
+      std::swap(on_finish, m_on_complete_snapshot);
+      m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_NONE;
+      m_image_updated = false;
+      if (!shut_down_pending) {
+        m_state = STATE_IDLE;
+        notify_status_updated();
+      }
+      locker.unlock();
+      on_finish->complete(r);
+      if (shut_down_pending) {
+        unregister_remote_update_watcher();
+      } else if (image_updated) {
+        handle_image_update_notify();
+      }
+      return;
+    }
   }
 
   bool unlink = true;
@@ -1598,6 +1867,12 @@ void Replayer<I>::handle_image_update_notify() {
     dout(15) << "flagging snapshot rescan required" << dendl;
     m_image_updated = true;
   } else if (m_state == STATE_IDLE) {
+    if (m_snapshot_replay_phase != SNAPSHOT_REPLAY_PHASE_NONE) {
+      dout(15) << "deferring snapshot rescan during coordinated replay"
+               << dendl;
+      m_image_updated = true;
+      return;
+    }
     m_state = STATE_REPLAYING;
     locker.unlock();
 
@@ -1625,8 +1900,30 @@ void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
       m_state_builder->local_image_ctx->id);
   }
 
-  // don't set error code and description if resuming a pending
-  // shutdown
+  auto snapshot_replay_phase = m_snapshot_replay_phase;
+  Context* on_finish = cancel_coordinated_replay();
+
+  if (on_finish != nullptr) {
+    bool shut_down_pending = (m_state == STATE_COMPLETE);
+    if (snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_PREPARING &&
+        !shut_down_pending && m_error_code == 0) {
+      m_error_code = r;
+      m_error_description = description;
+    }
+    if (!shut_down_pending) {
+      m_state = STATE_IDLE;
+      notify_status_updated();
+    } else {
+      m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_NONE;
+    }
+    locker->unlock();
+    on_finish->complete(r);
+    if (shut_down_pending) {
+      unregister_remote_update_watcher();
+    }
+    return;
+  }
+
   if (is_replay_interrupted(locker)) {
     return;
   }
@@ -1642,6 +1939,28 @@ void Replayer<I>::handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
 
   m_state = STATE_COMPLETE;
   notify_status_updated();
+}
+
+template <typename I>
+Context* Replayer<I>::cancel_coordinated_replay() {
+  ceph_assert(ceph_mutex_is_locked_by_me(m_lock));
+
+  Context* on_finish = nullptr;
+  if (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_PREPARING) {
+    std::swap(on_finish, m_on_prepare_snapshot);
+    m_prepared_local_snap_id = nullptr;
+    m_updated_local_snap_id = CEPH_NOSNAP;
+    m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_NONE;
+  } else if (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_SYNCING) {
+    std::swap(on_finish, m_on_snapshot_sync);
+    m_snapshot_sync_complete_pending = false;
+    m_snapshot_sync_final_update = false;
+    m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_PREPARED;
+  } else if (m_snapshot_replay_phase == SNAPSHOT_REPLAY_PHASE_COMPLETING) {
+    std::swap(on_finish, m_on_complete_snapshot);
+    m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_SYNCED;
+  }
+  return on_finish;
 }
 
 template <typename I>
@@ -1665,8 +1984,18 @@ bool Replayer<I>::is_replay_interrupted() {
 template <typename I>
 bool Replayer<I>::is_replay_interrupted(std::unique_lock<ceph::mutex>* locker) {
   if (m_state == STATE_COMPLETE) {
+    if (m_sync_in_progress) {
+      m_sync_in_progress = false;
+      m_instance_watcher->notify_sync_complete(
+        m_state_builder->local_image_ctx->id);
+    }
+    auto on_finish = cancel_coordinated_replay();
+    m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_NONE;
     locker->unlock();
 
+    if (on_finish != nullptr) {
+      on_finish->complete(-ECANCELED);
+    }
     dout(10) << "resuming pending shut down" << dendl;
     unregister_remote_update_watcher();
     return true;
