@@ -1738,4 +1738,25 @@ BtreeLBAManager::move_and_clone_direct_mapping(
   co_return ret;
 }
 
+base_iertr::future<LBACursorRef>
+BtreeLBAManager::update_mapping_refcount(
+  Transaction &t,
+  LBACursorRef cursor,
+  int delta)
+{
+  co_return co_await _update_mapping(
+    t,
+    *cursor,
+    [delta](lba_map_val_t ret) {
+      ceph_assert((int)ret.refcount + delta >= 0);
+      ret.refcount += delta;
+      return ret;
+    },
+    nullptr
+  ).handle_error_interruptible(
+    base_iertr::pass_further{},
+    crimson::ct_error::assert_all("unexpected error")
+  );
+}
+
 }
