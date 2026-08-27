@@ -22,6 +22,7 @@ import re
 import signal
 import sys
 import textwrap
+import time
 import traceback
 
 from datetime import datetime, timedelta, timezone
@@ -64,7 +65,6 @@ REDMINE_STATUS_ID_INPROGRESS = 2
 REDMINE_STATUS_ID_TRIAGED = 18
 REDMINE_STATUS_ID_NEEDINFO = 11
 REDMINE_STATUS_ID_FIX_UNDER_REVIEW = 13
-REDMINE_STATUS_ID_PENDING_BACKPORT = 14
 
 # Closed
 REDMINE_STATUS_ID_RESOLVED = 3
@@ -73,12 +73,11 @@ REDMINE_STATUS_ID_REJECTED = 6
 REDMINE_STATUS_ID_WONTFIX = 8
 REDMINE_STATUS_ID_CANTREPRODUCE = 9
 REDMINE_STATUS_ID_DUPLICATE = 10
+REDMINE_STATUS_ID_PENDING_BACKPORT = 14
 REDMINE_STATUS_ID_WONTFIX_EOL = 19
+REDMINE_STATUS_ID_BACKPORTING = 40
 
 REDMINE_TRACKER_ID_BACKPORT = 9
-
-REDMINE_STATUS_ID_PENDING_BACKPORT = 14
-REDMINE_STATUS_ID_RESOLVED = 3
 
 REDMINE_ENDPOINT = "https://tracker.ceph.com"
 REDMINE_API_KEY = None
@@ -157,6 +156,20 @@ class UpkeepException(Exception):
 
     def comment(self):
         raise NotImplementedError()
+
+class PRMissingException(UpkeepException):
+    def __init__(self, issue_update, **kwargs):
+        super().__init__(issue_update, **kwargs)
+
+    def __str__(self):
+        return "PR is missing"
+
+    def comment(self):
+        return f"""
+Issue #{self.issue_update.issue.id} with status {self.issue_update.issue.status.name} is missing a Pull Request ID.
+
+A Pull Request ID is required to create backports. Please set the "Pull Request ID" custom field to the appropriate GitHub PR number.
+"""
 
 class PRInvalidException(UpkeepException):
     def __init__(self, issue_update, pr_id, **kwargs):
@@ -237,6 +250,10 @@ class IssueUpdate:
             return cf.value if cf else None
         except redminelib.exceptions.ResourceAttrError:
             return None
+
+    def get_current_status_id(self):
+        """Get the current status ID, prioritizing in-memory payload over the database state."""
+        return self.update_payload.get('status_id', self.issue.status.id)
 
     def get_custom_field(self, field_id):
         """ Get the custom field, first from update_payload otherwise issue """
@@ -328,9 +345,16 @@ class IssueUpdate:
         current_tags = []
         if current_tags_str:
             current_tags = [tag.strip() for tag in current_tags_str.split(',') if tag.strip()]
+            modified_tags = False
             if "upkeep-failed" in current_tags:
                 self.logger.info(f"'upkeep-failed' tag found in '{current_tags_str}'. Removing for update.")
                 current_tags.remove("upkeep-failed")
+                modified_tags = True
+            if "backport_processed" in current_tags:
+                self.logger.info(f"'backport_processed' tag found in '{current_tags_str}'. Removing for update.")
+                current_tags.remove("backport_processed")
+                modified_tags = True
+            if modified_tags:
                 self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, ", ".join(current_tags))
 
         payload = {
@@ -604,6 +628,7 @@ class RedmineUpkeep:
         def get_filters():
             statuses = [
                 REDMINE_STATUS_ID_PENDING_BACKPORT,
+                REDMINE_STATUS_ID_BACKPORTING,
                 REDMINE_STATUS_ID_RESOLVED,
             ]
             for status in statuses:
@@ -784,7 +809,7 @@ class RedmineUpkeep:
             issue_update.logger.warning(f"Could not get git describe for commit {commit}: {e}")
         return False
 
-    @transformation(10)
+    @transformation(100)
     def _transform_backport_resolved(self, issue_update):
         """
         Transformation: Changes backport trackers to "Resolved" if the associated PR is merged.
@@ -803,10 +828,11 @@ class RedmineUpkeep:
            return False
 
         # If PR is merged and it's a backport tracker with 'Pending Backport' status, update to 'Resolved'
-        if issue_update.issue.status.id != REDMINE_STATUS_ID_RESOLVED:
+        current_status_id = issue_update.get_current_status_id()
+        if current_status_id != REDMINE_STATUS_ID_RESOLVED:
             if issue_update.has_open_subtasks():
                 return False
-            issue_update.logger.info(f"Issue status is '{issue_update.issue.status.name}', which is not 'Resolved'.")
+            issue_update.logger.info(f"Issue status is currently '{current_status_id}', which is not 'Resolved'.")
             issue_update.logger.info("Updating status to 'Resolved' because its PR is merged.")
             changed = issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
             return changed
@@ -867,26 +893,132 @@ class RedmineUpkeep:
         return False
 
 
-    class FilterPendingBackport(Filter):
+    class FilterBackportStatus(Filter):
         """
-        Filter for issues that are in 'Pending Backport' status.  The
-        transformation will then check if they are non-backport trackers and if
-        all their 'Copied to' backports are resolved.
+        Filter for issues that are in 'Backporting' status.
+
+        The transformations will check if all their 'Copied to' backports are
+        resolved.
         """
 
         PRIORITY = 10
-        NAME = "Pending Backport"
+        NAME = "Backporting"
 
         @staticmethod
         def get_filters():
             yield {
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT}": '*',
+                "status_id": str(REDMINE_STATUS_ID_BACKPORTING),
+            }
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
+    class FilterPendingBackportStatus(Filter):
+        """
+        Filter for issues that are in 'Pending Backport'.
+        The transformations will check if they need backport tickets created.
+        """
+
+        PRIORITY = 100000
+        NAME = "Pending Backport"
+
+        @staticmethod
+        def get_filters():
+            yield {
                 "status_id": str(REDMINE_STATUS_ID_PENDING_BACKPORT),
             }
 
         @staticmethod
         def requires_github_api():
             return False
+
+
+    @transformation(10000)
+    def _transform_create_backports(self, issue_update):
+        """
+        Transformation: Creates missing backport issues when the main issue is in
+        'Pending Backport' state. Moves the issue to 'Backporting' state once
+        all necessary backport tickets exist.
+        """
+        issue_update.logger.debug("Running _transform_create_backports")
+
+        if issue_update.issue.tracker.id == REDMINE_TRACKER_ID_BACKPORT:
+            return False
+
+        current_status_id = issue_update.get_current_status_id()
+        if current_status_id != REDMINE_STATUS_ID_PENDING_BACKPORT:
+            return False
+
+        pr_id = issue_update.get_pr_id()
+        if not pr_id:
+            raise PRMissingException(issue_update)
+
+        backports_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
+        if not backports_str:
+            issue_update.logger.info("No backports requested. Setting status to 'Resolved'.")
+            return issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
+
+        expected_releases = set(re.findall(r'\w+', backports_str))
+        if not expected_releases:
+            issue_update.logger.info("No valid backports extracted. Setting status to 'Resolved'.")
+            return issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
+
+        existing_releases = set()
+        for relation in issue_update.issue.relations:
+            if relation.relation_type == 'copied_to':
+                try:
+                    other = self.R.issue.get(relation.issue_to_id)
+                    if other.tracker.id == REDMINE_TRACKER_ID_BACKPORT:
+                        cf = other.custom_fields.get(REDMINE_CUSTOM_FIELD_ID_RELEASE)
+                        if cf and cf.value:
+                            existing_releases.add(cf.value)
+                except redminelib.exceptions.ResourceAttrError:
+                    pass
+                except redminelib.exceptions.ResourceNotFoundError:
+                    pass
+
+        missing_releases = expected_releases - existing_releases
+        for release in missing_releases:
+            subject = f"{release}: {issue_update.issue.subject}"[:255]
+            assigned_to_id = None
+            try:
+                assigned_to_id = issue_update.issue.assigned_to.id
+            except redminelib.exceptions.ResourceAttrError:
+                pass
+
+            create_args = {
+                "project_id": issue_update.issue.project.id,
+                "tracker_id": REDMINE_TRACKER_ID_BACKPORT,
+                "subject": subject,
+                "priority_id": issue_update.issue.priority.id,
+                "custom_fields": [{"id": REDMINE_CUSTOM_FIELD_ID_RELEASE, "value": release}]
+            }
+            if assigned_to_id:
+                create_args["assigned_to_id"] = assigned_to_id
+
+            try:
+                other = self.R.issue.create(**create_args)
+            except redminelib.exceptions.ValidationError as e:
+                issue_update.logger.info(f"Retrying backport creation to {release} without assignee due to failure: {e}")
+                if "assigned_to_id" in create_args:
+                    del create_args["assigned_to_id"]
+                    other = self.R.issue.create(**create_args)
+                else:
+                    raise
+
+            self.R.issue_relation.create(
+                issue_id=issue_update.issue.id,
+                issue_to_id=other.id,
+                relation_type='copied_to'
+            )
+            issue_update.logger.info(f"Created backport to {release}: {REDMINE_ENDPOINT}/issues/{other.id}")
+            time.sleep(1) # Rate-limiting to avoid seeming like a spammer
+
+        # Once backports are created (or if they already existed), transition to Backporting state.
+        issue_update.logger.info("All backports created. Changing status to 'Backporting'.")
+        return issue_update.change_field('status_id', REDMINE_STATUS_ID_BACKPORTING)
 
 
     @transformation(10)
@@ -902,20 +1034,19 @@ class RedmineUpkeep:
             issue_update.logger.info("Is a backport tracker. Skipping this transformation.")
             return False
 
-        if issue_update.issue.status.id != REDMINE_STATUS_ID_PENDING_BACKPORT:
-            issue_update.logger.info(f"Not in 'Pending Backport' status ({issue_update.issue.status.name}). Skipping.")
+        current_status_id = issue_update.get_current_status_id()
+        if current_status_id != REDMINE_STATUS_ID_BACKPORTING:
+            issue_update.logger.info(f"Not in 'Backporting' status (current: {current_status_id}). Skipping.")
             return False
 
         if issue_update.has_open_subtasks():
             return False
 
-        issue_update.logger.info("Issue is a main tracker in 'Pending Backport' status. Checking related backports.")
+        issue_update.logger.info("Issue is a main tracker in 'Backporting' status. Checking related backports.")
 
         expected_backport_releases_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
         if expected_backport_releases_str:
-            expected_backport_releases = set(
-                rel.strip() for rel in expected_backport_releases_str.split(',') if rel.strip()
-            )
+            expected_backport_releases = set(re.findall(r'\w+', expected_backport_releases_str))
             issue_update.logger.info(f"Expecting backports for releases: {expected_backport_releases}")
         else:
             expected_backport_releases = set()
@@ -966,14 +1097,11 @@ class RedmineUpkeep:
                     all_backports_resolved_and_matched = False
                     break
 
-                if backport_issue.status.id == REDMINE_STATUS_ID_RESOLVED:
-                    issue_update.logger.info(f"Backport issue #{backport_id} is resolved and matches expected release '{backport_release}'.")
-                    resolved_and_matched_backports.add(backport_release)
-                elif backport_issue.status.id == REDMINE_STATUS_ID_REJECTED:
-                    issue_update.logger.info(f"Backport issue #{backport_id} is rejected and matches expected release '{backport_release}'.")
+                if getattr(backport_issue.status, 'is_closed', False):
+                    issue_update.logger.info(f"Backport issue #{backport_id} is closed (status: {backport_issue.status.name}) and matches expected release '{backport_release}'.")
                     resolved_and_matched_backports.add(backport_release)
                 else:
-                    issue_update.logger.info(f"Backport issue #{backport_id} is not resolved or rejected (status: {backport_issue.status.name}). Main issue cannot be resolved yet.")
+                    issue_update.logger.info(f"Backport issue #{backport_id} is not closed (status: {backport_issue.status.name}). Main issue cannot be resolved yet.")
                     all_backports_resolved_and_matched = False
                     break
             except redminelib.exceptions.ResourceNotFoundError:
@@ -991,7 +1119,7 @@ class RedmineUpkeep:
             issue_update.change_field('status_id', REDMINE_STATUS_ID_RESOLVED)
             return True
         else:
-            issue_update.logger.info("Not all expected backports are resolved and/or correctly tagged. Main issue status remains 'Pending Backport'.")
+            issue_update.logger.info("Not all expected backports are resolved and/or correctly tagged. Main issue status remains 'Backporting'.")
             issue_update.logger.info(f"Expected backports: {expected_backport_releases}")
             issue_update.logger.info(f"Resolved and matched backports found: {resolved_and_matched_backports}")
         return False
@@ -1034,21 +1162,21 @@ class RedmineUpkeep:
         """
         issue_update.logger.debug("Running _transform_set_status_on_merge")
 
-        current_status_id = issue_update.issue.status.id
+        current_status_id = issue_update.get_current_status_id()
         merge_commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
         if not merge_commit:
             issue_update.logger.info("No merge commit found. Skipping status update.")
             return False
 
-        # Only proceed if the issue is not already in a final or pending backport state
-        if issue_update.issue.status.is_closed or issue_update.issue.status.id == REDMINE_STATUS_ID_PENDING_BACKPORT:
-            issue_update.logger.info(f"Issue is already closed or 'Pending Backport'. Skipping status update on merge.")
+        # Only proceed if the issue is not already in a final or backport state
+        if current_status_id in (REDMINE_STATUS_ID_PENDING_BACKPORT, REDMINE_STATUS_ID_BACKPORTING, REDMINE_STATUS_ID_RESOLVED, REDMINE_STATUS_ID_REJECTED, REDMINE_STATUS_ID_CLOSED):
+            issue_update.logger.info(f"Issue is already in a terminal or backporting state ({current_status_id}). Skipping status update on merge.")
             return False
 
         if issue_update.has_open_subtasks():
             return False
 
-        issue_update.logger.info(f"Issue has a merge commit ({merge_commit}) and current status is '{issue_update.issue.status.name}'.")
+        issue_update.logger.info(f"Issue has a merge commit ({merge_commit}) and current status is '{current_status_id}'.")
 
         backports_field_value = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_BACKPORT)
         backports_list = [bp.strip() for bp in (backports_field_value or "").split(',') if bp.strip()]
