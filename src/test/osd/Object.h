@@ -579,8 +579,8 @@ public:
   const ContDesc &most_recent();
 
   // Returns the minimum set of byte ranges that MUST appear in the OSD's
-  // mapext result.  This is get_written_extents(alignment) minus any
-  // 4k-aligned, 4k-length blocks whose content is entirely zeros.
+  // mapext result.  This is get_written_extents(alignment) minus any byte
+  // range whose content (as read through the object model) is entirely zeros.
   //
   // Because writes and appends never produce zero bytes, a block is all-zeros
   // if and only if no write/append layer covers it (i.e. it was zeroed by a
@@ -588,10 +588,11 @@ public:
   // the OSD is free to drop such blocks from its allocation map, so the model
   // must not require them in the actual mapext result.
   //
-  // Partial blocks at the edges of extents (smaller than a full alignment
-  // unit) are included in the returned set — they will be narrowed further
-  // by inward rounding in the caller (MapextOp::_finish) so that sub-4k
-  // edge fragments are not required in the actual result either.
+  // This zero-check applies to all ranges: full alignment-unit blocks AND the
+  // partial fragments at the head and tail of each extent.  A head or tail
+  // fragment written into a pre-existing hole contains only zeros; the OSD
+  // may leave that region as a hole rather than allocating a new extent, so
+  // it must not be required in min_expected.
   interval_set<uint64_t> get_min_written_extents(uint64_t alignment) const;
 
   // Returns the set of byte ranges that are allocated (have data) on the
@@ -616,13 +617,13 @@ public:
   // EC pools (alignment > 1) have an additional consideration: the zero
   // operation in PrimaryLogPG emits a literal-zero write for any partial
   // alignment block at either edge of the zero range (head and tail).
-  // This write allocates the whole alignment-sized block on the OSD, even
-  // if no prior write ever touched it.  The tail partial block specifically
-  // — [hole_end, round_up(z_end, alignment)) — may not be covered by any
-  // older write layer, so it must be explicitly added to written here.
-  // (The head partial block [z_off, hole_start) is always within the
-  // previously-written object region, so older layers cover it naturally,
-  // but we add both for symmetry and correctness.)
+  // This write *may* allocate the whole alignment-sized block on the OSD —
+  // hence both edge blocks are added to written here (for max_expected).
+  // However, when the edge block was already a hole from a prior zero op,
+  // writing all-zero bytes into it does not necessarily allocate a new
+  // extent; the OSD may leave it as a hole.  That case is handled by
+  // get_min_written_extents(), which scans each partial fragment for
+  // all-zero content and excludes it from min_expected when found.
   interval_set<uint64_t> get_written_extents(uint64_t alignment = 1) const {
     interval_set<uint64_t> written;
     interval_set<uint64_t> masked;
