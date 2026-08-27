@@ -906,6 +906,19 @@ void GroupReplayer<I>::shut_down(int r) {
       update_mirror_group_status(true, STATE_STOPPED);
       handle_shut_down(r);
     });
+  auto stop_image_replayers = [this](Context* on_finish) {
+    return new LambdaContext([this, on_finish](int r) {
+      C_Gather *gather_ctx = new C_Gather(g_ceph_context, on_finish);
+      {
+        std::lock_guard locker{m_lock};
+        for (auto &it : m_image_replayers) {
+          it.second->stop(gather_ctx->new_sub());
+        }
+      }
+      gather_ctx->activate();
+    });
+  };
+  bool drain_finalization = false;
 
   // stop and destroy the replayers
   if (m_destroy_replayers) {
@@ -922,27 +935,30 @@ void GroupReplayer<I>::shut_down(int r) {
       ctx->complete(0);
     });
   }
-  ctx = new LambdaContext([this, ctx](int r) {
-    C_Gather *gather_ctx = new C_Gather(g_ceph_context, ctx);
-    {
-      std::lock_guard locker{m_lock};
-      for (auto &it : m_image_replayers) {
-        it.second->stop(gather_ctx->new_sub());
-      }
-    }
-    gather_ctx->activate();
-  });
-
   if (m_replayer != nullptr) {
+    // Fence new replay work before stopping image replayers.
+    m_replayer->stop();
+    drain_finalization = m_replayer->is_draining();
+
     ctx = new LambdaContext([this, ctx](int r) {
       m_replayer->destroy();
       m_replayer = nullptr;
       ctx->complete(0);
     });
 
+    if (drain_finalization) {
+      // Keep image replayers running until the final image/group COMPLETE
+      // transition is durable.
+      ctx = stop_image_replayers(ctx);
+    }
+
     ctx = new LambdaContext([this, ctx](int r) {
       m_replayer->shut_down(ctx);
     });
+  }
+
+  if (!drain_finalization) {
+    ctx = stop_image_replayers(ctx);
   }
 
   m_threads->work_queue->queue(ctx, 0);

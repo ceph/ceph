@@ -61,11 +61,17 @@ public:
     delete this;
   }
   void init(Context* on_finish);
+  void stop();
   void shut_down(Context* on_finish);
 
   bool is_replaying() const {
     std::unique_lock locker{m_lock};
     return (m_state == STATE_REPLAYING || m_state == STATE_IDLE);
+  }
+
+  bool is_draining() const {
+    std::unique_lock locker{m_lock};
+    return m_draining;
   }
 
   bool get_replay_status(std::string* description);
@@ -179,9 +185,6 @@ private:
  *          UPDATE_LOCAL_GROUP_STATE (skip if group state already enabled)                 |                                       |
  *                   |                                                                     |                                       |
  *                   v                                                                     |                                       |
- *         SET_IMAGE_REPLAYER_LIMITS                                                       |                                       |
- *                   |                                                                     |                                       |
- *                   v                                                                     v                                       |
  *                    +------------------------------> + <-------------------------------- +                                     ^ |
  *                                                     |                                                                         | |
  *                                                     v                             m_retry_validate_snap == false            --+ |
@@ -212,27 +215,34 @@ private:
  *                                 |         POST_MIRROR_SNAPSHOT_CREATED      POST_USER_SNAPSHOT_CREATED                          |
  *                                 |                         |                         |                                           |
  *                                 |                         v                         |                                           |
- *                                 |      CHECK_MIRROR_SNAPSHOT_SYNC_COMPLETE          |                                           |
+ *                                 |      PREPARE_MIRROR_IMAGE_SNAPSHOTS               |                                           |
  *                                 |                         |                         |                                           |
  *                                 |                         v                         |                                           |
- *                                 |               + ------- + ------- +               |                                           |
- *                                 |        images |                   | all image     |                                           |
- *                                 |       syncing |                   | snapshots     |                                           |
- *                                 |  (retry next  |                   |  synced       |                                           |
- *                                 |     cycle)    |                   v               |                                           |
- *                                 |               |    SET_MIRROR_SNAPSHOT_COMPLETE   |                                           |
- *                                 |               |                   |               |                                           |
- *                                 |               |                   v               |                                           |
- *                                 |               | MIRROR_GROUP_SNAPSHOT_UNLINK_PEER |                                           |
- *                                 |               |                   |               |                                           |
- *                                 v               v                   v               v                                           |
- *                                 |               | UNLINK_PEER_UUID_FROM_IMAGE_SNAPS |                                           |
- *                                 |               |                   |               |                                           |
- *                                 |               |                   v               |                                           |
- *                                 |               | UNLINK_PEER_UUID_FROM_GROUP_SNAP  |                                           |
- *                                 |               |                   |               |                                           |
- *                                 v               v                   v               v                                           |
- *                                 + ------------- + ----------------- + ------------- +                                         ^ |
+ *                                 | COMPLETE_PRECEDING_USER_GROUP_SNAPSHOTS           |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 |                         v                         |                                           |
+ *                                 | UPDATE_PREPARED_MIRROR_GROUP_SNAPSHOT             |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 |                         v                         |                                           |
+ *                                 |        SYNC_MIRROR_IMAGE_SNAPSHOTS                |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 |                         v                         |                                           |
+ *                                 |      COMPLETE_MIRROR_IMAGE_SNAPSHOTS              |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 |                         v                         |                                           |
+ *                                 |       SET_MIRROR_SNAPSHOT_COMPLETE                |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 |                         v                         |                                           |
+ *                                 |    MIRROR_GROUP_SNAPSHOT_UNLINK_PEER              |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 |                         v                         |                                           |
+ *                                 |    UNLINK_PEER_UUID_FROM_IMAGE_SNAPS              |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 |                         v                         |                                           |
+ *                                 |     UNLINK_PEER_UUID_FROM_GROUP_SNAP              |                                           |
+ *                                 |                         |                         |                                           |
+ *                                 v                         v                         v                                           |
+ *                                 + ----------------------- + ----------------------- +                                         ^ |
  *                                                           |                                                                   | |
  *                                                           v c_gather waits for all callbacks                                --+ |
  *                                                           + ------------------------------------------------------------------> +
@@ -305,7 +315,6 @@ private:
  * =================
  * GET_REPLAYERS_BY_IMAGE_ID
  * GET_GLOBAL_IMAGE_ID
- * SET_IMAGE_REPLAYER_END_LIMITS
  * NOTIFY_GROUP_LISTENER
  * IS_REPLAY_INTERRUPTED
  * GET_REPLAY_STATUS
@@ -317,6 +326,21 @@ private:
     STATE_REPLAYING,
     STATE_IDLE,
     STATE_COMPLETE
+  };
+
+  struct MirrorSnapshotImageTask {
+    ImageReplayer<ImageCtxT>* image_replayer;
+    uint64_t remote_snap_id;
+    size_t local_snap_spec_index;
+    uint64_t local_snap_id = CEPH_NOSNAP;
+  };
+
+  struct MirrorSnapshotReplayState {
+    std::string group_snap_id;
+    cls::rbd::GroupSnapshot local_snap;
+    std::vector<cls::rbd::ImageSnapshotSpec> local_image_snap_specs;
+    std::vector<MirrorSnapshotImageTask> image_tasks;
+    std::vector<std::string> preceding_user_snap_ids;
   };
 
   Threads<ImageCtxT> *m_threads;
@@ -361,6 +385,8 @@ private:
   uint64_t m_last_snapshot_bytes = 0;
 
   bool m_check_creating_snaps = true; // check and identify creating snaps just after restart
+  bool m_draining = false;
+  bool m_completing_mirror_snapshot = false;
   bool m_resync_requested = false;
   bool m_refresh_snaps = false;
 
@@ -410,9 +436,8 @@ private:
   void handle_create_mirror_group_snapshot(
     int r, cls::rbd::GroupSnapshot *snap);
 
-  void update_local_group_state(std::unique_lock<ceph::mutex>* locker,
-                                cls::rbd::GroupSnapshot* snap);
-  void handle_update_local_group_state(int r, cls::rbd::GroupSnapshot* snap);
+  void update_local_group_state(std::unique_lock<ceph::mutex>* locker);
+  void handle_update_local_group_state(int r);
 
   void mirror_snapshot_complete(
     const std::string &group_snap_id, Context *on_finish);
@@ -422,20 +447,53 @@ private:
     const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
+
+  int find_local_mirror_image_snapshot(
+    const std::string& group_snap_id,
+    const cls::rbd::GroupImageStatus& image,
+    bool* image_snap_created,
+    bool* image_snap_complete,
+    cls::rbd::ImageSnapshotSpec* snap_spec);
+  uint64_t find_remote_image_snapshot(
+    const cls::rbd::GroupSnapshot& remote_snap,
+    const std::string& global_image_id);
+
   void post_mirror_snapshot_created(
     const std::string &group_snap_id,
     const cls::rbd::GroupSnapshot &local_snap,
     const cls::rbd::GroupSnapshot &remote_snap,
     const std::vector<cls::rbd::GroupImageStatus>& local_images,
     Context *on_finish);
-  void handle_post_mirror_snapshot_created(
-    int r, const std::string &group_snap_id,
-    const cls::rbd::GroupSnapshot &local_snap,
-    Context *on_finish);
-  void check_mirror_snapshot_sync_complete(
-    const std::string &group_snap_id,
-    const cls::rbd::GroupSnapshot &local_snap,
-    Context *on_finish);
+  void prepare_mirror_image_snapshots(
+    std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void handle_prepare_mirror_image_snapshots(
+    int r, std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void complete_preceding_user_group_snapshots(
+    std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void handle_complete_preceding_user_group_snapshots(
+    int r, std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void update_prepared_mirror_group_snapshot(
+    std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void handle_update_prepared_mirror_group_snapshot(
+    int r, std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void sync_mirror_image_snapshots(
+    std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void handle_sync_mirror_image_snapshots(
+    int r, std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void complete_mirror_image_snapshots(
+    std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
+  void handle_complete_mirror_image_snapshots(
+    int r, std::shared_ptr<MirrorSnapshotReplayState> replay_state,
+    Context* on_finish);
   void set_mirror_snapshot_complete(
     const std::string &group_snap_id,
     const cls::rbd::GroupSnapshot &local_snap,
@@ -503,11 +561,6 @@ private:
   void get_replayers_by_image_id(std::unique_lock<ceph::mutex>* locker);
   std::string get_global_image_id(ImageReplayer<ImageCtxT>* image_replayer,
       std::unique_lock<ceph::mutex>& locker);
-  void set_image_replayer_end_limits(ImageReplayer<ImageCtxT>* image_replayer,
-      uint64_t snap_id, std::unique_lock<ceph::mutex>& locker);
-  void set_image_replayer_limits(const std::string &image_id,
-                                 const cls::rbd::GroupSnapshot *remote_snap,
-                                 std::unique_lock<ceph::mutex>* locker);
   void wait_for_in_flight_ops();
   void handle_wait_for_in_flight_ops(int r);
 };
