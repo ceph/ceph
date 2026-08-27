@@ -346,9 +346,10 @@ public:
   //   min_expected = get_min_written_extents() clipped to query range (no
   //                  rounding).  The OSD must return at least these extents.
   //
-  // Full alignment-sized all-zero blocks are excluded from min because after
-  // shard recovery the OSD may drop them.  Sub-aligned edge fragments are kept
-  // in min because the OSD always allocates them as literal-zero writes.
+  // All-zero byte ranges are excluded from min because after shard recovery
+  // the OSD may drop them — this applies to full alignment-sized blocks and
+  // to sub-aligned head/tail fragments alike: a fragment written into a
+  // pre-existing hole is all-zero and the OSD may leave it as a hole.
   // Outward rounding of max allows for partial writes being rounded to full
   // alignment blocks after recovery.
   bool check_sparse_extent_map(

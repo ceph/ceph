@@ -354,38 +354,49 @@ interval_set<uint64_t> ObjectDesc::get_min_written_extents(uint64_t alignment) c
     // Last aligned block boundary at or before ext_end.
     const uint64_t last_full_block = ext_end / alignment * alignment;
 
-    // Head partial fragment [ext_start, first_full_block) — keep as-is.
+    // Scan [scan_start, scan_end) in the object model and return true
+    // if every byte is '\0'.
+    auto is_all_zero = [&](uint64_t scan_start, uint64_t scan_end) -> bool {
+      ObjectDesc *mutable_this = const_cast<ObjectDesc *>(this);
+      iterator objiter = mutable_this->begin();
+      objiter.seek(scan_start);
+      for (uint64_t i = 0; i < (scan_end - scan_start) && !objiter.end();
+           ++i, ++objiter) {
+        if (*objiter != '\0')
+          return false;
+      }
+      return true;
+    };
+
+    // A head fragment that falls inside a prior zero-op hole is all-zero. 
+    // The OSD may leave it as a hole rather than allocating an extent, 
+    // so it must not be required in min.
     if (ext_start < first_full_block && first_full_block <= ext_end) {
-      min_written.insert(ext_start, first_full_block - ext_start);
+      if (!is_all_zero(ext_start, first_full_block)) {
+        min_written.insert(ext_start, first_full_block - ext_start);
+      }
     } else if (first_full_block > ext_end) {
-      // The whole extent is smaller than one alignment unit — keep it.
-      min_written.insert(ext_start, ext_end - ext_start);
+      // The whole extent is smaller than one alignment unit.
+      if (!is_all_zero(ext_start, ext_end)) {
+        min_written.insert(ext_start, ext_end - ext_start);
+      }
       continue;
     }
 
     // Full aligned blocks [first_full_block, last_full_block).
     // Keep a block only if it contains at least one non-zero byte.
     for (uint64_t blk = first_full_block; blk < last_full_block; blk += alignment) {
-      ObjectDesc *mutable_this = const_cast<ObjectDesc *>(this);
-      iterator objiter = mutable_this->begin();
-      objiter.seek(blk);
-
-      bool all_zero = true;
-      for (uint64_t i = 0; i < alignment && !objiter.end(); ++i, ++objiter) {
-        if (*objiter != '\0') {
-          all_zero = false;
-          break;
-        }
-      }
-
-      if (!all_zero) {
+      if (!is_all_zero(blk, blk + alignment)) {
         min_written.insert(blk, alignment);
       }
     }
 
-    // Tail partial fragment [last_full_block, ext_end) — keep as-is.
+    // Keep the tail's partial fragment only if it contains at least 
+    // one non-zero byte, for the same reason as the head.
     if (last_full_block < ext_end) {
-      min_written.insert(last_full_block, ext_end - last_full_block);
+      if (!is_all_zero(last_full_block, ext_end)) {
+        min_written.insert(last_full_block, ext_end - last_full_block);
+      }
     }
   }
 
