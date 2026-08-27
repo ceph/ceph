@@ -3,7 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapshots-form.component';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { SharedModule } from '~/app/shared/shared.module';
-import { ToastrModule } from 'ngx-toastr';
+
 import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -17,7 +17,6 @@ describe('CephfsSubvolumeSnapshotsFormComponent', () => {
     declarations: [CephfsSubvolumeSnapshotsFormComponent],
     imports: [
       SharedModule,
-      ToastrModule.forRoot(),
       ReactiveFormsModule,
       HttpClientTestingModule,
       RouterTestingModule,

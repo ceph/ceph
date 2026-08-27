@@ -4,7 +4,6 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
-import { ToastrModule } from 'ngx-toastr';
 
 import { CephModule } from '~/app/ceph/ceph.module';
 import { ClusterModule } from '~/app/ceph/cluster/cluster.module';
@@ -27,7 +26,6 @@ describe('ActiveAlertListComponent', () => {
       HttpClientTestingModule,
       NgbNavModule,
       RouterTestingModule,
-      ToastrModule.forRoot(),
       SharedModule,
       ClusterModule,
       DashboardModule,

@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RgwNotificationFormComponent } from './rgw-notification-form.component';
 import { CdLabelComponent } from '~/app/shared/components/cd-label/cd-label.component';
 import { ReactiveFormsModule } from '@angular/forms';
-import { ToastrModule } from 'ngx-toastr';
+
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import {
   InputModule,
@@ -40,7 +40,6 @@ describe('RgwNotificationFormComponent', () => {
         SelectModule,
         NumberModule,
         InputModule,
-        ToastrModule.forRoot(),
         ComponentsModule,
         ModalModule,
         ComboBoxModule,

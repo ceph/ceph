@@ -6,8 +6,6 @@ import { ActivatedRoute } from '@angular/router';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { of } from 'rxjs';
 
-import { ToastrModule } from 'ngx-toastr';
-
 import { NgbActiveModal, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -46,8 +44,7 @@ describe('NvmeofInitiatorsFormComponent', () => {
         NgbTypeaheadModule,
         ReactiveFormsModule,
         RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot()
+        SharedModule
       ]
     }).compileComponents();
 

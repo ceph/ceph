@@ -4,7 +4,6 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 import { PipesModule } from '~/app/shared/pipes/pipes.module';
-import { ToastrModule } from 'ngx-toastr';
 
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SummaryService } from '~/app/shared/services/summary.service';
@@ -23,8 +22,7 @@ describe('ServiceDetailsComponent', () => {
       RouterTestingModule,
       SharedModule,
       NgbNavModule,
-      PipesModule,
-      ToastrModule.forRoot()
+      PipesModule
     ],
     declarations: [ServiceDetailsComponent, ServiceDaemonListComponent],
     providers: [{ provide: SummaryService, useValue: { subscribeOnce: jest.fn() } }]

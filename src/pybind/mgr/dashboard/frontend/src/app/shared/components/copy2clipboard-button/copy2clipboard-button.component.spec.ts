@@ -1,7 +1,8 @@
 import { TestBed } from '@angular/core/testing';
 
 import * as BrowserDetect from 'detect-browser';
-import { ToastrService } from 'ngx-toastr';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { Copy2ClipboardButtonComponent } from './copy2clipboard-button.component';
@@ -12,10 +13,9 @@ describe('Copy2ClipboardButtonComponent', () => {
   configureTestBed({
     providers: [
       {
-        provide: ToastrService,
+        provide: NotificationService,
         useValue: {
-          error: () => true,
-          success: () => true
+          show: jest.fn()
         }
       }
     ]
@@ -27,39 +27,58 @@ describe('Copy2ClipboardButtonComponent', () => {
   });
 
   describe('test onClick behaviours', () => {
-    let toastrService: ToastrService;
-    let queryFn: jasmine.Spy;
-    let writeTextFn: jasmine.Spy;
+    let notificationService: NotificationService;
+    let queryFn: jest.SpyInstance;
+    let writeTextFn: jest.SpyInstance;
 
     beforeEach(() => {
-      toastrService = TestBed.inject(ToastrService);
-      component = new Copy2ClipboardButtonComponent(toastrService);
-      spyOn<any>(component, 'getText').and.returnValue('foo');
+      notificationService = TestBed.inject(NotificationService);
+      component = new Copy2ClipboardButtonComponent(notificationService);
+      jest.spyOn(component as any, 'getText').mockReturnValue('foo');
       Object.assign(navigator, {
         permissions: { query: jest.fn() },
         clipboard: {
           writeText: jest.fn()
         }
       });
-      queryFn = spyOn(navigator.permissions, 'query');
+      queryFn = jest.spyOn(navigator.permissions, 'query');
     });
 
-    it('should not call permissions API', () => {
-      spyOn(BrowserDetect, 'detect').and.returnValue({ name: 'firefox' });
-      writeTextFn = spyOn(navigator.clipboard, 'writeText').and.returnValue(
-        new Promise<void>((resolve, _) => {
-          resolve();
-        })
-      );
-      component.onClick();
+    it('should not call permissions API', async () => {
+      jest
+        .spyOn(BrowserDetect, 'detect')
+        .mockReturnValue({ name: 'firefox', version: '120.0.0', os: 'Linux', type: 'browser' });
+      writeTextFn = jest.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+
+      await component.onClick();
       expect(queryFn).not.toHaveBeenCalled();
       expect(writeTextFn).toHaveBeenCalledWith('foo');
+      expect(notificationService.show).toHaveBeenCalled();
     });
 
     it('should call permissions API', () => {
-      spyOn(BrowserDetect, 'detect').and.returnValue({ name: 'chrome' });
+      jest
+        .spyOn(BrowserDetect, 'detect')
+        .mockReturnValue({ name: 'chrome', version: '120.0.0', os: 'Linux', type: 'browser' });
+      jest.spyOn(navigator.permissions, 'query').mockResolvedValue({ state: 'granted' } as any);
+      jest.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
+
       component.onClick();
       expect(queryFn).toHaveBeenCalled();
+    });
+
+    it('should show error notification when clipboard fails', async () => {
+      jest.spyOn(BrowserDetect, 'detect').mockReturnValue({ name: 'firefox' } as any);
+      jest.spyOn(navigator.clipboard, 'writeText').mockRejectedValue(new Error('Failed'));
+
+      await component.onClick();
+      await Promise.resolve();
+      const calls = (notificationService.show as jest.Mock).mock.calls;
+      expect(calls).toContainEqual([
+        NotificationType.error,
+        'Error',
+        'Failed to copy text to the clipboard.'
+      ]);
     });
   });
 });

@@ -3,7 +3,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 import { By } from '@angular/platform-browser';
-import { ToastrModule } from 'ngx-toastr';
+
 import { of, throwError } from 'rxjs';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -32,13 +32,7 @@ describe('NvmeofEditHostKeyModalComponent', () => {
   beforeEach(waitForAsync(() => {
     TestBed.configureTestingModule({
       declarations: [NvmeofEditHostKeyModalComponent],
-      imports: [
-        ReactiveFormsModule,
-        HttpClientTestingModule,
-        RouterTestingModule,
-        SharedModule,
-        ToastrModule.forRoot()
-      ],
+      imports: [ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule, SharedModule],
       providers: [
         { provide: NvmeofService, useValue: nvmeofServiceSpy },
         { provide: TaskWrapperService, useValue: taskWrapperServiceSpy },

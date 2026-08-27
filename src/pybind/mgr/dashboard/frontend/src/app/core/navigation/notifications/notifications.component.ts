@@ -1,9 +1,8 @@
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, ChangeDetectionStrategy, inject, Signal } from '@angular/core';
+import { toSignal } from '@angular/core/rxjs-interop';
+import { map } from 'rxjs/operators';
 
-import { Subscription } from 'rxjs';
-
-import { Icons } from '~/app/shared/enum/icons.enum';
-import { CdNotification } from '~/app/shared/models/cd-notification';
+import { ICON_TYPE, IconSize } from '~/app/shared/enum/icons.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 
@@ -11,34 +10,21 @@ import { SummaryService } from '~/app/shared/services/summary.service';
   selector: 'cd-notifications',
   templateUrl: './notifications.component.html',
   styleUrls: ['./notifications.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush,
   standalone: false
 })
-export class NotificationsComponent implements OnInit, OnDestroy {
-  icons = Icons;
-  hasRunningTasks = false;
-  hasNotifications = false;
-  private subs = new Subscription();
+export class NotificationsComponent {
+  icons = ICON_TYPE;
+  iconSize = IconSize.size20;
 
-  constructor(
-    public notificationService: NotificationService,
-    private summaryService: SummaryService
-  ) {}
+  private notificationService = inject(NotificationService);
+  private summaryService = inject(SummaryService);
 
-  ngOnInit() {
-    this.subs.add(
-      this.summaryService.subscribe((summary) => {
-        this.hasRunningTasks = summary.executing_tasks.length > 0;
-      })
-    );
+  hasRunningTasks: Signal<boolean> = toSignal(
+    this.summaryService.summaryData$.pipe(map((summary) => summary?.executing_tasks?.length > 0)),
+    { initialValue: false }
+  );
 
-    this.subs.add(
-      this.notificationService.data$.subscribe((notifications: CdNotification[]) => {
-        this.hasNotifications = notifications.length > 0;
-      })
-    );
-  }
-
-  ngOnDestroy(): void {
-    this.subs.unsubscribe();
-  }
+  isMuted = toSignal(this.notificationService.muteState$, { initialValue: false });
+  hasNotifications = toSignal(this.notificationService.hasUnread$, { initialValue: false });
 }
