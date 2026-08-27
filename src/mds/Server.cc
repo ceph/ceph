@@ -1071,7 +1071,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 	    dout(10) << " ignoring blocklisted client." << p->first
 		     << " (" <<  p->second.addr << ")" << dendl;
 	    cmm.erase(p->first);
-	    cm.erase(p++);
+	    p = cm.erase(p);
 	  } else {
 	    ++p;
 	  }

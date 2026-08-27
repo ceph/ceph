@@ -1097,7 +1097,7 @@ void MDBalancer::try_rebalance(balance_state_t& state)
 		<< " to mds." << target << dendl;
 	have += pop;
 	mds->mdcache->migrator->export_dir_nicely(dir, target);
-	import_pop_map.erase(p++);
+	p = import_pop_map.erase(p);
       } else {
 	++p;
       }

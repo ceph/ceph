@@ -218,7 +218,7 @@ public:
       want -= (int)it.get_len();
       inos.insert(it.get_start(), it.get_len());
       delegated_inos.insert(it.get_start(), it.get_len());
-      free_prealloc_inos.erase(it++);
+      it = free_prealloc_inos.erase(it);
       if (want <= 0)
 	break;
     }
