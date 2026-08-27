@@ -1004,9 +1004,12 @@ class RedmineUpkeep:
                 issue_update.logger.info(f"Retrying backport creation to {release} without assignee due to failure: {e}")
                 if "assigned_to_id" in create_args:
                     del create_args["assigned_to_id"]
-                    other = self.R.issue.create(**create_args)
+                    try:
+                        other = self.R.issue.create(**create_args)
+                    except redminelib.exceptions.ValidationError as e2:
+                        raise RedmineUpdateException(issue_update, exception=e2, traceback=traceback.format_exc())
                 else:
-                    raise
+                    raise RedmineUpdateException(issue_update, exception=e, traceback=traceback.format_exc())
 
             self.R.issue_relation.create(
                 issue_id=issue_update.issue.id,
