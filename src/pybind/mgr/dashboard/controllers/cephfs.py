@@ -156,6 +156,12 @@ CHECKPOINT_MUTATION_SCHEMA = {
     'checkpoint_status': (str, 'Checkpoint status'),
 }
 
+PATH_SNAPSHOT_SCHEMA = {
+    'name': (str, 'Snapshot name'),
+    'path': (str, 'Snapshot path'),
+    'created': (str, 'Snapshot creation time'),
+}
+
 
 # pylint: disable=R0904
 @APIRouter('/cephfs', Scope.CEPHFS)
@@ -1659,6 +1665,21 @@ class CephFSMirror(RESTController):
                 component='cephfs.mirror'
             )
         return json.loads(out)
+
+    @EndpointDoc("List snapshots for a mirrored directory",
+                 parameters={
+                     'fs_name': (str, 'File system name'),
+                     'path': (str, 'Mirrored directory path'),
+                 },
+                 responses={200: [PATH_SNAPSHOT_SCHEMA]})
+    @Endpoint('GET', path='/{fs_name}/snapshots', query_params=['path'])
+    @ReadPermission
+    def list_path_snapshots(self, fs_name: str, path: str):
+        try:
+            cfs = CephFS_(fs_name)
+            return cfs.ls_snapshots(path)
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+            return []
 
     @EndpointDoc("Get snapshot mirror sync metrics",
                  parameters={
