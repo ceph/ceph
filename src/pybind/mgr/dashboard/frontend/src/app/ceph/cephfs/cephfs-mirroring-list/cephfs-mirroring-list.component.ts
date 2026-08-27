@@ -17,7 +17,6 @@ import { CEPHFS_MIRRORING_URL } from '~/app/shared/constants/cephfs.constant';
 import { MirroringSyncStatus } from '~/app/shared/enum/cephfs-mirroring-sync-status.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
-import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { DeletionImpact } from '~/app/shared/enum/delete-confirmation-modal-impact.enum';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -51,6 +50,8 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
   @ViewChild('table', { static: true }) table: TableComponent;
   @ViewChild('disableMirroringTpl', { static: true })
   disableMirroringTpl: TemplateRef<any>;
+  @ViewChild('fsNameTpl', { static: true })
+  fsNameTpl: TemplateRef<any>;
 
   private cephfsService = inject(CephfsService);
   private authStorageService = inject(AuthStorageService);
@@ -59,6 +60,7 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
   private router = inject(Router);
   private relativeDatePipe = inject(RelativeDatePipe);
 
+  readonly mirroringUrl = CEPHFS_MIRRORING_URL;
   columns: CdTableColumn[];
   tableActions: CdTableAction[];
   isSetupModalOpen = false;
@@ -86,10 +88,7 @@ export class CephfsMirroringListComponent implements OnInit, OnDestroy {
         name: $localize`Filesystem`,
         prop: 'local_fs_name',
         flexGrow: 2,
-        cellTransformation: CellTemplate.redirect,
-        customTemplateConfig: {
-          redirectLink: [CEPHFS_MIRRORING_URL, '::prop', 'overview']
-        }
+        cellTemplate: this.fsNameTpl
       },
       { name: $localize`Site name`, prop: 'remote_site_name', flexGrow: 2 },
       { name: $localize`Bytes replicated`, prop: 'bytes_replicated', flexGrow: 2 },

@@ -46,7 +46,10 @@ export class CephfsMirroringFsTabsComponent implements OnInit, OnDestroy {
   }
 
   onSelected(tab: TABS): void {
-    this.router.navigate(['/cephfs/mirroring', this.fsName, tab]);
+    const { fsId, fsName } = history.state ?? {};
+    this.router.navigate(['/cephfs/mirroring', this.fsName, tab], {
+      state: fsId != null ? { fsId, fsName } : undefined
+    });
   }
 
   get Tabs(): typeof TABS {

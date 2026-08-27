@@ -272,13 +272,16 @@ class CephFS(object):
         self.cfs.mkdir(snapshot_path, mode)
         return name
 
-    def ls_snapshots(self, path):
+    def ls_snapshots(self, path, details=False):
         """
         List snapshots for the specified path.
         :param path: The path of the directory.
         :type path: str
-        :return: A list of dictionaries containing the name and the
-          creation time of the snapshot.
+        :param details: When True, include full snap_info (id and metadata).
+        :type details: bool
+        :return: A list of dictionaries containing the name, path, and
+          creation time. When details is True, also includes snap_info
+          fields (id, metadata).
         :rtype: list
         """
         result = []
@@ -291,11 +294,19 @@ class CephFS(object):
                     if dent.d_name not in [b'.', b'..'] and not dent.d_name.startswith(b'_'):
                         snapshot_path = os.path.join(path, dent.d_name)
                         stat = self.cfs.stat(snapshot_path)
-                        result.append({
+                        entry = {
                             'name': dent.d_name.decode(),
                             'path': snapshot_path.decode(),
                             'created': '{}Z'.format(stat.st_ctime.isoformat('T'))
-                        })
+                        }
+                        if details:
+                            try:
+                                entry.update(self.cfs.snap_info(snapshot_path))
+                            except cephfs.Error as err:
+                                logger.error(
+                                    "Failed to read snap_info for %s: %s",
+                                    snapshot_path, err)
+                        result.append(entry)
                 dent = self.cfs.readdir(d)
         return result
 

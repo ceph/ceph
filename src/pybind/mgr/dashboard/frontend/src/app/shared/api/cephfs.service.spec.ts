@@ -156,6 +156,18 @@ describe('CephfsService', () => {
     expect(req.request.body).toBeNull();
   });
 
+  it('should call lsSnapshots', () => {
+    service.lsSnapshots(3, '/some/path').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/3/snapshot?path=%252Fsome%252Fpath');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call lsSnapshots with details', () => {
+    service.lsSnapshots(3, '/some/path', true).subscribe();
+    const req = httpTesting.expectOne('api/cephfs/3/snapshot?path=%252Fsome%252Fpath&details=true');
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should list mirror checkpoints for a path', () => {
     const path = '/volumes/Group1/A1/subvol';
     service.listMirrorCheckpoints('testfs', path).subscribe();

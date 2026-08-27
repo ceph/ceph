@@ -249,7 +249,7 @@ describe('CephfsAddMirroringPathComponent', () => {
     component.onCancel();
 
     expect(routerNavigateByUrlSpy).toHaveBeenCalledWith('/cephfs/mirroring/testfs/mirror-paths', {
-      state: undefined
+      state: { fsId: 1, fsName: 'testfs' }
     });
     expect(routerNavigateSpy).not.toHaveBeenCalled();
   });

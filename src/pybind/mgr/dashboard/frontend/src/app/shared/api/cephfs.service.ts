@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { Observable } from 'rxjs';
 
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
-import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
+import { CephfsDir, CephfsQuotas, CephfsSnapshot } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
 import {
   Daemon,
@@ -75,6 +75,14 @@ export class CephfsService {
     params = params.append('path', path);
     params = params.append('name', name);
     return this.http.delete(`${this.baseURL}/${id}/snapshot`, { params });
+  }
+
+  lsSnapshots(id: number, path: string, details = false): Observable<CephfsSnapshot[]> {
+    let params = new HttpParams().append('path', path);
+    if (details) {
+      params = params.append('details', 'true');
+    }
+    return this.http.get<CephfsSnapshot[]>(`${this.baseURL}/${id}/snapshot`, { params });
   }
 
   quota(id: number, path: string, quotas: CephfsQuotas) {
