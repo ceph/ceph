@@ -2038,6 +2038,26 @@ std::optional<ECCommon::read_request_t> prepare_sparse_read_request(
 
   if (out_needs_reconstruct) {
     req.drop_data = false;
+
+    // When reconstruction is needed, ensure all healthy shards are asked to read 
+    // the same region from disk, making it safe to zero-pad any sparse holes 
+    // uniformly during decode.
+    shard_extent_set_t uniform_want(sinfo.get_k_plus_m());
+    for (const shard_id_t shard : sinfo.get_data_shards()) {
+      for (const auto &read : to_read) {
+        auto &&[off, len] = sinfo.chunk_aligned_ro_range_to_shard_ro_range(
+            read.offset, read.size);
+        uniform_want[shard].union_insert(off, len);
+      }
+    }
+    req.shard_want_to_read = std::move(uniform_want);
+    req.shard_reads.clear();
+    req.zeros_for_decode.clear();
+
+    out_r = pipeline.get_min_avail_to_read_shards(hoid, false, false, req);
+    if (out_r < 0) {
+      return std::nullopt;
+    }
   }
 
   out_r = 0;
@@ -2058,31 +2078,47 @@ int ec_sparse_finish_read(
     DoutPrefixProvider *dpp)
 {
   const uint64_t req_end = std::min(offset + length, req.object_size);
-
   if (needs_reconstruct) {
+    // Stage 1: decode missing shards.
     int r = ec_sparse_decode(res.buffers_read, req.shard_want_to_read,
-                             req.zeros_for_decode, ec_impl, req.object_size, dpp);
+                             req.zeros_for_decode, res.sparse_extents_read,
+                             ec_impl, req.object_size, dpp);
     if (r < 0) {
       return r;
     }
+
+    // Stage 2: for each data shard that was reconstructed, populate sparse_extents_read.
+    for (shard_id_t shard : sinfo.get_data_shards()) {
+      // Skip shards outside the requested read range
+      if (!res.buffers_read.extent_maps.contains(shard)) {
+        continue;
+      }
+      // Skip shards that were read directly from disk
+      if (res.sparse_extents_read.contains(shard) &&
+          !res.sparse_extents_read.at(shard).empty()) {
+        continue;
+      }
+      const interval_set<uint64_t> shard_fae =
+          sinfo.ro_intervals_to_shard_intervals(force_allocated_extents, shard);
+      const uint64_t scan_stride =
+          std::min(sinfo.get_chunk_size(), FAE_BLOCK_SIZE);
+      interval_set<uint64_t> shard_scan;
+      if (req.shard_want_to_read.contains(shard)) {
+        for (auto [off, len] : req.shard_want_to_read.at(shard)) {
+          const uint64_t aligned_off = p2align(off, scan_stride);
+          const uint64_t aligned_end = p2roundup(off + len, scan_stride);
+          shard_scan.union_insert(aligned_off, aligned_end - aligned_off);
+        }
+      }
+      res.sparse_extents_read[shard] =
+          ec_sparse_scan_shard_extents(res.buffers_read, shard,
+                                       shard_fae, shard_scan, dpp);
+    }
   }
 
-  if (!needs_reconstruct) {
-    // Good path: clip the raw fiemap map directly — no interval_set needed.
-    out_map = ec_sparse_clip_to_map(
-        merge_shard_extent_maps(res.sparse_extents_read, sinfo),
-        offset, req_end);
-  } else {
-    interval_set<uint64_t> combined =
-        ec_sparse_merge_ro_fiemap(res.sparse_extents_read, sinfo);
-    const uint64_t scan_start = p2align(offset, FAE_BLOCK_SIZE);
-    const uint64_t scan_end = std::min(p2roundup(offset + length, FAE_BLOCK_SIZE),
-                                       req.object_size);
-    combined.union_of(ec_sparse_scan_ro_blocks(res.buffers_read,
-                                               force_allocated_extents,
-                                               scan_start, scan_end));
-    out_map = ec_sparse_clip_to_map(combined, offset, req_end);
-  }
+  // Stage 3: merge all shard fiemaps and clip to the requested range.
+  auto merged = merge_shard_extent_maps(res.sparse_extents_read, sinfo);
+  out_map = ec_sparse_clip_to_map(merged, offset, req_end);
 
   if (out_bl != nullptr) {
     for (auto &&[ext_off, ext_len] : out_map) {

@@ -1241,46 +1241,95 @@ int ec_sparse_decode(
     shard_extent_map_t &buffers_read,
     const shard_extent_set_t &shard_want_to_read,
     shard_extent_set_t &zeros_for_decode,
+    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
     const ErasureCodeInterfaceRef &ec_impl,
     uint64_t object_size,
     DoutPrefixProvider *dpp)
 {
-  buffers_read.zero_pad(shard_want_to_read);
-  buffers_read.add_zero_padding_for_decode(zeros_for_decode);
-  return buffers_read.decode(ec_impl, shard_want_to_read, object_size, dpp);
-}
-
-interval_set<uint64_t> ec_sparse_merge_ro_fiemap(
-    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
-    const stripe_info_t &sinfo)
-{
-  interval_set<uint64_t> result;
-  for (auto &[ro_off, ro_len] : merge_shard_extent_maps(sparse_extents_read, sinfo)) {
-    result.insert(ro_off, ro_len);
+  extent_set decode_range;
+  for (auto &&[shard, eset] : shard_want_to_read) {
+    decode_range.union_of(eset);
   }
-  return result;
+  shard_extent_set_t present_want(shard_want_to_read.get_max_shards());
+  for (auto &&[shard, extents] : sparse_extents_read) {
+    if (!decode_range.empty()) {
+      present_want[shard].union_of(decode_range);
+    }
+  }
+  buffers_read.zero_pad(present_want);
+  buffers_read.add_zero_padding_for_decode(zeros_for_decode);
+  int r = buffers_read.decode(ec_impl, shard_want_to_read, object_size, dpp);
+  return r;
 }
 
-interval_set<uint64_t> ec_sparse_scan_ro_blocks(
+std::map<uint64_t, uint64_t> ec_sparse_scan_shard_extents(
     const shard_extent_map_t &buffers_read,
-    const interval_set<uint64_t> &force_allocated_extents,
-    uint64_t scan_start,
-    uint64_t scan_end)
+    shard_id_t shard,
+    const interval_set<uint64_t> &shard_fae,
+    const interval_set<uint64_t> &shard_scan_window,
+    DoutPrefixProvider *dpp)
 {
-  interval_set<uint64_t> allocated;
+  const uint64_t chunk_size = buffers_read.sinfo->get_chunk_size();
+  const uint64_t scan_stride = std::min(chunk_size, FAE_BLOCK_SIZE);
 
-  for (uint64_t block = scan_start; block < scan_end; block += FAE_BLOCK_SIZE) {
-    const uint64_t read_len = std::min(FAE_BLOCK_SIZE, scan_end - block);
-    bufferlist bl = buffers_read.get_ro_buffer(block, read_len);
+  std::map<uint64_t, uint64_t> result;
 
-    if (!bl.is_zero()) {
-      allocated.insert(block, read_len);
-    } else if (force_allocated_extents.intersects(block, read_len)) {
-      allocated.insert(block, read_len);
+  if (!buffers_read.extent_maps.contains(shard)) {
+    return result;
+  }
+
+  for (auto iter = buffers_read.extent_maps.at(shard).begin();
+       iter != buffers_read.extent_maps.at(shard).end(); ++iter) {
+    const uint64_t ext_off = iter.get_off();
+    const uint64_t ext_len = iter.get_len();
+    const bufferlist &ext_bl = iter.get_val();
+    const uint64_t ext_end = ext_off + ext_len;
+
+    uint64_t block = ext_off;
+    while (block < ext_end) {
+      const uint64_t block_len = std::min(scan_stride, ext_end - block);
+
+      if (!shard_scan_window.intersects(block, block_len)) {
+        block += block_len;
+        continue;
+      }
+
+      bool allocated;
+      if (shard_fae.intersects(block, block_len)) {
+        allocated = true;
+      } else {
+        const uint64_t in_ext = block - ext_off;
+        bufferlist block_bl;
+        block_bl.substr_of(ext_bl, in_ext, block_len);
+        const auto &first_ptr = block_bl.front();
+        if (first_ptr.length() >= sizeof(uint64_t) &&
+            !mem_is_zero(first_ptr.c_str(), sizeof(uint64_t))) {
+          // Stage 1: first word non-zero.
+          allocated = true;
+        } else {
+          // Stage 2: full scan.
+          allocated = !block_bl.is_zero();
+        }
+      }
+
+      if (allocated) {
+        // Merge with the immediately preceding entry if contiguous.
+        auto it = result.end();
+        if (it != result.begin()) {
+          --it;
+          if (it->first + it->second == block) {
+            it->second += block_len;
+            block += block_len;
+            continue;
+          }
+        }
+        result.emplace(block, block_len);
+      }
+      block += block_len;
     }
   }
 
-  return allocated;
+  return result;
 }
 
 void ec_recovery_compute_shard_push(

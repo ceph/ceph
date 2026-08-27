@@ -2502,6 +2502,161 @@ TEST(ECUtil, ro_intervals_to_shard_intervals_multiple_intervals)
 // --------------------------------------------------------------------------
 
 // Build a bufferlist of `len` bytes filled with `fill_byte`.
+// ---------------------------------------------------------------------------
+// XorErasureCode — a real k=2, m=1 XOR erasure codec for unit testing.
+//
+// Encode: parity[i] = data_0[i] XOR data_1[i]
+// Decode: missing_data[i] = other_data[i] XOR parity[i]
+//
+// decode_chunks actually writes reconstructed data into the output bufferptr,
+// unlike MockErasureCode which is a no-op.  Use this codec whenever a test
+// needs to verify reconstructed data content.
+// ---------------------------------------------------------------------------
+class XorErasureCode : public ErasureCodeInterface {
+public:
+  // k=2 data shards, 1 parity shard (raw shards: 0=D0, 1=D1, 2=P).
+  static constexpr int K = 2;
+  static constexpr int M = 1;
+
+  uint64_t get_supported_optimizations() const override {
+    return FLAG_EC_PLUGIN_PARTIAL_READ_OPTIMIZATION |
+           FLAG_EC_PLUGIN_PARTIAL_WRITE_OPTIMIZATION |
+           FLAG_EC_PLUGIN_ZERO_INPUT_ZERO_OUTPUT_OPTIMIZATION |
+           FLAG_EC_PLUGIN_ZERO_PADDING_OPTIMIZATION |
+           FLAG_EC_PLUGIN_PARITY_DELTA_OPTIMIZATION;
+  }
+
+  int init(ErasureCodeProfile &, std::ostream *) override { return 0; }
+  const ErasureCodeProfile &get_profile() const override { return _profile; }
+  int create_rule(const std::string &, CrushWrapper &,
+                  std::ostream *) const override { return 0; }
+
+  unsigned int get_chunk_count() const override { return K + M; }
+  unsigned int get_data_chunk_count() const override { return K; }
+  unsigned int get_coding_chunk_count() const override { return M; }
+  int get_sub_chunk_count() override { return 1; }
+  unsigned int get_chunk_size(unsigned int stripe_width) const override {
+    return stripe_width / K;
+  }
+  size_t get_minimum_granularity() override { return 0; }
+
+  const std::vector<shard_id_t> &get_chunk_mapping() const override {
+    return _chunk_mapping;
+  }
+
+  int minimum_to_decode(const shard_id_set &want_to_read,
+                        const shard_id_set &available,
+                        shard_id_set &minimum_set,
+                        shard_id_map<std::vector<std::pair<int,int>>>
+                            *minimum_sub_chunks) override {
+    // If all wanted shards are available, return them directly.
+    bool all_available = true;
+    for (shard_id_t s : want_to_read) {
+      if (!available.contains(s)) { all_available = false; break; }
+    }
+    if (all_available) {
+      minimum_set = want_to_read;
+    } else {
+      // Need reconstruction: return any K available shards.
+      minimum_set.clear();
+      for (shard_id_t s : available) {
+        minimum_set.insert(s);
+        if ((int)minimum_set.size() == K) break;
+      }
+      if ((int)minimum_set.size() < K) return -EIO;
+    }
+    if (minimum_sub_chunks) {
+      for (shard_id_t s : minimum_set) {
+        (*minimum_sub_chunks)[s] = {{0, 1}};
+      }
+    }
+    return 0;
+  }
+
+  int encode_chunks(const shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override {
+    // XOR D0 and D1 into parity.
+    const bufferptr &d0 = in.at(shard_id_t(0));
+    const bufferptr &d1 = in.at(shard_id_t(1));
+    bufferptr &p        = out.at(shard_id_t(2));
+    ceph_assert(d0.length() == d1.length());
+    ceph_assert(d0.length() == p.length());
+    const char *s0 = d0.c_str();
+    const char *s1 = d1.c_str();
+    char       *sp = p.c_str();
+    for (unsigned i = 0; i < d0.length(); ++i) {
+      sp[i] = s0[i] ^ s1[i];
+    }
+    return 0;
+  }
+
+  int decode_chunks(const shard_id_set &want_to_read,
+                    shard_id_map<bufferptr> &in,
+                    shard_id_map<bufferptr> &out) override {
+    ceph_assert(in.size() == 2);
+    ceph_assert(out.size() == 1);
+
+    // Find which shard to reconstruct and the two source shards.
+    shard_id_t missing = out.begin()->first;
+    bufferptr &dst     = out.begin()->second;
+
+    // Collect the two source shards (any two of D0, D1, P).
+    auto it = in.begin();
+    const bufferptr &src0 = it->second; ++it;
+    const bufferptr &src1 = it->second;
+    ceph_assert(src0.length() == src1.length());
+    ceph_assert(src0.length() == dst.length());
+    (void)missing; // XOR of any two shards recovers the third.
+
+    const char *a = src0.c_str();
+    const char *b = src1.c_str();
+    char       *d = dst.c_str();
+    for (unsigned i = 0; i < src0.length(); ++i) {
+      d[i] = a[i] ^ b[i];
+    }
+    return 0;
+  }
+
+  // --------------- deprecated stubs ---------------
+  [[deprecated]] int minimum_to_decode(const std::set<int>&, const std::set<int>&,
+      std::map<int, std::vector<std::pair<int,int>>>*) override
+      { ADD_FAILURE(); return 0; }
+  [[deprecated]] int minimum_to_decode_with_cost(const std::set<int>&,
+      const std::map<int,int>&, std::set<int>*) override
+      { ADD_FAILURE(); return 0; }
+  int minimum_to_decode_with_cost(const shard_id_set&, const shard_id_map<int>&,
+      shard_id_set*) override { return 0; }
+  [[deprecated]] int encode(const std::set<int>&, const bufferlist&,
+      std::map<int,bufferlist>*) override { ADD_FAILURE(); return 0; }
+  int encode(const shard_id_set&, const bufferlist&,
+      shard_id_map<bufferlist>*) override { return 0; }
+  [[deprecated]] int encode_chunks(const std::set<int>&,
+      std::map<int,bufferlist>*) override { ADD_FAILURE(); return 0; }
+  [[deprecated]] int decode(const std::set<int>&, const std::map<int,bufferlist>&,
+      std::map<int,bufferlist>*, int) override { ADD_FAILURE(); return 0; }
+  int decode(const shard_id_set&, const shard_id_map<bufferlist>&,
+      shard_id_map<bufferlist>*, int) override { return 0; }
+  [[deprecated]] int decode_chunks(const std::set<int>&,
+      const std::map<int,bufferlist>&, std::map<int,bufferlist>*) override
+      { ADD_FAILURE(); return 0; }
+  [[deprecated]] int decode_concat(const std::set<int>&,
+      const std::map<int,bufferlist>&, bufferlist*) override
+      { ADD_FAILURE(); return 0; }
+  [[deprecated]] int decode_concat(const std::map<int,bufferlist>&,
+      bufferlist*) override { ADD_FAILURE(); return 0; }
+  void encode_delta(const bufferptr&, const bufferptr&, bufferptr*) override {}
+  void apply_delta(const shard_id_map<bufferptr>&,
+                   shard_id_map<bufferptr>&) override {}
+
+private:
+  ErasureCodeProfile _profile;
+  const std::vector<shard_id_t> _chunk_mapping = {};
+};
+
+// ---------------------------------------------------------------------------
+// Test buffer helpers
+// ---------------------------------------------------------------------------
+
 static bufferlist make_buf(uint64_t len, char fill_byte = '\x00')
 {
   bufferlist bl;
@@ -2515,6 +2670,40 @@ static bufferlist make_buf(uint64_t len, char fill_byte = '\x00')
 static bufferlist make_nonzero_buf(uint64_t len)
 {
   return make_buf(len, '\xAB');
+}
+
+// XOR two same-length bufferlists byte-by-byte to produce the parity shard.
+static bufferlist make_xor_parity(const bufferlist &d0, const bufferlist &d1)
+{
+  ceph_assert(d0.length() == d1.length());
+  bufferlist result;
+  bufferptr ptr = buffer::create(d0.length());
+  // Flatten both into contiguous buffers for easy XOR.
+  bufferlist tmp0 = d0, tmp1 = d1;
+  tmp0.rebuild();
+  tmp1.rebuild();
+  const char *a = tmp0.c_str();
+  const char *b = tmp1.c_str();
+  char *out = ptr.c_str();
+  for (unsigned i = 0; i < d0.length(); ++i) {
+    out[i] = a[i] ^ b[i];
+  }
+  result.append(ptr);
+  return result;
+}
+
+// Build a read_request_t covering both data shards over [0, stripe_width).
+// Used as the request for XorDecode tests.
+static ECCommon::read_request_t make_xor_stripe_request(
+    const ECUtil::stripe_info_t &s)
+{
+  const uint64_t swidth = s.get_stripe_width();
+  ECUtil::shard_extent_set_t want(s.get_k_plus_m());
+  s.ro_range_to_shard_extent_set(0, swidth, want);
+  return ECCommon::read_request_t(want, ECCommon::WantAttrs::No,
+                                  ECCommon::WantOmapHeader::No,
+                                  ECCommon::WantOmapKeys::No,
+                                  "", 0, swidth);
 }
 
 // Standard k=2, m=1 stripe geometry: chunk_size=4K, stripe_width=8K.
@@ -2756,7 +2945,10 @@ TEST(ECSparseFuncs_Decode, DC1_MissingShardDecoded)
 
   ECUtil::shard_extent_set_t zeros(k2m1_k + k2m1_m);
 
-  int r = ec_sparse_decode(sem, want, zeros, ec_impl, k2m1_swidth, nullptr);
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  sparse_extents[shard_id_t(0)];  // shard 0 replied (has data)
+  sparse_extents[shard_id_t(2)];  // shard 2 replied (has data)
+  int r = ec_sparse_decode(sem, want, zeros, sparse_extents, ec_impl, k2m1_swidth, nullptr);
   ASSERT_EQ(r, 0);
   // After decode, shard 1 must be present.
   ASSERT_TRUE(sem.contains_shard(shard_id_t(1)));
@@ -2794,8 +2986,12 @@ TEST(ECSparseFuncs_Decode, DC2_TailStripePaddingFromZerosForDecode)
     }
   }
 
-  int r = ec_sparse_decode(sem, want, req.zeros_for_decode, ec_impl,
-                           object_size, nullptr);
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  for (auto &[shard, sr] : req.shard_reads) {
+    sparse_extents[shard];  // mark every read shard as healthy
+  }
+  int r = ec_sparse_decode(sem, want, req.zeros_for_decode, sparse_extents,
+                           ec_impl, object_size, nullptr);
   ASSERT_EQ(r, 0);
 }
 
@@ -2817,7 +3013,10 @@ TEST(ECSparseFuncs_Decode, DC3_NoShardsMissing_NoOp)
 
   ECUtil::shard_extent_set_t zeros(k2m1_k + k2m1_m);
 
-  int r = ec_sparse_decode(sem, want, zeros, ec_impl, k2m1_swidth, nullptr);
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  sparse_extents[shard_id_t(0)];  // both data shards replied
+  sparse_extents[shard_id_t(1)];
+  int r = ec_sparse_decode(sem, want, zeros, sparse_extents, ec_impl, k2m1_swidth, nullptr);
   ASSERT_EQ(r, 0);
 }
 
@@ -2835,10 +3034,10 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH1_AllShardsPresent)
   extents[shard_id_t(0)][0] = k2m1_chunk;
   extents[shard_id_t(1)][0] = k2m1_chunk;
 
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
+  auto out = merge_shard_extent_maps(extents, s);
   // Both shards together cover [0, 8K) continuously.
-  ASSERT_EQ(out.num_intervals(), 1u);
-  ASSERT_TRUE(out.contains(0, k2m1_swidth));
+  ASSERT_EQ(out.size(), 1u);
+  ASSERT_EQ(out.at(0), k2m1_swidth);
 }
 
 TEST(ECSparseFuncs_MergeRoFiemap, MH2_OneMissingDataShard)
@@ -2850,9 +3049,9 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH2_OneMissingDataShard)
   extents[shard_id_t(0)][0] = k2m1_chunk;
   // shard 1 intentionally absent
 
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
-  ASSERT_EQ(out.num_intervals(), 1u);
-  ASSERT_TRUE(out.contains(0, k2m1_chunk));  // only shard 0's RO range [0,4K)
+  auto out = merge_shard_extent_maps(extents, s);
+  ASSERT_EQ(out.size(), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);  // only shard 0's RO range [0,4K)
 }
 
 TEST(ECSparseFuncs_MergeRoFiemap, MH3_EmptyExtents)
@@ -2860,7 +3059,7 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH3_EmptyExtents)
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   shard_id_map<std::map<uint64_t, uint64_t>> extents(k2m1_k + k2m1_m);
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
+  auto out = merge_shard_extent_maps(extents, s);
   ASSERT_TRUE(out.empty());
 }
 
@@ -2873,10 +3072,10 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH4_ParityShardIgnored)
   extents[shard_id_t(0)][0] = k2m1_chunk;
   extents[shard_id_t(2)][0] = k2m1_chunk;  // parity — must not appear in output
 
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
+  auto out = merge_shard_extent_maps(extents, s);
   // Only shard 0 contributes RO [0,4K).
-  ASSERT_EQ(out.num_intervals(), 1u);
-  ASSERT_TRUE(out.contains(0, k2m1_chunk));
+  ASSERT_EQ(out.size(), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);
 }
 
 TEST(ECSparseFuncs_MergeRoFiemap, MH5_SmallChunkProjection)
@@ -2888,82 +3087,108 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH5_SmallChunkProjection)
   extents[shard_id_t(0)][0] = chunk;
   extents[shard_id_t(1)][0] = chunk;
 
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
-  ASSERT_EQ(out.num_intervals(), 1u);
-  ASSERT_TRUE(out.contains(0, 2 * chunk));
+  auto out = merge_shard_extent_maps(extents, s);
+  ASSERT_EQ(out.size(), 1u);
+  ASSERT_EQ(out.at(0), 2 * chunk);
 }
 
 // --------------------------------------------------------------------------
-// ec_sparse_scan_ro_blocks
+// ec_sparse_scan_shard_extents
 // --------------------------------------------------------------------------
-
-TEST(ECSparseFuncs_ScanRoBlocks, SC1_AllZeroNoFAE)
+//
+// Helper: project an RO-space interval_set to shard space for the given shard.
+static interval_set<uint64_t> shard_window(
+    const ECUtil::stripe_info_t &s,
+    shard_id_t shard,
+    uint64_t ro_start,
+    uint64_t ro_end)
 {
-  // Block [0,4K); content all-zero; no FAE → not allocated.
+  interval_set<uint64_t> ro_win;
+  if (ro_end > ro_start) {
+    ro_win.insert(ro_start, ro_end - ro_start);
+  }
+  return s.ro_intervals_to_shard_intervals(ro_win, shard);
+}
+
+TEST(ECSparseFuncs_ScanShardExtents, SC1_AllZeroNoFAE)
+{
+  // k=2, chunk=4K: shard 0 holds shard-space [0,4K); all-zero; no FAE → empty output.
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(0), 0, make_buf(k2m1_chunk, '\x00'));
 
   interval_set<uint64_t> fae;
-
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, FAE_BLOCK_SIZE);
+  // RO scan window [0, 4K) → shard 0 shard-space [0, 4K).
+  auto win  = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
+  auto out  = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
   ASSERT_TRUE(out.empty());
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC2_AllZeroWithFAE)
+TEST(ECSparseFuncs_ScanShardExtents, SC2_AllZeroWithFAE)
 {
-  // Block [4K,8K); content all-zero; FAE covers it → allocated.
+  // Shard 1, shard-space [0,4K); all-zero; shard-space FAE covers [0,4K) → allocated.
+  // RO FAE [4K,8K) → shard 1 shard-space FAE [0,4K).
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
-  // Shard 1 owns RO [4K,8K) in a k=2, chunk=4K layout.
   sem.insert_in_shard(shard_id_t(1), 0, make_buf(k2m1_chunk, '\x00'));
 
-  interval_set<uint64_t> fae;
-  fae.insert(FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  interval_set<uint64_t> ro_fae;
+  ro_fae.insert(FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+  interval_set<uint64_t> shard_fae =
+      s.ro_intervals_to_shard_intervals(ro_fae, shard_id_t(1));
+  // RO scan window [4K,8K) → shard 1 shard-space [0,4K).
+  auto win = shard_window(s, shard_id_t(1), FAE_BLOCK_SIZE, 2 * FAE_BLOCK_SIZE);
 
-  auto out = ec_sparse_scan_ro_blocks(sem, fae,
-                                      FAE_BLOCK_SIZE, 2 * FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(1), shard_fae, win, nullptr);
   ASSERT_FALSE(out.empty());
-  ASSERT_TRUE(out.contains(FAE_BLOCK_SIZE, FAE_BLOCK_SIZE));
+  // Shard-space result: [0,4K) allocated.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC3_NonZeroBlock)
+TEST(ECSparseFuncs_ScanShardExtents, SC3_NonZeroBlock)
 {
-  // Block [0,4K); content non-zero → allocated.
+  // Shard 0, shard-space [0,4K); non-zero → allocated.
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(0), 0, make_nonzero_buf(k2m1_chunk));
 
   interval_set<uint64_t> fae;
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
 
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
   ASSERT_FALSE(out.empty());
-  ASSERT_TRUE(out.contains(0, FAE_BLOCK_SIZE));
+  // Shard-space result: [0,4K) allocated.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC5_SmallChunk_BlockStraddlesTwoShards_NonZero)
+TEST(ECSparseFuncs_ScanShardExtents, SC5_SmallChunk_NonZeroShard)
 {
-  // chunk=2K, k=2: RO block [0,4K) spans shard 0 [0,2K) and shard 1 [0,2K).
-  // Shard 0 is non-zero → whole block is allocated.
+  // chunk=2K, k=2: scan_stride=2K.  Shard 0 shard-space [0,2K) is non-zero.
+  // The RO window covers [0,4K); shard 0's projection is [0,2K).
   const uint64_t chunk = 2048;
   ECUtil::stripe_info_t s(2u, 1u, 2 * chunk, std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(0), 0, make_nonzero_buf(chunk));
-  sem.insert_in_shard(shard_id_t(1), 0, make_buf(chunk, '\x00'));
 
   interval_set<uint64_t> fae;
+  // RO window [0,4K) → shard 0 shard-space [0,2K).
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
 
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
   ASSERT_FALSE(out.empty());
-  ASSERT_TRUE(out.contains(0, FAE_BLOCK_SIZE));
+  // Shard-space: [0,2K) allocated.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), chunk);
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC6_SmallChunk_BlockStraddlesTwoShards_BothZeroNoFAE)
+TEST(ECSparseFuncs_ScanShardExtents, SC6_SmallChunk_BothShardsZeroNoFAE)
 {
-  // chunk=2K: both halves of RO block [0,4K) are all-zero, no FAE → unallocated.
+  // chunk=2K: shard 0 and shard 1 both all-zero; no FAE → both empty.
   const uint64_t chunk = 2048;
   ECUtil::stripe_info_t s(2u, 1u, 2 * chunk, std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
@@ -2971,57 +3196,67 @@ TEST(ECSparseFuncs_ScanRoBlocks, SC6_SmallChunk_BlockStraddlesTwoShards_BothZero
   sem.insert_in_shard(shard_id_t(1), 0, make_buf(chunk, '\x00'));
 
   interval_set<uint64_t> fae;
+  auto win0 = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
+  auto win1 = shard_window(s, shard_id_t(1), 0, FAE_BLOCK_SIZE);
 
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, FAE_BLOCK_SIZE);
-  ASSERT_TRUE(out.empty());
+  auto out0 = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win0, nullptr);
+  auto out1 = ec_sparse_scan_shard_extents(sem, shard_id_t(1), fae, win1, nullptr);
+  ASSERT_TRUE(out0.empty());
+  ASSERT_TRUE(out1.empty());
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC7_LargeChunk_NonZeroBlock)
+TEST(ECSparseFuncs_ScanShardExtents, SC7_LargeChunk_NonZeroBlock)
 {
-  // chunk=64K, k=2: RO block [0,4K) entirely within shard 0's 64K chunk; non-zero.
+  // chunk=64K, k=2: scan_stride=FAE_BLOCK_SIZE=4K.
+  // Shard 0 has a full 64K chunk of non-zero data.
+  // RO window covers just [0,4K) → shard 0 shard-space window [0,4K).
+  // Expect: shard-space [0,4K) allocated.
   const uint64_t chunk = 64 * 1024;
   ECUtil::stripe_info_t s(2u, 1u, 2 * chunk, std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(0), 0, make_nonzero_buf(chunk));
 
   interval_set<uint64_t> fae;
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
 
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
   ASSERT_FALSE(out.empty());
-  ASSERT_TRUE(out.contains(0, FAE_BLOCK_SIZE));
+  // Only the windowed sub-block [0,4K) is scanned and allocated.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), FAE_BLOCK_SIZE);
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC8_PartialLastBlock_NonZero)
+TEST(ECSparseFuncs_ScanShardExtents, SC8_PartialLastBlock_NonZero)
 {
-  // scan_end = 6K (object_size = 6K); block at [4K,6K) is 2K, non-zero → [4K,6K) allocated.
-  const uint64_t object_size = 6 * 1024;
-  // k=2, chunk=4K. shard 1 owns RO [4K,8K) — only first 2K is valid.
+  // k=2, chunk=4K; shard 1 has 2K of data at shard-space [0,2K); non-zero.
+  // RO scan window [4K,6K) → shard 1 shard-space [0,2K).
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(1), 0, make_nonzero_buf(2048));
 
   interval_set<uint64_t> fae;
+  auto win = shard_window(s, shard_id_t(1), FAE_BLOCK_SIZE, 6 * 1024);
 
-  // scan_end is object_size = 6K.
-  auto out = ec_sparse_scan_ro_blocks(sem, fae,
-                                      FAE_BLOCK_SIZE, object_size);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(1), fae, win, nullptr);
   ASSERT_FALSE(out.empty());
-  ASSERT_TRUE(out.contains(FAE_BLOCK_SIZE, 2048));
+  // Shard-space: [0,2K) allocated.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), 2048u);
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC9_PartialLastBlock_AllZeroNoFAE)
+TEST(ECSparseFuncs_ScanShardExtents, SC9_PartialLastBlock_AllZeroNoFAE)
 {
-  // scan_end=6K; partial last 2K block all-zero, no FAE → not allocated.
+  // k=2, chunk=4K; shard 1 has 2K of zeros; no FAE → empty.
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(1), 0, make_buf(2048, '\x00'));
 
   interval_set<uint64_t> fae;
+  auto win = shard_window(s, shard_id_t(1), FAE_BLOCK_SIZE, 6 * 1024);
 
-  auto out = ec_sparse_scan_ro_blocks(sem, fae,
-                                      FAE_BLOCK_SIZE, 6 * 1024);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(1), fae, win, nullptr);
   ASSERT_TRUE(out.empty());
 }
 
@@ -3096,16 +3331,23 @@ TEST(ECSparseFuncs_FinishRead, WP3_ReconstructShard_SparseHole)
 {
   // Case B: shard 1 missing; its RO range [4K,8K) is a sparse hole (decoded zeros,
   // not in FAE) — must be absent from out_map.
+  //
+  // Must use XorErasureCode (not MockErasureCode) because decode() calls
+  // pad_on_shards() which allocates an uninitialised buffer for the missing
+  // shard before handing it to decode_chunks().  MockErasureCode is a no-op
+  // and leaves that garbage in place; the zero scan then wrongly marks shard 1
+  // as allocated.  XorErasureCode XORs shard0 (0xAB) with parity (0xAB) to
+  // produce shard1 = 0x00, which is the sparse-hole scenario under test.
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
-  MockErasureCode *ecode = new MockErasureCode(k2m1_k, k2m1_k + k2m1_m);
+  XorErasureCode *ecode = new XorErasureCode();
   ErasureCodeInterfaceRef ec_impl(ecode);
 
   ECCommon::read_result_t res(&s);
   // Shard 0 healthy: allocated at [0,4K); shard 1 missing (absent from sparse_extents_read).
   res.sparse_extents_read[shard_id_t(0)][0] = k2m1_chunk;
-  // Populate buffers_read: shard 0 non-zero, shard 2 (parity) non-zero.
-  // Shard 1 will be decoded as all-zero (MockErasureCode copies from in to out).
+  // D0 = 0xAB, P = D0 XOR D1 = 0xAB XOR 0x00 = 0xAB.
+  // decode will reconstruct D1 = D0 XOR P = 0xAB XOR 0xAB = 0x00.
   res.buffers_read.insert_in_shard(shard_id_t(0), 0, make_nonzero_buf(k2m1_chunk));
   res.buffers_read.insert_in_shard(shard_id_t(2), 0, make_nonzero_buf(k2m1_chunk));
 
@@ -3397,7 +3639,7 @@ TEST(ECSparseFuncs_ClipToMap, CL13_ManyExtentsOnlyMiddleInRange)
 }
 
 // --------------------------------------------------------------------------
-// ec_sparse_merge_ro_fiemap — additional edge cases
+// merge_shard_extent_maps — additional edge cases
 // --------------------------------------------------------------------------
 
 TEST(ECSparseFuncs_MergeRoFiemap, MH6_MultiStripeObject)
@@ -3414,10 +3656,10 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH6_MultiStripeObject)
   extents[shard_id_t(1)][0]            = k2m1_chunk;
   extents[shard_id_t(1)][k2m1_chunk]   = k2m1_chunk;
 
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
+  auto out = merge_shard_extent_maps(extents, s);
   // Two full stripes = 16K of contiguous RO space.
-  ASSERT_EQ(out.num_intervals(), 1u);
-  ASSERT_TRUE(out.contains(0, 2 * k2m1_swidth));
+  ASSERT_EQ(out.size(), 1u);
+  ASSERT_EQ(out.at(0), 2 * k2m1_swidth);
 }
 
 TEST(ECSparseFuncs_MergeRoFiemap, MH7_SparseObject_NonContiguous)
@@ -3430,10 +3672,10 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH7_SparseObject_NonContiguous)
   shard_id_map<std::map<uint64_t, uint64_t>> extents(k2m1_k + k2m1_m);
   extents[shard_id_t(0)][k2m1_chunk] = k2m1_chunk;  // shard 0, second stripe
 
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
-  ASSERT_EQ(out.num_intervals(), 1u);
-  ASSERT_TRUE(out.contains(k2m1_swidth, k2m1_chunk));
-  ASSERT_FALSE(out.intersects(0, k2m1_swidth));
+  auto out = merge_shard_extent_maps(extents, s);
+  ASSERT_EQ(out.size(), 1u);
+  ASSERT_EQ(out.at(k2m1_swidth), k2m1_chunk);
+  ASSERT_EQ(out.count(0), 0u);
 }
 
 TEST(ECSparseFuncs_MergeRoFiemap, MH8_OnlyParityShard)
@@ -3443,7 +3685,7 @@ TEST(ECSparseFuncs_MergeRoFiemap, MH8_OnlyParityShard)
                           std::vector<shard_id_t>{});
   shard_id_map<std::map<uint64_t, uint64_t>> extents(k2m1_k + k2m1_m);
   extents[shard_id_t(2)][0] = k2m1_chunk;
-  auto out = ec_sparse_merge_ro_fiemap(extents, s);
+  auto out = merge_shard_extent_maps(extents, s);
   ASSERT_TRUE(out.empty());
 }
 
@@ -3472,7 +3714,10 @@ TEST(ECSparseFuncs_Decode, DC4_ZerosForDecodePopulated)
   ECUtil::shard_extent_set_t zeros(k2m1_k + k2m1_m);
   zeros[shard_id_t(1)].insert(0, k2m1_chunk);
 
-  int r = ec_sparse_decode(sem, want, zeros, ec_impl, k2m1_swidth, nullptr);
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  sparse_extents[shard_id_t(0)];  // shard 0 replied (has data)
+  sparse_extents[shard_id_t(2)];  // shard 2 replied (has data)
+  int r = ec_sparse_decode(sem, want, zeros, sparse_extents, ec_impl, k2m1_swidth, nullptr);
   ASSERT_EQ(r, 0);
   ASSERT_TRUE(sem.contains_shard(shard_id_t(1)));
 }
@@ -3497,78 +3742,205 @@ TEST(ECSparseFuncs_Decode, DC5_AllShardsPresentNoDecodeNeeded)
   want[shard_id_t(1)].insert(0, k2m1_chunk);
   ECUtil::shard_extent_set_t zeros(k2m1_k + k2m1_m);
 
-  int r = ec_sparse_decode(sem, want, zeros, ec_impl, k2m1_swidth, nullptr);
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  sparse_extents[shard_id_t(0)];  // both data shards replied
+  sparse_extents[shard_id_t(1)];
+  int r = ec_sparse_decode(sem, want, zeros, sparse_extents, ec_impl, k2m1_swidth, nullptr);
   ASSERT_EQ(r, 0);
   // Shard 0 must still be present with original data.
   ASSERT_TRUE(sem.contains_shard(shard_id_t(0)));
   ASSERT_TRUE(sem.contains_shard(shard_id_t(1)));
 }
 
+TEST(ECSparseFuncs_Decode, DC6_EmptyFiemapShardUsedForReconstruction)
+{
+  // k=2, m=1.  Shard 1 is missing (no reply at all).  Shard 0 replied with
+  // an empty fiemap — its content in the read range is all-zero.  Parity
+  // shard 2 has actual data.  With sparse_extents_read entries for shards 0
+  // and 2, shard 0 must be zero-padded and combined with the parity shard to
+  // reconstruct shard 1.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  MockErasureCode *ecode = new MockErasureCode(k2m1_k, k2m1_k + k2m1_m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+
+  ECUtil::shard_extent_map_t sem(&s);
+  // Shard 0: empty fiemap — not in sem at all.
+  // Shard 2 (parity): has data.
+  sem.insert_in_shard(shard_id_t(2), 0, make_nonzero_buf(k2m1_chunk));
+
+  ECUtil::shard_extent_set_t want(k2m1_k + k2m1_m);
+  want[shard_id_t(0)].insert(0, k2m1_chunk);
+  want[shard_id_t(1)].insert(0, k2m1_chunk);
+
+  ECUtil::shard_extent_set_t zeros(k2m1_k + k2m1_m);
+
+  // Shard 0 replied with empty fiemap; shard 2 replied with data; shard 1 is absent.
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  sparse_extents[shard_id_t(0)];  // empty fiemap
+  sparse_extents[shard_id_t(2)];  // has data
+
+  int r = ec_sparse_decode(sem, want, zeros, sparse_extents, ec_impl, k2m1_swidth, nullptr);
+  ASSERT_EQ(r, 0);
+  // Shard 1 must have been reconstructed.
+  ASSERT_TRUE(sem.contains_shard(shard_id_t(1)));
+  // Shard 0 must have been zero-padded into sem.
+  ASSERT_TRUE(sem.contains_shard(shard_id_t(0)));
+}
+
+TEST(ECSparseFuncs_Decode, DC7_AllShardsEmptyFiemap)
+{
+  // k=2, m=1.  Shard 1 is missing.  All other shards (0 and parity 2)
+  // replied with empty fiemaps — the entire range is a sparse hole.
+  // decode() must succeed, reconstructing shard 1 as all-zeros.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  MockErasureCode *ecode = new MockErasureCode(k2m1_k, k2m1_k + k2m1_m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+
+  // buffers_read is completely empty (all shards returned empty fiemaps).
+  ECUtil::shard_extent_map_t sem(&s);
+
+  ECUtil::shard_extent_set_t want(k2m1_k + k2m1_m);
+  want[shard_id_t(0)].insert(0, k2m1_chunk);
+  want[shard_id_t(1)].insert(0, k2m1_chunk);
+
+  ECUtil::shard_extent_set_t zeros(k2m1_k + k2m1_m);
+
+  // Shards 0 and 2 replied with empty fiemaps; shard 1 is truly absent.
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  sparse_extents[shard_id_t(0)];  // empty fiemap
+  sparse_extents[shard_id_t(2)];  // empty fiemap
+
+  int r = ec_sparse_decode(sem, want, zeros, sparse_extents, ec_impl, k2m1_swidth, nullptr);
+  ASSERT_EQ(r, 0);
+  // Shard 1 must have been reconstructed (as all-zeros).
+  ASSERT_TRUE(sem.contains_shard(shard_id_t(1)));
+}
+
+TEST(ECSparseFuncs_Decode, DC8_UnevenShardAllocationDecodeSucceeds)
+{
+  // Regression test for the double-erasure failure seen in production.
+  //
+  // k=2, m=1.  Shard 0 is missing and must be reconstructed.  Shard 1 has
+  // data only in [0, chunk) — the second chunk is a sparse hole.  Parity
+  // shard 2 has data across the full [0, 2*chunk) range.
+  //
+  // shard_want_to_read is uniform: both shard 0 and shard 1 are requested
+  // over [0, 2*chunk), as prepare_sparse_read_request now produces when
+  // reconstruction is needed.
+  //
+  // Without the fix, shard 1 would be zero-padded only to its own per-shard
+  // want [0, chunk), dropping out of the slice iterator at the second stripe.
+  // That leaves both shard 0 (the target) and shard 1 (dropped) as erasures,
+  // giving nerrs=2=m and causing isa_decode to return -1.
+  //
+  // With the fix, shard 1 is padded to decode_range=[0, 2*chunk) and stays
+  // in the 'in' map for both stripes, so nerrs=1 throughout.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  MockErasureCode *ecode = new MockErasureCode(k2m1_k, k2m1_k + k2m1_m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+
+  ECUtil::shard_extent_map_t sem(&s);
+  // Shard 1: data only in first chunk (second chunk is a sparse hole).
+  sem.insert_in_shard(shard_id_t(1), 0, make_nonzero_buf(k2m1_chunk));
+  // Parity shard 2: data across the full two-chunk range.
+  sem.insert_in_shard(shard_id_t(2), 0, make_nonzero_buf(2 * k2m1_chunk));
+
+  // Uniform shard_want_to_read: both shard 0 and shard 1 over [0, 2*chunk).
+  ECUtil::shard_extent_set_t want(k2m1_k + k2m1_m);
+  want[shard_id_t(0)].insert(0, 2 * k2m1_chunk);
+  want[shard_id_t(1)].insert(0, 2 * k2m1_chunk);
+
+  ECUtil::shard_extent_set_t zeros(k2m1_k + k2m1_m);
+
+  // Shards 1 and 2 replied; shard 0 is absent (to be reconstructed).
+  shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents(k2m1_k + k2m1_m);
+  sparse_extents[shard_id_t(1)];  // has data (only first chunk allocated)
+  sparse_extents[shard_id_t(2)];  // has data (full range)
+
+  int r = ec_sparse_decode(sem, want, zeros, sparse_extents, ec_impl,
+                           2 * k2m1_swidth, nullptr);
+  ASSERT_EQ(r, 0);
+  // Shard 0 must have been reconstructed.
+  ASSERT_TRUE(sem.contains_shard(shard_id_t(0)));
+}
+
 // --------------------------------------------------------------------------
-// ec_sparse_scan_ro_blocks — additional edge cases
+// ec_sparse_scan_shard_extents — additional edge cases
 // --------------------------------------------------------------------------
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC10_ZeroLengthScanRange)
+TEST(ECSparseFuncs_ScanShardExtents, SC10_EmptyScanWindow)
 {
-  // scan_start == scan_end → the loop body never executes; output is always
-  // empty regardless of buffers_read content.
+  // An empty shard_scan_window means no block intersects it → output always empty.
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(0), 0, make_nonzero_buf(k2m1_chunk));
 
   interval_set<uint64_t> fae;
-  fae.insert(0, k2m1_swidth);  // FAE covers everything — still empty because no iterations
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, 0);
+  fae.insert(0, k2m1_swidth);  // FAE covers everything — irrelevant when window is empty
+  interval_set<uint64_t> empty_win;
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, empty_win, nullptr);
   ASSERT_TRUE(out.empty());
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC11_AlternatingZeroNonZeroBlocks)
+TEST(ECSparseFuncs_ScanShardExtents, SC11_AlternatingZeroNonZeroBlocks)
 {
-  // k=2, chunk=4K (FAE_BLOCK_SIZE=4K): blocks at 0,4K,8K,12K alternating
-  // non-zero / zero / non-zero / zero.  Only the non-zero blocks allocated.
+  // k=2, chunk=4K: two stripes.
+  // Shard 0: stripe 0 non-zero, stripe 1 non-zero → shard-space [0,4K) and [4K,8K).
+  // Shard 1: stripe 0 zero, stripe 1 zero → shard-space [0,4K) and [4K,8K).
+  // Full RO window [0,16K) → shard 0 shard-space [0,8K), shard 1 shard-space [0,8K).
   const uint64_t chunk = k2m1_chunk;
-  const uint64_t swidth = k2m1_swidth;  // 8K per stripe
-  // Two stripes → 16K RO; need k=2 geometry.
-  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, swidth, std::vector<shard_id_t>{});
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth, std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
-  // Stripe 0: shard 0 → RO[0,4K) non-zero; shard 1 → RO[4K,8K) zero.
   sem.insert_in_shard(shard_id_t(0), 0,     make_nonzero_buf(chunk));
   sem.insert_in_shard(shard_id_t(1), 0,     make_buf(chunk, '\x00'));
-  // Stripe 1: shard 0 → RO[8K,12K) non-zero; shard 1 → RO[12K,16K) zero.
   sem.insert_in_shard(shard_id_t(0), chunk, make_nonzero_buf(chunk));
   sem.insert_in_shard(shard_id_t(1), chunk, make_buf(chunk, '\x00'));
 
   interval_set<uint64_t> fae;
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, 4 * chunk);
+  auto win0 = shard_window(s, shard_id_t(0), 0, 4 * chunk);
+  auto win1 = shard_window(s, shard_id_t(1), 0, 4 * chunk);
+  auto out0 = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win0, nullptr);
+  auto out1 = ec_sparse_scan_shard_extents(sem, shard_id_t(1), fae, win1, nullptr);
 
-  ASSERT_TRUE(out.contains(0,        chunk));  // non-zero
-  ASSERT_FALSE(out.intersects(chunk, chunk));  // zero, no FAE
-  ASSERT_TRUE(out.contains(2*chunk,  chunk));  // non-zero
-  ASSERT_FALSE(out.intersects(3*chunk, chunk)); // zero, no FAE
+  // Shard 0: both stripe-blocks are non-zero → [0,8K) allocated (merged).
+  ASSERT_FALSE(out0.empty());
+  ASSERT_EQ(out0.at(0), 2 * chunk);
+  // Shard 1: both stripe-blocks are zero → nothing allocated.
+  ASSERT_TRUE(out1.empty());
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC12_FAECoversOnlyPartOfZeroBlock)
+TEST(ECSparseFuncs_ScanShardExtents, SC12_FAECoversOnlyPartOfZeroBlock)
 {
-  // FAE covers only [2K,4K) within a 4K block whose full content is zero.
-  // The FAE check uses the full block range [0,4K), which intersects the FAE →
-  // the whole block must be allocated.
+  // RO FAE [2K,4K) on shard 0 (chunk=4K) → shard-space FAE [2K,4K).
+  // scan_stride=4K so the block [0,4K) intersects FAE [2K,4K) → allocated.
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
   sem.insert_in_shard(shard_id_t(0), 0, make_buf(k2m1_chunk, '\x00'));
 
-  interval_set<uint64_t> fae;
-  fae.insert(2048, 2048);  // only second half of the block
+  interval_set<uint64_t> ro_fae;
+  ro_fae.insert(2048, 2048);  // RO [2K,4K) — within shard 0's chunk
+  interval_set<uint64_t> shard_fae =
+      s.ro_intervals_to_shard_intervals(ro_fae, shard_id_t(0));
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
 
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), shard_fae, win, nullptr);
   ASSERT_FALSE(out.empty());
-  ASSERT_TRUE(out.contains(0, FAE_BLOCK_SIZE));
+  // Shard-space: [0,4K) allocated.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);
 }
 
-TEST(ECSparseFuncs_ScanRoBlocks, SC13_ScanStartMidObject)
+TEST(ECSparseFuncs_ScanShardExtents, SC13_ScanWindowRestrictsToOneShard)
 {
-  // scan_start=4K: only the second block is scanned; first block ignored.
+  // RO window [4K,8K) → shard 0 shard-space window is empty (shard 0 covers
+  // RO [0,4K) in stripe 0); shard 1 window is [0,4K).
+  // Shard 0 data is non-zero but its window is empty → not scanned.
+  // Shard 1 data is non-zero and within its window → allocated.
   ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
                           std::vector<shard_id_t>{});
   ECUtil::shard_extent_map_t sem(&s);
@@ -3576,12 +3948,18 @@ TEST(ECSparseFuncs_ScanRoBlocks, SC13_ScanStartMidObject)
   sem.insert_in_shard(shard_id_t(1), 0, make_nonzero_buf(k2m1_chunk));
 
   interval_set<uint64_t> fae;
-  // Scan only [4K, 8K).
-  auto out = ec_sparse_scan_ro_blocks(sem, fae, k2m1_chunk, k2m1_swidth);
-  // Block [0,4K) was not scanned → absent.
-  ASSERT_FALSE(out.intersects(0, k2m1_chunk));
-  // Block [4K,8K) is non-zero → present.
-  ASSERT_TRUE(out.contains(k2m1_chunk, k2m1_chunk));
+  // RO window [4K,8K): shard 0 → empty; shard 1 → [0,4K).
+  auto win0 = shard_window(s, shard_id_t(0), k2m1_chunk, k2m1_swidth);
+  auto win1 = shard_window(s, shard_id_t(1), k2m1_chunk, k2m1_swidth);
+
+  auto out0 = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win0, nullptr);
+  auto out1 = ec_sparse_scan_shard_extents(sem, shard_id_t(1), fae, win1, nullptr);
+
+  // Shard 0 window is empty → output empty.
+  ASSERT_TRUE(out0.empty());
+  // Shard 1 block [0,4K) is within the window and non-zero → allocated.
+  ASSERT_EQ(out1.count(0), 1u);
+  ASSERT_EQ(out1.at(0), k2m1_chunk);
 }
 
 // --------------------------------------------------------------------------
@@ -3725,4 +4103,697 @@ TEST(ECSparseFuncs_FinishRead, WP13_GoodPath_FiemapHoleIsHole)
     ASSERT_LE(off + len, k2m1_chunk)
         << "[4K,8K) hole must not appear on good path";
   }
+}
+
+// --------------------------------------------------------------------------
+// ec_sparse_scan_shard_extents — new shard-space-specific tests
+// --------------------------------------------------------------------------
+
+TEST(ECSparseFuncs_ScanShardExtents, SC_Stage1NonZeroFirstWord)
+{
+  // Block whose first 8 bytes are non-zero and the rest are zero.
+  // Stage 1 fires immediately; stage 2 is not reached.
+  // k=2, chunk=4K, shard 0.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  ECUtil::shard_extent_map_t sem(&s);
+
+  // Build a 4K buffer: first 8 bytes non-zero, rest zero.
+  bufferlist bl;
+  bufferptr ptr = buffer::create(k2m1_chunk);
+  memset(ptr.c_str(), '\x00', k2m1_chunk);
+  memset(ptr.c_str(), '\xAB', sizeof(uint64_t));  // first 8 bytes non-zero
+  bl.append(ptr);
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  interval_set<uint64_t> fae;
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
+
+  // Block is allocated via stage-1.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);
+}
+
+TEST(ECSparseFuncs_ScanShardExtents, SC_Stage1PassesStage2Finds)
+{
+  // Block whose first 8 bytes are zero but remaining bytes are non-zero.
+  // Stage 1 passes (first word is zero); stage 2 finds the block non-zero.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  ECUtil::shard_extent_map_t sem(&s);
+
+  // Build a 4K buffer: first 8 bytes zero, remainder non-zero.
+  bufferlist bl;
+  bufferptr ptr = buffer::create(k2m1_chunk);
+  memset(ptr.c_str(), '\xAB', k2m1_chunk);
+  memset(ptr.c_str(), '\x00', sizeof(uint64_t));  // first 8 bytes zero
+  bl.append(ptr);
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  interval_set<uint64_t> fae;
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
+
+  // Block is allocated via stage-2.
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);
+}
+
+TEST(ECSparseFuncs_ScanShardExtents, SC_FAEShardSpace)
+{
+  // Shard-space FAE covers [0,4K); buffer is all-zero.
+  // FAE check fires; zero-detection is never reached.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  ECUtil::shard_extent_map_t sem(&s);
+  sem.insert_in_shard(shard_id_t(0), 0, make_buf(k2m1_chunk, '\x00'));
+
+  // FAE already in shard space — covers the block directly.
+  interval_set<uint64_t> shard_fae;
+  shard_fae.insert(0, k2m1_chunk);
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), shard_fae, win, nullptr);
+
+  ASSERT_EQ(out.count(0), 1u);
+  ASSERT_EQ(out.at(0), k2m1_chunk);
+}
+
+TEST(ECSparseFuncs_ScanShardExtents, SC_ScanWindowRestricts)
+{
+  // Shard 0 has two 4K blocks at shard-space [0,4K) and [4K,8K).
+  // Scan window covers only the first block [0,4K).
+  // The second block is non-zero but outside the window → absent from output.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  ECUtil::shard_extent_map_t sem(&s);
+  sem.insert_in_shard(shard_id_t(0), 0,          make_buf(k2m1_chunk, '\x00'));
+  sem.insert_in_shard(shard_id_t(0), k2m1_chunk, make_nonzero_buf(k2m1_chunk));
+
+  interval_set<uint64_t> fae;
+  // Window covers only shard-space [0,4K) (RO [0,4K) for shard 0).
+  auto win = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
+
+  // First block is zero and outside FAE → absent.
+  ASSERT_TRUE(out.empty());
+  // (The second block is non-zero but outside the window → not scanned.)
+}
+
+TEST(ECSparseFuncs_ScanShardExtents, SC_LargeChunkStrideIsFAEBlock)
+{
+  // chunk=64K, k=2: scan_stride = min(64K, 4K) = 4K.
+  // Shard 0 has a 64K buffer: sub-block [0,4K) zero, [4K,64K) non-zero.
+  // Scan window covers the full 64K shard-space chunk.
+  // Expected: [0,4K) excluded (zero, no FAE); [4K,64K) allocated (non-zero),
+  //           split into 4K sub-blocks each independently determined.
+  const uint64_t chunk = 64 * 1024;
+  const uint64_t fae_bs = FAE_BLOCK_SIZE;
+  ECUtil::stripe_info_t s(2u, 1u, 2 * chunk, std::vector<shard_id_t>{});
+  ECUtil::shard_extent_map_t sem(&s);
+
+  bufferlist bl;
+  bl.append_zero(fae_bs);                        // first 4K: zero
+  bl.append(std::string(chunk - fae_bs, '\xAB')); // remainder: non-zero
+  sem.insert_in_shard(shard_id_t(0), 0, bl);
+
+  interval_set<uint64_t> fae;
+  // RO window [0, chunk) covers only shard 0's first chunk.
+  auto win = shard_window(s, shard_id_t(0), 0, chunk);
+  auto out = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win, nullptr);
+
+  // First 4K sub-block is zero → absent.
+  ASSERT_EQ(out.count(0), 0u);
+  // Second sub-block [4K,8K) is non-zero → present.
+  ASSERT_EQ(out.count(fae_bs), 1u);
+  // All allocated sub-blocks coalesce into one entry starting at fae_bs.
+  ASSERT_EQ(out.at(fae_bs), chunk - fae_bs);
+}
+
+TEST(ECSparseFuncs_ScanShardExtents, SC_SmallChunkStride)
+{
+  // chunk=2K, k=2: scan_stride = min(2K, 4K) = 2K.
+  // Shard 0 shard-space [0,2K): zero.  Shard 1 shard-space [0,2K): non-zero.
+  // Each shard's 2K block is independently determined.
+  const uint64_t chunk = 2048;
+  ECUtil::stripe_info_t s(2u, 1u, 2 * chunk, std::vector<shard_id_t>{});
+  ECUtil::shard_extent_map_t sem(&s);
+  sem.insert_in_shard(shard_id_t(0), 0, make_buf(chunk, '\x00'));
+  sem.insert_in_shard(shard_id_t(1), 0, make_nonzero_buf(chunk));
+
+  interval_set<uint64_t> fae;
+  // RO window [0,4K) covers one stripe: shard 0 → [0,2K), shard 1 → [0,2K).
+  auto win0 = shard_window(s, shard_id_t(0), 0, FAE_BLOCK_SIZE);
+  auto win1 = shard_window(s, shard_id_t(1), 0, FAE_BLOCK_SIZE);
+
+  auto out0 = ec_sparse_scan_shard_extents(sem, shard_id_t(0), fae, win0, nullptr);
+  auto out1 = ec_sparse_scan_shard_extents(sem, shard_id_t(1), fae, win1, nullptr);
+
+  // Shard 0 block is zero → absent.
+  ASSERT_TRUE(out0.empty());
+  // Shard 1 block is non-zero → shard-space [0,2K) allocated.
+  ASSERT_EQ(out1.count(0), 1u);
+  ASSERT_EQ(out1.at(0), chunk);
+}
+
+// --------------------------------------------------------------------------
+// ec_sparse_finish_read — scan clipped to client range by Stage 3
+// --------------------------------------------------------------------------
+
+TEST(ECSparseFuncs_FinishRead, WP_ScanRangeRestriction)
+{
+  // Reconstruct path: both shards decoded as non-zero.  Client reads only
+  // RO [0,4K) (shard 0's range).  Shard 1's RO range is [4K,8K).
+  //
+  // The scan uses shard_want_to_read as the window, so shard 1 IS scanned
+  // and found allocated.  However, ec_sparse_clip_to_map at Stage 3 clips
+  // the merged result to [offset, req_end) = [0, 4K), so shard 1's range
+  // [4K,8K) must be absent from out_map.
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  MockErasureCode *ecode = new MockErasureCode(k2m1_k, k2m1_k + k2m1_m);
+  ErasureCodeInterfaceRef ec_impl(ecode);
+
+  ECCommon::read_result_t res(&s);
+  // Only shard 0 was read from disk.
+  res.sparse_extents_read[shard_id_t(0)][0] = k2m1_chunk;
+  // Provide non-zero buffers for both shards so MockErasureCode has data.
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, make_nonzero_buf(k2m1_chunk));
+  res.buffers_read.insert_in_shard(shard_id_t(1), 0, make_nonzero_buf(k2m1_chunk));
+
+  // shard_want_to_read covers both shards (whole-stripe decode).
+  ECUtil::shard_extent_set_t want(k2m1_k + k2m1_m);
+  want[shard_id_t(0)].insert(0, k2m1_chunk);
+  want[shard_id_t(1)].insert(0, k2m1_chunk);
+  ECCommon::read_request_t req(want, ECCommon::WantAttrs::No,
+                               ECCommon::WantOmapHeader::No,
+                               ECCommon::WantOmapKeys::No,
+                               "", 0, k2m1_swidth);
+
+  std::map<uint64_t, uint64_t> out_map;
+  interval_set<uint64_t> fae;
+
+  // Client requested offset=0, length=k2m1_chunk → req_end=4K.
+  // Stage 3 clips to [0,4K): shard 1's RO range [4K,8K) is excluded.
+  int r = ec_sparse_finish_read(s, res, req, 0, k2m1_chunk,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, nullptr, nullptr);
+  ASSERT_EQ(r, 0);
+  // [0,4K) from shard 0 is present (healthy shard, in client range).
+  ASSERT_GE(out_map.count(0), 1u);
+  // Nothing from shard 1's RO range [4K,8K) must appear — clipped by Stage 3.
+  for (auto &[off, len] : out_map) {
+    ASSERT_LE(off + len, k2m1_chunk)
+        << "shard 1 range [4K,8K) must not appear after clip: out_map entry ["
+        << off << "," << off + len << ")";
+  }
+}
+// ==========================================================================
+// ECSparseFuncs_XorDecode — integration tests using XorErasureCode
+//
+// These tests call ec_sparse_finish_read with needs_reconstruct=true.
+// D0 (shard 0) is always present and non-zero; D1 (shard 1) is missing and
+// must be reconstructed by XOR from D0 and P (shard 2 = parity = D0 XOR D1).
+//
+// Because XorErasureCode::decode_chunks actually performs XOR, the content of
+// the reconstructed shard is deterministic and verifiable.
+//
+// Standard geometry: k=2, chunk=4K, stripe=8K, scan_stride=min(4K,4K)=4K.
+// Large-chunk geometry: k=2, chunk=8K, stripe=16K, scan_stride=min(8K,4K)=4K.
+//
+// Shard-space → RO-space mapping (standard, chunk=4K):
+//   shard 0 [0,4K) → RO [0,4K)
+//   shard 1 [0,4K) → RO [4K,8K)
+//
+// Shard-space → RO-space mapping (large-chunk, chunk=8K):
+//   shard 0 [0,8K) → RO [0,8K)   (two 4K scan blocks)
+//   shard 1 [0,8K) → RO [8K,16K) (two 4K scan blocks)
+// ==========================================================================
+
+// ---------------------------------------------------------------------------
+// XD1: standard geometry, D1 reconstructed as all-zero, no FAE.
+// Expected: D1's RO range [4K,8K) absent from out_map (sparse hole).
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD1_AllZeroNoFAE)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  // D0 = non-zero; expected_D1 = all-zero; P = D0 XOR D1 = D0 XOR 0 = D0.
+  bufferlist d0   = make_nonzero_buf(k2m1_chunk);
+  bufferlist exp1 = make_buf(k2m1_chunk, '\x00');
+  bufferlist p    = make_xor_parity(d0, exp1);
+
+  ECCommon::read_result_t res(&s);
+  // D0 healthy, in sparse_extents_read; D1 missing (not present).
+  res.sparse_extents_read[shard_id_t(0)][0] = k2m1_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  interval_set<uint64_t> fae;  // empty — no force-allocated extents
+
+  int r = ec_sparse_finish_read(s, res, req, 0, k2m1_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // D0's RO range [0,4K) present (non-zero, healthy shard).
+  ASSERT_GE(out_map.count(0), 1u);
+  // D1's RO range [4K,8K) absent (all-zero, no FAE → sparse hole).
+  for (auto &[off, len] : out_map) {
+    ASSERT_LE(off + len, k2m1_chunk)
+        << "D1 RO range [4K,8K) must be absent (all-zero, no FAE)";
+  }
+  // out_bl length must match total allocated bytes.
+  uint64_t total = 0;
+  for (auto &[off, len] : out_map) total += len;
+  ASSERT_EQ(out_bl.length(), total);
+}
+
+// ---------------------------------------------------------------------------
+// XD2: standard geometry, D1 reconstructed as all-zero, FAE covers D1's range.
+// Expected: D1's RO range [4K,8K) present (force-allocated); portion is zero.
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD2_AllZeroWithFAE)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  bufferlist d0   = make_nonzero_buf(k2m1_chunk);
+  bufferlist exp1 = make_buf(k2m1_chunk, '\x00');
+  bufferlist p    = make_xor_parity(d0, exp1);
+
+  ECCommon::read_result_t res(&s);
+  res.sparse_extents_read[shard_id_t(0)][0] = k2m1_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  interval_set<uint64_t> fae;
+  fae.insert(k2m1_chunk, k2m1_chunk);  // RO [4K,8K) force-allocated
+
+  int r = ec_sparse_finish_read(s, res, req, 0, k2m1_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // Both ranges must appear (D0 non-zero, D1 zero-but-FAE).
+  bool d1_covered = false;
+  for (auto &[off, len] : out_map) {
+    if (off <= k2m1_chunk && off + len > k2m1_chunk) { d1_covered = true; break; }
+  }
+  ASSERT_TRUE(d1_covered) << "D1 RO range [4K,8K) must be present due to FAE";
+
+  // Isolate D1's bytes in out_bl.  Entries may be coalesced across the
+  // D0/D1 boundary, so count only the portion on each side.
+  uint64_t d0_bytes = 0;
+  for (auto &[off, len] : out_map) {
+    uint64_t d0_end = std::min(off + len, k2m1_chunk);
+    if (d0_end > off) d0_bytes += d0_end - off;
+  }
+  // D1 bytes start at d0_bytes in out_bl.
+  // An entry may span the D0/D1 boundary (coalesced), so count only the
+  // portion at or beyond k2m1_chunk.
+  uint64_t d1_bytes = 0;
+  for (auto &[off, len] : out_map) {
+    if (off + len > k2m1_chunk) {
+      uint64_t start = std::max(off, k2m1_chunk);
+      d1_bytes += (off + len) - start;
+    }
+  }
+  if (d1_bytes > 0) {
+    bufferlist d1_bl;
+    d1_bl.substr_of(out_bl, d0_bytes, d1_bytes);
+    ASSERT_TRUE(d1_bl.is_zero())
+        << "D1 portion of out_bl must be all-zero (reconstructed from zero)";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// XD3: standard geometry, D1 reconstructed as all-data (0xAB), no FAE.
+// Expected: D1's RO range [4K,8K) present; D1 bytes are all 0xAB.
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD3_AllData)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  bufferlist d0   = make_nonzero_buf(k2m1_chunk);       // 0xAB
+  bufferlist exp1 = make_buf(k2m1_chunk, '\xAB');        // 0xAB
+  bufferlist p    = make_xor_parity(d0, exp1);           // 0xAB XOR 0xAB = 0x00
+
+  ECCommon::read_result_t res(&s);
+  res.sparse_extents_read[shard_id_t(0)][0] = k2m1_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  interval_set<uint64_t> fae;
+
+  int r = ec_sparse_finish_read(s, res, req, 0, k2m1_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // D1's RO range [4K,8K) must be present (non-zero data).
+  // The entry may be coalesced with D0 (e.g. {0: 8192}), so check that
+  // some entry spans into [4K,8K) rather than requiring a separate key.
+  bool d1_present = false;
+  for (auto &[off, len] : out_map) {
+    if (off + len > k2m1_chunk) { d1_present = true; break; }
+  }
+  ASSERT_TRUE(d1_present) << "D1 RO range [4K,8K) must be present (non-zero data)";
+
+  // Isolate D1's bytes: for entries spanning the boundary, take only the
+  // portion at or beyond k2m1_chunk.
+  uint64_t d0_bytes = 0;
+  uint64_t d1_bytes = 0;
+  for (auto &[off, len] : out_map) {
+    uint64_t d0_end = std::min(off + len, k2m1_chunk);
+    if (d0_end > off) d0_bytes += d0_end - off;
+    if (off + len > k2m1_chunk) {
+      uint64_t start = std::max(off, k2m1_chunk);
+      d1_bytes += (off + len) - start;
+    }
+  }
+  ASSERT_GT(d1_bytes, 0u);
+  bufferlist d1_bl;
+  d1_bl.substr_of(out_bl, d0_bytes, d1_bytes);
+  ASSERT_FALSE(d1_bl.is_zero())
+      << "D1 portion must be non-zero (decoded from 0xAB data)";
+  // Content check: D1 must equal exp1 (0xAB pattern).
+  bufferlist expected;
+  expected.append(make_buf(d1_bytes, '\xAB'));
+  ASSERT_TRUE(d1_bl.contents_equal(expected));
+}
+
+// ---------------------------------------------------------------------------
+// XD4: standard geometry, D1 first 8 bytes zero, rest 0xAB (stage-2 trigger).
+// Expected: whole D1 chunk allocated; D1 bytes are non-zero.
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD4_ZeroFirstWordDataRest)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  // Build exp1: first 8 bytes zero, remaining bytes 0xAB.
+  bufferlist exp1;
+  exp1.append(make_buf(8, '\x00'));
+  exp1.append(make_buf(k2m1_chunk - 8, '\xAB'));
+
+  bufferlist d0 = make_nonzero_buf(k2m1_chunk);  // 0xAB
+  bufferlist p  = make_xor_parity(d0, exp1);
+
+  ECCommon::read_result_t res(&s);
+  res.sparse_extents_read[shard_id_t(0)][0] = k2m1_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  interval_set<uint64_t> fae;
+
+  int r = ec_sparse_finish_read(s, res, req, 0, k2m1_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // D1's RO range must be allocated (stage-2 scan finds non-zero rest).
+  bool d1_present = false;
+  for (auto &[off, len] : out_map) {
+    if (off + len > k2m1_chunk) { d1_present = true; break; }
+  }
+  ASSERT_TRUE(d1_present)
+      << "D1 must be allocated: first word zero but rest non-zero (stage 2)";
+
+  // D1 bytes must be non-zero overall.
+  uint64_t d0_bytes = 0, d1_bytes = 0;
+  for (auto &[off, len] : out_map) {
+    uint64_t d0_end = std::min(off + len, k2m1_chunk);
+    if (d0_end > off) d0_bytes += d0_end - off;
+    if (off + len > k2m1_chunk) {
+      uint64_t start = std::max(off, k2m1_chunk);
+      d1_bytes += (off + len) - start;
+    }
+  }
+  ASSERT_GT(d1_bytes, 0u);
+  bufferlist d1_bl;
+  d1_bl.substr_of(out_bl, d0_bytes, d1_bytes);
+  ASSERT_FALSE(d1_bl.is_zero());
+}
+
+// ---------------------------------------------------------------------------
+// XD5: standard geometry, D1 first 8 bytes 0xAB, rest zero (stage-1 trigger).
+// Expected: whole D1 chunk allocated; D1 bytes are non-zero.
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD5_DataFirstWordZeroRest)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, k2m1_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  // Build exp1: first 8 bytes 0xAB, remaining bytes zero.
+  bufferlist exp1;
+  exp1.append(make_buf(8, '\xAB'));
+  exp1.append(make_buf(k2m1_chunk - 8, '\x00'));
+
+  bufferlist d0 = make_nonzero_buf(k2m1_chunk);  // 0xAB
+  bufferlist p  = make_xor_parity(d0, exp1);
+
+  ECCommon::read_result_t res(&s);
+  res.sparse_extents_read[shard_id_t(0)][0] = k2m1_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  interval_set<uint64_t> fae;
+
+  int r = ec_sparse_finish_read(s, res, req, 0, k2m1_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // D1's RO range must be allocated (stage-1 fires on first word 0xAB).
+  bool d1_present = false;
+  for (auto &[off, len] : out_map) {
+    if (off + len > k2m1_chunk) { d1_present = true; break; }
+  }
+  ASSERT_TRUE(d1_present)
+      << "D1 must be allocated: first word non-zero (stage 1)";
+
+  uint64_t d0_bytes = 0, d1_bytes = 0;
+  for (auto &[off, len] : out_map) {
+    uint64_t d0_end = std::min(off + len, k2m1_chunk);
+    if (d0_end > off) d0_bytes += d0_end - off;
+    if (off + len > k2m1_chunk) {
+      uint64_t start = std::max(off, k2m1_chunk);
+      d1_bytes += (off + len) - start;
+    }
+  }
+  ASSERT_GT(d1_bytes, 0u);
+  bufferlist d1_bl;
+  d1_bl.substr_of(out_bl, d0_bytes, d1_bytes);
+  ASSERT_FALSE(d1_bl.is_zero());
+}
+
+// ---------------------------------------------------------------------------
+// Large-chunk geometry constants used by XD6–XD8.
+// chunk=8K, stripe=16K, scan_stride=min(8K,4K)=4K → two 4K scan blocks per shard.
+// Shard 1 shard-space [0,8K) maps to RO [8K,16K).
+// ---------------------------------------------------------------------------
+static constexpr uint64_t lc_chunk  = 8192;   // 8 KiB
+static constexpr uint64_t lc_swidth = 2 * lc_chunk;  // 16 KiB
+
+// ---------------------------------------------------------------------------
+// XD6: large-chunk, D1 first 4K block zero, second 4K block 0xAB.
+// Expected: only the second 4K of D1's RO range present (RO [12K,16K)).
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD6_LargeChunk_FirstBlockZeroSecondData)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, lc_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  // exp1: first 4K zero, second 4K 0xAB.
+  bufferlist exp1;
+  exp1.append(make_buf(4096, '\x00'));
+  exp1.append(make_buf(4096, '\xAB'));
+
+  bufferlist d0 = make_nonzero_buf(lc_chunk);   // 0xAB throughout
+  bufferlist p  = make_xor_parity(d0, exp1);
+
+  ECCommon::read_result_t res(&s);
+  res.sparse_extents_read[shard_id_t(0)][0] = lc_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  interval_set<uint64_t> fae;
+
+  int r = ec_sparse_finish_read(s, res, req, 0, lc_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // D1 shard-space: first 4K block (→ RO [8K,12K)) must be absent.
+  // D1 shard-space: second 4K block (→ RO [12K,16K)) must be present.
+  bool first_block_absent = true;
+  bool second_block_present = false;
+  for (auto &[off, len] : out_map) {
+    // RO [8K,12K) — first scan block of D1.
+    if (off < lc_chunk + 4096 && off + len > lc_chunk) {
+      first_block_absent = false;
+    }
+    // RO [12K,16K) — second scan block of D1.
+    if (off <= lc_chunk + 4096 && off + len > lc_chunk + 4096) {
+      second_block_present = true;
+    }
+  }
+  ASSERT_TRUE(first_block_absent)
+      << "D1 first 4K scan block (RO [8K,12K)) must be absent (all-zero)";
+  ASSERT_TRUE(second_block_present)
+      << "D1 second 4K scan block (RO [12K,16K)) must be present (0xAB)";
+}
+
+// ---------------------------------------------------------------------------
+// XD7: large-chunk, D1 first 4K block 0xAB, second 4K block zero.
+// Expected: only the first 4K of D1's RO range present (RO [8K,12K)).
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD7_LargeChunk_FirstBlockDataSecondZero)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, lc_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  // exp1: first 4K 0xAB, second 4K zero.
+  bufferlist exp1;
+  exp1.append(make_buf(4096, '\xAB'));
+  exp1.append(make_buf(4096, '\x00'));
+
+  bufferlist d0 = make_nonzero_buf(lc_chunk);
+  bufferlist p  = make_xor_parity(d0, exp1);
+
+  ECCommon::read_result_t res(&s);
+  res.sparse_extents_read[shard_id_t(0)][0] = lc_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  interval_set<uint64_t> fae;
+
+  int r = ec_sparse_finish_read(s, res, req, 0, lc_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // D1 first 4K block (RO [8K,12K)) must be present.
+  bool first_block_present = false;
+  // D1 second 4K block (RO [12K,16K)) must be absent.
+  bool second_block_present = false;
+  for (auto &[off, len] : out_map) {
+    if (off <= lc_chunk && off + len > lc_chunk) {
+      first_block_present = true;
+    }
+    if (off < lc_swidth && off + len > lc_chunk + 4096) {
+      second_block_present = true;
+    }
+  }
+  ASSERT_TRUE(first_block_present)
+      << "D1 first 4K scan block (RO [8K,12K)) must be present (0xAB)";
+  ASSERT_FALSE(second_block_present)
+      << "D1 second 4K scan block (RO [12K,16K)) must be absent (all-zero)";
+}
+
+// ---------------------------------------------------------------------------
+// XD8: large-chunk, both D1 blocks zero but FAE covers only first 4K of D1.
+// Expected: only first 4K of D1's RO range present (RO [8K,12K));
+// second 4K absent (zero, not in FAE).
+// ---------------------------------------------------------------------------
+TEST(ECSparseFuncs_XorDecode, XD8_LargeChunk_FAECoversOnlyFirstBlock)
+{
+  ECUtil::stripe_info_t s(k2m1_k, k2m1_m, lc_swidth,
+                          std::vector<shard_id_t>{});
+  XorErasureCode *xcode = new XorErasureCode();
+  ErasureCodeInterfaceRef ec_impl(xcode);
+
+  // Both D1 blocks are zero.
+  bufferlist exp1 = make_buf(lc_chunk, '\x00');
+
+  bufferlist d0 = make_nonzero_buf(lc_chunk);
+  bufferlist p  = make_xor_parity(d0, exp1);  // p = d0 XOR 0 = d0
+
+  ECCommon::read_result_t res(&s);
+  res.sparse_extents_read[shard_id_t(0)][0] = lc_chunk;
+  res.buffers_read.insert_in_shard(shard_id_t(0), 0, d0);
+  res.buffers_read.insert_in_shard(shard_id_t(2), 0, p);
+
+  ECCommon::read_request_t req = make_xor_stripe_request(s);
+  std::map<uint64_t, uint64_t> out_map;
+  bufferlist out_bl;
+  // FAE covers RO [8K,12K) — only the first 4K scan block of D1.
+  interval_set<uint64_t> fae;
+  fae.insert(lc_chunk, 4096);
+
+  int r = ec_sparse_finish_read(s, res, req, 0, lc_swidth,
+                                /*needs_reconstruct=*/true,
+                                ec_impl, fae, out_map, &out_bl, nullptr);
+  ASSERT_EQ(r, 0);
+
+  // First 4K of D1's RO range [8K,12K) must be present (FAE).
+  bool first_block_present = false;
+  // Second 4K of D1's RO range [12K,16K) must be absent (zero, no FAE).
+  bool second_block_present = false;
+  for (auto &[off, len] : out_map) {
+    if (off <= lc_chunk && off + len > lc_chunk) {
+      first_block_present = true;
+    }
+    if (off < lc_swidth && off + len > lc_chunk + 4096) {
+      second_block_present = true;
+    }
+  }
+  ASSERT_TRUE(first_block_present)
+      << "D1 first 4K scan block (RO [8K,12K)) must be present (FAE)";
+  ASSERT_FALSE(second_block_present)
+      << "D1 second 4K scan block (RO [12K,16K)) must be absent (zero, no FAE)";
+
+  // D1 first-block bytes in out_bl must be all-zero.
+  uint64_t d0_bytes = 0, d1_bytes = 0;
+  for (auto &[off, len] : out_map) {
+    uint64_t d0_end = std::min(off + len, lc_chunk);
+    if (d0_end > off) d0_bytes += d0_end - off;
+    if (off + len > lc_chunk) {
+      uint64_t start = std::max(off, lc_chunk);
+      d1_bytes += (off + len) - start;
+    }
+  }
+  ASSERT_GT(d1_bytes, 0u);
+  bufferlist d1_bl;
+  d1_bl.substr_of(out_bl, d0_bytes, d1_bytes);
+  ASSERT_TRUE(d1_bl.is_zero())
+      << "D1 FAE portion of out_bl must be all-zero (reconstructed as zero)";
 }
