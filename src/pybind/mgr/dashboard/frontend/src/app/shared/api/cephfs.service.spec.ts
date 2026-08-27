@@ -156,6 +156,16 @@ describe('CephfsService', () => {
     expect(req.request.body).toBeNull();
   });
 
+  it('should list snapshots for a mirrored path', () => {
+    const path = '/volumes/Group1/A1/subvol';
+    service.listMirrorPathSnapshots('testfs', path).subscribe();
+    const req = httpTesting.expectOne(
+      (request) =>
+        request.url === 'api/cephfs/mirror/testfs/snapshots' && request.params.get('path') === path
+    );
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should list mirror checkpoints for a path', () => {
     const path = '/volumes/Group1/A1/subvol';
     service.listMirrorCheckpoints('testfs', path).subscribe();

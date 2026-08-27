@@ -5,7 +5,7 @@ import _ from 'lodash';
 import { Observable } from 'rxjs';
 
 import { cdEncode, cdEncodeNot } from '../decorators/cd-encode';
-import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
+import { CephfsDir, CephfsQuotas, CephfsSnapshot } from '../models/cephfs-directory-models';
 import { shareReplay } from 'rxjs/operators';
 import {
   Daemon,
@@ -200,6 +200,15 @@ export class CephfsService {
   removeMirrorDirectory(@cdEncodeNot fsName: string, @cdEncodeNot path: string): Observable<any> {
     return this.http.delete(`${this.baseURL}/mirror/directory`, {
       params: { fs_name: fsName, path }
+    });
+  }
+
+  listMirrorPathSnapshots(
+    @cdEncodeNot fsName: string,
+    @cdEncodeNot path: string
+  ): Observable<CephfsSnapshot[]> {
+    return this.http.get<CephfsSnapshot[]>(`${this.baseURL}/mirror/${fsName}/snapshots`, {
+      params: { path }
     });
   }
 
