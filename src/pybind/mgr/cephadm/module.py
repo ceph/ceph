@@ -3868,6 +3868,20 @@ Then run the following:
             raise OrchestratorError(f'Cannot find pool "{pool}" for '
                                     f'service {service_name}')
 
+    def _check_pool_not_erasure_coded(self, pool: str, service_name: str) -> None:
+        osd_map = self.get('osd_map')
+        pools = osd_map.get('pools', []) if isinstance(osd_map, dict) else []
+        for p in pools:
+            if p['pool_name'] == pool:
+                if p.get('type') == 3:
+                    raise OrchestratorError(
+                        f'Pool "{pool}" is an erasure-coded pool. '
+                        f'Service "{service_name}" requires a replicated pool '
+                        f'because it uses OMAP objects which are not supported '
+                        f'on erasure-coded pools.'
+                    )
+                return
+
     def _add_daemon(self,
                     daemon_type: str,
                     spec: ServiceSpec) -> List[str]:
@@ -4661,6 +4675,7 @@ Then run the following:
                 NvmeofMetadataPoolHelper(self).create_pool_if_needed()
             try:
                 self._check_pool_exists(nvmeof_spec.pool, nvmeof_spec.service_name())
+                self._check_pool_not_erasure_coded(nvmeof_spec.pool, nvmeof_spec.service_name())
             except OrchestratorError as e:
                 self.log.debug(f"{e}")
                 raise
