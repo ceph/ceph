@@ -36,16 +36,19 @@ struct LanceDBObjectStoreProvider;
  *
  * @param driver  Non-null pointer to rgw::sal::Driver (env.driver in RGW handlers)
  * @param dpp     Non-null pointer to DoutPrefixProvider for logging
+ * @param tenant  Tenant of the buckets accessed through the provider, NULL or
+ *                empty for the default tenant
  *
  * @return Non-null pointer to LanceDBObjectStoreProvider on success,
- *         NULL if either driver or dpp is NULL
+ *         NULL if either driver or dpp is NULL, or if tenant is not valid UTF-8
  *
  * @note Caller must either:
  *   - Pass to lancedb_registry_insert_provider() (transfers ownership), OR
  *   - Free with rgw_lancedb_store_free_provider()
  * @note Both driver and dpp must remain valid for provider lifetime
  */
-struct LanceDBObjectStoreProvider* rgw_lancedb_store_create_provider(void* driver, const void* dpp);
+struct LanceDBObjectStoreProvider* rgw_lancedb_store_create_provider(void* driver, const void* dpp,
+                                                                    const char* tenant);
 
 /**
  * Free a provider created by rgw_lancedb_store_create_provider.

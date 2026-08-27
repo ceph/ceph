@@ -80,9 +80,11 @@ inline bool is_rgw_backend(BackendType type) {
   return type == BackendType::RGW;
 }
 
-// Create a LanceDB session with RGW provider
+// Create a LanceDB session with RGW provider. the session is per tenant, since
+// two tenants may use the same vector bucket name
 LanceDBSession* create_rgw_session(const DoutPrefixProvider* dpp,
     rgw::sal::Driver* driver,
+    const std::string& tenant,
     const void* options = nullptr);
 
 /*
