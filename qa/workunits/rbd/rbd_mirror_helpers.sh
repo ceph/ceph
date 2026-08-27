@@ -871,11 +871,25 @@ test_image_replay_state()
     local pool=$2
     local image=$3
     local test_state=$4
-    local current_state=stopped
+    local expected_state
+
+    # A start request fails while the image replayer is still Stopping.
+    # Wait for the exact state before allowing the test to continue.
+    case "${test_state}" in
+        started)
+            expected_state=Replaying
+            ;;
+        stopped)
+            expected_state=Stopped
+            ;;
+        *)
+            fail "unknown image replay state: ${test_state}"
+            return 1
+            ;;
+    esac
 
     admin_daemons "${cluster}" rbd mirror status ${pool}/${image} --format xml-pretty || { fail; return 1; }
-    test "Replaying" = "$(xmlstarlet sel -t -v "//image_replayer/state" < "$CMD_STDOUT" )" && current_state=started
-    test "${test_state}" = "${current_state}"
+    test "${expected_state}" = "$(xmlstarlet sel -t -v "//image_replayer/state" < "$CMD_STDOUT" )"
 }
 
 wait_for_image_replay_state()
@@ -1969,7 +1983,9 @@ stop_mirror_while_group_snapshot_incomplete() {
     local count=0
     local state=""
     local snaps_synced="false"
-    while [ "${count}" -lt 60 ]; do
+    # Snapshot preparation can finish in less than a second. Poll frequently
+    # so the daemon can be stopped while the snapshot is still CREATING.
+    while [ "${count}" -lt 600 ]; do
         run_cmd "rbd --cluster ${cluster} group snap ls ${pool}/${group} --format xml --pretty-format"
         state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT") || { state=''; }
         snaps_synced=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT") || { snaps_synced='false'; }
@@ -1981,7 +1997,7 @@ stop_mirror_while_group_snapshot_incomplete() {
         fi
 
         count=$((count+1))
-        sleep 1;
+        sleep 0.1;
     done
 
     if [ -z "${state}" ]; then
@@ -2635,8 +2651,12 @@ get_pool_obj_count()
     local obj_name=$3
     local -n _count=$4
 
-    run_cmd "rados --cluster ${cluster} -p ${pool} ls --format xml-pretty"
-    _count="$(xmlstarlet sel -t -v "count(//objects/object[name='${obj_name}'])" < "$CMD_STDOUT")"
+    # avoid listing all objects while deferred deletion is in progress
+    if try_cmd "rados --cluster ${cluster} -p ${pool} stat ${obj_name}"; then
+        _count=1
+    else
+        _count=0
+    fi
 }
 
 get_image_snap_id_from_group_snap_info()
@@ -2751,6 +2771,24 @@ get_image_snap_complete()
     local -n _is_complete=$4
     run_cmd "rbd --cluster=${cluster} snap list --all --format xml --pretty-format ${image_spec}"
     _is_complete="$(xmlstarlet sel -t -v "//snapshots/snapshot[id='${snap_id}']/namespace/complete" < "$CMD_STDOUT")"
+}
+
+wait_for_image_snap_complete()
+{
+    local cluster=$1
+    local image_spec=$2
+    local snap_id=$3
+    local expected_complete=$4
+    local is_complete s
+
+    for s in 0 0.1 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32 64 64; do
+        sleep "${s}"
+        get_image_snap_complete "${cluster}" "${image_spec}" "${snap_id}" is_complete || continue
+        [ "${is_complete}" = "${expected_complete}" ] && return 0
+    done
+
+    fail "wait for image snapshot ${snap_id} of ${image_spec} to have complete=${expected_complete} failed on ${cluster}"
+    return 1
 }
 
 check_group_snap_doesnt_exist()
@@ -3031,6 +3069,57 @@ test_group_snap_state()
     elif [ "${expected_state}" != "${state}" ]; then
         fail "group snapshot ${group_snap_id} state mismatch: expected state '${expected_state}', got '${state}'"; return 1;
     fi
+}
+
+wait_for_group_snap_phase()
+{
+    local cluster=$1
+    local group_spec=$2
+    local group_snap_id=$3
+    local expected_state=$4
+    local expected_complete=$5
+    local count=0
+    local state complete
+
+    while [ "${count}" -lt 600 ]; do
+        if [ "${count}" -gt 0 ]; then
+            sleep 0.1
+        fi
+        if ! try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format"; then
+            count=$((count+1))
+            continue
+        fi
+
+        # a missing snapshot is expected during the first few polls
+        state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/state" < "$CMD_STDOUT") || state=""
+        complete=$(xmlstarlet sel -t -v "//group_snaps/group_snap[id='${group_snap_id}']/namespace/complete" < "$CMD_STDOUT") || complete=""
+        if [ "${state}" = "${expected_state}" ] && [ "${complete}" = "${expected_complete}" ]; then
+            return 0
+        fi
+        count=$((count+1))
+    done
+
+    fail "wait for group snapshot ${group_snap_id} phase ${expected_state}, complete=${expected_complete} failed on ${cluster}"
+    return 1
+}
+
+wait_for_user_group_snap_state()
+{
+    local cluster=$1
+    local group_spec=$2
+    local snap_name=$3
+    local expected_state=$4
+    local state s
+
+    for s in 0 0.1 0.2 0.4 0.8 1.6 2 2 4 4 8 8 16 16 32 32 64 64; do
+        sleep "${s}"
+        try_cmd "rbd --cluster ${cluster} group snap list ${group_spec} --format xml --pretty-format" || continue
+        state=$(xmlstarlet sel -t -v "//group_snaps/group_snap[snapshot='${snap_name}']/state" < "$CMD_STDOUT") || state=""
+        [ "${state}" = "${expected_state}" ] && return 0
+    done
+
+    fail "wait for user group snapshot ${snap_name} state ${expected_state} failed on ${cluster}"
+    return 1
 }
 
 test_group_snap_sync_complete()

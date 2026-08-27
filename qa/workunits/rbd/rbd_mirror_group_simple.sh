@@ -2637,14 +2637,11 @@ test_force_promote()
     wait_for_image_size_matches "${secondary_cluster}" "${pool}/${image_prefix}2" $(("${image_size}"+4*1024*1024))
   elif [ "${scenario}" = 'image_shrink' ]; then
     wait_for_image_size_matches "${secondary_cluster}" "${pool}/${image_prefix}3" $(("${image_size}"-4*1024*1024))
-  elif [ "${scenario}" = 'no_change' ] || [ "${scenario}" = 'no_change_primary_up' ]; then
-    # ensure that a small image has completed its sync
-    local snap_id
-    get_newest_mirror_snapshot_id_on_primary "${primary_cluster}" "${pool}/${image_prefix}0" snap_id
-    wait_for_snap_id_present "${secondary_cluster}" "${pool}/${image_prefix}0" "${snap_id}"
-    wait_for_snapshot_sync_complete "${secondary_cluster}" "${primary_cluster}" "${pool}" "${pool}" "${image_prefix}0" "${snap_id}"
   fi
 
+  # Wait until preparation has finished and the group has started sync. The
+  # image status can move from 100% to complete before it can be polled.
+  wait_for_group_snap_phase "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 'created' 'false'
 
   # stop the daemon to prevent further syncing of snapshots
   stop_mirrors "${secondary_cluster}" '-9'
@@ -2653,8 +2650,7 @@ test_force_promote()
   test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}" 
 
   if [ "${scenario}" = 'no_change' ] || [ "${scenario}" = 'no_change_primary_up' ]; then
-    # if we waited for a small image to complete its sync then the big image should still be mid-sync
-    # if we didn't wait for the small image to sync then its possible that the big image hasn't even started syncing the latest image yet
+    # the large image should still be syncing
     local big_image_snap_id
     get_newest_mirror_snapshot_id_on_primary "${primary_cluster}" "${pool}/${big_image}" big_image_snap_id
     test_snap_complete "${secondary_cluster}" "${pool}/${big_image}" "${big_image_snap_id}" 'false' || fail "big image is synced"
@@ -3125,6 +3121,86 @@ test_interrupted_sync_restarted_daemon()
   images_remove "${primary_cluster}" "${pool}/${image_prefix}" "${image_count}"
 }
 
+# test group-coordinated image snapshot replay phases
+declare -a test_image_replayer_snapshot_phases_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}")
+
+test_image_replayer_snapshot_phases_scenarios=1
+
+test_image_replayer_snapshot_phases()
+{
+  local primary_cluster=$1 ; shift
+  local secondary_cluster=$1 ; shift
+  local pool=$1 ; shift
+  local group=test-group0
+  local small_image=test-image-small
+  local big_image=test-image-big
+  local image_count=2
+
+  start_mirrors "${primary_cluster}"
+  start_mirrors "${secondary_cluster}"
+
+  group_create "${primary_cluster}" "${pool}/${group}"
+  image_create "${primary_cluster}" "${pool}/${small_image}" 1G
+  image_create "${primary_cluster}" "${pool}/${big_image}" 4G
+  group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/${small_image}"
+  group_image_add "${primary_cluster}" "${pool}/${group}" "${pool}/${big_image}"
+  mirror_group_enable "${primary_cluster}" "${pool}/${group}"
+
+  wait_for_group_present "${secondary_cluster}" "${pool}" "${group}" "${image_count}"
+  wait_for_group_replay_started "${secondary_cluster}" "${pool}/${group}" "${image_count}"
+  wait_for_group_status_in_pool_dir "${secondary_cluster}" "${pool}/${group}" 'up+replaying' "${image_count}"
+  wait_for_group_synced "${primary_cluster}" "${pool}/${group}" "${secondary_cluster}" "${pool}/${group}"
+
+  # keep the large image busy while the small image completes
+  write_image "${primary_cluster}" "${pool}" "${small_image}" 10 4096
+  write_image "${primary_cluster}" "${pool}" "${big_image}" 1024 4194304
+
+  # Queue the snapshot while the secondary daemon is down. This lets the test
+  # watch the preparation phase as soon as replay starts again.
+  stop_mirrors "${secondary_cluster}"
+
+  local group_snap_id
+  mirror_group_snapshot "${primary_cluster}" "${pool}/${group}" group_snap_id
+
+  # Start watching for the creating, but don't block the script progress, as we
+  # must start the daemon.
+  wait_for_group_snap_phase "${secondary_cluster}" "${pool}/${group}" "${group_snap_id}" 'creating' 'false' &
+  local phase_wait_pid=$!
+  start_mirrors "${secondary_cluster}"
+
+  # wait for creating state, the prepare_snapshot keeps the group snapshot CREATING and incomplete
+  wait "${phase_wait_pid}"
+
+  # image snapshots should be prepared and incomplete
+  local small_local_snap_id big_local_snap_id
+  wait_for_image_snapshot_with_group_snap_info "${secondary_cluster}" "${pool}" "${small_image}" "${group_snap_id}" small_local_snap_id
+  wait_for_image_snapshot_with_group_snap_info "${secondary_cluster}" "${pool}" "${big_image}" "${group_snap_id}" big_local_snap_id
+
+  local small_complete big_complete
+  get_image_snap_complete "${secondary_cluster}" "${pool}/${small_image}" "${small_local_snap_id}" small_complete
+  get_image_snap_complete "${secondary_cluster}" "${pool}/${big_image}" "${big_local_snap_id}" big_complete
+  test "${small_complete}" = 'false' || { fail "prepared snapshot ${small_local_snap_id} is already complete"; return 1; }
+  test "${big_complete}" = 'false' || { fail "prepared snapshot ${big_local_snap_id} is already complete"; return 1; }
+
+  # the group snapshot is published after all image snapshots are prepared
+  wait_for_group_snap_phase "${secondary_cluster}" "${pool}/${group}" "${group_snap_id}" 'created' 'false'
+
+  # image snapshots complete before the group snapshot
+  wait_for_image_snap_complete "${secondary_cluster}" "${pool}/${small_image}" "${small_local_snap_id}" 'true'
+  wait_for_image_snap_complete "${secondary_cluster}" "${pool}/${big_image}" "${big_local_snap_id}" 'true'
+  test_group_synced_image_status "${secondary_cluster}" "${pool}/${group}" "${group_snap_id}" "${image_count}"
+
+  wait_for_group_snap_sync_complete "${secondary_cluster}" "${pool}/${group}" "${group_snap_id}"
+
+  # tidy up
+  mirror_group_disable "${primary_cluster}" "${pool}/${group}"
+  group_remove "${primary_cluster}" "${pool}/${group}"
+  wait_for_group_not_present "${primary_cluster}" "${pool}" "${group}"
+  wait_for_group_not_present "${secondary_cluster}" "${pool}" "${group}"
+  image_remove "${primary_cluster}" "${pool}/${small_image}"
+  image_remove "${primary_cluster}" "${pool}/${big_image}"
+}
+
 # Scenario 1: The snapshot on the secondary is in the creating phase when the daemon is restarted.
 declare -a test_interrupted_sync_1=("${CLUSTER2}" "${CLUSTER1}" "${pool0}" "${image_prefix}" 'snap_creating' 2)
 # Scenario 2: The snapshot on the secondary is in the created phase when the daemon is restarted.
@@ -3161,15 +3237,27 @@ test_interrupted_sync()
 
   write_image "${primary_cluster}" "${pool}" "${big_image}" 1024 4194304
 
+  if [ "${scenario}" = 'snap_creating' ]; then
+    # Queue the snapshot so replay starts from the CREATING phase below.
+    stop_mirrors "${secondary_cluster}"
+  fi
+
   local group_snap_id
   mirror_group_snapshot "${primary_cluster}" "${pool}/${group0}" group_snap_id
 
-  local image_snap_id
-  wait_for_image_snapshot_with_group_snap_info "${secondary_cluster}" "${pool}" "${image_prefix}1" "${group_snap_id}" image_snap_id
+  local image_snap_id=""
   if [ "${scenario}" = 'snap_creating' ]; then
-    stop_mirror_while_group_snapshot_incomplete "${secondary_cluster}" "${pool}" "${group0}" "${group_snap_id}" "creating"
+    # Start watching for the creating & incomplete and then stop the mirror, but don't block the script progress, as we
+    # must start the daemon.
+    stop_mirror_while_group_snapshot_incomplete "${secondary_cluster}" "${pool}" "${group0}" "${group_snap_id}" "creating" &
+    local stop_wait_pid=$!
+    start_mirrors "${secondary_cluster}"
+    # stop before image snapshot preparation completes
+    wait "${stop_wait_pid}"
     test_group_snap_state "${secondary_cluster}" "${pool}" "${group0}" "${group_snap_id}" "creating"
+    get_image_snapshot_with_group_snap_info "${secondary_cluster}" "${pool}" "${image_prefix}1" "${group_snap_id}" image_snap_id || image_snap_id=""
   elif [ "${scenario}" = 'snap_created' ]; then
+    wait_for_image_snapshot_with_group_snap_info "${secondary_cluster}" "${pool}" "${image_prefix}1" "${group_snap_id}" image_snap_id
     stop_mirror_while_group_snapshot_incomplete "${secondary_cluster}" "${pool}" "${group0}" "${group_snap_id}" "created"
     test_group_snap_state "${secondary_cluster}" "${pool}" "${group0}" "${group_snap_id}" "created"
     test_group_snap_sync_incomplete "${secondary_cluster}" "${pool}/${group0}" "${group_snap_id}"
@@ -3185,7 +3273,9 @@ test_interrupted_sync()
   get_image_snapshot_with_group_snap_info "${secondary_cluster}" "${pool}" "${image_prefix}1" "${group_snap_id}" new_image_snap_id ||
     fail "failed to find image snapshot associated with group snap ${group_snap_id}"
   if [ "${scenario}" = 'snap_creating' ]; then
-    test "${image_snap_id}" != "${new_image_snap_id}" ||  { fail "failed to recreate image snapshot with a new snap_id after restart"; return 1; }
+    if [ -n "${image_snap_id}" ]; then
+      test "${image_snap_id}" != "${new_image_snap_id}" ||  { fail "failed to recreate image snapshot with a new snap_id after restart"; return 1; }
+    fi
   elif [ "${scenario}" = 'snap_created' ]; then
     test "${image_snap_id}" == "${new_image_snap_id}" ||  { fail "image snapshot recreated with a new snap_id after restart"; return 1; }
   fi
@@ -4189,6 +4279,7 @@ run_all_tests()
   run_test_all_scenarios test_empty_group_omap_keys
   # TODO: add the capabilty to have clone images support in the mirror group
   run_test_all_scenarios test_group_with_clone_image
+  run_test_all_scenarios test_image_replayer_snapshot_phases
   run_test_all_scenarios test_interrupted_sync_restarted_daemon
   run_test_all_scenarios test_interrupted_sync
   run_test_all_scenarios test_group_snap_sync_after_user_snap_removal
