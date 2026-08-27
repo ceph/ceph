@@ -3885,6 +3885,13 @@ void PeeringState::split_into(
   child->info.last_epoch_started = info.last_epoch_started;
   child->info.last_interval_started = info.last_interval_started;
 
+  // rebuild-stats: Make the child inherit the parent's latch. Otherwise the
+  // child's share of a pre-split, still-ongoing failure would understate its
+  // true duration (or vanish from delta_recovered's filter entirely) once it
+  // independently detects its own degradation post-split.
+  child->rebuild_start_time = rebuild_start_time;
+  child->rebuild_had_redundancy_loss = rebuild_had_redundancy_loss;
+
   increment_stats_invalidations_counter(rs_pg_split_parent_stats_invalidated,
                                         info.stats.stats_invalid);
   increment_stats_invalidations_counter(rs_pg_split_child_stats_invalidated,
@@ -4119,6 +4126,21 @@ void PeeringState::finish_split_stats(
   const object_stat_sum_t& stats, ObjectStore::Transaction &t)
 {
   info.stats.stats.sum = stats;
+
+  // rebuild-stats: object_stat_sum_t::split() (see its SPLIT(num_objects_
+  // recovered) macro) divides num_objects_recovered evenly across the
+  // parent and every child -- so info.stats.stats.sum.num_objects_recovered
+  // just dropped to a fraction of whatever it was when rebuild_base_
+  // recovered was last snapshotted, on BOTH the parent and the child. Without
+  // the redistributed value (via split()), try_record_rebuild_segment()'s
+  // delta_recovered = num_recovered - rebuild_base_recovered can go negative
+  // can reflect inaccurate value and result in discarding a genuine rebuild.
+  // Therefore, re-anchor the baseline to the just-applied, already
+  // redistributed value and make the child's inheritance numerically correct.
+  if (rebuild_start_time != utime_t()) {
+    rebuild_base_recovered = info.stats.stats.sum.num_objects_recovered;
+  }
+
   write_if_dirty(t);
 }
 

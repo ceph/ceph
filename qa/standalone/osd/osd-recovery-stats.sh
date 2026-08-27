@@ -1153,6 +1153,311 @@ function TEST_rebuild_perf_empty_pg_not_counted() {
     kill_daemons $dir || return 1
 }
 
+# A PG split (ceph osd pool set ... pg_num N, triggering
+# PeeringState::split_into()/finish_split_stats()) occurring while the parent PG
+# is already latched as vulnerable. The test Forces a PG degraded (noup + down
+# one replica, size=3/ min_size=2), lets a first recovery cycle complete so
+# num_objects_recovered is genuinely nonzero, then re-degrades the same PG,
+# holds it vulnerable for a deliberate 8 secs, and grows pg_num from 1 to 2 to
+# split it while still degraded. The test finally verifies the following:
+#  1. The parent PG's own recorded duration - printed and asserted positive.
+#  2. The child must show NO "latched failure start" line of its own anywhere
+#     -- the most direct check of all, since it actually inherits the latch.
+#  3. The child's recorded duration is also parsed and printed, and asserted
+#     >= 5s. Reason: The second-cycle degrade-then-sleep-8-then-split sequence
+#     above means an inherited latch's recorded duration must be at least ~8s
+#     (it spans that sleep), while a fresh arm at the split moment would show
+#     a duration of a few seconds at most.
+function TEST_rebuild_perf_pg_split_inherits_latch() {
+    local dir=$1
+    local OSDS=4
+
+    run_mon $dir a || return 1
+    run_mgr $dir x || return 1
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_osd $dir $osd --osd-mclock-skip-benchmark=true --debug-osd=15 || return 1
+    done
+
+    create_pool $poolname 1 1 replicated || return 1
+    ceph osd pool set $poolname size 3 || return 1
+    ceph osd pool set $poolname min_size 2 || return 1
+    # Deterministic pg_num control for this test -- don't let the
+    # autoscaler race the manual pg_num bump below.
+    ceph osd pool set $poolname pg_autoscale_mode off || return 1
+    wait_for_clean || return 1
+
+    rados -p $poolname bench 5 write -b 4096 --no-cleanup || return 1
+    wait_for_clean || return 1
+
+    local primary
+    primary=$(get_primary $poolname dummyname)
+    local PG
+    PG=$(get_pg $poolname dummyname)
+    local poolid=${PG%.*}
+    local child_pg="${poolid}.1"
+    local otherosd
+    otherosd=$(get_not_primary $poolname dummyname)
+    local log=$dir/osd.${primary}.log
+
+    # --- Priming cycle: force a real, *completed* recovery so
+    # num_objects_recovered is genuinely nonzero before the PG is ever
+    # re-degraded and split -- see header comment for why this matters.
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+    for i in $(seq 1 10)
+    do
+      flush_pg_stats || return 1
+      sleep 1
+    done
+    grep -q "rebuild-stats: latched failure start for ${PG} " $log || {
+      echo "FAIL: the priming latch never armed -- test setup didn't" \
+           "actually make the PG degraded"
+      return 1
+    }
+    # More writes while degraded, so the down OSD has real missing
+    # objects to actually recover once it returns (not a no-op catch-up).
+    rados -p $poolname bench 5 write -b 4096 --no-cleanup || return 1
+    ceph osd unset noup || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+    grep -q "rebuild-stats: recorded rebuild for ${PG} " $log || {
+      echo "FAIL: the priming cycle's recovery was never recorded --" \
+           "num_objects_recovered won't be primed, the real test below" \
+           "would be vacuous"
+      return 1
+    }
+
+    # --- Real test: re-degrade the same PG (now with a large, nonzero
+    # rebuild_base_recovered baseline once this second latch arms), hold
+    # it degraded for a bit, then split while still vulnerable.
+    ceph osd set noup || return 1
+    ceph osd down osd.${otherosd} || return 1
+
+    local second_armed=false
+    for i in $(seq 1 10)
+    do
+      flush_pg_stats || return 1
+      if test "$(grep -c "rebuild-stats: latched failure start for ${PG} " $log)" -ge 2
+      then
+        second_armed=true
+        break
+      fi
+      sleep 1
+    done
+    $second_armed || {
+      echo "FAIL: the second latch never armed before the split -- test" \
+           "setup didn't actually re-degrade the PG"
+      return 1
+    }
+    # Hold the degraded window open for long enough that an inherited
+    # duration (spanning this whole sleep) and a freshly-armed one
+    # (starting at the split below) are unambiguously distinguishable
+    # afterward.
+    sleep 8
+
+    # Split the still-degraded parent PG in two
+    local before_numpg
+    before_numpg=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
+      perf dump | jq '.osd.numpg')
+    ceph osd pool set $poolname pg_num 2 || return 1
+
+    local split_done=false
+    for i in $(seq 1 60)
+    do
+      local numpg
+      numpg=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
+        perf dump | jq '.osd.numpg')
+      if test "$numpg" -gt "$before_numpg"
+      then
+        split_done=true
+        break
+      fi
+      sleep 1
+    done
+    $split_done || {
+      echo "FAIL: split never completed on osd.${primary} (numpg stayed" \
+           "at $before_numpg after 60s) -- either the split stalled while" \
+           "the PG was degraded (a real, previously unconfirmed risk --" \
+           "see this test's header comment), or ${child_pg} isn't where" \
+           "expected; check osd logs directly"
+      return 1
+    }
+
+    ceph osd unset noup || return 1
+    wait_for_clean || return 1
+    flush_pg_stats || return 1
+
+    # Both the parent and the split-created child must eventually record a
+    # genuine, non-discarded rebuild segment with a sane (non-negative)
+    # delta_recovered -- checked across all four OSDs since either PG's
+    # primary could have landed anywhere post-split.
+    for pg in ${PG} ${child_pg}
+    do
+      local recorded=false
+      local discarded=false
+      for osd in $(seq 0 $(expr $OSDS - 1))
+      do
+        grep -q "rebuild-stats: recorded rebuild for ${pg} " $dir/osd.${osd}.log \
+          && recorded=true
+        grep -q "rebuild-stats: discarded rebuild for ${pg} " $dir/osd.${osd}.log \
+          && discarded=true
+      done
+
+      $recorded || {
+        echo "FAIL: no 'recorded rebuild' line found anywhere for ${pg} --" \
+             "the split-inherited latch was lost or never resolved"
+        return 1
+      }
+      ! $discarded || {
+        echo "FAIL: a 'discarded rebuild' line was found for ${pg} -- likely" \
+             "delta_recovered went negative after the split, discarding a" \
+             "genuine rebuild instead of recording it"
+        return 1
+      }
+
+      # Directly confirm delta_recovered isn't negative in the recorded line
+      # itself, not just that it recorded instead of being discarded -- the
+      # two filters overlap but aren't identical.
+      grep -h "rebuild-stats: recorded rebuild for ${pg} " $dir/osd.*.log \
+        | grep -q "delta_recovered=-" && {
+        echo "FAIL: ${pg} recorded a NEGATIVE delta_recovered -- the" \
+             "split-time num_objects_recovered redistribution bug is" \
+             "present"
+        return 1
+      }
+    done
+
+    # Sharpest, most direct check of all: the child pg must not emit its
+    # own "latched failure start" line BEFORE its first recorded resolution.
+    # A correctly inheriting child must produce no "latched" line before the
+    # inherited rebuild resolves.
+    #
+    # The check is deliberately scoped to "before the first recorded line",
+    # not "anywhere in the log": growing pg_num can also auto-bump
+    # pgp_num_target, and pgp_num's own gradual catch-up is a genuine, unrelated
+    # CRUSH remap that can cause the child to legitimately re-latch on its own,
+    # later, due to a real misplacement. Therefore, this tests the actual
+    # inheritance mechanism directly rather than through inference.
+    local child_first_recorded_ts
+   child_first_recorded_ts=$(grep -h "rebuild-stats: recorded rebuild for ${child_pg} " \
+      $dir/osd.*.log | sort | head -1 | awk '{print $1}')
+    test -n "$child_first_recorded_ts" || {
+      echo "FAIL: could not determine ${child_pg}'s first recorded timestamp"
+      return 1
+    }
+    local child_earliest_latched_ts
+    child_earliest_latched_ts=$(grep -h "rebuild-stats: latched failure start for ${child_pg} " \
+      $dir/osd.*.log | sort | head -1 | awk '{print $1}')
+    if [ -n "$child_earliest_latched_ts" ] \
+      && [[ "$child_earliest_latched_ts" < "$child_first_recorded_ts" ]]
+    then
+      echo "FAIL: ${child_pg} shows its own 'latched failure start' line" \
+           "(at $child_earliest_latched_ts) BEFORE its first recorded" \
+           "resolution (at $child_first_recorded_ts) -- it independently" \
+           "armed a fresh latch instead of inheriting the parent's" \
+           "already-armed one at split time"
+      return 1
+    fi
+
+    # Parent PG sanity check complementing the non-negative delta_recovered
+    # check above: its recorded duration from the real (second, post-
+    # priming) cycle must be positive. Uses $log specifically (not a glob
+    # across all four OSDs) because the primary never changes for this PG
+    # throughout the test (only otherosd goes up/down), so both the
+    # priming cycle's and the real test's "recorded rebuild for ${PG}"
+    # lines land in this single file in true chronological order --
+    # `tail -1` reliably picks the real (second) one, not the priming
+    # cycle's first one, without relying on cross-file ordering.
+    local parent_duration
+    parent_duration=$(grep "rebuild-stats: recorded rebuild for ${PG} " $log \
+      | tail -1 | grep -o "duration=[0-9.]*" | cut -d= -f2)
+    test -n "$parent_duration" || {
+      echo "FAIL: could not extract ${PG}'s (parent) recorded duration"
+      return 1
+    }
+    echo "INFO: ${PG} (parent) recorded duration=${parent_duration}s"
+    awk -v d="$parent_duration" 'BEGIN { exit !(d > 0) }' || {
+      echo "FAIL: ${PG}'s (parent) recorded duration (${parent_duration}s)" \
+           "is not positive"
+      return 1
+    }
+
+    # The child PG's  inherited latch's recorded duration must be
+    # at least ~8s (it spans that sleep), while a fresh arm at the split
+    # moment would show a duration of a few seconds at most (just the
+    # post-split recovery time, none of the pre-split sleep). Use >=5 as
+    # the threshold -- comfortably below the true ~8s+ floor for a correct
+    # inheritance, comfortably above what a fresh split-time arm could
+    # plausibly accumulate before this test's own wait_for_clean returns.
+    local child_duration
+    child_duration=$(grep -h "rebuild-stats: recorded rebuild for ${child_pg} " \
+      $dir/osd.*.log | grep -o "duration=[0-9.]*" | head -1 | cut -d= -f2)
+    test -n "$child_duration" || {
+      echo "FAIL: could not extract ${child_pg}'s recorded duration"
+      return 1
+    }
+    echo "INFO: ${child_pg} (child) recorded duration=${child_duration}s"
+    awk -v d="$child_duration" 'BEGIN { exit !(d >= 5) }' || {
+      echo "FAIL: ${child_pg}'s recorded duration ($child_duration s) is" \
+           "too short to have inherited the pre-split latch -- looks like" \
+           "the child started a fresh arm at the split moment instead of" \
+           "parent-to-child copy taking effect"
+      return 1
+    }
+
+    # Global reconciliation: pg_vulnerability_duration is an OSD-wide
+    # aggregate, not per-PG, so the only meaningful level to verify it at
+    # is a TOTAL across all four OSDs. Retries briefly since perf dump can
+    # momentarily race a just-written log line's disk flush.
+    local total_log_recorded total_log_duration total_avgcount total_sum
+    for i in $(seq 1 10)
+    do
+      total_log_recorded=$(grep -h "rebuild-stats: recorded rebuild for " \
+        $dir/osd.*.log | wc -l)
+      total_avgcount=0
+      total_sum=0
+      for osd in $(seq 0 $(expr $OSDS - 1))
+      do
+        local dump
+        dump=$(CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${osd}) \
+          perf dump) || return 1
+        total_avgcount=$(awk -v a="$total_avgcount" \
+          -v b="$(jq '.recoverystate_perf.pg_vulnerability_duration.avgcount' <<< "$dump")" \
+          'BEGIN{print a+b}')
+        total_sum=$(awk -v a="$total_sum" \
+          -v b="$(jq '.recoverystate_perf.pg_vulnerability_duration.sum' <<< "$dump")" \
+          'BEGIN{print a+b}')
+      done
+      test "$total_avgcount" = "$total_log_recorded" && break
+      sleep 1
+    done
+    total_log_duration=$(grep -h "rebuild-stats: recorded rebuild for " $dir/osd.*.log \
+      | grep -o "duration=[0-9.]*" | cut -d= -f2 | awk '{s+=$1} END {print s+0}')
+
+    echo "INFO: total recorded (logs)=${total_log_recorded}," \
+         "total avgcount (perf dump)=${total_avgcount}"
+    echo "INFO: total duration (logs)=${total_log_duration}s," \
+         "total sum (perf dump)=${total_sum}s"
+
+    test "$total_avgcount" = "$total_log_recorded" || {
+      echo "FAIL: perf dump's total avgcount (${total_avgcount}) across" \
+           "all four OSDs doesn't match the total 'recorded rebuild' line" \
+           "count from the logs (${total_log_recorded})"
+      return 1
+    }
+    awk -v a="$total_sum" -v b="$total_log_duration" \
+      'BEGIN { d=a-b; if (d<0) d=-d; exit !(d < 0.01) }' || {
+      echo "FAIL: perf dump's total sum (${total_sum}s) across all four" \
+           "OSDs doesn't match the total recorded duration from the logs" \
+           "(${total_log_duration}s)"
+      return 1
+    }
+
+    delete_pool $poolname
+    kill_daemons $dir || return 1
+}
+
 main osd-recovery-stats "$@"
 
 # Local Variables:
