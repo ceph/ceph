@@ -12,8 +12,8 @@
    management of the daemons.
 
 It is possible to add Monitors to a running cluster as long as redundancy is
-maintained. To bootstrap a Monitor, see `Manual Deployment`_ or `Monitor
-Bootstrap`_.
+maintained. To bootstrap a Monitor, see :ref:`manual-deployment`
+or :ref:`dev-monitor-bootstrap`.
 
 .. _adding-monitors:
 
@@ -61,25 +61,21 @@ Deploying your Hardware
 
 Some operators choose to add a new Monitor host at the same time that they add
 a new Monitor. For details on the minimum recommendations for Monitor hardware,
-see `Hardware Recommendations`_. Before adding a Monitor host to the cluster,
+see :ref:`hardware-recommendations`. Before adding a Monitor host to the cluster,
 make sure that there is an up-to-date version of Linux installed.
 
 Add the newly installed Monitor host to a rack in your cluster, connect the
 host to the network, and make sure that the host has network connectivity.
 
-.. _Hardware Recommendations: ../../../start/hardware-recommendations
 
 Installing the Required Software
 --------------------------------
 
 In manually deployed clusters, it is necessary to install Ceph packages
-manually. For details, see `Installing Packages`_. Configure SSH so that it can
+manually. For details, see :ref:`install_storage_cluster`. Configure SSH so that it can
 be used by a user that has passwordless authentication and root permissions.
 
-.. _Installing Packages: ../../../install/install-storage-cluster
-
-
-.. _Adding a Monitor (Manual):
+.. _adding-monitor-manual:
 
 Adding a Monitor (Manual)
 -------------------------
@@ -95,14 +91,14 @@ often been named with single letters (``a``, ``b``, ``c``, etc.), but you are
 free to define the ``id`` however you see fit. In this document, ``{mon-id}``
 refers to the ``id`` exclusive of the ``mon.`` prefix: for example, if
 ``mon.a`` has been chosen as the ``id`` of a Monitor, then ``{mon-id}`` is
-``a``.                                               ???
+``a``.
 
 #. Create a data directory on the machine that will host the new Monitor:
 
    .. prompt:: bash $
 
-    ssh {new-mon-host}
-    sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
+      ssh {new-mon-host}
+      sudo mkdir /var/lib/ceph/mon/ceph-{mon-id}
 
 #. Create a temporary directory ``{tmp}`` that will contain the files needed
    during this procedure. This directory should be different from the data
@@ -111,7 +107,7 @@ refers to the ``id`` exclusive of the ``mon.`` prefix: for example, if
 
    .. prompt:: bash $
 
-    mkdir {tmp}
+      mkdir {tmp}
 
 #. Retrieve the keyring for your Monitors (``{tmp}`` is the path to the
    retrieved keyring and ``{key-filename}`` is the name of the file that
@@ -157,8 +153,7 @@ that Ceph Monitors use Paxos to maintain consensus about the cluster
 map. Such consensus is possible only if the number of Monitors is sufficient
 to establish quorum.
 
-
-.. _Removing a Monitor (Manual):
+.. _removing-monitor-manual:
 
 Removing a Monitor (Manual)
 ---------------------------
@@ -175,7 +170,7 @@ lost.
 
    .. prompt:: bash $
 
-      systemctl stop ceph-mon@{mon-id}
+      sudo systemctl stop ceph-mon@{mon-id}
 
 #. Remove the Monitor from the cluster:
 
@@ -186,7 +181,6 @@ lost.
 #. Remove the Monitor entry from the ``ceph.conf`` file:
 
 .. _rados-mon-remove-from-unhealthy: 
-
 
 Removing Monitors from an Unhealthy Cluster
 -------------------------------------------
@@ -264,7 +258,7 @@ cluster (for example, a cluster whose Monitors are unable to form a quorum).
    that there is also room for an archived copy of the DB. The archived copy
    can be compressed.
 
-.. _Changing a Monitor's IP address:
+.. _change-monitor-address:
 
 Changing a Monitor's IP Address
 ===============================
@@ -279,7 +273,7 @@ Ceph has strict requirements on the discovery of Monitors.
 Although the ``ceph.conf`` file is used by Ceph clients and other Ceph daemons
 to discover Monitors, the monitor map is used by Monitors to discover each
 other. This is why it is necessary to obtain the current ``monmap`` at the time
-a new Monitor is created: as can be seen above in `Adding a Monitor (Manual)`_,
+a new Monitor is created: as can be seen above in :ref:`adding-monitor-manual`,
 the ``monmap`` is one of the arguments required by the ``ceph-mon -i {mon-id}
 --mkfs`` command. The following sections explain the consistency requirements
 for Ceph Monitors, and also explain a number of safe ways to change a Monitor's
@@ -323,8 +317,8 @@ Changing a Monitor's IP address (Preferred Method)
 If a Monitor's IP address is changed only in the ``ceph.conf`` file, there is
 no guarantee that the other Monitors in the cluster will receive the update.
 For this reason, the preferred method to change a Monitor's IP address is as
-follows: add a new Monitor with the desired IP address (as described in `Adding
-a Monitor (Manual)`_), make sure that the new Monitor successfully joins the
+follows: add a new Monitor with the desired IP address (as described in
+:ref:`adding-monitor-manual`), make sure that the new Monitor successfully joins the
 quorum, remove the Monitor that is using the old IP address, and update the
 ``ceph.conf`` file to ensure that clients and other daemons are made aware of
 the new Monitor's IP address.
@@ -342,11 +336,12 @@ For example, suppose that there are three Monitors in place::
         addr = 10.0.0.3:6789
 
 To change ``mon.c`` so that its name is ``host04`` and its IP address is
-``10.0.0.4``: (1) follow the steps in `Adding a Monitor (Manual)`_ to add a new
+``10.0.0.4``: (1) follow the steps in :ref:`adding-monitor-manual` to add a new
 Monitor ``mon.d``, (2) make sure that ``mon.d`` is  running before removing
-``mon.c`` or else quorum will be broken, and (3) follow the steps in `Removing
-a Monitor (Manual)`_ to remove ``mon.c``. To move all three Monitors to new IP
+``mon.c`` or else quorum will be broken, and (3) follow the steps in
+:ref:`removing-monitor-manual` to remove ``mon.c``. To move all three Monitors to new IP
 addresses, repeat this process.
+
 
 Changing a Monitor's IP address (Advanced Method)
 -------------------------------------------------
@@ -589,8 +584,6 @@ Example Procedure
 *The above procedure was developed by Eugen Block and was successfully tested
 in February 2024 on Ceph version 18.2.1 (Reef).*
 
-.. _Manual Deployment: ../../../install/manual-deployment
-.. _Monitor Bootstrap: ../../../dev/mon-bootstrap
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
 
 .. |---|   unicode:: U+2014 .. EM DASH
