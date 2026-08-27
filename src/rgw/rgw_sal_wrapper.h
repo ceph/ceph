@@ -62,20 +62,23 @@ typedef struct CRgwBuffer {
  * Object metadata
  */
 typedef struct CRgwObjectMeta {
-  uint64_t size;          /* Object size in bytes */
-  char* etag;             /* ETag (MD5 hash), null-terminated */
-  char* content_type;     /* Content type, null-terminated */
-  int64_t last_modified;  /* Last modified timestamp */
+  uint64_t size;             /* Object size in bytes */
+  char* etag;                /* ETag (MD5 hash), null-terminated */
+  char* content_type;        /* Content type, null-terminated */
+  int64_t last_modified;     /* Last modified timestamp, in seconds */
+  int32_t last_modified_ns;  /* Nanoseconds part of the last modified timestamp */
 } CRgwObjectMeta;
 
 /**
  * Single entry in a list operation result
  */
 typedef struct CRgwListEntry {
-  char* key;              /* Object key, null-terminated */
-  char* version_id;       /* Version ID, null-terminated (NULL for current version) */
-  uint64_t size;          /* Object size in bytes */
-  int64_t last_modified;  /* Last modified timestamp */
+  char* key;                 /* Object key, null-terminated */
+  char* version_id;          /* Version ID, null-terminated (NULL for current version) */
+  char* etag;                /* ETag (MD5 hash), null-terminated (NULL if unknown) */
+  uint64_t size;             /* Object size in bytes */
+  int64_t last_modified;     /* Last modified timestamp, in seconds */
+  int32_t last_modified_ns;  /* Nanoseconds part of the last modified timestamp */
 } CRgwListEntry;
 
 /**

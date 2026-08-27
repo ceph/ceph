@@ -163,6 +163,33 @@ impl RGWObjectStore {
         &self.prefix
     }
 
+    /// Build the metadata of a listed object.
+    ///
+    /// The etag and the full resolution timestamp are what let a caller tell two
+    /// objects with the same key apart: an object that is deleted and written again
+    /// keeps its key, and its size and its mtime in seconds may be unchanged.
+    unsafe fn entry_meta(entry: &ffi::CRgwListEntry) -> ObjectMeta {
+        let key = CStr::from_ptr(entry.key).to_string_lossy().into_owned();
+        let e_tag = if entry.etag.is_null() {
+            None
+        } else {
+            Some(CStr::from_ptr(entry.etag).to_string_lossy().into_owned())
+        };
+        ObjectMeta {
+            location: Path::from(key),
+            last_modified: Self::timestamp(entry.last_modified, entry.last_modified_ns),
+            size: entry.size,
+            e_tag,
+            version: None,
+        }
+    }
+
+    /// Convert an RGW timestamp to a chrono one, keeping the sub-second part
+    fn timestamp(seconds: i64, nanoseconds: i32) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::from_timestamp(seconds, nanoseconds.max(0) as u32)
+            .unwrap_or_else(chrono::Utc::now)
+    }
+
     /// Convert errno to ObjectStore error (test-only public accessor)
     #[cfg(test)]
     pub fn errno_to_error_for_test(
@@ -711,20 +738,7 @@ impl ObjectStore for RGWObjectStore {
                         );
                         slice
                             .iter()
-                            .map(|e| {
-                                let key = CStr::from_ptr(e.key).to_string_lossy().into_owned();
-                                Ok(ObjectMeta {
-                                    location: Path::from(key),
-                                    last_modified: chrono::DateTime::from_timestamp(
-                                        e.last_modified,
-                                        0,
-                                    )
-                                    .unwrap_or_else(chrono::Utc::now),
-                                    size: e.size,
-                                    e_tag: None,
-                                    version: None,
-                                })
-                            })
+                            .map(|e| Ok(RGWObjectStore::entry_meta(e)))
                             .collect()
                     }
                 };
@@ -822,14 +836,7 @@ impl ObjectStore for RGWObjectStore {
                                 common_prefixes.push(Path::from(prefix_path));
                             }
                         } else if !key.is_empty() {
-                            objects.push(ObjectMeta {
-                                location: Path::from(key.clone()),
-                                last_modified: chrono::DateTime::from_timestamp(e.last_modified, 0)
-                                    .unwrap_or_else(chrono::Utc::now),
-                                size: e.size,
-                                e_tag: None,
-                                version: None,
-                            });
+                            objects.push(Self::entry_meta(e));
                         }
                     }
                 }
@@ -1025,8 +1032,10 @@ impl RGWObjectStore {
 
         Ok(ObjectMeta {
             location: location.clone(),
-            last_modified: chrono::DateTime::from_timestamp(owned_meta.0.last_modified, 0)
-                .unwrap_or_else(chrono::Utc::now),
+            last_modified: Self::timestamp(
+                owned_meta.0.last_modified,
+                owned_meta.0.last_modified_ns,
+            ),
             size: owned_meta.0.size,
             e_tag: etag,
             version: None,
