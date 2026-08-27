@@ -4,10 +4,11 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { ReactiveFormsModule } from '@angular/forms';
 import { NfsRateLimitComponent } from '../nfs-rate-limit/nfs-rate-limit.component';
 import { RouterTestingModule } from '@angular/router/testing';
-import { SharedModule } from '~/app/shared/shared.module';
+import { CommonModule } from '@angular/common';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { ToastrModule } from 'ngx-toastr';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 describe('NfsClusterFormComponent', () => {
   let component: NfsClusterFormComponent;
@@ -15,14 +16,9 @@ describe('NfsClusterFormComponent', () => {
   let notificationService: NotificationService;
 
   configureTestBed({
-    imports: [
-      ReactiveFormsModule,
-      HttpClientTestingModule,
-      RouterTestingModule,
-      SharedModule,
-      ToastrModule.forRoot()
-    ],
-    declarations: [NfsClusterFormComponent, NfsRateLimitComponent]
+    imports: [ReactiveFormsModule, HttpClientTestingModule, CommonModule, RouterTestingModule],
+    declarations: [NfsClusterFormComponent, NfsRateLimitComponent],
+    providers: [FormatterService, { provide: CdDatePipe, useValue: { transform: (d: any) => d } }]
   });
 
   beforeEach(async () => {

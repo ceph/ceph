@@ -1,7 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { configureTestBed } from '~/testing/unit-test-helper';
-import { SharedModule } from '~/app/shared/shared.module';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { CommonModule } from '@angular/common';
 import { NfsClusterComponent } from './nfs-cluster.component';
 import { of } from 'rxjs';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
@@ -16,7 +16,7 @@ describe('NfsClusterComponent', () => {
 
   configureTestBed({
     declarations: [NfsClusterComponent],
-    imports: [HttpClientTestingModule, SharedModule, RouterTestingModule],
+    imports: [HttpClientTestingModule, CommonModule, RouterTestingModule],
     providers: [
       {
         provide: OrchestratorService,

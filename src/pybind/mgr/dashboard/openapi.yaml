@@ -12598,17 +12598,17 @@ paths:
                   default: false
                   type: boolean
                 max_client_combined_bw:
-                  type: integer
+                  type: string
                 max_client_read_bw:
-                  type: integer
+                  type: string
                 max_client_write_bw:
-                  type: integer
+                  type: string
                 max_export_combined_bw:
-                  type: integer
+                  type: string
                 max_export_read_bw:
-                  type: integer
+                  type: string
                 max_export_write_bw:
-                  type: integer
+                  type: string
                 qos_type:
                   default: ''
                   type: string
@@ -12618,8 +12618,12 @@ paths:
       responses:
         '200':
           content:
+            application/json:
+              schema:
+                type: object
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                type: object
           description: Resource updated.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -12663,8 +12667,12 @@ paths:
       responses:
         '200':
           content:
+            application/json:
+              schema:
+                type: object
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                type: object
           description: Resource updated.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -12691,8 +12699,12 @@ paths:
       responses:
         '200':
           content:
+            application/json:
+              schema:
+                type: object
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.
@@ -13176,17 +13188,17 @@ paths:
                   default: false
                   type: boolean
                 max_client_combined_bw:
-                  type: integer
+                  type: string
                 max_client_read_bw:
-                  type: integer
+                  type: string
                 max_client_write_bw:
-                  type: integer
+                  type: string
                 max_export_combined_bw:
-                  type: integer
+                  type: string
                 max_export_read_bw:
-                  type: integer
+                  type: string
                 max_export_write_bw:
-                  type: integer
+                  type: string
                 pseudo_path:
                   type: string
               required:
@@ -13196,8 +13208,12 @@ paths:
       responses:
         '200':
           content:
+            application/json:
+              schema:
+                type: object
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                type: object
           description: Resource updated.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -13241,8 +13257,12 @@ paths:
       responses:
         '200':
           content:
+            application/json:
+              schema:
+                type: object
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                type: object
           description: Resource updated.
         '400':
           description: Operation exception. Please check the response body for details.
@@ -13274,8 +13294,12 @@ paths:
       responses:
         '200':
           content:
+            application/json:
+              schema:
+                type: object
             application/vnd.ceph.api.v1.0+json:
-              type: object
+              schema:
+                type: object
           description: OK
         '400':
           description: Operation exception. Please check the response body for details.

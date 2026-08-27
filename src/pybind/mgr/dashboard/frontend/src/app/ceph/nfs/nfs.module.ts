@@ -25,7 +25,6 @@ import {
 
 import Close from '@carbon/icons/es/close/32';
 import { NfsClusterComponent } from './nfs-cluster/nfs-cluster.component';
-import { ClusterModule } from '../cluster/cluster.module';
 import { NfsClusterDetailsComponent } from './nfs-cluster-details/nfs-cluster-details.component';
 import { NfsClusterFormComponent } from './nfs-cluster-form/nfs-cluster-form.component';
 import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component';
@@ -47,8 +46,7 @@ import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component
     CheckboxModule,
     ButtonModule,
     IconModule,
-    TabsModule,
-    ClusterModule
+    TabsModule
   ],
   exports: [
     NfsListComponent,

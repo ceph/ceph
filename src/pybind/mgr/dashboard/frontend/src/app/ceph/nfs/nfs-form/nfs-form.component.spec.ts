@@ -10,10 +10,13 @@ import { Observable, of } from 'rxjs';
 
 import { NfsFormClientComponent } from '~/app/ceph/nfs/nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from '~/app/ceph/nfs/nfs-form/nfs-form.component';
+import { NfsRateLimitComponent } from '~/app/ceph/nfs/nfs-rate-limit/nfs-rate-limit.component';
 import { Directory } from '~/app/shared/api/nfs.service';
-import { SharedModule } from '~/app/shared/shared.module';
+import { CommonModule } from '@angular/common';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 describe('NfsFormComponent', () => {
   let component: NfsFormComponent;
@@ -23,15 +26,17 @@ describe('NfsFormComponent', () => {
   let router: Router;
 
   configureTestBed({
-    declarations: [NfsFormComponent, NfsFormClientComponent],
+    declarations: [NfsFormComponent, NfsFormClientComponent, NfsRateLimitComponent],
     imports: [
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      SharedModule,
+      CommonModule,
       NgbTypeaheadModule
     ],
     providers: [
+      FormatterService,
+      { provide: CdDatePipe, useValue: { transform: (d: any) => d } },
       {
         provide: ActivatedRoute,
         useValue: new ActivatedRouteStub({ cluster_id: 'mynfs', export_id: '1' })

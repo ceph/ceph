@@ -1,12 +1,12 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { NfsRateLimitComponent } from './nfs-rate-limit.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ReactiveFormsModule, Validators } from '@angular/forms';
+import { CommonModule } from '@angular/common';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RouterTestingModule } from '@angular/router/testing';
-import { SharedModule } from '~/app/shared/shared.module';
-import { Validators } from '@angular/forms';
 import { FormatterService } from '~/app/shared/services/formatter.service';
 import { NFS_TYPE } from '../models/nfs-cluster-config';
+import { NfsRateLimitComponent } from './nfs-rate-limit.component';
 
 describe('NfsRateLimitComponent', () => {
   let component: NfsRateLimitComponent;
@@ -14,7 +14,7 @@ describe('NfsRateLimitComponent', () => {
 
   configureTestBed({
     declarations: [NfsRateLimitComponent],
-    imports: [HttpClientTestingModule, RouterTestingModule, SharedModule],
+    imports: [HttpClientTestingModule, RouterTestingModule, ReactiveFormsModule, CommonModule],
     providers: [FormatterService]
   });
 
