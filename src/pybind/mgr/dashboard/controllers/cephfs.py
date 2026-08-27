@@ -32,6 +32,12 @@ GET_STATFS_SCHEMA = {
     'subdirs': (int, '')
 }
 
+PATH_SNAPSHOT_SCHEMA = {
+    'name': (str, 'Snapshot name'),
+    'path': (str, 'Snapshot path'),
+    'created': (str, 'Snapshot creation time'),
+}
+
 LIST_PEERS_SCHEMA = [{
     'uuid': ({
         'client_name': (str, 'Ceph client name'),
@@ -743,6 +749,27 @@ class CephFS(RESTController):
         """
         cfs = self._cephfs_instance(fs_id)
         return cfs.statfs(path)
+
+    @RESTController.Resource('GET', path='/snapshot')
+    @EndpointDoc("List snapshots of the specified path",
+                 parameters={
+                     'fs_id': (str, 'File System Identifier'),
+                     'path': (str, 'Directory path'),
+                 },
+                 responses={200: [PATH_SNAPSHOT_SCHEMA]})
+    def ls_snapshots(self, fs_id, path):
+        """
+        List snapshots for the specified directory.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory.
+        :return: Snapshot name, path, and creation time.
+        :rtype: list
+        """
+        try:
+            cfs = self._cephfs_instance(fs_id)
+            return cfs.ls_snapshots(path)
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+            return []
 
     @RESTController.Resource('POST', path='/snapshot')
     @allow_empty_body
