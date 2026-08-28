@@ -3,6 +3,7 @@
 
 #include "librbd/operation/SnapshotRollbackRequest.h"
 #include "include/rados/librados.hpp"
+#include "common/ceph_releases.h"
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/AsyncObjectThrottle.h"
@@ -288,6 +289,39 @@ void SnapshotRollbackRequest<I>::send_rollback_objects() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
+  // WI-14-a: attempt the pool-op fast path (available from Umbrella onwards)
+  {
+    // get_min_compatible_osd lives on Rados, not IoCtx; construct temporarily
+    librados::Rados rados(image_ctx.data_ctx);
+    int8_t require_osd_release_raw = 0;
+    int r = rados.get_min_compatible_osd(&require_osd_release_raw);
+    if (r == 0) {
+      auto require_osd_release =
+        static_cast<ceph_release_t>(require_osd_release_raw);
+      if (require_osd_release >= ceph_release_t::umbrella) {
+        ldout(cct, 5) << this << " " << __func__
+                      << ": using pool-op rollback fast path" << dendl;
+        uint64_t rollback_id = 0;
+        // RBD always uses selfmanaged snaps on its data pool
+        r = image_ctx.data_ctx.selfmanaged_snap_rollback(m_snap_id,
+                                                         &rollback_id);
+        if (r == 0) {
+          // Pool-op issued; proceed directly to handle_rollback_objects()
+          Context *ctx = create_context_callback<
+            SnapshotRollbackRequest<I>,
+            &SnapshotRollbackRequest<I>::handle_rollback_objects>(this);
+          ctx->complete(0);
+          return;
+        }
+        // Non-fatal: fall through to per-object path on any error (WI-14-b)
+        ldout(cct, 1) << this << " " << __func__
+                      << ": pool-op rollback failed (" << cpp_strerror(r)
+                      << "), falling back to per-object rollback" << dendl;
+      }
+    }
+  }
+
+  // --- existing per-object AsyncObjectThrottle path ---
   std::shared_lock owner_locker{image_ctx.owner_lock};
   uint64_t num_objects;
   {
