@@ -664,6 +664,16 @@ int IoCtx::selfmanaged_snap_rollback(const std::string& oid,
   return ctx->selfmanaged_snap_rollback(oid, snapid);
 }
 
+int IoCtx::snap_rollback(const std::string& snapname, uint64_t *rollback_id) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->snap_rollback(snapname, rollback_id);
+}
+
+int IoCtx::selfmanaged_snap_rollback(uint64_t snap_id, uint64_t *rollback_id) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->pool_selfmanaged_snap_rollback(snap_id, rollback_id);
+}
+
 int IoCtx::selfmanaged_snap_set_write_ctx(snap_t seq,
                                           std::vector<snap_t>& snaps) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
