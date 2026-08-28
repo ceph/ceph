@@ -10,7 +10,10 @@ This crate implements the `object_store::ObjectStore` trait from Apache Arrow, r
 
 ### During Ceph Build
 
-The crate is built automatically as part of the Ceph build process when `WITH_RADOSGW_LANCEDB` is enabled:
+The crate is built automatically as part of the Ceph build process when
+`WITH_RADOSGW_LANCEDB` is enabled. It is compiled through the `rgw-lancedb`
+umbrella crate (which combines `lancedb-c` and `lancedb-rgw-store` into a
+single `librgw_lancedb.a` static library linked into `rgw_common`).
 
 ```bash
 cd ceph/build
@@ -36,14 +39,65 @@ After rebuilding, restart the RGW daemon to pick up the changes.
 
 ## Testing
 
-### Unit Tests
+### C++ SAL Wrapper Tests
 
-Unit tests run within the Ceph build system (via `ninja`). Standalone `cargo test`
-requires Ceph libraries to resolve FFI symbols at link time.
+Tests the C wrapper API directly against a live SAL driver:
 
-### Integration Tests
+```bash
+cd ceph/build
+ninja ceph_test_rgw_sal_wrapper
+./bin/ceph_test_rgw_sal_wrapper -c ./ceph.conf
+```
 
-Integration tests require a running Ceph cluster with RGW. See `src/test/rgw/s3vectors/` for the test suite.
+The backend (rados, dbstore, posix) is read from ceph.conf.
+
+### LanceDB ObjectStore Integration Tests
+
+Tests the `ObjectStore` trait implementation end-to-end through the
+real FFI boundary, including the arrow-rs object-store conformance suite.
+
+These are ordinary Rust tests in `tests/object_store.rs`.  The ceph build
+runs `cargo test --no-run` and installs the resulting libtest binary as
+`ceph_test_rgw_lancedb_object_store`, so test nodes need neither the source
+tree nor a rust toolchain.  Bringing up the ceph context and the SAL driver
+happens in `src/test/rgw/rgw_sal_test_env.cc`, linked in as
+`libceph_rgw_sal_test_env.so`.
+
+```bash
+cd ceph/build
+ninja ceph_test_rgw_lancedb_object_store
+CEPH_CONF=./ceph.conf ./bin/ceph_test_rgw_lancedb_object_store
+```
+
+libtest owns `argv`, so the binary is configured through `$CEPH_CONF` and
+`$CEPH_ARGS` (e.g. `CEPH_ARGS="--rgw-backend-store dbstore"`) while its own
+arguments are the usual libtest ones:
+
+```bash
+# one test, with its output shown
+CEPH_CONF=./ceph.conf ./bin/ceph_test_rgw_lancedb_object_store \
+    aros_put_opts --exact --nocapture
+# include tests marked #[ignore]
+CEPH_CONF=./ceph.conf ./bin/ceph_test_rgw_lancedb_object_store --include-ignored
+```
+
+Each test runs against its own bucket, created and torn down through the
+`rgw_test_env_*` API, so the default thread-parallel execution is safe.
+
+The crate's own unit tests live beside the code in `#[cfg(test)]` modules and
+are built into a separate binary, `unittest_rgw_lancedb_store`.  They use fake
+pointers rather than a driver, so they need no cluster and run under
+`make check`:
+
+```bash
+cd ceph/build
+ninja unittest_rgw_lancedb_store
+ctest -R unittest_rgw_lancedb_store
+```
+
+### S3 Vector Integration Tests
+
+Full end-to-end tests via S3 protocol. See `src/test/rgw/s3vectors/`.
 
 ## Architecture
 
@@ -52,3 +106,7 @@ Integration tests require a running Ceph cluster with RGW. See `src/test/rgw/s3v
 - `src/provider.rs` - `RGWStoreProvider` for creating stores from S3 URLs
 - `src/ffi.rs` - FFI bindings to C SAL wrapper functions
 - `include/lancedb_rgw_store.h` - C header for FFI interface
+- `tests/object_store.rs` - integration tests, including the arrow-rs
+  object-store conformance suite
+- `../../test/rgw/rgw_sal_test_env.cc` - C++ side of the test environment
+  (ceph context, SAL driver, per-test buckets)

@@ -4324,6 +4324,7 @@ dependencies = [
  "log",
  "object_store",
  "pkg-config",
+ "tokio",
  "tokio-test",
  "url",
 ]

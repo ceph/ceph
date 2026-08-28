@@ -22,8 +22,6 @@
 //! This crate requires NO modifications to lancedb, lance, or lance-io.
 //! It uses the existing extension points:
 //! - `ObjectStoreProvider` trait to implement custom storage
-//!
-//! ```
 
 /// FFI bindings to Ceph's rgw_sal_wrapper.cc
 pub mod ffi;

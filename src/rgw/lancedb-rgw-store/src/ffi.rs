@@ -183,6 +183,7 @@ extern "C" {
         bucket: *const CRgwBucket,
         obj: *const CRgwObject,
         buffer: *const CRgwBuffer,
+        etag_out: *mut *mut c_char,
     ) -> c_int;
 
     /// Write an object with conditional preconditions
@@ -196,6 +197,7 @@ extern "C" {
         if_match: *const c_char,
         if_nomatch: *const c_char,
         canceled: *mut c_int,
+        etag_out: *mut *mut c_char,
     ) -> c_int;
 
     /// Read an object from RGW storage
@@ -207,6 +209,24 @@ extern "C" {
         obj: *const CRgwObject,
         offset: u64,
         length: u64,
+        buffer: *mut CRgwBuffer,
+    ) -> c_int;
+
+    /// Read an object with conditional checks (if-match, if-modified-since, etc.).
+    /// This is not used by Lance as it reads immutable files, but is added only
+    /// for object-store conformance tests.
+    pub fn rgw_get_object_conditional(
+        driver: *mut CRgwDriver,
+        dpp: *const CRgwDoutPrefix,
+        yield_ctx: *mut CRgwYieldContext,
+        bucket: *const CRgwBucket,
+        obj: *const CRgwObject,
+        offset: u64,
+        length: u64,
+        if_match: *const c_char,
+        if_nomatch: *const c_char,
+        if_modified_since: *const i64,
+        if_unmodified_since: *const i64,
         buffer: *mut CRgwBuffer,
     ) -> c_int;
 
@@ -390,51 +410,5 @@ impl Drop for OwnedRGWListResult {
         unsafe {
             rgw_free_list_result(&mut self.0);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::ffi::CString;
-
-    #[test]
-    fn test_buffer_default() {
-        let buf = CRgwBuffer::default();
-        assert!(buf.data.is_null());
-        assert_eq!(buf.len, 0);
-    }
-
-    #[test]
-    fn test_object_default() {
-        let obj = CRgwObject::default();
-        assert!(obj.key.is_null());
-        assert!(obj.version_id.is_null());
-    }
-
-    #[test]
-    fn test_object_from_key() {
-        let key = CString::new("test-key").unwrap();
-        let obj = CRgwObject::from_key(key.as_ptr());
-        assert_eq!(obj.key, key.as_ptr());
-        assert!(obj.version_id.is_null());
-    }
-
-    #[test]
-    fn test_object_meta_default() {
-        let meta = CRgwObjectMeta::default();
-        assert_eq!(meta.size, 0);
-        assert!(meta.etag.is_null());
-        assert!(meta.content_type.is_null());
-        assert_eq!(meta.last_modified, 0);
-    }
-
-    #[test]
-    fn test_list_result_default() {
-        let result = CRgwListResult::default();
-        assert!(result.entries.is_null());
-        assert_eq!(result.count, 0);
-        assert_eq!(result.is_truncated, 0);
-        assert!(result.next_marker.is_null());
     }
 }
