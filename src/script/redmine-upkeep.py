@@ -54,6 +54,7 @@ REDMINE_CUSTOM_FIELD_ID_BACKPORT = 2
 REDMINE_CUSTOM_FIELD_ID_RELEASE = 16
 REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID = 21
 REDMINE_CUSTOM_FIELD_ID_TAGS = 31
+REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS = 48
 REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT = 33
 REDMINE_CUSTOM_FIELD_ID_FIXED_IN = 34
 REDMINE_CUSTOM_FIELD_ID_RELEASED_IN = 35
@@ -263,6 +264,17 @@ class IssueUpdate:
                 return field['value']
         return self.get_raw_custom_field(field_id)
 
+    def get_list_custom_field(self, field_id, raw=False):
+        """ Helper to safely get a list custom field, handling strings and None """
+        val = self.get_raw_custom_field(field_id) if raw else self.get_custom_field(field_id)
+        if not val:
+            return []
+        if isinstance(val, list):
+            return val.copy()
+        if isinstance(val, str):
+            return [v.strip() for v in val.split(',') if v.strip()]
+        return []
+
     def add_or_update_custom_field(self, field_id, value):
         """Helper to add or update a custom field in the payload."""
         custom_fields = self.update_payload.setdefault("custom_fields", [])
@@ -295,20 +307,16 @@ class IssueUpdate:
             return True
 
     def add_tag(self, tag):
-        current_tags_str = self.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
-        current_tags = []
-        if current_tags_str:
-            current_tags = [current_tag.strip() for current_tag in current_tags_str.split(',') if current_tag.strip()]
+        current_flags = self.get_list_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS)
 
-        if tag in current_tags:
-            self.logger.debug(f"tag '{tag}' already in tags")
+        if tag in current_flags:
+            self.logger.debug(f"flag '{tag}' already in flags")
             return
         else:
-            current_tags.append(tag)
-            self.logger.info(f"Adding '{tag}' tag.")
+            current_flags.append(tag)
+            self.logger.info(f"Adding '{tag}' flag.")
 
-        new_tags = ", ".join(current_tags)
-        self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, new_tags)
+        self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, current_flags)
 
     def has_open_subtasks(self):
         """
@@ -337,25 +345,20 @@ class IssueUpdate:
             self.logger.debug("Issue has no subtasks (ResourceAttrError on 'children' attribute).")
             return False
 
-    def get_update_payload(self, suppress_mail=True): # Added suppress_mail parameter
+    def get_update_payload(self, suppress_mail=True, keep_failure_flag=False): # Added suppress_mail parameter
         today = datetime.now(timezone.utc).isoformat(timespec='seconds')
         self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP, today)
 
-        current_tags_str = self.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
-        current_tags = []
-        if current_tags_str:
-            current_tags = [tag.strip() for tag in current_tags_str.split(',') if tag.strip()]
-            modified_tags = False
-            if "upkeep-failed" in current_tags:
-                self.logger.info(f"'upkeep-failed' tag found in '{current_tags_str}'. Removing for update.")
-                current_tags.remove("upkeep-failed")
-                modified_tags = True
-            if "backport_processed" in current_tags:
-                self.logger.info(f"'backport_processed' tag found in '{current_tags_str}'. Removing for update.")
-                current_tags.remove("backport_processed")
-                modified_tags = True
-            if modified_tags:
-                self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, ", ".join(current_tags))
+        if not keep_failure_flag:
+            # Cleanup new flags field
+            current_flags = self.get_list_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS)
+            modified_flags = False
+            if "upkeep-failed" in current_flags:
+                self.logger.info(f"'upkeep-failed' flag found. Removing for update.")
+                current_flags.remove("upkeep-failed")
+                modified_flags = True
+            if modified_flags:
+                self.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, current_flags)
 
         payload = {
             'issue': self.update_payload,
@@ -454,6 +457,10 @@ class RedmineUpkeep:
         NAME = "undefined"
 
         @staticmethod
+        def disabled():
+            return False
+
+        @staticmethod
         def get_filters():
             raise NotImplementedError("NI")
 
@@ -513,7 +520,8 @@ class RedmineUpkeep:
         for name, v in RedmineUpkeep.__dict__.items():
             if inspect.isclass(v) and issubclass(v, self.Filter) and v != self.Filter:
                 log.debug("discovered filter %s", v.NAME)
-                self.filters.append(v)
+                if not v.disabled():
+                    self.filters.append(v)
         random.shuffle(self.filters) # to shuffle equivalent PRIORITY
         self.filters.sort(key = lambda filter: filter.PRIORITY, reverse=True)
         log.debug(f"Discovered filters: {[f.__name__ for f in self.filters]}")
@@ -547,6 +555,63 @@ class RedmineUpkeep:
         log.info("Successfully connected to Redmine.")
         return R
 
+    class FilterMigrateLegacyTags(Filter):
+        """
+        Filter to find issues that still have the legacy text-based tags so they can be migrated.
+        """
+        PRIORITY = 1000000
+        NAME = "MigrateLegacyTags"
+
+        @staticmethod
+        def disabled():
+            return True
+
+        @staticmethod
+        def get_filters():
+            yield {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "~upkeep-"}
+            yield {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "~backport_processed"}
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
+    @transformation(1000000)
+    def _transform_migrate_legacy_tags(self, issue_update):
+        """
+        Transformation: Migrates old text-based tags to the new Upkeep Flags list field.
+        """
+        issue_update.logger.debug("Running _transform_migrate_legacy_tags")
+        current_tags_str = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
+        if not current_tags_str:
+            return False
+
+        current_tags = [tag.strip() for tag in re.split(r'[, ]', current_tags_str) if tag.strip()]
+        log.debug(f"current_tags: {current_tags}")
+        if not current_tags:
+            return False
+
+        changed = False
+        if "upkeep-failed" in current_tags:
+            issue_update.logger.info("Migrating legacy 'upkeep-failed' tag.")
+            current_tags.remove("upkeep-failed")
+            issue_update.add_tag("upkeep-failed")
+            changed = True
+        if "upkeep-bad-parentage" in current_tags:
+            issue_update.logger.info("Migrating legacy 'upkeep-bad-parentage' tag.")
+            current_tags.remove("upkeep-bad-parentage")
+            issue_update.add_tag("upkeep-bad-parentage")
+            changed = True
+        if "backport_processed" in current_tags:
+            issue_update.logger.info("Removing obsolete 'backport_processed' tag.")
+            current_tags.remove("backport_processed")
+            changed = True
+
+        if changed:
+            new_tags_str = ", ".join(current_tags)
+            issue_update.add_or_update_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS, new_tags_str)
+
+        return changed
+
     class FilterMergedBug1(Filter):
         """
         Filter issues with erroneous merge commits.
@@ -557,12 +622,11 @@ class RedmineUpkeep:
 
         @staticmethod
         def get_filters():
-            filter_set = {
+            yield {
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID}": '>=0',
                 f"cf_{REDMINE_CUSTOM_FIELD_ID_RELEASED_IN}": '~^',
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS}": "!upkeep-bad-parentage"
             }
-            yield {**filter_set, **{f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!*"}}
-            yield {**filter_set, **{f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!~upkeep-bad-parentage"}}
 
         @staticmethod
         def requires_github_api():
@@ -1252,6 +1316,9 @@ class RedmineUpkeep:
                 if transform_method(issue_update):
                     issue_update.logger.info(f"Transformation {transform_method.__name__} resulted in a change.")
                     applied_transformations.append(transform_method.__name__)
+                    if transform_name == "migrate_legacy_tags":
+                        issue_update.logger.info("Short-circuiting remaining transformations to isolate tag migration.")
+                        break
 
             issue_update.set_transform(None)
             if issue_update.has_changes:
@@ -1259,7 +1326,8 @@ class RedmineUpkeep:
                 try:
                     # We cannot put top-level changes in the PUT request against
                     # the redmine API via redminelib. So we send it manually.
-                    payload = issue_update.get_update_payload()
+                    keep_failure = "_transform_migrate_legacy_tags" in applied_transformations
+                    payload = issue_update.get_update_payload(keep_failure_flag=keep_failure)
                     issue_update.logger.debug("PUT payload:\n%s", json.dumps(payload, indent=4))
                     headers = {
                         'Content-Type': 'application/json',
@@ -1310,9 +1378,9 @@ class RedmineUpkeep:
         comment = f"""
 h1. Redmine Upkeep failure
 
-The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue. I have added the tag "upkeep-failed" to avoid looking at this issue again.
+The "redmine-upkeep.py script":https://github.com/ceph/ceph/blob/main/src/script/redmine-upkeep.py failed to update this issue. I have added the flag "upkeep-failed" to avoid looking at this issue again.
 
-**Please manually fix the issue and remove "upkeep-failed" tag to allow future upkeep operations.**
+**Please manually fix the issue and remove "upkeep-failed" flag to allow future upkeep operations.**
 
 h2. Transformation
 
@@ -1340,24 +1408,21 @@ h2. Update Payload
         issue_update.logger.debug("Created update failure comment:\n%s", comment)
         failure_payload['issue']['notes'] = comment
 
-        # Get existing tags or initialize if none
-        current_tags_str = issue_update.get_raw_custom_field(REDMINE_CUSTOM_FIELD_ID_TAGS)
-        current_tags = []
-        if current_tags_str:
-            current_tags = [tag.strip() for tag in current_tags_str.split(',') if tag.strip()]
+        # Get existing flags directly from the raw issue (ignoring pending payload)
+        current_flags = issue_update.get_list_custom_field(REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, raw=True)
 
         new_tag = "upkeep-failed"
-        if new_tag in current_tags:
-            issue_update.logger.warning(f"'upkeep-failed' tag is already present")
+        if new_tag in current_flags:
+            issue_update.logger.warning(f"'upkeep-failed' flag is already present")
             return
         else:
-            current_tags.append(new_tag)
-            issue_update.logger.info(f"Adding '{new_tag}' tag.")
+            current_flags.append(new_tag)
+            issue_update.logger.info(f"Adding '{new_tag}' flag.")
 
-        # Update custom field for tags in the failure payload
+        # Update custom field for flags in the failure payload
         custom_fields_payload = failure_payload['issue'].setdefault('custom_fields', [])
         custom_fields_payload.append(
-            {'id': REDMINE_CUSTOM_FIELD_ID_TAGS, 'value': ", ".join(current_tags)}
+            {'id': REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS, 'value': current_flags}
         )
 
         try:
@@ -1548,8 +1613,9 @@ h2. Update Payload
             "status_id": "*",
         }
         upkeep_failed_filters = [
-            {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!*",},
-            {f"cf_{REDMINE_CUSTOM_FIELD_ID_TAGS}": "!~upkeep-failed",}
+            {
+                f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_FLAGS}": "!upkeep-failed",
+            }
         ]
         #f"cf_{REDMINE_CUSTOM_FIELD_ID_UPKEEP_TIMESTAMP}": f"<={cutoff_date}", # Not updated recently
 
