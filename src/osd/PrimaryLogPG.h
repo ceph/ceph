@@ -720,6 +720,12 @@ public:
 
     utime_t mtime;
     SnapContext snapc;           // writer snap context
+    // Highest snap ID that is a *real* named pool snapshot (not a rollback ID).
+    // Rollback IDs advance snap_seq without being inserted into pg_pool_t::snaps,
+    // so snapc.seq may be a rollback ID.  real_snap_seq holds the highest key in
+    // pool.info.snaps (or 0 if none) and must be used for clone naming, the clone
+    // gate condition, and the SnapSet::seq update in make_writeable().
+    snapid_t real_snap_seq{0};
     eversion_t at_version;       // pg's current version pointer
     version_t user_at_version;   // pg's current user version pointer
 
