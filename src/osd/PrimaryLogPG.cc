@@ -4347,9 +4347,16 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   if (op->may_write() || op->may_cache()) {
     // snap
     if (!(m->has_flag(CEPH_OSD_FLAG_ENFORCE_SNAPC)) &&
-	pool.info.is_pool_snaps_mode()) {
+ pool.info.is_pool_snaps_mode()) {
       // use pool's snapc
       ctx->snapc = pool.snapc;
+      // Compute real_snap_seq: the highest key in pool.info.snaps.
+      // snapc.seq (== pool.snap_seq) may be a rollback ID, which advances
+      // snap_seq without inserting into pg_pool_t::snaps.  Use the highest
+      // real named snapshot ID (or 0 if none) for clone naming / gate / seq.
+      ctx->real_snap_seq = pool.info.snaps.empty()
+                             ? snapid_t(0)
+                             : pool.info.snaps.rbegin()->first;
     } else {
       // client specified snapc
       ctx->snapc.seq = m->get_snap_seq();
