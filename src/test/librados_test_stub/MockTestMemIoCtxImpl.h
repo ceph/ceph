@@ -172,6 +172,18 @@ public:
     return TestMemIoCtxImpl::selfmanaged_snap_rollback(oid, snap_id);
   }
 
+  MOCK_METHOD2(snap_rollback,
+               int(const std::string& snap_name, uint64_t *rollback_id));
+  int do_snap_rollback(const std::string& snap_name, uint64_t *rollback_id) {
+    return TestMemIoCtxImpl::snap_rollback(snap_name, rollback_id);
+  }
+
+  MOCK_METHOD2(pool_selfmanaged_snap_rollback,
+               int(uint64_t snap_id, uint64_t *rollback_id));
+  int do_pool_selfmanaged_snap_rollback(uint64_t snap_id, uint64_t *rollback_id) {
+    return TestMemIoCtxImpl::pool_selfmanaged_snap_rollback(snap_id, rollback_id);
+  }
+
   MOCK_METHOD3(truncate, int(const std::string& oid,
                              uint64_t size,
                              const SnapContext &snapc));
@@ -235,6 +247,8 @@ public:
     ON_CALL(*this, selfmanaged_snap_create(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_create));
     ON_CALL(*this, selfmanaged_snap_remove(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_remove));
     ON_CALL(*this, selfmanaged_snap_rollback(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_selfmanaged_snap_rollback));
+    ON_CALL(*this, snap_rollback(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_snap_rollback));
+    ON_CALL(*this, pool_selfmanaged_snap_rollback(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_pool_selfmanaged_snap_rollback));
     ON_CALL(*this, truncate(_,_,_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_truncate));
     ON_CALL(*this, write(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_write));
     ON_CALL(*this, write_full(_, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_write_full));
