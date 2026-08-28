@@ -315,7 +315,7 @@ class RbdService(object):
         # type: (str, Optional[str], Optional[str], int, Optional[int], bool) -> Dict
         """Return the changed extents between two states of an image.
 
-        Wraps ``librbd``'s ``diff_iterate2``. With ``from_snapshot`` set it reports
+        Wraps ``rbd.Image``'s ``diff_iterate``. With ``from_snapshot`` set it reports
         the extents that changed since that snapshot; otherwise it reports every
         allocated extent (a full-image diff). ``snapshot_name`` selects the target
         state (a snapshot, or the live image when omitted). ``whole_object`` trades
