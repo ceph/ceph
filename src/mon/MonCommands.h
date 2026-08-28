@@ -1266,6 +1266,7 @@ COMMAND("osd pool get "
           "|nopgchange"
           "|noscrub"
           "|nosizechange"
+		  "|num_zones"
           "|pct_update_delay"
           "|pg_autoscale_bias"
           "|pg_autoscale_mode"
@@ -1286,8 +1287,7 @@ COMMAND("osd pool get "
           "|target_size_bytes"
           "|target_size_ratio"
           "|use_gmt_hitset"
-          "|write_fadvise_dontneed"
-          "|num_zones",
+          "|write_fadvise_dontneed",
 	"get pool parameter <var>", "osd", "r")
 COMMAND("osd pool set "
 	"name=pool,type=CephPoolname "
