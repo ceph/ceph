@@ -1559,8 +1559,12 @@ h2. Update Payload
                 log.info("Issue processing limit reached. Stopping filter execution.")
                 break
             for filter_set in f.get_filters():
+                if limit <= 0:
+                    break
                 log.debug(f"Generated filter set: {filter_set}")
                 for upkeep_failed_filter in upkeep_failed_filters:
+                    if limit <= 0:
+                        break
                     issue_filter = {**common_filters, **upkeep_failed_filter, **filter_set}
                     issue_filter['limit'] = limit
                     needs_github_api = f.requires_github_api()
@@ -1579,8 +1583,6 @@ h2. Update Payload
                                 break
                     except redminelib.exceptions.ResourceAttrError as e:
                         log.warning(f"Redmine API error with filter {issue_filter}: {e}")
-                    if limit <= 0:
-                        break
 
 def main():
     parser = argparse.ArgumentParser(description="Ceph redmine upkeep tool")
