@@ -9092,6 +9092,10 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     dout(10) << " op snapset is old" << dendl;
   }
 
+  // Clone gate: a clone is needed when the head object is older than the most
+  // recent real snapshot.  Compare snapc.snaps[0] against new_snapset.seq,
+  // which is guaranteed by WI-18-e never to hold a rollback ID -- it always
+  // reflects the highest *real* named snapshot at the time of the last write.
   if ((ctx->obs->exists && !ctx->obs->oi.is_whiteout()) && // head exist(ed)
       snapc.snaps.size() &&                 // there are snaps
       !ctx->cache_operation &&
