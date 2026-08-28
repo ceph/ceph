@@ -315,7 +315,12 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans,
     ObjectContext::attr_cache_t& attr_cache);
-  interruptible_future<struct stat> stat(
+  using store_stat_ertr = crimson::os::FuturizedStore::Shard::stat_ertr;
+  using store_stat_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      store_stat_ertr>;
+  store_stat_iertr::future<struct stat> stat(
     CollectionRef c,
     const ghobject_t& oid) const;
   read_errorator::future<std::map<uint64_t, uint64_t>> fiemap(
