@@ -6,6 +6,7 @@
 #include "common/ceph_releases.h"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include "librbd/AsyncObjectThrottle.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ObjectMap.h"
@@ -313,10 +314,12 @@ void SnapshotRollbackRequest<I>::send_rollback_objects() {
           ctx->complete(0);
           return;
         }
-        // Non-fatal: fall through to per-object path on any error (WI-14-b)
+        // WI-14-b: Non-fatal; fall through to per-object path on any error.
+        // Increment fallback counter so operators can observe downgrade events.
         ldout(cct, 1) << this << " " << __func__
                       << ": pool-op rollback failed (" << cpp_strerror(r)
                       << "), falling back to per-object rollback" << dendl;
+        image_ctx.perfcounter->inc(l_librbd_snap_rollback_pool_op_fallback);
       }
     }
   }
