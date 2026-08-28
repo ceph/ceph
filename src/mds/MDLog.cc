@@ -33,6 +33,10 @@
 #include "events/ELid.h"
 
 #include "common/config.h"
+
+#ifdef CEPH_LOCKSTAT
+#include "common/lockstat.h"
+#endif
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 
@@ -491,6 +495,10 @@ public:
 void MDLog::_submit_thread()
 {
   dout(10) << "_submit_thread start" << dendl;
+
+#ifdef CEPH_LOCKSTAT
+  ceph::lockstat_detail::LockStat::set_thread_iopath(true);
+#endif
 
   std::unique_lock locker{submit_mutex};
 
