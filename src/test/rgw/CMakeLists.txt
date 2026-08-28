@@ -489,6 +489,11 @@ add_executable(unittest_rgw_tag test_rgw_tag.cc)
 add_ceph_unittest(unittest_rgw_tag)
 target_link_libraries(unittest_rgw_tag ${rgw_libs} ${UNITTEST_LIBS})
 
+# unittest_rgw_auth_sigv4
+add_executable(unittest_rgw_auth_sigv4 test_rgw_auth_sigv4.cc)
+add_ceph_unittest(unittest_rgw_auth_sigv4)
+target_link_libraries(unittest_rgw_auth_sigv4 ${rgw_libs} ${UNITTEST_LIBS})
+
 # unittest_rgw_http_client
 add_executable(unittest_rgw_http_client test_rgw_http_client.cc)
 add_ceph_unittest(unittest_rgw_http_client)
