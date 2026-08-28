@@ -217,4 +217,15 @@ void ScrubScheduler::dec_scrubs_local()
 int ScrubScheduler::get_scrubs_local() const {
   return m_resource_bookkeeper.get_scrubs_local();
 }
+
+void ScrubScheduler::dump_scrub_reservations(ceph::Formatter* f) const
+{
+  // Dump local resource bookkeeper info
+  m_resource_bookkeeper.dump_scrub_reservations(f);
+
+  // TODO: Crimson doesn't have remote scrub reservations like classic OSD
+  // Classic OSD also dumps m_osd_svc.get_scrub_reserver().dump(f) for remote reservations
+  // but Crimson's architecture is different and doesn't have a separate remote reserver
+}
+
 } // namespace crimson::osd

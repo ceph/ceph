@@ -59,5 +59,8 @@ public:
   scrub::ScrubQueue& get_queue() {
     return m_queue;
   }
+
+  /// Dump scrub reservations for debugging
+  void dump_scrub_reservations(ceph::Formatter* f) const;
 };
 } // namespace crimson::osd
