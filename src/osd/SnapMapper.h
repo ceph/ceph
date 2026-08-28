@@ -229,7 +229,7 @@ public:
     OSDriver& backend,
     OSDriver::OSTransaction&& txn,
     const std::map<epoch_t,
-                   std::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
+      mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
 
   static void set_completed_rollback(
     OSDriver& backend,

@@ -1023,7 +1023,7 @@ void SnapMapper::record_completed_rollbacks(
   CephContext *cct,
   OSDriver& backend,
   OSDriver::OSTransaction&& txn,
-  const map<epoch_t, map<int64_t, snap_interval_set_t>>& completed_rollbacks)
+  const map<epoch_t, mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks)
 {
   dout(10) << __func__ << " completed_rollbacks " << completed_rollbacks << dendl;
   for (auto& [epoch, pool_map] : completed_rollbacks) {

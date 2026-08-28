@@ -8364,6 +8364,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   uint64_t txn_size = 0;
 
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
+  // WI-17-c: parallel map for completed rollbacks (mirrors purged_snaps)
+  map<epoch_t, mempool::osdmap::map<int64_t, snap_interval_set_t>> completed_rollbacks;
 
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t start = std::max(superblock.get_newest_map() + 1, first);
@@ -8386,6 +8388,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       o->decode(bl);
 
       purged_snaps[e] = o->get_new_purged_snaps();
+      completed_rollbacks[e] = o->get_new_completed_rollbacks();
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
@@ -8458,6 +8461,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       }
       got_full_map(e);
       purged_snaps[e] = o->get_new_purged_snaps();
+      completed_rollbacks[e] = o->get_new_completed_rollbacks();
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
@@ -8531,6 +8535,21 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << __func__ << " superblock purged_snaps_last is "
 	     << superblock.purged_snaps_last
 	     << ", not recording new purged_snaps" << dendl;
+  }
+
+  // WI-17-c: record new completed_rollbacks (mirrors purged_snaps recording)
+  if (superblock.completed_rollbacks_last == start - 1) {
+    OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
+    SnapMapper::record_completed_rollbacks(
+      cct,
+      osdriver,
+      osdriver.get_transaction(&t),
+      completed_rollbacks);
+    superblock.completed_rollbacks_last = last;
+  } else {
+    dout(10) << __func__ << " superblock completed_rollbacks_last is "
+             << superblock.completed_rollbacks_last
+             << ", not recording new completed_rollbacks" << dendl;
   }
 
   // superblock and commit
