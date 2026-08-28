@@ -9092,6 +9092,44 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     dout(10) << " op snapset is old" << dendl;
   }
 
+  // Detect whether there are any pending rollback ops for this object.  When
+  // there are, ALL clone operations (including any regular snapshot clone) must
+  // be issued in a separate transaction (T1) submitted via simple_opc_submit
+  // before the client write transaction (T2).  EC does not permit a
+  // clone(dst, src) and a write(dst) in the same transaction.  When there are
+  // only snapshot clones and no rollbacks, the single-transaction path is used.
+  const snapid_t obj_seq = ctx->new_snapset.seq;
+  const auto jit_ops = [&]() -> std::vector<pending_op_t> {
+    auto& rb_queue = get_osdmap()->get_rollback_snaps_queue();
+    auto pool_it = rb_queue.find(info.pgid.pgid.pool());
+    if (pool_it == rb_queue.end())
+      return {};
+    return build_pending_ops(pool.info, obj_seq, snapc.seq);
+  }();
+
+  const bool has_rollback = std::any_of(
+    jit_ops.begin(), jit_ops.end(),
+    [](const pending_op_t& op) { return op.type == pending_op_t::ROLLBACK; });
+
+  // When a rollback is needed we build a separate jit_ctx to hold T1 (all
+  // clones + SnapSet update).  Otherwise clone_t/clone_log/clone_version point
+  // into the main ctx so the single-transaction path is unchanged.
+  OpContextUPtr jit_ctx;
+  if (has_rollback) {
+    jit_ctx = simple_opc_create(ctx->obc);
+    jit_ctx->at_version = ctx->at_version;
+    jit_ctx->snapc    = ctx->snapc;
+    jit_ctx->mtime    = ctx->mtime;
+    jit_ctx->new_obs  = ctx->new_obs;
+    jit_ctx->new_snapset = ctx->new_snapset;
+  }
+
+  // Convenience aliases: when has_rollback, clone ops go into jit_ctx;
+  // otherwise they go directly into the main ctx.
+  PGTransaction* clone_t   = has_rollback ? jit_ctx->op_t.get() : ctx->op_t.get();
+  std::vector<pg_log_entry_t>& clone_log = has_rollback ? jit_ctx->log : ctx->log;
+  eversion_t& clone_version = has_rollback ? jit_ctx->at_version : ctx->at_version;
+
   // Clone gate: a clone is needed when the head object is older than the most
   // recent real snapshot.  Compare snapc.snaps[0] against new_snapset.seq,
   // which is guaranteed by WI-18-e never to hold a rollback ID -- it always
@@ -9149,11 +9187,11 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     } else {
       snap_oi = &static_snap_oi;
     }
-    snap_oi->version = ctx->at_version;
+    snap_oi->version = clone_version;
     snap_oi->prior_version = ctx->obs->oi.version;
     snap_oi->copy_user_bits(ctx->obs->oi);
 
-    _make_clone(ctx, ctx->op_t.get(), ctx->clone_obc, soid, coid, snap_oi);
+    _make_clone(ctx, clone_t, ctx->clone_obc, soid, coid, snap_oi);
 
     ctx->delta_stats.num_objects++;
     if (snap_oi->is_dirty()) {
@@ -9180,64 +9218,86 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
 
     // log clone
     dout(10) << " cloning v " << ctx->obs->oi.version
-	     << " to " << coid << " v " << ctx->at_version
+	     << " to " << coid << " v " << clone_version
 	     << " snaps=" << snaps
 	     << " snapset=" << ctx->new_snapset << dendl;
-    ctx->log.push_back(pg_log_entry_t(
-			 pg_log_entry_t::CLONE, coid, ctx->at_version,
+    clone_log.push_back(pg_log_entry_t(
+			 pg_log_entry_t::CLONE, coid, clone_version,
 			 ctx->obs->oi.version,
 			 ctx->obs->oi.user_version,
 			 osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
-    encode(snaps, ctx->log.back().snaps);
+    encode(snaps, clone_log.back().snaps);
 
-    ctx->at_version.version++;
+    clone_version.version++;
   }
 
-  // JIT rollback: resolve any pending rollbacks for this object before the
-  // client write is applied.  This runs after the regular snapshot clone block
-  // so that if both a normal clone AND a rollback are needed, the normal clone
-  // is captured first (it represents the state at snapc.seq before the rollback
-  // would have been visible -- but in practice they are in the same transaction).
-  {
-    snapid_t obj_seq = ctx->new_snapset.seq;
-    auto& rb_queue = get_osdmap()->get_rollback_snaps_queue();
-    auto pool_it = rb_queue.find(info.pgid.pgid.pool());
+  // JIT rollback: when there are pending rollback ops, execute them now.
+  // The clone operations (including any regular snapshot clone above) have
+  // already been directed into jit_ctx (T1).  Here we add the rollback-driven
+  // clones and SnapSet update to jit_ctx, then submit T1 via simple_opc_submit.
+  // T2 (the client write) proceeds in ctx->op_t as normal.
+  if (has_rollback) {
+    dout(10) << "make_writeable " << soid
+             << " JIT rollback: " << jit_ops.size() << " pending ops" << dendl;
 
-    if (pool_it != rb_queue.end()) {
-      auto ops = build_pending_ops(pool.info, obj_seq, snapc.seq);
+    // Sync new_snapset into jit_ctx so update_snapset_for_rollback sees the
+    // snapshot clones we may have just added above.
+    jit_ctx->new_snapset = ctx->new_snapset;
 
-      if (!ops.empty()) {
-        dout(10) << "make_writeable " << soid
-                 << " JIT rollback: " << ops.size() << " pending ops" << dendl;
+    // Emit clone operations for the rollback ops into jit_ctx->op_t (T1).
+    execute_clone_plan(soid, jit_ops, jit_ctx->op_t.get());
 
-        // Transaction 1: emit clone operations
-        execute_clone_plan(soid, ops, ctx->op_t.get());
-
-        // Update SnapSet metadata and write SS_ATTR
-        update_snapset_for_rollback(ctx, ops, pool.info, ctx->op_t.get());
-
-        // Emit CLONE + MODIFY(head) log entries
-        emit_rollback_log_entries(ctx, ops);
-
-        // Track in-flight JIT rollbacks per rollback_id so the background
-        // trimmer waits for JIT work to complete before marking done.
-        for (auto& op : ops) {
-          if (op.type == pending_op_t::ROLLBACK) {
-            jit_rollback_inflight[op.id]++;
-            snapid_t rb_id = op.id;
-            ctx->on_success.push_back([this, rb_id]() {
-              auto it = jit_rollback_inflight.find(rb_id);
-              if (it != jit_rollback_inflight.end()) {
-                if (--(it->second) == 0) {
-                  jit_rollback_inflight.erase(it);
-                  kick_snap_trim();
-                }
-              }
-            });
-          }
+    // Register OBCs for rollback source clones so EC's get_write_plan can
+    // look them up from the transaction's obc_map.
+    for (auto& op : jit_ops) {
+      if (op.type == pending_op_t::ROLLBACK) {
+        hobject_t src_clone = soid;
+        src_clone.snap = op.source;
+        ObjectContextRef src_obc = get_object_context(src_clone, false);
+        if (src_obc) {
+          jit_ctx->op_t->add_obc(src_obc);
         }
       }
     }
+
+    // Update SnapSet metadata for the rollback clones and write SS_ATTR in T1.
+    update_snapset_for_rollback(jit_ctx.get(), jit_ops, pool.info,
+                                jit_ctx->op_t.get());
+
+    // Propagate the updated new_snapset (with rollback clones + advanced seq)
+    // back to ctx so that finish_ctx writes the correct final SS_ATTR in T2.
+    ctx->new_snapset = jit_ctx->new_snapset;
+
+    // Emit CLONE + MODIFY(head) log entries into jit_ctx->log (T1).
+    emit_rollback_log_entries(jit_ctx.get(), jit_ops);
+
+    // Advance ctx->at_version past all the versions consumed by T1 so that
+    // T2 log entries start at the correct version.
+    ctx->at_version = jit_ctx->at_version;
+
+    // Track in-flight JIT rollbacks so the background trimmer waits for JIT
+    // work to complete before marking a rollback done.
+    for (auto& op : jit_ops) {
+      if (op.type == pending_op_t::ROLLBACK) {
+        jit_rollback_inflight[op.id]++;
+        snapid_t rb_id = op.id;
+        jit_ctx->on_success.push_back([this, rb_id]() {
+          auto it = jit_rollback_inflight.find(rb_id);
+          if (it != jit_rollback_inflight.end()) {
+            if (--(it->second) == 0) {
+              jit_rollback_inflight.erase(it);
+              kick_snap_trim();
+            }
+          }
+        });
+      }
+    }
+
+    // Submit T1 (clones + SnapSet update) as a separate, independent
+    // transaction.  T2 (client write) is submitted by the caller via the
+    // normal issue_repop path.  Both transactions are submitted in parallel;
+    // ordering is guaranteed by the object pipeline in the backend.
+    simple_opc_submit(std::move(jit_ctx));
   }
 
   // update most recent clone_overlap and usage stats
