@@ -9259,9 +9259,17 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     newest_overlap.subtract(ctx->modified_ranges);
   }
 
-  if (snapc.seq > ctx->new_snapset.seq) {
-    // update snapset with latest snap context
-    ctx->new_snapset.seq = snapc.seq;
+  // Advance SnapSet::seq to the highest *real* snapshot ID.  Using snapc.seq
+  // here would store a rollback ID into the object's persistent metadata,
+  // because rollback IDs advance pool.snap_seq without being inserted into
+  // pg_pool_t::snaps.  real_snap_seq is 0 for client-snapc writes, where
+  // snapc.seq already contains only real snap IDs, so fall back to snapc.seq
+  // in that case via the two-step comparison below.
+  {
+    snapid_t effective_seq = ctx->real_snap_seq ? ctx->real_snap_seq : snapc.seq;
+    if (effective_seq > ctx->new_snapset.seq) {
+      ctx->new_snapset.seq = effective_seq;
+    }
   }
   dout(20) << "make_writeable " << soid
 	   << " done, snapset=" << ctx->new_snapset << dendl;
