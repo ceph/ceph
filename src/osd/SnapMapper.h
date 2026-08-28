@@ -224,12 +224,21 @@ public:
     std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
 
   // WI-17-b: completed-rollback recording and lookup
+  // Overload for mempool-allocated maps (from OSDMap incremental in handle_osd_map())
   static void record_completed_rollbacks(
     CephContext *cct,
     OSDriver& backend,
     OSDriver::OSTransaction&& txn,
     const std::map<epoch_t,
       mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
+
+  // Overload for plain std::map (from MMonGetCompletedRollbacksReply)
+  static void record_completed_rollbacks(
+    CephContext *cct,
+    OSDriver& backend,
+    OSDriver::OSTransaction&& txn,
+    const std::map<epoch_t,
+      std::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
 
   static void set_completed_rollback(
     OSDriver& backend,

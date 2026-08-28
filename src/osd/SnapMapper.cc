@@ -1019,11 +1019,12 @@ bool SnapMapper::is_completed_rollback(
   return kv.first == key;
 }
 
-void SnapMapper::record_completed_rollbacks(
+template <class PoolMap>
+static void _do_record_completed_rollbacks(
   CephContext *cct,
   OSDriver& backend,
-  OSDriver::OSTransaction&& txn,
-  const map<epoch_t, mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks)
+  OSDriver::OSTransaction& txn,
+  const map<epoch_t, PoolMap>& completed_rollbacks)
 {
   dout(10) << __func__ << " completed_rollbacks " << completed_rollbacks << dendl;
   for (auto& [epoch, pool_map] : completed_rollbacks) {
@@ -1032,12 +1033,30 @@ void SnapMapper::record_completed_rollbacks(
         snapid_t rb_id = i.get_start();
         snapid_t rb_end = i.get_start() + i.get_len();
         while (rb_id < rb_end) {
-          set_completed_rollback(backend, txn, pool_id, rb_id);
+          SnapMapper::set_completed_rollback(backend, txn, pool_id, rb_id);
           ++rb_id;
         }
       }
     }
   }
+}
+
+void SnapMapper::record_completed_rollbacks(
+  CephContext *cct,
+  OSDriver& backend,
+  OSDriver::OSTransaction&& txn,
+  const map<epoch_t, mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks)
+{
+  _do_record_completed_rollbacks(cct, backend, txn, completed_rollbacks);
+}
+
+void SnapMapper::record_completed_rollbacks(
+  CephContext *cct,
+  OSDriver& backend,
+  OSDriver::OSTransaction&& txn,
+  const map<epoch_t, map<int64_t, snap_interval_set_t>>& completed_rollbacks)
+{
+  _do_record_completed_rollbacks(cct, backend, txn, completed_rollbacks);
 }
 
 
