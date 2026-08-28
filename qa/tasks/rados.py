@@ -64,6 +64,9 @@ def task(ctx, config):
           min_stride_size: <minimum write stride size in bytes>
           max_stride_size: <maximum write stride size in bytes>
           op_weights: <dictionary mapping operation type to integer weight>
+            snap_rollback: weight for pool-level snapshot rollback operations
+                           (pool-managed mode uses snap name; selfmanaged uses snap ID)
+                           Default: 0 (disabled). Recommended: 10 when rollback > 0.
           runs: <number of times to run> - the pool is remade between runs
           ec_pool: use an ec pool
           erasure_code_profile: profile to use with the erasure coded pool
@@ -235,6 +238,7 @@ def task(ctx, config):
         "snap_create",
         "snap_remove",
         "rollback",
+        "snap_rollback",    # NEW: pool-level snapshot rollback
         "setattr",
         "rmattr",
         "watch",
