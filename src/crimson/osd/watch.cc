@@ -124,6 +124,19 @@ seastar::future<> Watch::start_notify(NotifyRef notify)
   logger().debug("{} gid={} cookie={} starting notify(id={})",
                  __func__,  get_watcher_gid(), get_cookie(),
                  notify->ninfo.notify_id);
+  if (notify->complete) {
+    // The notify already completed -- in practice because it timed out while
+    // Notify::create_n_propagate() was still walking the watchers and this
+    // watcher had not been reached yet. Do not record or deliver it: emplacing
+    // an already-complete notify would leave a stale in_progress_notifies entry
+    // (the timer has fired, so nothing would later remove it unless the client
+    // acks), and delivering it would push a NOTIFY whose timeout completion was
+    // already sent to the notifier. Same core as do_notify_timeout(), so reading
+    // `complete` here is race-free.
+    logger().debug("{} notify(id={}) already complete, skipping",
+                   __func__, notify->ninfo.notify_id);
+    return seastar::now();
+  }
   auto [ it, emplaced ] = in_progress_notifies.emplace(std::move(notify));
   ceph_assert(emplaced);
   ceph_assert(is_alive());
@@ -138,8 +151,8 @@ seastar::future<> Watch::notify_ack(
                  __func__,  get_watcher_gid(), get_cookie(), notify_id);
   const auto it = in_progress_notifies.find(notify_id);
   if (it == std::end(in_progress_notifies)) {
-    logger().error("{} notify_id={} not found on the in-progess list."
-                   " Supressing but this should not happen.",
+    logger().error("{} notify_id={} not found on the in-progress list."
+                   " Suppressing but this should not happen.",
                    __func__, notify_id);
     return seastar::now();
   }
@@ -212,7 +225,18 @@ void Watch::cancel_notify(const uint64_t notify_id)
                  __func__,  get_watcher_gid(), get_cookie(),
                  notify_id);
   const auto it = in_progress_notifies.find(notify_id);
-  assert(it != std::end(in_progress_notifies));
+  if (it == std::end(in_progress_notifies)) {
+    // A notify timeout can fire while `Notify::create_n_propagate()` is still
+    // walking the watchers: `Notify::watchers` is populated synchronously and
+    // the timer is armed up front, but each watcher only records the notify in
+    // `in_progress_notifies` once its (asynchronous) `start_notify()` runs.
+    // `do_notify_timeout()` then iterates the full watcher set and may reach a
+    // watcher that has not started this notify yet. Treat that as a no-op
+    // rather than dereferencing `end()`. Mirrors `notify_ack()`.
+    logger().debug("{} notify_id={} not on the in-progress list, ignoring",
+                   __func__, notify_id);
+    return;
+  }
   in_progress_notifies.erase(it);
 }
 
@@ -346,6 +370,16 @@ void Notify::do_notify_timeout()
   // a watcher stores and which is being removed by `cancel_notify()`.
   // to avoid use-after-free we bump up the ref counter with `guard_ptr`.
   [[maybe_unused]] auto guard_ptr = shared_from_this();
+  // Mark the notify complete before cancelling watchers and sending the timeout
+  // completion. Propagation (Notify::create_n_propagate) may still be walking
+  // the watchers: a watcher whose start_notify() has not run yet is skipped by
+  // cancel_notify() (a no-op for a not-yet-recorded notify) and is still sent a
+  // NOTIFY once propagation resumes. Without `complete` set, that watcher's
+  // later ACK would reach complete_watcher()/remove_watcher() with `watchers`
+  // already emptied here, tripping their asserts (debug) or emitting a second
+  // NOTIFY_COMPLETE (release). Setting `complete` makes the late ACK a no-op via
+  // the guards in those methods.
+  complete = true;
   for (auto& watcher : watchers) {
     logger().debug("canceling watcher cookie={} gid={} use_count={}",
       watcher->get_cookie(),
