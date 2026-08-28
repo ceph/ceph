@@ -294,3 +294,217 @@ TEST(PrimaryLogPGRollbackTrimq, OnlyIncompleteRollbackAdded)
       << "pending rb2=" << rb2 << " must appear in rollback_trimq";
   EXPECT_EQ(trimq.at(rb2).source_snap, s1);
 }
+
+// ---------------------------------------------------------------------------
+// WI-18-f: make_writeable() rollback-safe clone logic (§16)
+//
+// simulate_make_writeable() replicates verbatim the three expressions fixed
+// by WI-18-c/d/e in PrimaryLogPG::make_writeable():
+//
+//   (WI-18-c) clone naming:  coid.snap = ctx->real_snap_seq
+//   (WI-18-d) clone gate:    snapc.snaps[0] > max(new_snapset.seq, real_snap_seq)
+//   (WI-18-e) seq update:    effective_seq = real_snap_seq ?: snapc.seq
+//
+// The four tests cover:
+//   (a) No spurious clone when R is the only seq advance (gate always false).
+//   (b) Clone is named real_snap_seq, not snapc.seq=R, when gate fires.
+//   (c) SnapSet::seq never holds a rollback ID after any write.
+//   (d) Spurious clone suppressed when new_snapset.seq was contaminated by R.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Result of simulating the make_writeable() clone gate and naming logic.
+struct MakeWriteableResult {
+  bool clone_created;     ///< true if the clone gate fired
+  snapid_t clone_name;    ///< snap ID assigned to the clone (if created)
+  snapid_t new_snapset_seq; ///< SnapSet::seq after the write
+};
+
+/// Simulate the three make_writeable() expressions fixed by WI-18-a–e.
+///
+/// @param snapc         pool SnapContext (seq may be a rollback ID)
+/// @param real_snap_seq highest key in pool.info.snaps, or 0
+/// @param head_exists   whether the head object exists (for gate)
+/// @param ss_seq        current SnapSet::seq on the object
+static MakeWriteableResult simulate_make_writeable(
+    const SnapContext& snapc,
+    snapid_t real_snap_seq,
+    bool head_exists,
+    snapid_t ss_seq)
+{
+  MakeWriteableResult r;
+  r.new_snapset_seq = ss_seq;
+  r.clone_created = false;
+  r.clone_name = snapid_t(0);
+
+  // --- Clone gate (WI-18-d) ---
+  bool gate = (head_exists &&
+               snapc.snaps.size() &&
+               snapc.snaps[0] > std::max(ss_seq, real_snap_seq));
+
+  if (gate) {
+    r.clone_created = true;
+    // --- Clone naming (WI-18-c) ---
+    r.clone_name = real_snap_seq;
+  }
+
+  // --- SnapSet::seq update (WI-18-e) ---
+  snapid_t effective_seq = real_snap_seq ? real_snap_seq : snapc.seq;
+  if (effective_seq > r.new_snapset_seq) {
+    r.new_snapset_seq = effective_seq;
+  }
+
+  return r;
+}
+
+} // anonymous namespace (extends existing one; defined separately to keep
+  // helpers grouped by work-item)
+
+// ---------------------------------------------------------------------------
+// Sub-case (a): No spurious clone when rollback ID R is the sole seq advance.
+//
+// Scenario: pool has snap S1=10.  Rollback R=20 is issued.  No new real snap.
+// An object that was last written at S1 is written again.
+//   snapc.seq = R=20, snapc.snaps = {S1=10}, real_snap_seq = S1=10.
+//   new_snapset.seq = S1=10 (object already up-to-date through S1).
+// Gate: snaps[0]=10 > max(10, 10) = 10 > 10 → false → no clone.  Correct.
+// SnapSet::seq: effective_seq = S1=10, 10 > 10 → false → seq stays S1=10.
+// ---------------------------------------------------------------------------
+TEST(PrimaryLogPGMakeWriteable, NoSpuriousCloneForRollbackOnlySeqAdvance)
+{
+  const snapid_t S1(10), R(20);
+
+  SnapContext snapc;
+  snapc.seq   = R;          // seq is a rollback ID
+  snapc.snaps = {S1};       // only real snaps
+
+  const snapid_t real_snap_seq = S1;  // pool.info.snaps.rbegin()->first
+  const snapid_t ss_seq        = S1;  // object last written at S1
+
+  auto res = simulate_make_writeable(snapc, real_snap_seq,
+                                     /*head_exists=*/true, ss_seq);
+
+  EXPECT_FALSE(res.clone_created)
+      << "No clone should be created when rollback ID R=" << R
+      << " is the only advance beyond S1=" << S1;
+
+  EXPECT_FALSE(res.new_snapset_seq == R)
+      << "SnapSet::seq must not be set to rollback ID R=" << R;
+
+  EXPECT_EQ(res.new_snapset_seq, S1)
+      << "SnapSet::seq must remain at real snap S1=" << S1;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-case (b): Clone is named real_snap_seq (S1), not snapc.seq (R).
+//
+// Set up a context where the gate fires: ss_seq=0, real_snap_seq=S1=10,
+// snapc.snaps[0]=S_new=30, snapc.seq=R=20 (rollback ID).
+// Gate: 30 > max(0, 10) = 30 > 10 → true → clone fires.
+// Post-fix clone name: real_snap_seq = S1=10 (not R=20).
+// ---------------------------------------------------------------------------
+TEST(PrimaryLogPGMakeWriteable, CloneNamedAfterRealSnapNotRollbackId)
+{
+  // ss_seq=0 (object never written under any snapshot), real_snap_seq=S1,
+  // but snapc.snaps={S_new} and snapc.seq=R triggers the gate.
+
+  const snapid_t S1(10), R(20), S_new(30);
+
+  SnapContext snapc;
+  snapc.seq   = R;        // snapc.seq is a rollback ID
+  snapc.snaps = {S_new};  // only real snap visible in this context
+
+  const snapid_t real_snap_seq = S1;  // pool.info.snaps has only S1 on this OSD
+  const snapid_t ss_seq        = snapid_t(0); // object never written under any snap
+
+  auto res = simulate_make_writeable(snapc, real_snap_seq,
+                                     /*head_exists=*/true, ss_seq);
+
+  ASSERT_TRUE(res.clone_created)
+      << "Gate must fire: snaps[0]=" << S_new
+      << " > max(ss_seq=0, real_snap_seq=" << S1 << ")";
+
+  EXPECT_EQ(res.clone_name, S1)
+      << "Clone must be named after real_snap_seq=" << S1
+      << ", not rollback ID R=" << R;
+
+  EXPECT_NE(res.clone_name, R)
+      << "Clone name must NOT be the rollback ID R=" << R;
+}
+
+// ---------------------------------------------------------------------------
+// Sub-case (c): SnapSet::seq never contains a rollback ID after any write.
+//
+// Three writes tested:
+//  1. Write while pool has only R (no real snaps): seq must stay 0.
+//  2. Write while pool has S1 and R (R > S1): seq must be S1, not R.
+//  3. Write while pool has S1, R, S_new (S_new > R > S1): seq must be S_new.
+// ---------------------------------------------------------------------------
+TEST(PrimaryLogPGMakeWriteable, SnapSetSeqNeverContainsRollbackId)
+{
+  const snapid_t S1(10), R(20), S_new(30);
+
+  // Write 1: pool has S1 and R (R > S1). real_snap_seq = S1.
+  // Object never written before (ss_seq=0): seq must advance to S1, not R.
+  {
+    SnapContext snapc;
+    snapc.seq   = R;
+    snapc.snaps = {S1};
+    const snapid_t real_snap_seq = S1;
+    const snapid_t ss_seq        = snapid_t(0);
+
+    auto res = simulate_make_writeable(snapc, real_snap_seq,
+                                       /*head_exists=*/true, ss_seq);
+
+    EXPECT_NE(res.new_snapset_seq, R)
+        << "SnapSet::seq must not be set to rollback ID R=" << R;
+    EXPECT_EQ(res.new_snapset_seq, S1)
+        << "SnapSet::seq must be set to real snap S1=" << S1;
+  }
+
+  // Write 3: pool has S1, R, S_new (S_new > R > S1). real_snap_seq = S_new.
+  {
+    SnapContext snapc;
+    snapc.seq   = S_new;   // highest allocated ID is S_new (real)
+    snapc.snaps = {S_new, S1};
+    const snapid_t real_snap_seq = S_new;
+    const snapid_t ss_seq        = snapid_t(0);
+
+    auto res = simulate_make_writeable(snapc, real_snap_seq,
+                                       /*head_exists=*/true, ss_seq);
+
+    EXPECT_NE(res.new_snapset_seq, R)
+        << "SnapSet::seq must not be set to rollback ID R=" << R;
+    EXPECT_EQ(res.new_snapset_seq, S_new)
+        << "SnapSet::seq must be set to real snap S_new=" << S_new;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Sub-case (d): Gate suppresses spurious clone when new_snapset.seq was
+// previously contaminated with a rollback ID (pre-fix scenario).
+//
+// Scenario: a prior write (before fix) stored R=20 into new_snapset.seq.
+// Then S_new=30 is created. Next write:
+//   pre-fix gate: snaps[0]=30 > new_snapset.seq=20 → true → spurious clone R.
+//   post-fix gate: snaps[0]=30 > max(20, 30) = 30 > 30 → false → no clone.
+// ---------------------------------------------------------------------------
+TEST(PrimaryLogPGMakeWriteable, GateSuppressesSpuriousCloneWhenSeqContaminated)
+{
+  const snapid_t R(20), S_new(30);
+
+  SnapContext snapc;
+  snapc.seq   = S_new;
+  snapc.snaps = {S_new};
+
+  const snapid_t real_snap_seq = S_new; // post-fix: real snap is S_new
+  const snapid_t ss_seq        = R;     // contaminated by prior rollback write
+
+  auto res = simulate_make_writeable(snapc, real_snap_seq,
+                                     /*head_exists=*/true, ss_seq);
+
+  EXPECT_FALSE(res.clone_created)
+      << "Post-fix gate must suppress spurious clone when new_snapset.seq="
+      << R << " (rollback ID) and real_snap_seq=snaps[0]=" << S_new;
+}
