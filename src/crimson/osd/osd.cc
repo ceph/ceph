@@ -816,6 +816,8 @@ seastar::future<> OSD::start_asok_admin()
       make_asok_hook<DumpPGStateHistory>(std::as_const(pg_shard_manager)));
     asok->register_command(make_asok_hook<DumpMetricsHook>());
     asok->register_command(make_asok_hook<DumpPerfCountersHook>());
+    asok->register_command(make_asok_hook<DumpScrubsHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<DumpScrubReservationsHook>(get_shard_services()));
     asok->register_command(make_asok_hook<AssertAlwaysHook>());
     asok->register_command(make_asok_hook<InjectDataErrorHook>(get_shard_services()));
     asok->register_command(make_asok_hook<InjectMDataErrorHook>(get_shard_services()));
@@ -831,6 +833,11 @@ seastar::future<> OSD::start_asok_admin()
                                                                   std::string_view{"deep-scrub"}));
     asok->register_command(make_asok_hook<pg::ScrubCommand<false>>(*this,
                                                                    std::string_view{"scrub"}));
+    asok->register_command(make_asok_hook<pg::ScheduleScrubCommand<false>>(*this,
+                                                                           std::string_view{"schedule-scrub"}));
+    asok->register_command(make_asok_hook<pg::ScheduleScrubCommand<true>>(*this,
+                                                                          std::string_view{"schedule-deep-scrub"}));
+    asok->register_command(make_asok_hook<pg::ScrubMetricsCommand>(*this));
     // ops commands
     asok->register_command(
       make_asok_hook<DumpInFlightOpsHook>(
@@ -1441,7 +1448,7 @@ seastar::future<> OSD::handle_scrub_command(
     [m, conn, this](spg_t pgid) {
     return pg_shard_manager.start_pg_operation<
       crimson::osd::ScrubRequested
-      >(m->deep, conn, m->epoch, pgid).second;
+      >(m->deep, m->repair, conn, m->epoch, pgid).second;
   });
 }
 
