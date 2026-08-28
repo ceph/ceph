@@ -15,7 +15,7 @@ struct cls_user_set_buckets_op {
   cls_user_set_buckets_op() : add(false) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(1, 1, bl);
     encode(entries, bl);
     encode(add, bl);
     encode(time, bl);
@@ -23,7 +23,7 @@ struct cls_user_set_buckets_op {
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(1, bl);
     decode(entries, bl);
     decode(add, bl);
     decode(time, bl);

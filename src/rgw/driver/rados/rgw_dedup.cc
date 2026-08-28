@@ -2696,9 +2696,7 @@ namespace rgw::dedup {
     }
 
     std::map<RGWObjCategory, RGWStorageStats> stats;
-    std::optional<std::map<std::string, RGWStorageClassStats>> sc_stats{
-      std::map<std::string, RGWStorageClassStats>{}
-    };
+    std::optional<std::map<std::string, RGWStorageStats>> sc_stats;
     std::string bucket_ver, master_ver;
     std::string max_marker;
     ret = bucket->read_stats(dpp, null_yield, index, RGW_NO_SHARD, &bucket_ver,

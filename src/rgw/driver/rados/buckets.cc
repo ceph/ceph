@@ -142,10 +142,22 @@ int list(const DoutPrefixProvider* dpp, optional_yield y,
 
 int write_stats(const DoutPrefixProvider* dpp, optional_yield y,
                 librados::Rados& rados, const rgw_raw_obj& obj,
-                const RGWBucketEnt& ent)
+                const RGWBucketEnt& ent,
+                const std::optional<std::unordered_map<std::string, RGWBucketEnt>>* storage_class_ents)
 {
   cls_user_bucket_entry entry;
   ent.convert(&entry);
+  if (storage_class_ents && storage_class_ents->has_value()) {
+    if (!entry.storage_class_stats.has_value()) {
+      entry.storage_class_stats.emplace();
+    }
+    for (const auto& [storage_class, bent] : storage_class_ents->value()) {
+      cls_user_bucket_entry& sc_entry = entry.storage_class_stats.value()[storage_class];
+      sc_entry.size = bent.size;
+      sc_entry.size_rounded = bent.size_rounded;
+      sc_entry.count = bent.count;
+    }
+  }
 
   constexpr bool add = false; // bucket entry must exist
   return set(dpp, y, rados, obj, std::move(entry), add, &ent);
@@ -154,7 +166,8 @@ int write_stats(const DoutPrefixProvider* dpp, optional_yield y,
 int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
                librados::Rados& rados, const rgw_raw_obj& obj,
                RGWStorageStats& stats, ceph::real_time* last_synced,
-               ceph::real_time* last_updated)
+               ceph::real_time* last_updated,
+               std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats)
 {
   rgw_rados_ref ref;
   int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
@@ -175,15 +188,14 @@ int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
   stats.size = header.stats.total_bytes;
   stats.size_rounded = header.stats.total_bytes_rounded;
   stats.num_objects = header.stats.total_entries;
-  if (header.storage_class_stats.has_value()) {
-    if (!stats.storage_class_stats.has_value()) {
-      stats.storage_class_stats.emplace();
+  if (sc_stats && header.storage_class_stats.has_value()) {
+    if (!sc_stats->has_value()) {
+      sc_stats->emplace();
     }
-    for (auto it = header.storage_class_stats.value().begin(); it != header.storage_class_stats.value().end(); ++it) {
-      std::string storage_class = it->first;
-      stats.storage_class_stats.value()[storage_class].size = it->second.total_bytes;
-      stats.storage_class_stats.value()[storage_class].size_rounded = it->second.total_bytes_rounded;
-      stats.storage_class_stats.value()[storage_class].num_objects = it->second.total_entries;
+    for (const auto& [storage_class, sc] : *header.storage_class_stats) {
+      sc_stats->value()[storage_class].size = sc.total_bytes;
+      sc_stats->value()[storage_class].size_rounded = sc.total_bytes_rounded;
+      sc_stats->value()[storage_class].num_objects = sc.total_entries;
     }
   }
 

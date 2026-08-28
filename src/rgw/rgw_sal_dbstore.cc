@@ -211,7 +211,7 @@ namespace rgw::sal {
       int shard_id,
       std::string *bucket_ver, std::string *master_ver,
       std::map<RGWObjCategory, RGWStorageStats>& stats,
-      std::optional<std::map<std::string, RGWStorageClassStats>>& sc_stats,
+      std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
       std::string *max_marker, bool *syncstopped)
   {
     return 0;
@@ -1670,7 +1670,8 @@ namespace rgw::sal {
                           const rgw_owner& owner,
                           RGWStorageStats& stats,
                           ceph::real_time& last_synced,
-                          ceph::real_time& last_updated)
+                          ceph::real_time& last_updated,
+                          std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats)
   {
     return 0;
   }

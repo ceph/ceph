@@ -170,9 +170,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
       return ret;
     } else if (ret >= 0 && entry.user_stats_sync) {
       if (header.storage_class_stats.has_value() && entry.storage_class_stats.has_value()) {
-        for (auto it = entry.storage_class_stats.value().begin(); it != entry.storage_class_stats.value().end(); ++it) {
-          std::string storage_class = it->first;
-          cls_user_bucket_entry stats = it->second;
+        for (const auto& [storage_class, stats] : *entry.storage_class_stats) {
           header.storage_class_stats.value()[storage_class].total_entries -= stats.count;
           header.storage_class_stats.value()[storage_class].total_bytes -= stats.size;
           header.storage_class_stats.value()[storage_class].total_bytes_rounded -= stats.size_rounded;
@@ -198,9 +196,7 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
 
     if (!storage_class_stats.value().empty()){
       if (header.storage_class_stats.has_value()) {
-        for (auto it = storage_class_stats.value().begin(); it != storage_class_stats.value().end(); ++it) {
-          std::string storage_class = it->first;
-          cls_user_bucket_entry stats = it->second;
+        for (const auto& [storage_class, stats] : *storage_class_stats) {
           header.storage_class_stats.value()[storage_class].total_entries += stats.count;
           header.storage_class_stats.value()[storage_class].total_bytes += stats.size;
           header.storage_class_stats.value()[storage_class].total_bytes_rounded += stats.size_rounded;
@@ -452,9 +448,7 @@ static int cls_user_reset_stats(cls_method_context_t hctx,
       }
       add_header_stats(&header.stats, e);
       if (storage_classes_present && e.storage_class_stats.has_value()) {
-        for (auto it = e.storage_class_stats.value().begin(); it != e.storage_class_stats.value().end(); ++it) {
-          std::string storage_class = it->first;
-          cls_user_bucket_entry stats = it->second;
+        for (const auto& [storage_class, stats] : *e.storage_class_stats) {
           header.storage_class_stats.value()[storage_class].total_entries += stats.count;
           header.storage_class_stats.value()[storage_class].total_bytes += stats.size;
           header.storage_class_stats.value()[storage_class].total_bytes_rounded += stats.size_rounded;
@@ -522,9 +516,7 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
     }
     add_header_stats(&ret.acc_stats, e);
     if (storage_classes_present && e.storage_class_stats.has_value()) {
-      for (auto it = e.storage_class_stats.value().begin(); it != e.storage_class_stats.value().end(); ++it) {
-        std::string storage_class = it->first;
-        cls_user_bucket_entry stats = it->second;
+      for (const auto& [storage_class, stats] : *e.storage_class_stats) {
         header.storage_class_stats.value()[storage_class].total_entries += stats.count;
         header.storage_class_stats.value()[storage_class].total_bytes += stats.size;
         header.storage_class_stats.value()[storage_class].total_bytes_rounded += stats.size_rounded;
