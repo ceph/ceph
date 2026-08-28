@@ -163,6 +163,33 @@ impl RGWObjectStore {
         &self.prefix
     }
 
+    /// Build the metadata of a listed object.
+    ///
+    /// The etag and the full resolution timestamp are what let a caller tell two
+    /// objects with the same key apart: an object that is deleted and written again
+    /// keeps its key, and its size and its mtime in seconds may be unchanged.
+    unsafe fn entry_meta(entry: &ffi::CRgwListEntry) -> ObjectMeta {
+        let key = CStr::from_ptr(entry.key).to_string_lossy().into_owned();
+        let e_tag = if entry.etag.is_null() {
+            None
+        } else {
+            Some(CStr::from_ptr(entry.etag).to_string_lossy().into_owned())
+        };
+        ObjectMeta {
+            location: Path::from(key),
+            last_modified: Self::timestamp(entry.last_modified, entry.last_modified_ns),
+            size: entry.size,
+            e_tag,
+            version: None,
+        }
+    }
+
+    /// Convert an RGW timestamp to a chrono one, keeping the sub-second part
+    fn timestamp(seconds: i64, nanoseconds: i32) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::from_timestamp(seconds, nanoseconds.max(0) as u32)
+            .unwrap_or_else(chrono::Utc::now)
+    }
+
     /// Convert errno to ObjectStore error (test-only public accessor)
     #[cfg(test)]
     pub fn errno_to_error_for_test(
@@ -171,13 +198,13 @@ impl RGWObjectStore {
         path: &Path,
         op: &str,
     ) -> object_store::Error {
-        self.errno_to_error(errno, path, op)
+        Self::errno_to_error(errno, path, op)
     }
 
     /// Convert errno to ObjectStore error.
     /// Common RGW/RADOS codes are mapped explicitly; unmapped codes fall
     /// through to Generic with the raw errno in the message.
-    fn errno_to_error(&self, errno: i32, path: &Path, op: &str) -> object_store::Error {
+    fn errno_to_error(errno: i32, path: &Path, op: &str) -> object_store::Error {
         match errno {
             -2 => object_store::Error::NotFound {
                 // ENOENT
@@ -294,7 +321,7 @@ impl ObjectStore for RGWObjectStore {
                         version: None,
                     })
                 } else {
-                    Err(self.errno_to_error(result, location, "put"))
+                    Err(Self::errno_to_error(result, location, "put"))
                 }
             }
             PutMode::Create => {
@@ -320,7 +347,7 @@ impl ObjectStore for RGWObjectStore {
                 };
 
                 if result != 0 {
-                    return Err(self.errno_to_error(result, location, "put (create)"));
+                    return Err(Self::errno_to_error(result, location, "put (create)"));
                 }
                 if canceled != 0 {
                     return Err(ObjectStoreError::AlreadyExists {
@@ -364,7 +391,7 @@ impl ObjectStore for RGWObjectStore {
                 };
 
                 if result != 0 {
-                    return Err(self.errno_to_error(result, location, "put (update)"));
+                    return Err(Self::errno_to_error(result, location, "put (update)"));
                 }
                 if canceled != 0 {
                     return Err(ObjectStoreError::Precondition {
@@ -448,7 +475,7 @@ impl ObjectStore for RGWObjectStore {
                     )
                 };
                 if result != 0 {
-                    return Err(self.errno_to_error(result, location, "get"));
+                    return Err(Self::errno_to_error(result, location, "get"));
                 }
                 OwnedRGWBuffer(buffer).to_bytes()
             };
@@ -689,11 +716,13 @@ impl ObjectStore for RGWObjectStore {
                 };
 
                 if ret != 0 {
+                    // the errno is mapped to a typed error, so that a caller could tell a
+                    // missing bucket (ENOENT) apart from any other listing failure.
+                    // the bucket is part of the path, since it is the only part of the
+                    // error that lance keeps when it converts a "not found"
+                    let path = Path::from(format!("{}/{}", bucket, prefix_str).as_str());
                     return Some((
-                        vec![Err(object_store::Error::Generic {
-                            store: "rgw",
-                            source: format!("list failed with errno {}", ret).into(),
-                        })],
+                        vec![Err(RGWObjectStore::errno_to_error(ret, &path, "list"))],
                         (String::new(), true),
                     ));
                 }
@@ -709,20 +738,7 @@ impl ObjectStore for RGWObjectStore {
                         );
                         slice
                             .iter()
-                            .map(|e| {
-                                let key = CStr::from_ptr(e.key).to_string_lossy().into_owned();
-                                Ok(ObjectMeta {
-                                    location: Path::from(key),
-                                    last_modified: chrono::DateTime::from_timestamp(
-                                        e.last_modified,
-                                        0,
-                                    )
-                                    .unwrap_or_else(chrono::Utc::now),
-                                    size: e.size,
-                                    e_tag: None,
-                                    version: None,
-                                })
-                            })
+                            .map(|e| Ok(RGWObjectStore::entry_meta(e)))
                             .collect()
                     }
                 };
@@ -797,10 +813,12 @@ impl ObjectStore for RGWObjectStore {
             };
 
             if ret != 0 {
-                return Err(object_store::Error::Generic {
-                    store: "rgw",
-                    source: format!("list_with_delimiter failed with errno {}", ret).into(),
-                });
+                // the errno is mapped to a typed error, so that a caller could tell a
+                // missing bucket (ENOENT) apart from any other listing failure.
+                // the bucket is part of the path, since it is the only part of the
+                // error that lance keeps when it converts a "not found"
+                let path = Path::from(format!("{}/{}", self.bucket, prefix_str).as_str());
+                return Err(Self::errno_to_error(ret, &path, "list_with_delimiter"));
             }
 
             let owned_result = OwnedRGWListResult(result);
@@ -818,14 +836,7 @@ impl ObjectStore for RGWObjectStore {
                                 common_prefixes.push(Path::from(prefix_path));
                             }
                         } else if !key.is_empty() {
-                            objects.push(ObjectMeta {
-                                location: Path::from(key.clone()),
-                                last_modified: chrono::DateTime::from_timestamp(e.last_modified, 0)
-                                    .unwrap_or_else(chrono::Utc::now),
-                                size: e.size,
-                                e_tag: None,
-                                version: None,
-                            });
+                            objects.push(Self::entry_meta(e));
                         }
                     }
                 }
@@ -893,7 +904,7 @@ impl ObjectStore for RGWObjectStore {
                 if result == 0 {
                     Ok(())
                 } else {
-                    Err(self.errno_to_error(result, from, "copy"))
+                    Err(Self::errno_to_error(result, from, "copy"))
                 }
             }
             CopyMode::Create => {
@@ -921,7 +932,7 @@ impl ObjectStore for RGWObjectStore {
                         source: "destination already exists".into(),
                     })
                 } else {
-                    Err(self.errno_to_error(result, from, "copy_if_not_exists"))
+                    Err(Self::errno_to_error(result, from, "copy_if_not_exists"))
                 }
             }
         }
@@ -956,7 +967,7 @@ impl ObjectStore for RGWObjectStore {
         };
 
         if result != 0 {
-            return Err(self.errno_to_error(result, location, "init_multipart"));
+            return Err(Self::errno_to_error(result, location, "init_multipart"));
         }
 
         let upload_id_str = unsafe { CStr::from_ptr(upload_id_ptr) }
@@ -1004,7 +1015,7 @@ impl RGWObjectStore {
         };
 
         if result != 0 {
-            return Err(self.errno_to_error(result, location, "head"));
+            return Err(Self::errno_to_error(result, location, "head"));
         }
 
         let owned_meta = OwnedRGWObjectMeta(meta);
@@ -1021,8 +1032,10 @@ impl RGWObjectStore {
 
         Ok(ObjectMeta {
             location: location.clone(),
-            last_modified: chrono::DateTime::from_timestamp(owned_meta.0.last_modified, 0)
-                .unwrap_or_else(chrono::Utc::now),
+            last_modified: Self::timestamp(
+                owned_meta.0.last_modified,
+                owned_meta.0.last_modified_ns,
+            ),
             size: owned_meta.0.size,
             e_tag: etag,
             version: None,

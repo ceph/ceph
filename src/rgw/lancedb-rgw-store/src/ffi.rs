@@ -119,6 +119,8 @@ pub struct CRgwObjectMeta {
     pub content_type: *mut c_char,
     /// Last modified timestamp (Unix epoch seconds)
     pub last_modified: i64,
+    /// Nanoseconds part of the last modified timestamp
+    pub last_modified_ns: i32,
 }
 
 impl Default for CRgwObjectMeta {
@@ -128,6 +130,7 @@ impl Default for CRgwObjectMeta {
             etag: std::ptr::null_mut(),
             content_type: std::ptr::null_mut(),
             last_modified: 0,
+            last_modified_ns: 0,
         }
     }
 }
@@ -139,10 +142,14 @@ pub struct CRgwListEntry {
     pub key: *mut c_char,
     /// Version ID, null-terminated (NULL for current version)
     pub version_id: *mut c_char,
+    /// ETag (MD5 hash), null-terminated (NULL if unknown)
+    pub etag: *mut c_char,
     /// Object size in bytes
     pub size: u64,
     /// Last modified timestamp (Unix epoch seconds)
     pub last_modified: i64,
+    /// Nanoseconds part of the last modified timestamp
+    pub last_modified_ns: i32,
 }
 
 /// Result of a list objects operation
