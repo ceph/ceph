@@ -4852,94 +4852,116 @@ void Server::handle_client_openc(const MDRequestRef& mdr)
   if (!dn)
     return;
 
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
+
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  if (!excl && !dnl->is_null()) {
+  if (!dnl->is_null() && mdr->committing) {
+    /*
+     * Retried after the create was already journaled in a previous
+     * pass: the dn locks are no longer guaranteed to be held and
+     * re-running the create would double-create.  The finisher
+     * (C_MDS_openc_finish) will complete the request once the
+     * journal entry commits.
+     */
+    return;
+  }
+
+  CInode *newi;
+  if (!dnl->is_null() && mdr->is_xlocked(&dn->lock)) {
+    /*
+     * Retried after the create was projected in a previous pass:
+     * the projected linkage is our own.  Resume just after the
+     * projection instead of re-running the create (which would
+     * double-create) or taking the "it existed" branch below
+     * (which would reply without journaling the create).
+     */
+    newi = dnl->get_inode();
+  } else if (!excl && !dnl->is_null()) {
     // it existed.
     ceph_assert(mdr.get()->is_rdlocked(&dn->lock));
 
     handle_client_open(mdr);
     return;
-  }
+  } else {
+    ceph_assert(dnl->is_null());
 
-  ceph_assert(dnl->is_null());
-
-  if (!can_handle_charmap(mdr, dn)) {
-    return;
-  }
-
-  if (req->get_alternate_name().size() > alternate_name_max) {
-    dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
-    respond_to_request(mdr, -ENAMETOOLONG);
-    return;
-  }
-  dn->set_alternate_name(req->get_alternate_name());
-
-  // set layout
-  file_layout_t layout;
-  if (mdr->dir_layout != file_layout_t())
-    layout = mdr->dir_layout;
-  else
-    layout = mdcache->default_file_layout;
-
-  // What kind of client caps are required to complete this operation
-  uint64_t access = MAY_WRITE;
-
-  const auto default_layout = layout;
-
-  // fill in any special params from client
-  if (req->head.args.open.stripe_unit)
-    layout.stripe_unit = req->head.args.open.stripe_unit;
-  if (req->head.args.open.stripe_count)
-    layout.stripe_count = req->head.args.open.stripe_count;
-  if (req->head.args.open.object_size)
-    layout.object_size = req->head.args.open.object_size;
-  if (req->get_connection()->has_feature(CEPH_FEATURE_CREATEPOOLID) &&
-      (__s32)req->head.args.open.pool >= 0) {
-    layout.pool_id = req->head.args.open.pool;
-
-    // make sure we have as new a map as the client
-    if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
-      mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
+    if (!can_handle_charmap(mdr, dn)) {
       return;
     }
+
+    if (req->get_alternate_name().size() > alternate_name_max) {
+      dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
+      respond_to_request(mdr, -ENAMETOOLONG);
+      return;
+    }
+    dn->set_alternate_name(req->get_alternate_name());
+
+    // set layout
+    file_layout_t layout;
+    if (mdr->dir_layout != file_layout_t())
+      layout = mdr->dir_layout;
+    else
+      layout = mdcache->default_file_layout;
+
+    // What kind of client caps are required to complete this operation
+    uint64_t access = MAY_WRITE;
+
+    const auto default_layout = layout;
+
+    // fill in any special params from client
+    if (req->head.args.open.stripe_unit)
+      layout.stripe_unit = req->head.args.open.stripe_unit;
+    if (req->head.args.open.stripe_count)
+      layout.stripe_count = req->head.args.open.stripe_count;
+    if (req->head.args.open.object_size)
+      layout.object_size = req->head.args.open.object_size;
+    if (req->get_connection()->has_feature(CEPH_FEATURE_CREATEPOOLID) &&
+        (__s32)req->head.args.open.pool >= 0) {
+      layout.pool_id = req->head.args.open.pool;
+
+      // make sure we have as new a map as the client
+      if (req->get_mdsmap_epoch() > mds->mdsmap->get_epoch()) {
+        mds->wait_for_mdsmap(req->get_mdsmap_epoch(), new C_MDS_RetryRequest(mdcache, mdr));
+        return;
+      }
+    }
+
+    // If client doesn't have capability to modify layout pools, then
+    // only permit this request if the requested pool matches what the
+    // file would have inherited anyway from its parent.
+    if (default_layout != layout) {
+      access |= MAY_SET_VXATTR;
+    }
+
+    if (!is_valid_layout(&layout)) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    // created null dn.
+    if (!check_access(mdr, diri, access))
+      return;
+    if (!check_fragment_space(mdr, dir))
+      return;
+    if (!check_dir_max_entries(mdr, dir))
+      return;
+
+    if (mds_allow_async_dirops && mdr->dn[0].size() == 1)
+      mds->locker->create_lock_cache(mdr, diri, &mdr->dir_layout);
+
+    // create inode.
+    newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
+			     req->head.args.open.mode | S_IFREG, &layout);
+    ceph_assert(newi);
+
+    // it's a file.
+    dn->push_projected_linkage(newi);
   }
-
-  // If client doesn't have capability to modify layout pools, then
-  // only permit this request if the requested pool matches what the
-  // file would have inherited anyway from its parent.
-  if (default_layout != layout) {
-    access |= MAY_SET_VXATTR;
-  }
-
-  if (!is_valid_layout(&layout)) {
-    respond_to_request(mdr, -EINVAL);
-    return;
-  }
-
-  // created null dn.
-  CDir *dir = dn->get_dir();
-  CInode *diri = dir->get_inode();
-  if (!check_access(mdr, diri, access))
-    return;
-  if (!check_fragment_space(mdr, dir))
-    return;
-  if (!check_dir_max_entries(mdr, dir))
-    return;
-
-  if (mds_allow_async_dirops && mdr->dn[0].size() == 1)
-    mds->locker->create_lock_cache(mdr, diri, &mdr->dir_layout);
-
-  // create inode.
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
-				   req->head.args.open.mode | S_IFREG, &layout);
-  ceph_assert(newi);
-
-  // it's a file.
-  dn->push_projected_linkage(newi);
 
   auto _inode = newi->_get_inode();
   _inode->version = dn->pre_dirty();
-  if (layout.pool_id != mdcache->default_file_layout.pool_id)
+  if (_inode->layout.pool_id != mdcache->default_file_layout.pool_id)
     _inode->add_old_pool(mdcache->default_file_layout.pool_id);
   _inode->update_backtrace();
   _inode->rstat.rfiles = 1;
@@ -7496,37 +7518,59 @@ void Server::handle_client_mknod(const MDRequestRef& mdr)
   if (!check_dir_max_entries(mdr, dir))
     return;
 
-  ceph_assert(dn->get_projected_linkage()->is_null());
-  if (req->get_alternate_name().size() > alternate_name_max) {
-    dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
-    respond_to_request(mdr, -ENAMETOOLONG);
+  CInode *newi;
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (!dnl->is_null() && mdr->committing) {
+    /*
+     * Retried after the create was already journaled in a previous
+     * pass: the dn locks are no longer guaranteed to be held and
+     * re-running the create would double-create.  The finisher
+     * (C_MDS_mknod_finish) will complete the request once the
+     * journal entry commits.
+     */
     return;
   }
-  dn->set_alternate_name(req->get_alternate_name());
+  if (!dnl->is_null() && mdr->is_xlocked(&dn->lock)) {
+    /*
+     * Retried after the create was projected in a previous pass:
+     * the projected linkage is our own.  Resume just after the
+     * projection instead of re-running the create (which would
+     * double-create).
+     */
+    newi = dnl->get_inode();
+  } else {
+    ceph_assert(dnl->is_null());
+    if (req->get_alternate_name().size() > alternate_name_max) {
+      dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
+      respond_to_request(mdr, -ENAMETOOLONG);
+      return;
+    }
+    dn->set_alternate_name(req->get_alternate_name());
 
-  // set layout
-  file_layout_t layout;
-  if (mdr->dir_layout != file_layout_t())
-    layout = mdr->dir_layout;
-  else
-    layout = mdcache->default_file_layout;
+    // set layout
+    file_layout_t layout;
+    if (mdr->dir_layout != file_layout_t())
+      layout = mdr->dir_layout;
+    else
+      layout = mdcache->default_file_layout;
 
-  if (!is_valid_layout(&layout)) {
-    respond_to_request(mdr, -EINVAL);
-    return;
+    if (!is_valid_layout(&layout)) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode, &layout);
+    ceph_assert(newi);
+
+    dn->push_projected_linkage(newi);
   }
-
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode, &layout);
-  ceph_assert(newi);
-
-  dn->push_projected_linkage(newi);
 
   auto _inode = newi->_get_inode();
   _inode->version = dn->pre_dirty();
   _inode->rdev = req->head.args.mknod.rdev;
   _inode->rstat.rfiles = 1;
   _inode->accounted_rstat = _inode->rstat;
-  if (layout.pool_id != mdcache->default_file_layout.pool_id)
+  if (_inode->layout.pool_id != mdcache->default_file_layout.pool_id)
     _inode->add_old_pool(mdcache->default_file_layout.pool_id);
   _inode->update_backtrace();
 
@@ -7600,28 +7644,50 @@ void Server::handle_client_mkdir(const MDRequestRef& mdr)
   if (!check_dir_max_entries(mdr, dir))
     return;
 
-  ceph_assert(dn->get_projected_linkage()->is_null());
-
-  if (!can_handle_charmap(mdr, dn)) {
+  CInode *newi;
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (!dnl->is_null() && mdr->committing) {
+    /*
+     * Retried after the create was already journaled in a previous
+     * pass: the dn locks are no longer guaranteed to be held and
+     * re-running the create would double-create.  The finisher
+     * (C_MDS_mknod_finish) will complete the request once the
+     * journal entry commits.
+     */
     return;
   }
+  if (!dnl->is_null() && mdr->is_xlocked(&dn->lock)) {
+    /*
+     * Retried after the create was projected in a previous pass:
+     * the projected linkage is our own.  Resume just after the
+     * projection instead of re-running the create (which would
+     * double-create).
+     */
+    newi = dnl->get_inode();
+  } else {
+    ceph_assert(dnl->is_null());
 
-  if (req->get_alternate_name().size() > alternate_name_max) {
-    dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
-    respond_to_request(mdr, -ENAMETOOLONG);
-    return;
+    if (!can_handle_charmap(mdr, dn)) {
+      return;
+    }
+
+    if (req->get_alternate_name().size() > alternate_name_max) {
+      dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
+      respond_to_request(mdr, -ENAMETOOLONG);
+      return;
+    }
+    dn->set_alternate_name(req->get_alternate_name());
+
+    // new inode
+    unsigned mode = req->head.args.mkdir.mode;
+    mode &= ~S_IFMT;
+    mode |= S_IFDIR;
+    newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
+    ceph_assert(newi);
+
+    // it's a directory.
+    dn->push_projected_linkage(newi);
   }
-  dn->set_alternate_name(req->get_alternate_name());
-
-  // new inode
-  unsigned mode = req->head.args.mkdir.mode;
-  mode &= ~S_IFMT;
-  mode |= S_IFDIR;
-  CInode *newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
-  ceph_assert(newi);
-
-  // it's a directory.
-  dn->push_projected_linkage(newi);
 
   auto* _inode = newi->_get_inode();
   _inode->version = dn->pre_dirty();
@@ -7702,25 +7768,47 @@ void Server::handle_client_symlink(const MDRequestRef& mdr)
   if (!check_dir_max_entries(mdr, dir))
     return;
 
-  ceph_assert(dn->get_projected_linkage()->is_null());
-
-  if (!can_handle_charmap(mdr, dn)) {
+  CInode *newi = nullptr;
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (!dnl->is_null() && mdr->committing) {
+    /*
+     * Retried after the create was already journaled in a previous
+     * pass: the dn locks are no longer guaranteed to be held and
+     * re-running the create would double-create.  The finisher
+     * (C_MDS_mknod_finish) will complete the request once the
+     * journal entry commits.
+     */
     return;
   }
+  if (!dnl->is_null() && mdr->is_xlocked(&dn->lock)) {
+    /*
+     * Retried after the create was projected in a previous pass:
+     * the projected linkage is our own.  Resume just after the
+     * projection instead of re-running the create (which would
+     * double-create).
+     */
+    newi = dnl->get_inode();
+  } else {
+    ceph_assert(dnl->is_null());
 
-  if (req->get_alternate_name().size() > alternate_name_max) {
-    dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
-    respond_to_request(mdr, -ENAMETOOLONG);
-    return;
+    if (!can_handle_charmap(mdr, dn)) {
+      return;
+    }
+
+    if (req->get_alternate_name().size() > alternate_name_max) {
+      dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
+      respond_to_request(mdr, -ENAMETOOLONG);
+      return;
+    }
+    dn->set_alternate_name(req->get_alternate_name());
+
+    unsigned mode = S_IFLNK | 0777;
+    newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
+    ceph_assert(newi);
+
+    // it's a symlink
+    dn->push_projected_linkage(newi);
   }
-  dn->set_alternate_name(req->get_alternate_name());
-
-  unsigned mode = S_IFLNK | 0777;
-  CInode *newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
-  ceph_assert(newi);
-
-  // it's a symlink
-  dn->push_projected_linkage(newi);
 
   newi->symlink = req->get_path2();
   auto _inode = newi->_get_inode();
