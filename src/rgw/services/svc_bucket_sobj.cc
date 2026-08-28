@@ -540,7 +540,8 @@ int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,
 
   vector<rgw_bucket_dir_header> headers;
 
-  int r = svc.bi->read_stats(dpp, bucket_info, ent, y);
+  std::optional<std::unordered_map<std::string, RGWBucketEnt>> storage_class_ents;
+  int r = svc.bi->read_stats(dpp, bucket_info, ent, &storage_class_ents, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_stats returned r=" << r << dendl;
     return r;

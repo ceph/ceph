@@ -266,9 +266,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_owner& owner, const 
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  std::optional<std::map<std::string, RGWStorageClassStats>> sc_stats{
-    std::map<std::string, RGWStorageClassStats>{}
-  };
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats;
   r = bucket->read_stats(dpp, y, index, RGW_NO_SHARD, &bucket_ver,
 			 &master_ver, bucket_stats, sc_stats, nullptr);
   if (r < 0) {

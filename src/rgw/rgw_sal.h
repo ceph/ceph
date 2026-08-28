@@ -378,7 +378,8 @@ class Driver {
                            const rgw_owner& owner,
                            RGWStorageStats& stats,
                            ceph::real_time& last_synced,
-                           ceph::real_time& last_updated) = 0;
+                           ceph::real_time& last_updated,
+                           std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats = nullptr) = 0;
     /** Load owner storage stats asynchronously */
     virtual int load_stats_async(const DoutPrefixProvider* dpp,
                                  const rgw_owner& owner,
@@ -959,7 +960,7 @@ class Bucket {
 			   const bucket_index_layout_generation& idx_layout,
 			   int shard_id, std::string* bucket_ver, std::string* master_ver,
 			   std::map<RGWObjCategory, RGWStorageStats>& stats,
-			   std::optional<std::map<std::string, RGWStorageClassStats>>& sc_stats,
+			   std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			   std::string* max_marker = nullptr,
 			   bool* syncstopped = nullptr) = 0;
     /** Read the bucket stats from the backing Store, asynchronous */
