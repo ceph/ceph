@@ -43,7 +43,8 @@
   completion thread, with no extra read-side context.  BlueFS's
   db/wal/slow devices and other backends (io_uring, posix-aio, SPDK,
   pmem) keep the single ring and completion thread they had before and
-  are unchanged.
+  are unchanged.  The default of ``bdev_aio_reap_max`` rises from 16 to
+  128 completions per pass.
 
 * CephFS: The ``client_force_lazyio`` configuration option is now correctly marked
   as not supporting runtime updates. Previously, the configuration schema indicated
