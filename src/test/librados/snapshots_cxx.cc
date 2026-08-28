@@ -833,6 +833,108 @@ TEST_P(LibRadosSnapshotsSelfManagedECPP, Bug11677) {
   delete[] buf;
 }
 
+// Pool-managed snap rollback: basic success path with data-integrity check
+TEST_P(LibRadosSnapshotsPP, PoolSnapRollbackPP) {
+  char buf[bufsize];
+  char buf2[bufsize];
+  memset(buf,  0xcc, sizeof(buf));
+  memset(buf2, 0xdd, sizeof(buf2));
+  bufferlist bl1, bl2;
+  bl1.append(buf,  sizeof(buf));
+  bl2.append(buf2, sizeof(buf2));
+  // Write initial content (A) and create snapshot
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.snap_create("rollback_snap"));
+  rados_snap_t rid;
+  ASSERT_EQ(0, ioctx.snap_lookup("rollback_snap", &rid));
+  // Overwrite with different content (B)
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
+  // Issue pool-level rollback
+  uint64_t rollback_id = 0;
+  ASSERT_EQ(0, ioctx.snap_rollback("rollback_snap", &rollback_id));
+  EXPECT_GT(rollback_id, (uint64_t)0);
+  // Verify rollback_id is greater than the snap sequence of the snapshot
+  EXPECT_GT(rollback_id, (uint64_t)rid);
+  // Read back and verify content equals snapshot content (A, not B)
+  bufferlist bl3;
+  EXPECT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
+  EXPECT_EQ(0, memcmp(buf, bl3.c_str(), sizeof(buf)));
+  ASSERT_EQ(0, ioctx.snap_remove("rollback_snap"));
+}
+
+// Pool-managed snap rollback: snap does not exist → -ENOENT
+TEST_P(LibRadosSnapshotsPP, PoolSnapRollbackNoentPP) {
+  uint64_t rollback_id = 0;
+  ASSERT_EQ(-ENOENT, ioctx.snap_rollback("nonexistent_snap", &rollback_id));
+}
+
+// Pool-managed snap rollback: idempotency
+// Calling with the same snap name twice returns the same rollback_id
+TEST_P(LibRadosSnapshotsPP, PoolSnapRollbackIdempotentPP) {
+  char buf[bufsize];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+  ASSERT_EQ(0, ioctx.snap_create("idem_snap"));
+  uint64_t id1 = 0, id2 = 0;
+  ASSERT_EQ(0, ioctx.snap_rollback("idem_snap", &id1));
+  ASSERT_EQ(0, ioctx.snap_rollback("idem_snap", &id2));
+  EXPECT_EQ(id1, id2);
+  ASSERT_EQ(0, ioctx.snap_remove("idem_snap"));
+}
+
+// Selfmanaged snap rollback: basic success path with data-integrity check
+TEST_P(LibRadosSnapshotsSelfManagedPP, PoolSelfmanagedSnapRollbackPP) {
+  std::vector<uint64_t> my_snaps;
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
+  // Write initial content (A) under snap context
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  char buf[bufsize];
+  char buf2[bufsize];
+  memset(buf,  0xcc, sizeof(buf));
+  memset(buf2, 0xdd, sizeof(buf2));
+  bufferlist bl1, bl2;
+  bl1.append(buf,  sizeof(buf));
+  bl2.append(buf2, sizeof(buf2));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+  // Create a second snap so the first is captured as a clone.
+  my_snaps.insert(my_snaps.begin(), -2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.front()));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  // Overwrite with different content (B)
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
+  // Issue pool-level selfmanaged snap rollback to snap[1] (the first snap, content A)
+  uint64_t rollback_id = 0;
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[1], &rollback_id));
+  EXPECT_GT(rollback_id, my_snaps[1]);
+  // Read back and verify content equals snapshot content (A, not B)
+  bufferlist bl3;
+  EXPECT_EQ((int)sizeof(buf), ioctx.read("foo", bl3, sizeof(buf), 0));
+  EXPECT_EQ(0, memcmp(buf, bl3.c_str(), sizeof(buf)));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps[0]));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps[1]));
+}
+
+// Selfmanaged snap rollback: idempotency
+TEST_P(LibRadosSnapshotsSelfManagedPP, PoolSelfmanagedSnapRollbackIdempotentPP) {
+  std::vector<uint64_t> my_snaps;
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  char buf[bufsize];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+  uint64_t id1 = 0, id2 = 0;
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[0], &id1));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[0], &id2));
+  EXPECT_EQ(id1, id2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps.back()));
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSnapshotsPP);
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSnapshotsSelfManagedPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSnapshotsECPP);
