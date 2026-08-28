@@ -518,6 +518,12 @@ add_ceph_unittest(unittest_rgw_http_client)
 target_link_libraries(unittest_rgw_http_client
   rgw_common ${rgw_libs} ${UNITTEST_LIBS})
 
+# unittest_rgw_rest_conn
+add_executable(unittest_rgw_rest_conn test_rgw_rest_conn.cc)
+add_ceph_unittest(unittest_rgw_rest_conn)
+target_link_libraries(unittest_rgw_rest_conn
+  rgw_common ${rgw_libs} ${UNITTEST_LIBS})
+
 if(WITH_RADOSGW_FDB)
  list(APPEND rgw_incs "${CMAKE_BINARY_DIR}/_deps/zpp_bits-src/")
  add_catch2_test_rgw(rgw_hex)
