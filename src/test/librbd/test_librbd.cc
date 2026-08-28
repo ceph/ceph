@@ -10479,6 +10479,62 @@ TEST_F(TestLibRBD, CheckObjectMap)
   ASSERT_TRUE((flags & RBD_FLAG_OBJECT_MAP_INVALID) != 0);
 }
 
+TEST_F(TestLibRBD, ObjectMapOnCloneSnap)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING | RBD_FEATURE_OBJECT_MAP);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  librbd::Image parent_image;
+  ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, parent_image.snap_create("snap1"));
+  ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+
+  uint64_t features;
+  ASSERT_EQ(0, parent_image.features(&features));
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+                         clone_name.c_str(), features, &order));
+
+  librbd::Image clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+
+  // copy up an object so that the snapshot object map has a mix of
+  // existent and non-existent objects to verify
+  bl.clear();
+  bl.append(std::string(4096, '2'));
+  ASSERT_EQ((ssize_t)bl.length(), clone_image.write(0, bl.length(), bl));
+
+  ASSERT_EQ(0, clone_image.snap_create("clone_snap"));
+  ASSERT_EQ(0, clone_image.close());
+
+  // the clone snapshot still has a live parent overlap, so librbd doesn't
+  // load its object map into the image context -- check and rebuild must
+  // still be able to get at the on-disk map
+  librbd::Image snap_image;
+  ASSERT_EQ(0, rbd.open(ioctx, snap_image, clone_name.c_str(), "clone_snap"));
+
+  PrintProgress prog_ctx;
+  ASSERT_EQ(0, snap_image.check_object_map(prog_ctx));
+  ASSERT_PASSED(validate_object_map, snap_image);
+
+  ASSERT_EQ(0, snap_image.rebuild_object_map(prog_ctx));
+  ASSERT_PASSED(validate_object_map, snap_image);
+}
+
 TEST_F(TestLibRBD, BlockingAIO)
 {
   librados::IoCtx ioctx;
