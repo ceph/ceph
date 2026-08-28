@@ -121,7 +121,7 @@ public:
       store_index_t store_index = 0);
     ~Shard() = default;
 
-    seastar::future<struct stat> stat(
+    stat_ertr::future<struct stat> stat(
       CollectionRef c,
       const ghobject_t& oid,
       uint32_t op_flags = 0) override final;

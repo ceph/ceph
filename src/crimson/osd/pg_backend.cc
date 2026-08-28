@@ -1799,7 +1799,7 @@ PGBackend::omap_clear(
   return omap_clear_ertr::now();
 }
 
-PGBackend::interruptible_future<struct stat>
+PGBackend::store_stat_iertr::future<struct stat>
 PGBackend::stat(
   CollectionRef c,
   const ghobject_t& oid) const
