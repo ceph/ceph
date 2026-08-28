@@ -1371,7 +1371,7 @@ h2. Update Payload
             response.raise_for_status()
             issue_update.logger.info(f"Successfully added 'upkeep-failed' tag and comment to Redmine issue.")
         except requests.exceptions.HTTPError as err:
-            issue_update.logger.fatal(f"Could not update Redmine issue with failure tag/comment: {err} - Response: {response.text}")
+            issue_update.logger.critical(f"Could not update Redmine issue with failure tag/comment: {err} - Response: {response.text}")
             sys.exit(1)
 
     def filter_and_process_issues(self):
@@ -1627,15 +1627,15 @@ def main():
     log.debug(f"Parsed arguments: {args}")
 
     if not REDMINE_API_KEY:
-        log.fatal("REDMINE_API_KEY not found! Please set REDMINE_API_KEY environment variable or ~/.redmine_key.")
+        log.critical("REDMINE_API_KEY not found! Please set REDMINE_API_KEY environment variable or ~/.redmine_key.")
         sys.exit(1)
 
     if GITHUB_TOKEN is None:
-        log.fatal("GITHUB_TOKEN not found! Please set GITHUB_TOKEN environment variable or ~/.github_token.")
+        log.critical("GITHUB_TOKEN not found! Please set GITHUB_TOKEN environment variable or ~/.github_token.")
         sys.exit(1)
 
     if IS_GITHUB_ACTION and GITHUB_REPOSITORY != "ceph/ceph":
-        log.fatal("refusing to run ceph/ceph.git github action for repository {GITHUB_REPOSITORY}")
+        log.critical(f"refusing to run ceph/ceph.git github action for repository {GITHUB_REPOSITORY}")
         sys.exit(0)
 
     RU = None
@@ -1643,7 +1643,7 @@ def main():
         RU = RedmineUpkeep(args)
         RU.filter_and_process_issues() # No arguments needed here anymore
     except Exception as e:
-        log.fatal(f"An unhandled error occurred during Redmine upkeep: {e}", exc_info=True)
+        log.critical(f"An unhandled error occurred during Redmine upkeep: {e}", exc_info=True)
         if IS_GITHUB_ACTION:
              print(f"::error::An unhandled error occurred: {e}", file=sys.stderr)
         sys.exit(1)
