@@ -2078,6 +2078,75 @@ public:
   }
 };
 
+class SnapRollbackOp : public TestOp {
+public:
+  int snap_to_roll_back_to;           // model snap sequence number
+  std::shared_ptr<int> in_use;
+
+  SnapRollbackOp(int n, RadosTestContext *context, TestOpStat *stat = 0)
+    : TestOp(n, context, stat), snap_to_roll_back_to(-1)
+  {}
+
+  void _begin() override
+  {
+    std::lock_guard l{context->state_lock};
+
+    if (context->snaps.empty()) {
+      context->kick();
+      done = true;
+      return;
+    }
+
+    // Must quiesce: model update applies to all objects simultaneously.
+    if (!context->oid_in_use.empty()) {
+      context->kick();
+      done = true;
+      return;
+    }
+
+    snap_to_roll_back_to = rand_choose(context->snaps)->first;
+    in_use = context->snaps_in_use.lookup_or_create(
+      snap_to_roll_back_to, snap_to_roll_back_to);
+
+    context->cout_prefix() << "pool-level snap rollback to snap "
+                           << snap_to_roll_back_to << std::endl;
+
+    // Update model: roll back every known object to this snap
+    context->roll_back_pool(snap_to_roll_back_to);
+
+    uint64_t rollback_id = 0;
+    uint64_t rados_snap  = context->snaps[snap_to_roll_back_to];
+    int r;
+
+    if (context->pool_snaps) {
+      std::string snapname;
+      r = context->io_ctx.snap_get_name(rados_snap, &snapname);
+      if (r < 0) {
+        std::cerr << "SnapRollbackOp: snap_get_name failed: "
+                  << cpp_strerror(r) << std::endl;
+        ceph_abort();
+      }
+      r = context->io_ctx.snap_rollback(snapname, &rollback_id);
+    } else {
+      r = context->io_ctx.selfmanaged_snap_rollback(rados_snap, &rollback_id);
+    }
+
+    if (r < 0) {
+      std::cerr << "SnapRollbackOp failed: " << cpp_strerror(r) << std::endl;
+      ceph_abort();
+    }
+
+    in_use.reset();
+    done = true;
+    context->kick();
+  }
+
+  bool finished() override { return done; }
+  bool must_quiesce_other_ops() override { return true; }
+
+  std::string getType() override { return "SnapRollbackOp"; }
+};
+
 class CopyFromOp : public TestOp {
 public:
   std::string oid, oid_src;
