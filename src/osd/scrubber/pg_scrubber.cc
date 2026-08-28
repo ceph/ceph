@@ -1086,8 +1086,9 @@ void PgScrubber::select_range_n_notify()
 uint64_t PgScrubber::get_scrub_cost(uint64_t num_chunk_objects)
 {
   const auto& conf = m_pg->get_cct()->_conf;
-  if (op_queue_type_t::WeightedPriorityQueue == m_osds->osd->osd_op_queue_type()) {
-    // if the osd_op_queue is WPQ, we will use the default osd_scrub_cost value
+  if (op_queue_type_t::mClockScheduler != m_osds->osd->osd_op_queue_type()) {
+    // only mclock derives a per-IO metadata cost from its device capacity
+    // model; wpq and bfq use the flat osd_scrub_cost value
     return conf->osd_scrub_cost;
   }
   uint64_t cost = 0;
