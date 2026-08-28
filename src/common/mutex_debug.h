@@ -251,14 +251,14 @@ public:
 
   void
   condvar_wait_end(
-      lockstat_detail::lockstat_clock::time_point wait_start_clock)
+      lockstat_detail::lockstat_clock::time_point /*wait_start_clock*/)
   {
-    if (unlikely(wait_start_clock != lockstat_detail::lockstat_clock::zero() &&
+    // Resume hold tracking after pthread_cond_wait re-acquires the mutex.
+    // Do not record condvar sleep as mutex wait time; that is not lock
+    // contention.
+    if (unlikely(lockstat_detail::LockStat::is_lockstat_enabled() &&
                  get_traits())) {
-      const auto now = lockstat_detail::lockstat_clock::now();
-      record_wait_time(
-          now - wait_start_clock, lockstat_detail::LockMode::WRITE);
-      m_hold_start = now;
+      m_hold_start = lockstat_detail::lockstat_clock::now();
       m_hold_mode = lockstat_detail::LockMode::WRITE;
     }
   }
