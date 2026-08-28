@@ -160,3 +160,5 @@ either for high availability or for scalability.
 Combinations of `standby` and `active` etc are possible, for example
 running 3 `active` ``ceph-mds`` instances for scaling, and one `standby`
 instance for high availability.
+
+.. _RESTful: https://en.wikipedia.org/wiki/RESTful

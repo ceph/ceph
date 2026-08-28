@@ -12,8 +12,6 @@ intelligent daemons, and a :term:`Ceph Storage Cluster` accommodates large
 numbers of nodes, which communicate with each other to replicate and
 redistribute data dynamically.
 
-.. image:: images/stack.png
-
 .. image:: ../images/stack.png
 
 .. toctree::
