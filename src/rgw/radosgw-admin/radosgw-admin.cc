@@ -10343,10 +10343,11 @@ next:
 
     constexpr bool omit_utilized_stats = false;
     RGWStorageStats stats(omit_utilized_stats);
+    std::optional<std::unordered_map<std::string, RGWStorageStats>> sc_stats;
     ceph::real_time last_stats_sync;
     ceph::real_time last_stats_update;
     ret = driver->load_stats(dpp(), null_yield, owner, stats,
-                             last_stats_sync, last_stats_update);
+                             last_stats_sync, last_stats_update, &sc_stats);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
         cerr << "User has not been initialized or user does not exist" << std::endl;
@@ -10360,10 +10361,10 @@ next:
     {
       Formatter::ObjectSection os(*formatter, "result");
       encode_json("stats", stats, formatter.get());
-      if (stats.storage_class_stats.has_value()) {
+      if (sc_stats.has_value()) {
         formatter->open_object_section("stats.storage-classes");
-        for(auto it = stats.storage_class_stats.value().begin(); it != stats.storage_class_stats.value().end(); ++it){
-          encode_json(it->first.c_str(), it->second, formatter.get());
+        for (const auto& [storage_class, stats] : sc_stats.value()) {
+          encode_json(storage_class.c_str(), stats, formatter.get());
         }
         formatter->close_section();
       }

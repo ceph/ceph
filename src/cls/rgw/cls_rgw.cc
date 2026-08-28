@@ -757,8 +757,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 } // rgw_bucket_list
 
 static void initialize_storage_class(rgw_bucket_dir_header *header) {
-  for (auto kiter = header->stats.begin(); kiter != header->stats.end(); ++kiter) {
-    auto s = kiter->second;
+  for (const auto& [category, s] : header->stats) {
     if (s.num_entries > 0) {
       return;
     }
@@ -2716,7 +2715,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         header_changed = true;
       }
       auto& storage_class = rgw_placement_rule::get_canonical_storage_class(cur_change.meta.storage_class);
-      std::optional<std::unordered_map<std::string, rgw_bucket_category_stats>> storage_class_stats = header.storage_class_stats;
+      auto& storage_class_stats = header.storage_class_stats;
       rgw_bucket_category_stats& stats = header.stats[cur_change.meta.category];
 
       switch(op) {
@@ -2756,7 +2755,7 @@ int rgw_dir_suggest_changes(cls_method_context_t hctx,
         stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);
         stats.actual_size += cur_change.meta.size;
         if (storage_class_stats.has_value()) {
-          rgw_bucket_category_stats sc_stats = storage_class_stats.value()[storage_class];
+          rgw_bucket_category_stats& sc_stats = storage_class_stats.value()[storage_class];
           sc_stats.num_entries++;
           sc_stats.total_size += cur_change.meta.accounted_size;
           sc_stats.total_size_rounded += cls_rgw_get_rounded_size(cur_change.meta.accounted_size);

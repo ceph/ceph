@@ -556,9 +556,7 @@ void RGWOp_BILog_Info::execute(optional_yield y) {
   }
 
   map<RGWObjCategory, RGWStorageStats> stats;
-  std::optional<std::map<std::string, RGWStorageClassStats>> sc_stats{
-    std::map<std::string, RGWStorageClassStats>{}
-  };
+  std::optional<std::map<std::string, RGWStorageStats>> sc_stats;
   const auto& index = log_to_index_layout(logs.back());
 
   int ret =  bucket->read_stats(s, y, index, shard_id, &bucket_ver, &master_ver, stats, sc_stats, &max_marker, &syncstopped);

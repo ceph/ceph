@@ -6625,12 +6625,10 @@ static bool is_empty_stats(const rgw_bucket_dir_header& header) {
 }
 
 static void accumulate_sc_stats(const rgw_bucket_dir_header& header,
-                                 std::map<std::string, RGWStorageClassStats>& sc_stats)
+                                 std::map<std::string, RGWStorageStats>& sc_stats)
 {
-  for (auto it = header.storage_class_stats.value().begin(); it != header.storage_class_stats.value().end(); ++it) {
-    std::string storage_class = it->first;
-    rgw_bucket_category_stats stats = it->second;
-    RGWStorageClassStats& s = sc_stats[storage_class];
+  for (const auto& [storage_class, stats] : *header.storage_class_stats) {
+    RGWStorageStats& s = sc_stats[storage_class];
 
     s.size += stats.total_size;
     s.size_rounded += stats.total_size_rounded;
@@ -10371,7 +10369,7 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			       const rgw::bucket_index_layout_generation& idx_layout,
 			       int shard_id, string *bucket_ver, string *master_ver,
 			       map<RGWObjCategory, RGWStorageStats>& stats,
-			       std::optional<std::map<std::string, RGWStorageClassStats>>& sc_stats,
+			       std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			       string *max_marker, bool *syncstopped)
 {
   vector<rgw_bucket_dir_header> headers;
