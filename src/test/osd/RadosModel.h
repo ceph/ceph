@@ -69,7 +69,8 @@ enum TestOpType {
   TEST_OP_TIER_PROMOTE,
   TEST_OP_TIER_FLUSH,
   TEST_OP_SET_CHUNK,
-  TEST_OP_TIER_EVICT
+  TEST_OP_TIER_EVICT,
+  TEST_OP_SNAP_ROLLBACK   // pool-level snap rollback (both snap modes)
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -589,6 +590,24 @@ public:
     contents.dirty = true;
     contents.flushed = false;
     pool_obj_cont.rbegin()->second.insert_or_assign(oid, contents);
+  }
+
+  void roll_back_pool(int snap)
+  {
+    // Collect the set of all object names across all snap levels
+    std::set<std::string> all_oids;
+    for (auto& [level, objs] : pool_obj_cont) {
+      for (auto& [oid, desc] : objs) {
+        all_oids.insert(oid);
+      }
+    }
+
+    // For each object, apply the per-object roll_back() logic at the
+    // current snap level.  Objects that did not exist at 'snap' are
+    // marked as deleted (roll_back() already handles this via find_object).
+    for (auto& oid : all_oids) {
+      roll_back(oid, snap);
+    }
   }
 
   void update_object_tier_flushed(const std::string &oid, int snap)
