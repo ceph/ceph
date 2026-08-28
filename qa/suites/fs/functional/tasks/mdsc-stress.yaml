@@ -1,0 +1,20 @@
+# MDS request dispatch stress: metadata load + back-to-back rank
+# failovers (double-failover chaos).  The test deliberately fails MDS
+# ranks while clients are loaded, so the resulting cluster noise is
+# expected and ignored below.
+overrides:
+  ceph:
+    log-ignorelist:
+      - evicting unresponsive client
+      - but it is still running
+      - slow request
+      - MDS_SLOW_REQUEST
+      - MDS_CLIENT_LATE_RELEASE
+      - MDS_CLIENTS_LAGGY
+      - failing to respond to capability release
+      - Degraded data redundancy
+      - Reduced data availability
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_mdsc_stress
