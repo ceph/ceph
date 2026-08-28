@@ -9096,9 +9096,10 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       snapc.snaps.size() &&                 // there are snaps
       !ctx->cache_operation &&
       snapc.snaps[0] > ctx->new_snapset.seq) {  // existing object is old
-    // clone
+    // clone -- name after the highest *real* snapshot ID, not snapc.seq which
+    // may be a rollback ID that was never inserted into pg_pool_t::snaps.
     hobject_t coid = soid;
-    coid.snap = snapc.seq;
+    coid.snap = ctx->real_snap_seq;
 
     const auto snaps = [&] {
       auto last = find_if_not(
