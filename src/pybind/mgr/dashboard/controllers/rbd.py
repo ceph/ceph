@@ -266,10 +266,33 @@ class Rbd(RESTController):
         it walks the image via ``diff_iterate2`` and returns the changed extents,
         which is the primitive backup tools need for changed-block tracking (CBT).
         """
+        if from_snapshot == '':
+            from_snapshot = None
+        if snapshot_name == '':
+            snapshot_name = None
+        if length == '':
+            length = None
+        try:
+            offset_i = int(offset)
+        except (TypeError, ValueError) as e:
+            raise DashboardException(
+                msg="invalid offset '{}'".format(offset),
+                code='invalid_offset', component='rbd') from e
+        try:
+            length_i = int(length) if length is not None else None
+        except (TypeError, ValueError) as e:
+            raise DashboardException(
+                msg="invalid length '{}'".format(length),
+                code='invalid_length', component='rbd') from e
+        try:
+            whole_object_b = str_to_bool(whole_object)
+        except ValueError as e:
+            raise DashboardException(
+                msg="invalid whole_object '{}'".format(whole_object),
+                code='invalid_whole_object', component='rbd') from e
         return RbdService.image_diff(
-            image_spec, from_snapshot, snapshot_name, int(offset),
-            int(length) if length is not None else None,
-            str_to_bool(whole_object))
+            image_spec, from_snapshot, snapshot_name, offset_i, length_i,
+            whole_object_b)
 
 
 @UIRouter('/block/rbd')
