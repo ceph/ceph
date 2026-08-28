@@ -1564,16 +1564,24 @@ seastar::future<struct stat> SeaStore::Shard::_stat(
   return seastar::make_ready_future<struct stat>(st);
 }
 
-seastar::future<struct stat> SeaStore::Shard::stat(
+SeaStore::Shard::stat_ertr::future<struct stat> SeaStore::Shard::stat(
   CollectionRef c,
   const ghobject_t& oid,
   uint32_t op_flags)
 {
   if(!store_active) {
-    return seastar::make_ready_future<struct stat>();
+    return stat_ertr::make_ready_future<struct stat>();
   }
   ++(shard_stats.read_num);
   ++(shard_stats.pending_read_num);
+
+  // Check for injected metadata error (matches BlueStore::stat -EIO behavior)
+  if (_debug_mdata_eio(oid)) {
+    LOG_PREFIX(SeaStoreS::stat);
+    ERROR("injected metadata error for oid={}", oid);
+    --(shard_stats.pending_read_num);
+    return crimson::ct_error::input_output_error::make();
+  }
 
   return repeat_with_onode<struct stat>(
     c,
@@ -1585,9 +1593,8 @@ seastar::future<struct stat> SeaStore::Shard::stat(
     [this, oid](auto &t, auto &onode) {
     return _stat(t, onode, oid);
   }).handle_error(
-    crimson::ct_error::enoent::handle([] {
-      return seastar::make_ready_future<struct stat>();
-    }),
+    crimson::ct_error::enoent::pass_further{},
+    crimson::ct_error::input_output_error::pass_further{},
     crimson::ct_error::assert_all(
       "Invalid error in SeaStoreS::stat"
     )
