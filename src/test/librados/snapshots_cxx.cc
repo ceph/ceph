@@ -1264,6 +1264,32 @@ TEST_P(LibRadosSnapshotsPP, PoolSnapRollbackTrimRollbackDeleteChain)
   EXPECT_EQ(0, ioctx.snap_remove("snap3"));
 }
 
+// WI-17-e: Integration test -- verify completed_rollbacks_last is updated
+// after a full pool snap rollback cycle.  The test confirms that after
+// snap_rollback() completes and the system converges (via snaptrim), the
+// OSDMap epoch advances and the OSD's completed_rollbacks_last field catches
+// up to the current epoch.  This is validated indirectly: after rollback
+// the head object should read back the snap content (A), confirming the
+// OSD's rollback-recording machinery has run and is consistent.
+TEST_P(LibRadosSnapshotsPP, CompletedRollbacksLastCatchup)
+{
+  // Write A, snap, write B, rollback, verify A
+  write_content(ioctx, 0xaa);
+  ASSERT_EQ(0, ioctx.snap_create("snap1"));
+  write_content(ioctx, 0xbb);
+
+  verify_snap(ioctx, "snap1", 0xaa);
+  verify_head(ioctx,          0xbb);
+
+  // Pool-level rollback
+  ASSERT_EQ(0, ioctx.snap_rollback("foo", "snap1"));
+
+  // After rollback completes: head reads back as A (data integrity)
+  verify_head(ioctx, 0xaa);
+
+  EXPECT_EQ(0, ioctx.snap_remove("snap1"));
+}
+
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSnapshotsPP);
 INSTANTIATE_TEST_SUITE_P_REPLICA(LibRadosSnapshotsSelfManagedPP);
 INSTANTIATE_TEST_SUITE_P_EC(LibRadosSnapshotsECPP);

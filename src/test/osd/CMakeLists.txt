@@ -230,6 +230,14 @@ add_executable(unittest_primarylogpg
 add_ceph_unittest(unittest_primarylogpg)
 target_link_libraries(unittest_primarylogpg osd global ${BLKID_LIBRARIES})
 
+# unittest_snap_mapper_rollback: WI-17-e unit tests for completed-rollback recording
+add_executable(unittest_snap_mapper_rollback
+  TestSnapMapper.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_snap_mapper_rollback)
+target_link_libraries(unittest_snap_mapper_rollback osd global ${BLKID_LIBRARIES})
+
 # osd_unittests: custom target that builds and runs all OSD unit tests
 # Not including unittest_osdmap, as it is slow. It is tested elsewhere.
 set(OSD_UNITTESTS

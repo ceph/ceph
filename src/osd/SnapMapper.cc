@@ -991,8 +991,8 @@ string SnapMapper::make_completed_rollback_key(int64_t pool_id, snapid_t rb_id)
 }
 
 void SnapMapper::set_completed_rollback(
-  OSDriver& backend,
-  OSDriver::OSTransaction& txn,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  MapCacher::Transaction<string, ceph::buffer::list>& txn,
   int64_t pool_id,
   snapid_t rb_id)
 {
@@ -1007,7 +1007,7 @@ void SnapMapper::set_completed_rollback(
 }
 
 bool SnapMapper::is_completed_rollback(
-  OSDriver& backend,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
   int64_t pool_id,
   snapid_t rb_id)
 {
@@ -1019,11 +1019,11 @@ bool SnapMapper::is_completed_rollback(
   return kv.first == key;
 }
 
-template <class PoolMap>
+template <class PoolMap, class TxnT>
 static void _do_record_completed_rollbacks(
   CephContext *cct,
-  OSDriver& backend,
-  OSDriver::OSTransaction& txn,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  TxnT& txn,
   const map<epoch_t, PoolMap>& completed_rollbacks)
 {
   dout(10) << __func__ << " completed_rollbacks " << completed_rollbacks << dendl;
@@ -1043,8 +1043,8 @@ static void _do_record_completed_rollbacks(
 
 void SnapMapper::record_completed_rollbacks(
   CephContext *cct,
-  OSDriver& backend,
-  OSDriver::OSTransaction&& txn,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  MapCacher::Transaction<string, ceph::buffer::list>&& txn,
   const map<epoch_t, mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks)
 {
   _do_record_completed_rollbacks(cct, backend, txn, completed_rollbacks);
@@ -1052,8 +1052,8 @@ void SnapMapper::record_completed_rollbacks(
 
 void SnapMapper::record_completed_rollbacks(
   CephContext *cct,
-  OSDriver& backend,
-  OSDriver::OSTransaction&& txn,
+  MapCacher::StoreDriver<string, ceph::buffer::list>& backend,
+  MapCacher::Transaction<string, ceph::buffer::list>&& txn,
   const map<epoch_t, map<int64_t, snap_interval_set_t>>& completed_rollbacks)
 {
   _do_record_completed_rollbacks(cct, backend, txn, completed_rollbacks);

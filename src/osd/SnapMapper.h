@@ -227,27 +227,27 @@ public:
   // Overload for mempool-allocated maps (from OSDMap incremental in handle_osd_map())
   static void record_completed_rollbacks(
     CephContext *cct,
-    OSDriver& backend,
-    OSDriver::OSTransaction&& txn,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
+    MapCacher::Transaction<std::string, ceph::buffer::list>&& txn,
     const std::map<epoch_t,
       mempool::osdmap::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
 
-  // Overload for plain std::map (from MMonGetCompletedRollbacksReply)
+  // Overload for plain std::map (from MMonGetCompletedRollbacksReply or tests)
   static void record_completed_rollbacks(
     CephContext *cct,
-    OSDriver& backend,
-    OSDriver::OSTransaction&& txn,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
+    MapCacher::Transaction<std::string, ceph::buffer::list>&& txn,
     const std::map<epoch_t,
       std::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
 
   static void set_completed_rollback(
-    OSDriver& backend,
-    OSDriver::OSTransaction& txn,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
+    MapCacher::Transaction<std::string, ceph::buffer::list>& txn,
     int64_t pool_id,
     snapid_t rb_id);
 
   static bool is_completed_rollback(
-    OSDriver& backend,
+    MapCacher::StoreDriver<std::string, ceph::buffer::list>& backend,
     int64_t pool_id,
     snapid_t rb_id);
 
