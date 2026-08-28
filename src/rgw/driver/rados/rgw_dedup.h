@@ -99,7 +99,7 @@ namespace rgw::dedup {
     };
 
     inline uint64_t __calc_deduped_bytes(uint16_t num_parts, uint64_t size_bytes);
-    inline bool should_split_head(const RGWObjManifest &manifest);
+    inline bool should_split_head(const RGWObjManifest &manifest, md5_stats_t *p_stats);
     void remove_created_tail_object(const disk_record_t *p_rec,
                                     const RGWObjManifest &manifest,
                                     md5_stats_t *p_stats /*IN-OUT*/);
@@ -258,6 +258,7 @@ namespace rgw::dedup {
 
     uint32_t d_min_obj_size_for_dedup = (64ULL * 1024);
     bool     d_split_head             = true;
+    bool     d_pool_supports_truncate = true;
     uint32_t d_head_object_size       = (4ULL * 1024 * 1024);
     control_t d_ctl;
     dedup_filter_t d_filter;

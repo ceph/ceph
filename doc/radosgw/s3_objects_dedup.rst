@@ -96,6 +96,9 @@ The dedup estimate process skips the following RGW objects:
 - Objects with different placement rules.
 - Objects in different RADOS pools.
 - Objects with different RGW storage classes.
+- On EC pools without ``allow_ec_overwrites``: non-multipart objects smaller
+  than ``rgw_max_chunk_size`` in the default storage class (these require
+  split-head which is unavailable on such pools).
 
 The full dedup process skips all of the above and additionally skips
 **compressed** and **user-encrypted** objects.
@@ -176,6 +179,16 @@ be deduplicated.
 this option to ``false`` disables split-head entirely.
 
 .. confval:: rgw_dedup_split_obj_head
+
+.. note::
+   Split-head is automatically disabled on erasure-coded (EC) data pools
+   that do not have ``allow_ec_overwrites`` enabled. EC pools are
+   append-only and reject the truncate operation required by split-head.
+   On such pools, non-multipart default-storage-class objects smaller
+   than ``rgw_max_chunk_size`` are skipped during the bucket-index scan
+   since they cannot be deduped without split-head.
+   Non-default storage-class objects and multipart objects have an empty
+   head and remain dedupable without split-head.
 
 
 Memory Usage
