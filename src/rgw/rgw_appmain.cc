@@ -49,6 +49,7 @@
 #include "rgw_rest_ratelimit.h"
 #include "rgw_rest_zero.h"
 #include "rgw_rest_restore.h"
+#include "rgw_rest_s3vector.h"
 #include "rgw_swift_auth.h"
 #include "rgw_log.h"
 #include "rgw_lib.h"
@@ -352,6 +353,7 @@ void rgw::AppMain::cond_init_apis()
       admin_resource->register_resource("usage", new RGWRESTMgr_Usage);
       admin_resource->register_resource("account", new RGWRESTMgr_Account);
       admin_resource->register_resource("restore", new RGWRESTMgr_Restore);
+      admin_resource->register_resource("vectorbucket", new RGWRESTMgr_VectorBucket);
       /* Register driver-specific admin APIs */
       env.driver->register_admin_apis(admin_resource);
       rest.register_resource(g_conf()->rgw_admin_entry, admin_resource);

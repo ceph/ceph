@@ -2262,28 +2262,52 @@ def test_background_index_rebuild():
     result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name, dataType='float32', dimension=dimension, distanceMetric='euclidean')
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # insert 500 vectors in batches (exceeds default threshold of 256 and
-    # LanceDB's IVF_PQ minimum for reliable index creation)
     batch_size = 100
     total_vectors = 500
-    for batch_start in range(0, total_vectors, batch_size):
-        batch_end = min(batch_start + batch_size, total_vectors)
-        vectors = generate_vectors(batch_end - batch_start, dimension)
-        # offset keys to avoid duplicates across batches
-        for i, v in enumerate(vectors):
-            v['key'] = f'vec-{batch_start + i}'
-        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
-        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # verify no index exists before rebuild
-    stats = get_index_stats(conn, bucket_name, index_name)
-    log.info('pre-rebuild stats: %s', stats)
-    assert stats['numIndexSegments'] == 0, 'index should not exist before rebuild'
-    assert stats['numUnindexedRows'] == total_vectors
+    # Pause the background rebuild worker while we load data and snapshot the
+    # pre-rebuild state. Setting rgw_s3vector_max_concurrent_rebuilds=0 makes the
+    # worker skip its table scan entirely (rgw_s3vector_background.cc: "background
+    # rebuilds paused"), so it builds no index AND does not consume the table's
+    # pending mutation counters. Without this the pre-rebuild assertions below
+    # (numIndexSegments==0, numUnindexedRows==total) are racy: the FIRST rebuild
+    # of a table is not gated by the cooldown, so on a fast cluster the worker
+    # fires the moment the row count crosses the threshold, mid-load.
+    _grant_admin_caps()
+    set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 0)
+    # block until the daemon has actually applied it (config push is async); the
+    # admin API reports the same cct value the worker's scan reads.
+    wait_for_max_concurrent_rebuilds(0)
+    try:
+        # insert 500 vectors in batches (exceeds default threshold of 256 and
+        # LanceDB's IVF_PQ minimum for reliable index creation)
+        for batch_start in range(0, total_vectors, batch_size):
+            batch_end = min(batch_start + batch_size, total_vectors)
+            vectors = generate_vectors(batch_end - batch_start, dimension)
+            # offset keys to avoid duplicates across batches
+            for i, v in enumerate(vectors):
+                v['key'] = f'vec-{batch_start + i}'
+            result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # poll until background rebuild completes (unindexed ratio below threshold)
-    stats = wait_for_index_rebuild(conn, bucket_name, index_name)
-    assert stats['numIndexedRows'] >= total_vectors * 0.9
+        # verify no index exists before rebuild (deterministic: worker paused)
+        stats = get_index_stats(conn, bucket_name, index_name)
+        log.info('pre-rebuild stats: %s', stats)
+        assert stats['numIndexSegments'] == 0, 'index should not exist before rebuild'
+        assert stats['numUnindexedRows'] == total_vectors
+
+        # resume the worker: the 500 pending inserts survived the pause (skipped
+        # scans don't consume counters), so the next scan spawns the rebuild.
+        set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 4)
+        wait_for_max_concurrent_rebuilds(4)
+
+        # poll until background rebuild completes (unindexed ratio below threshold)
+        stats = wait_for_index_rebuild(conn, bucket_name, index_name)
+        assert stats['numIndexedRows'] >= total_vectors * 0.9
+    finally:
+        # always resume so a failure above doesn't leave the worker paused for
+        # subsequent tests in the suite
+        set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', 4)
 
     # verify query works after rebuild — just check the response is valid
     top_k = 10
@@ -3066,67 +3090,89 @@ def test_below_threshold_no_rebuild():
     _ = _delete_vector_bucket(conn, bucket_name)
 
 
-def get_rgw_log_path():
-    """Determine the RGW daemon log file path for log parsing."""
-    if 'RGW_LOG_FILE' in os.environ:
-        return os.environ['RGW_LOG_FILE']
-    port = get_config_port()
-    source_root = os.path.normpath(os.path.join(
-        os.path.dirname(os.path.realpath(__file__)),
-        '..', '..', '..', '..'))
-    return os.path.join(source_root, 'build', 'out', f'radosgw.{port}.log')
+def _grant_admin_caps():
+    """Grant the main test user the 'buckets=read' cap so it can call the
+    ceph admin REST API at /admin/vectorbucket. Idempotent — safe to call
+    multiple times."""
+    out, ret = admin(['user', 'info', '--access-key', get_access_key()])
+    assert ret == 0, f'failed to look up test user for admin caps: {out}'
+    uid = json.loads(out)['user_id']
+    _, ret = admin(['caps', 'add', '--uid', uid, '--caps', 'buckets=read'])
+    assert ret == 0, f'failed to grant buckets=read cap to {uid}'
 
 
-SPAWN_RE = re.compile(
-    r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4})\s+\S+\s+[\s\d]+\s*'
-    r's3vectors manager: INFO: spawning rebuild coroutine for '
-    r'(\S+)\.(\S+)\s+\(active_rebuilds=(\d+)/(\d+)')
+def get_rebuild_admin_status(since=0, bucket=''):
+    """Query the ceph admin REST API (/admin/vectorbucket?rebuild=true) for
+    this RGW instance's background rebuild status + event log. Replaces log
+    scraping. Returns the parsed JSON response.
 
-FINISH_RE = re.compile(
-    r'(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+[+-]\d{4})\s+\S+\s+[\s\d]+\s*'
-    r's3vectors manager: INFO: rebuild coroutine finished for '
-    r'(\S+)\.(\S+)\s+\(active_rebuilds=(\d+)')
+    Uses stdlib urllib (not requests) so it works with the offline wheelhouse
+    used by tox, which ships boto3/botocore but not requests."""
+    import ssl
+    import urllib.request
+    import urllib.error
+    from botocore.auth import S3SigV4Auth
+    from botocore.awsrequest import AWSRequest
+    from botocore.credentials import Credentials
 
-LIMIT_RE = re.compile(
-    r's3vectors manager: INFO: rebuild concurrency limit reached')
+    hostname = get_config_host()
+    port_no = get_config_port()
+    scheme = 'https://' if port_no in (443, 8443) else 'http://'
+
+    params = {'rebuild': 'true'}
+    if since:
+        params['since'] = str(since)
+    if bucket:
+        params['vectorbucket'] = bucket
+
+    url = f'{scheme}{hostname}:{port_no}/admin/vectorbucket'
+    creds = Credentials(get_access_key(), get_secret_key())
+    request = AWSRequest(method='GET', url=url, params=params)
+    # S3SigV4Auth (not plain SigV4Auth): RGW is an S3 service, so it expects the
+    # x-amz-content-sha256 header and S3-style path canonicalization. Plain
+    # SigV4Auth omits that header, causing a SignatureDoesNotMatch (403).
+    S3SigV4Auth(creds, 's3', get_config_zonegroup()).add_auth(request)
+    # AWSRequest.url does NOT include params; only .prepare() folds the query
+    # string into the URL (and carries the signed Authorization header over).
+    prepared = request.prepare()
+
+    ctx = None
+    if scheme == 'https://':
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE
+
+    req = urllib.request.Request(prepared.url, headers=dict(prepared.headers),
+                                 method='GET')
+    try:
+        with urllib.request.urlopen(req, context=ctx) as resp:
+            return json.loads(resp.read())
+    except urllib.error.HTTPError as e:
+        body = e.read().decode('utf-8', 'replace')
+        raise AssertionError(
+            f'admin rebuild-status request failed: HTTP {e.code} {e.reason}: {body}')
 
 
-def parse_rebuild_log_events(log_path, start_offset, bucket_name):
-    """Parse the RGW log from start_offset, extracting rebuild events
-    for the given bucket_name. Returns (spawn_events, finish_events, limit_count)."""
-    spawn_events = []
-    finish_events = []
-    limit_count = 0
+def wait_for_max_concurrent_rebuilds(expected, timeout=20):
+    """Poll the admin API until the RGW daemon reports it has actually observed
+    the given rgw_s3vector_max_concurrent_rebuilds value.
 
-    with open(log_path, 'r') as f:
-        f.seek(start_offset)
-        for line in f:
-            if LIMIT_RE.search(line):
-                limit_count += 1
-            if bucket_name not in line:
-                continue
-
-            m = SPAWN_RE.search(line)
-            if m:
-                spawn_events.append({
-                    'timestamp': m.group(1),
-                    'bucket': m.group(2),
-                    'index': m.group(3),
-                    'active_rebuilds': int(m.group(4)),
-                    'max_concurrent': int(m.group(5)),
-                })
-                continue
-
-            m = FINISH_RE.search(line)
-            if m:
-                finish_events.append({
-                    'timestamp': m.group(1),
-                    'bucket': m.group(2),
-                    'index': m.group(3),
-                    'active_rebuilds': int(m.group(4)),
-                })
-
-    return spawn_events, finish_events, limit_count
+    `ceph config set` writes the mon config db; the daemon applies the change a
+    moment later (asynchronously). The admin status reads the *same* cct config
+    key that the background worker's spawn gate reads
+    (active_rebuilds >= max_concurrent), so once this reports `expected`, the
+    worker is guaranteed to see it on its next poll too. Requires admin caps
+    (call _grant_admin_caps() first)."""
+    deadline = time.time() + timeout
+    last = None
+    while time.time() < deadline:
+        last = get_rebuild_admin_status()['status']['max_concurrent_rebuilds']
+        if last == expected:
+            return
+        time.sleep(0.5)
+    raise AssertionError(
+        f'RGW did not apply rgw_s3vector_max_concurrent_rebuilds={expected} '
+        f'within {timeout}s (last observed {last})')
 
 
 def verify_max_concurrency(spawn_events, finish_events, max_concurrent):
@@ -3155,15 +3201,15 @@ def verify_max_concurrency(spawn_events, finish_events, max_concurrent):
 
 def test_concurrent_rebuild_limit():
     """Test that the background rebuild system respects the max_concurrent_rebuilds limit.
-    Creates multiple indexes, inserts vectors concurrently, then verifies from the RGW log
-    that at most max_concurrent_rebuilds were in-flight simultaneously."""
+    Creates multiple indexes, inserts vectors concurrently, then verifies via the ceph
+    admin REST API that at most max_concurrent_rebuilds were in-flight simultaneously."""
     max_concurrent = 2
     num_indexes = 5
     dimension = 32
     vectors_per_index = 500
 
-    log_path = get_rgw_log_path()
-    assert os.path.exists(log_path), f'RGW log file not found: {log_path}'
+    # allow the test user to query the admin rebuild-status endpoint
+    _grant_admin_caps()
 
     # configure concurrency limit and disable cooldown
     set_rgw_config_option('rgw_s3vector_max_concurrent_rebuilds', max_concurrent)
@@ -3174,8 +3220,8 @@ def test_concurrent_rebuild_limit():
     index_names = [f'idx-{i}' for i in range(num_indexes)]
 
     try:
-        # record log position before test
-        log_start_offset = os.path.getsize(log_path)
+        # record start time to filter events (analogous to the old log offset)
+        before_time = int(time.time())
 
         # create bucket and indexes
         _ensure_s3_bucket_for_vector_bucket(bucket_name)
@@ -3222,12 +3268,19 @@ def test_concurrent_rebuild_limit():
 
         log.info('all %d indexes rebuilt successfully', num_indexes)
 
-        # parse the log and verify concurrency
-        spawn_events, finish_events, limit_count = parse_rebuild_log_events(
-            log_path, log_start_offset, bucket_name)
+        # query the admin API and verify concurrency. limit_reached events are
+        # global (no bucket), so query without a bucket filter and filter
+        # spawn/finish client-side by bucket.
+        status = get_rebuild_admin_status(since=before_time)
+        events = status['rebuild_events']
+        spawn_events = [e for e in events
+                        if e['type'] == 'spawn' and e.get('bucket') == bucket_name]
+        finish_events = [e for e in events
+                         if e['type'] == 'finish' and e.get('bucket') == bucket_name]
+        limit_events = [e for e in events if e['type'] == 'limit_reached']
 
-        log.info('log events: %d spawns, %d finishes, %d limit-reached',
-                 len(spawn_events), len(finish_events), limit_count)
+        log.info('admin events: %d spawns, %d finishes, %d limit-reached',
+                 len(spawn_events), len(finish_events), len(limit_events))
         for e in spawn_events:
             log.info('  spawn: %s.%s active_rebuilds=%d/%d',
                      e['bucket'], e['index'], e['active_rebuilds'], e['max_concurrent'])
@@ -3239,8 +3292,8 @@ def test_concurrent_rebuild_limit():
             f'expected at least {num_indexes} spawn events, got {len(spawn_events)}')
         assert len(finish_events) >= num_indexes, (
             f'expected at least {num_indexes} finish events, got {len(finish_events)}')
-        assert limit_count >= 1, (
-            f'expected concurrency limit reached at least once, got {limit_count}')
+        assert len(limit_events) >= 1, (
+            f'expected concurrency limit reached at least once, got {len(limit_events)}')
 
         peak = verify_max_concurrency(spawn_events, finish_events, max_concurrent)
         log.info('peak active_rebuilds: %d (limit: %d)', peak, max_concurrent)
@@ -3663,68 +3716,17 @@ def test_explain_plan_ivf_nprobes():
     _ = _delete_vector_bucket(conn, bucket_name)
 
 
-LOCK_REFRESH_RE = re.compile(
-    r's3vectors manager: INFO: refreshed lock for '
-    r'(\S+)\.(\S+)')
-
-LOCK_LOST_RE = re.compile(
-    r's3vectors manager: WARNING: lock lost \(stolen\) for '
-    r'(\S+)\.(\S+)')
-
-LOCK_REFRESH_FAIL_RE = re.compile(
-    r's3vectors manager: WARNING: failed to refresh lock for '
-    r'(\S+)\.(\S+)')
-
-
-def parse_lock_refresh_events(log_path, start_offset, bucket_name):
-    """Parse the RGW log for lock refresh events for the given bucket."""
-    refresh_events = []
-    lost_events = []
-    fail_events = []
-
-    with open(log_path, 'r') as f:
-        f.seek(start_offset)
-        for line in f:
-            if bucket_name not in line:
-                continue
-
-            m = LOCK_REFRESH_RE.search(line)
-            if m:
-                refresh_events.append({
-                    'bucket': m.group(1),
-                    'index': m.group(2),
-                })
-                continue
-
-            m = LOCK_LOST_RE.search(line)
-            if m:
-                lost_events.append({
-                    'bucket': m.group(1),
-                    'index': m.group(2),
-                })
-                continue
-
-            m = LOCK_REFRESH_FAIL_RE.search(line)
-            if m:
-                fail_events.append({
-                    'bucket': m.group(1),
-                    'index': m.group(2),
-                })
-
-    return refresh_events, lost_events, fail_events
-
-
 def test_lock_timestamp_refresh_during_rebuild():
     """Test that the main loop refreshes the distributed lock timestamp
     during an active rebuild. Uses a short lock TTL (9s) and refresh
     interval (TTL/3 = 3s). Inserts enough vectors (2000) so the rebuild
     takes long enough for at least one refresh to occur.
 
-    Observes the refresh through RGW log messages:
-      'INFO: refreshed lock for <bucket>.<index>'
+    Observes the refresh through the ceph admin REST API rebuild event log
+    (lock_refresh events).
     """
-    log_path = get_rgw_log_path()
-    log.info('using log file: %s', log_path)
+    # allow the test user to query the admin rebuild-status endpoint
+    _grant_admin_caps()
 
     conn = connection()
     bucket_name = gen_bucket_name()
@@ -3735,8 +3737,6 @@ def test_lock_timestamp_refresh_during_rebuild():
     # lower the rebuild cooldown to avoid delays
     set_rgw_config_option('rgw_s3vector_index_lock_ttl_seconds', 6)
     set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 1)
-    # set debug level to 10 so refresh messages are visible
-    set_rgw_config_option('debug_rgw', 10)
 
     try:
         _ensure_s3_bucket_for_vector_bucket(bucket_name)
@@ -3748,8 +3748,8 @@ def test_lock_timestamp_refresh_during_rebuild():
             distanceMetric='euclidean')
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-        # record log offset before inserting vectors
-        log_start_offset = os.path.getsize(log_path)
+        # record start time before inserting vectors (event filter)
+        before_time = int(time.time())
 
         # insert enough vectors so the rebuild takes >20s (TTL/3 refresh interval)
         # 5000 vectors with dimension=128 should take 25-60s to index
@@ -3770,12 +3770,15 @@ def test_lock_timestamp_refresh_during_rebuild():
         log.info('rebuild complete: %s', stats)
         assert stats['numIndexedRows'] >= total_vectors * 0.9
 
-        # give a moment for final log flush
+        # give a moment for the final event to be recorded
         time.sleep(2)
 
-        # parse the log for lock refresh events
-        refresh_events, lost_events, fail_events = parse_lock_refresh_events(
-            log_path, log_start_offset, bucket_name)
+        # query the admin API for lock refresh events (filtered to this bucket)
+        status = get_rebuild_admin_status(since=before_time, bucket=bucket_name)
+        events = status['rebuild_events']
+        refresh_events = [e for e in events if e['type'] == 'lock_refresh']
+        lost_events = [e for e in events if e['type'] == 'lock_lost']
+        fail_events = [e for e in events if e['type'] == 'lock_refresh_fail']
 
         log.info('lock refresh events: %d refreshes, %d lost, %d failures',
                  len(refresh_events), len(lost_events), len(fail_events))
@@ -3784,7 +3787,7 @@ def test_lock_timestamp_refresh_during_rebuild():
         assert len(refresh_events) >= 1, (
             f'expected at least 1 lock refresh event for {bucket_name}.{index_name}, '
             f'got {len(refresh_events)}. The rebuild may have been too fast for the '
-            f'refresh interval (TTL/3 = 2s). Check RGW log at {log_path}')
+            f'refresh interval (TTL/3 = 2s).')
 
         # verify no lock was lost or failed to refresh
         assert len(lost_events) == 0, (
@@ -3805,5 +3808,4 @@ def test_lock_timestamp_refresh_during_rebuild():
         _ = _delete_vector_bucket(conn, bucket_name)
         set_rgw_config_option('rgw_s3vector_index_lock_ttl_seconds', 120)  # restore default
         set_rgw_config_option('rgw_s3vector_index_rebuild_cooldown', 5)
-        set_rgw_config_option('debug_rgw', 1)
 

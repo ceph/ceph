@@ -11,6 +11,9 @@
 #include "common/ceph_json.h"
 #include "rgw_arn.h"
 #include "rgw_s3vector_background.h"
+#include <cstdio>
+#include <cstdlib>
+#include <ctime>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1215,6 +1218,138 @@ RGWOp* RGWHandler_REST_s3Vector::op_post() {
     return new RGWS3VectorListVectorBuckets(std::move(bl_post_body));
   if (op_name == "QueryVectors")
     return new RGWS3VectorQueryVectors(std::move(bl_post_body));
+  return nullptr;
+}
+
+// ============================================================================
+// Ceph admin REST API: /admin/vectorbucket
+// ============================================================================
+
+namespace {
+
+// Format a coarse_real_time as an ISO-8601 UTC string with millisecond
+// precision (e.g. "2026-08-01T12:00:12.500Z").
+std::string s3v_iso8601(ceph::coarse_real_time t) {
+  const time_t tt = ceph::coarse_real_clock::to_time_t(t);
+  const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+      t.time_since_epoch()).count() % 1000;
+  struct tm bdt;
+  gmtime_r(&tt, &bdt);
+  char buf[32];
+  const size_t n = strftime(buf, sizeof(buf), "%Y-%m-%dT%H:%M:%S", &bdt);
+  char out[48];
+  snprintf(out, sizeof(out), "%.*s.%03dZ", static_cast<int>(n), buf,
+           static_cast<int>(ms));
+  return out;
+}
+
+// GET /admin/vectorbucket?rebuild=true[&vectorbucket=<name>][&since=<epoch>]
+// Returns this RGW instance's background rebuild status + event log.
+class RGWOp_VectorBucket_Rebuild_Status : public RGWRESTOp {
+public:
+  int check_caps(const RGWUserCaps& caps) override {
+    return caps.check_cap("buckets", RGW_CAP_READ);
+  }
+  void execute(optional_yield y) override;
+  const char* name() const override { return "vectorbucket_rebuild_status"; }
+};
+
+void RGWOp_VectorBucket_Rebuild_Status::execute(optional_yield y) {
+  const std::string bucket_filter = s->info.args.get("vectorbucket");
+  uint64_t since = 0;
+  {
+    bool exists = false;
+    const std::string since_str = s->info.args.get("since", &exists);
+    if (exists && !since_str.empty()) {
+      since = strtoull(since_str.c_str(), nullptr, 10);
+    }
+  }
+
+  const auto status = rgw::s3vector::get_background_status();
+  const auto events = rgw::s3vector::get_rebuild_events(since, bucket_filter);
+
+  Formatter* f = flusher.get_formatter();
+  flusher.start(0);
+
+  f->open_object_section("rebuild_status");
+
+  // instance identity first — makes the per-instance scope explicit
+  f->open_object_section("instance");
+  f->dump_string("instance_id", status.instance_id);
+  f->dump_string("host_id", status.host_id);
+  f->close_section();
+
+  f->open_object_section("status");
+  f->dump_int("active_rebuilds", status.active_rebuilds);
+  f->dump_int("max_concurrent_rebuilds", status.max_concurrent_rebuilds);
+  f->dump_int("num_workers", status.num_workers);
+  f->dump_int("tables_tracked", status.tables_tracked);
+  f->close_section();
+
+  f->open_object_section("counters");
+  f->dump_unsigned("total_rebuilds_started", status.total_rebuilds_started);
+  f->dump_unsigned("total_rebuilds_completed", status.total_rebuilds_completed);
+  f->dump_unsigned("total_rebuilds_failed", status.total_rebuilds_failed);
+  f->dump_int("peak_active_rebuilds", status.peak_active_rebuilds);
+  f->dump_unsigned("limit_reached_count", status.limit_reached_count);
+  f->dump_unsigned("lock_refresh_count", status.lock_refresh_count);
+  f->dump_unsigned("lock_lost_count", status.lock_lost_count);
+  f->dump_unsigned("lock_refresh_fail_count", status.lock_refresh_fail_count);
+  f->close_section();
+
+  const auto now = ceph::coarse_real_clock::now();
+  f->open_array_section("active_builds");
+  for (const auto& b : status.active_builds_list) {
+    if (!bucket_filter.empty() && b.bucket != bucket_filter) {
+      continue;
+    }
+    f->open_object_section("active_build");
+    f->dump_string("bucket", b.bucket);
+    f->dump_string("index", b.index);
+    f->dump_string("start_time", s3v_iso8601(b.start_time));
+    f->dump_int("duration_so_far_ms",
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            now - b.start_time).count());
+    f->dump_int("lock_refreshes", b.lock_refreshes);
+    f->close_section();
+  }
+  f->close_section();
+
+  f->open_array_section("rebuild_events");
+  for (const auto& e : events) {
+    f->open_object_section("event");
+    f->dump_string("type", e.type);
+    f->dump_string("timestamp", s3v_iso8601(e.timestamp));
+    if (!e.bucket.empty()) {
+      f->dump_string("bucket", e.bucket);
+    }
+    if (!e.index.empty()) {
+      f->dump_string("index", e.index);
+    }
+    f->dump_int("active_rebuilds", e.active_rebuilds);
+    f->dump_int("max_concurrent", e.max_concurrent);
+    if (e.duration_ms > 0) {
+      f->dump_int("duration_ms", e.duration_ms);
+    }
+    if (!e.result.empty()) {
+      f->dump_string("result", e.result);
+    }
+    f->close_section();
+  }
+  f->close_section();
+
+  f->close_section(); // rebuild_status
+
+  flusher.flush();
+}
+
+} // anonymous namespace
+
+RGWOp* RGWHandler_VectorBucket::op_get() {
+  if (s->info.args.exists("rebuild")) {
+    return new RGWOp_VectorBucket_Rebuild_Status;
+  }
+  // Future: if (s->info.args.exists("session")) { ... }
   return nullptr;
 }
 

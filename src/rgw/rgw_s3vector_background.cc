@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 sts=2 expandtab
 
 #include <atomic>
+#include <deque>
 #include <memory>
 #include <mutex>
 #include <shared_mutex>
@@ -28,6 +29,7 @@
 #include "common/ceph_json.h"
 #include "common/ceph_crypto.h"
 #include "rgw_s3vector.h"
+#include "rgw_s3vector_background.h"
 #include "lancedb.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -48,6 +50,9 @@ struct build_state_t {
   int64_t build_lease_seconds = 600;
   std::string builder_id;
   uint64_t global_delete_count = 0;
+  // per-index rebuild timing, persisted across RGW restarts via table metadata
+  int64_t last_rebuild_completed_at = 0;  // epoch seconds
+  int64_t last_rebuild_duration_ms = 0;
 
   void dump(ceph::Formatter *f) const {
     encode_json("build_in_progress", build_in_progress, f);
@@ -55,6 +60,8 @@ struct build_state_t {
     encode_json("build_lease_seconds", build_lease_seconds, f);
     encode_json("builder_id", builder_id, f);
     encode_json("global_delete_count", global_delete_count, f);
+    encode_json("last_rebuild_completed_at", last_rebuild_completed_at, f);
+    encode_json("last_rebuild_duration_ms", last_rebuild_duration_ms, f);
   }
 
   void decode_json(JSONObj *obj) {
@@ -63,6 +70,8 @@ struct build_state_t {
     JSONDecoder::decode_json("build_lease_seconds", build_lease_seconds, obj);
     JSONDecoder::decode_json("builder_id", builder_id, obj);
     JSONDecoder::decode_json("global_delete_count", global_delete_count, obj);
+    JSONDecoder::decode_json("last_rebuild_completed_at", last_rebuild_completed_at, obj);
+    JSONDecoder::decode_json("last_rebuild_duration_ms", last_rebuild_duration_ms, obj);
   }
 
   std::string to_json_str() const {
@@ -83,6 +92,51 @@ struct build_state_t {
     decode_json(&parser);
     return true;
   }
+};
+
+// ============================================================================
+// Background rebuild observability (per-instance)
+// ============================================================================
+
+// A significant background action, recorded to the in-memory ring buffer.
+// These correspond 1:1 to the log points the integration tests used to scrape.
+struct rebuild_event_t {
+  enum class Type {
+    SPAWN, FINISH, LIMIT_REACHED,
+    LOCK_REFRESH, LOCK_LOST, LOCK_REFRESH_FAIL
+  };
+  Type type;
+  ceph::coarse_real_time timestamp;
+  std::string bucket;
+  std::string index;
+  int active_rebuilds = 0;
+  int max_concurrent = 0;
+  int duration_ms = 0;
+  std::string result;  // "success"/"failure"/"skipped" for FINISH
+};
+
+static const char* event_type_to_str(rebuild_event_t::Type t) {
+  switch (t) {
+    case rebuild_event_t::Type::SPAWN:             return "spawn";
+    case rebuild_event_t::Type::FINISH:            return "finish";
+    case rebuild_event_t::Type::LIMIT_REACHED:     return "limit_reached";
+    case rebuild_event_t::Type::LOCK_REFRESH:      return "lock_refresh";
+    case rebuild_event_t::Type::LOCK_LOST:         return "lock_lost";
+    case rebuild_event_t::Type::LOCK_REFRESH_FAIL: return "lock_refresh_fail";
+  }
+  return "unknown";
+}
+
+// Monotonic aggregate counters that survive event-log eviction.
+struct background_counters_t {
+  std::atomic<uint64_t> total_rebuilds_started{0};
+  std::atomic<uint64_t> total_rebuilds_completed{0};
+  std::atomic<uint64_t> total_rebuilds_failed{0};
+  std::atomic<int> peak_active_rebuilds{0};
+  std::atomic<uint64_t> limit_reached_count{0};
+  std::atomic<uint64_t> lock_refresh_count{0};
+  std::atomic<uint64_t> lock_lost_count{0};
+  std::atomic<uint64_t> lock_refresh_fail_count{0};
 };
 
 class Manager : public DoutPrefixProvider {
@@ -112,7 +166,7 @@ private:
   }
   using MessageQueue =  boost::lockfree::queue<message_t*, boost::lockfree::fixed_sized<true>>;
   using Executor = boost::asio::io_context::executor_type;
-  bool shutdown = false;
+  std::atomic<bool> shutdown{false};
   CephContext* const cct;
   boost::asio::io_context io_context;
   boost::asio::executor_work_guard<Executor> work_guard;
@@ -152,10 +206,21 @@ private:
     std::string etag;
     ceph::coarse_real_clock::time_point last_refresh;
     bool lock_lost = false;
+    ceph::coarse_real_time start_time;  // when the build acquired the lock
+    int refresh_count = 0;              // successful lock refreshes so far
   };
   std::map<table_name_t, active_lock_t> active_locks; // protected by active_builds_mutex
   MessageQueue messages;
   static constexpr auto idle_sleep = std::chrono::milliseconds(1000); // 1s
+
+  // ---- background rebuild observability (per-instance) ----
+  // cached daemon identity so every status report is unambiguously scoped.
+  std::string instance_id_;
+  std::string host_id_;
+  // in-memory ring buffer of significant rebuild actions + aggregate counters.
+  std::deque<rebuild_event_t> event_log_;
+  mutable std::mutex event_log_mutex_;
+  background_counters_t counters_;
 
   CephContext *get_cct() const override { return cct; }
   unsigned get_subsys() const override { return dout_subsys; }
@@ -171,6 +236,65 @@ private:
     timer.async_wait(yield[ec]);
     if (ec) {
       ldpp_dout(this, 1) << "ERROR: async_sleep failed with error: " << ec.message() << dendl;
+    }
+  }
+
+  // Record a significant rebuild action: bump the matching aggregate counter
+  // and append to the in-memory ring buffer (evicting the oldest when full).
+  // Additive to the existing ldpp_dout() log lines — never replaces them.
+  void record_event(rebuild_event_t::Type type,
+                    const std::string& bucket = "",
+                    const std::string& index = "",
+                    int active_rebuilds = 0,
+                    int max_concurrent = 0,
+                    int duration_ms = 0,
+                    const std::string& result = "") {
+    switch (type) {
+      case rebuild_event_t::Type::SPAWN: {
+        counters_.total_rebuilds_started.fetch_add(1, std::memory_order_relaxed);
+        int prev = counters_.peak_active_rebuilds.load(std::memory_order_relaxed);
+        while (active_rebuilds > prev &&
+               !counters_.peak_active_rebuilds.compare_exchange_weak(
+                   prev, active_rebuilds, std::memory_order_relaxed)) {}
+        break;
+      }
+      case rebuild_event_t::Type::FINISH:
+        if (result == "success") {
+          counters_.total_rebuilds_completed.fetch_add(1, std::memory_order_relaxed);
+        } else if (result == "failure") {
+          counters_.total_rebuilds_failed.fetch_add(1, std::memory_order_relaxed);
+        }
+        break;
+      case rebuild_event_t::Type::LIMIT_REACHED:
+        counters_.limit_reached_count.fetch_add(1, std::memory_order_relaxed);
+        break;
+      case rebuild_event_t::Type::LOCK_REFRESH:
+        counters_.lock_refresh_count.fetch_add(1, std::memory_order_relaxed);
+        break;
+      case rebuild_event_t::Type::LOCK_LOST:
+        counters_.lock_lost_count.fetch_add(1, std::memory_order_relaxed);
+        break;
+      case rebuild_event_t::Type::LOCK_REFRESH_FAIL:
+        counters_.lock_refresh_fail_count.fetch_add(1, std::memory_order_relaxed);
+        break;
+    }
+
+    rebuild_event_t ev;
+    ev.type = type;
+    ev.timestamp = ceph::coarse_real_clock::now();
+    ev.bucket = bucket;
+    ev.index = index;
+    ev.active_rebuilds = active_rebuilds;
+    ev.max_concurrent = max_concurrent;
+    ev.duration_ms = duration_ms;
+    ev.result = result;
+
+    const size_t max_events = std::max<uint64_t>(
+        1, cct->_conf.get_val<uint64_t>("rgw_s3vector_event_log_size"));
+    std::lock_guard lg(event_log_mutex_);
+    event_log_.push_back(std::move(ev));
+    while (event_log_.size() > max_events) {
+      event_log_.pop_front();
     }
   }
 
@@ -841,9 +965,10 @@ private:
 
     {
       std::lock_guard lg(active_builds_mutex);
+      const auto now = ceph::coarse_real_clock::now();
       active_builds.insert(table_name);
       active_locks[table_name] = {lock_token, lock_result.etag,
-                                   ceph::coarse_real_clock::now(), false};
+                                   now, false, now, 0};
     }
 
     struct lock_guard_t {
@@ -943,6 +1068,13 @@ private:
       if (build_ret == 0 && delete_rebuild) {
         post_state.global_delete_count = 0;
       }
+      if (build_ret == 0) {
+        const int64_t now_s = std::chrono::duration_cast<std::chrono::seconds>(
+            std::chrono::system_clock::now().time_since_epoch()).count();
+        post_state.last_rebuild_completed_at = now_s;
+        post_state.last_rebuild_duration_ms =
+            (state.build_started_at > 0) ? (now_s - state.build_started_at) * 1000 : 0;
+      }
       if (int ret = write_build_state(table, post_state); ret < 0) {
         ldpp_dout(this, 1) << "WARNING: failed to clear build state for "
             << bucket_name << "." << index_name << dendl;
@@ -997,17 +1129,21 @@ private:
       if (result.ret == 0) {
         lock.etag = result.new_etag;
         lock.last_refresh = now;
+        ++lock.refresh_count;
         ldpp_dout(this, 10) << "INFO: refreshed lock for "
             << name.first << "." << name.second << dendl;
+        record_event(rebuild_event_t::Type::LOCK_REFRESH, name.first, name.second);
       } else if (result.ret == -ERR_PRECONDITION_FAILED) {
         lock.lock_lost = true;
         ldpp_dout(this, 1) << "WARNING: lock lost (stolen) for "
             << name.first << "." << name.second
             << " during active build" << dendl;
+        record_event(rebuild_event_t::Type::LOCK_LOST, name.first, name.second);
       } else {
         ldpp_dout(this, 1) << "WARNING: failed to refresh lock for "
             << name.first << "." << name.second
             << " (ret=" << result.ret << "), will retry" << dendl;
+        record_event(rebuild_event_t::Type::LOCK_REFRESH_FAIL, name.first, name.second);
       }
     }
   }
@@ -1086,8 +1222,22 @@ private:
         }
       });
 
+      // 1b. pause switch: rgw_s3vector_max_concurrent_rebuilds == 0 stops the
+      // worker from starting new rebuilds. We keep consuming control messages
+      // above (so table/session bookkeeping stays current) and we skip the table
+      // scan below - so pending mutation counters are NOT consumed (no rebuild
+      // signal is lost) and no LIMIT_REACHED event is emitted on every scan while
+      // paused. We still fall through to refresh_active_locks() so that any build
+      // already in flight when the pause took effect keeps its distributed lock
+      // alive until it finishes. Raising the value resumes rebuilds normally.
+      const bool paused = (max_concurrent <= 0);
+      if (paused) {
+        ldpp_dout(this, 20) << "INFO: background rebuilds paused "
+            "(rgw_s3vector_max_concurrent_rebuilds=0), skipping table scan" << dendl;
+      }
+
       // 2. scan tables for pending mutations
-      {
+      if (!paused) {
         std::shared_lock sl(tables_mutex);//this lock is held only for the duration of scanning the tables map, not for the entire processing of each table.
         const auto now = ceph::coarse_real_clock::now();
         for (auto& [name, state] : tables) {
@@ -1096,6 +1246,9 @@ private:
                 << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
                 << ", max_concurrent=" << max_concurrent
                 << "), deferring remaining tables" << dendl;
+            record_event(rebuild_event_t::Type::LIMIT_REACHED, "", "",
+                         active_rebuild_count.load(std::memory_order_relaxed),
+                         max_concurrent);
             break;
           }
 
@@ -1128,8 +1281,13 @@ private:
               << ", inserts=" << inserts
               << ", deletes=" << deletes << ")" << dendl;
 
+          record_event(rebuild_event_t::Type::SPAWN, name.first, name.second,
+                       active_rebuild_count.load(std::memory_order_relaxed),
+                       max_concurrent);
+
           boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
-              [this, table_name = name, inserts, deletes](boost::asio::yield_context yield) {
+              [this, table_name = name, inserts, deletes, max_concurrent](boost::asio::yield_context yield) {
+            const auto build_start = ceph::coarse_real_clock::now();
             const int rc = process_table(table_name, inserts, deletes, yield);
             if (rc == 0) {
               std::shared_lock sl(tables_mutex);//short time lock to update last_rebuild_time after successful rebuild
@@ -1145,6 +1303,15 @@ private:
                 << table_name.first << "." << table_name.second
                 << " (active_rebuilds=" << active_rebuild_count.load(std::memory_order_relaxed)
                 << ", rc=" << rc << ")" << dendl;
+            const int duration_ms = static_cast<int>(
+                std::chrono::duration_cast<std::chrono::milliseconds>(
+                    ceph::coarse_real_clock::now() - build_start).count());
+            const char* result = (rc == 0) ? "success"
+                               : (rc < 0)  ? "failure" : "skipped";
+            record_event(rebuild_event_t::Type::FINISH, table_name.first,
+                         table_name.second,
+                         active_rebuild_count.load(std::memory_order_relaxed),
+                         max_concurrent, duration_ms, result);
           }, [this, table_name = name, inserts, deletes] (std::exception_ptr eptr) {
             if (eptr) {
               try {
@@ -1199,6 +1366,13 @@ public:
   }
 
   void init() {
+    // cache the daemon identity once so every status report is unambiguously
+    // scoped to this instance. host_id is "<instance_id>-<zone>-<zonegroup>";
+    // instance_id is the monitor-assigned global_id (leading, dash-free field).
+    host_id_ = driver->get_host_id();
+    const auto dash = host_id_.find('-');
+    instance_id_ = (dash == std::string::npos) ? host_id_ : host_id_.substr(0, dash);
+
     boost::asio::spawn(make_strand(io_context), std::allocator_arg, make_stack_allocator(),
         [this](boost::asio::yield_context yield) {
           process_tables(yield);
@@ -1304,7 +1478,69 @@ public:
     }
     return it->second;
   }
-  
+
+  // Snapshot of this instance's rebuild status + aggregate counters.
+  background_status_t get_background_status() {
+    background_status_t st;
+    st.instance_id = instance_id_;
+    st.host_id = host_id_;
+    st.active_rebuilds = active_rebuild_count.load(std::memory_order_relaxed);
+    st.max_concurrent_rebuilds =
+        cct->_conf.get_val<int64_t>("rgw_s3vector_max_concurrent_rebuilds");
+    st.num_workers = static_cast<int>(workers.size());
+    {
+      std::shared_lock sl(tables_mutex);
+      st.tables_tracked = static_cast<int>(tables.size());
+    }
+    st.total_rebuilds_started = counters_.total_rebuilds_started.load(std::memory_order_relaxed);
+    st.total_rebuilds_completed = counters_.total_rebuilds_completed.load(std::memory_order_relaxed);
+    st.total_rebuilds_failed = counters_.total_rebuilds_failed.load(std::memory_order_relaxed);
+    st.peak_active_rebuilds = counters_.peak_active_rebuilds.load(std::memory_order_relaxed);
+    st.limit_reached_count = counters_.limit_reached_count.load(std::memory_order_relaxed);
+    st.lock_refresh_count = counters_.lock_refresh_count.load(std::memory_order_relaxed);
+    st.lock_lost_count = counters_.lock_lost_count.load(std::memory_order_relaxed);
+    st.lock_refresh_fail_count = counters_.lock_refresh_fail_count.load(std::memory_order_relaxed);
+    {
+      std::lock_guard lg(active_builds_mutex);
+      for (const auto& [name, lock] : active_locks) {
+        active_build_info_t info;
+        info.bucket = name.first;
+        info.index = name.second;
+        info.start_time = lock.start_time;
+        info.lock_refreshes = lock.refresh_count;
+        st.active_builds_list.push_back(std::move(info));
+      }
+    }
+    return st;
+  }
+
+  // Return recorded events, optionally filtered by timestamp and bucket.
+  std::vector<rebuild_event_info_t> get_rebuild_events(uint64_t since_epoch,
+                                                       const std::string& bucket_filter) {
+    std::vector<rebuild_event_info_t> out;
+    std::lock_guard lg(event_log_mutex_);
+    out.reserve(event_log_.size());
+    for (const auto& e : event_log_) {
+      if (since_epoch > 0) {
+        const auto ev_epoch = static_cast<uint64_t>(
+            ceph::coarse_real_clock::to_time_t(e.timestamp));
+        if (ev_epoch < since_epoch) continue;
+      }
+      if (!bucket_filter.empty() && e.bucket != bucket_filter) continue;
+      rebuild_event_info_t info;
+      info.type = event_type_to_str(e.type);
+      info.timestamp = e.timestamp;
+      info.bucket = e.bucket;
+      info.index = e.index;
+      info.active_rebuilds = e.active_rebuilds;
+      info.max_concurrent = e.max_concurrent;
+      info.duration_ms = e.duration_ms;
+      info.result = e.result;
+      out.push_back(std::move(info));
+    }
+    return out;
+  }
+
   Manager(CephContext* _cct, rgw::sal::Driver* _driver) :
     cct(_cct),
     work_guard(boost::asio::make_work_guard(io_context)),
@@ -1385,6 +1621,21 @@ bool notify_session_delete(const DoutPrefixProvider* dpp, const std::string& buc
     return false;
   }
   return s_manager->notify_session(dpp, bucket_name, Manager::message_t::Op::SESSION_DELETE);
+}
+
+background_status_t get_background_status() {
+  if (!s_manager) {
+    return {};
+  }
+  return s_manager->get_background_status();
+}
+
+std::vector<rebuild_event_info_t> get_rebuild_events(uint64_t since_epoch,
+                                                     const std::string& bucket_filter) {
+  if (!s_manager) {
+    return {};
+  }
+  return s_manager->get_rebuild_events(since_epoch, bucket_filter);
 }
 
 
