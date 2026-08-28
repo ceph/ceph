@@ -19,6 +19,7 @@
 #include <thread>
 
 #include "common/ceph_mutex_lockstat.h"
+#include "common/lockstat.h"
 #include "gtest/gtest.h"
 
 template <typename Mutex>
@@ -219,3 +220,43 @@ TEST(SharedMutexTimedLockStat, TryLockUntil)
   ASSERT_TRUE(f2.get());
   m.unlock();
 }
+
+#ifdef CEPH_LOCKSTAT
+TEST(MutexLockStat, CondvarWaitNotMutexWait)
+{
+  using namespace ceph::lockstat_detail;
+
+  LockStatEntry::start(lockstat_clock::duration{tsc_rep{0}});
+
+  ceph::mutex_lockstat m(LOCKSTAT("condvar_wait_test"));
+  ceph::condition_variable_lockstat cv;
+  const auto* traits = m.get_traits();
+  ASSERT_NE(traits, nullptr);
+
+  {
+    std::unique_lock lock(m);
+    const auto stats_before = traits->get_lockstat_entry()->get_stats_sum();
+    const auto wait_before =
+        stats_before.m_wait_duration[static_cast<size_t>(LockMode::WRITE)]
+            .count();
+
+    (void)cv.wait_for(lock, std::chrono::milliseconds(100));
+
+    const auto stats_after = traits->get_lockstat_entry()->get_stats_sum();
+    const auto wait_after =
+        stats_after.m_wait_duration[static_cast<size_t>(LockMode::WRITE)]
+            .count();
+    const auto wait_delta = wait_after - wait_before;
+
+    // pthread_cond_timedwait sleep must not be attributed as mutex wait.
+    // Allow slack for uncontended lock bookkeeping, not the 100ms sleep.
+    EXPECT_LT(
+        wait_delta,
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            std::chrono::milliseconds(10))
+            .count());
+  }
+
+  LockStatEntry::stop();
+}
+#endif
