@@ -34,3 +34,6 @@ pkg-config = "0.3"
 [dev-dependencies]
 tokio-test = "0.4"
 lazy_static = "1.4"
+# tests/object_store.rs uses #[tokio::test]: the arrow-rs conformance suite
+# drives concurrent uploads through tokio, which futures::executor cannot run
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

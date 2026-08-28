@@ -54,13 +54,45 @@ The backend (rados, dbstore, posix) is read from ceph.conf.
 ### LanceDB ObjectStore Integration Tests
 
 Tests the `ObjectStore` trait implementation end-to-end through the
-real FFI boundary:
+real FFI boundary, including the arrow-rs object-store conformance suite.
+
+These are ordinary Rust tests in `tests/object_store.rs`.  The ceph build
+runs `cargo test --no-run` and installs the resulting libtest binary as
+`ceph_test_rgw_lancedb_object_store`, so test nodes need neither the source
+tree nor a rust toolchain.  Bringing up the ceph context and the SAL driver
+happens in `src/test/rgw/rgw_sal_test_env.cc`, linked in as
+`libceph_rgw_sal_test_env.so`.
 
 ```bash
 cd ceph/build
-# Force Rust rebuild if sources changed
 ninja ceph_test_rgw_lancedb_object_store
-./bin/ceph_test_rgw_lancedb_object_store -c ./ceph.conf
+CEPH_CONF=./ceph.conf ./bin/ceph_test_rgw_lancedb_object_store
+```
+
+libtest owns `argv`, so the binary is configured through `$CEPH_CONF` and
+`$CEPH_ARGS` (e.g. `CEPH_ARGS="--rgw-backend-store dbstore"`) while its own
+arguments are the usual libtest ones:
+
+```bash
+# one test, with its output shown
+CEPH_CONF=./ceph.conf ./bin/ceph_test_rgw_lancedb_object_store \
+    aros_put_opts --exact --nocapture
+# include tests marked #[ignore]
+CEPH_CONF=./ceph.conf ./bin/ceph_test_rgw_lancedb_object_store --include-ignored
+```
+
+Each test runs against its own bucket, created and torn down through the
+`rgw_test_env_*` API, so the default thread-parallel execution is safe.
+
+The crate's own unit tests live beside the code in `#[cfg(test)]` modules and
+are built into a separate binary, `unittest_rgw_lancedb_store`.  They use fake
+pointers rather than a driver, so they need no cluster and run under
+`make check`:
+
+```bash
+cd ceph/build
+ninja unittest_rgw_lancedb_store
+ctest -R unittest_rgw_lancedb_store
 ```
 
 ### S3 Vector Integration Tests
@@ -74,3 +106,7 @@ Full end-to-end tests via S3 protocol. See `src/test/rgw/s3vectors/`.
 - `src/provider.rs` - `RGWStoreProvider` for creating stores from S3 URLs
 - `src/ffi.rs` - FFI bindings to C SAL wrapper functions
 - `include/lancedb_rgw_store.h` - C header for FFI interface
+- `tests/object_store.rs` - integration tests, including the arrow-rs
+  object-store conformance suite
+- `../../test/rgw/rgw_sal_test_env.cc` - C++ side of the test environment
+  (ceph context, SAL driver, per-test buckets)

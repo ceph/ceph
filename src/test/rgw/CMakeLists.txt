@@ -539,9 +539,91 @@ target_link_libraries(ceph_test_rgw_sal_wrapper
   ${UNITTEST_LIBS})
 install(TARGETS ceph_test_rgw_sal_wrapper DESTINATION ${CMAKE_INSTALL_BINDIR})
 
-add_executable(ceph_test_rgw_lancedb_object_store test_rgw_lancedb_object_store.cc)
-target_link_libraries(ceph_test_rgw_lancedb_object_store
+# Bringing up a ceph context and a SAL driver is C++ work that Rust's libtest
+# cannot do, since it owns main().  This shared library does it behind an
+# extern "C" API and, being linked against rgw_common, re-exports the whole
+# rgw_sal_wrapper API too -- so the cargo test binary below links one .so
+# instead of reproducing the full transitive C++ link line.
+add_library(ceph_rgw_sal_test_env SHARED rgw_sal_test_env.cc)
+target_link_libraries(ceph_rgw_sal_test_env
   rgw_common
   ${rgw_libs})
-install(TARGETS ceph_test_rgw_lancedb_object_store DESTINATION ${CMAKE_INSTALL_BINDIR})
+target_include_directories(ceph_rgw_sal_test_env PRIVATE
+  ${CMAKE_SOURCE_DIR}/src/rgw)
+install(TARGETS ceph_rgw_sal_test_env DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+# The LanceDB ObjectStore conformance tests are real Rust #[tokio::test]
+# functions in src/rgw/lancedb-rgw-store/tests/object_store.rs.  Build them
+# here with `cargo test --no-run` and install the resulting libtest binary
+# under the usual ceph_test_* name; test nodes then need neither the source
+# tree nor a rust toolchain.  libtest owns argv, so the binary is configured
+# through $CEPH_CONF / $CEPH_ARGS and its own argv is left to test filters.
+# sets RGW_LANCEDB_CARGO_TARGET_DIR and RGW_LANCEDB_CARGO_FLAG
+include(RgwLancedbCargo)
+set(LANCEDB_STORE_DIR ${CMAKE_SOURCE_DIR}/src/rgw/lancedb-rgw-store)
+set(LANCEDB_OBJECT_STORE_TEST
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/ceph_test_rgw_lancedb_object_store)
+add_custom_command(
+  OUTPUT ${LANCEDB_OBJECT_STORE_TEST}
+  COMMAND ${CMAKE_COMMAND}
+          -DCARGO=${CARGO_EXECUTABLE}
+          -DMANIFEST=${LANCEDB_STORE_DIR}/Cargo.toml
+          -DTEST_TARGET=object_store
+          -DPROFILE_FLAG=${RGW_LANCEDB_CARGO_FLAG}
+          -DTARGET_DIR=${RGW_LANCEDB_CARGO_TARGET_DIR}
+          -DLINK_DIR=$<TARGET_FILE_DIR:ceph_rgw_sal_test_env>
+          -DRPATH=${CMAKE_INSTALL_FULL_LIBDIR}
+          -DOUTPUT=${LANCEDB_OBJECT_STORE_TEST}
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/cargo_test_binary.cmake
+  DEPENDS ceph_rgw_sal_test_env
+          ${CMAKE_CURRENT_SOURCE_DIR}/cargo_test_binary.cmake
+          ${LANCEDB_STORE_DIR}/tests/object_store.rs
+          ${LANCEDB_STORE_DIR}/build.rs
+          ${LANCEDB_STORE_DIR}/Cargo.toml
+          ${LANCEDB_STORE_DIR}/src/lib.rs
+          ${LANCEDB_STORE_DIR}/src/ffi.rs
+          ${LANCEDB_STORE_DIR}/src/provider.rs
+          ${LANCEDB_STORE_DIR}/src/store.rs
+  COMMENT "Building ceph_test_rgw_lancedb_object_store (cargo test --no-run)"
+  VERBATIM)
+add_custom_target(ceph_test_rgw_lancedb_object_store ALL
+  DEPENDS ${LANCEDB_OBJECT_STORE_TEST})
+# serialize against the rgw-lancedb build: both cargo invocations lock the
+# same CARGO_TARGET_DIR
+add_dependencies(ceph_test_rgw_lancedb_object_store rgw-lancedb)
+install(PROGRAMS ${LANCEDB_OBJECT_STORE_TEST} DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+# The crate's own #[cfg(test)] unit tests, which cargo builds into a separate
+# binary.  They use null and fake pointers rather than a driver, so unlike the
+# integration tests they need no cluster and belong in `make check`.  They
+# still link the shared library, since they reach through the FFI into
+# rgw_sal_wrapper_version().
+set(LANCEDB_STORE_UNITTEST
+  ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_rgw_lancedb_store)
+add_custom_command(
+  OUTPUT ${LANCEDB_STORE_UNITTEST}
+  COMMAND ${CMAKE_COMMAND}
+          -DCARGO=${CARGO_EXECUTABLE}
+          -DMANIFEST=${LANCEDB_STORE_DIR}/Cargo.toml
+          -DTEST_TARGET=lib
+          -DPROFILE_FLAG=${RGW_LANCEDB_CARGO_FLAG}
+          -DTARGET_DIR=${RGW_LANCEDB_CARGO_TARGET_DIR}
+          -DLINK_DIR=$<TARGET_FILE_DIR:ceph_rgw_sal_test_env>
+          -DRPATH=${CMAKE_INSTALL_FULL_LIBDIR}
+          -DOUTPUT=${LANCEDB_STORE_UNITTEST}
+          -P ${CMAKE_CURRENT_SOURCE_DIR}/cargo_test_binary.cmake
+  DEPENDS ceph_rgw_sal_test_env
+          ${CMAKE_CURRENT_SOURCE_DIR}/cargo_test_binary.cmake
+          ${LANCEDB_STORE_DIR}/build.rs
+          ${LANCEDB_STORE_DIR}/Cargo.toml
+          ${LANCEDB_STORE_DIR}/src/lib.rs
+          ${LANCEDB_STORE_DIR}/src/ffi.rs
+          ${LANCEDB_STORE_DIR}/src/provider.rs
+          ${LANCEDB_STORE_DIR}/src/store.rs
+  COMMENT "Building unittest_rgw_lancedb_store (cargo test --no-run --lib)"
+  VERBATIM)
+add_custom_target(unittest_rgw_lancedb_store
+  DEPENDS ${LANCEDB_STORE_UNITTEST})
+add_dependencies(unittest_rgw_lancedb_store rgw-lancedb)
+add_ceph_test(unittest_rgw_lancedb_store ${LANCEDB_STORE_UNITTEST})
 endif()

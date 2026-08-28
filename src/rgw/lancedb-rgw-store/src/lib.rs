@@ -22,8 +22,6 @@
 //! This crate requires NO modifications to lancedb, lance, or lance-io.
 //! It uses the existing extension points:
 //! - `ObjectStoreProvider` trait to implement custom storage
-//!
-//! ```
 
 /// FFI bindings to Ceph's rgw_sal_wrapper.cc
 pub mod ffi;
@@ -150,47 +148,6 @@ const VERSION: &[u8] = concat!(env!("CARGO_PKG_VERSION"), "\0").as_bytes();
 #[no_mangle]
 pub extern "C" fn rgw_lancedb_store_version() -> *const std::os::raw::c_char {
     VERSION.as_ptr() as *const std::os::raw::c_char
-}
-
-//=============================================================================
-// Integration test runner — called from C++ test harness
-//=============================================================================
-
-mod integration_tests;
-
-/// Run ObjectStore integration tests against a live SAL driver.
-///
-/// Called from the C++ test binary (ceph_test_rgw_lancedb_object_store) which
-/// initializes the SAL driver and creates the test bucket.
-///
-/// Returns 0 if all tests pass, or the count of failures.
-///
-/// # Safety
-/// - `driver` and `dpp` must be valid pointers to an initialized SAL driver
-/// - `bucket` and `tenant` must be valid null-terminated C strings
-/// - A bucket with the given name must already exist
-#[no_mangle]
-pub unsafe extern "C" fn rgw_lancedb_object_store_run_tests(
-    driver: *mut CRgwDriver,
-    dpp: *const CRgwDoutPrefix,
-    bucket: *const std::os::raw::c_char,
-    tenant: *const std::os::raw::c_char,
-) -> std::os::raw::c_int {
-    if driver.is_null() || dpp.is_null() || bucket.is_null() {
-        eprintln!("ERROR: rgw_lancedb_object_store_run_tests: null argument");
-        return -1;
-    }
-
-    let bucket_str = std::ffi::CStr::from_ptr(bucket).to_str().unwrap_or("");
-    let tenant_str = if tenant.is_null() {
-        ""
-    } else {
-        std::ffi::CStr::from_ptr(tenant).to_str().unwrap_or("")
-    };
-
-    let store = RGWObjectStore::new(driver, dpp, bucket_str, tenant_str, "");
-
-    integration_tests::run_all(&store) as std::os::raw::c_int
 }
 
 #[cfg(test)]

@@ -568,14 +568,9 @@ if(WITH_RADOSGW_LANCEDB)
   set(LANCEDB_C_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-c")
   set(LANCEDB_RGW_STORE_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/lancedb-rgw-store")
   set(RGW_LANCEDB_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rgw-lancedb")
-  set(RGW_LANCEDB_BUILD_DIR "${CMAKE_CURRENT_BINARY_DIR}/rgw-lancedb-prefix/src/rgw-lancedb-build")
-  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
-    set(RGW_LANCEDB_TARGET_DIR "${RGW_LANCEDB_BUILD_DIR}/target/debug")
-    set(RGW_LANCEDB_CARGO_FLAG "")
-  else()
-    set(RGW_LANCEDB_TARGET_DIR "${RGW_LANCEDB_BUILD_DIR}/target/release")
-    set(RGW_LANCEDB_CARGO_FLAG "--release")
-  endif()
+  # sets RGW_LANCEDB_BUILD_DIR, RGW_LANCEDB_CARGO_TARGET_DIR,
+  # RGW_LANCEDB_TARGET_DIR and RGW_LANCEDB_CARGO_FLAG, shared with src/test/rgw
+  include(RgwLancedbCargo)
   set(RGW_LANCEDB_STATIC_LIB "${RGW_LANCEDB_TARGET_DIR}/librgw_lancedb.a")
 
   ExternalProject_Add(rgw-lancedb
@@ -583,7 +578,7 @@ if(WITH_RADOSGW_LANCEDB)
     BINARY_DIR ${RGW_LANCEDB_BUILD_DIR}
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${CMAKE_COMMAND} -E env
-          CARGO_TARGET_DIR=${RGW_LANCEDB_BUILD_DIR}/target
+          CARGO_TARGET_DIR=${RGW_LANCEDB_CARGO_TARGET_DIR}
           ${CARGO_EXECUTABLE} build ${RGW_LANCEDB_CARGO_FLAG}
           --manifest-path ${RGW_LANCEDB_SOURCE_DIR}/Cargo.toml
     BUILD_ALWAYS OFF

@@ -1316,6 +1316,57 @@ impl MultipartUpload for RGWMultipartUpload {
 mod tests {
     use super::*;
 
+    /// errno -> ObjectStore::Error variant.
+    ///
+    /// The variant is the contract callers depend on: object_store and lance
+    /// match on NotFound, AlreadyExists, Precondition and NotModified to drive
+    /// retries and conditional writes, so a mismapped code turns into wrong
+    /// behaviour rather than a bad message.  The message text is deliberately
+    /// not asserted.
+    #[test]
+    fn test_errno_to_error_mapping() {
+        use object_store::Error;
+
+        let store = unsafe {
+            RGWObjectStore::new(std::ptr::null_mut(), std::ptr::null(), "b", "", "")
+        };
+        let path = Path::from("some/key");
+
+        let mapped = |errno| store.errno_to_error_for_test(errno, &path, "op");
+
+        assert!(matches!(mapped(-2), Error::NotFound { .. }));      // ENOENT
+        assert!(matches!(mapped(-17), Error::AlreadyExists { .. })); // EEXIST
+        assert!(matches!(mapped(-95), Error::NotSupported { .. }));  // ENOTSUP
+        // ERR_PRECONDITION_FAILED / ERR_NOT_MODIFIED, RGW-specific codes
+        assert!(matches!(mapped(-2015), Error::Precondition { .. }));
+        assert!(matches!(mapped(-2016), Error::NotModified { .. }));
+
+        // codes with no closer variant collapse to Generic
+        for errno in [-1, -13, -22, -28, -36] {
+            assert!(
+                matches!(mapped(errno), Error::Generic { store: "rgw", .. }),
+                "errno {errno} should map to Generic"
+            );
+        }
+
+        // unmapped codes fall through, carrying the raw errno for diagnosis
+        match mapped(-4095) {
+            Error::Generic { store: "rgw", source } => {
+                assert!(
+                    source.to_string().contains("-4095"),
+                    "fallthrough should report the raw errno, got: {source}"
+                );
+            }
+            other => panic!("expected Generic, got {other:?}"),
+        }
+
+        // NotFound and AlreadyExists carry the path; callers log it
+        match mapped(-2) {
+            Error::NotFound { path: p, .. } => assert_eq!(p, "some/key"),
+            other => panic!("expected NotFound, got {other:?}"),
+        }
+    }
+
     #[test]
     fn test_store_display_with_prefix() {
         let store = unsafe {
