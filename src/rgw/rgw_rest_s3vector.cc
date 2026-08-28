@@ -154,7 +154,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if(op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -336,7 +336,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -396,7 +396,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -441,7 +441,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -480,7 +480,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -532,7 +532,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -590,7 +590,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -803,7 +803,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
     }
@@ -865,7 +865,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -922,7 +922,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -985,7 +985,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1023,7 +1023,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1062,7 +1062,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1114,7 +1114,7 @@ private:
     op_ret = driver->load_vector_bucket(this, bucket_id, &bucket, y);
     if (op_ret < 0) {
       if (op_ret == -ENOENT) {
-        rgw::s3vector::notify_session_delete(this, bucket_id.name);
+        rgw::s3vector::notify_session_delete(this, bucket_id.tenant, bucket_id.name);
       }
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
@@ -1153,6 +1153,14 @@ int RGWHandler_REST_s3Vector::init(rgw::sal::Driver* driver, req_state *s, rgw::
     return ret;
   }
   return RGWHandler_REST::allocate_formatter(s, RGWFormat::JSON, false);
+}
+
+int RGWHandler_REST_s3Vector::postauth_init(optional_yield y) {
+  // the URL of an s3vector request holds the name of the operation, and not a
+  // bucket, so it cannot hold a tenant either. the tenant of the request is the
+  // one of the user making it, as implied by its credentials
+  s->bucket_tenant = s->auth.identity->get_tenant();
+  return 0;
 }
 
 int RGWHandler_REST_s3Vector::authorize(const DoutPrefixProvider* dpp, optional_yield y) {

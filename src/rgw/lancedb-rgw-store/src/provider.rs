@@ -30,6 +30,10 @@ use url::Url;
 pub struct RGWStoreProvider {
     driver: *mut CRgwDriver,
     dpp: *const CRgwDoutPrefix,
+    /// Tenant of the buckets accessed through this provider (empty for the
+    /// default tenant). A provider, and the session holding it, are never
+    /// shared between tenants, since two tenants may use the same bucket name
+    tenant: String,
 }
 
 // To guarantee that driver and dpp are pointers are safe to share across threads
@@ -46,8 +50,14 @@ impl RGWStoreProvider {
     /// # Arguments
     /// * `driver` - Pointer to rgw::sal::Driver (typically env.driver in RGW handlers)
     /// * `dpp` - Pointer to DoutPrefixProvider for logging
-    pub unsafe fn new(driver: *mut CRgwDriver, dpp: *const CRgwDoutPrefix) -> Self {
-        Self { driver, dpp }
+    /// * `tenant` - Tenant of the buckets accessed through this provider (empty
+    ///   for the default tenant)
+    pub unsafe fn new(driver: *mut CRgwDriver, dpp: *const CRgwDoutPrefix, tenant: String) -> Self {
+        Self {
+            driver,
+            dpp,
+            tenant,
+        }
     }
 
     /// Get the driver pointer
@@ -92,12 +102,7 @@ impl lance_io::object_store::ObjectStoreProvider for RGWStoreProvider {
             format!("{}/", path)
         };
 
-        // Extract tenant from URL query param: s3://bucket/?tenant=xxx
-        let tenant = base_path
-            .query_pairs()
-            .find(|(k, _)| k == "tenant")
-            .map(|(_, v)| v.to_string())
-            .unwrap_or_default();
+        let tenant = self.tenant.as_str();
 
         // Create RGW ObjectStore with bucket and prefix
         // Note: The prefix is stored in RGWObjectStore but NOT used for path manipulation
@@ -105,7 +110,7 @@ impl lance_io::object_store::ObjectStoreProvider for RGWStoreProvider {
         //
         // We keep the prefix for debugging/logging and troubleshooting purposes.
         let inner = Arc::new(unsafe {
-            RGWObjectStore::new(self.driver, self.dpp, bucket, &tenant, &prefix)
+            RGWObjectStore::new(self.driver, self.dpp, bucket, tenant, &prefix)
         });
 
         let storage_options =
@@ -159,6 +164,7 @@ mod tests {
             RGWStoreProvider::new(
                 std::ptr::null_mut::<CRgwDriver>(),
                 std::ptr::null::<CRgwDoutPrefix>(),
+                String::new(),
             )
         };
 
