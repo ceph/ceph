@@ -981,6 +981,66 @@ void SnapMapper::record_purged_snaps(
 }
 
 
+// WI-17-b: completed-rollback key helpers and recording
+
+string SnapMapper::make_completed_rollback_key(int64_t pool_id, snapid_t rb_id)
+{
+  return fmt::format("completed_rb_{:016x}_{:016x}",
+                     static_cast<uint64_t>(pool_id),
+                     static_cast<uint64_t>(rb_id));
+}
+
+void SnapMapper::set_completed_rollback(
+  OSDriver& backend,
+  OSDriver::OSTransaction& txn,
+  int64_t pool_id,
+  snapid_t rb_id)
+{
+  string key = make_completed_rollback_key(pool_id, rb_id);
+  ceph::buffer::list val;
+  // value is a simple marker; we only need key presence
+  ceph::encode(pool_id, val);
+  ceph::encode(rb_id, val);
+  map<string, ceph::buffer::list> m;
+  m[key] = val;
+  txn.set_keys(m);
+}
+
+bool SnapMapper::is_completed_rollback(
+  OSDriver& backend,
+  int64_t pool_id,
+  snapid_t rb_id)
+{
+  string key = make_completed_rollback_key(pool_id, rb_id);
+  pair<string, ceph::buffer::list> kv;
+  // get_next_or_current returns the key >= the search key
+  if (backend.get_next_or_current(key, &kv) != 0)
+    return false;
+  return kv.first == key;
+}
+
+void SnapMapper::record_completed_rollbacks(
+  CephContext *cct,
+  OSDriver& backend,
+  OSDriver::OSTransaction&& txn,
+  const map<epoch_t, map<int64_t, snap_interval_set_t>>& completed_rollbacks)
+{
+  dout(10) << __func__ << " completed_rollbacks " << completed_rollbacks << dendl;
+  for (auto& [epoch, pool_map] : completed_rollbacks) {
+    for (auto& [pool_id, rb_ids] : pool_map) {
+      for (auto i = rb_ids.begin(); i != rb_ids.end(); ++i) {
+        snapid_t rb_id = i.get_start();
+        snapid_t rb_end = i.get_start() + i.get_len();
+        while (rb_id < rb_end) {
+          set_completed_rollback(backend, txn, pool_id, rb_id);
+          ++rb_id;
+        }
+      }
+    }
+  }
+}
+
+
 #ifndef WITH_CRIMSON
 bool SnapMapper::Scrubber::_parse_p(std::string_view key, std::string_view value)
 {

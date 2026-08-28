@@ -223,7 +223,28 @@ public:
     OSDriver::OSTransaction&& txn,
     std::map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
 
+  // WI-17-b: completed-rollback recording and lookup
+  static void record_completed_rollbacks(
+    CephContext *cct,
+    OSDriver& backend,
+    OSDriver::OSTransaction&& txn,
+    const std::map<epoch_t,
+                   std::map<int64_t, snap_interval_set_t>>& completed_rollbacks);
+
+  static void set_completed_rollback(
+    OSDriver& backend,
+    OSDriver::OSTransaction& txn,
+    int64_t pool_id,
+    snapid_t rb_id);
+
+  static bool is_completed_rollback(
+    OSDriver& backend,
+    int64_t pool_id,
+    snapid_t rb_id);
+
 private:
+  static std::string make_completed_rollback_key(int64_t pool_id, snapid_t rb_id);
+
   static int _lookup_purged_snap(
     CephContext *cct,
     OSDriver& backend,
