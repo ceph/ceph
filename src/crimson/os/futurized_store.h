@@ -96,7 +96,10 @@ public:
       const ghobject_t& oid,
       uint32_t op_flags = 0) = 0;
 
-    virtual seastar::future<struct stat> stat(
+    using stat_ertr = crimson::errorator<
+      crimson::ct_error::enoent,
+      crimson::ct_error::input_output_error>;
+    virtual stat_ertr::future<struct stat> stat(
       CollectionRef c,
       const ghobject_t& oid,
       uint32_t op_flags = 0) = 0;

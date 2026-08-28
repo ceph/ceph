@@ -1159,7 +1159,7 @@ CyanStore::Shard::fiemap(
   return seastar::make_ready_future<std::map<uint64_t, uint64_t>>(std::move(m));
 }
 
-seastar::future<struct stat>
+CyanStore::Shard::stat_ertr::future<struct stat>
 CyanStore::Shard::stat(
   CollectionRef ch,
   const ghobject_t& oid,
@@ -1169,11 +1169,11 @@ CyanStore::Shard::stat(
   auto c = static_cast<Collection*>(ch.get());
   auto o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+    return crimson::ct_error::enoent::make();
   }
   struct stat st;
   st.st_size = o->get_size();
-  return seastar::make_ready_future<struct stat>(std::move(st));
+  return stat_ertr::make_ready_future<struct stat>(std::move(st));
 }
 
 }
