@@ -4,10 +4,12 @@
 #pragma once
 
 #include <iterator>
-#include <map>
 #include <set>
 
+#include <boost/container/flat_map.hpp>
+
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/core/sharded.hh>
 
 #include "crimson/net/Connection.h"
 #include "crimson/osd/object_context.h"
@@ -47,12 +49,25 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   watch_info_t winfo;
   entity_name_t entity_name;
   Ref<PG> pg;
+  // set once the watch is torn down (remove()/discard_state()); guards a reset
+  // that races watch removal. Mirrors classic Watch::discarded.
+  bool discarded = false;
 
   seastar::timer<seastar::lowres_clock> timeout_timer;
 
   seastar::future<> start_notify(NotifyRef);
   seastar::future<> send_notify_msg(NotifyRef);
   seastar::future<> send_disconnect_msg();
+
+  // Register/unregister this watch in its connection's per-connection registry
+  // (crimson::osd::WatchConState, living in the connection's OSDConnectionPriv)
+  // so that a reset of the connection can find and disconnect it. These perform
+  // a cross-core hop because the watch lives on its PG's core while the registry
+  // lives on the connection's home core. Defined in watch_conn.cc (they touch
+  // OSD-only symbols and so must stay out of watch.cc, which is also compiled
+  // into unit tests).
+  seastar::future<> register_on_conn();
+  seastar::future<> deregister_from_conn();
 
   friend Notify;
   friend class WatchTimeoutRequest;
@@ -101,6 +116,13 @@ public:
   bool is_connected() const {
     return static_cast<bool>(conn);
   }
+  bool is_connected_to(const crimson::net::Connection* con) const {
+    // identity comparison only; safe to call from any core.
+    return conn.get() == con;
+  }
+  bool is_discarded() const {
+    return discarded;
+  }
   void got_ping(utime_t);
 
   void discard_state();
@@ -145,6 +167,39 @@ public:
 };
 
 using WatchRef = seastar::shared_ptr<Watch>;
+
+// A per-connection registry of the watches currently reachable over one client
+// connection. It lives in that connection's OSDConnectionPriv (on the
+// connection's home core) and lets OSD::ms_handle_reset() find and disconnect
+// every watch of a reset connection. This is crimson's equivalent of classic
+// WatchConState (src/osd/Watch.h) / Session::wstate.
+//
+// A Watch is owned by its ObjectContext and therefore lives on its PG's core,
+// which may differ from the connection's core. Entries are consequently held as
+// cross-core `seastar::foreign_ptr<WatchRef>` and keyed by the Watch's address
+// (used purely as an opaque identity). All methods run on the connection's core;
+// reset() fans out one cross-core hop per watch to disconnect it on its own
+// core. Defined in watch_conn.cc.
+class WatchConState {
+  // A flat_map (contiguous, one growable allocation) rather than std::map: the
+  // set is small (the objects a single connection watches), never touched on
+  // the notify data path, mutated only on watch establishment/teardown, and
+  // iterated only on reset -- so cache-friendly iteration matters more than
+  // node stability or ordered lookup, and the pointer key is opaque identity.
+  boost::container::flat_map<const void*, seastar::foreign_ptr<WatchRef>> watches;
+
+public:
+  /// Register a (foreign) watch under its identity key.
+  void add_watch(const void* key, seastar::foreign_ptr<WatchRef> watch);
+  /// Unregister a watch; a no-op if it is not present.
+  void remove_watch(const void* key);
+  bool empty() const {
+    return watches.empty();
+  }
+  /// Disconnect every registered watch that is still connected to `con`,
+  /// emptying the registry. Called on a connection reset.
+  seastar::future<> reset(const crimson::net::Connection* con);
+};
 
 struct notify_reply_t {
   uint64_t watcher_gid;
