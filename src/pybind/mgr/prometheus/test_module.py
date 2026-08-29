@@ -471,3 +471,35 @@ class HardwareMetricsTest(TestCase):
         self.module._process_processors(self.status, self.hostname)
         for labels in self.module.metrics['hardware_cpu_cores'].value:
             self.assertEqual(len(labels), 5)
+
+
+class RgwInstanceIdTest(TestCase):
+
+    def _parse(self, daemon_id):
+        from prometheus.module import Module
+        # _parse_rgw_instance_id only touches its argument, so it's
+        # safe to call directly on the class without a full Module
+        # instance (no self state is used).
+        return Module._parse_rgw_instance_id(None, daemon_id)
+
+    def test_three_part_daemon_id_extracts_instance(self):
+        # e.g. "host1.rgw.0" -> instance id "0"
+        self.assertEqual(self._parse('host1.rgw.0'), '0')
+
+    def test_one_dot_daemon_id_does_not_raise(self):
+        # Regression test: previously raised IndexError, since the
+        # guard only checked for a dot, but the code indexed [2],
+        # which needs two dots.
+        self.assertEqual(self._parse('host1.rgw0'), 'host1.rgw0')
+
+    def test_no_dot_daemon_id_falls_back_to_full_id(self):
+        self.assertEqual(self._parse('standalone'), 'standalone')
+
+    def test_empty_daemon_id_returns_empty_string(self):
+        self.assertEqual(self._parse(''), '')
+
+    def test_none_daemon_id_returns_empty_string(self):
+        self.assertEqual(self._parse(None), '')
+
+    def test_more_than_two_dots_extracts_third_segment(self):
+        self.assertEqual(self._parse('a.b.c.d'), 'c')
