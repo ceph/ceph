@@ -555,6 +555,54 @@ class RedmineUpkeep:
         log.info("Successfully connected to Redmine.")
         return R
 
+    class FilterClearDuplicate(Filter):
+        """
+        Filter for Duplicate issues that still have PR/Merge/Release fields set.
+        """
+        PRIORITY = 2000000
+        NAME = "ClearDuplicate"
+
+        @staticmethod
+        def get_filters():
+            for field_id in [
+                REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID,
+                REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT,
+                REDMINE_CUSTOM_FIELD_ID_FIXED_IN,
+                REDMINE_CUSTOM_FIELD_ID_RELEASED_IN,
+            ]:
+                yield {
+                    f"cf_{field_id}": "*",
+                    "status_id": str(REDMINE_STATUS_ID_DUPLICATE),
+                }
+
+        @staticmethod
+        def requires_github_api():
+            return False
+
+    @transformation(2000000)
+    def _transform_clear_duplicate_fields(self, issue_update):
+        """
+        Transformation: Strips Pull Request ID, Merge Commit, Fixed In, and Released In
+        from issues that are marked as Duplicate.
+        """
+        if issue_update.get_current_status_id() != REDMINE_STATUS_ID_DUPLICATE:
+            return False
+
+        issue_update.logger.debug("Running _transform_clear_duplicate_fields")
+        changed = False
+
+        for field_id, name in [
+            (REDMINE_CUSTOM_FIELD_ID_PULL_REQUEST_ID, "Pull Request ID"),
+            (REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT, "Merge Commit"),
+            (REDMINE_CUSTOM_FIELD_ID_FIXED_IN, "Fixed In"),
+            (REDMINE_CUSTOM_FIELD_ID_RELEASED_IN, "Released In"),
+        ]:
+            if issue_update.get_custom_field(field_id):
+                issue_update.logger.info(f"Clearing '{name}' because issue is a Duplicate.")
+                changed |= issue_update.add_or_update_custom_field(field_id, "")
+
+        return changed
+
     class FilterMigrateLegacyTags(Filter):
         """
         Filter to find issues that still have the legacy text-based tags so they can be migrated.
@@ -837,6 +885,9 @@ class RedmineUpkeep:
         Transformation: Checks if a PR associated with an issue has been merged
         and updates the merge commit and fixed_in fields in the payload.
         """
+        if issue_update.get_current_status_id() == REDMINE_STATUS_ID_DUPLICATE:
+            return False
+
         issue_update.logger.debug("Running _transform_merged")
 
         commit = issue_update.get_custom_field(REDMINE_CUSTOM_FIELD_ID_MERGE_COMMIT)
