@@ -53,8 +53,10 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/heartbeat.h"
+#include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
+#include "crimson/osd/watch.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/osd_operations/client_request.h"
@@ -1040,9 +1042,22 @@ OSD::do_ms_dispatch(
 
 void OSD::ms_handle_reset(crimson::net::ConnectionRef conn, bool is_replace)
 {
-  // TODO: cleanup the session attached to this connection
+  // Runs on the connection's home core. Disconnect every watch reachable over
+  // this connection so notifies buffer (and are replayed on reconnect) and the
+  // watch timeout can eventually reap it -- mirrors classic
+  // WatchConState::reset() driven from OSD::ms_handle_reset(). Fire-and-forget:
+  // the reset() fans out one cross-core hop per watch; keep `conn` alive until
+  // it finishes.
   LOG_PREFIX(OSD::ms_handle_reset);
   WARN("{}", *conn);
+  if (!conn->has_user_private()) {
+    return;
+  }
+  auto& priv = get_osd_priv(&*conn);
+  if (!priv.watch_conn_state) {
+    return;
+  }
+  std::ignore = priv.watch_conn_state->reset(&*conn).finally([conn] {});
 }
 
 void OSD::ms_handle_remote_reset(crimson::net::ConnectionRef conn)
