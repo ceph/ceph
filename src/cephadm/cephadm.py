@@ -1613,6 +1613,7 @@ class CephadmAgent(DaemonForm):
         self.target_ip = ''
         self.target_port = ''
         self.host = ''
+        self.target_changed = False
         self.daemon_dir = os.path.join(ctx.data_dir, self.fsid, f'{self.daemon_type}.{self.daemon_id}')
         self.config_path = os.path.join(self.daemon_dir, 'agent.json')
         self.keyring_path = os.path.join(self.daemon_dir, 'keyring')
@@ -1725,6 +1726,7 @@ class CephadmAgent(DaemonForm):
         self.event.set()
 
     def pull_conf_settings(self) -> None:
+        previous_target = (self.target_ip, self.target_port)
         try:
             with open(self.config_path, 'r') as f:
                 config = json.load(f)
@@ -1741,6 +1743,15 @@ class CephadmAgent(DaemonForm):
         except Exception as e:
             self.shutdown()
             raise Error(f'Failed to get agent target ip and port from config: {e}')
+
+        current_target = (self.target_ip, self.target_port)
+        if previous_target[0] and previous_target != current_target:
+            self.target_changed = True
+            logger.info(
+                f'Target mgr changed from '
+                f'{previous_target[0]}:{previous_target[1]} to '
+                f'{self.target_ip}:{self.target_port}'
+            )
 
         try:
             with open(self.keyring_path, 'r') as f:
@@ -1788,6 +1799,15 @@ class CephadmAgent(DaemonForm):
             self.volume_gatherer.start()
 
         while not self.stop:
+            if self.target_changed:
+                self.target_changed = False
+                delay = random.uniform(0, self.jitter_seconds)
+                logger.info(
+                    f'Target mgr changed, delaying next metadata report '
+                    f'for {delay:.2f} seconds'
+                )
+                time.sleep(delay)
+
             start_time = time.monotonic()
             ack = self.ack
 
