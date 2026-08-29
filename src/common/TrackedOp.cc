@@ -89,7 +89,7 @@ OpHistory::OpHistory(CephContext *c) : cct(c), opsvc(this) {
   b.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
   b.add_u64_counter(l_trackedop_slow_op_count, "slow_ops_count",
-					       "Number of operations taking over ten second");
+					       "Number of operations taking over ten seconds");
 
   logger.reset(b.create_perf_counters());
   cct->get_perfcounters_collection()->add(logger.get());
