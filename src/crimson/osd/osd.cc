@@ -155,6 +155,10 @@ OSD::OSD(int id, uint32_t nonce,
   LOG_PREFIX(OSD::OSD);
   DEBUG("");
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+
+  // Register as config observer to handle config changes
+  crimson::common::local_conf().add_observer(this);
+
   for (auto msgr : {std::ref(cluster_msgr), std::ref(public_msgr),
                     std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
     msgr.get()->set_auth_server(monc.get());
@@ -1088,16 +1092,51 @@ void OSD::handle_authentication(const EntityName& name,
 
 std::vector<std::string> OSD::get_tracked_keys() const noexcept
 {
-  return {"osd_beacon_report_interval"s};
+  return {
+    "osd_beacon_report_interval"s,
+    "osd_scrub_min_interval"s,
+    "osd_scrub_max_interval"s,
+    "osd_scrub_interval_randomize_ratio"s,
+    "osd_deep_scrub_interval"s,
+    "osd_scrub_begin_hour"s,
+    "osd_scrub_end_hour"s,
+    "osd_scrub_begin_week_day"s,
+    "osd_scrub_end_week_day"s,
+    "osd_scrub_auto_repair"s
+  };
 }
 
 void OSD::handle_conf_change(
   const crimson::common::ConfigProxy& conf,
   const std::set <std::string> &changed)
 {
+  LOG_PREFIX(OSD::handle_conf_change);
   if (changed.contains("osd_beacon_report_interval")) {
     beacon_timer.rearm_periodic(
       std::chrono::seconds(conf->osd_beacon_report_interval));
+  }
+
+  // Check if any scrub-related config changed
+  static const std::set<std::string> scrub_configs = {
+    "osd_scrub_min_interval",
+    "osd_scrub_max_interval",
+    "osd_scrub_interval_randomize_ratio",
+    "osd_deep_scrub_interval",
+    "osd_scrub_begin_hour",
+    "osd_scrub_end_hour",
+    "osd_scrub_begin_week_day",
+    "osd_scrub_end_week_day",
+    "osd_scrub_auto_repair"
+  };
+
+  for (const auto& config : scrub_configs) {
+    if (changed.contains(config)) {
+      INFO("Scrub config changed: {}, updating scrub schedules", config);
+      if (shard_services.local_is_initialized()) {
+        get_shard_services().get_scrub_scheduler().on_config_change();
+      }
+      break;
+    }
   }
 }
 
