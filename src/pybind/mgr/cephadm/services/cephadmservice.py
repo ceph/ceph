@@ -24,7 +24,7 @@ from ceph.deployment.service_spec import (
     RequiresCertificatesEntry
 )
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6
-from mgr_util import build_url, merge_dicts
+from mgr_util import CapProfiles, build_url, merge_dicts
 from orchestrator import (
     OrchestratorError,
     DaemonDescription,
@@ -365,6 +365,7 @@ class CephadmService(metaclass=ABCMeta):
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
+        self._cap_profiles = CapProfiles(mgr)
 
     def get_self_signed_certificates_with_label(self, svc_spec: ServiceSpec, daemon_spec: CephadmDaemonDeploySpec, label: str, ip_addr: Optional[str] = None) -> TLSCredentials:
         svc_name = svc_spec.service_name()
@@ -678,6 +679,7 @@ class CephadmService(metaclass=ABCMeta):
         return DaemonDescription()
 
     def get_keyring_with_caps(self, entity: AuthEntity, caps: List[str]) -> str:
+        caps = self._cap_profiles.resolve(caps)
         # try with newer cipher first, it's possible this isn't supported
         # early in an upgrade
         ret, keyring, err = self.mgr.mon_command({

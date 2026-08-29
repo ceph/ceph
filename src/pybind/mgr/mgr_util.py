@@ -14,8 +14,10 @@ import cephfs
 import contextlib
 import datetime
 import errno
+import json
 import socket
 import time
+import uuid
 import logging
 import re
 import sys
@@ -30,7 +32,7 @@ if sys.version_info >= (3, 3):
 else:
     from threading import _Timer as Timer
 
-from typing import Tuple, Any, Callable, Optional, Dict, TYPE_CHECKING, TypeVar, List, Iterable, Generator, Generic, Iterator
+from typing import Tuple, Any, Callable, Optional, Dict, TYPE_CHECKING, TypeVar, List, Iterable, Generator, Generic, Iterator, Set
 
 from ceph.deployment.utils import wrap_ipv6
 from ceph.cryptotools.select import get_crypto_caller
@@ -1019,3 +1021,112 @@ def password_hash(password: Optional[str], salt_password: Optional[str] = None) 
 
     cc = get_crypto_caller()
     return cc.password_hash(password, salt_password)
+
+
+PROBE_ENTITY_PREFIX = 'client.cap-profile-probe-'
+MARKER_PREFIX = 'mgr/cap_profiles/'
+
+# caps to use in place of 'profile <name>' on a cluster that cannot use it,
+# keyed by profile name, then by cap type
+PROFILE_FALLBACKS: Dict[str, Dict[str, str]] = {}
+
+
+class CapProfileError(RuntimeError):
+    """the cluster could not be asked; fail and retry rather than guess"""
+
+
+class CapProfiles:
+    """
+    Says whether a cap profile can be handed out. Mons and osds silently
+    accept a profile they do not know and grant it nothing, so one is only
+    used once every member of the mon, mgr and osd maps runs the same
+    version and the mon, which alone rejects an unknown mgr profile, takes
+    it on a throwaway key while refusing a made-up one. That is recorded
+    in config-key for good: a daemon from before the profile must not be
+    brought in afterwards.
+    """
+
+    def __init__(self, mgr: Any) -> None:
+        self.mgr = mgr
+        self._enabled: Set[str] = set()
+
+    def _cmd(self, **cmd: Any) -> Tuple[int, str, str]:
+        return self.mgr.mon_command(cmd)
+
+    def _json(self, prefix: str) -> Any:
+        ret, out, err = self._cmd(prefix=prefix, format='json')
+        if ret:
+            raise CapProfileError(f"'{prefix}' failed [{ret}]: {err}")
+        try:
+            return json.loads(out)
+        except ValueError:
+            raise CapProfileError(f"'{prefix}' did not answer in json")
+
+    def _marked(self, profile: str) -> bool:
+        if profile not in self._enabled:
+            ret, out, err = self._cmd(prefix='config-key get', key=MARKER_PREFIX + profile)
+            if ret not in (0, -errno.ENOENT):
+                raise CapProfileError(f'cannot read the cap profile marker for {profile} [{ret}]: {err}')
+            if ret == 0 and out.strip():
+                self._enabled.add(profile)
+        return profile in self._enabled
+
+    def _version(self) -> Optional[str]:
+        """the one version every mon, mgr and osd runs, if there is one"""
+        destroyed = {o['osd'] for o in self._json('osd info') if 'destroyed' in o.get('state', [])}
+        osds = [o for o in self._json('osd metadata') if o.get('id') not in destroyed]
+        rows = osds + self._json('mon metadata') + self._json('mgr metadata')
+        # a member that never booted has no version and could be anything,
+        # and no osd at all says nothing about the ones to come
+        versions = {r.get('ceph_version_short', 'unknown') for r in rows} | ({'unknown'} if not osds else set())
+        return versions.pop() if len(versions) == 1 and 'unknown' not in versions else None
+
+    def _probe(self, profile: str) -> bool:
+        """whether the mon takes 'mgr profile <profile>'"""
+        # a fresh entity each time: an existing one answers with the same
+        # EINVAL a bad profile gets
+        entity = f'{PROBE_ENTITY_PREFIX}{profile}-{uuid.uuid4().hex}'
+        ret, out, err = self._cmd(prefix='auth get-or-create-key', entity=entity,
+                                  caps=['mgr', f'profile {profile}'])
+        if ret == -errno.EINVAL:
+            return False
+        if ret == 0:
+            ret, out, err = self._cmd(prefix='auth rm', entity=entity)
+        if ret:
+            raise CapProfileError(f'cap profile probe for {profile} failed [{ret}], {entity} '
+                                  f'may be left behind: {err}')
+        return True
+
+    def supported(self, profile: str) -> bool:
+        """raises CapProfileError when the cluster could not be asked"""
+        if self._marked(profile):
+            return True
+        version = self._version()
+        if not version or self._probe('nosuch') or not self._probe(profile):
+            return False
+        ret, out, err = self._cmd(prefix='config-key set', key=MARKER_PREFIX + profile, val=version)
+        if ret:
+            logger.warning(f'recording that cap profile {profile} is usable failed: {err}')
+            return self._marked(profile)  # the mon may have kept it anyway
+        logger.info(f'cap profile {profile} is usable on this cluster as of {version}; '
+                    'daemons from before it are no longer supported')
+        self._enabled.add(profile)
+        return True
+
+    def resolve(self, caps: List[str]) -> List[str]:
+        """
+        Swap each 'profile <name>' the cluster cannot use for its entry in
+        PROFILE_FALLBACKS. caps is the flat [type, cap, ...] auth list.
+        Raises CapProfileError when the cluster could not be asked.
+        """
+        out = list(caps)
+        decided: Dict[str, bool] = {}
+        for i in range(1, len(out), 2):
+            words = out[i].split()
+            if len(words) == 2 and words[0] == 'profile' and words[1] in PROFILE_FALLBACKS:
+                name = words[1]
+                if name not in decided:
+                    decided[name] = self.supported(name)
+                if not decided[name]:
+                    out[i] = PROFILE_FALLBACKS[name][out[i - 1]]
+        return out

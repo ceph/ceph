@@ -129,6 +129,10 @@ def with_cephadm_module(module_options=None, store=None):
                 'osds': [],
                 'require_osd_release': 'umbrella',
             })
+        # a cluster that says nothing about its versions: cap profiles
+        # resolve to their fallbacks without probing
+        for prefix in ('mon metadata', 'mgr metadata', 'osd info', 'osd metadata'):
+            setattr(m, '_mon_command_mock_' + prefix.replace(' ', '_'), lambda cmd: '[]')
         for k, v in store.items():
             m._ceph_set_store(k, v)
 
