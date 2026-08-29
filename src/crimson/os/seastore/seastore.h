@@ -213,6 +213,10 @@ public:
 
     omap_root_t select_log_omap_root(Onode& onode) const;
 
+    // Error injection
+    seastar::future<> inject_data_error(const ghobject_t& o) override final;
+    seastar::future<> inject_mdata_error(const ghobject_t& o) override final;
+
   // only exposed to SeaStore
   public:
     base_ertr::future<> umount();
@@ -382,7 +386,8 @@ public:
 
     tm_ret _remove(
       internal_context_t &ctx,
-      OnodeRef &onode);
+      OnodeRef &onode,
+      const ghobject_t &oid);
     tm_ret _touch(
       internal_context_t &ctx,
       Onode &onode);
@@ -685,6 +690,14 @@ public:
     mutable seastar::lowres_clock::time_point last_tp =
       seastar::lowres_clock::time_point::min();
     mutable shard_stats_t last_shard_stats;
+
+    // Error injection support (no locks needed - single reactor per shard)
+    std::set<ghobject_t> debug_data_error_objects;
+    std::set<ghobject_t> debug_mdata_error_objects;
+
+    bool _debug_data_eio(const ghobject_t& o) const;
+    bool _debug_mdata_eio(const ghobject_t& o) const;
+    void _debug_obj_on_delete(const ghobject_t& o);
   };
 
 public:
