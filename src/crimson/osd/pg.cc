@@ -814,6 +814,17 @@ void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
   ceph_assert(0 == "impossible in crimson");
 }
 
+void PG::on_scrub_schedule_input_change()
+{
+  LOG_PREFIX(PG::on_scrub_schedule_input_change);
+  if (is_primary() && !scrubber.is_queued_or_active()) {
+    DEBUGDPP("active/primary and not scrubbing, updating scrub job", *this);
+    scrubber.update_scrub_job();
+  } else {
+    DEBUGDPP("inactive, non-primary, or already scrubbing - skipping update", *this);
+  }
+}
+
 void PG::log_state_enter(const char *state) {
   logger().info("Entering state: {}", state);
 }
