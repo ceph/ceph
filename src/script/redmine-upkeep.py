@@ -824,6 +824,9 @@ class RedmineUpkeep:
         """
         pr_id = issue_update.get_pr_id()
 
+        if not pr_id:
+            return None
+
         ref = f"refs/pull/{pr_id}/head"
 
         try:
