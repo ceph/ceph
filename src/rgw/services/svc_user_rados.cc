@@ -579,7 +579,15 @@ int RGWSI_User_RADOS::remove_user_info(const RGWUserInfo& info,
       ldpp_dout(dpp, 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
       return ret;
     }
-    // TODO: remove vector buckets
+
+    rgw_raw_obj uid_vector_bucks = get_vector_buckets_obj(info.user_id);
+    ldpp_dout(dpp, 10) << "removing user vector buckets index" << dendl;
+    auto vector_sysobj = svc.sysobj->get_obj(uid_vector_bucks);
+    ret = vector_sysobj.wop().remove(dpp, y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove " << info.user_id << ":" << uid_vector_bucks << ", should be fixed (err=" << ret << ")" << dendl;
+      return ret;
+    }
   } else if (info.type != TYPE_ROOT) {
     // unlink the name from its account
     const RGWZoneParams& zone = svc.zone->get_zone_params();

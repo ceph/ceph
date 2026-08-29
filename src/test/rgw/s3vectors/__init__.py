@@ -76,14 +76,6 @@ def setup():
     global s3vector_local_path
     s3vector_local_path = defaults.get("s3vector_local_path")
 
-    global s3vector_s3_endpoint
-    s3vector_s3_endpoint = defaults.get("s3vector_s3_endpoint")
-
-    global s3vector_s3_region
-    s3vector_s3_region = defaults.get("s3vector_s3_region")
-
-    global s3vector_s3_allow_http
-    s3vector_s3_allow_http = defaults.get("s3vector_s3_allow_http", "true")
 
 
 def get_config_host():
@@ -151,23 +143,9 @@ def get_s3vector_local_path():
     return s3vector_local_path
 
 
-def get_s3vector_s3_endpoint():
-    global s3vector_s3_endpoint
-    return s3vector_s3_endpoint
-
-
-def get_s3vector_s3_region():
-    global s3vector_s3_region
-    return s3vector_s3_region
-
-
-def get_s3vector_s3_allow_http():
-    global s3vector_s3_allow_http
-    return s3vector_s3_allow_http
-
-
-def is_s3_backend():
-    return get_s3vector_backend() in ("s3", "rgw")
+def has_backing_bucket():
+    """ whether the tested backend keeps the vector data in an ordinary bucket """
+    return get_s3vector_backend() == "rgw"
 
 
 @pytest.fixture(autouse=True, scope="package")

@@ -145,68 +145,10 @@ namespace rgw::s3vector {
     return fmt::format("{}://{}/?tenant={}", RGW_PROVIDER_SCHEME, bucket, *tenant);
   }
 
-  // Set S3 storage options (endpoint, region, credentials, allow_http) on a
-  // connection builder. Returns true on success, false on failure (builder is
-  // freed on error).
-  bool set_s3_storage_options(const DoutPrefixProvider* dpp,
-      const rgw::sal::User* user, CephContext* cct,
-      LanceDBConnectBuilder*& builder) {
-    const auto& conf = cct->_conf;
-    const std::string s3_endpoint = conf.get_val<std::string>("rgw_s3vector_s3_endpoint");
-    const std::string s3_region = conf.get_val<std::string>("rgw_s3vector_s3_region");
-    const bool s3_allow_http = conf.get_val<bool>("rgw_s3vector_s3_allow_http");
-
-    auto set_option = [&](const char* key, const char* value) -> bool {
-      LanceDBConnectBuilder* new_builder = lancedb_connect_builder_storage_option(builder, key, value);
-      if (!new_builder) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to set storage option: " << key << dendl;
-        lancedb_connect_builder_free(builder);
-        builder = nullptr;
-        return false;
-      }
-      builder = new_builder;
-      return true;
-    };
-
-    if (!s3_endpoint.empty()) {
-      if (!set_option("endpoint", s3_endpoint.c_str())) return false;
-    }
-    if (!s3_region.empty()) {
-      if (!set_option("aws_region", s3_region.c_str())) return false;
-    }
-
-    if (!user) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector S3 backend requires user credentials" << dendl;
-      lancedb_connect_builder_free(builder);
-      builder = nullptr;
-      return false;
-    }
-    const auto& keys = user->get_info().access_keys;
-    if (keys.empty()) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector S3 backend: user has no access keys" << dendl;
-      lancedb_connect_builder_free(builder);
-      builder = nullptr;
-      return false;
-    }
-    for (const auto& [id, ak] : keys) {
-      if (ak.active) {
-        if (!set_option("aws_access_key_id", ak.id.c_str())) return false;
-        if (!set_option("aws_secret_access_key", ak.key.c_str())) return false;
-        break;
-      }
-    }
-
-    if (s3_allow_http) {
-      if (!set_option("allow_http", "true")) return false;
-    }
-
-    return true;
-  }
-
   // utility functions for connection creation and opening table
 
   LanceDBConnection* connect(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
-      const rgw::sal::User* user, const std::string* tenant,
+      const std::string* tenant,
       const std::string& vector_bucket_name) {
     CephContext* cct = dpp->get_cct();
     const auto& conf = cct->_conf;
@@ -244,23 +186,6 @@ namespace rgw::s3vector {
       }
 
       ldpp_dout(dpp, 10) << "INFO: s3vector connecting to RGW backend: " << uri << dendl;
-    } else { // S3 backend
-
-      // S3 endpoint/region are set as storage options, not embedded in the URI.
-      // A regular S3 bucket with the same name as the vector bucket must exist
-      // at the backend.
-      uri = fmt::format("s3://{}/", vector_bucket_name);
-      builder = lancedb_connect(uri.c_str());
-      if (!builder) {
-        ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
-        return nullptr;
-      }
-
-      if (!set_s3_storage_options(dpp, user, cct, builder)) {
-        return nullptr;
-      }
-
-      ldpp_dout(dpp, 10) << "INFO: s3vector connecting to S3 backend: " << uri << dendl;
     }
 
     // connect() is used for vector bucket and index operations and therfore is using a short-lived session
@@ -299,7 +224,7 @@ namespace rgw::s3vector {
   }
 
   LanceDBSessionConnHandle connect_with_session_handle(const DoutPrefixProvider* dpp,
-      rgw::sal::Driver* driver, const rgw::sal::User* user,
+      rgw::sal::Driver* driver,
       const std::string* tenant, const std::string& vector_bucket_name) {
     CephContext* cct = dpp->get_cct();
     const auto& conf = cct->_conf;
@@ -315,7 +240,7 @@ namespace rgw::s3vector {
       // No cached session — create a short-lived connection using caller's driver/dpp
       rgw::s3vector::notify_session_create(dpp, vector_bucket_name);
       return LanceDBSessionConnHandle{
-        .conn = connect(dpp, driver, user, tenant, vector_bucket_name)
+        .conn = connect(dpp, driver, tenant, vector_bucket_name)
       };
     }
 
@@ -323,26 +248,16 @@ namespace rgw::s3vector {
     if (is_local_backend(backend_type)) {
       const std::string local_path = conf.get_val<std::string>("rgw_s3vector_local_path");
       uri = fmt::format("{}/{}", local_path, vector_bucket_name);
-    } else if (is_rgw_backend(backend_type)) {
-      uri = make_rgw_uri(vector_bucket_name, tenant);
     } else {
-      uri = fmt::format("s3://{}/", vector_bucket_name);
+      uri = make_rgw_uri(vector_bucket_name, tenant);
     }
 
     LanceDBConnectBuilder* builder = lancedb_connect(uri.c_str());
     if (!builder) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector failed to create connection builder for: " << uri << dendl;
       return LanceDBSessionConnHandle{
-        .conn = connect(dpp, driver, user, tenant, vector_bucket_name)
+        .conn = connect(dpp, driver, tenant, vector_bucket_name)
       };
-    }
-
-    if (is_s3_backend(backend_type)) {
-      if (!set_s3_storage_options(dpp, user, cct, builder)) {
-        return LanceDBSessionConnHandle{
-          .conn = connect(dpp, driver, user, tenant, vector_bucket_name)
-        };
-      }
     }
 
     // Cached session exists — attach it to the builder
@@ -356,7 +271,7 @@ namespace rgw::s3vector {
         << " falling back to connect without session" << dendl;
       lancedb_free_string(error_message);
       return LanceDBSessionConnHandle{
-        .conn = connect(dpp, driver, user, tenant, vector_bucket_name)
+        .conn = connect(dpp, driver, tenant, vector_bucket_name)
       };
     }
 
@@ -367,9 +282,9 @@ namespace rgw::s3vector {
   }
 
   LanceDBTable* open_table(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
-      const rgw::sal::User* user, const std::string* tenant,
+      const std::string* tenant,
       const std::string& vector_bucket_name, const std::string& index_name) {
-    LanceDBConnection* conn = connect(dpp, driver, user, tenant, vector_bucket_name);
+    LanceDBConnection* conn = connect(dpp, driver, tenant, vector_bucket_name);
     if (!conn) {
       return nullptr;
     }
@@ -383,10 +298,10 @@ namespace rgw::s3vector {
   }
 
   LanceDBSessionTableHandle open_table_with_session_handle(const DoutPrefixProvider* dpp,
-      rgw::sal::Driver* driver, const rgw::sal::User* user,
+      rgw::sal::Driver* driver,
       const std::string* tenant, const std::string& vector_bucket_name,
       const std::string& index_name) {
-    auto conn_handle = connect_with_session_handle(dpp, driver, user, tenant, vector_bucket_name);
+    auto conn_handle = connect_with_session_handle(dpp, driver, tenant, vector_bucket_name);
     if (!conn_handle) {
       return {};
     }
@@ -889,7 +804,6 @@ namespace rgw::s3vector {
   struct CreateIndexCtx {
     const create_index_t* configuration;
     rgw::sal::Driver* driver;
-    const rgw::sal::User* user;
     const std::string* tenant;
     DoutPrefixProvider* dpp;
     std::vector<validation_error_t>* errors;
@@ -900,12 +814,11 @@ namespace rgw::s3vector {
     auto* ctx = static_cast<CreateIndexCtx*>(user_data);
     auto* dpp = ctx->dpp;
     auto* driver = ctx->driver;
-    auto* user = ctx->user;
     const auto& tenant = ctx->tenant;
     const auto& configuration = *ctx->configuration;
     auto& errors = *ctx->errors;
 
-    LanceDBConnection* conn = connect(dpp, driver, user, tenant, configuration.vector_bucket_name);
+    LanceDBConnection* conn = connect(dpp, driver, tenant, configuration.vector_bucket_name);
     if (!conn) {
       ctx->result = -EIO;
       return;
@@ -1046,9 +959,9 @@ namespace rgw::s3vector {
     return;
   }
 
-  int create_index(const create_index_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
+  int create_index(const create_index_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "CreateIndex", configuration);
-    CreateIndexCtx ctx{&configuration, driver, user, tenant, dpp, &errors, 0};
+    CreateIndexCtx ctx{&configuration, driver, tenant, dpp, &errors, 0};
     lancedb_run_on_stack(create_index_impl, &ctx, 256*1024, 1024*1024);
     return ctx.result;
   }
@@ -1070,9 +983,9 @@ namespace rgw::s3vector {
     decode_index_name(vector_bucket_name, index_name, obj);
   }
 
-  int delete_index(const delete_index_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
+  int delete_index(const delete_index_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
     log_configuration(dpp, "DeleteIndex", configuration);
-    LanceDBConnection* conn = connect(dpp, driver, user, tenant, configuration.vector_bucket_name);
+    LanceDBConnection* conn = connect(dpp, driver, tenant, configuration.vector_bucket_name);
     if (!conn) {
       return -EIO;
     }
@@ -1131,9 +1044,9 @@ namespace rgw::s3vector {
   }
 
 
-  int get_index(const get_index_t& configuration, const std::string& region, const std::string& account, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_index_reply_t& reply) {
+  int get_index(const get_index_t& configuration, const std::string& region, const std::string& account, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_index_reply_t& reply) {
     log_configuration(dpp, "GetIndex", configuration);
-    LanceDBConnection* conn = connect(dpp, driver, user, tenant, configuration.vector_bucket_name);
+    LanceDBConnection* conn = connect(dpp, driver, tenant, configuration.vector_bucket_name);
     if (!conn) {
       return -EIO;
     }
@@ -1248,9 +1161,9 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  int list_indexes(const list_indexes_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, list_indexes_reply_t& reply) {
+  int list_indexes(const list_indexes_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, list_indexes_reply_t& reply) {
     log_configuration(dpp, "ListIndexes", configuration);
-    LanceDBConnection* conn = connect(dpp, driver, user, tenant, configuration.vector_bucket_name);
+    LanceDBConnection* conn = connect(dpp, driver, tenant, configuration.vector_bucket_name);
     if (!conn) {
       return -EIO;
     }
@@ -1339,29 +1252,25 @@ namespace rgw::s3vector {
     decode_vector_bucket_name(vector_bucket_name, vector_bucket_arn, obj);
   }
 
-  struct DeleteVectorBucketCtx {
-    const delete_vector_bucket_t* configuration;
+  struct RemoveIndexesCtx {
+    const std::string* vector_bucket_name;
     rgw::sal::Driver* driver;
-    const rgw::sal::User* user;
     const std::string* tenant;
-    DoutPrefixProvider* dpp;
+    const DoutPrefixProvider* dpp;
+    bool delete_indexes;
     int result;
   };
 
-  static void delete_vector_bucket_impl(void* user_data) {
-    auto* ctx = static_cast<DeleteVectorBucketCtx*>(user_data);
-    auto* dpp = ctx->dpp;
-    auto* driver = ctx->driver;
-    auto* user = ctx->user;
-    const auto& tenant = ctx->tenant;
-    const auto& bucket_name = ctx->configuration->vector_bucket_name;
+  static void remove_indexes_impl(void* user_data) {
+    auto* ctx = static_cast<RemoveIndexesCtx*>(user_data);
+    const auto* dpp = ctx->dpp;
+    const auto& bucket_name = *ctx->vector_bucket_name;
 
-    LanceDBConnection* conn = connect(dpp, driver, user, tenant, bucket_name);
+    LanceDBConnection* conn = connect(dpp, ctx->driver, ctx->tenant, bucket_name);
     if (!conn) {
       ctx->result = -EIO;
       return;
     }
-    // a vector bucket that still has indexes cannot be deleted
     char** table_names;
     size_t name_count;
     char* error_message;
@@ -1372,7 +1281,7 @@ namespace rgw::s3vector {
       ctx->result = lancedb_error_to_errno(err);
       return;
     }
-    if (name_count > 0) {
+    if (name_count > 0 && !ctx->delete_indexes) {
       ldpp_dout(dpp, 1) << "ERROR: s3vector bucket: " << bucket_name << " cannot be deleted, it still has " <<
         name_count << " indexes" << dendl;
       lancedb_free_table_names(table_names, name_count);
@@ -1380,17 +1289,33 @@ namespace rgw::s3vector {
       ctx->result = -ENOTEMPTY;
       return;
     }
+    for (size_t i = 0; i < name_count; ++i) {
+      if (const LanceDBError err = lancedb_connection_drop_table(conn, table_names[i], nullptr, &error_message);
+          err == LANCEDB_TABLE_NOT_FOUND) {
+        ldpp_dout(dpp, 10) << "INFO: s3vector index: " << table_names[i] << " does not exist" << dendl;
+        lancedb_free_string(error_message);
+      } else if (err != LANCEDB_SUCCESS) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to delete index: " << table_names[i] << " of s3vector bucket: " <<
+          bucket_name << ". error: " << error_message << dendl;
+        lancedb_free_string(error_message);
+        lancedb_free_table_names(table_names, name_count);
+        lancedb_connection_free(conn);
+        ctx->result = lancedb_error_to_errno(err);
+        return;
+      } else { // successfully deleted the index
+        // we are not failing the operation if we cannot notify the background process on index removal
+        notify_index_remove(dpp, bucket_name, table_names[i]);
+      }
+    }
     lancedb_free_table_names(table_names, name_count);
-    ldpp_dout(dpp, 20) << "INFO: deleting in-memory session (if it exists) for bucket: " << bucket_name << dendl;
-    rgw::s3vector::notify_session_delete(dpp, bucket_name);
     lancedb_connection_free(conn);
     ctx->result = 0;
   }
 
-  int delete_vector_bucket(const delete_vector_bucket_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
-    log_configuration(dpp, "DeleteVectorBucket", configuration);
-    DeleteVectorBucketCtx ctx{&configuration, driver, user, tenant, dpp, 0};
-    lancedb_run_on_stack(delete_vector_bucket_impl, &ctx, 256*1024, 1024*1024);
+  int remove_indexes(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+      const std::string* tenant, const std::string& vector_bucket_name, bool delete_indexes, optional_yield y) {
+    RemoveIndexesCtx ctx{&vector_bucket_name, driver, tenant, dpp, delete_indexes, 0};
+    lancedb_run_on_stack(remove_indexes_impl, &ctx, 256*1024, 1024*1024);
     return ctx.result;
   }
 
@@ -1438,7 +1363,6 @@ namespace rgw::s3vector {
   struct CreateVectorBucketCtx {
     const create_vector_bucket_t* configuration;
     rgw::sal::Driver* driver;
-    const rgw::sal::User* user;
     const std::string* tenant;
     DoutPrefixProvider* dpp;
     int result;
@@ -1448,11 +1372,10 @@ namespace rgw::s3vector {
     auto* ctx = static_cast<CreateVectorBucketCtx*>(user_data);
     auto* dpp = ctx->dpp;
     auto* driver = ctx->driver;
-    auto* user = ctx->user;
     const auto& tenant = ctx->tenant;
     const auto& bucket_name = ctx->configuration->vector_bucket_name;
 
-    auto conn_handle = connect_with_session_handle(dpp, driver, user, tenant, bucket_name);
+    auto conn_handle = connect_with_session_handle(dpp, driver, tenant, bucket_name);
     if (!conn_handle) {
       ctx->result = -EIO;
       return;
@@ -1473,9 +1396,9 @@ namespace rgw::s3vector {
     ctx->result = 0;
   }
 
-  int create_vector_bucket(const create_vector_bucket_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
+  int create_vector_bucket(const create_vector_bucket_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
     log_configuration(dpp, "CreateVectorBucket", configuration);
-    CreateVectorBucketCtx ctx{&configuration, driver, user, tenant, dpp, 0};
+    CreateVectorBucketCtx ctx{&configuration, driver, tenant, dpp, 0};
     lancedb_run_on_stack(create_vector_bucket_impl, &ctx, 256*1024, 1024*1024);
     return ctx.result;
   }
@@ -1626,7 +1549,6 @@ namespace rgw::s3vector {
   struct PutVectorsCtx {
     const put_vectors_t* configuration;
     rgw::sal::Driver* driver;
-    const rgw::sal::User* user;
     const std::string* tenant;
     DoutPrefixProvider* dpp;
     std::vector<validation_error_t>* errors;
@@ -1637,12 +1559,11 @@ namespace rgw::s3vector {
     auto* ctx = static_cast<PutVectorsCtx*>(user_data);
     auto* dpp = ctx->dpp;
     auto* driver = ctx->driver;
-    auto* user = ctx->user;
     const auto& tenant = ctx->tenant;
     const auto& configuration = *ctx->configuration;
     auto& errors = *ctx->errors;
 
-    auto table_handle = open_table_with_session_handle(dpp, driver, user, tenant, configuration.vector_bucket_name, configuration.index_name);
+    auto table_handle = open_table_with_session_handle(dpp, driver, tenant, configuration.vector_bucket_name, configuration.index_name);
     if (!table_handle) {
       ctx->result = -EIO;
       return;
@@ -2025,9 +1946,9 @@ namespace rgw::s3vector {
     ctx->result = 0;
   }
 
-  int put_vectors(const put_vectors_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
+  int put_vectors(const put_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "PutVectors", configuration);
-    PutVectorsCtx ctx{&configuration, driver, user, tenant, dpp, &errors, 0};
+    PutVectorsCtx ctx{&configuration, driver, tenant, dpp, &errors, 0};
     lancedb_run_on_stack(put_vectors_impl, &ctx, 256*1024, 1024*1024);
     return ctx.result;
   }
@@ -2190,9 +2111,9 @@ namespace rgw::s3vector {
     return populate_vectors_from_arrow(dpp, c_arrays_ptr, c_schema_ptr, vectors, index_name, use_data, use_distance, vector_query, use_metadata);
   }
 
-  int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply) {
+  int get_vectors(const get_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, get_vectors_reply_t& reply) {
     log_configuration(dpp, "GetVectors", configuration);
-    auto table_handle = open_table_with_session_handle(dpp, driver, user, tenant, configuration.vector_bucket_name, configuration.index_name);
+    auto table_handle = open_table_with_session_handle(dpp, driver, tenant, configuration.vector_bucket_name, configuration.index_name);
     if (!table_handle) {
       return -EIO;
     }
@@ -2337,9 +2258,9 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  int list_vectors(const list_vectors_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, list_vectors_reply_t& reply) {
+  int list_vectors(const list_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, list_vectors_reply_t& reply) {
     log_configuration(dpp, "ListVectors", configuration);
-    LanceDBTable* table = open_table(dpp, driver, user, tenant, configuration.vector_bucket_name, configuration.index_name);
+    LanceDBTable* table = open_table(dpp, driver, tenant, configuration.vector_bucket_name, configuration.index_name);
     if (!table) {
       return -EIO;
     }
@@ -2430,9 +2351,9 @@ namespace rgw::s3vector {
     }
   }
 
-  int delete_vectors(const delete_vectors_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
+  int delete_vectors(const delete_vectors_t& configuration, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y) {
     log_configuration(dpp, "DeleteVectors", configuration);
-    auto table_handle = open_table_with_session_handle(dpp, driver, user, tenant, configuration.vector_bucket_name, configuration.index_name);
+    auto table_handle = open_table_with_session_handle(dpp, driver, tenant, configuration.vector_bucket_name, configuration.index_name);
     if (!table_handle) {
       return -EIO;
     }
@@ -2527,9 +2448,9 @@ namespace rgw::s3vector {
     f->close_section();
   }
 
-  int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors) {
+  int query_vectors(const query_vectors_t& configuration, std::optional<JSONParser>& filter, rgw::sal::Driver* driver, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, query_vectors_reply_t& reply, std::vector<validation_error_t>& errors) {
     log_configuration(dpp, "QueryVectors", configuration);
-    auto table_handle = open_table_with_session_handle(dpp, driver, user, tenant, configuration.vector_bucket_name, configuration.index_name);
+    auto table_handle = open_table_with_session_handle(dpp, driver, tenant, configuration.vector_bucket_name, configuration.index_name);
     if (!table_handle) {
       return -EIO;
     }

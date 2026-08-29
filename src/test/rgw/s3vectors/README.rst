@@ -19,21 +19,16 @@ backend the tests exercise. It must match the ``rgw_s3vector_backend`` value
 in ``ceph.conf``:
 
 * ``local`` — LanceDB stores data on the local filesystem (no S3 bucket needed)
-* ``s3`` — LanceDB stores data in an S3 bucket
 * ``rgw`` — LanceDB stores data via RGW's SAL layer
 
-When set to ``s3`` or ``rgw``, the tests automatically create and clean up a
-regular S3 bucket with the same name as each vector bucket.
+When set to ``rgw``, the tests automatically create and clean up a regular S3
+bucket with the same name as each vector bucket.
 
 Starting the cluster for each backend:
 
 For ``rgw`` (default)::
 
   ../src/vstart.sh -n -d
-
-For ``s3``::
-
-  ../src/vstart.sh -n -d -o "rgw_s3vector_backend=s3" -o "rgw_s3vector_s3_endpoint=http://localhost:8000" -o "rgw_s3vector_s3_allow_http=true" -o "rgw_s3vector_s3_region=default"
 
 For ``local``::
 
