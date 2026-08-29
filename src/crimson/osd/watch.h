@@ -33,6 +33,13 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   // used by create().
   struct private_ctag_t{};
 
+  // A dedicated private tag for the unit-test-only constructor below. Being
+  // private, it can only be named by `Watch` itself, so the sole way to reach
+  // that constructor is `create_for_test()`. Its presence in the signature
+  // also doubly documents -- at the definition and at every (test-only) call
+  // site -- that the constructor is not for production use.
+  struct unit_test_ctag_t{};
+
   std::set<NotifyRef, std::less<>> in_progress_notifies;
   crimson::net::ConnectionXcoreRef conn;
   crimson::osd::ObjectContextRef obc;
@@ -65,6 +72,25 @@ public:
       }) {
     assert(this->pg);
   }
+
+  // UNIT-TEST ONLY. Builds a Watch without an ObjectContext, a PG or a
+  // connection -- just enough state to exercise the connection- and
+  // PG-agnostic bookkeeping (notably the in_progress_notifies handling in
+  // cancel_notify()/notify_ack()). Because `obc` and `pg` are left null, the
+  // caller must NOT arm timeout_timer or invoke anything that dereferences
+  // them (e.g. do_watch_timeout(), remove(), start_notify() on a connected
+  // watch). The timeout callback is deliberately a no-op: wiring
+  // do_watch_timeout() here would make every test translation unit depend on
+  // the PG operation framework (WatchTimeoutRequest et al.), which is exactly
+  // what this seam avoids. Reachable only through create_for_test(); see
+  // unit_test_ctag_t.
+  Watch(unit_test_ctag_t,
+        const watch_info_t& winfo,
+        const entity_name_t& entity_name)
+    : winfo(winfo),
+      entity_name(entity_name),
+      timeout_timer([] { /* never armed in tests; see note above */ }) {
+  }
   ~Watch();
 
   seastar::future<> connect(crimson::net::ConnectionXcoreRef, bool);
@@ -90,6 +116,13 @@ public:
   static seastar::shared_ptr<Watch> create(Args&&... args) {
     return seastar::make_shared<Watch>(private_ctag_t{},
                                        std::forward<Args>(args)...);
+  };
+
+  // UNIT-TEST ONLY factory for the unit_test_ctag_t constructor above.
+  static seastar::shared_ptr<Watch> create_for_test(
+      const watch_info_t& winfo,
+      const entity_name_t& entity_name) {
+    return seastar::make_shared<Watch>(unit_test_ctag_t{}, winfo, entity_name);
   };
 
   uint64_t get_watcher_gid() const {
