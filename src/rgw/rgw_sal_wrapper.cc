@@ -120,6 +120,9 @@ int rgw_put_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_put_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
@@ -216,6 +219,9 @@ int rgw_put_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dp
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_put_object_conditional: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
@@ -311,6 +317,9 @@ int rgw_get_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_get_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
   buffer->data = nullptr;
   buffer->len = 0;
 
@@ -397,6 +406,9 @@ int rgw_delete_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_delete_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
@@ -430,6 +442,9 @@ int rgw_head_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_head_object: invalid args" << dendl;
     return -EINVAL;
   }
+
+  ldpp_dout(dpp, 10) << "rgw_head_object: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
 
   meta->size = 0;
   meta->etag = nullptr;
@@ -498,6 +513,12 @@ int rgw_list_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_list_objects: bucket=" << bucket_id->name
+                     << " prefix='" << (prefix ? prefix : "") << "'"
+                     << " delimiter='" << (delimiter ? delimiter : "") << "'"
+                     << " marker='" << (marker ? marker : "") << "'"
+                     << " max_keys=" << max_keys << dendl;
+
   result->entries = nullptr;
   result->count = 0;
   result->is_truncated = 0;
@@ -515,12 +536,6 @@ int rgw_list_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
   params.marker = rgw_obj_key(marker ? marker : "");
   params.list_versions = false;
   params.allow_unordered = false;
-
-  ldpp_dout(dpp, 10) << "rgw_list_objects: bucket=" << bucket_id->name
-           << " prefix='" << params.prefix << "'"
-           << " delimiter='" << params.delim << "'"
-           << " marker='" << params.marker.name << "'"
-           << " max_keys=" << max_keys << dendl;
 
   rgw::sal::Bucket::ListResults results;
 
@@ -605,6 +620,11 @@ int rgw_copy_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_copy_object: src_bucket=" << src_bucket_id->name
+                     << " src_obj=" << src_obj_id->key
+                     << " dst_bucket=" << dst_bucket_id->name
+                     << " dst_obj=" << dst_obj_id->key << dendl;
+
   std::unique_ptr<rgw::sal::Bucket> src_bucket;
   int ret = load_bucket(driver, dpp, src_bucket_id, src_bucket, y);
   if (ret < 0) {
@@ -683,6 +703,11 @@ int rgw_copy_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* d
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_copy_object_conditional: invalid args" << dendl;
     return -EINVAL;
   }
+
+  ldpp_dout(dpp, 10) << "rgw_copy_object_conditional: src_bucket=" << src_bucket_id->name
+                     << " src_obj=" << src_obj_id->key
+                     << " dst_bucket=" << dst_bucket_id->name
+                     << " dst_obj=" << dst_obj_id->key << dendl;
 
   if (if_nomatch && std::string(if_nomatch) == "*") {
     std::unique_ptr<rgw::sal::Bucket> check_bucket;
@@ -777,6 +802,9 @@ int rgw_delete_objects( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_delete_objects: bucket=" << bucket_id->name
+                     << " count=" << count << dendl;
+
   if (count == 0) {
     return 0;
   }
@@ -837,6 +865,9 @@ int rgw_init_multipart( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_init_multipart: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
   *upload_id = nullptr;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -884,6 +915,9 @@ int rgw_multipart_put_part( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_put_part: invalid args" << dendl;
     return -EINVAL;
   }
+
+  ldpp_dout(dpp, 10) << "rgw_multipart_put_part: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
 
   *etag = nullptr;
 
@@ -984,6 +1018,9 @@ int rgw_multipart_complete( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_pt
     return -EINVAL;
   }
 
+  ldpp_dout(dpp, 10) << "rgw_multipart_complete: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
+
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
   if (ret < 0) {
@@ -1034,6 +1071,9 @@ int rgw_multipart_abort( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
     ldpp_dout(dpp, 1) << "ERROR: sal_wrapper: rgw_multipart_abort: invalid args" << dendl;
     return -EINVAL;
   }
+
+  ldpp_dout(dpp, 10) << "rgw_multipart_abort: bucket=" << bucket_id->name
+                     << " obj=" << obj_id->key << dendl;
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
   int ret = load_bucket(driver, dpp, bucket_id, bucket, y);
