@@ -21,13 +21,13 @@ tasks:
       extra_attr: [multisite_test]
       # the tests are run once per backend. the backend is set on the RGWs by the
       # tests, and does not require a restart
-      backends: [rgw, s3, local]
+      backends: [rgw, local]
     c2.client.0:
       rgw_server: c2.client.0
       # the vector bucket lifecycle is tested on the non-master zone as well,
       # since vector buckets are created there and not on the master zone
       extra_attr: [vector_bucket_test]
-      backends: [rgw, s3, local]
+      backends: [rgw, local]
 
 overrides:
   ceph:

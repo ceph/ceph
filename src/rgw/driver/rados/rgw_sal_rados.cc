@@ -61,6 +61,10 @@
 #include "rgw_rest_user.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#ifdef WITH_RADOSGW_LANCEDB
+#include "rgw_s3vector.h"
+#include "rgw_s3vector_background.h"
+#endif
 #include "rgw_service.h"
 #include "rgw_tools.h"
 #include "rgw_tracer.h"
@@ -663,6 +667,22 @@ int RadosVectorBucket::remove(const DoutPrefixProvider* dpp,
 			optional_yield y)
 {
   ldpp_dout(dpp, 20) << "s3vector --- RadosVectorBucket::remove called" << dendl;
+
+#ifdef WITH_RADOSGW_LANCEDB
+  {
+    // the indexes hold the data of a vector bucket, like the objects of an ordinary
+    // one: they are removed only when the caller asks for it, and prevent the removal
+    // of the vector bucket otherwise
+    const int r = rgw::s3vector::remove_indexes(dpp, store, &info.bucket.tenant,
+                                                info.bucket.name, delete_children, y);
+    if (r < 0) {
+      return r;
+    }
+    // the data of the vector bucket is gone, and so should be its cached session
+    rgw::s3vector::notify_session_delete(dpp, info.bucket.name);
+  }
+#endif
+
   RGWObjVersionTracker ot;
 
   int ret = store->getRados()->delete_vector_bucket(info, ot, y, dpp);

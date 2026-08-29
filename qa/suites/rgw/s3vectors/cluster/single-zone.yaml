@@ -12,7 +12,7 @@ tasks:
       rgw_server: client.0
       # the tests are run once per backend. the backend is set on the RGW by the
       # tests, and does not require a restart
-      backends: [rgw, s3, local]
+      backends: [rgw, local]
 
 overrides:
   ceph:

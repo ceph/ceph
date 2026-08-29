@@ -34,25 +34,11 @@ with:
 
 .. confval:: rgw_s3vector_backend
 
-Three backends are supported:
+Two backends are supported:
 
 - ``rgw`` (the default): LanceDB files are stored in the same Ceph cluster,
   through the RGW storage abstraction layer. No external service and no extra
   configuration are needed.
-- ``s3``: LanceDB files are stored in an S3-compatible object store.
-  The endpoint is configured centrally, while the credentials used to access it
-  are the credentials of the user that issued the S3 Vectors request.
-  The endpoint must be reachable from the RGW process, and the user must have
-  access to it with its credentials. Using this option may give better visibility
-  to the data being stored, allow for quota management, rate-limiting etc.
-
-  .. tip:: Using ``http://localhost:<port>`` (where ``<port>`` is the port
-     configured for the RGW's frontend) lets the RGW send the S3 requests to
-     itself. Make sure to set: ``rgw_s3vector_s3_allow_http = true`` in this case.
-
-  .. tip:: Setting the endpoint to be the RGW's load balancer (if one exists)
-     may achieve better load distribution.
-
 - ``local``: LanceDB files are stored on the local filesystem of the RGW
   process. This backend is intended for testing and single RGW setups only:
   vector buckets created on one RGW will not be usable from another one.
@@ -61,29 +47,18 @@ The ``local`` backend is configured with:
 
 .. confval:: rgw_s3vector_local_path
 
-The ``s3`` backend is configured with:
-
-.. confval:: rgw_s3vector_s3_endpoint
-.. confval:: rgw_s3vector_s3_region
-.. confval:: rgw_s3vector_s3_allow_http
-
-.. warning:: ``rgw_s3vector_s3_allow_http`` should only be enabled when the
-   configured endpoint is reachable over a trusted network, since the user
-   credentials would otherwise be sent in cleartext.
-
 
 Backing Buckets
 ~~~~~~~~~~~~~~~
 
-With the ``rgw`` and the ``s3`` backends, LanceDB stores its files inside a
-regular S3 bucket. The name of that bucket is identical to the name of the
-vector bucket. **This bucket is not created automatically**: it must be created
-before ``CreateVectorBucket`` is called.
+With the ``rgw`` backend, LanceDB stores its files inside a regular S3 bucket.
+The name of that bucket is identical to the name of the vector bucket.
+**This bucket is not created automatically**: it must be created before
+``CreateVectorBucket`` is called.
 
 For example, to create a vector bucket named ``my-vectors``, first create a
-regular S3 bucket named ``my-vectors`` (at the RGW endpoint for the ``rgw``
-backend, or at the endpoint configured in ``rgw_s3vector_s3_endpoint`` for the
-``s3`` backend), and only then call ``CreateVectorBucket``.
+regular S3 bucket named ``my-vectors`` at the RGW endpoint, and only then call
+``CreateVectorBucket``.
 
 .. note:: S3 buckets are kept in separate namespaces, and a name may be used by both
    at the same time. Listing S3 buckets does not show vector buckets,
@@ -139,9 +114,6 @@ more than one zone, holding different indexes and vectors.
 The backing bucket of a vector bucket is a regular S3 bucket, and its own sync
 configuration applies to it. It should not be synced. See:
 `Recommended Bucket Configuration`_.
-
-.. note:: When an ``s3`` backend is used, all endpoints must belong to the same
-   zone/site.
 
 Metadata Filtering
 ------------------
@@ -455,8 +427,8 @@ Create Vector Bucket
 ````````````````````
 
 Creates a new vector bucket. The bucket name must be between 3 and 63
-characters long. With the ``rgw`` and ``s3`` backends, a regular S3 bucket with
-the same name must already exist. See: `Backing Buckets`_.
+characters long. With the ``rgw`` backend, a regular S3 bucket with the same
+name must already exist. See: `Backing Buckets`_.
 
 ::
 
