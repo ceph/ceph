@@ -145,6 +145,47 @@ class TestOSD:
         assert osd_obj.replace is False
         assert ret is True
 
+    def test_start_draining_sets_timezone_aware_timestamp(self, osd_obj):
+        """
+        Regression test: start_draining() previously used datetime.utcnow(),
+        which returns a timezone-naive datetime. Naive values get
+        mishandled by datetime_to_str()'s astimezone() call (it assumes
+        a naive input is local time and shifts it), causing drain
+        timestamps to be persisted incorrectly on any non-UTC mgr host.
+        drain_started_at must be timezone-aware (UTC) so serialization
+        via datetime_to_str() is correct regardless of host timezone.
+        """
+        osd_obj.start_draining()
+        assert osd_obj.drain_started_at.tzinfo is not None
+
+    def test_stop_draining_sets_timezone_aware_timestamp(self, osd_obj):
+        """Same regression as above, for drain_stopped_at."""
+        osd_obj.stop_draining()
+        assert osd_obj.drain_stopped_at.tzinfo is not None
+
+    def test_drain_timestamp_round_trips_through_serialization(self, osd_obj):
+        """
+        The actual failure mode: a naive drain_started_at, once run
+        through datetime_to_str() and back through str_to_datetime(),
+        must represent the same instant it started as. Against the
+        original datetime.utcnow() implementation, this round trip
+        silently shifts the value by the host's UTC offset.
+        """
+        from ceph.utils import datetime_to_str, str_to_datetime
+
+        osd_obj.start_draining()
+        original = osd_obj.drain_started_at
+
+        serialized = datetime_to_str(original)
+        restored = str_to_datetime(serialized)
+
+        # allow a small tolerance for the time elapsed during the test itself
+        delta = abs((restored - original).total_seconds())
+        assert delta < 1, (
+            f"drain_started_at did not round-trip correctly: "
+            f"original={original}, restored={restored}, delta={delta}s"
+        )
+
     def test_start_draining_replace(self, osd_obj):
         assert osd_obj.draining is False
         assert osd_obj.drain_started_at is None
