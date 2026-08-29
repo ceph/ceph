@@ -698,6 +698,11 @@ class LocalCephFSMount():
         log.info('Ready to start {}...'.format(type(self).__name__))
 
     def is_blocked(self):
+        if self.addr is None:
+            # gather_mount_info() failed on this local setup (e.g. no
+            # debugfs), so the client addr is unknown; skip the
+            # blocklist check and do a normal umount
+            return False
         self.fs = LocalFilesystem(self.ctx, name=self.cephfs_name)
 
         output = self.fs.mon_manager.raw_cluster_cmd(args='osd blocklist ls')
@@ -1486,6 +1491,18 @@ def exec_test():
     mds_cluster = LocalMDSCluster(ctx)
     mgr_cluster = LocalMgrCluster(ctx)
 
+    if use_kernel_client:
+        # The kernel client only supports AES (CEPH_CRYPTO_AES) cephx
+        # keys, while "auth get-or-create" issues the preferred cipher
+        # (aes256k on current releases).  aes counts as an insecure
+        # cipher, so allow it explicitly.  Same dance as the kclient
+        # task in qa/tasks/kclient.py.
+        remote.run(args=[CEPH_CMD, "config", "set", "mon",
+                         "mon_auth_allow_insecure_key", "true"],
+                   stdout=StringIO())
+        remote.run(args=[CEPH_CMD, "mon", "set", "auth_allowed_ciphers",
+                         "aes,aes256k"], stdout=StringIO())
+
     # Construct Mount classes
     mounts = []
     for client_id in clients:
@@ -1502,6 +1519,15 @@ def exec_test():
             open("./keyring", "at").write(p.stdout.getvalue())
 
         if use_kernel_client:
+            # The key may have been created (by an earlier run) with
+            # the preferred cipher, which the kernel client rejects;
+            # rotate it to aes and refresh the local keyring entry
+            # (the last entry for an entity wins when the keyring is
+            # loaded).
+            p = remote.run(args=[CEPH_CMD, "auth", "rotate", client_name,
+                                 "--key-type=aes"], stdout=StringIO())
+            open("./keyring", "at").write(p.stdout.getvalue())
+
             mount = LocalKernelMount(ctx=ctx, test_dir=test_dir,
                                      client_id=client_id, brxnet=opt_brxnet)
         else:
