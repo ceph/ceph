@@ -1576,6 +1576,73 @@ TEST_F(TestLibRBD, TestCopyPP)
   ioctx.close();
 }
 
+TEST_F(TestLibRBD, TestCopyClone)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string parent_name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, parent_name.c_str(), size, &order));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '1'));
+  {
+    librbd::Image parent_image;
+    ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+    ASSERT_EQ((ssize_t)bl.length(), parent_image.write(0, bl.length(), bl));
+    ASSERT_EQ(0, parent_image.snap_create("snap1"));
+    ASSERT_EQ(0, parent_image.snap_protect("snap1"));
+  }
+
+  uint64_t features;
+  {
+    librbd::Image parent_image;
+    ASSERT_EQ(0, rbd.open(ioctx, parent_image, parent_name.c_str(), NULL));
+    ASSERT_EQ(0, parent_image.features(&features));
+  }
+
+  std::string clone_name = get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, parent_name.c_str(), "snap1", ioctx,
+                         clone_name.c_str(), features, &order));
+
+  std::string copy_name = get_temp_image_name();
+  {
+    librbd::Image clone_image;
+    ASSERT_EQ(0, rbd.open(ioctx, clone_image, clone_name.c_str(), NULL));
+
+    // the object map only tracks objects belonging to the clone itself, so
+    // nothing inherited from the parent is marked as existing in it.  Take
+    // the exclusive lock so that the object map, if any, is loaded before
+    // the copy -- otherwise the copy can't be fooled by it.  With object map
+    // disabled this just exercises the plain copy path.
+    if (is_feature_enabled(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+      ASSERT_EQ(0, clone_image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE));
+      bool is_owner;
+      ASSERT_EQ(0, clone_image.is_exclusive_lock_owner(&is_owner));
+      ASSERT_TRUE(is_owner);
+    }
+
+    bufferlist clone_bl;
+    ASSERT_EQ((ssize_t)bl.length(), clone_image.read(0, bl.length(), clone_bl));
+    ASSERT_TRUE(bl.contents_equal(clone_bl));
+
+    ASSERT_EQ(0, clone_image.copy(ioctx, copy_name.c_str()));
+  }
+
+  // the copy must carry the data the clone inherited from its parent
+  librbd::Image copy_image;
+  ASSERT_EQ(0, rbd.open(ioctx, copy_image, copy_name.c_str(), NULL));
+
+  bufferlist copy_bl;
+  ASSERT_EQ((ssize_t)bl.length(), copy_image.read(0, bl.length(), copy_bl));
+  ASSERT_TRUE(bl.contents_equal(copy_bl));
+}
+
 TEST_F(TestLibRBD, TestDeepCopy)
 {
   REQUIRE_FORMAT_V2();
