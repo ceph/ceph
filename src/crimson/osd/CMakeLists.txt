@@ -65,6 +65,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
   watch.cc
+  watch_timeout_request.cc
   )
 if(HAS_VTA)
   set_source_files_properties(main.cc
