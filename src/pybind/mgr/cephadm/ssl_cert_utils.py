@@ -2,7 +2,7 @@
 from typing import Any, Tuple, IO, List, Union, Optional, Dict
 import ipaddress
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from cryptography import x509
 from cryptography.x509 import Certificate
 from cryptography.x509.oid import NameOID, ExtensionOID
@@ -342,8 +342,20 @@ class SSLCerts:
 
     def load_root_credentials(self, cert: str, priv_key: str) -> None:
         given_cert = x509.load_pem_x509_certificate(cert.encode('utf-8'), backend=default_backend())
-        tz = given_cert.not_valid_after.tzinfo
-        if datetime.now(tz) >= given_cert.not_valid_after:
+        # `not_valid_after` returns a timezone-naive datetime whose value is
+        # in UTC. Using its (always-None) tzinfo for the comparison silently
+        # produces a naive-local-vs-naive-UTC comparison instead of a correct
+        # UTC-vs-UTC one: on a host running behind UTC this accepts an
+        # already-expired certificate for several hours; on a host running
+        # ahead of UTC this rejects a still-valid certificate as expired.
+        # `not_valid_after_utc` (cryptography >= 42.0) returns a proper
+        # timezone-aware UTC datetime and avoids this entirely; fall back to
+        # treating the naive value as UTC on older cryptography versions.
+        try:
+            not_valid_after = given_cert.not_valid_after_utc
+        except AttributeError:
+            not_valid_after = given_cert.not_valid_after.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) >= not_valid_after:
             raise SSLConfigException('Given cert is expired')
         self.root_cert = given_cert
         self.root_key = serialization.load_pem_private_key(
