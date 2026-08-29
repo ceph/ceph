@@ -24,21 +24,18 @@ Watch::~Watch()
   logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
 }
 
-seastar::future<> Watch::connect(crimson::net::ConnectionXcoreRef conn, bool)
-{
-  if (this->conn == conn) {
-    logger().debug("conn={} already connected", *conn);
-    return seastar::now();
-  }
-  timeout_timer.cancel();
-  timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
-  this->conn = std::move(conn);
-  return seastar::now();
-}
-
 void Watch::disconnect()
 {
-  ceph_assert(!conn);
+  logger().debug("{} gid={} cookie={} (was {}connected)",
+                 __func__, get_watcher_gid(), get_cookie(),
+                 is_connected() ? "" : "dis");
+  // Drop the (possibly dead) connection and fall back to buffering: subsequent
+  // notifies are recorded in in_progress_notifies and replayed by connect()
+  // once the client reconnects. Mirrors classic Watch::disconnect()
+  // (src/osd/Watch.cc). Called both for watches loaded from disk (already
+  // disconnected - a no-op here) and, on a connection reset, for a currently
+  // connected watch.
+  conn = {};
   timeout_timer.cancel();
   timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
 }
@@ -46,6 +43,17 @@ void Watch::disconnect()
 seastar::future<> Watch::send_notify_msg(NotifyRef notify)
 {
   logger().info("{} for notify(id={})", __func__, notify->ninfo.notify_id);
+  if (!is_connected()) {
+    // The connection may be dropped between iterations of connect()'s buffered-
+    // notify replay: a reset can run during a preceding send's await and call
+    // disconnect(), clearing conn. Guard here (mirroring send_disconnect_msg())
+    // so the notify stays in in_progress_notifies and is replayed on the next
+    // reconnect rather than dereferencing a cleared conn. Safe shard-wise: this
+    // only inspects the local conn handle on the watch's own core.
+    logger().debug("{} not connected, buffering notify(id={})",
+                   __func__, notify->ninfo.notify_id);
+    return seastar::now();
+  }
   return conn->send(crimson::make_message<MWatchNotify>(
     winfo.cookie,
     notify->user_version,
@@ -117,14 +125,6 @@ seastar::future<> Watch::send_disconnect_msg()
     empty));
 }
 
-void Watch::discard_state()
-{
-  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
-  ceph_assert(obc);
-  in_progress_notifies.clear();
-  timeout_timer.cancel();
-}
-
 void Watch::got_ping(utime_t)
 {
   if (is_connected()) {
@@ -132,27 +132,6 @@ void Watch::got_ping(utime_t)
     timeout_timer.cancel();
     timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
   }
-}
-
-seastar::future<> Watch::remove()
-{
-  logger().debug("{} gid={} cookie={}", __func__, get_watcher_gid(), get_cookie());
-  // in contrast to ceph-osd crimson sends CEPH_WATCH_EVENT_DISCONNECT directly
-  // from the timeout handler and _after_ CEPH_WATCH_EVENT_NOTIFY_COMPLETE.
-  // this simplifies the Watch::remove() interface as callers aren't obliged
-  // anymore to decide whether EVENT_DISCONNECT needs to be send or not -- it
-  // becomes an implementation detail of Watch.
-  return seastar::do_for_each(in_progress_notifies,
-    [this_shared=shared_from_this()] (auto notify) {
-      logger().debug("Watch::remove gid={} cookie={} notify(id={})",
-                     this_shared->get_watcher_gid(),
-                     this_shared->get_cookie(),
-                     notify->ninfo.notify_id);
-      return notify->remove_watcher(this_shared);
-    }).then([this] {
-      discard_state();
-      return seastar::now();
-    });
 }
 
 void Watch::cancel_notify(const uint64_t notify_id)
