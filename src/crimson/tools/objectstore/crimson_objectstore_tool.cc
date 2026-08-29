@@ -34,9 +34,12 @@
 #include "seastar/util/closeable.hh"
 #include "seastar/util/log.hh"
 #include "crimson/os/seastore/segment_manager.h"
+#include "crimson/osd/main_config_bootstrap_helpers.h"
 #include "include/expected.hpp"
 #include "osd/osd_types.h"
 #include "json_spirit/json_spirit_reader.h"
+
+SET_SUBSYS(osd);
 
 namespace bpo = boost::program_options;
 using crimson::common::sharded_conf;
@@ -228,6 +231,20 @@ tl::expected<pg_t, std::string> parse_pgid(const std::string& pgid_str) {
     return tl::unexpected("Invalid pgid: " + pgid_str);
   }
   return pgid;
+}
+
+int get_whoami(const std::string &data_path) {
+  char fn[PATH_MAX];
+  snprintf(fn, sizeof(fn), "%s/whoami", data_path.c_str());
+  int fd = ::open(fn, O_RDONLY);
+  if (fd >= 0) {
+    bufferlist bl;
+    bl.read_fd(fd, 64);
+    std::string s(bl.c_str(), bl.length());
+    int whoami = atoi(s.c_str());
+    return whoami;
+  }
+  return -1;
 }
 
 std::string get_pgid_str_from_coll(const coll_t& coll) {
@@ -1018,6 +1035,8 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
 
 int main(int argc, const char* argv[])
 {
+  LOG_PREFIX(OBJECTSTORE_TOOL::main);
+
   bpo::options_description desc("Allowed options");
   objectstore_config_t config;
   config.populate_options(desc);
@@ -1239,6 +1258,30 @@ int main(int argc, const char* argv[])
     seastar_argv.push_back(const_cast<char*>(arg.c_str()));
   }
 
+  std::vector<const char *> extra_args;
+  char osd_name[PATH_MAX];
+  if (!config.data_path.empty()) {
+    int whoami = get_whoami(config.data_path);
+    if (whoami < 0) {
+      ERROR("failed to get whoami");
+      return -EINVAL;
+    }
+    extra_args.emplace_back("-n");
+    snprintf(osd_name, sizeof(osd_name), "osd.%d", whoami);
+    extra_args.emplace_back(&osd_name[0]);
+  }
+
+  INFO("parsing early config");
+  auto early_config_result = crimson::osd::get_early_config(
+    argc, argv, extra_args);
+  if (!early_config_result.has_value()) {
+    int r = early_config_result.error();
+    std::cerr << "do_early_config returned error: " << r << std::endl;
+    return r;
+  }
+  auto &early_config = early_config_result.value();
+  INFO("early config parsed successfully");
+
   try {
     return app.run(
       seastar_argv.size(),
@@ -1246,9 +1289,15 @@ int main(int argc, const char* argv[])
       [&] {
         return seastar::async([&] {
           try {
-            sharded_conf().start(EntityName{}, std::string_view{"ceph"}).get();
+            sharded_conf().start(
+              early_config.init_params.name,
+              early_config.cluster_name).get();
             auto stop_conf = seastar::deferred_stop(sharded_conf());
             local_conf().start().get();
+            local_conf().parse_config_files(early_config.conf_file_list).get();
+            local_conf().parse_env().get();
+            local_conf().parse_argv(early_config.ceph_args).get();
+
             seastar_apps_lib::stop_signal should_stop;
             if (config.debug) {
               seastar::global_logger_registry().set_all_loggers_level(
