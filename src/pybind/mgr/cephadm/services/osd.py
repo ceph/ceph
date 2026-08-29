@@ -826,7 +826,7 @@ class OSD:
             self.rm_util.set_osd_flag([self], 'out')
         else:
             self.rm_util.reweight_osd(self, 0.0)
-        self.drain_started_at = datetime.utcnow()
+        self.drain_started_at = datetime_now()
         self.draining = True
         logger.debug(f"Started draining {self}.")
         return True
@@ -837,7 +837,7 @@ class OSD:
         else:
             if self.original_weight:
                 self.rm_util.reweight_osd(self, self.original_weight)
-        self.drain_stopped_at = datetime.utcnow()
+        self.drain_stopped_at = datetime_now()
         self.draining = False
         logger.debug(f"Stopped draining {self}.")
         return True
@@ -866,7 +866,7 @@ class OSD:
     def is_empty(self) -> bool:
         if self.get_pg_count() == 0:
             if not self.drain_done_at:
-                self.drain_done_at = datetime.utcnow()
+                self.drain_done_at = datetime_now()
                 self.draining = False
             return True
         return False
