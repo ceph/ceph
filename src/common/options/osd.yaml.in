@@ -51,14 +51,10 @@ options:
 - name: osd_max_backfills
   type: uint
   level: advanced
-  desc: Maximum number of concurrent local and remote backfills or recoveries per
-    OSD
-  long_desc: There can be osd_max_backfills local reservations AND the same remote
-    reservations per OSD. So a value of 1 lets this OSD participate as 1 PG primary
-    in recovery and 1 shard of another recovering PG.
-  fmt_desc: The maximum number of backfills allowed to or from a single OSD.
-    Note that this is applied separately for read and write operations.
-    This setting is automatically reset when the mClock scheduler is used.
+  desc: Maximum number of concurrent backfills to or from a single OSD.
+  long_desc: The maximum number of backfills allowed to or from a single OSD. Note
+    that this is applied separately for read and write operations. This setting is
+    automatically reset when the mClock scheduler is used.
   default: 1
   see_also:
   - osd_mclock_override_recovery_settings
@@ -259,11 +255,13 @@ options:
   type: int
   level: advanced
   desc: Restrict scrubbing to this hour of the day or later
-  long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
-  fmt_desc: This restricts scrubbing to this hour of the day or later.
-    Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0``
-    to allow scrubbing the entire day.  Along with ``osd_scrub_end_hour`` they define a time
-    window, only in which will periodic scrubs be initiated.
+  long_desc: This restricts scrubbing to this hour of the day or later. Use osd_scrub_begin_hour
+    = 0 and osd_scrub_end_hour = 0 to allow scrubbing the entire day. Along with osd_scrub_end_hour
+    they define a time window, only in which will periodic scrubs be initiated.
+  fmt_desc: This restricts scrubbing to this hour of the day or later. Use ``osd_scrub_begin_hour
+    = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing the entire day.  Along
+    with ``osd_scrub_end_hour`` they define a time window, only in which will periodic
+    scrubs be initiated.
   default: 0
   see_also:
   - osd_scrub_end_hour
@@ -274,11 +272,14 @@ options:
   type: int
   level: advanced
   desc: Restrict scrubbing to hours of the day earlier than this
-  long_desc: Use osd_scrub_begin_hour=0 and osd_scrub_end_hour=0 for the entire day.
-  fmt_desc: This restricts scrubbing to the hours earlier than this.
-    Use ``osd_scrub_begin_hour = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing
-    for the entire day.  Along with ``osd_scrub_begin_hour``, they define a time
-    window, only in which can periodic scrubs be automatically initiated.
+  long_desc: This restricts scrubbing to the hours earlier than this. Use osd_scrub_begin_hour
+    = 0 and osd_scrub_end_hour = 0 to allow scrubbing for the entire day. Along with
+    osd_scrub_begin_hour, they define a time window, only in which can periodic scrubs
+    be automatically initiated.
+  fmt_desc: This restricts scrubbing to the hours earlier than this. Use ``osd_scrub_begin_hour
+    = 0`` and ``osd_scrub_end_hour = 0`` to allow scrubbing for the entire day.  Along
+    with ``osd_scrub_begin_hour``, they define a time window, only in which can periodic
+    scrubs be automatically initiated.
   default: 0
   see_also:
   - osd_scrub_begin_hour
@@ -289,13 +290,14 @@ options:
   type: int
   level: advanced
   desc: Restrict scrubbing to this day of the week or later
-  long_desc: 0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0
-    for the entire week.
-  fmt_desc: This restricts scrubbing to this day of the week or later.
-    0  = Sunday, 1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0``
-    and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
-    Along with ``osd_scrub_end_week_day``, they define a time window in which
-    periodic scrubs can be automatically initiated.
+  long_desc: This restricts scrubbing to this day of the week or later. 0 = Sunday,
+    1 = Monday, etc. Use osd_scrub_begin_week_day = 0 and osd_scrub_end_week_day =
+    0 to allow scrubbing for the entire week. Along with osd_scrub_end_week_day, they
+    define a time window in which periodic scrubs can be automatically initiated.
+  fmt_desc: This restricts scrubbing to this day of the week or later. 0  = Sunday,
+    1 = Monday, etc. Use ``osd_scrub_begin_week_day = 0`` and ``osd_scrub_end_week_day
+    = 0`` to allow scrubbing for the entire week. Along with ``osd_scrub_end_week_day``,
+    they define a time window in which periodic scrubs can be automatically initiated.
   default: 0
   see_also:
   - osd_scrub_end_week_day
@@ -306,13 +308,14 @@ options:
   type: int
   level: advanced
   desc: Restrict scrubbing to days of the week earlier than this
-  long_desc: 0 = Sunday, 1 = Monday, etc. Use osd_scrub_begin_week_day=0 osd_scrub_end_week_day=0
-    for the entire week.
-  fmt_desc: This restricts scrubbing to days of the week earlier than this.
-    0 = Sunday, 1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0``
-    and ``osd_scrub_end_week_day = 0`` to allow scrubbing for the entire week.
-    Along with ``osd_scrub_begin_week_day``, they define a time
-    window, in which periodic scrubs can be automatically initiated.
+  long_desc: This restricts scrubbing to days of the week earlier than this. 0 = Sunday,
+    1 = Monday, etc. Use osd_scrub_begin_week_day = 0 and osd_scrub_end_week_day =
+    0 to allow scrubbing for the entire week. Along with osd_scrub_begin_week_day,
+    they define a time window, in which periodic scrubs can be automatically initiated.
+  fmt_desc: This restricts scrubbing to days of the week earlier than this. 0 = Sunday,
+    1 = Monday, etc.  Use ``osd_scrub_begin_week_day = 0`` and ``osd_scrub_end_week_day
+    = 0`` to allow scrubbing for the entire week. Along with ``osd_scrub_begin_week_day``,
+    they define a time window, in which periodic scrubs can be automatically initiated.
   default: 0
   see_also:
   - osd_scrub_begin_week_day
@@ -360,15 +363,15 @@ options:
 - name: osd_scrub_interval_randomize_ratio
   type: float
   level: advanced
-  desc: Ratio of scrub interval to randomly vary
-  long_desc: This prevents a scrub 'stampede' by randomly varying the scrub intervals
-    so that they are uniformly distributed over time.
-  fmt_desc: Add a random delay to ``osd_scrub_min_interval`` when scheduling
-    the next scrub job for a PG. The delay is a random
-    value less than ``osd_scrub_min_interval`` \*
-    ``osd_scrub_interval_randomized_ratio``. The default setting
-    spreads scrubs throughout the allowed time
-    window of ``[1, 1.5]`` \* ``osd_scrub_min_interval``.
+  desc: Fraction of the minimum scrub interval by which to randomly stagger scrub scheduling.
+  long_desc: When scheduling a PG's next scrub, a random delay is added to prevent
+    a scrub stampede and spread scrubs uniformly over time. The delay is a random value
+    less than osd_scrub_min_interval * osd_scrub_interval_randomize_ratio, so with
+    the default the next scrub falls in the window [1, 1.5] * osd_scrub_min_interval.
+  fmt_desc: When scheduling a PG's next scrub, a random delay is added to prevent a
+    scrub stampede and spread scrubs uniformly over time. The delay is a random value
+    less than ``osd_scrub_min_interval`` \* ``osd_scrub_interval_randomize_ratio``,
+    so with the default the next scrub falls in the window ``[1, 1.5]`` \* ``osd_scrub_min_interval``.
   default: 0.5
   see_also:
   - osd_scrub_min_interval
@@ -499,18 +502,21 @@ options:
 - name: osd_deep_scrub_interval_cv
   type: float
   level: advanced
-  desc: Determines the amount of variation in the deep scrub interval
-  long_desc: Deep scrub intervals are varied by a random amount to prevent
-    stampedes. This parameter determines the amount of variation.
-    Technically ``osd_deep_scrub_interval_cv`` is the coefficient of variation for
-    the deep scrub interval.
-  fmt_desc: The coefficient of variation for the deep scrub interval, specified as a
-    ratio. On average, the next deep scrub for a PG is scheduled ``osd_deep_scrub_interval``
-    after the last deep scrub. The actual time is randomized to a normal distribution
-    with a standard deviation of ``osd_deep_scrub_interval`` * ``osd_deep_scrub_interval_cv``
-    (clamped to within 2 standard deviations).
-    The default value guarantees that 95% of deep scrubs will be scheduled in the range
-    [0.8 * ``osd_deep_scrub_interval``, 1.2 * ``osd_deep_scrub_interval``].
+  desc: Coefficient of variation for the deep-scrub interval; controls how much deep-scrub
+    scheduling is randomized.
+  long_desc: The coefficient of variation for the deep-scrub interval, specified as
+    a ratio, used to randomize deep-scrub scheduling and prevent scrub stampedes. On
+    average, a PG's next deep scrub is scheduled osd_deep_scrub_interval after the
+    last one; the actual time is drawn from a normal distribution with a standard deviation
+    of osd_deep_scrub_interval * osd_deep_scrub_interval_cv (clamped to within 2 standard
+    deviations). The default keeps 95% of deep scrubs within [0.8, 1.2] * osd_deep_scrub_interval.
+  fmt_desc: The coefficient of variation for the deep-scrub interval, specified as
+    a ratio, used to randomize deep-scrub scheduling and prevent scrub stampedes. On
+    average, a PG's next deep scrub is scheduled ``osd_deep_scrub_interval`` after
+    the last one; the actual time is drawn from a normal distribution with a standard
+    deviation of ``osd_deep_scrub_interval`` \* ``osd_deep_scrub_interval_cv`` (clamped
+    to within 2 standard deviations). The default keeps 95% of deep scrubs within ``[0.8,
+    1.2]`` \* ``osd_deep_scrub_interval``.
   min: 0
   max: 0.4
   default: 0.2
@@ -815,11 +821,10 @@ options:
 - name: osd_max_write_size
   type: size
   level: advanced
-  desc: Maximum size of a RADOS write operation in megabytes
-  long_desc: This setting prevents clients from doing very large writes to RADOS.  If
-    you set this to a value below what clients expect, they will receive an error
-    when attempting to write to the cluster.
-  fmt_desc: The maximum size of a write in megabytes.
+  desc: Maximum size of a single RADOS write, in MiB.
+  long_desc: The maximum size, in MiB, of a single write to RADOS. It caps very large
+    client writes; if set below what clients expect, they receive an error when writing
+    to the cluster.
   default: 90
   min: 4
   with_legacy: true
@@ -834,10 +839,10 @@ options:
 - name: osd_client_message_size_cap
   type: size
   level: advanced
-  desc: maximum memory to devote to in-flight client requests
-  long_desc: If this value is exceeded, the OSD will not read any new client data
-    off of the network until memory is freed.
-  fmt_desc: The largest client data message allowed in memory.
+  desc: Maximum memory for in-flight client request messages.
+  long_desc: The maximum total memory devoted to in-flight client request messages.
+    When the in-flight total exceeds this value, the OSD stops reading new client data
+    from the network until memory is freed.
   default: 500_M
   with_legacy: true
 - name: osd_client_message_cap
@@ -861,12 +866,14 @@ options:
 - name: osd_crush_initial_weight
   type: float
   level: advanced
-  desc: if >= 0, initial CRUSH weight for newly created OSDs
-  long_desc: If this value is negative, the size of the OSD in TiB is used.
-  fmt_desc: The initial CRUSH weight for newly added OSDs. The default
-    value of this option is ``the size of a newly added OSD in TB``. By default,
-    the initial CRUSH weight for a newly added OSD is set to its device size in
-    TB. See `Weighting Bucket Items`_ for details.
+  desc: Initial CRUSH weight for newly added OSDs; if negative, the device size in
+    TiB is used.
+  long_desc: The initial CRUSH weight for a newly added OSD. A negative value (the
+    default) sets the weight to the OSD's device size in TiB; a non-negative value
+    sets that explicit weight. See the Weighting Bucket Items documentation for details.
+  fmt_desc: The initial CRUSH weight for a newly added OSD. A negative value (the default)
+    sets the weight to the OSD's device size in TiB; a non-negative value sets that
+    explicit weight. See `Weighting Bucket Items`_ for details.
   default: -1
   with_legacy: true
 # Allows the "peered" state for recovery and backfill below min_size
@@ -1042,17 +1049,22 @@ options:
   type: str
   level: advanced
   desc: which operation priority queue algorithm to use
-  long_desc: which operation priority queue algorithm to use
-  fmt_desc: This sets the type of queue to be used for prioritizing ops
-    within each OSD. Both queues feature a strict sub-queue which is
-    dequeued before the normal queue. The normal queue is different
-    between implementations. The WeightedPriorityQueue (``wpq``)
-    dequeues operations in relation to their priorities to prevent
-    starvation of any queue. WPQ should help in cases where a few OSDs
-    are more overloaded than others. The mClockQueue
-    (``mclock_scheduler``) prioritizes operations based on which class
-    they belong to (recovery, scrub, snaptrim, client op, osd subop).
-    See `QoS Based on mClock`_. Requires a restart.
+  long_desc: This sets the type of queue to be used for prioritizing ops within each
+    OSD. Both queues feature a strict sub-queue which is dequeued before the normal
+    queue. The normal queue is different between implementations. WeightedPriorityQueue
+    (wpq) dequeues operations in relation to their priorities to prevent starvation
+    of any queue. WPQ should help in cases where a few OSDs are more overloaded than
+    others. mClockQueue (mclock_scheduler) prioritizes operations based on which class
+    they belong to (recovery, scrub, snaptrim, client op, osd subop). See the QoS Based
+    on mClock documentation. Requires a restart.
+  fmt_desc: This sets the type of queue to be used for prioritizing ops within each
+    OSD. Both queues feature a strict sub-queue which is dequeued before the normal
+    queue. The normal queue is different between implementations. WeightedPriorityQueue
+    (``wpq``) dequeues operations in relation to their priorities to prevent starvation
+    of any queue. WPQ should help in cases where a few OSDs are more overloaded than
+    others. mClockQueue (``mclock_scheduler``) prioritizes operations based on which
+    class they belong to (recovery, scrub, snaptrim, client op, osd subop). See the
+    `QoS Based on mClock`_ documentation. Requires a restart.
   default: mclock_scheduler
   see_also:
   - osd_op_queue_cut_off
@@ -1065,19 +1077,22 @@ options:
 - name: osd_op_queue_cut_off
   type: str
   level: advanced
-  desc: the threshold between high priority ops and low priority ops
-  long_desc: the threshold between high priority ops that use strict priority ordering
-    and low priority ops that use a fairness algorithm that may or may not incorporate
-    priority
-  fmt_desc: This selects which priority ops will be sent to the strict
-    queue verses the normal queue. The ``low`` setting sends all
-    replication ops and higher to the strict queue, while the ``high``
-    option sends only replication acknowledgment ops and higher to
-    the strict queue. Setting this to ``high`` should help when a few
-    OSDs in the cluster are very busy especially when combined with
-    ``wpq`` in the ``osd_op_queue`` setting. OSDs that are very busy
-    handling replication traffic could starve primary client traffic
-    on these OSDs without these settings. Requires a restart.
+  desc: Threshold separating strict-priority ops from fair-queued ops.
+  long_desc: Selects which ops go to the strict-priority queue rather than the normal
+    (fairness) queue. High-priority ops use strict priority ordering, while lower-priority
+    ops use a fairness algorithm that may or may not incorporate priority. The low
+    setting sends all replication ops and higher to the strict queue; the high setting
+    sends only replication-acknowledgment ops and higher. high helps when a few OSDs
+    are very busy, especially with wpq set in osd_op_queue, since OSDs busy with replication
+    traffic could otherwise starve primary client traffic. Requires a restart.
+  fmt_desc: Selects which ops go to the strict-priority queue rather than the normal
+    (fairness) queue. High-priority ops use strict priority ordering, while lower-priority
+    ops use a fairness algorithm that may or may not incorporate priority. The ``low``
+    setting sends all replication ops and higher to the strict queue; the ``high``
+    setting sends only replication-acknowledgment ops and higher. ``high`` helps when
+    a few OSDs are very busy, especially with ``wpq`` set in ``osd_op_queue``, since
+    OSDs busy with replication traffic could otherwise starve primary client traffic.
+    Requires a restart.
   default: high
   see_also:
   - osd_op_queue
@@ -1089,13 +1104,15 @@ options:
 - name: osd_mclock_scheduler_client_res
   type: float
   level: advanced
-  desc: I/O proportion reserved for each client (default). The default value
-    of 0 specifies the lowest possible reservation. Any value greater than
-    0 and up to 1.0 specifies the minimum I/O proportion to reserve for each
-    client in terms of a fraction of the OSD's maximum IOPS capacity.
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O proportion reserved for each client (default).
+  desc: Minimum I/O proportion reserved for each client (mClock custom profile only).
+  long_desc: The minimum I/O proportion reserved for each client, as a fraction (0-1.0)
+    of the OSD's maximum IOPS capacity. The default of 0 specifies the lowest possible
+    reservation. Considered only when osd_op_queue = mclock_scheduler and osd_mclock_profile
+    = custom.
+  fmt_desc: The minimum I/O proportion reserved for each client, as a fraction (0-1.0)
+    of the OSD's maximum IOPS capacity. The default of ``0`` specifies the lowest possible
+    reservation. Considered only when ``osd_op_queue`` = ``mclock_scheduler`` and ``osd_mclock_profile``
+    = ``custom``.
   default: 0
   min: 0
   max: 1.0
@@ -1105,10 +1122,15 @@ options:
 - name: osd_mclock_scheduler_client_wgt
   type: uint
   level: advanced
-  desc: I/O share for each client (default) over reservation
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O share for each client (default) over reservation.
+  desc: I/O share for each client above the reservation (mClock custom profile only).
+  long_desc: The weight (share) used to allocate I/O to each client above the reservation,
+    competing in proportion to this value against the other operation classes up to
+    each one's limit. Considered only when osd_op_queue = mclock_scheduler and osd_mclock_profile
+    = custom.
+  fmt_desc: The weight (share) used to allocate I/O to each client above the reservation,
+    competing in proportion to this value against the other operation classes up to
+    each one's limit. Considered only when ``osd_op_queue`` = ``mclock_scheduler``
+    and ``osd_mclock_profile`` = ``custom``.
   default: 1
   see_also:
   - osd_op_queue
@@ -1116,15 +1138,16 @@ options:
 - name: osd_mclock_scheduler_client_lim
   type: float
   level: advanced
-  desc: I/O limit for each client (default) over reservation. The default
-    value of 0 specifies no limit enforcement, which means each client can
-    use the maximum possible IOPS capacity of the OSD. Any value greater
-    than 0 and up to 1.0 specifies the upper I/O limit over reservation
-    that each client receives in terms of a fraction of the OSD's
-    maximum IOPS capacity.
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O limit for each client (default) over reservation.
+  desc: Upper I/O limit for each client above the reservation (mClock custom profile
+    only).
+  long_desc: The upper I/O limit, above the reservation, for each client, as a fraction
+    (0-1.0) of the OSD's maximum IOPS capacity. The default of 0 enforces no limit,
+    allowing each client to use the OSD's full IOPS capacity. Considered only when
+    osd_op_queue = mclock_scheduler and osd_mclock_profile = custom.
+  fmt_desc: The upper I/O limit, above the reservation, for each client, as a fraction
+    (0-1.0) of the OSD's maximum IOPS capacity. The default of ``0`` enforces no limit,
+    allowing each client to use the OSD's full IOPS capacity. Considered only when
+    ``osd_op_queue`` = ``mclock_scheduler`` and ``osd_mclock_profile`` = ``custom``.
   default: 0
   min: 0
   max: 1.0
@@ -1134,14 +1157,16 @@ options:
 - name: osd_mclock_scheduler_background_recovery_res
   type: float
   level: advanced
-  desc: I/O proportion reserved for background recovery (default). The
-    default value of 0 specifies the lowest possible reservation. Any value
-    greater than 0 and up to 1.0 specifies the minimum I/O proportion to
-    reserve for background recovery operations in terms of a fraction of
-    the OSD's maximum IOPS capacity.
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O proportion reserved for background recovery (default).
+  desc: Minimum I/O proportion reserved for background recovery operations (mClock
+    custom profile only).
+  long_desc: The minimum I/O proportion reserved for background recovery operations,
+    as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default of 0 specifies
+    the lowest possible reservation. Considered only when osd_op_queue = mclock_scheduler
+    and osd_mclock_profile = custom.
+  fmt_desc: The minimum I/O proportion reserved for background recovery operations,
+    as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default of ``0``
+    specifies the lowest possible reservation. Considered only when ``osd_op_queue``
+    = ``mclock_scheduler`` and ``osd_mclock_profile`` = ``custom``.
   default: 0
   min: 0
   max: 1.0
@@ -1151,10 +1176,16 @@ options:
 - name: osd_mclock_scheduler_background_recovery_wgt
   type: uint
   level: advanced
-  desc: I/O share for each background recovery over reservation
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O share for each background recovery over reservation.
+  desc: I/O share for background recovery operations above the reservation (mClock
+    custom profile only).
+  long_desc: The weight (share) used to allocate I/O to background recovery operations
+    above the reservation, competing in proportion to this value against the other
+    operation classes up to each one's limit. Considered only when osd_op_queue = mclock_scheduler
+    and osd_mclock_profile = custom.
+  fmt_desc: The weight (share) used to allocate I/O to background recovery operations
+    above the reservation, competing in proportion to this value against the other
+    operation classes up to each one's limit. Considered only when ``osd_op_queue``
+    = ``mclock_scheduler`` and ``osd_mclock_profile`` = ``custom``.
   default: 1
   see_also:
   - osd_op_queue
@@ -1162,15 +1193,17 @@ options:
 - name: osd_mclock_scheduler_background_recovery_lim
   type: float
   level: advanced
-  desc: I/O limit for background recovery over reservation. The default
-    value of 0 specifies no limit enforcement, which means background
-    recovery operation can use the maximum possible IOPS capacity of the
-    OSD. Any value greater than 0 and up to 1.0 specifies the upper I/O
-    limit over reservation that background recovery operation receives in
-    terms of a fraction of the OSD's maximum IOPS capacity.
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O limit for background recovery over reservation.
+  desc: Upper I/O limit for background recovery operations above the reservation (mClock
+    custom profile only).
+  long_desc: The upper I/O limit, above the reservation, for background recovery operations,
+    as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default of 0 enforces
+    no limit, allowing background recovery operations to use the OSD's full IOPS capacity.
+    Considered only when osd_op_queue = mclock_scheduler and osd_mclock_profile = custom.
+  fmt_desc: The upper I/O limit, above the reservation, for background recovery operations,
+    as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default of ``0``
+    enforces no limit, allowing background recovery operations to use the OSD's full
+    IOPS capacity. Considered only when ``osd_op_queue`` = ``mclock_scheduler`` and
+    ``osd_mclock_profile`` = ``custom``.
   default: 0
   min: 0
   max: 1.0
@@ -1180,14 +1213,16 @@ options:
 - name: osd_mclock_scheduler_background_best_effort_res
   type: float
   level: advanced
-  desc: I/O proportion reserved for background best_effort (default). The
-    default value of 0 specifies the lowest possible reservation. Any value
-    greater than 0 and up to 1.0 specifies the minimum I/O proportion to
-    reserve for background best_effort operations in terms of a fraction
-    of the OSD's maximum IOPS capacity.
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O proportion reserved for background best_effort (default).
+  desc: Minimum I/O proportion reserved for background best-effort operations (mClock
+    custom profile only).
+  long_desc: The minimum I/O proportion reserved for background best-effort operations,
+    as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default of 0 specifies
+    the lowest possible reservation. Considered only when osd_op_queue = mclock_scheduler
+    and osd_mclock_profile = custom.
+  fmt_desc: The minimum I/O proportion reserved for background best-effort operations,
+    as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default of ``0``
+    specifies the lowest possible reservation. Considered only when ``osd_op_queue``
+    = ``mclock_scheduler`` and ``osd_mclock_profile`` = ``custom``.
   default: 0
   min: 0
   max: 1.0
@@ -1197,10 +1232,16 @@ options:
 - name: osd_mclock_scheduler_background_best_effort_wgt
   type: uint
   level: advanced
-  desc: I/O share for each background best_effort over reservation
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O share for each background best_effort over reservation.
+  desc: I/O share for background best-effort operations above the reservation (mClock
+    custom profile only).
+  long_desc: The weight (share) used to allocate I/O to background best-effort operations
+    above the reservation, competing in proportion to this value against the other
+    operation classes up to each one's limit. Considered only when osd_op_queue = mclock_scheduler
+    and osd_mclock_profile = custom.
+  fmt_desc: The weight (share) used to allocate I/O to background best-effort operations
+    above the reservation, competing in proportion to this value against the other
+    operation classes up to each one's limit. Considered only when ``osd_op_queue``
+    = ``mclock_scheduler`` and ``osd_mclock_profile`` = ``custom``.
   default: 1
   see_also:
   - osd_op_queue
@@ -1208,15 +1249,18 @@ options:
 - name: osd_mclock_scheduler_background_best_effort_lim
   type: float
   level: advanced
-  desc: I/O limit for background best_effort over reservation. The default
-    value of 0 specifies no limit enforcement, which means background
-    best_effort operation can use the maximum possible IOPS capacity of the
-    OSD. Any value greater than 0 and up to 1.0 specifies the upper I/O
-    limit over reservation that background best_effort operation receives
-    in terms of a fraction of the OSD's maximum IOPS capacity.
-    Ignored unless osd_mclock_profile is set to 'custom'.
-  long_desc: Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: I/O limit for background best_effort over reservation.
+  desc: Upper I/O limit for background best-effort operations above the reservation
+    (mClock custom profile only).
+  long_desc: The upper I/O limit, above the reservation, for background best-effort
+    operations, as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default
+    of 0 enforces no limit, allowing background best-effort operations to use the OSD's
+    full IOPS capacity. Considered only when osd_op_queue = mclock_scheduler and osd_mclock_profile
+    = custom.
+  fmt_desc: The upper I/O limit, above the reservation, for background best-effort
+    operations, as a fraction (0-1.0) of the OSD's maximum IOPS capacity. The default
+    of ``0`` enforces no limit, allowing background best-effort operations to use the
+    OSD's full IOPS capacity. Considered only when ``osd_op_queue`` = ``mclock_scheduler``
+    and ``osd_mclock_profile`` = ``custom``.
   default: 0
   min: 0
   max: 1.0
@@ -1232,67 +1276,74 @@ options:
 - name: osd_mclock_max_sequential_bandwidth_hdd
   type: size
   level: basic
-  desc: The maximum sequential bandwidth in bytes/second of the OSD (for
-    rotational media)
-  long_desc: This option specifies the maximum sequential bandwidth to consider
-    for an OSD whose underlying device type is rotational media. This is
-    considered by the mclock scheduler to derive the cost factor to be used in
-    QoS calculations. Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: The maximum sequential bandwidth in bytes/second to consider for the
-    OSD (for rotational media)
+  desc: Maximum sequential bandwidth (bytes/second) to assume for the OSD (rotational
+    media).
+  long_desc: The maximum sequential bandwidth (in bytes/second) to assume for an OSD
+    backed by rotational media. The mClock scheduler uses it to derive the cost factor
+    for QoS calculations. Considered only when osd_op_queue = mclock_scheduler.
+  fmt_desc: The maximum sequential bandwidth (in bytes/second) to assume for an OSD
+    backed by rotational media. The mClock scheduler uses it to derive the cost factor
+    for QoS calculations. Considered only when ``osd_op_queue`` = ``mclock_scheduler``.
   default: 150_M
   flags:
   - runtime
 - name: osd_mclock_max_sequential_bandwidth_ssd
   type: size
   level: basic
-  desc: The maximum sequential bandwidth in bytes/second of the OSD (for
-    solid state media)
-  long_desc: This option specifies the maximum sequential bandwidth to consider
-    for an OSD whose underlying device type is solid state media. This is
-    considered by the mclock scheduler to derive the cost factor to be used in
-    QoS calculations. Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: The maximum sequential bandwidth in bytes/second to consider for the
-    OSD (for solid state media)
+  desc: Maximum sequential bandwidth (bytes/second) to assume for the OSD (solid-state
+    media).
+  long_desc: The maximum sequential bandwidth (in bytes/second) to assume for an OSD
+    backed by solid-state media. The mClock scheduler uses it to derive the cost factor
+    for QoS calculations. Considered only when osd_op_queue = mclock_scheduler.
+  fmt_desc: The maximum sequential bandwidth (in bytes/second) to assume for an OSD
+    backed by solid-state media. The mClock scheduler uses it to derive the cost factor
+    for QoS calculations. Considered only when ``osd_op_queue`` = ``mclock_scheduler``.
   default: 1200_M
   flags:
   - runtime
 - name: osd_mclock_max_capacity_iops_hdd
   type: float
   level: basic
-  desc: Max random write IOPS capacity (at 4KiB block size) to consider per OSD
-    (for rotational media)
-  long_desc: This option specifies the max OSD random write IOPS capacity per
-    OSD. Contributes in QoS calculations when enabling a dmclock profile. Only
-    considered for osd_op_queue = mclock_scheduler
-  fmt_desc: Max random write IOPS capacity (at 4 KiB block size) to consider per
-    OSD (for rotational media)
+  desc: Maximum random-write IOPS capacity (at 4 KiB block size) to assume per OSD
+    (rotational media).
+  long_desc: The maximum random-write IOPS capacity to assume for an OSD backed by
+    rotational media (measured at 4 KiB block size). It contributes to the mClock scheduler's
+    QoS calculations, and is considered only when osd_op_queue = mclock_scheduler.
+  fmt_desc: The maximum random-write IOPS capacity to assume for an OSD backed by rotational
+    media (measured at 4 KiB block size). It contributes to the mClock scheduler's
+    QoS calculations, and is considered only when ``osd_op_queue`` = ``mclock_scheduler``.
   default: 315
   flags:
   - runtime
 - name: osd_mclock_max_capacity_iops_ssd
   type: float
   level: basic
-  desc: Max random write IOPS capacity (at 4 KiB block size) to consider per OSD
-    (for solid state media)
-  long_desc: This option specifies the max OSD random write IOPS capacity per
-    OSD. Contributes in QoS calculations when enabling a dmclock profile. Only
-    considered for osd_op_queue = mclock_scheduler
-  fmt_desc: Max random write IOPS capacity (at 4 KiB block size) to consider per
-    OSD (for solid state media)
+  desc: Maximum random-write IOPS capacity (at 4 KiB block size) to assume per OSD
+    (solid-state media).
+  long_desc: The maximum random-write IOPS capacity to assume for an OSD backed by
+    solid-state media (measured at 4 KiB block size). It contributes to the mClock
+    scheduler's QoS calculations, and is considered only when osd_op_queue = mclock_scheduler.
+  fmt_desc: The maximum random-write IOPS capacity to assume for an OSD backed by solid-state
+    media (measured at 4 KiB block size). It contributes to the mClock scheduler's
+    QoS calculations, and is considered only when ``osd_op_queue`` = ``mclock_scheduler``.
   default: 21500
   flags:
   - runtime
 - name: osd_mclock_force_run_benchmark_on_init
   type: bool
   level: advanced
-  desc: Force run the OSD benchmark on OSD initialization/boot-up
-  long_desc: This option specifies whether the OSD benchmark must be run during
-    the OSD boot-up sequence even if historical data about the OSD iops capacity
-    is available in the MON config store. Enable this to refresh the OSD iops
-    capacity if the underlying device's performance characteristics have changed
-    significantly. Only considered for osd_op_queue = mclock_scheduler.
-  fmt_desc: Force run the OSD benchmark on OSD initialization/boot-up
+  desc: Force the startup OSD IOPS benchmark to run even when a measured capacity is
+    already stored.
+  long_desc: By default the startup IOPS benchmark runs only when no measured capacity
+    is stored in the Monitor config (osd_mclock_max_capacity_iops_[hdd|ssd] still at
+    its default). When set, the benchmark runs even if a stored value exists, refreshing
+    it after the device's performance characteristics change significantly. osd_mclock_skip_benchmark
+    takes precedence over this option. Considered only when osd_op_queue = mclock_scheduler.
+  fmt_desc: By default the startup IOPS benchmark runs only when no measured capacity
+    is stored in the Monitor config (``osd_mclock_max_capacity_iops_[hdd|ssd]`` still
+    at its default). When set, the benchmark runs even if a stored value exists, refreshing
+    it after the device's performance characteristics change significantly. ``osd_mclock_skip_benchmark``
+    takes precedence over this option. Considered only when ``osd_op_queue`` = ``mclock_scheduler``.
   default: false
   see_also:
   - osd_mclock_max_capacity_iops_hdd
@@ -1302,10 +1353,15 @@ options:
 - name: osd_mclock_skip_benchmark
   type: bool
   level: dev
-  desc: Skip the OSD benchmark on OSD initialization/boot-up
-  long_desc: This option specifies whether the OSD benchmark must be skipped during
-    the OSD boot-up sequence. Only considered for osd_op_queue = mclock_scheduler.
-  fmt_desc: Skip the OSD benchmark on OSD initialization/boot-up
+  desc: Skip the startup OSD IOPS benchmark entirely.
+  long_desc: When set, the OSD never runs its startup IOPS benchmark. mClock instead
+    uses the configured osd_mclock_max_capacity_iops_[hdd|ssd] value. This takes precedence
+    over osd_mclock_force_run_benchmark_on_init. Considered only when osd_op_queue
+    = mclock_scheduler.
+  fmt_desc: When set, the OSD never runs its startup IOPS benchmark. mClock instead
+    uses the configured ``osd_mclock_max_capacity_iops_[hdd|ssd]`` value. This takes
+    precedence over ``osd_mclock_force_run_benchmark_on_init``. Considered only when
+    ``osd_op_queue`` = ``mclock_scheduler``.
   default: false
   see_also:
   - osd_mclock_max_capacity_iops_hdd
@@ -1315,17 +1371,19 @@ options:
 - name: osd_mclock_profile
   type: str
   level: advanced
-  desc: Which mclock profile to use
-  long_desc: This option specifies the mclock profile to enable - one among the set
-    of built-in profiles or a custom profile. Only considered for osd_op_queue = mclock_scheduler
-  fmt_desc: |
-    This sets the type of mclock profile to use for providing QoS
-    based on operations belonging to different classes (background
-    recovery, scrub, snaptrim, client op, osd subop). Once a built-in
-    profile is enabled, the lower level mclock resource control
-    parameters [*reservation, weight, limit*] and some Ceph
-    configuration parameters are set transparently. Note that the
-    above does not apply for the *custom* profile.
+  desc: Which mClock profile to use.
+  long_desc: Selects the mClock profile used to provide QoS across operation classes
+    (client op, osd subop, background recovery, scrub, snaptrim). This is either one
+    of the built-in profiles or 'custom'. Enabling a built-in profile transparently
+    sets the low-level mClock resource-control parameters (reservation, weight, limit)
+    and some related Ceph options; the 'custom' profile does not. Considered only when
+    osd_op_queue = mclock_scheduler.
+  fmt_desc: Selects the mClock profile used to provide QoS across operation classes
+    (client op, osd subop, background recovery, scrub, snaptrim). This is either one
+    of the built-in profiles or ``custom``. Enabling a built-in profile transparently
+    sets the low-level mClock resource-control parameters (*reservation, weight, limit*)
+    and some related Ceph options; the ``custom`` profile does not. Considered only
+    when ``osd_op_queue`` = ``mclock_scheduler``.
   default: balanced
   see_also:
   - osd_op_queue
@@ -1339,17 +1397,15 @@ options:
 - name: osd_mclock_override_recovery_settings
   type: bool
   level: advanced
-  desc: Setting this option enables the override of recovery/backfill limits
-    for the mClock scheduler.
-  long_desc: This option when set enables the override of the max recovery
-    active and the max backfills limits with mClock scheduler active. These
-    options are not modifiable when mClock scheduler is active. Any attempt
-    to modify these values without setting this option will reset the
-    recovery or backfill option back to its default value.
-  fmt_desc: Setting this option will enable the override of the
-    recovery/backfill limits for the mClock scheduler as defined by the
-    ``osd_recovery_max_active_hdd``, ``osd_recovery_max_active_ssd`` and
-    ``osd_max_backfills`` options.
+  desc: Allow overriding recovery/backfill limits while the mClock scheduler is active.
+  long_desc: While the mClock scheduler is active, the recovery/backfill limits osd_recovery_max_active_hdd,
+    osd_recovery_max_active_ssd, and osd_max_backfills are normally not modifiable;
+    any attempt to change one without this option set resets it to its default. Set
+    this option to permit those overrides.
+  fmt_desc: While the mClock scheduler is active, the recovery/backfill limits ``osd_recovery_max_active_hdd``,
+    ``osd_recovery_max_active_ssd``, and ``osd_max_backfills`` are normally not modifiable;
+    any attempt to change one without this option set resets it to its default. Set
+    this option to permit those overrides.
   default: false
   see_also:
   - osd_recovery_max_active_hdd
@@ -1360,15 +1416,20 @@ options:
 - name: osd_mclock_iops_capacity_threshold_hdd
   type: float
   level: basic
-  desc: The threshold IOPS capacity (at 4KiB block size) beyond which to ignore
-    the OSD bench results for an OSD (for rotational media)
-  long_desc: This option specifies the high threshold IOPS capacity for an OSD
-    below which the OSD bench results can be considered for QoS calculations.
-    Only considered when osd_op_queue = mclock_scheduler
-  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for rotational media) and fall back to
-    the last valid or default IOPS capacity defined by
-    ``osd_mclock_max_capacity_iops_hdd``.
+  desc: Upper bound for the startup IOPS benchmark; a 4 KiB random-write result above
+    this is rejected (rotational media).
+  long_desc: When mClock is enabled (osd_op_queue = mclock_scheduler), each OSD measures
+    its IOPS capacity at first startup with a 4 KiB random-write benchmark. mClock
+    rejects a result above this high threshold (or below osd_mclock_iops_capacity_low_threshold_hdd)
+    as implausible, keeping the configured (default) osd_mclock_max_capacity_iops_hdd
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Rotational media only.
+  fmt_desc: When mClock is enabled (``osd_op_queue`` = ``mclock_scheduler``), each
+    OSD measures its IOPS capacity at first startup with a 4 KiB random-write benchmark.
+    mClock rejects a result above this high threshold (or below ``osd_mclock_iops_capacity_low_threshold_hdd``)
+    as implausible, keeping the configured (default) ``osd_mclock_max_capacity_iops_hdd``
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Rotational media only.
   default: 500
   see_also:
   - osd_mclock_max_capacity_iops_hdd
@@ -1377,15 +1438,20 @@ options:
 - name: osd_mclock_iops_capacity_low_threshold_hdd
   type: float
   level: basic
-  desc: The threshold IOPS capacity (at 4KiB block size) below which to ignore
-    the OSD bench results for an OSD (for rotational media)
-  long_desc: This option specifies the low threshold IOPS capacity of an OSD
-    above which the OSD bench results can be considered for QoS calculations.
-    Only considered when osd_op_queue = mclock_scheduler
-  fmt_desc: The threshold IOPS capacity (at 4KiB block size) below which to
-    ignore OSD bench results for an OSD (for rotational media) and fall back to
-    the last valid or default IOPS capacity defined by
-    ``osd_mclock_max_capacity_iops_hdd``.
+  desc: Lower bound for the startup IOPS benchmark; a 4 KiB random-write result below
+    this is rejected (rotational media).
+  long_desc: When mClock is enabled (osd_op_queue = mclock_scheduler), each OSD measures
+    its IOPS capacity at first startup with a 4 KiB random-write benchmark. mClock
+    rejects a result below this low threshold (or above osd_mclock_iops_capacity_threshold_hdd)
+    as implausible, keeping the configured (default) osd_mclock_max_capacity_iops_hdd
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Rotational media only.
+  fmt_desc: When mClock is enabled (``osd_op_queue`` = ``mclock_scheduler``), each
+    OSD measures its IOPS capacity at first startup with a 4 KiB random-write benchmark.
+    mClock rejects a result below this low threshold (or above ``osd_mclock_iops_capacity_threshold_hdd``)
+    as implausible, keeping the configured (default) ``osd_mclock_max_capacity_iops_hdd``
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Rotational media only.
   default: 50
   see_also:
   - osd_mclock_max_capacity_iops_hdd
@@ -1394,15 +1460,20 @@ options:
 - name: osd_mclock_iops_capacity_threshold_ssd
   type: float
   level: basic
-  desc: The threshold IOPS capacity (at 4KiB block size) beyond which to ignore
-    the OSD bench results for an OSD (for solid state media)
-  long_desc: This option specifies the high threshold IOPS capacity for an OSD
-    below which the OSD bench results can be considered for QoS calculations.
-    Only considered when osd_op_queue = mclock_scheduler
-  fmt_desc: The threshold IOPS capacity (at 4KiB block size) beyond which to
-    ignore OSD bench results for an OSD (for solid state media) and fall back to
-    the last valid or default IOPS capacity defined by
-    ``osd_mclock_max_capacity_iops_ssd``.
+  desc: Upper bound for the startup IOPS benchmark; a 4 KiB random-write result above
+    this is rejected (solid-state media).
+  long_desc: When mClock is enabled (osd_op_queue = mclock_scheduler), each OSD measures
+    its IOPS capacity at first startup with a 4 KiB random-write benchmark. mClock
+    rejects a result above this high threshold (or below osd_mclock_iops_capacity_low_threshold_ssd)
+    as implausible, keeping the configured (default) osd_mclock_max_capacity_iops_ssd
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Solid-state media only.
+  fmt_desc: When mClock is enabled (``osd_op_queue`` = ``mclock_scheduler``), each
+    OSD measures its IOPS capacity at first startup with a 4 KiB random-write benchmark.
+    mClock rejects a result above this high threshold (or below ``osd_mclock_iops_capacity_low_threshold_ssd``)
+    as implausible, keeping the configured (default) ``osd_mclock_max_capacity_iops_ssd``
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Solid-state media only.
   default: 80000
   see_also:
   - osd_mclock_max_capacity_iops_ssd
@@ -1411,15 +1482,20 @@ options:
 - name: osd_mclock_iops_capacity_low_threshold_ssd
   type: float
   level: basic
-  desc: The threshold IOPS capacity (at 4KiB block size) below which to ignore
-    the OSD bench results for an OSD (for solid state media)
-  long_desc: This option specifies the low threshold IOPS capacity for an OSD
-    above which the OSD bench results can be considered for QoS calculations.
-    Only considered when osd_op_queue = mclock_scheduler
-  fmt_desc: The threshold IOPS capacity (at 4KiB block size) below which to
-    ignore OSD bench results for an OSD (for solid state media) and fall back to
-    the last valid or default IOPS capacity defined by
-    ``osd_mclock_max_capacity_iops_ssd``.
+  desc: Lower bound for the startup IOPS benchmark; a 4 KiB random-write result below
+    this is rejected (solid-state media).
+  long_desc: When mClock is enabled (osd_op_queue = mclock_scheduler), each OSD measures
+    its IOPS capacity at first startup with a 4 KiB random-write benchmark. mClock
+    rejects a result below this low threshold (or above osd_mclock_iops_capacity_threshold_ssd)
+    as implausible, keeping the configured (default) osd_mclock_max_capacity_iops_ssd
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Solid-state media only.
+  fmt_desc: When mClock is enabled (``osd_op_queue`` = ``mclock_scheduler``), each
+    OSD measures its IOPS capacity at first startup with a 4 KiB random-write benchmark.
+    mClock rejects a result below this low threshold (or above ``osd_mclock_iops_capacity_threshold_ssd``)
+    as implausible, keeping the configured (default) ``osd_mclock_max_capacity_iops_ssd``
+    and logging a cluster warning that recommends benchmarking manually (e.g. FIO).
+    Solid-state media only.
   default: 1000
   see_also:
   - osd_mclock_max_capacity_iops_ssd
