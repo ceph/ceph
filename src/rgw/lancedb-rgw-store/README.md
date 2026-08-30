@@ -10,7 +10,10 @@ This crate implements the `object_store::ObjectStore` trait from Apache Arrow, r
 
 ### During Ceph Build
 
-The crate is built automatically as part of the Ceph build process when `WITH_RADOSGW_LANCEDB` is enabled:
+The crate is built automatically as part of the Ceph build process when
+`WITH_RADOSGW_LANCEDB` is enabled. It is compiled through the `rgw-lancedb`
+umbrella crate (which combines `lancedb-c` and `lancedb-rgw-store` into a
+single `librgw_lancedb.a` static library linked into `rgw_common`).
 
 ```bash
 cd ceph/build
@@ -36,14 +39,33 @@ After rebuilding, restart the RGW daemon to pick up the changes.
 
 ## Testing
 
-### Unit Tests
+### C++ SAL Wrapper Tests
 
-Unit tests run within the Ceph build system (via `ninja`). Standalone `cargo test`
-requires Ceph libraries to resolve FFI symbols at link time.
+Tests the C wrapper API directly against a live SAL driver:
 
-### Integration Tests
+```bash
+cd ceph/build
+ninja ceph_test_rgw_sal_wrapper
+./bin/ceph_test_rgw_sal_wrapper -c ./ceph.conf
+```
 
-Integration tests require a running Ceph cluster with RGW. See `src/test/rgw/s3vectors/` for the test suite.
+The backend (rados, dbstore, posix) is read from ceph.conf.
+
+### LanceDB ObjectStore Integration Tests
+
+Tests the `ObjectStore` trait implementation end-to-end through the
+real FFI boundary:
+
+```bash
+cd ceph/build
+# Force Rust rebuild if sources changed
+ninja ceph_test_rgw_lancedb_object_store
+./bin/ceph_test_rgw_lancedb_object_store -c ./ceph.conf
+```
+
+### S3 Vector Integration Tests
+
+Full end-to-end tests via S3 protocol. See `src/test/rgw/s3vectors/`.
 
 ## Architecture
 
