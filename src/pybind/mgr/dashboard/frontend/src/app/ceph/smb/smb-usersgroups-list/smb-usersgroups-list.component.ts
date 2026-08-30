@@ -80,7 +80,11 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       {
         name: $localize`Linked to cluster`,
         prop: 'linked_to_cluster',
-        flexGrow: 2
+        flexGrow: 2,
+        cellTransformation: CellTemplate.redirect,
+        customTemplateConfig: {
+          redirectLink: ['/cephfs/smb/cluster', '::prop', 'overview']
+        }
       }
     ];
 
