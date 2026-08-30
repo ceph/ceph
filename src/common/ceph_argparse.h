@@ -90,6 +90,31 @@ bool ceph_argparse_binary_flag(std::vector<const char*> &args,
 extern CephInitParameters ceph_argparse_early_args
 	    (std::vector<const char*>& args, uint32_t module_type,
 	     std::string *cluster, std::string *conf_file_list);
+/*
+ * Remove from args any unrecognized argument that was given as a config
+ * option, in either the "--foo=bar" or the "--foo bar" form, and return the
+ * names of the options removed.
+ *
+ * Config options are routinely renamed, retyped or dropped altogether, so a
+ * deployed daemon should not refuse to start just because it was handed one
+ * that no longer exists.  This matches how the same option is treated when it
+ * comes from ceph.conf or from the mon config database, where an unknown
+ * option is ignored.  Callers are expected to warn about what was removed.
+ *
+ * Only options carrying a value are removed.  A bare "--flag" is left in
+ * place, as is everything following a "--", because a flag that takes no
+ * value is far more likely to be a mistyped command argument than a config,
+ * and quietly dropping it would turn the typo into a flag that silently does
+ * nothing.  For the same reason the argument after "--foo" is only taken as
+ * its value if it does not itself begin with a '-'.
+ *
+ * Call this only where any remaining argument would otherwise be rejected as
+ * unrecognized, and after the caller has parsed the arguments it knows about:
+ * consuming the value of a "--foo bar" pair is safe precisely because that
+ * pair would have been an error anyway.
+ */
+extern std::vector<std::string> ceph_argparse_drop_unknown_conf_opts(
+	std::vector<const char*>& args);
 extern bool ceph_argparse_need_usage(const std::vector<const char*>& args);
 extern void generic_server_usage();
 extern void generic_client_usage();
