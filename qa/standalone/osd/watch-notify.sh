@@ -138,6 +138,7 @@ function _wait_notify_seen() {
 # so `rados watch` blocks in getchar() and keeps the watch alive.
 function _start_watcher() {
     local pool=$1 obj=$2 tag=$3
+    shift 3                     # any remaining args are extra `rados` options
     local fifo="$OUTDIR/w-$tag.fifo"
     local out="$OUTDIR/w-$tag.out"
     rm -f "$fifo" "$out"
@@ -145,7 +146,7 @@ function _start_watcher() {
     # Holder keeps the write end open so the reader never sees EOF.
     sleep 100000 > "$fifo" &
     W_HOLD[$tag]=$!
-    rados -p "$pool" watch "$obj" < "$fifo" > "$out" 2>&1 &
+    rados -p "$pool" "$@" watch "$obj" < "$fifo" > "$out" 2>&1 &
     W_PID[$tag]=$!
     W_FIFO[$tag]="$fifo"
     W_OUT[$tag]="$out"
@@ -351,6 +352,56 @@ function TEST_rewatch_after_disconnect() {
 
     timeout 30 rados -p foo notify $obj "again" || return 1
     _wait_notify_seen b 15 || return 1
+}
+
+# Poll until a watcher (by tag) has printed a watch-error line to its capture
+# file. `rados watch` prints "ERROR cookie <c> err <msg>" from
+# WatchCtx2::handle_error() when the watch's error callback fires.
+function _wait_watch_error() {
+    local tag=$1 timeout=${2:-15}
+    local out="${W_OUT[$tag]}"
+    local deadline=$(( $(date +%s) + timeout ))
+    while [ $(date +%s) -lt $deadline ]; do
+        grep -q '^ERROR' "$out" && return 0
+        sleep 1
+    done
+    echo "watcher $tag did not receive a watch-error; output:"
+    cat "$out"
+    return 1
+}
+
+# A watch whose client stops sending watch pings (its connection stays fully up,
+# but the OSD sees no keepalive) must be timed out *by the OSD*, which then has
+# to tell the still-connected client -- delivering a watch-error
+# (CEPH_WATCH_EVENT_DISCONNECT) that fires the client's error callback.
+#
+# This is the crimson-standalone analogue of LibRadosWatchNotify.Watch3Timeout
+# and a direct regression for the bug seen in teuthology run 524085: the OSD
+# reaped the timed-out watch but never sent the disconnect (do_watch_timeout()
+# ran send_disconnect_msg() *after* the internal UNWATCH had already cleared the
+# watch's conn, so it silently no-op'd). The client then never learned its watch
+# was gone until, much later, its connection happened to reset -- blowing the
+# test's timeout budget. With the fix the error must arrive within roughly the
+# watch timeout.
+function TEST_watch_timeout_notifies_client() {
+    local dir=$1
+    _setup_crimson_cluster $dir || return 1
+
+    local obj=obj-pingtimeout
+    echo data | rados -p foo put $obj - || return 1
+
+    # Suppress *client-side* watch pings only (not message receipt), so the OSD's
+    # watch timeout fires while the client's connection is still alive and able
+    # to receive the disconnect.
+    _start_watcher foo $obj a --objecter_inject_no_watch_ping=true || return 1
+    _wait_watch_count foo $obj 1 30 || return 1
+
+    # Within roughly the watch timeout the OSD must reap the watch AND deliver
+    # the watch-error to the client.
+    _wait_watch_error a $(( WATCH_TIMEOUT + 30 )) || return 1
+
+    # ... and the watch is gone from the OSD side too.
+    _wait_watch_count foo $obj 0 30 || return 1
 }
 
 main watch-notify "$@"

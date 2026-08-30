@@ -57,7 +57,7 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
 
   seastar::future<> start_notify(NotifyRef);
   seastar::future<> send_notify_msg(NotifyRef);
-  seastar::future<> send_disconnect_msg();
+  seastar::future<> send_disconnect_msg(crimson::net::ConnectionXcoreRef conn);
 
   // Register/unregister this watch in its connection's per-connection registry
   // (crimson::osd::WatchConState, living in the connection's OSDConnectionPriv)
