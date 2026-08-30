@@ -23,6 +23,7 @@
 
 #include <iostream> // for std::cout
 
+#include "common/ceph_argparse.h"
 #include "common/config_proxy.h"
 #include "common/errno.h"
 #include "gtest/gtest.h"
@@ -303,6 +304,93 @@ TEST(Option, validation)
   input = "one";  // A value that has a magic conversion
   EXPECT_EQ(0, opt_validator.pre_validate(&input, &msg));
   EXPECT_EQ(input, "1");
+}
+
+TEST(daemon_config, drop_unknown_conf_opts)
+{
+  // compare by value: the arguments are pointers, and comparing those would
+  // only be testing whether the compiler happened to pool the literals
+  auto as_strings = [](const std::vector<const char*>& args) {
+    return std::vector<std::string>(args.begin(), args.end());
+  };
+  // an unknown config given as an argument is dropped and reported, so that
+  // the caller does not treat it as a fatal unrecognized argument
+  {
+    std::vector<const char*> args{"--debug_foijdf=1"};
+    EXPECT_EQ(std::vector<std::string>{"debug_foijdf"},
+	      ceph_argparse_drop_unknown_conf_opts(args));
+    EXPECT_TRUE(args.empty());
+  }
+  // a bare flag may be a command argument, so it is left for the caller
+  {
+    std::vector<const char*> args{"--hot-standby"};
+    EXPECT_TRUE(ceph_argparse_drop_unknown_conf_opts(args).empty());
+    EXPECT_EQ(1u, args.size());
+  }
+  // so is anything that is not an option at all
+  {
+    std::vector<const char*> args{"a", "-i", "-"};
+    EXPECT_TRUE(ceph_argparse_drop_unknown_conf_opts(args).empty());
+    EXPECT_EQ(3u, args.size());
+  }
+  // an option name is required
+  {
+    std::vector<const char*> args{"--=1"};
+    EXPECT_TRUE(ceph_argparse_drop_unknown_conf_opts(args).empty());
+    EXPECT_EQ(1u, args.size());
+  }
+  // only the offending options are removed, order is otherwise preserved
+  {
+    std::vector<const char*> args{"-i", "a", "--debug_a=1", "-f",
+				  "--debug_b=2", "--hot-standby"};
+    std::vector<std::string> expected{"debug_a", "debug_b"};
+    EXPECT_EQ(expected, ceph_argparse_drop_unknown_conf_opts(args));
+    std::vector<std::string> remaining{"-i", "a", "-f", "--hot-standby"};
+    EXPECT_EQ(remaining, as_strings(args));
+  }
+  // the value may be a separate argument: both are dropped
+  {
+    std::vector<const char*> args{"--debug_ms", "1"};
+    EXPECT_EQ(std::vector<std::string>{"debug_ms"},
+	      ceph_argparse_drop_unknown_conf_opts(args));
+    EXPECT_TRUE(args.empty());
+  }
+  // ... but only when there is something that can be a value
+  {
+    std::vector<const char*> args{"--debug_ms"};
+    EXPECT_TRUE(ceph_argparse_drop_unknown_conf_opts(args).empty());
+    EXPECT_EQ(1u, args.size());
+  }
+  // an option is not the value of the option before it
+  {
+    std::vector<const char*> args{"--debug_ms", "--debug_mds=1"};
+    EXPECT_EQ(std::vector<std::string>{"debug_mds"},
+	      ceph_argparse_drop_unknown_conf_opts(args));
+    std::vector<std::string> remaining{"--debug_ms"};
+    EXPECT_EQ(remaining, as_strings(args));
+  }
+  // a value that looks like an option is left alone, so that a bare flag is
+  // still rejected rather than silently swallowing the next argument
+  {
+    std::vector<const char*> args{"--mds_numa_nod", "-1"};
+    EXPECT_TRUE(ceph_argparse_drop_unknown_conf_opts(args).empty());
+    EXPECT_EQ(2u, args.size());
+  }
+  // a value may itself contain an '=', and may be empty
+  {
+    std::vector<const char*> args{"--debug_a=b=c", "--debug_b="};
+    std::vector<std::string> expected{"debug_a", "debug_b"};
+    EXPECT_EQ(expected, ceph_argparse_drop_unknown_conf_opts(args));
+    EXPECT_TRUE(args.empty());
+  }
+  // everything past a double dash belongs to the caller
+  {
+    std::vector<const char*> args{"--debug_a=1", "--", "--debug_b=2"};
+    EXPECT_EQ(std::vector<std::string>{"debug_a"},
+	      ceph_argparse_drop_unknown_conf_opts(args));
+    std::vector<std::string> remaining{"--", "--debug_b=2"};
+    EXPECT_EQ(remaining, as_strings(args));
+  }
 }
 
 /*
