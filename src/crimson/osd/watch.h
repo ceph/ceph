@@ -66,7 +66,10 @@ class Watch : public seastar::enable_shared_from_this<Watch> {
   // lives on the connection's home core. Defined in watch_conn.cc (they touch
   // OSD-only symbols and so must stay out of watch.cc, which is also compiled
   // into unit tests).
-  seastar::future<> register_on_conn();
+  // register_on_conn() returns whether the registration is effective: true if
+  // the connection was still connected, false if it was reset during the hop
+  // (in which case the entry is rolled back and the caller disconnects locally).
+  seastar::future<bool> register_on_conn();
   seastar::future<> deregister_from_conn();
 
   friend Notify;

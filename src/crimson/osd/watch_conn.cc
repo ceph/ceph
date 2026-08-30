@@ -29,7 +29,7 @@ namespace {
 
 namespace crimson::osd {
 
-seastar::future<> Watch::register_on_conn()
+seastar::future<bool> Watch::register_on_conn()
 {
   ceph_assert(conn);
   const auto conn_shard = conn.get_owner_shard();
@@ -40,8 +40,13 @@ seastar::future<> Watch::register_on_conn()
   // caller for the duration of connect()) keeps `raw_conn` valid across the hop.
   return seastar::smp::submit_to(conn_shard,
     [raw_conn, key, fwatch=seastar::make_foreign(shared_from_this())]() mutable {
-      get_osd_priv(raw_conn).ensure_watch_conn_state().add_watch(
-        key, std::move(fwatch));
+      auto& state = get_osd_priv(raw_conn).ensure_watch_conn_state();
+      state.add_watch(key, std::move(fwatch));
+      if (raw_conn->is_connected()) {
+        return true;
+      }
+      state.remove_watch(key);
+      return false;
     });
 }
 
@@ -83,7 +88,11 @@ seastar::future<> Watch::connect(crimson::net::ConnectionXcoreRef conn, bool)
       timeout_timer.arm(std::chrono::seconds{winfo.timeout_seconds});
       this->conn = std::move(new_conn);
       return register_on_conn();
-    }).then([this, this_shared=shared_from_this()] {
+    }).then([this, this_shared=shared_from_this()](bool connected) {
+      if (!connected) {
+        this_shared->disconnect();
+        return seastar::now();
+      }
       // Now (re)connected: replay every notify buffered while disconnected.
       // Mirrors classic Watch::connect() (src/osd/Watch.cc). start_notify()
       // records a notify in in_progress_notifies even while disconnected but
