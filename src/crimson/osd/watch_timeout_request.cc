@@ -88,11 +88,22 @@ std::vector<OSDOp> WatchTimeoutRequest::create_osd_ops()
 void Watch::do_watch_timeout()
 {
   assert(pg);
+  // Capture the connection now: the WatchTimeoutRequest started below issues an
+  // internal UNWATCH whose obc effect runs Watch::remove() -> discard_state(),
+  // which clears this->conn before the continuation runs. Sending the disconnect
+  // on the captured handle (rather than this->conn, now null) is what actually
+  // delivers CEPH_WATCH_EVENT_DISCONNECT to the client - after the UNWATCH has
+  // flushed any NOTIFY_COMPLETE messages, matching the ordering documented in
+  // Watch::remove(). Without this the send silently no-ops on a cleared conn and
+  // the client never learns the watch timed out (it only finds out much later,
+  // when its connection resets and a watch-reconnect is refused with -ENOTCONN).
+  auto conn = this->conn;
   auto [op, fut] = pg->get_shard_services().start_operation<WatchTimeoutRequest>(
     shared_from_this(), pg);
-  std::ignore = std::move(fut).then([op=std::move(op), this] {
-    return send_disconnect_msg();
-  });
+  std::ignore = std::move(fut).then(
+    [op=std::move(op), conn=std::move(conn), this]() mutable {
+      return send_disconnect_msg(std::move(conn));
+    });
 }
 
 } // namespace crimson::osd

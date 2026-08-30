@@ -46,10 +46,12 @@ seastar::future<> Watch::send_notify_msg(NotifyRef notify)
   if (!is_connected()) {
     // The connection may be dropped between iterations of connect()'s buffered-
     // notify replay: a reset can run during a preceding send's await and call
-    // disconnect(), clearing conn. Guard here (mirroring send_disconnect_msg())
-    // so the notify stays in in_progress_notifies and is replayed on the next
-    // reconnect rather than dereferencing a cleared conn. Safe shard-wise: this
-    // only inspects the local conn handle on the watch's own core.
+    // disconnect(), clearing conn. Guard here so the notify stays in
+    // in_progress_notifies and is replayed on the next reconnect rather than
+    // dereferencing a cleared conn. Safe shard-wise: this only inspects the
+    // local conn handle on the watch's own core. (Unlike send_disconnect_msg(),
+    // which is given the connection to use, this path reads this->conn: it must
+    // observe an in-flight reset so the notify falls back to buffering.)
     logger().debug("{} not connected, buffering notify(id={})",
                    __func__, notify->ninfo.notify_id);
     return seastar::now();
@@ -111,9 +113,13 @@ seastar::future<> Watch::notify_ack(
   return notify->complete_watcher(shared_from_this(), reply_bl);
 }
 
-seastar::future<> Watch::send_disconnect_msg()
+seastar::future<> Watch::send_disconnect_msg(crimson::net::ConnectionXcoreRef conn)
 {
-  if (!is_connected()) {
+  // `conn` is passed in explicitly (rather than read from this->conn) because
+  // the timeout path tears the watch down -- discard_state() clears this->conn
+  // -- before this runs; see do_watch_timeout(). A null handle means the watch
+  // was already disconnected, so there is nobody to tell.
+  if (!conn) {
     return seastar::now();
   }
   ceph::bufferlist empty;
