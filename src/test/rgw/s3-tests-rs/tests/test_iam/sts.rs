@@ -384,6 +384,21 @@ async fn test_assume_role_with_web_identity() {
     let thumbprint = cfg.webidentity_thumbprint.as_deref().unwrap_or("");
     let oidc_url = format!("http://localhost:8080/realms/{}", realm);
 
+    /* clean up stale resources from prior interrupted runs */
+    let _ = iam.delete_role_policy().role_name(&role_name)
+        .policy_name("S3Full").send().await;
+    let _ = iam.delete_role().role_name(&role_name).send().await;
+    if let Ok(providers) = iam.list_open_id_connect_providers().send().await {
+        for p in providers.open_id_connect_provider_list() {
+            if let Some(arn) = p.arn() {
+                if arn.contains("localhost:8080") {
+                    let _ = iam.delete_open_id_connect_provider()
+                        .open_id_connect_provider_arn(arn).send().await;
+                }
+            }
+        }
+    }
+
     /* create OIDC provider in RGW */
     let oidc_resp = iam.create_open_id_connect_provider()
         .url(&oidc_url)

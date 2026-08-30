@@ -206,13 +206,14 @@ async fn test_account_role_list_sorted() {
     let cfg = get_config();
     let path = &cfg.iam_path_prefix;
 
-    let resp = client.list_roles().path_prefix(path).send().await.unwrap();
-    assert_eq!(resp.roles().len(), 0);
-
     let name1 = format!("{}aa", cfg.iam_name_prefix);
     let name2 = format!("{}Ab", cfg.iam_name_prefix);
     let name3 = format!("{}ac", cfg.iam_name_prefix);
     let name4 = format!("{}Ad", cfg.iam_name_prefix);
+
+    for n in [&name1, &name2, &name3, &name4] {
+        let _ = client.delete_role().role_name(n).send().await;
+    }
 
     for (n, p) in [(&name4, "w/"), (&name3, "x/"), (&name2, "y/"), (&name1, "z/")] {
         client.create_role().role_name(n).path(&format!("{}{}", path, p))
@@ -220,8 +221,11 @@ async fn test_account_role_list_sorted() {
     }
 
     let resp = client.list_roles().path_prefix(path).send().await.unwrap();
-    let names: Vec<&str> = resp.roles().iter().map(|r| r.role_name()).collect();
-    assert_eq!(names, vec![&name1, &name2, &name3, &name4]);
+    let test_names: Vec<&str> = resp.roles().iter()
+        .map(|r| r.role_name())
+        .filter(|n| [name1.as_str(), name2.as_str(), name3.as_str(), name4.as_str()].contains(n))
+        .collect();
+    assert_eq!(test_names, vec![&name1, &name2, &name3, &name4]);
 
     for n in [&name1, &name2, &name3, &name4] {
         client.delete_role().role_name(n).send().await.unwrap();
@@ -240,6 +244,10 @@ async fn test_account_role_list_path_prefix() {
     let name3 = format!("{}c", cfg.iam_name_prefix);
     let name4 = format!("{}d", cfg.iam_name_prefix);
 
+    for n in [&name1, &name2, &name3, &name4] {
+        let _ = client.delete_role().role_name(n).send().await;
+    }
+
     client.create_role().role_name(&name1).path(path)
         .assume_role_policy_document(assume_role_policy()).send().await.unwrap();
     client.create_role().role_name(&name2).path(path)
@@ -249,12 +257,17 @@ async fn test_account_role_list_path_prefix() {
     client.create_role().role_name(&name4).path(&format!("{}a/x/", path))
         .assume_role_policy_document(assume_role_policy()).send().await.unwrap();
 
+    let test_names: Vec<String> = vec![name1.clone(), name2.clone(), name3.clone(), name4.clone()];
     let list = |prefix: &str| {
         let c = &client;
         let p = prefix.to_string();
+        let tn = test_names.clone();
         async move {
             let resp = c.list_roles().path_prefix(&p).send().await.unwrap();
-            resp.roles().iter().map(|r| r.role_name().to_string()).collect::<Vec<_>>()
+            resp.roles().iter()
+                .map(|r| r.role_name().to_string())
+                .filter(|n| tn.contains(n))
+                .collect::<Vec<_>>()
         }
     };
 
