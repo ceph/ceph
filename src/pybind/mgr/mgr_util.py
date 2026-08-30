@@ -1028,7 +1028,13 @@ MARKER_PREFIX = 'mgr/cap_profiles/'
 
 # caps to use in place of 'profile <name>' on a cluster that cannot use it,
 # keyed by profile name, then by cap type
-PROFILE_FALLBACKS: Dict[str, Dict[str, str]] = {}
+PROFILE_FALLBACKS: Dict[str, Dict[str, str]] = {
+    'rgw': {
+        'mon': 'allow *',
+        'mgr': 'allow rw',
+        'osd': 'allow rwx tag rgw *=*',
+    },
+}
 
 
 class CapProfileError(RuntimeError):
