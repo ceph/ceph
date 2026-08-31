@@ -26,6 +26,7 @@ tasks:
       - \(OBJECT_
       - \(PG_
       - overall HEALTH
+      - MDS_ALL_DOWN
 - exec:
     osd.0:
       - ceph osd pool create foo 32

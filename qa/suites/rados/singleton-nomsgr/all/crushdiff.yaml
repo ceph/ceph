@@ -14,6 +14,7 @@ overrides:
     - overall HEALTH_
     - \(POOL_APP_NOT_ENABLED\)
     - \(PG_DEGRADED\)
+    - MDS_ALL_DOWN
 
 tasks:
 - install:
