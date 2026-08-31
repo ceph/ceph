@@ -1286,6 +1286,7 @@ int VersionedDirectory::open(const DoutPrefixProvider* dpp)
 
 int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
 {
+  bool created{false};
   int ret = mkdirat(parent->get_fd(), fname.c_str(), S_IRWXU);
   if (ret < 0) {
     ret = errno;
@@ -1295,8 +1296,9 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
 	  << cpp_strerror(ret) << dendl;
       return -ret;
     }
+  } else if (ret == 0) {
+    created = true;
   }
-
   ret = open(dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not open versioned directory " << get_name()
@@ -1304,13 +1306,15 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
     return ret;
   }
 
-  /* Need type attribute written */
-  Attrs attrs;
-  ret = write_attrs(dpp, null_yield, attrs, nullptr);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not write attrs for versioned directory " << get_name()
-                      << dendl;
-    return ret;
+  if (created) {
+    /* Need type attribute written */
+    Attrs attrs;
+    ret = write_attrs(dpp, null_yield, attrs, nullptr);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not write attrs for versioned directory " << get_name()
+                        << dendl;
+      return ret;
+    }
   }
 
   if (temp_file) {
