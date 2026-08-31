@@ -8896,9 +8896,21 @@ hobject_t PrimaryLogPG::execute_clone_plan(
       // head_source unchanged: we cloned FROM it, not to it
 
     } else {
-      // ROLLBACK: clone source snapshot content to head
+      // ROLLBACK: clone source snapshot content to head.
+      // If the source snap does not exist (the object was never written before
+      // this snapshot was taken), the rollback is a no-op for this object.
       hobject_t src_clone = soid;
       src_clone.snap = op.source;
+
+      ObjectContextRef src_obc = get_object_context(src_clone, false);
+      if (!src_obc) {
+        // Source clone does not exist: object predates the pool rollback snap,
+        // so there is nothing to restore.  Skip both the clone and any
+        // immediately-following SNAP ops that would have cloned from src_clone.
+        while (i + 1 < (int)ops.size() && ops[i + 1].type == pending_op_t::SNAP)
+          ++i;
+        continue;
+      }
 
       t->clone(soid, src_clone);      // head now holds source content
       head_source = src_clone;        // future SNAPs clone from here
@@ -9259,45 +9271,60 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
       }
     }
 
-    // Update SnapSet metadata for the rollback clones and write SS_ATTR in T1.
-    update_snapset_for_rollback(jit_ctx.get(), jit_ops, pool.info,
-                                jit_ctx->op_t.get());
+    // If execute_clone_plan emitted no operations (all ROLLBACKs were NOPs
+    // because the object did not exist at the time of the rollback snap, and
+    // there are no regular snapshot clones either), T1 would contain only a
+    // setattr(SS_ATTR) on the head object.  The head object does not exist yet
+    // -- it will be created by T2 -- so submitting T1 would hit ENOENT and
+    // crash.  The correct behaviour is to skip T1 entirely: T2's finish_ctx()
+    // will write the correct SS_ATTR on the newly-created head, and
+    // ctx->new_snapset.seq is advanced by the code below (lines ~9334-9337)
+    // independently of T1.
+    if (jit_ctx->op_t->op_map.empty()) {
+      dout(10) << "make_writeable " << soid
+               << " JIT rollback all NOPs, skipping T1" << dendl;
+      jit_ctx->op_t.reset();
+    } else {
+      // Update SnapSet metadata for the rollback clones and write SS_ATTR in T1.
+      update_snapset_for_rollback(jit_ctx.get(), jit_ops, pool.info,
+                                  jit_ctx->op_t.get());
 
-    // Propagate the updated new_snapset (with rollback clones + advanced seq)
-    // back to ctx so that finish_ctx writes the correct final SS_ATTR in T2.
-    ctx->new_snapset = jit_ctx->new_snapset;
+      // Propagate the updated new_snapset (with rollback clones + advanced seq)
+      // back to ctx so that finish_ctx writes the correct final SS_ATTR in T2.
+      ctx->new_snapset = jit_ctx->new_snapset;
 
-    // Emit CLONE + MODIFY(head) log entries into jit_ctx->log (T1).
-    emit_rollback_log_entries(jit_ctx.get(), jit_ops);
+      // Emit CLONE + MODIFY(head) log entries into jit_ctx->log (T1).
+      emit_rollback_log_entries(jit_ctx.get(), jit_ops);
 
-    // Advance ctx->at_version past all the versions consumed by T1 so that
-    // T2 log entries start at the correct version.
-    ctx->at_version = jit_ctx->at_version;
-    ctx->at_version.version++;
+      // Advance ctx->at_version past all the versions consumed by T1 so that
+      // T2 log entries start at the correct version.
+      ctx->at_version = jit_ctx->at_version;
+      ctx->at_version.version++;
 
-    // Track in-flight JIT rollbacks so the background trimmer waits for JIT
-    // work to complete before marking a rollback done.
-    for (auto& op : jit_ops) {
-      if (op.type == pending_op_t::ROLLBACK) {
-        jit_rollback_inflight[op.id]++;
-        snapid_t rb_id = op.id;
-        jit_ctx->on_success.push_back([this, rb_id]() {
-          auto it = jit_rollback_inflight.find(rb_id);
-          if (it != jit_rollback_inflight.end()) {
-            if (--(it->second) == 0) {
-              jit_rollback_inflight.erase(it);
-              kick_snap_trim();
+      // Track in-flight JIT rollbacks so the background trimmer waits for JIT
+      // work to complete before marking a rollback done.
+      for (auto& op : jit_ops) {
+        if (op.type == pending_op_t::ROLLBACK) {
+          jit_rollback_inflight[op.id]++;
+          snapid_t rb_id = op.id;
+          jit_ctx->on_success.push_back([this, rb_id]() {
+            auto it = jit_rollback_inflight.find(rb_id);
+            if (it != jit_rollback_inflight.end()) {
+              if (--(it->second) == 0) {
+                jit_rollback_inflight.erase(it);
+                kick_snap_trim();
+              }
             }
-          }
-        });
+          });
+        }
       }
-    }
 
-    // Submit T1 (clones + SnapSet update) as a separate, independent
-    // transaction.  T2 (client write) is submitted by the caller via the
-    // normal issue_repop path.  Both transactions are submitted in parallel;
-    // ordering is guaranteed by the object pipeline in the backend.
-    simple_opc_submit(std::move(jit_ctx));
+      // Submit T1 (clones + SnapSet update) as a separate, independent
+      // transaction.  T2 (client write) is submitted by the caller via the
+      // normal issue_repop path.  Both transactions are submitted in parallel;
+      // ordering is guaranteed by the object pipeline in the backend.
+      simple_opc_submit(std::move(jit_ctx));
+    }
   }
 
   // update most recent clone_overlap and usage stats
