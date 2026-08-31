@@ -154,6 +154,36 @@ will run smoothly on any supported container host OS (such as Ubuntu 24.04 or
 CentOS 9), completely isolated from the host's native package manager.
 
 
+Block Device I/O Scheduler
+==========================
+
+Set the Linux block-layer I/O scheduler to match the class of device
+backing each OSD:
+
+* **Rotational (HDD) devices:** ``mq-deadline`` (or ``bfq``).  Request
+  merging and the deadline elevator complement the drive's own command
+  reordering (NCQ/TCQ) and help avoid read starvation during recovery
+  and backfill.
+* **Solid-state (SSD / NVMe) devices:** ``none``.  These devices reorder
+  requests internally, so a kernel-level elevator only adds latency.
+
+Recent ``blk-mq`` kernels frequently default to these values already, but
+this is not guaranteed across distributions, kernel versions, or TuneD
+profiles, so it is worth verifying::
+
+    # the active scheduler is shown in brackets
+    cat /sys/block/sda/queue/scheduler
+
+    # set it for a single device
+    echo mq-deadline > /sys/block/sda/queue/scheduler
+
+Make the setting persistent with a ``udev`` rule keyed on
+``/sys/block/*/queue/rotational`` so it survives reboots and applies to
+devices added later.  For BlueStore this is a modest tuning knob -- its
+large, mostly-sequential I/O together with the drive's own reordering does
+most of the work -- but setting it per device class avoids pathological
+behavior.
+
 Host Distribution Upgrades (Horizontal Paths)
 =============================================
 
