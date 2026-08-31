@@ -103,6 +103,9 @@ public:
 
   void release(const release_set_t& release_set) override;
 
+  int64_t claim_range(uint64_t offset, uint64_t length,
+                       PExtentVector *extents) override;
+
   uint64_t get_free() override {
     return num_free;
   }
@@ -266,6 +269,8 @@ protected:
    */
   void _try_remove_from_tree(uint64_t start, uint64_t size,
     std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
+  int64_t _claim_range(uint64_t offset, uint64_t length,
+                        PExtentVector *extents);
   bool has_cache() const {
     return !!cache;
   }
