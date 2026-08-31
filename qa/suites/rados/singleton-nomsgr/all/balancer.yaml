@@ -9,6 +9,7 @@ tasks:
     log-ignorelist:
       - \(PG_AVAILABILITY\)
       - \(POOL_APP_NOT_ENABLED\)
+      - MDS_ALL_DOWN
 - cram:
     clients:
       client.0:

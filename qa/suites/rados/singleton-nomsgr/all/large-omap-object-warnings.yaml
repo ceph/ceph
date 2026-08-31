@@ -16,6 +16,7 @@ overrides:
       - large omap objects
       - Large omap object found
       - application not enabled
+      - MDS_ALL_DOWN
     conf:
       osd:
         osd scrub backoff ratio: 0
