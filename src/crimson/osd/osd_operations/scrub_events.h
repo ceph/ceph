@@ -135,13 +135,14 @@ public:
 template <typename T>
 class ScrubAsyncOpT : public TrackableOperationT<T> {
   Ref<PG> pg;
+  const bool scheduled;
 
 public:
   using interruptor = InterruptibleOperation::interruptor;
   template <typename U=void>
   using ifut = InterruptibleOperation::interruptible_future<U>;
 
-  ScrubAsyncOpT(Ref<PG> pg);
+  ScrubAsyncOpT(Ref<PG> pg, bool scheduled = true);
 
   ifut<> start();
 
@@ -247,7 +248,7 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::scrub_sleep;
 
   ScrubSleep(Ref<PG> pg)
-    : ScrubAsyncOpT(pg) {}
+    : ScrubAsyncOpT(pg, false) {}
 
   void print(std::ostream &out) const final {
     out << "()";

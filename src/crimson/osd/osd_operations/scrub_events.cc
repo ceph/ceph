@@ -83,14 +83,31 @@ template class RemoteScrubEventBaseT<ScrubRequested>;
 template class RemoteScrubEventBaseT<ScrubMessage>;
 
 template <typename T>
-ScrubAsyncOpT<T>::ScrubAsyncOpT(Ref<PG> pg) : pg(pg) {}
+ScrubAsyncOpT<T>::ScrubAsyncOpT(Ref<PG> pg, bool scheduled)
+  : pg(pg), scheduled(scheduled) {}
 
 template <typename T>
 typename ScrubAsyncOpT<T>::template ifut<> ScrubAsyncOpT<T>::start()
 {
   LOG_PREFIX(ScrubAsyncOpT::start);
   DEBUGDPP("{} starting", *pg, *this);
-  return run(*pg);
+  if (!scheduled) {
+    return run(*pg);
+  }
+
+  const auto cost = static_cast<int>(
+    std::max<int64_t>(1, pg->get_average_object_size()));
+  return interruptor::make_interruptible(
+    pg->get_shard_services().get_throttle(
+      crimson::osd::scheduler::params_t{
+      cost,
+      pg->get_scrub_priority(),
+      0,
+      SchedulerClass::background_best_effort
+    })
+  ).then_interruptible([this](auto releaser) {
+    return run(*pg).finally([releaser = std::move(releaser)] {});
+  });
 }
 
 ScrubFindRange::ifut<> ScrubFindRange::run(PG &pg)
@@ -155,14 +172,6 @@ ScrubScan::ifut<> ScrubScan::run(PG &pg)
   ret.valid_through = pg.get_info().last_update;
 
   DEBUGDPP("begin: {}, end: {}", pg, begin, end);
-  using crimson::common::local_conf;
-  auto throttle = co_await interruptor::make_interruptible(
-    pg.shard_services.get_throttle(
-      scheduler::params_t{
-        static_cast<int>(local_conf()->osd_scrub_event_cost),
-        static_cast<unsigned>(local_conf()->osd_scrub_priority),
-        0,
-        SchedulerClass::background_best_effort}));
   auto [objects, _] = co_await pg.backend->list_objects(begin, end);
 
   DEBUGDPP("listed {} objects", pg, objects);
