@@ -198,7 +198,8 @@ private:
 
   // called when extent to be released/marked free
   void _add_to_tree(uint64_t start, uint64_t size);
-  void _process_range_removal(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
+  range_tree_t::iterator _process_range_removal(uint64_t start, uint64_t end,
+    range_tree_t::iterator rs);
   void _remove_from_tree(uint64_t start, uint64_t size);
 
   uint64_t _get_free() const {
