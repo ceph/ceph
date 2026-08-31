@@ -252,8 +252,12 @@ seastar::future<> OperationThrottler::background_task() {
         }  
         auto wait_duration = std::chrono::duration_cast<std::chrono::milliseconds>(future_time - now);
         DEBUG("No items ready. Retrying in {} ms", wait_duration.count());
+        // Break out of the inner loop before sleeping so that any wake()
+        // signals delivered during the sleep are not lost.  After the sleep,
+        // signal the cv ourselves to re-enter the outer wait properly.
         co_await seastar::sleep(wait_duration);
-        continue;
+        cv.signal();
+        break;
       }
       if (auto *item = std::get_if<crimson::osd::scheduler::item_t>(&work_item)) {
         DEBUG("Waking up a work item");
