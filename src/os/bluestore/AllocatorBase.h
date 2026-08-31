@@ -175,6 +175,9 @@ protected:
         notify(data[i]);
       }
     }
+    void clear() {
+      count = 0;
+    }
   };
   /*
    * Concurrently accessed extent (offset,length) cache
@@ -254,6 +257,18 @@ protected:
           notify(o, i << myTraits.base_bits);
         };
         buckets[i].foreach(cb);
+      }
+    }
+    // Hands every cached extent to notify and empties the cache. The lock
+    // is taken exclusively, so concurrent try_put()/try_get() fail fast.
+    void drain(std::function<void(uint64_t offset, uint64_t length)> notify) {
+      std::unique_lock _lock(lock);
+      for (uint64_t i = 0; i < buckets.size(); i++) {
+        auto cb = [&](uint64_t o) {
+          notify(o, i << myTraits.base_bits);
+        };
+        buckets[i].foreach(cb);
+        buckets[i].clear();
       }
     }
   };
