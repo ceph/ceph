@@ -6,7 +6,12 @@ import _ from 'lodash';
 import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { ActionLabelsI18n, URLVerbs, USER } from '~/app/shared/constants/app.constants';
+import {
+  ActionLabelsI18n,
+  AppConstants,
+  URLVerbs,
+  USER
+} from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -56,6 +61,8 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
   usernameExists: boolean;
   showTenant = false;
   previousTenant: string = null;
+  originalUid: string;
+  isDashboardUser = false;
   @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
   accounts: Account[] = [];
   initialUserPolicies: string[] = [];
@@ -284,6 +291,11 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
           });
           this.capabilities = resp[0].caps;
           this.uid = this.getUID();
+          this.originalUid = this.uid;
+          this.isDashboardUser = this.uid === AppConstants.defaultUser;
+          if (this.isDashboardUser) {
+            this.userForm.get('user_id')?.disable();
+          }
           this.initialUserPolicies = resp[0].managed_user_policies ?? [];
 
           this.managedPolicies.forEach((policy) => {
@@ -369,7 +381,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
       // Edit
       if (this._isGeneralDirty()) {
         const args = this._getUpdateArgs();
-        this.submitObservables.push(this.rgwUserService.update(this.uid, args));
+        this.submitObservables.push(this.rgwUserService.update(this.originalUid || this.uid, args));
       }
       notificationTitle = $localize`Updated Object Gateway user '${this.uid}'`;
     } else {
@@ -686,6 +698,7 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
    */
   private _isGeneralDirty(): boolean {
     return [
+      'user_id',
       'display_name',
       'email',
       'max_buckets_mode',
@@ -788,6 +801,10 @@ export class RgwUserFormComponent extends CdForm implements OnInit {
     const keys = ['display_name', 'email', 'max_buckets', 'system', 'suspended'];
     for (const key of keys) {
       result[key] = this.userForm.getValue(key);
+    }
+    const currentUid = this.getUID();
+    if (this.originalUid && currentUid !== this.originalUid) {
+      result['new_uid'] = currentUid;
     }
     if (this.userForm.getValue('account_id')) {
       result['account_id'] = this.userForm.getValue('account_id');
