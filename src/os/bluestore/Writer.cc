@@ -1452,11 +1452,11 @@ void BlueStore::Writer::do_write_with_blobs(
   for (auto& b : bd) {
     if (b.is_compressed()) {
       bstore->_buffer_cache_write(this->txc, onode, pos, b.object_data,
-        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+        bstore->_get_write_caching(onode, pos, b.object_data.length(), wctx->fadv_flags));
       pos += b.object_data.length();
     } else {
       bstore->_buffer_cache_write(this->txc, onode, pos, b.disk_data,
-        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+        bstore->_get_write_caching(onode, pos, b.disk_data.length(), wctx->fadv_flags));
       pos += b.disk_data.length();
     }
   }

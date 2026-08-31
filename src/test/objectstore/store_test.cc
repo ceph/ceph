@@ -2923,7 +2923,8 @@ void doAppendCaching(ObjectStore* store,
     c.wait();
     off += size;
   }
-  {
+  // do not show by default
+  if (0) {
     cout <<" Perf counters:\n";
     JSONFormatter f(true);
     store->dump_perf_counters(&f);
@@ -2969,10 +2970,10 @@ TEST_P(StoreTestSpecificAUSize, AppendCaching) {
   size_t write_size = min_alloc / 2;
   doAppendCaching(store.get(), 0, write_size,
     0,
-    4, 0);
+    4, write_size * 2);
   doAppendCaching(store.get(), write_size, write_size,
     0,
-    4, 0);
+    4, write_size);
   doAppendCaching(store.get(), 0, write_size,
     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED,
     4, write_size * 2);

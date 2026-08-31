@@ -16848,7 +16848,7 @@ void BlueStore::_do_write_small(
 		   << std::dec << " of mutable " << *b
 		   << dendl;
 	  _buffer_cache_write(txc, o, bstart + b_off0, bl,
-	    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+	    _get_write_caching(o, offset, length, wctx->fadv_flags));
 
 	  b->dirty_blob().calc_csum(b_off0, bl);
 
@@ -17071,7 +17071,7 @@ void BlueStore::_do_write_big_apply_deferred(
   }
   auto& b0 = dctx.blob_ref;
   _buffer_cache_write(txc, o, dctx.off - dctx.head_read, bl,
-    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+    _get_write_caching(o, dctx.off, dctx.used, wctx->fadv_flags));
 
   b0->dirty_blob().calc_csum(dctx.b_off, bl);
 
@@ -17550,7 +17550,8 @@ int BlueStore::_do_alloc_write(
     txc->statfs_delta.stored() += le->length;
     dout(20) << __func__ << "  lex " << *le << dendl;
     _buffer_cache_write(txc, o, wi.logical_offset, wi.get_original_data(),
-                        wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
+      _get_write_caching(o, wi.logical_offset, wi.get_original_length(),
+         wctx->fadv_flags));
 
     // queue io
     if (!g_conf()->bluestore_debug_omit_block_device_write) {
@@ -17711,15 +17712,7 @@ void BlueStore::_choose_write_options(
    uint32_t fadvise_flags,
    WriteContext *wctx)
 {
-  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
-    dout(20) << __func__ << " will do buffered write" << dendl;
-    wctx->buffered = true;
-  } else if (cct->_conf->bluestore_default_buffered_write &&
-	     (fadvise_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
-			       CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
-    dout(20) << __func__ << " defaulting to buffered write" << dendl;
-    wctx->buffered = true;
-  }
+  wctx->fadv_flags = fadvise_flags;
 
   // apply basic csum block size
   wctx->csum_order = block_size_order;
@@ -17795,8 +17788,30 @@ void BlueStore::_choose_write_options(
   dout(20) << __func__ << " prefer csum_order " << wctx->csum_order
            << " target_blob_size 0x" << std::hex << wctx->target_blob_size
 	   << " compress=" << (int)wctx->compress
-	   << " buffered=" << (int)wctx->buffered
+	   << " fadv=0x" << std::hex << wctx->fadv_flags
            << std::dec << dendl;
+}
+
+unsigned BlueStore::_get_write_caching(
+  OnodeRef& o,
+  uint64_t offset, size_t len,
+  uint32_t fadvise_flags)
+{
+  unsigned ret = Buffer::FLAG_NOCACHE;
+  uint64_t end_offs = offset + len;
+  if (fadvise_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+    dout(20) << __func__ << " will need, do buffered write" << dendl;
+    ret = 0;
+  } else if (cct->_conf->bluestore_default_buffered_write &&
+	     (fadvise_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+			       CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
+    dout(20) << __func__ << " defaulting to buffered write" << dendl;
+    ret = 0;
+  } else if (end_offs >= o->onode.size && !p2aligned(end_offs, min_alloc_size)) {
+    dout(20) << __func__ << " at tail, do buffered write" << dendl;
+    ret = 0;
+  }
+  return ret;
 }
 
 int BlueStore::_do_gc(

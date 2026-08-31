@@ -3782,7 +3782,7 @@ private:
   // write ops
   public:
   struct WriteContext {
-    bool buffered = false;          ///< buffered write
+    unsigned fadv_flags = 0;        ///< requested write mode
     bool compress = false;          ///< compressed write
     CompressorRef compressor;       ///< effective compression engine
     double crr = 0.0;               ///< compression required ratio
@@ -3841,7 +3841,7 @@ private:
 
     /// partial clone of the context
     void fork(const WriteContext& other) {
-      buffered = other.buffered;
+      fadv_flags = other.fadv_flags;
       compress = other.compress;
       target_blob_size = other.target_blob_size;
       csum_type = other.csum_type;
@@ -3924,6 +3924,10 @@ private:
                              OnodeRef& o,
                              uint32_t fadvise_flags,
                              WriteContext *wctx);
+
+  unsigned _get_write_caching(OnodeRef& o,
+	                      uint64_t offset, size_t len,
+                              uint32_t fadvise_flags);
 
   int _do_gc(TransContext *txc,
              CollectionRef& c,
