@@ -2,6 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { SmbService } from '~/app/shared/api/smb.service';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
@@ -64,7 +65,11 @@ export class SmbJoinAuthListComponent implements OnInit {
       {
         name: $localize`Linked to cluster`,
         prop: 'linked_to_cluster',
-        flexGrow: 2
+        flexGrow: 2,
+        cellTransformation: CellTemplate.redirect,
+        customTemplateConfig: {
+          redirectLink: ['/cephfs/smb/cluster', '::prop', 'overview']
+        }
       }
     ];
 
