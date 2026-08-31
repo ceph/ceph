@@ -240,6 +240,7 @@ ioring_queue_t::~ioring_queue_t()
 int ioring_queue_t::init(std::vector<int> &fds)
 {
   ceph_assert(0);
+  return -1;
 }
 
 void ioring_queue_t::shutdown()
@@ -252,11 +253,13 @@ int ioring_queue_t::submit_batch(aio_iter beg, aio_iter end,
                                  int *retries, int submit_retries, int initial_delay_us)
 {
   ceph_assert(0);
+  return -1;
 }
 
 int ioring_queue_t::get_next_completed(int timeout_ms, aio_t **paio, int max)
 {
   ceph_assert(0);
+  return -1;
 }
 
 bool ioring_queue_t::supported()
