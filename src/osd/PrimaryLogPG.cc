@@ -9013,7 +9013,6 @@ void PrimaryLogPG::emit_rollback_log_entries(
     ctx->obs->oi.version,
     ctx->obs->oi.user_version,
     ctx->reqid, ctx->mtime, 0));
-  ctx->at_version.version++;
 
   dout(10) << __func__ << " MODIFY head " << soid
            << " snapset.seq=" << ss.seq << dendl;
@@ -9274,6 +9273,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     // Advance ctx->at_version past all the versions consumed by T1 so that
     // T2 log entries start at the correct version.
     ctx->at_version = jit_ctx->at_version;
+    ctx->at_version.version++;
 
     // Track in-flight JIT rollbacks so the background trimmer waits for JIT
     // work to complete before marking a rollback done.
