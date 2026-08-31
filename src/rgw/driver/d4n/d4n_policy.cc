@@ -186,9 +186,16 @@ int LFUDAPolicy::init(CephContext* cct, const DoutPrefixProvider* dpp, asio::io_
         ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): bucket_name: " << bucket_name << dendl;
       }
       State state{State::INIT};
-      if (!restore_val.empty() && restore_val == "1") { // No need to set the xattr because this case only occurs when the state has
-        state = State::INVALID;                         // been retrieved from the xattr itself.
-        ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): State restored to INVALID." << dendl;
+      if (!restore_val.empty() && restore_val == "1") {
+        // Data block marked invalid via RGW_CACHE_ATTR_INVALID xattr on SSD
+        state = State::INVALID;
+        ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): State restored to INVALID from xattr." << dendl;
+      } else if (block.invalid) {
+        // HEAD block tombstoned in BlockDirectory (invalid=true flag)
+        // Crash recovery path: cleaning thread will call do_delete to clean up HEAD blocks
+        state = State::INVALID;
+        ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__
+                          << "(): State restored to INVALID from BlockDirectory tombstone." << dendl;
       } else {
         state = State::INIT;
       }
@@ -610,19 +617,18 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 
 		if (!remoteCacheAddress.empty()) {
 		  if (entry.localWeight > avgWeight) {
-			rgw::d4n::RemoteCachePutOp::RemoteCachePutOpData op {
-				entry.bucketName,
-				object_name,
-				block.blockID,
-				block.size,
-				block.version,
-				false,
-				entry.user,
-				remoteCacheAddress,
-				block.cacheObj.size,
-				instance_id,
-				"" // old_version - not applicable for eviction
-			};
+			rgw::d4n::RemoteCachePutOp::RemoteCachePutOpData op;
+			op.bucket_name = entry.bucketName;
+			op.object_name = object_name;
+			op.offset = block.blockID;
+			op.len = block.size;
+			op.version = block.version;
+			op.dirty = false;
+			op.bucket_owner = entry.user;
+			op.remote_addr = remoteCacheAddress;
+			op.obj_size = block.cacheObj.size;
+			op.instance_id = instance_id;
+			// old_version left default (empty) - not applicable for eviction
 			std::unique_ptr<rgw::d4n::RemoteCachePutOp> remote_put = std::make_unique<rgw::d4n::RemoteCachePutOp>(driver, op, true);
 			if ((ret = remote_put->send_and_complete_request(dpp, y, &out_bl)) < 0){
 			  ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): " << __LINE__ << ": Sending to remote has failed: " << remoteCacheAddress << dendl;
@@ -1034,30 +1040,28 @@ int LFUDAPolicy::do_delete(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, int 
     if (ret == -EBUSY) {
       std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
 
-      // Track retry count for lease deferrals to prevent infinite loops
-      e->retry_count++;
-      if (e->retry_count >= MAX_CLEANING_RETRY) {
-        ldpp_dout(dpp, 0) << "LFUDAPolicy::" << __func__
-                          << "() max lease deferral attempts (" << MAX_CLEANING_RETRY
-                          << ") exceeded for key=" << e->key
-                          << " - lease may be stuck, marking as failed" << dendl;
-        l.unlock();
-        // Return error so it goes to failed_entries queue for manual review
-        return -EBUSY;
-      }
-
-      //deferring the deletion of the invalid object
+      // Defer deletion due to active GET lease
+      // Update per_obj_versions: move entry to later creationTime
+      // Defer by cleaning interval to retry on next cleaning cycle after lease expires
+      // This allows other versions to be promoted and cleaned while this one waits
       auto v_it = per_obj_versions.find(e->obj_key.name);
       if (v_it != per_obj_versions.end()) {
         v_it->second.erase(e->creationTime);
-        e->creationTime += std::chrono::seconds(interval / 2);
+        e->creationTime = ceph::real_clock::now() + std::chrono::seconds(interval / 2);
         v_it->second[e->creationTime] = e;
       }
+
       ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
                          << "() deferring deletion due to active lease"
                          << " retry_count=" << e->retry_count
-                         << " updated creationTime=" << e->creationTime << dendl;
+                         << " updated creationTime=" << e->creationTime
+                         << " - entry remains in per_obj_versions for later promotion" << dendl;
       l.unlock();
+
+      // Return -EALREADY to signal cleaning(): entry deferred, skip erase_dirty_object
+      // Entry stays in per_obj_versions and will be re-promoted when it becomes oldest
+      // This allows version promotion to proceed (other versions can be cleaned)
+      return -EALREADY;
     } else if (ret < 0) {
       ldpp_dout(dpp, 0) << "Failed to delete blocks for: " << e->key << ", ret=" << ret << dendl;
       return ret;
@@ -1324,7 +1328,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
   rgw_user c_rgw_user = e->user; 
   //writing data to the backend
   //we need to create an atomic_writer
-  std::unique_ptr<rgw::sal::User> c_user = driver->get_user(c_rgw_user);
+  std::unique_ptr<rgw::sal::User> c_user = driver->get_next()->get_user(c_rgw_user);
 
   std::unique_ptr<rgw::sal::Bucket> c_bucket;
   rgw_bucket c_rgw_bucket = rgw_bucket(c_rgw_user.tenant, e->bucket_name, e->bucket_id);
@@ -1332,7 +1336,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
   RGWBucketInfo c_bucketinfo;
   c_bucketinfo.bucket = c_rgw_bucket;
   c_bucketinfo.owner = c_rgw_user;
-  ret = driver->load_bucket(dpp, c_rgw_bucket, &c_bucket, y);
+  ret = driver->get_next()->load_bucket(dpp, c_rgw_bucket, &c_bucket, y);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << __func__ << "(): load_bucket() returned ret=" << ret << dendl;
     return ret;
@@ -1370,7 +1374,7 @@ int LFUDAPolicy::do_writeback(const DoutPrefixProvider* dpp, LFUDAObjEntry* e, o
       return op_ret;
     }
   } else { //end-if delete_marker
-    std::unique_ptr<rgw::sal::Writer> processor =  driver->get_atomic_writer(dpp,
+    std::unique_ptr<rgw::sal::Writer> processor =  driver->get_next()->get_atomic_writer(dpp,
       y,
       c_obj.get(),
       owner,
@@ -1833,65 +1837,85 @@ void LFUDAPolicy::cleaning(const DoutPrefixProvider* dpp, optional_yield y)
         s = State::INIT;
         ret = do_writeback(dpp, *e, y);
       }
+
       // STEP 4: Handle processing result
-      if (ret < 0) {
-        // Processing failed - determine if we should retry or mark as permanently failed
-
-        if (is_transient_error(ret) && (*e)->retry_count < MAX_CLEANING_RETRY) {
-          // STEP 4a: Transient error - retry with deferral
-          std::unique_lock<std::mutex> retry_lock(lfuda_cleaning_lock);
-
-          // Reset entry state from IN_PROGRESS back to INIT/INVALID
-          // This allows the entry to be processed again when retried
-          // State transition: IN_PROGRESS -> INIT/INVALID (allows re-processing)
-          auto p = o_entries_map.find((*e)->key);
-          if (p != o_entries_map.end()) {
-            p->second.second = s;  // s is INIT (for writeback) or INVALID (for delete)
-          }
-
-          // Set retry deferral time to prevent tight retry loop on small heaps
-          // Why use next_retry_time instead of modifying creationTime?
-          // - creationTime is used as map key in per_obj_versions
-          // - Modifying it would reorder versions incorrectly
-          // - For do_delete, reordering is OK (entry is removed after deletion)
-          // - For do_writeback, reordering is NOT OK (entry is kept as clean)
-          (*e)->next_retry_time = ceph::real_clock::now() + std::chrono::seconds(interval / 2);
-
-          // Re-queue entry for retry
-          (*e)->retry_count++;
-          ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
-                             << "() deferring cleaning retry due to transient error ret=" << ret
-                             << " retry_count=" << (*e)->retry_count
-                             << " next_retry_time=" << (*e)->next_retry_time << dendl;
-
-          auto handle = object_heap.push(*e);
-          (*e)->set_handle(handle);
-          cond->notify(retry_lock);
-
-          // Reset e so it will be re-popped from heap on next iteration
-          // The retry deferral wait (STEP 2a) will ensure we don't process it too soon
-          e.reset();
-          continue;
-
-        } else {
-          // STEP 4b: Permanent failure or retry limit exceeded
-          // Action: Save to failed_entries for manual review/debugging
-          // Entry will still be removed from active tracking (erased below)
-
-          std::unique_lock<std::mutex> fail_lock(lfuda_cleaning_lock);
-          failed_entries.push_back(*(*e));
-          // Note: Entry falls through to erase_dirty_object below
+      // Special case: -EALREADY means entry was deferred by do_delete()
+      // Entry moved to later creationTime in per_obj_versions - allow version promotion
+      if (ret == -EALREADY) {
+        std::unique_lock<std::mutex> l(lfuda_cleaning_lock);
+        ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
+                            << "() entry deferred (active lease), moved in per_obj_versions"
+                            << dendl;
+        // Reset state from IN_PROGRESS back to INVALID so it can be re-processed when promoted
+        auto p = o_entries_map.find((*e)->key);
+        if (p != o_entries_map.end()) {
+          p->second.second = s;  // Back to INVALID
         }
-      }
-      // STEP 5: Cleanup - Remove entry from tracking
-      // erase_dirty_object() acquires its own lock and:
-      // - Removes from o_entries_map
-      // - Removes from per_obj_versions (using creationTime as map key)
-      // - Deletes the LFUDAObjEntry object
-      erase_dirty_object(dpp, (*e)->key, y);
+        l.unlock();
 
-      // Clear our local reference since entry is now deleted
-      e.reset();
+        // DON'T call erase_dirty_object - entry should remain in per_obj_versions
+        // Fall through to version promotion - allows next version to be cleaned
+        e.reset();
+        // Continue to STEP 6 (version promotion)
+      } else {
+        // ret < 0 (error) or ret == 0 (success)
+        if (ret < 0) {
+          // Processing failed - determine if we should retry or mark as permanently failed
+
+          if (is_transient_error(ret) && (*e)->retry_count < MAX_CLEANING_RETRY) {
+            // STEP 4a: Transient error - retry with deferral
+            std::unique_lock<std::mutex> retry_lock(lfuda_cleaning_lock);
+
+            // Reset entry state from IN_PROGRESS back to INIT/INVALID
+            // This allows the entry to be processed again when retried
+            // State transition: IN_PROGRESS -> INIT/INVALID (allows re-processing)
+            auto p = o_entries_map.find((*e)->key);
+            if (p != o_entries_map.end()) {
+              p->second.second = s;  // s is INIT (for writeback) or INVALID (for delete)
+            }
+
+            // Set retry deferral time to prevent tight retry loop on small heaps
+            // Why use next_retry_time instead of modifying creationTime?
+            // - creationTime is used as map key in per_obj_versions
+            // - Modifying it would reorder versions incorrectly
+            (*e)->next_retry_time = ceph::real_clock::now() + std::chrono::seconds(interval / 2);
+
+            // Re-queue entry for retry
+            (*e)->retry_count++;
+            ldpp_dout(dpp, 20) << "LFUDAPolicy::" << __func__
+                               << "() deferring cleaning retry due to transient error ret=" << ret
+                               << " retry_count=" << (*e)->retry_count
+                               << " next_retry_time=" << (*e)->next_retry_time << dendl;
+
+            auto handle = object_heap.push(*e);
+            (*e)->set_handle(handle);
+            cond->notify(retry_lock);
+
+            // Reset e so it will be re-popped from heap on next iteration
+            // The retry deferral wait (STEP 2a) will ensure we don't process it too soon
+            e.reset();
+            continue;
+
+          } else {
+            // STEP 4b: Permanent failure or retry limit exceeded
+            // Action: Save to failed_entries for manual review/debugging
+            // Entry will still be removed from active tracking (erased below)
+
+            std::unique_lock<std::mutex> fail_lock(lfuda_cleaning_lock);
+            failed_entries.push_back(*(*e));
+            // Note: Entry falls through to erase_dirty_object below
+          }
+        }
+        // STEP 5: Cleanup - Remove entry from tracking (for success or permanent failure)
+        // erase_dirty_object() acquires its own lock and:
+        // - Removes from o_entries_map
+        // - Removes from per_obj_versions (using creationTime as map key)
+        // - Deletes the LFUDAObjEntry object
+        erase_dirty_object(dpp, (*e)->key, y);
+
+        // Clear our local reference since entry is now deleted
+        e.reset();
+      }
 
       // STEP 6: Version Promotion - Process next version of same object
       // Versioned objects have multiple versions tracked in per_obj_versions:

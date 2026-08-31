@@ -6048,6 +6048,25 @@ void RGWDeleteObj::execute(optional_yield y)
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
       null_verid = (s->object->get_instance() == "null");
 
+#ifdef RGW_HAVE_D4N_FILTER
+      if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
+        if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
+          rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
+          d4n_obj->set_remote_cache_request();
+          if (auto object_dirty = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_DIRTY"); object_dirty) {
+            d4n_obj->set_remote_dirty_flag(object_dirty.get() == "true" || object_dirty.get() == "1" );
+          }
+          // object version, used to look up the version-specific head (like the GET path)
+          if (auto object_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_OBJECT_VERSION"); object_version) {
+            d4n_obj->set_object_version(object_version.get());
+          }
+          // non-empty only when the local RGW's delete created a delete marker to replicate
+          if (auto dm_version = s->info.env->get_optional("HTTP_X_RGW_CACHE_DELETE_MARKER_VERSION"); dm_version) {
+            d4n_obj->set_delete_marker_version(dm_version.get());
+          }
+        }
+      }
+#endif
       op_ret = state_loaded = s->object->load_obj_state(this, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -6152,14 +6171,6 @@ void RGWDeleteObj::execute(optional_yield y)
       if (s->info.env->get_optional("HTTP_X_RGW_CACHE_REQUEST"))
         s->object->set_cache_request();
 
-#ifdef RGW_HAVE_D4N_FILTER
-  if (g_conf().get_val<std::string>("rgw_filter") == "d4n") {
-    if (s->info.env->get_optional("HTTP_X_RGW_REMOTE_CACHE_REQUEST")) {
-      rgw::sal::D4NFilterObject* d4n_obj = dynamic_cast<rgw::sal::D4NFilterObject*>(s->object.get());
-      d4n_obj->set_remote_cache_request();
-    }
-  }
-#endif
 
       op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {

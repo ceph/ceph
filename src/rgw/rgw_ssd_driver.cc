@@ -652,11 +652,7 @@ void SSDDriver::process_data_block(const DoutPrefixProvider* dpp,
     rgw_user user = extract_user_from_attrs(dpp, attrs);
     std::string bucket_name = extract_attr_string(dpp, attrs, RGW_CACHE_ATTR_BUCKET_NAME);
 
-    // Mark invalid blocks as clean for eviction
-    if (invalidStr == "1") {
-        dirty = false;
-    }
-
+    // Invalid blocks remain dirty so obj_func creates object entry for cleaning thread
     block_func(dpp, key, offset, len, version, dirty, user, bucket_name, null_yield, localWeightStr);
     if (dirty) {
         obj_func(dpp, key, version, false, bucket_id, obj_key, instance, null_yield, invalidStr);
