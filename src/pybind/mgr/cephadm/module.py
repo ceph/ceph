@@ -3868,19 +3868,24 @@ Then run the following:
             raise OrchestratorError(f'Cannot find pool "{pool}" for '
                                     f'service {service_name}')
 
-    def _check_pool_not_erasure_coded(self, pool: str, service_name: str) -> None:
+    def _check_pool_supports_omap(self, pool: str, service_name: str) -> None:
         osd_map = self.get('osd_map')
         pools = osd_map.get('pools', []) if isinstance(osd_map, dict) else []
         for p in pools:
             if p['pool_name'] == pool:
-                if p.get('type') == 3:
-                    raise OrchestratorError(
-                        f'Pool "{pool}" is an erasure-coded pool. '
-                        f'Service "{service_name}" requires a replicated pool '
-                        f'because it uses OMAP objects which are not supported '
-                        f'on erasure-coded pools.'
-                    )
-                return
+                if p.get('type') == 1:
+                    return
+                flags_names = p.get('flags_names', '')
+                if 'supports_omap' in flags_names:
+                    return
+                raise OrchestratorError(
+                    f'Pool "{pool}" does not support OMAP. '
+                    f'Service "{service_name}" requires a pool with OMAP support '
+                    f'because it uses OMAP objects for gateway state. '
+                    f'Use a replicated pool, or enable OMAP support on the '
+                    f'erasure-coded pool with '
+                    f'"ceph osd pool set {pool} allow_ec_optimizations true".'
+                )
 
     def _add_daemon(self,
                     daemon_type: str,
@@ -4675,7 +4680,7 @@ Then run the following:
                 NvmeofMetadataPoolHelper(self).create_pool_if_needed()
             try:
                 self._check_pool_exists(nvmeof_spec.pool, nvmeof_spec.service_name())
-                self._check_pool_not_erasure_coded(nvmeof_spec.pool, nvmeof_spec.service_name())
+                self._check_pool_supports_omap(nvmeof_spec.pool, nvmeof_spec.service_name())
             except OrchestratorError as e:
                 self.log.debug(f"{e}")
                 raise
