@@ -1034,7 +1034,7 @@ class RgwClient(RestClient):
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
-    def list_roles(self, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def _fetch_roles_raw(self, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
         rgw_list_roles_command = ['role', 'list']
         if account_id:
             rgw_list_roles_command += ['--account-id', account_id]
@@ -1045,6 +1045,29 @@ class RgwClient(RestClient):
 
         if isinstance(roles, dict):
             roles = roles.get('Roles', [])
+        return roles if isinstance(roles, list) else []
+
+    def list_roles(self, account_id: Optional[str] = None) -> List[Dict[str, Any]]:
+        roles = self._fetch_roles_raw(account_id)
+        if account_id:
+            all_roles = self._fetch_roles_raw(None)
+            existing_names = set()
+            for role_entry in roles:
+                role_dict = (role_entry.get('member', role_entry)
+                             if isinstance(role_entry, dict) and 'member' in role_entry
+                             else role_entry)
+                if isinstance(role_dict, dict) and 'RoleName' in role_dict:
+                    existing_names.add(role_dict['RoleName'])
+            for role_entry in all_roles:
+                role_dict = (role_entry.get('member', role_entry)
+                             if isinstance(role_entry, dict) and 'member' in role_entry
+                             else role_entry)
+                if isinstance(role_dict, dict):
+                    role_account_id = role_dict.get('AccountId', '')
+                    # Include matching account roles or unassigned/global roles (empty AccountId)
+                    if ((not role_account_id or role_account_id == account_id) and
+                            role_dict.get('RoleName') not in existing_names):
+                        roles.append(role_entry)
 
         result = []
         for role in roles:
@@ -1117,6 +1140,9 @@ class RgwClient(RestClient):
         if account_id:
             rgw_get_role_command += ['--account-id', account_id]
         code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
+        if code != 0 and account_id:
+            rgw_get_role_command = ['role', 'get', '--role-name', role_name]
+            code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
         if code != 0:
             raise DashboardException(msg=f'Error getting role with code {code}: {_err}',
                                      component='rgw')
@@ -1132,6 +1158,11 @@ class RgwClient(RestClient):
             rgw_update_role_command += ['--account-id', account_id]
         code, _, _err = mgr.send_rgwadmin_command(rgw_update_role_command,
                                                   stdout_as_json=False)
+        if code != 0 and account_id:
+            rgw_update_role_command = ['role', 'update', '--role-name',
+                                       role_name, '--max_session_duration', max_session_duration]
+            code, _, _err = mgr.send_rgwadmin_command(rgw_update_role_command,
+                                                      stdout_as_json=False)
         if code != 0:
             raise DashboardException(msg=f'Error updating role with code {code}: {_err}',
                                      component='rgw')
@@ -1142,6 +1173,10 @@ class RgwClient(RestClient):
             rgw_delete_role_command += ['--account-id', account_id]
         code, _, _err = mgr.send_rgwadmin_command(rgw_delete_role_command,
                                                   stdout_as_json=False)
+        if code != 0 and account_id:
+            rgw_delete_role_command = ['role', 'delete', '--role-name', role_name]
+            code, _, _err = mgr.send_rgwadmin_command(rgw_delete_role_command,
+                                                      stdout_as_json=False)
         if code != 0:
             raise DashboardException(msg=f'Error deleting role with code {code}: {_err}',
                                      component='rgw')
