@@ -1192,7 +1192,8 @@ Effect evaluate_iam_policies(
     bool account_root, uint64_t op, const rgw::ARN& arn,
     const boost::optional<Policy>& resource_policy,
     const vector<Policy>& identity_policies,
-    const vector<Policy>& session_policies)
+    const vector<Policy>& session_policies,
+    bool cross_account)
 {
   auto identity_res = eval_identity_or_session_policies(dpp, identity_policies, env, op, arn);
   if (identity_res == Effect::Deny) {
@@ -1271,9 +1272,11 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             bool mandatory_policy)
 {
   const bool account_root = (s->identity->get_identity_type() == TYPE_ROOT);
+  constexpr bool cross_account = false;
   const auto effect = evaluate_iam_policies(dpp, s->env, *s->identity,
                                             account_root, op, res, {},
-                                            user_policies, session_policies);
+                                            user_policies, session_policies,
+                                            cross_account);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1362,7 +1365,9 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 			      const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
-                              const uint64_t op, bool* granted_by_acl)
+                              const uint64_t op,
+                              bool cross_account,
+                              bool* granted_by_acl)
 {
   if (!verify_requester_payer_permission(s))
     return false;
@@ -1383,7 +1388,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
   const auto effect = evaluate_iam_policies(
       dpp, s->env, *s->identity, account_root, op, arn,
-      bucket_policy, identity_policies, session_policies);
+      bucket_policy, identity_policies, session_policies, cross_account);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1418,27 +1423,32 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
     if (!ps.identity->is_owner_of(s->bucket_owner.id)) {
       ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
           << s->bucket_owner.id << " != " << s->owner.id << dendl;
+      constexpr bool cross_account = true;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       return verify_bucket_permission(dpp, &ps, arn, account_root, {}, {}, {},
                                       user_policies, session_policies, op,
-                                      &s->granted_by_acl)
+                                      cross_account, &s->granted_by_acl)
           && verify_bucket_permission(dpp, &ps, arn, false, user_acl,
                                       bucket_acl, bucket_policy, {}, {}, op,
-                                      &s->granted_by_acl);
+                                      cross_account, &s->granted_by_acl);
     } else {
+      constexpr bool cross_account = false;
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
       return verify_bucket_permission(dpp, &ps, arn, account_root, {}, {},
                                       bucket_policy, user_policies,
-                                      session_policies, op, &s->granted_by_acl);
+                                      session_policies, op,
+                                      cross_account, &s->granted_by_acl);
     }
   }
   constexpr bool account_root = false;
+  constexpr bool cross_account = false;
   return verify_bucket_permission(dpp, &ps, arn, account_root,
                                   user_acl, bucket_acl,
                                   bucket_policy, user_policies,
-                                  session_policies, op, &s->granted_by_acl);
+                                  session_policies, op,
+                                  cross_account, &s->granted_by_acl);
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
@@ -1534,7 +1544,9 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
                               const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
-                              const uint64_t op, bool* granted_by_acl)
+                              const uint64_t op,
+                              bool cross_account,
+                              bool* granted_by_acl)
 {
   if (!verify_requester_payer_permission(ps))
     return false;
@@ -1550,7 +1562,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 
   const auto effect = evaluate_iam_policies(
       dpp, ps->env, *ps->identity, account_root, op, ARN(obj),
-      bucket_policy, identity_policies, session_policies);
+      bucket_policy, identity_policies, session_policies, cross_account);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1589,28 +1601,33 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
     if (!ps.identity->is_owner_of(object_owner)) {
       ldpp_dout(dpp, 4) << "cross-account request for object owner "
           << object_owner << " != " << s->owner.id << dendl;
+      constexpr bool cross_account = true;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       return verify_object_permission(dpp, &ps, obj, account_root, {}, {}, {}, {},
                                       identity_policies, session_policies, op,
-                                      &s->granted_by_acl)
+                                      cross_account, &s->granted_by_acl)
           && verify_object_permission(dpp, &ps, obj, false,
                                       user_acl, bucket_acl, object_acl,
-                                      bucket_policy, {}, {}, op, &s->granted_by_acl);
+                                      bucket_policy, {}, {}, op,
+                                      cross_account, &s->granted_by_acl);
     } else {
+      constexpr bool cross_account = false;
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
       return verify_object_permission(dpp, &ps, obj, account_root, {}, {}, {},
                                       bucket_policy, identity_policies,
-                                      session_policies, op, &s->granted_by_acl);
+                                      session_policies, op,
+                                      cross_account, &s->granted_by_acl);
     }
   }
   constexpr bool account_root = false;
+  constexpr bool cross_account = false;
   return verify_object_permission(dpp, &ps, obj, account_root,
                                   user_acl, bucket_acl,
                                   object_acl, bucket_policy,
                                   identity_policies, session_policies, op,
-                                  &s->granted_by_acl);
+                                  cross_account, &s->granted_by_acl);
 }
 
 bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
