@@ -13,6 +13,7 @@ overrides:
     - but it is still running
     - overall HEALTH_
     - \(POOL_APP_NOT_ENABLED\)
+    - MDS_ALL_DOWN
 
 tasks:
 - install:
