@@ -137,6 +137,13 @@ check "list: stray between bucket and list" 1 "ERROR: Unrecognized argument: 'ex
 check "list: unrecognized flag" 22 'ERROR: invalid flag --fakeflag' bucket list --fakeflag
 
 # missing option value
+# Leaving the value out is the way to check that an option is defined as
+# taking a value: a value-taking option should reject the command when its
+# value is missing. These rows also verify that each option is defined for
+# the command where it is expected to be valid. The same option therefore
+# gets a row under each command where it is expected to be valid. In CLI11,
+# for example, an option that is not registered for the command may result
+# in an error or a warning.
 check "list: --bucket missing value" 1 'Option --bucket requires an argument.' bucket list --bucket
 check "list: --uid missing value" 1 'Option --uid requires an argument.' bucket list --uid
 check "list: --bucket-id missing value" 1 'Option --bucket-id requires an argument.' bucket list --bucket-id

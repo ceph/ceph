@@ -108,6 +108,13 @@ check_cluster "put: missing both"             22 "ERROR: context was not provide
   script put
 
 # missing option value
+# Leaving the value out is the way to check that an option is defined as
+# taking a value: a value-taking option should reject the command when its
+# value is missing. This also verifies that each option is defined for the
+# command where it is expected to be valid. The same option therefore gets a
+# row under each command where it is expected to be valid. In CLI11, for
+# example, an option that is not registered for the command may result in an
+# error or a warning.
 check "put: --context missing value" 1 "Option --context requires an argument." \
   script put --context
 check "put: --infile missing value"  1 "Option --infile requires an argument." \
