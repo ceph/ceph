@@ -402,6 +402,7 @@ class D4NFilterDriver : public FilterDriver {
     auto get_d4n_executor() {
       return d4n_thread_pool->get_executor();
     }
+    Driver* get_next() { return next; }
 };
 
 class D4NFilterUser : public FilterUser {
@@ -502,6 +503,7 @@ class D4NFilterObject : public FilterObject {
     bool attrs_read_from_cache{false};
     bool cache_request{false};
     bool remote_cache_request{false}; //sent by another rgw
+    std::string delete_marker_version; //version of a delete marker to replicate on the remote rgw
     // Lease management for concurrent GET/PUT protection
     std::string lease_resource;    // Unique lease key for this GET
     std::string lease_holder;      // Holder ID (node/process)
@@ -662,12 +664,14 @@ class D4NFilterObject : public FilterObject {
     int set_head_block_dir_entry(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs, bool is_latest_version = true, bool dirty = false);
     int set_data_block_dir_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
     int delete_data_block_cache_entries(const DoutPrefixProvider* dpp, optional_yield y, std::string& version, bool dirty = false);
-    bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y);
+    bool check_head_exists_in_cache_get_oid(const DoutPrefixProvider* dpp, std::string& head_oid_in_cache, rgw::sal::Attrs& attrs, rgw::d4n::CacheBlock& blk, optional_yield y, bool acquire_lease = false);
     rgw::sal::Bucket* get_destination_bucket(const DoutPrefixProvider* dpp) { return dest_bucket;}
     rgw::sal::Object* get_destination_object(const DoutPrefixProvider* dpp) { return dest_object; }
     bool is_multipart() { return multipart; }
     int set_attr_crypt_parts(const DoutPrefixProvider* dpp, optional_yield y, rgw::sal::Attrs& attrs);
-    int create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y);
+    int create_delete_marker(const DoutPrefixProvider* dpp, optional_yield y,
+                             const std::string& forced_version = "",
+                             bool remote = false);
     bool is_delete_marker() { return delete_marker; }
     bool exists(void) override { if (exists_in_cache) { return true;} return next->exists(); };
     bool load_obj_from_store() { return load_from_store; }
@@ -684,6 +688,10 @@ class D4NFilterObject : public FilterObject {
     uint64_t get_remote_block_len() { return blk_len; }
 	const bool get_remote_dirty_flag() {return remote_dirty;}
 	void set_remote_dirty_flag(bool flag) {remote_dirty = flag;}
+    // Version of the delete marker to be replicated on the remote RGW. Empty when
+    // the delete op does not create a delete marker.
+    const std::string get_delete_marker_version() { return delete_marker_version; }
+    void set_delete_marker_version(const std::string& v) { delete_marker_version = v; }
     bool get_remote_block_only() const { return block_only; }
     void set_remote_obj_size(uint64_t size) { obj_size = size; }
     void set_remote_block_only(bool flag) { block_only = flag; }
