@@ -2822,6 +2822,16 @@ class TestPull:
             _cephadm.command_pull(ctx)
         assert err in str(e.value)
 
+        _call.return_value = (
+            '',
+            'failed to copy: httpReadSeeker: failed open: failed to do request: '
+            'Get "https://cdn01.quay.io/quayio-production-s3/sha256/f8/f8a4970c": EOF',
+            1,
+        )
+        with pytest.raises(_cephadm.Error) as e:
+            _cephadm.command_pull(ctx)
+        assert err in str(e.value)
+
     @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
     @mock.patch('cephadm.infer_local_ceph_image', return_value='last_local_ceph_image')
     def test_image(self, _infer_local_ceph_image, _get_image_info_from_inspect):
