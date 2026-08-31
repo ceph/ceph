@@ -15,6 +15,17 @@
       {{ action | titlecase }} {{ resource | upperFirst }}
     </div>
 
+    <cd-alert-panel
+      *ngIf="editing && !isDashboardUser"
+      type="info"
+      spacingClass="mb-3"
+      i18n
+    >
+      Renaming a user with existing buckets re-assigns bucket and object ownership. This process may
+      take time for large datasets, and active S3 client operations may experience temporary
+      AccessDenied errors until completed.
+    </cd-alert-panel>
+
     @if (accounts.length > 0) {
       <!-- Link Account -->
       <div class="form-item">
@@ -92,6 +103,7 @@
         cdRequiredField="User ID"
         [invalid]="userForm.controls.user_id.invalid && userForm.controls.user_id.dirty"
         [invalidText]="userError"
+        [helperText]="isDashboardUser ? dashboardUserHelper : null"
         >User ID
         <input
           cdsText
@@ -99,10 +111,13 @@
           name="user_id"
           id="user_id"
           [invalid]="userForm.controls.user_id.invalid && userForm.controls.user_id.dirty"
-          [readonly]="editing"
+          [readonly]="isDashboardUser"
           [autofocus]="!editing"
         />
       </cds-text-label>
+      <ng-template #dashboardUserHelper>
+        <span i18n>The RGW user used by the Dashboard API cannot be renamed.</span>
+      </ng-template>
       <ng-template #userError>
         <span
           class="invalid-feedback"
@@ -123,6 +138,14 @@
           "
           i18n
           >The chosen user ID is already in use.</span
+        >
+        <span
+          class="invalid-feedback"
+          *ngIf="
+            userForm.getValue('show_tenant') && userForm.showError('user_id', frm, 'notUnique')
+          "
+          i18n
+          >The chosen user ID exists in this tenant.</span
         >
       </ng-template>
     </div>
