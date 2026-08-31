@@ -2513,8 +2513,22 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
       get_osdmap(), info.pgid.pgid.pool(), obj_seq);
 
     if (rb_source != CEPH_NOSNAP) {
+      // rb_source is the snap ID the user wants to roll back to.  The clone
+      // that holds that content is not necessarily named rb_source — it is
+      // the first clone in the snapset whose ID is >= rb_source (the same
+      // logic used by find_object_context for snap reads).
+      const auto& clones = obc->ssc->snapset.clones; // ascending
+      auto cit = std::lower_bound(clones.begin(), clones.end(), rb_source);
+
       hobject_t redirect_oid = obc->obs.oi.soid;
-      redirect_oid.snap = rb_source;
+      if (cit == clones.end()) {
+        // No clone covers rb_source: object did not exist at that snap.
+        dout(10) << __func__ << " rollback redirect: no clone >= " << rb_source
+                 << " in " << clones << ", returning ENOENT" << dendl;
+        osd->reply_op_error(op, -ENOENT);
+        return;
+      }
+      redirect_oid.snap = *cit;
 
       ObjectContextRef redirect_obc = get_object_context(redirect_oid, false);
       if (!redirect_obc || !redirect_obc->obs.exists) {
@@ -8879,6 +8893,7 @@ PrimaryLogPG::build_pending_ops(
 hobject_t PrimaryLogPG::execute_clone_plan(
   const hobject_t& soid,
   const std::vector<pending_op_t>& ops,
+  const SnapSet& ss,
   PGTransaction* t)
 {
   // head_source tracks which object currently holds the logical head content.
@@ -8897,12 +8912,21 @@ hobject_t PrimaryLogPG::execute_clone_plan(
 
     } else {
       // ROLLBACK: clone source snapshot content to head.
-      // If the source snap does not exist (the object was never written before
-      // this snapshot was taken), the rollback is a no-op for this object.
-      hobject_t src_clone = soid;
-      src_clone.snap = op.source;
+      // op.source is the snap ID the user requested; the actual clone holding
+      // that content is the first clone with ID >= op.source (same lookup
+      // used by find_object_context).  If no such clone exists the object
+      // predates the rollback snapshot and the rollback is a no-op.
+      const auto& clones = ss.clones;  // ascending
+      auto cit = std::lower_bound(clones.begin(), clones.end(), op.source);
 
-      ObjectContextRef src_obc = get_object_context(src_clone, false);
+      hobject_t src_clone = soid;
+      if (cit != clones.end()) {
+        src_clone.snap = *cit;
+      }
+
+      ObjectContextRef src_obc = (cit != clones.end())
+        ? get_object_context(src_clone, false)
+        : nullptr;
       if (!src_obc) {
         // Source clone does not exist: object predates the pool rollback snap,
         // so there is nothing to restore.  Skip both the clone and any
@@ -9152,7 +9176,7 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     // clone -- name after the highest *real* snapshot ID, not snapc.seq which
     // may be a rollback ID that was never inserted into pg_pool_t::snaps.
     hobject_t coid = soid;
-    coid.snap = ctx->real_snap_seq;
+    coid.snap = ctx->real_snap_seq ? ctx->real_snap_seq : snapc.seq;
 
     const auto snaps = [&] {
       auto last = find_if_not(
@@ -9256,14 +9280,20 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     jit_ctx->new_snapset = ctx->new_snapset;
 
     // Emit clone operations for the rollback ops into jit_ctx->op_t (T1).
-    execute_clone_plan(soid, jit_ops, jit_ctx->op_t.get());
+    execute_clone_plan(soid, jit_ops, jit_ctx->new_snapset, jit_ctx->op_t.get());
 
     // Register OBCs for rollback source clones so EC's get_write_plan can
     // look them up from the transaction's obc_map.
     for (auto& op : jit_ops) {
       if (op.type == pending_op_t::ROLLBACK) {
+        // Resolve op.source to the clone that actually holds that content.
+        const auto& clones = jit_ctx->new_snapset.clones;
+        auto cit = std::lower_bound(clones.begin(), clones.end(), op.source);
+        if (cit == clones.end()) {
+          continue;
+        }
         hobject_t src_clone = soid;
-        src_clone.snap = op.source;
+        src_clone.snap = *cit;
         ObjectContextRef src_obc = get_object_context(src_clone, false);
         if (src_obc) {
           jit_ctx->op_t->add_obc(src_obc);

@@ -1244,9 +1244,12 @@ protected:
   // execute_clone_plan() walks pending_ops and emits clone operations into t.
   // Returns the hobject_t that now holds the logical head content after all
   // rollbacks (may be a source clone, or soid itself if no rollback was last).
+  // ss is the current SnapSet, used to resolve a rollback source_snap to the
+  // clone that actually holds that content.
   hobject_t execute_clone_plan(
     const hobject_t& soid,
     const std::vector<pending_op_t>& ops,
+    const SnapSet& ss,
     PGTransaction* t);
 
   // update_snapset_for_rollback() updates SnapSet metadata for newly created
