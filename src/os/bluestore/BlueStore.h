@@ -3404,7 +3404,8 @@ private:
     OnodeRef& o,
     uint32_t offset,
     uint32_t length,
-    ceph::buffer::list& bl);
+    ceph::buffer::list& bl,
+    uint32_t op_flags = 0);
 
   int _do_readv(
     Collection *c,
@@ -3795,39 +3796,46 @@ private:
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
       BlobRef b;
-      uint64_t blob_length;
-      uint64_t b_off;
-      ceph::buffer::list bl;
-      uint64_t b_off0; ///< original offset in a blob prior to padding
-      uint64_t length0; ///< original data length prior to padding
+      uint64_t b_off_orig;    ///< original offset in a blob
+      uint64_t b_off;         ///< offset in a blob with padding applied
+      ceph::buffer::list orig_bl;
+      ceph::buffer::list ondisk_bl;
 
       bool mark_unused;
       bool new_blob; ///< whether new blob was created
 
       bool compressed = false;
-      ceph::buffer::list compressed_bl;
-      size_t compressed_len = 0;
+      size_t compressed_len = 0; ///< the size of the compressed data without padding
 
       write_item(
 	uint64_t logical_offs,
         BlobRef b,
-        uint64_t blob_len,
-        uint64_t o,
+        uint64_t blob_offs,
         ceph::buffer::list& bl,
-        uint64_t o0,
-        uint64_t l0,
         bool _mark_unused,
 	bool _new_blob)
        :
          logical_offset(logical_offs),
          b(b),
-         blob_length(blob_len),
-         b_off(o),
-         bl(bl),
-         b_off0(o0),
-         length0(l0),
+         b_off_orig(blob_offs),
+         b_off(blob_offs),
+         orig_bl(bl),
          mark_unused(_mark_unused),
 	 new_blob(_new_blob) {}
+      size_t get_original_length() { return orig_bl.length(); }
+      ceph::bufferlist& get_original_data() { return orig_bl;}
+      size_t get_ondisk_length() { return get_ondisk_data().length(); }
+      ceph::bufferlist& get_ondisk_data() { return ondisk_bl.size() ? ondisk_bl : orig_bl; }
+
+      void set_compressed_data(size_t _compressed_len, ceph::bufferlist&& bl) {
+        compressed = true;
+        compressed_len = _compressed_len;
+        ondisk_bl.swap(bl);
+      }
+      void set_padded_data(uint64_t _b_off, ceph::bufferlist&& bl) {
+        b_off = _b_off;
+        ondisk_bl.swap(bl);
+      }
     };
     std::vector<write_item> writes;                 ///< blobs we're writing
 
@@ -3842,20 +3850,14 @@ private:
     void write(
       uint64_t loffs,
       BlobRef b,
-      uint64_t blob_len,
-      uint64_t o,
+      uint64_t blob_off,
       ceph::buffer::list& bl,
-      uint64_t o0,
-      uint64_t len0,
       bool _mark_unused,
       bool _new_blob) {
       writes.emplace_back(loffs,
                           b,
-                          blob_len,
-                          o,
+                          blob_off,
                           bl,
-                          o0,
-                          len0,
                           _mark_unused,
                           _new_blob);
     }
@@ -3915,8 +3917,8 @@ private:
 	     uint64_t offset, size_t len,
 	     ceph::buffer::list& bl,
 	     uint32_t fadvise_flags);
-  void _pad_zeros(ceph::buffer::list *bl, uint64_t *offset,
-		  uint64_t chunk_size);
+  size_t _pad_zeros(ceph::buffer::list *bl, uint64_t *offset,
+		    uint64_t chunk_size);
 
   void _choose_write_options(CollectionRef& c,
                              OnodeRef& o,

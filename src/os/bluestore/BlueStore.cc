@@ -5144,7 +5144,8 @@ bool BlueStore::WriteContext::has_conflict(
   for (auto w : writes) {
     if (b == w.b) {
       auto loffs2 = p2align(w.logical_offset, min_alloc_size);
-      auto loffs2_end = p2roundup(w.logical_offset + w.length0, min_alloc_size);
+      auto loffs2_end = p2roundup(w.logical_offset + w.get_original_length(),
+        min_alloc_size);
       if ((loffs <= loffs2 && loffs_end > loffs2) ||
           (loffs >= loffs2 && loffs < loffs2_end)) {
         return true;
@@ -13414,9 +13415,10 @@ void inline BlueStore::_do_read_and_pad(
   OnodeRef& o,
   uint32_t offset,
   uint32_t length,
-  ceph::buffer::list& bl)
+  ceph::buffer::list& bl,
+  uint32_t op_flags)
 {
-  int r = _do_read(c, o, offset, length, bl, 0);
+  int r = _do_read(c, o, offset, length, bl, op_flags);
   ceph_assert(r >= 0 && r <= (int)length);
   size_t zlen = length - r;
   if (zlen > 0) {
@@ -16628,7 +16630,7 @@ int BlueStore::_touch(TransContext *txc,
   return r;
 }
 
-void BlueStore::_pad_zeros(
+size_t BlueStore::_pad_zeros(
   bufferlist *bl, uint64_t *offset,
   uint64_t chunk_size)
 {
@@ -16688,6 +16690,7 @@ void BlueStore::_pad_zeros(
   if (pad_count)
     logger->inc(l_bluestore_write_pad_bytes, pad_count);
   ceph_assert(bl->length() == length);
+  return pad_count;
 }
 
 void BlueStore::_do_write_small(
@@ -16702,7 +16705,7 @@ void BlueStore::_do_write_small(
 	   << std::dec << dendl;
   ceph_assert(length < min_alloc_size);
 
-  uint64_t end_offs = offset + length;
+  const uint64_t end_offs = offset + length;
 
   logger->inc(l_bluestore_write_small);
   logger->inc(l_bluestore_write_small_bytes, length);
@@ -16710,23 +16713,19 @@ void BlueStore::_do_write_small(
   bufferlist bl;
   blp.copy(length, bl);
 
-  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
-  auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
-  uint32_t alloc_len = min_alloc_size;
-  auto offset0 = p2align<uint64_t>(offset, alloc_len);
-
-  bool any_change;
+  const auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
+  const auto max_off = offset + max_bsize;
+  const auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
 
   // search suitable extent in both forward and reverse direction in
   // [offset - target_max_blob_size, offset + target_max_blob_size] range
   // then check if blob can be reused via can_reuse_blob func or apply
   // direct/deferred write (the latter for extents including or higher
   // than 'offset' only).
-  o->extent_map.fault_range(db, min_off, offset + max_bsize - min_off);
-
+  o->extent_map.fault_range(db, min_off, max_off - min_off);
   // Look for an existing mutable blob we can use.
-  auto begin = o->extent_map.extent_map.begin();
-  auto end = o->extent_map.extent_map.end();
+  const auto begin = o->extent_map.extent_map.begin();
+  const auto end = o->extent_map.extent_map.end();
   auto ep = o->extent_map.seek_lextent(offset);
   if (ep != begin) {
     --ep;
@@ -16739,29 +16738,55 @@ void BlueStore::_do_write_small(
     prev_ep = ep;
     --prev_ep;
   }
+  auto start_ep = ep;
+  auto end_ep = ep; // exclusively
+  uint64_t min_seen_off = offset;
+  uint64_t max_seen_off = offset;
 
   boost::container::flat_set<const bluestore_blob_t*> inspected_blobs;
   // We don't want to have more blobs than min alloc units fit
   // into 2 max blobs
   size_t blob_threshold = max_blob_size / min_alloc_size * 2 + 1;
   bool above_blob_threshold = false;
-
   inspected_blobs.reserve(blob_threshold);
 
-  uint64_t max_off = 0;
-  auto start_ep = ep;
-  auto end_ep = ep; // exclusively
+  const auto alloc_aligned_offset = p2align<uint64_t>(offset, min_alloc_size);
+  BlobRef candidate_blob;
+  uint64_t candidate_blob_off = 0;
+  auto can_reuse_blob = [&](BlobRef b, uint32_t bstart) {
+    // try to reuse blob if we can
+    uint32_t alloc_len = min_alloc_size;
+    if (b->can_reuse_blob(min_alloc_size,
+                          max_bsize,
+			  alloc_aligned_offset - bstart,
+			  &alloc_len)) {
+      // expecting data always fit into reused blob
+      ceph_assert(alloc_len == min_alloc_size);
+      // Need to check for pending writes desiring to
+      // reuse the same pextent. The rationale is that during GC two chunks
+      // from garbage blobs(compressed?) can share logical space within the same
+      // AU. That's in turn might be caused by unaligned len in clone_range2.
+      // Hence the second write will fail in an attempt to reuse blob at
+      // do_alloc_write().
+      if (!wctx->has_conflict(b,
+			      alloc_aligned_offset,
+			      alloc_aligned_offset + alloc_len,
+			      min_alloc_size)) {
+	candidate_blob = b;
+	candidate_blob_off = offset - bstart;
+	return true;
+      }
+    }
+    return false;
+  };
+
+  bool any_change;
   do {
     any_change = false;
 
-    if (ep != end && ep->logical_offset < offset + max_bsize) {
+    if (ep != end && ep->logical_offset < max_off) {
       BlobRef b = ep->blob;
-      if (!above_blob_threshold) {
-	inspected_blobs.insert(&b->get_blob());
-	above_blob_threshold = inspected_blobs.size() >= blob_threshold;
-      }
-      max_off = ep->logical_end();
-      auto bstart = ep->blob_start();
+      uint32_t bstart = ep->blob_start();
 
       dout(20) << __func__ << " considering " << *b
 	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
@@ -16774,265 +16799,122 @@ void BlueStore::_do_write_small(
 	dout(20) << __func__ << " ignoring offset-skewed " << *b << dendl;
       } else {
 	uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
-	// can we pad our head/tail out with zeros?
-	uint64_t head_pad, tail_pad;
-	head_pad = p2phase(offset, chunk_size);
-	tail_pad = p2nphase(end_offs, chunk_size);
-	if (head_pad || tail_pad) {
-	  o->extent_map.fault_range(db, offset - head_pad,
-				    end_offs - offset + head_pad + tail_pad);
-	}
-	if (head_pad &&
-	    o->extent_map.has_any_lextents(offset - head_pad, head_pad)) {
-	  head_pad = 0;
-	}
-	if (tail_pad && o->extent_map.has_any_lextents(end_offs, tail_pad)) {
-	  tail_pad = 0;
-	}
+	// Should we pad our head/tail with zeros or existing data
+	uint64_t head_pad0 = p2phase(offset - bstart, chunk_size);
+	uint64_t tail_pad0 = p2nphase(end_offs - bstart, chunk_size);
 
-	uint64_t b_off = offset - head_pad - bstart;
-	uint64_t b_len = length + head_pad + tail_pad;
+	// Aligned offset within blob
+	uint64_t b_off0 = offset - bstart - head_pad0;
+	// Aligned length within blob
+	uint64_t b_len = length + head_pad0 + tail_pad0;
+	if(b_off0 % chunk_size == 0 && b_len % chunk_size == 0 &&
+           head_pad0 + tail_pad0 < min_alloc_size &&
+	   b->get_blob().is_allocated(b_off0, b_len)) {
+	  auto head_pad = head_pad0;
+	  auto tail_pad = tail_pad0;
+	  bool unused = true;
+	  if (head_pad &&
+	      o->extent_map.has_any_lextents(offset - head_pad, head_pad)) {
+	    // read and pad the head
+	    bufferlist head_bl;
+	    _do_read_and_pad(c.get(), o, offset - head_pad, head_pad,
+	      head_bl,
+	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+	    head_bl.claim_append(bl);
+	    bl.swap(head_bl);
+	    head_pad = 0;
+	    unused = false;
+	  }
+	  if (tail_pad &&
+	      o->extent_map.has_any_lextents(end_offs, tail_pad)) {
+	    // read and pad the tail
+	    bufferlist tail_bl;
+	    _do_read_and_pad(c.get(), o, end_offs, tail_pad,
+	      tail_bl,
+	      CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+	    bl.claim_append(tail_bl);
+	    tail_pad = 0;
+	    unused = false;
+	  }
+	  // pad head or tail or both if not yet padded
+	  _apply_padding(head_pad, tail_pad, bl);
+	  unused = unused && b->get_blob().is_unused(b_off0, b_len);
 
-        // direct write into unused blocks of an existing mutable blob?
-        if ((b_off % chunk_size == 0 && b_len % chunk_size == 0) &&
-            b->get_blob().get_ondisk_capacity() >= b_off + b_len &&
-            b->get_blob().is_unused(b_off, b_len) &&
-            b->get_blob().is_allocated(b_off, b_len)) {
-          _buffer_cache_write(txc, o, offset, bl,
-                              wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-          _apply_padding(head_pad, tail_pad, bl);
+	  dout(20) << __func__
+	           << (unused ? " to unused 0x" : " overwrite 0x")
+	           << std::hex << b_off0 << "~" << b_len
+		   << " pad 0x" << head_pad0 << " + 0x" << tail_pad0
+		   << " go deferred " << bool(b_len < prefer_deferred_size || !unused)
+		   << std::dec << " of mutable " << *b
+		   << dendl;
+	  _buffer_cache_write(txc, o, bstart + b_off0, bl,
+	    wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-          dout(20) << __func__ << "  write to unused 0x" << std::hex << b_off
-                   << "~" << b_len << " pad 0x" << head_pad << " + 0x"
-                   << tail_pad << std::dec << " of mutable " << *b << dendl;
+	  b->dirty_blob().calc_csum(b_off0, bl);
 
           if (!g_conf()->bluestore_debug_omit_block_device_write) {
-          if (b_len < prefer_deferred_size) {
-              dout(20) << __func__ << " deferring small 0x" << std::hex
-		       << b_len << std::dec << " unused write via deferred" << dendl;
-              bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
-              op->op = bluestore_deferred_op_t::OP_WRITE;
-              b->get_blob().map(
-		b_off, b_len,
-                                [&](uint64_t offset, uint64_t length) {
-                                  op->extents.emplace_back(bluestore_pextent_t(offset, length));
-                                  return 0;
-                                });
-              op->data = bl;
-          } else {
-              b->get_blob().map_bl(
-                  b_off, bl,
-		[&](uint64_t offset, bufferlist& t) {
-                    bdev->aio_write(offset, t,
-				  &txc->ioc, wctx->buffered);
-                  });
+	    if (b_len < prefer_deferred_size || !unused) {
+		bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
+		op->op = bluestore_deferred_op_t::OP_WRITE;
+		op->data = bl;
+		int r = b->get_blob().map(
+		  b_off0, b_len,
+		    [&](uint64_t offset, uint64_t length) {
+		      op->extents.emplace_back(bluestore_pextent_t(offset, length));
+		      return 0;
+		    });
+		ceph_assert(r == 0);
+	    } else {
+		b->get_blob().map_bl(
+		    b_off0, bl,
+		  [&](uint64_t offset, bufferlist& t) {
+		      bdev->aio_write(offset, t,
+				    &txc->ioc, wctx->buffered);
+		   });
+	    }
           }
-          }
-          b->dirty_blob().calc_csum(b_off, bl);
           dout(20) << __func__ << "  lex old " << *ep << dendl;
-          Extent *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
+          Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
 						 b,
 						 &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
-
 	  txc->statfs_delta.stored() += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
-	  logger->inc(l_bluestore_write_small_unused);
+	  logger->inc(unused ?
+	    l_bluestore_write_small_unused :
+	    l_bluestore_write_small_pre_read);
 	  return;
 	}
-	// read some data to fill out the chunk?
-	uint64_t head_read = p2phase(b_off, chunk_size);
-	uint64_t tail_read = p2nphase(b_off + b_len, chunk_size);
-	if ((head_read || tail_read) &&
-	    (b->get_blob().get_ondisk_capacity() >= b_off + b_len + tail_read) &&
-	    head_read + tail_read < min_alloc_size) {
-	  b_off -= head_read;
-	  b_len += head_read + tail_read;
-
-	} else {
-	  head_read = tail_read = 0;
-	}
-
-	// chunk-aligned deferred overwrite?
-	if (b->get_blob().get_ondisk_capacity() >= b_off + b_len &&
-	    b_off % chunk_size == 0 &&
-	    b_len % chunk_size == 0 &&
-	    b->get_blob().is_allocated(b_off, b_len)) {
-
-	  _apply_padding(head_pad, tail_pad, bl);
-
-	  dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
-		   << " and tail 0x" << tail_read << std::dec << dendl;
-	  if (head_read) {
-	    bufferlist head_bl;
-	    int r = _do_read(c.get(), o, offset - head_pad - head_read, head_read,
-			     head_bl,
-			     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
-	    ceph_assert(r >= 0 && r <= (int)head_read);
-	    size_t zlen = head_read - r;
-	    if (zlen) {
-	      head_bl.append_zero(zlen);
-	      logger->inc(l_bluestore_write_pad_bytes, zlen);
-	    }
-	    head_bl.claim_append(bl);
-	    bl.swap(head_bl);
-	    logger->inc(l_bluestore_write_penalty_read_ops);
-	  }
-	  if (tail_read) {
-	    bufferlist tail_bl;
-	    int r = _do_read(c.get(), o, offset + length + tail_pad, tail_read,
-			     tail_bl,
-			     CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
-	    ceph_assert(r >= 0 && r <= (int)tail_read);
-	    size_t zlen = tail_read - r;
-	    if (zlen) {
-	      tail_bl.append_zero(zlen);
-	      logger->inc(l_bluestore_write_pad_bytes, zlen);
-	    }
-	    bl.claim_append(tail_bl);
-	    logger->inc(l_bluestore_write_penalty_read_ops);
-	  }
-          logger->inc(l_bluestore_write_small_pre_read);
-
-          _buffer_cache_write(txc, o, offset - head_read - head_pad, bl,
-                              wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
-
-          b->dirty_blob().calc_csum(b_off, bl);
-
-          if (!g_conf()->bluestore_debug_omit_block_device_write) {
-          bluestore_deferred_op_t *op = _get_deferred_op(txc, bl.length());
-          op->op = bluestore_deferred_op_t::OP_WRITE;
-          int r = b->get_blob().map(
-              b_off, b_len,
-	      [&](uint64_t offset, uint64_t length) {
-                op->extents.emplace_back(bluestore_pextent_t(offset, length));
-                return 0;
-              });
-          ceph_assert(r == 0);
-          op->data = std::move(bl);
-          dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off
-                   << "~" << b_len << std::dec << " of mutable " << *b << " at "
-                   << op->extents << dendl;
-          }
-
-          Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
-						 b, &wctx->old_extents);
-          b->dirty_blob().mark_used(le->blob_offset, le->length);
-          txc->statfs_delta.stored() += le->length;
-          dout(20) << __func__ << "  lex " << *le << dendl;
-          return;
-        }
-        // try to reuse blob if we can
-        if (b->can_reuse_blob(min_alloc_size,
-			      max_bsize,
-			      offset0 - bstart,
-			      &alloc_len)) {
-	  ceph_assert(alloc_len == min_alloc_size); // expecting data always
-					       // fit into reused blob
-	  // Need to check for pending writes desiring to
-	  // reuse the same pextent. The rationale is that during GC two chunks
-	  // from garbage blobs(compressed?) can share logical space within the same
-	  // AU. That's in turn might be caused by unaligned len in clone_range2.
-	  // Hence the second write will fail in an attempt to reuse blob at
-	  // do_alloc_write().
-	  if (!wctx->has_conflict(b,
-				  offset0,
-				  offset0 + alloc_len, 
-				  min_alloc_size)) {
-
-	    // we can't reuse pad_head/pad_tail since they might be truncated 
-	    // due to existent extents
-	    uint64_t b_off = offset - bstart;
-	    uint64_t b_off0 = b_off;
-	    o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-
-	    // Zero detection -- small block
-	    if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
-	      _pad_zeros(&bl, &b_off0, chunk_size);
-
-	      dout(20) << __func__ << " reuse blob " << *b << std::hex
-		       << " (0x" << b_off0 << "~" << bl.length() << ")"
-		       << " (0x" << b_off << "~" << length << ")"
-		       << std::dec << dendl;
-
-	      wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
-		  false, false);
-	      logger->inc(l_bluestore_write_small_unused);
-	    } else { // if (bl.is_zero())
-	      dout(20) << __func__ << " skip small zero block " << std::hex
-                << " (0x" << b_off0 << "~" << bl.length() << ")"
-                << " (0x" << b_off << "~" << length << ")"
-                << std::dec << dendl;
-	      logger->inc(l_bluestore_write_small_skipped);
-	      logger->inc(l_bluestore_write_small_skipped_bytes, length);
-	    }
-
-	    return;
-	  }
+	if (can_reuse_blob(b, bstart)) {
+	  break;
 	}
       }
+
+      if (!above_blob_threshold) {
+	inspected_blobs.insert(&b->get_blob());
+	above_blob_threshold = inspected_blobs.size() >= blob_threshold;
+      }
+      max_seen_off = ep->logical_end();
       ++ep;
       end_ep = ep;
       any_change = true;
-    } // if (ep != end && ep->logical_offset < offset + max_bsize)
+    } // if (ep != end && ep->logical_offset < max_off)
 
     // check extent for reuse in reverse order
     if (prev_ep != end && prev_ep->logical_offset >= min_off) {
       BlobRef b = prev_ep->blob;
+      uint32_t bstart = prev_ep->blob_start();
+      dout(20) << __func__ << " considering " << *b
+	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
+      if (can_reuse_blob(b, bstart)) {
+	break;
+      }
       if (!above_blob_threshold) {
 	inspected_blobs.insert(&b->get_blob());
 	above_blob_threshold = inspected_blobs.size() >= blob_threshold;
       }
       start_ep = prev_ep;
-      auto bstart = prev_ep->blob_start();
-      dout(20) << __func__ << " considering " << *b
-	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
-      if (b->can_reuse_blob(min_alloc_size,
-			    max_bsize,
-                            offset0 - bstart,
-                            &alloc_len)) {
-	ceph_assert(alloc_len == min_alloc_size); // expecting data always
-					     // fit into reused blob
-	// Need to check for pending writes desiring to
-	// reuse the same pextent. The rationale is that during GC two chunks
-	// from garbage blobs(compressed?) can share logical space within the same
-	// AU. That's in turn might be caused by unaligned len in clone_range2.
-	// Hence the second write will fail in an attempt to reuse blob at
-	// do_alloc_write().
-	if (!wctx->has_conflict(b,
-				offset0,
-				offset0 + alloc_len, 
-				min_alloc_size)) {
-
-	  uint64_t b_off = offset - bstart;
-	  uint64_t b_off0 = b_off;
-	  o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-
-	  // Zero detection -- small block
-	  if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
-	    uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
-	    _pad_zeros(&bl, &b_off0, chunk_size);
-
-	    dout(20) << __func__ << " reuse blob " << *b << std::hex
-	      << " (0x" << b_off0 << "~" << bl.length() << ")"
-	      << " (0x" << b_off << "~" << length << ")"
-	      << std::dec << dendl;
-
-	    wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
-		false, false);
-	    logger->inc(l_bluestore_write_small_unused);
-	  } else { // if (bl.is_zero())
-	    dout(20) << __func__ << " skip small zero block " << std::hex
-	      << " (0x" << b_off0 << "~" << bl.length() << ")"
-	      << " (0x" << b_off << "~" << length << ")"
-	      << std::dec << dendl;
-	    logger->inc(l_bluestore_write_small_skipped);
-	    logger->inc(l_bluestore_write_small_skipped_bytes, length);
-	  }
-
-	  return;
-	}
-      } 
+      min_seen_off = start_ep->logical_offset;
       if (prev_ep != begin) {
 	--prev_ep;
 	any_change = true;
@@ -17044,7 +16926,7 @@ void BlueStore::_do_write_small(
 
   if (above_blob_threshold) {
     dout(10) << __func__ << " request GC, blobs >= " << inspected_blobs.size()
-            << " " << std::hex << min_off << "~" << max_off << std::dec
+            << " " << std::hex << min_seen_off << "~" << max_seen_off << std::dec
 	    << dendl;
     ceph_assert(start_ep != end_ep);
     for (auto ep = start_ep; ep != end_ep; ++ep) {
@@ -17060,28 +16942,34 @@ void BlueStore::_do_write_small(
               << std::hex << offset << "~" << length
 	      << std::dec << dendl;
   }
-  uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
-  uint64_t b_off0 = b_off;
-  o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
 
   // Zero detection -- small block
   if (!cct->_conf->bluestore_zero_block_detection || !bl.is_zero()) {
-    // new blob.
-    BlobRef b = c->new_blob();
-    _pad_zeros(&bl, &b_off0, block_size);
-    wctx->write(offset, b, alloc_len, b_off0, bl, b_off, length,
-	min_alloc_size != block_size, // use 'unused' bitmap when alloc granularity
-                                      // doesn't match disk one only
-	true);
+    bool new_blob = false;
+    bool mark_unused = false;
+    if (!candidate_blob) {
+      candidate_blob = c->new_blob();
+      candidate_blob_off = p2phase<uint64_t>(offset, min_alloc_size);
+      // use 'unused' bitmap when alloc granularity
+      // doesn't match disk one only
+      mark_unused = min_alloc_size != block_size;
+      new_blob = true;
+    }
+    o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
+
+    wctx->write(offset, candidate_blob,
+      candidate_blob_off, bl,
+      mark_unused, new_blob);
+    if (!new_blob) {
+      logger->inc(l_bluestore_write_small_unused);
+    }
   } else { // if (bl.is_zero())
     dout(20) << __func__ << " skip small zero block " << std::hex
-      << " (0x" << b_off0 << "~" << bl.length() << ")"
-      << " (0x" << b_off << "~" << length << ")"
+      << " (0x" << offset << "~" << length << ")"
       << std::dec << dendl;
     logger->inc(l_bluestore_write_small_skipped);
     logger->inc(l_bluestore_write_small_skipped_bytes, length);
   }
-
   return;
 }
 
@@ -17394,7 +17282,7 @@ void BlueStore::_do_write_big(
 
     // Zero detection -- big block
     if (!cct->_conf->bluestore_zero_block_detection || !t.is_zero()) {
-      wctx->write(offset, b, l, b_off, t, b_off, l, false, new_blob);
+      wctx->write(offset, b, b_off, t, false, new_blob);
 
       dout(20) << __func__ << " schedule write big: 0x"
       << std::hex << offset << "~" << l << std::dec
@@ -17436,10 +17324,11 @@ int BlueStore::_do_alloc_write(
   uint64_t need = 0;
   uint64_t data_size = 0;
   // 'need' is amount of space that must be provided by allocator.
-  // 'data_size' is a size of data that will be transferred to disk.
+  // 'data_size' is a size of data that will be transferred to disk
+  // (disk block padded).
   // Note that data_size is always <= need. This comes from:
-  // - write to blob was unaligned, and there is free space
-  // - data has been compressed
+  // - write to blob could be unaligned with min_alloc_size,
+  //   hence adjusting required size
   //
   // We make one decision and apply it to all blobs.
   // All blobs will be deferred or none will.
@@ -17448,70 +17337,74 @@ int BlueStore::_do_alloc_write(
 
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   for (auto& wi : wctx->writes) {
-    if (wctx->compressor && wi.blob_length > min_alloc_size) {
+    bool compress_applied = false;
+    bluestore_blob_t& dblob = wi.b->dirty_blob();
+    uint64_t csum_length = 0;
+    unsigned csum_order = 0;
+
+    if (wctx->compressor && wi.get_original_length() > min_alloc_size) {
       auto start = mono_clock::now();
 
       // compress
-      ceph_assert(wi.b_off == 0);
-      ceph_assert(wi.blob_length == wi.bl.length());
+      ceph_assert(wi.b_off_orig == 0);
+      // initialize newly created blob only
+      ceph_assert(wi.new_blob);
+      ceph_assert(dblob.is_mutable()); // paranoic but let's make sure it is.
 
       // FIXME: memory alignment here is bad
       bufferlist t;
       std::optional<int32_t> compressor_message;
-      int r = wctx->compressor->compress(wi.bl, t, compressor_message);
-      uint64_t want_len_raw = wi.blob_length * wctx->crr;
+      int r = wctx->compressor->compress(wi.get_original_data(), t, compressor_message);
+      uint64_t want_len_raw = wi.get_original_length() * wctx->crr;
       uint64_t want_len = p2roundup(want_len_raw, min_alloc_size);
-      bool rejected = false;
       uint64_t compressed_len = t.length();
       // do an approximate (fast) estimation for resulting blob size
       // that doesn't take header overhead  into account
       uint64_t result_len = p2roundup(compressed_len, min_alloc_size);
-      if (r == 0 && result_len <= want_len && result_len < wi.blob_length) {
+      if (r == 0 && result_len <= want_len && result_len < wi.get_original_length()) {
 	bluestore_compression_header_t chdr;
+	bufferlist compressed_bl;
 	chdr.type = wctx->compressor->get_type();
 	chdr.length = t.length();
 	chdr.compressor_message = compressor_message;
-	encode(chdr, wi.compressed_bl);
-	wi.compressed_bl.claim_append(t);
+	encode(chdr, compressed_bl);
+	compressed_bl.claim_append(t);
 
-	compressed_len = wi.compressed_bl.length();
+	compressed_len = compressed_bl.length();
 	result_len = p2roundup(compressed_len, min_alloc_size);
-	if (result_len <= want_len && result_len < wi.blob_length) {
+	if (result_len <= want_len && result_len < wi.get_original_length()) {
 	  // Cool. We compressed at least as much as we were hoping to.
-	  // pad out to min_alloc_size
-	  wi.compressed_bl.append_zero(result_len - compressed_len);
-	  wi.compressed_len = compressed_len;
-	  wi.compressed = true;
+	  // Pad out to min_alloc_size
+	  compressed_bl.append_zero(result_len - compressed_len);
+	  wi.set_compressed_data(compressed_len, std::move(compressed_bl));
 	  logger->inc(l_bluestore_write_pad_bytes, result_len - compressed_len);
-	  dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
+	  dout(20) << __func__ << std::hex << "  compressed 0x" << wi.get_original_length()
 		   << " -> 0x" << compressed_len << " => 0x" << result_len
 		   << " with " << wctx->compressor->get_type()
 		   << std::dec << dendl;
 	  txc->statfs_delta.compressed() += compressed_len;
-	  txc->statfs_delta.compressed_original() += wi.blob_length;
+	  txc->statfs_delta.compressed_original() += wi.get_original_length();
 	  txc->statfs_delta.compressed_allocated() += result_len;
 	  logger->inc(l_bluestore_compress_success_count);
 	  need += result_len;
 	  data_size += result_len;
-	} else {
-	  rejected = true;
+	  // use the obtained length as a block size for csum
+	  csum_length = wi.get_ondisk_length();
+	  csum_order = std::countr_zero(csum_length);
+	  dblob.set_compressed(wi.get_original_length(), wi.compressed_len);
+	  compress_applied = true;
 	}
       } else if (r != 0) {
-	dout(5) << __func__ << std::hex << "  0x" << wi.blob_length
+	dout(5) << __func__ << std::hex << "  0x" << wi.get_original_length()
 		 << " bytes compressed using " << wctx->compressor->get_type_name()
 		 << std::dec
 		 << " failed with errcode = " << r
 		 << ", leaving uncompressed"
 		 << dendl;
 	logger->inc(l_bluestore_compress_rejected_count);
-	need += wi.blob_length;
-	data_size += wi.bl.length();
-      } else {
-	rejected = true;
       }
-
-      if (rejected) {
-	dout(20) << __func__ << std::hex << "  0x" << wi.blob_length
+      if (r == 0 && !compress_applied) {
+	dout(20) << __func__ << std::hex << "  0x" << wi.get_original_length()
 		 << " compressed to 0x" << compressed_len << " -> 0x" << result_len
 		 << " with " << wctx->compressor->get_type()
 		 << ", which is more than required 0x" << want_len_raw
@@ -17519,16 +17412,67 @@ int BlueStore::_do_alloc_write(
 		 << ", leaving uncompressed"
 		 << std::dec << dendl;
 	logger->inc(l_bluestore_compress_rejected_count);
-	need += wi.blob_length;
-	data_size += wi.bl.length();
       }
       log_latency("compress@_do_alloc_write",
 	l_bluestore_compress_lat,
         mono_clock::now() - start,
 	cct->_conf->bluestore_log_op_age );
-    } else {
-      need += wi.blob_length;
-      data_size += wi.bl.length();
+    }
+    if (!compress_applied) {
+      uint64_t chunk_size = wi.b->get_blob().get_chunk_size(block_size);
+      bufferlist ondisk_data(wi.get_original_data());
+      auto b_off = wi.b_off_orig;
+      if (_pad_zeros(&ondisk_data, &b_off, chunk_size) > 0) {
+        wi.set_padded_data(b_off, std::move(ondisk_data));
+      }
+      need += p2roundup(wi.get_ondisk_length(), min_alloc_size);
+      data_size += wi.get_ondisk_length();
+      if (wi.new_blob) {
+	ceph_assert(dblob.is_mutable()); // paranoic but let's make sure it is.
+	uint64_t alloc_length = p2roundup(wi.get_ondisk_length(), min_alloc_size);
+	// use allocator size aligned block size as csum length
+	csum_length = alloc_length;
+	if (p2phase(wi.get_ondisk_length(), min_alloc_size) != 0) {
+	  // hrm, maybe we could do better here, but let's not bother.
+	  dout(20) << __func__ << " forcing csum_order to block_size_order "
+		   << block_size_order << dendl;
+	  csum_order = block_size_order;
+	} else {
+	  csum_order =
+	    std::min<unsigned>(wctx->csum_order, std::countr_zero(wi.get_ondisk_length()));
+	}
+	// try to align blob with max_blob_size to improve
+	// its reuse ratio, e.g. in case of reverse write
+	ceph_assert(wi.b_off_orig >= wi.b_off);
+	uint32_t new_boff =
+	 (wi.logical_offset - (wi.b_off_orig - wi.b_off)) % max_bsize;
+	if ((new_boff % (1 << csum_order)) == 0 &&
+	     new_boff + alloc_length <= max_bsize &&
+	     new_boff > wi.b_off) {
+	  size_t delta = new_boff - wi.b_off;
+	  dout(20) << __func__ << std::hex
+	           << " forcing blob_offset to 0x"
+		   << b_off << " -> 0x" << new_boff
+		   << " original 0x"
+		   << wi.b_off_orig << " -> 0x" << wi.b_off_orig + delta
+		   << std::dec << dendl;
+	  csum_length += delta;
+	  wi.b_off_orig += delta;
+	  wi.b_off = new_boff;
+	}
+      }
+      if (csum != Checksummer::CSUM_NONE && wi.new_blob) {
+	dout(20) << __func__
+	  << " initialize csum setting for blob " << *wi.b
+	  << " csum_type " << Checksummer::get_csum_type_string(csum)
+	  << " csum_order " << csum_order
+	  << " csum_length 0x" << std::hex << csum_length
+	  << dendl;
+	dblob.init_csum(csum, csum_order, csum_length);
+      }
+    }
+    if (dblob.has_csum()) {
+      dblob.calc_csum(wi.b_off, wi.get_ondisk_data());
     }
   }
   PExtentVector prealloc;
@@ -17563,66 +17507,10 @@ int BlueStore::_do_alloc_write(
 
   for (auto& wi : wctx->writes) {
     bluestore_blob_t& dblob = wi.b->dirty_blob();
-    uint64_t b_off = wi.b_off;
-    bufferlist *l = &wi.bl;
-    uint64_t final_length = wi.blob_length;
-    uint64_t csum_length = wi.blob_length;
-    if (wi.compressed) {
-      final_length = wi.compressed_bl.length();
-      csum_length = final_length;
-      unsigned csum_order = std::countr_zero(csum_length);
-      l = &wi.compressed_bl;
-      dblob.set_compressed(wi.blob_length, wi.compressed_len);
-      if (csum != Checksummer::CSUM_NONE) {
-        dout(20) << __func__
-		 << " initialize csum setting for compressed blob " << *wi.b
-                 << " csum_type " << Checksummer::get_csum_type_string(csum)
-                 << " csum_order " << csum_order
-                 << " csum_length 0x" << std::hex << csum_length
-                 << " blob_length 0x" << wi.blob_length
-                 << " compressed_length 0x" << wi.compressed_len << std::dec
-                 << dendl;
-        dblob.init_csum(csum, csum_order, csum_length);
-      }
-    } else if (wi.new_blob) {
-      unsigned csum_order;
-      // initialize newly created blob only
-      ceph_assert(dblob.is_mutable());
-      if (l->length() != wi.blob_length) {
-        // hrm, maybe we could do better here, but let's not bother.
-        dout(20) << __func__ << " forcing csum_order to block_size_order "
-                << block_size_order << dendl;
-	csum_order = block_size_order;
-      } else {
-        csum_order = std::min<unsigned>(wctx->csum_order, std::countr_zero(l->length()));
-      }
-      // try to align blob with max_blob_size to improve
-      // its reuse ratio, e.g. in case of reverse write
-      uint32_t suggested_boff =
-       (wi.logical_offset - (wi.b_off0 - wi.b_off)) % max_bsize;
-      if ((suggested_boff % (1 << csum_order)) == 0 &&
-           suggested_boff + final_length <= max_bsize &&
-           suggested_boff > b_off) {
-        dout(20) << __func__ << " forcing blob_offset to 0x"
-                 << std::hex << suggested_boff << std::dec << dendl;
-        ceph_assert(suggested_boff >= b_off);
-        csum_length += suggested_boff - b_off;
-        b_off = suggested_boff;
-      }
-      if (csum != Checksummer::CSUM_NONE) {
-        dout(20) << __func__
-		 << " initialize csum setting for new blob " << *wi.b
-                 << " csum_type " << Checksummer::get_csum_type_string(csum)
-                 << " csum_order " << csum_order
-                 << " csum_length 0x" << std::hex << csum_length << std::dec
-                 << dendl;
-        dblob.init_csum(csum, csum_order, csum_length);
-      }
-    }
 
     PExtentVector extents;
-    int64_t left = final_length;
-    auto prefer_deferred_size_snapshot = prefer_deferred_size.load();
+    int64_t alloc_length = p2roundup(wi.get_ondisk_length(), min_alloc_size);
+    int64_t left = alloc_length;
     while (left > 0) {
       ceph_assert(prealloc_left > 0);
       if (prealloc_pos->length <= left) {
@@ -17641,61 +17529,50 @@ int BlueStore::_do_alloc_write(
 	break;
       }
     }
+    auto prefer_deferred_size_snapshot = prefer_deferred_size.load();
     for (auto& p : extents) {
       txc->allocated.insert(p.offset, p.length);
     }
-    dblob.allocated(p2align(b_off, min_alloc_size), final_length, extents);
+    dblob.allocated(p2align(wi.b_off, min_alloc_size), alloc_length, extents);
 
     dout(20) << __func__ << " blob " << *wi.b << dendl;
-    if (dblob.has_csum()) {
-      dblob.calc_csum(b_off, *l);
-    }
-
-    if (wi.mark_unused) {
-      ceph_assert(!dblob.is_compressed());
-      auto b_end = b_off + wi.bl.length();
-      if (b_off) {
-        dblob.add_unused(0, b_off);
-      }
-      uint64_t llen = dblob.get_logical_length();
-      if (b_end < llen) {
-        dblob.add_unused(b_end, llen - b_end);
-      }
-    }
 
     Extent *le = o->extent_map.set_lextent(coll, wi.logical_offset,
-                                           b_off + (wi.b_off0 - wi.b_off),
-                                           wi.length0,
+					   wi.b_off_orig,
+                                           wi.get_original_length(),
                                            wi.b,
                                            nullptr);
-    wi.b->dirty_blob().mark_used(le->blob_offset, le->length);
+    if (wi.mark_unused) {
+      dblob.add_unused_all();
+    }
+    dblob.mark_used(le->blob_offset, le->length);
+
     txc->statfs_delta.stored() += le->length;
     dout(20) << __func__ << "  lex " << *le << dendl;
-    bufferlist without_pad;
-    without_pad.substr_of(wi.bl, wi.b_off0-wi.b_off, wi.length0);
-    _buffer_cache_write(txc, o, wi.logical_offset, std::move(without_pad),
+    _buffer_cache_write(txc, o, wi.logical_offset, wi.get_original_data(),
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
     // queue io
     if (!g_conf()->bluestore_debug_omit_block_device_write) {
       if (data_size < prefer_deferred_size_snapshot) {
+	auto len = wi.get_ondisk_length();
 	dout(20) << __func__ << " deferring 0x" << std::hex
-		 << l->length()  << " write via deferred, pds=0x"
+		 << len << " write via deferred, pds=0x"
                  << prefer_deferred_size_snapshot
                  << std::dec<< dendl;
-	bluestore_deferred_op_t *op = _get_deferred_op(txc, l->length());
+	bluestore_deferred_op_t *op = _get_deferred_op(txc, len);
 	op->op = bluestore_deferred_op_t::OP_WRITE;
 	int r = wi.b->get_blob().map(
-	  b_off, l->length(),
+	  wi.b_off, len,
 	  [&](uint64_t offset, uint64_t length) {
 	    op->extents.emplace_back(bluestore_pextent_t(offset, length));
 	    return 0;
 	  });
         ceph_assert(r == 0);
-        op->data = *l;
+        op->data = wi.get_ondisk_data();
       } else {
 	wi.b->get_blob().map_bl(
-	  b_off, *l,
+	  wi.b_off, wi.get_ondisk_data(),
 	  [&](uint64_t offset, bufferlist& t) {
 	    bdev->aio_write(offset, t, &txc->ioc, false);
 	  });
