@@ -494,9 +494,6 @@ struct entity_addr_t {
     }
     encode(nonce, bl);
     __u32 elen = get_sockaddr_len();
-#if (__FreeBSD__) || defined(__APPLE__)
-      elen -= sizeof(u.sa.sa_len);
-#endif
     encode(elen, bl);
     if (elen) {
       uint16_t ss_family = u.sa.sa_family;
@@ -507,6 +504,9 @@ struct entity_addr_t {
 #endif
       encode(ss_family, bl);
       elen -= sizeof(u.sa.sa_family);
+#if defined(__FreeBSD__) || defined(__APPLE__)
+      elen -= sizeof(u.sa.sa_len);
+#endif
       bl.append(u.sa.sa_data, elen);
     }
     ENCODE_FINISH(bl);
