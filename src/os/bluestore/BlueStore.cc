@@ -2708,7 +2708,8 @@ void BlueStore::Blob::copy_extents_over_empty(
 // Requirements:
 // 1) checksums: same type and size
 // 2) tracker: same au size
-// 3) extents: must be disjointed
+// 3) extents: must be disjointed; 'other's valid extents must also be
+//    csum chunk aligned, see below
 // 4) unused: ignored, will be cleared
 //
 // Returns:
@@ -2733,6 +2734,13 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
   const bluestore_blob_use_tracker_t& xtr = x->get_blob_use_tracker();
   const bluestore_blob_use_tracker_t& ytr = y->get_blob_use_tracker();
   if (xtr.au_size != ytr.au_size) return false;
+  // merge_blob() moves x's csum data in whole csum chunks, once per valid
+  // extent of x, so those extents must be csum chunk aligned.  y's extents
+  // are not moved.  A csum chunk larger than min_alloc_size (see
+  // _choose_write_options()) plus a fragmented allocation breaks this.
+  // Refusing the merge is safe: the caller then uses make_blob_shared().
+  // The check is in the loops below.
+  uint32_t csum_chunk_size = xb.has_csum() ? xb.get_csum_chunk_size() : 0;
   // unused
   // ignore unused, we will clear it up anyway
   // extents
@@ -2761,6 +2769,13 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
 	can_merge = false;
 	break;
       }
+      if (csum_chunk_size != 0 &&
+	  ((xp % csum_chunk_size) != 0 ||
+	   (xi->length % csum_chunk_size) != 0)) {
+	// x's extent splits a csum chunk
+	can_merge = false;
+	break;
+      }
       xp += xi->length;
       ++xi;
       skip_empty(xe, xi, xp);
@@ -2778,6 +2793,12 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
   if (can_merge) {
     // scan remaining extents in x
     while (xi != xe.end()) {
+      if (csum_chunk_size != 0 && xi->is_valid() &&
+	  ((xp % csum_chunk_size) != 0 ||
+	   (xi->length % csum_chunk_size) != 0)) {
+	can_merge = false;
+	break;
+      }
       xp += xi->length;
       ++xi;
     }
