@@ -3023,6 +3023,58 @@ TEST_F(OSDMapTest, ReadBalanceScore2) {
 
   }
 
+//
+// A pool which is mapped to only a few OSDs of a large cluster (like the .mgr
+// pool, which usually has a single PG) used to get an optimal score which was
+// rounded down to 0, and therefore a read balance score of infinity.
+// See https://tracker.ceph.com/issues/66215
+//
+TEST_F(OSDMapTest, ReadBalanceScoreSmallPoolLargeCluster) {
+  constexpr int n_osds = 700;
+  set_up_map(n_osds);
+
+  // create an additional replicated pool with a single PG
+  OSDMap::Incremental new_pool_inc(osdmap.get_epoch() + 1);
+  new_pool_inc.new_pool_max = osdmap.get_pool_max();
+  new_pool_inc.fsid = osdmap.get_fsid();
+  uint64_t pool_id = set_rep_pool("one_pg_pool", new_pool_inc, false);
+  ASSERT_TRUE(new_pool_inc.new_pools.contains(pool_id));
+  new_pool_inc.new_pools[pool_id].set_pg_num(1);
+  new_pool_inc.new_pools[pool_id].set_pgp_num(1);
+  osdmap.apply_incremental(new_pool_inc);
+
+  const pg_pool_t *pi = osdmap.get_pg_pool(pool_id);
+  ASSERT_NE(pi, nullptr);
+  ASSERT_TRUE(pi->is_replicated());
+  ASSERT_EQ(pi->get_pg_num(), 1u);
+
+  // the pool is mapped to pool size OSDs only, way less than the cluster size
+  map<uint64_t,set<pg_t>> prim_pgs_by_osd, acting_prims_by_osd;
+  auto pgs_by_osd = osdmap.get_pgs_by_osd(g_ceph_context, pool_id,
+                                          &prim_pgs_by_osd, &acting_prims_by_osd);
+  ASSERT_EQ(pgs_by_osd.size(), pi->get_size());
+
+  OSDMap::read_balance_info_t rbi;
+  auto rc = osdmap.calc_read_balance_score(g_ceph_context, pool_id, &rbi);
+  ASSERT_EQ(rc, 0);
+  ASSERT_TRUE(rbi.err_msg.empty());
+
+  // scores must be finite and, as documented, not lower than 1
+  ASSERT_TRUE(std::isfinite(rbi.optimal_score));
+  ASSERT_TRUE(std::isfinite(rbi.raw_score));
+  ASSERT_TRUE(std::isfinite(rbi.acting_raw_score));
+  ASSERT_TRUE(std::isfinite(rbi.adjusted_score));
+  ASSERT_TRUE(std::isfinite(rbi.acting_adj_score));
+  ASSERT_GE(rbi.optimal_score, 1.0);
+  ASSERT_TRUE(score_in_range(rbi.adjusted_score));
+  ASSERT_TRUE(score_in_range(rbi.acting_adj_score));
+
+  // a single PG pool is as balanced as it can be - the only PG has exactly one
+  // primary - so it must score exactly 1
+  ASSERT_FLOAT_EQ(rbi.adjusted_score, 1.0);
+  ASSERT_FLOAT_EQ(rbi.acting_adj_score, 1.0);
+}
+
 TEST_F(OSDMapTest, read_balance_small_map) {
   // Set up a map with 4 OSDs and default pools
   set_up_map(4);
