@@ -226,6 +226,56 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   }
 }
 
+int64_t BtreeAllocator::claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  std::lock_guard l(lock);
+  return _claim_range(offset, length, extents);
+}
+
+int64_t BtreeAllocator::_claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+  ceph_assert(p2aligned(offset, (uint64_t)block_size));
+  ceph_assert(p2aligned(length, (uint64_t)block_size));
+  ceph_assert(offset <= uint64_t(device_size));
+  ceph_assert(length <= uint64_t(device_size) - offset);
+
+  ldout(cct, 10) << __func__ << std::hex
+                 << " offset 0x" << offset
+                 << " length 0x" << length
+                 << std::dec << dendl;
+
+  // bluestore_pextent_t::length is 32 bit, so a longer run has to be reported
+  // as several extents. Round down and align - the cap itself is not a
+  // multiple of block_size.
+  constexpr auto cap =
+    std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
+  const uint64_t max_extent_len = p2align(uint64_t(cap), (uint64_t)block_size);
+
+  uint64_t sum = 0;
+  _try_remove_from_tree(offset, length,
+    [&](uint64_t o, uint64_t l, bool found){
+      if (found) {
+        sum += l;
+        while (l > max_extent_len) {
+          extents->emplace_back(o, max_extent_len);
+          o += max_extent_len;
+          l -= max_extent_len;
+        }
+        extents->emplace_back(o, l);
+      }
+  });
+  return sum;
+}
+
 int64_t BtreeAllocator::_allocate(
   uint64_t want,
   uint64_t unit,
