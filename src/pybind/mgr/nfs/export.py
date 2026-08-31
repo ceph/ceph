@@ -235,10 +235,11 @@ class ExportMgr:
 
     def _create_rgw_export_user(self, export: Export) -> None:
         rgwfsal = cast(RGWFSAL, export.fsal)
+        realm_args = ['--rgw-realm', rgwfsal.rgw_realm] if rgwfsal.rgw_realm else []
         if not rgwfsal.user_id:
             assert export.path
             ret, out, err = self.mgr.tool_exec(
-                ['radosgw-admin', 'bucket', 'stats', '--bucket', export.path]
+                ['radosgw-admin', 'bucket', 'stats', '--bucket', export.path] + realm_args
             )
             if ret:
                 raise NFSException(f'Failed to fetch owner for bucket {export.path}')
@@ -246,9 +247,9 @@ class ExportMgr:
             owner = j.get('owner', '')
             rgwfsal.user_id = owner
         assert rgwfsal.user_id
-        ret, out, err = self.mgr.tool_exec([
-            'radosgw-admin', 'user', 'info', '--uid', rgwfsal.user_id
-        ])
+        ret, out, err = self.mgr.tool_exec(
+            ['radosgw-admin', 'user', 'info', '--uid', rgwfsal.user_id] + realm_args
+        )
         if ret:
             raise NFSException(
                 f'Failed to fetch key for bucket {export.path} owner {rgwfsal.user_id}'
@@ -763,6 +764,7 @@ class ExportMgr:
                           squash: str,
                           bucket: Optional[str] = None,
                           user_id: Optional[str] = None,
+                          rgw_realm: Optional[str] = None,
                           clients: list = [],
                           sectype: Optional[List[str]] = None,
                           xprtsec: Optional[str] = None,
@@ -783,6 +785,7 @@ class ExportMgr:
             "fsal": {
                 "name": NFS_GANESHA_SUPPORTED_FSALS[1],
                 "user_id": user_id,
+                "rgw_realm": rgw_realm,
             },
             "clients": clients,
             "sectype": sectype,
