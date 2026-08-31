@@ -10,11 +10,12 @@ import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 import { forkJoin, Observable, of } from 'rxjs';
-import { catchError, debounceTime, distinctUntilChanged, map, mergeMap } from 'rxjs/operators';
+import { catchError, debounceTime, distinctUntilChanged, map, mergeMap, take } from 'rxjs/operators';
 
 import { RGW_USER_EXPORT_PATH, SUPPORTED_FSAL } from '~/app/ceph/nfs/models/nfs.fsal';
 import { Directory, NfsService } from '~/app/shared/api/nfs.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
+import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
@@ -104,6 +105,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private rgwBucketService: RgwBucketService,
+    private rgwDaemonService: RgwDaemonService,
     private rgwUserService: RgwUserService,
     private rgwSiteService: RgwSiteService,
     private formBuilder: CdFormBuilder,
@@ -492,27 +494,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
     }
   }
 
-  resolveRealms(realms: string[]) {
-    if (realms.length !== 0) {
-      this.rgwSiteService
-        .isDefaultRealm()
-        .pipe(
-          mergeMap((isDefaultRealm) => {
-            if (!isDefaultRealm) {
-              throw new Error('Selected realm is not the default.');
-            }
-            return of(true);
-          })
-        )
-        .subscribe({
-          error: (error) => {
-            const fsalDescr = this.nfsService.nfsFsal.find(
-              (f) => f.value === this.storageBackend
-            ).descr;
-            this.storageBackendError = $localize`${fsalDescr} backend is not available. ${error}`;
-          }
-        });
-    }
+  resolveRealms(_realms: string[]) {
+    // Non-default realms are supported via --rgw-realm in the backend.
   }
 
   setUsers() {
@@ -663,6 +646,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     if (requestModel.fsal.name === SUPPORTED_FSAL.RGW) {
       delete requestModel.fsal.fs_name;
+      // Include the realm from the currently selected RGW gateway daemon
+      this.rgwDaemonService.selectedDaemon$.pipe(take(1)).subscribe(daemon => {
+        if (daemon?.realm_name) {
+          requestModel.fsal.rgw_realm = daemon.realm_name;
+        }
+      });
       if (requestModel.rgw_export_type === 'bucket') {
         delete requestModel.fsal.user_id;
       } else {

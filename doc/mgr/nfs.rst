@@ -647,7 +647,7 @@ To export a *bucket*:
 
 .. prompt:: bash #
 
-   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--readonly] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--xprtsec <value>] [--transports <value>...]
+   ceph nfs export create rgw --cluster-id <cluster_id> --pseudo-path <pseudo_path> --bucket <bucket_name> [--user-id <user-id>] [--realm <realm>] [--readonly] [--client_addr <value>...] [--squash <value>] [--sectype <value>...] [--xprtsec <value>] [--transports <value>...]
 
 For example, to export ``mybucket`` via NFS cluster ``mynfs`` at the
 pseudo-path ``/bucketdata`` to any host in the ``192.168.10.0/24`` network
@@ -671,8 +671,8 @@ and unique.
 and write operations to the bucket.  If it is not specified, the user who owns
 the bucket will be used.
 
-.. note:: Currently, if multi-site RGW is enabled, Ceph can only export RGW
-   buckets in the default realm.
+.. note:: If the bucket belongs to a non-default RGW realm, use the
+   ``--realm=<realm>`` option to specify the realm name.
 
 ``<client_addr>`` is the list of client address for which these export
 permissions will be applicable. By default all clients can access the export

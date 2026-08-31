@@ -42,7 +42,8 @@ EXPORT_SCHEMA = {
         'name': (str, 'name of FSAL'),
         'fs_name': (str, 'CephFS filesystem name', True),
         'sec_label_xattr': (str, 'Name of xattr for security label', True),
-        'user_id': (str, 'User id', True)
+        'user_id': (str, 'User id', True),
+        'rgw_realm': (str, 'RGW realm name for non-default realm exports', True)
     }, 'FSAL configuration'),
     'clients': ([{
         'addresses': ([str], 'list of IP addresses'),
@@ -64,7 +65,8 @@ CREATE_EXPORT_SCHEMA = {
     'fsal': ({
         'name': (str, 'name of FSAL'),
         'fs_name': (str, 'CephFS filesystem name', True),
-        'sec_label_xattr': (str, 'Name of xattr for security label', True)
+        'sec_label_xattr': (str, 'Name of xattr for security label', True),
+        'rgw_realm': (str, 'RGW realm name for non-default realm exports', True)
     }, 'FSAL configuration'),
     'clients': ([{
         'addresses': ([str], 'list of IP addresses'),
