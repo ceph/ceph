@@ -80,6 +80,10 @@ public:
     int64_t  hint,
     PExtentVector *extents) override;
   void release(const interval_set<uint64_t>& release_set) override;
+
+  int64_t claim_range(uint64_t offset, uint64_t length,
+                      PExtentVector *extents) override;
+
   uint64_t get_free() override;
   double get_fragmentation() override;
 
@@ -206,6 +210,8 @@ private:
   void _remove_from_tree(uint64_t start, uint64_t size);
   void _try_remove_from_tree(uint64_t start, uint64_t size,
     std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
+  int64_t _claim_range(uint64_t offset, uint64_t length,
+    PExtentVector *extents);
 
   uint64_t _get_free() const {
     return num_free;
