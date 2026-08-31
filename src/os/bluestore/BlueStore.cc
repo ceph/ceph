@@ -2708,7 +2708,9 @@ void BlueStore::Blob::copy_extents_over_empty(
 // Requirements:
 // 1) checksums: same type and size
 // 2) tracker: same au size
-// 3) extents: must be disjointed
+// 3) extents: must be disjointed, and 'other's valid extents must be
+//    csum chunk aligned (merge_blob() moves csum data in whole chunk
+//    units, once per valid extent of 'other'; 'this's extents stay put)
 // 4) unused: ignored, will be cleared
 //
 // Returns:
@@ -2733,6 +2735,16 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
   const bluestore_blob_use_tracker_t& xtr = x->get_blob_use_tracker();
   const bluestore_blob_use_tracker_t& ytr = y->get_blob_use_tracker();
   if (xtr.au_size != ytr.au_size) return false;
+  // csum chunk alignment of x's extents is checked inside the extents loop
+  // below.  merge_blob() moves x's csum data in whole csum chunk units,
+  // calling move_data() once per valid extent of x, so every valid extent
+  // of x must start and end on a csum chunk boundary (y's extents are left
+  // in place and need no such check).  A blob whose csum chunk exceeds
+  // min_alloc_size - see the alloc hint handling in _choose_write_options()
+  // - can violate this when its allocation came back fragmented.  Refusing
+  // is safe: merging is an optimization, and the caller falls back to
+  // make_blob_shared().
+  uint32_t csum_chunk_size = xb.has_csum() ? xb.get_csum_chunk_size() : 0;
   // unused
   // ignore unused, we will clear it up anyway
   // extents
@@ -2761,6 +2773,13 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
 	can_merge = false;
 	break;
       }
+      if (csum_chunk_size != 0 &&
+	  ((xp % csum_chunk_size) != 0 ||
+	   (xi->length % csum_chunk_size) != 0)) {
+	// x's extent splits a csum chunk; move_data() could not move it
+	can_merge = false;
+	break;
+      }
       xp += xi->length;
       ++xi;
       skip_empty(xe, xi, xp);
@@ -2778,6 +2797,12 @@ bool BlueStore::Blob::can_merge_blob(const Blob* other, uint32_t& blob_width) co
   if (can_merge) {
     // scan remaining extents in x
     while (xi != xe.end()) {
+      if (csum_chunk_size != 0 && xi->is_valid() &&
+	  ((xp % csum_chunk_size) != 0 ||
+	   (xi->length % csum_chunk_size) != 0)) {
+	can_merge = false;
+	break;
+      }
       xp += xi->length;
       ++xi;
     }
