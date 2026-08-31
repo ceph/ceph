@@ -43,6 +43,7 @@ tasks:
     - \(SLOW_OPS\)
     - slow request
     - evicting unresponsive client
+    - MDS_ALL_DOWN
 - workunit:
     clients:
       all:

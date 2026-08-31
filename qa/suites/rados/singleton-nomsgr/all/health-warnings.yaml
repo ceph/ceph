@@ -17,6 +17,7 @@ tasks:
       - \(OSD_
       - \(PG_
       - \(POOL_APP_NOT_ENABLED\)
+      - MDS_ALL_DOWN
 - workunit:
     clients:
       all:

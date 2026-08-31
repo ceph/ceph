@@ -11,6 +11,7 @@ tasks:
       - sudo ceph config set mgr mgr_pool false --force
     log-ignorelist:
     - \(POOL_APP_NOT_ENABLED\)
+    - MDS_ALL_DOWN
 - workunit:
     clients:
       all:

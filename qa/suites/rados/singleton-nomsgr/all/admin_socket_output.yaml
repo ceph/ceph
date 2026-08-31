@@ -16,6 +16,7 @@ overrides:
       - \(MDS_READ_ONLY\)
       - \(POOL_FULL\)
       - \(POOL_APP_NOT_ENABLED\)
+      - MDS_ALL_DOWN
 tasks:
 - install:
 - ceph:
