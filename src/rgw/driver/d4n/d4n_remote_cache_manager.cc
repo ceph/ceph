@@ -191,6 +191,9 @@ int RemoteCacheDeleteOp::send_request(const DoutPrefixProvider* dpp, optional_yi
   extra_headers["x-rgw-cache-blk-offset"] = std::to_string(op.offset);
   extra_headers["x-rgw-cache-blk-len"] = std::to_string(op.len);
   extra_headers["x-rgw-cache-obj-size"] = std::to_string(op.obj_size);
+  extra_headers["x-rgw-cache-object-dirty"] = op.dirty ? "true" : "false";
+  // Empty when this delete does not create a delete marker.
+  extra_headers["x-rgw-cache-delete-marker-version"] = op.delete_marker_version;
 
   auto resource = get_resource(op.bucket_name, op.object_name);
   sender = std::make_unique<RGWRESTStreamRWRequest>(dpp->get_cct(), "DELETE", op.remote_addr, &cb, nullptr, nullptr, "", host_style);
