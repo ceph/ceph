@@ -121,8 +121,10 @@ void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size)
   num_free += size;
 }
 
-void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
-  BtreeAllocator::range_tree_t::iterator& rs)
+BtreeAllocator::range_tree_t::iterator
+BtreeAllocator::_process_range_removal(
+  uint64_t start, uint64_t end,
+  BtreeAllocator::range_tree_t::iterator rs)
 {
   bool left_over = (rs->first != start);
   bool right_over = (rs->second != end);
@@ -160,7 +162,10 @@ void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
   } else {
     range_tree.erase(rs);
   }
-  num_free -= (end - start);
+  auto length = end - start;
+  ceph_assert(num_free >= length);
+  num_free -= length;
+  return range_tree.lower_bound(end);
 }
 
 void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size)
@@ -189,7 +194,17 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
   ceph_assert(size != 0);
 
-  auto rs = range_tree.find(start);
+  // lower_bound() returns the first range starting at or past 'start', hence
+  // it skips a range which begins before 'start' but reaches into
+  // [start, end). Step back to the preceding range only if it actually does
+  // so - otherwise lower_bound()'s result is already the one we want.
+  auto rs = range_tree.lower_bound(start);
+  if (rs != range_tree.begin()) {
+    auto prev_rs = std::prev(rs);
+    if (prev_rs->second > start) {
+      rs = prev_rs;
+    }
+  }
 
   if (rs == range_tree.end() || rs->first >= end) {
     cb(start, size, false);
@@ -197,25 +212,14 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   }
 
   do {
-
-    //FIXME: this is apparently wrong since _process_range_removal might
-    // invalidate existing iterators.
-    // Not a big deal so far since this method is not in use - it's called
-    // when making Hybrid allocator from a regular one. Which isn't an option
-    // for BtreeAllocator for now.
-    auto next_rs = rs;
-    ++next_rs;
-
     if (start < rs->first) {
       cb(start, rs->first - start, false);
       start = rs->first;
     }
     auto range_end = std::min(rs->second, end);
-    _process_range_removal(start, range_end, rs);
+    rs = _process_range_removal(start, range_end, rs);
     cb(start, range_end - start, true);
     start = range_end;
-
-    rs = next_rs;
   } while (rs != range_tree.end() && rs->first < end && start < end);
   if (start < end) {
     cb(start, end - start, false);

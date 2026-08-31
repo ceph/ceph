@@ -198,7 +198,11 @@ private:
 
   // called when extent to be released/marked free
   void _add_to_tree(uint64_t start, uint64_t size);
-  void _process_range_removal(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
+  // removes [start, end) out of the range pointed to by 'rs', which must
+  // fully contain it. Returns an iterator to the first range starting at or
+  // past 'end', valid despite the tree modifications just made.
+  range_tree_t::iterator _process_range_removal(uint64_t start, uint64_t end,
+    range_tree_t::iterator rs);
   void _remove_from_tree(uint64_t start, uint64_t size);
   void _try_remove_from_tree(uint64_t start, uint64_t size,
     std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
