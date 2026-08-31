@@ -26,14 +26,47 @@ void ReplicaActive::RtReservationCB::finish(int)
 
 WaitUpdate::WaitUpdate(my_context ctx) : ScrubState(ctx)
 {
+  DECLARE_LOCALS;
+
+  // Check for abort before reserving range
+  if (!m_scrbr->verify_against_abort(pg.get_osdmap_epoch())) {
+    // Abort detected, post abort event to transition to AwaitScrub
+    post_event(events::abort_t{});
+    return;
+  }
+
   auto &cs = context<ChunkState>();
   cs.range_reserved = true;
   assert(cs.range);
   get_scrub_context().reserve_range(cs.range->start, cs.range->end);
 }
 
+sc::result WaitUpdate::react(const ScrubContext::reserve_range_complete_t &e)
+{
+  DECLARE_LOCALS;
+
+  // Check if scrub should abort before transitioning to ScanRange
+  if (!m_scrbr->verify_against_abort(pg.get_osdmap_epoch())) {
+    // Abort detected, post abort event to transition to AwaitScrub
+    post_event(events::abort_t{});
+    return discard_event();
+  }
+
+  context<ChunkState>().version = e.value;
+  return transit<ScanRange>();
+}
+
 ScanRange::ScanRange(my_context ctx) : ScrubState(ctx)
 {
+  DECLARE_LOCALS;
+
+  // Check for abort before scanning range
+  if (!m_scrbr->verify_against_abort(pg.get_osdmap_epoch())) {
+    // Abort detected, post abort event to transition to AwaitScrub
+    post_event(events::abort_t{});
+    return;
+  }
+
   ceph_assert(context<ChunkState>().range);
   const auto &cs = context<ChunkState>();
   const auto &range = cs.range.value();
@@ -49,6 +82,8 @@ ScanRange::ScanRange(my_context ctx) : ScrubState(ctx)
 
 sc::result ScanRange::react(const ScrubContext::scan_range_complete_t &event)
 {
+  DECLARE_LOCALS;
+
   auto [_, inserted] = maps.insert(event.value.to_pair());
   ceph_assert(inserted);
   ceph_assert(waiting_on > 0);
@@ -57,28 +92,85 @@ sc::result ScanRange::react(const ScrubContext::scan_range_complete_t &event)
   if (waiting_on > 0) {
     return discard_event();
   } else {
+    // Check if scrub should abort after completing a chunk
+    if (!m_scrbr->verify_against_abort(pg.get_osdmap_epoch())) {
+      // Abort detected, post abort event to transition to AwaitScrub
+      post_event(events::abort_t{});
+      return discard_event();
+    }
+
     ceph_assert(context<ChunkState>().range);
     {
       auto results = validate_chunk(
-	get_scrub_context().get_dpp(),
-	context<Scrubbing>().policy,
-	maps);
+        get_scrub_context().get_dpp(),
+        context<Scrubbing>().policy,
+        maps);
       context<Scrubbing>().stats.add(results.stats);
       get_scrub_context().emit_chunk_result(
-	*(context<ChunkState>().range),
-	std::move(results));
+        *(context<ChunkState>().range),
+        std::move(results));
     }
-    if (context<ChunkState>().range->end.is_max()) {
-      get_scrub_context().emit_scrub_result(
-	context<Scrubbing>().deep,
-	context<Scrubbing>().stats);
-      return transit<PrimaryActive>();
-    } else {
-      context<Scrubbing>().advance_current(
-	context<ChunkState>().range->end);
-      return transit<ChunkState>();
-    }
+    return transit<WaitDigestUpdate>();
   }
+}
+
+WaitDigestUpdate::WaitDigestUpdate(my_context ctx) : ScrubState(ctx)
+{
+  DECLARE_LOCALS;
+
+  if (!m_scrbr->has_pending_digest_updates()) {
+    post_event(ScrubContext::digest_updates_complete_t{});
+  }
+}
+
+sc::result WaitDigestUpdate::react(
+  const ScrubContext::digest_updates_complete_t &)
+{
+  DECLARE_LOCALS;
+
+  ceph_assert(context<ChunkState>().range);
+  LOG_PREFIX(WaitDigestUpdate::react);
+  bool is_last = context<ChunkState>().range->end.is_max();
+  SUBDEBUGDPP(osd, "digest updates complete, is_last_chunk={}", dpp, is_last);
+  if (is_last) {
+    SUBDEBUGDPP(osd, "last chunk, completing scrub", dpp);
+    auto& scrubbing = context<Scrubbing>();
+    get_scrub_context().emit_scrub_result(
+      scrubbing.deep,
+      scrubbing.stats);
+    if (auto* metrics = scrubbing.get_metrics()) {
+      auto duration = ScrubClock::now() - scrubbing.scrub_start_time;
+      auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        duration).count();
+      metrics->inc_successful(elapsed_ms);
+    }
+    return transit<PrimaryActive>();
+  }
+
+  auto range_end = context<ChunkState>().range->end;
+  SUBDEBUGDPP(osd, "chunk complete at range end {}, advancing to next chunk", dpp, range_end);
+  context<Scrubbing>().advance_current(range_end);
+  return transit<PendingTimer>();
+}
+
+Scrubbing::Scrubbing(my_context ctx)
+  : ScrubState(ctx), policy(get_scrub_context().get_policy())
+{
+  DECLARE_LOCALS;
+
+  // Record scrub start time for elapsed time calculation (using ScrubClock like classic)
+  scrub_start_time = ScrubClock::now();
+
+  // Increment started counter (metrics already registered in PGScrubber constructor)
+  if (m_scrbr->m_last_scrub_metrics) {
+    m_scrbr->m_last_scrub_metrics->inc_started();
+  }
+}
+
+ScrubMetrics* Scrubbing::get_metrics()
+{
+  DECLARE_LOCALS;
+  return m_scrbr->get_scrub_metrics();
 }
 
 ReservingReplicas::ReservingReplicas(my_context ctx) : ScrubState(ctx)
@@ -89,8 +181,7 @@ ReservingReplicas::ReservingReplicas(my_context ctx) : ScrubState(ctx)
   auto &scrubbing = context<Scrubbing>();
 
   scrubbing.m_reservations.emplace(
-      *m_scrbr, context<PrimaryActive>().last_request_sent_nonce,
-      *scrubbing.m_counters_idx);
+      *m_scrbr, context<PrimaryActive>().last_request_sent_nonce, *scrubbing.get_metrics());
 
   if (!scrubbing.m_reservations->get_last_sent()) {
     // no replicas to reserve
@@ -111,7 +202,19 @@ sc::result ReservingReplicas::react(const events::replica_grant_t &event)
   ceph_assert(scrubbing.m_reservations);
   if (scrubbing.m_reservations->handle_reserve_grant(m, event.m_from)) {
     // we are done with the reservation process
-    return transit<ChunkState>();
+    // Note: elapsed time tracking is handled by ReplicaReservations::log_success_and_duration()
+    if (auto* metrics = scrubbing.get_metrics()) {
+      // Count the number of secondaries (replicas) we reserved
+      // This is the size of the acting set minus the primary
+      auto num_secondaries = get_scrub_context().get_ids_to_scrub().size() - 1;
+      metrics->set_rsv_secondaries_num(num_secondaries);
+      // Now that reservations are complete, scrubbing is "active"
+      metrics->inc_active_started();
+    }
+    LOG_PREFIX(ReservingReplicas::react);
+    SUBDEBUGDPP(osd, "reservations complete, transitioning to PendingTimer", dpp);
+    // Transition to PendingTimer which will sleep before first chunk
+    return transit<PendingTimer>();
   }
   return discard_event();
 
@@ -143,14 +246,27 @@ sc::result ReservingReplicas::react(const events::replica_reject_t &event)
   // the rescheduling of this PG)
   m_scrbr->flag_reservations_failure();
 
+  if (auto* metrics = scrubbing.get_metrics()) {
+    metrics->inc_rsv_rejected();
+  }
+
   return transit<AwaitScrub>();
 }
 
 sc::result ReservingReplicas::react(const events::remotes_reserved_t &)
 {
+  DECLARE_LOCALS;
   LOG_PREFIX(ReservingReplicas::react(remotes_reserved_t));
-  SUBDEBUGDPP(osd, "no replicas to reserve, proceeding to ChunkState", dpp);
-  return transit<ChunkState>();
+  SUBDEBUGDPP(osd, "no replicas to reserve, transitioning to PendingTimer", dpp);
+
+  // Increment active_started counter since we're about to start scrubbing
+  auto &scrubbing = context<Scrubbing>();
+  if (auto* metrics = scrubbing.get_metrics()) {
+    metrics->inc_active_started();
+  }
+
+  // Transition to PendingTimer which will sleep before first chunk
+  return transit<PendingTimer>();
 }
 
 // -------- for replicas -----------------------------------------------------
@@ -159,7 +275,6 @@ sc::result ReservingReplicas::react(const events::remotes_reserved_t &)
 
 ReplicaActive::~ReplicaActive()
 {
-  clear_remote_reservation(false);
 }
 sc::result ReplicaActive::react(const events::replica_reserve_request_t &event)
 {
@@ -373,6 +488,17 @@ ReplicaScanChunk::ReplicaScanChunk(my_context ctx) : ScrubState(ctx)
     to_scan.end,
     to_scan.deep);
 }
+// ----------------------- PendingTimer -----------------------------------
+
+PendingTimer::PendingTimer(my_context ctx) : ScrubState(ctx) {
+  DECLARE_LOCALS;
+  LOG_PREFIX(PendingTimer::PendingTimer);
+  SUBDEBUGDPP(osd, "entering PendingTimer state", dpp);
+
+  // Start the sleep operation which will post internal_sched_scrub_t when done
+  m_scrbr->start_chunk_sleep();
+}
+
 
 
 };
