@@ -78,6 +78,7 @@ public:
 
 class ScrubRequested final : public RemoteScrubEventBaseT<ScrubRequested> {
   bool deep = false;
+  bool repair = false;
 protected:
   ifut<> handle_event(PG &pg) final;
 
@@ -85,19 +86,20 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::scrub_requested;
 
   template <typename... Args>
-  ScrubRequested(bool deep, Args&&... base_args)
+  ScrubRequested(bool deep, bool repair, Args&&... base_args)
     : RemoteScrubEventBaseT<ScrubRequested>(std::forward<Args>(base_args)...),
-      deep(deep) {}
+      deep(deep), repair(repair) {}
 
   epoch_t get_epoch_sent_at() const {
     return epoch;
   }
 
   void print(std::ostream &out) const final {
-    out << "(deep=" << deep << ")";
+    out << "(deep=" << deep << ", repair=" << repair << ")";
   }
   void dump_detail(ceph::Formatter *f) const final {
     f->dump_bool("deep", deep);
+    f->dump_bool("repair", repair);
   }
 
 };
@@ -240,6 +242,53 @@ protected:
   ifut<> run(PG &pg) final;
 };
 
+class ScrubSleep : public ScrubAsyncOpT<ScrubSleep> {
+public:
+  static constexpr OperationTypeCode type = OperationTypeCode::scrub_sleep;
+
+  ScrubSleep(Ref<PG> pg)
+    : ScrubAsyncOpT(pg) {}
+
+  void print(std::ostream &out) const final {
+    out << "()";
+  }
+  void dump_detail(ceph::Formatter *f) const final {
+  }
+
+protected:
+  ifut<> run(PG &pg) final;
+};
+
+class ScrubDigestUpdate : public ScrubAsyncOpT<ScrubDigestUpdate> {
+  hobject_t oid;
+  std::optional<uint32_t> data_digest;
+  std::optional<uint32_t> omap_digest;
+  uint64_t generation;
+
+public:
+  static constexpr OperationTypeCode type = OperationTypeCode::scrub_digest_update;
+
+  ScrubDigestUpdate(
+    Ref<PG> pg,
+    const hobject_t &oid,
+    std::optional<uint32_t> data_digest,
+    std::optional<uint32_t> omap_digest,
+    uint64_t generation)
+    : ScrubAsyncOpT(pg), oid(oid),
+      data_digest(data_digest), omap_digest(omap_digest),
+      generation(generation) {}
+
+  void print(std::ostream &out) const final {
+    out << "(oid=" << oid << ")";
+  }
+  void dump_detail(ceph::Formatter *f) const final {
+    f->dump_stream("oid") << oid;
+  }
+
+protected:
+  ifut<> run(PG &pg) final;
+};
+
 struct obj_scrub_progress_t {
   // nullopt once complete
   std::optional<uint64_t> offset = 0;
@@ -264,6 +313,13 @@ struct EventBackendRegistry<osd::ScrubRequested> {
 
 template <>
 struct EventBackendRegistry<osd::ScrubMessage> {
+  static std::tuple<> get_backends() {
+    return {};
+  }
+};
+
+template <>
+struct EventBackendRegistry<osd::ScrubDigestUpdate> {
   static std::tuple<> get_backends() {
     return {};
   }
@@ -307,6 +363,12 @@ template <> struct fmt::formatter<crimson::osd::ScrubReserveRange>
   : fmt::ostream_formatter {};
 
 template <> struct fmt::formatter<crimson::osd::ScrubScan>
+  : fmt::ostream_formatter {};
+
+template <> struct fmt::formatter<crimson::osd::ScrubSleep>
+  : fmt::ostream_formatter {};
+
+template <> struct fmt::formatter<crimson::osd::ScrubDigestUpdate>
   : fmt::ostream_formatter {};
 
 #endif
