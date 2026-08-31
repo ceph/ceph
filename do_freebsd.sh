@@ -1,8 +1,12 @@
 #!/bin/sh -xve
 export NPROC=`sysctl -n hw.ncpu`
 
+# Get sudo activated. So login is only at the beginning 
+# of running this script 
+$SUDO echo
+
 if [ x"$1"x = x"--deps"x ]; then
-    sudo ./install-deps.sh
+    $SUDO ./install-deps.sh
 fi
 
 if [ x"$CEPH_DEV"x != xx ]; then
@@ -15,7 +19,8 @@ fi
 #	-D CMAKE_CXX_COMPILER="/usr/local/bin/clang++-devel" \
 #	-D CMAKE_C_COMPILER="/usr/local/bin/clang-devel" \
 COMPILE_FLAGS="-O0 -g"
-COMPILE_FLAGS="${COMPILE_FLAGS} -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument"
+# COMPILE_FLAGS="${COMPILE_FLAGS} -fuse-ld=/usr/local/bin/ld " 
+COMPILE_FLAGS="${COMPILE_FLAGS} -Wno-unused-command-line-argument"
 CMAKE_CXX_FLAGS_DEBUG="$CXX_FLAGS_DEBUG $COMPILE_FLAGS"
 CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG $COMPILE_FLAGS"
 
@@ -28,48 +33,62 @@ CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG $COMPILE_FLAGS"
 
 echo Keeping the old build
 if [ -d ${BUILD_DIR}.old ]; then
-    sudo mv ${BUILD_DIR}.old ${BUILD_DIR}.del
-    sudo rm -rf ${BUILD_DIR}.del &
+    $SUDO mv ${BUILD_DIR}.old ${BUILD_DIR}.del
+    $SUDO rm -rf ${BUILD_DIR}.del &
 fi
 if [ -d ${BUILD_DIR} ]; then
-    sudo mv ${BUILD_DIR} ${BUILD_DIR}.old
+    $SUDO mv ${BUILD_DIR} ${BUILD_DIR}.old
 fi
 
-mkdir ${BUILD_DIR}
+# mkdir ${BUILD_DIR}
 ./do_cmake.sh "$*" \
 	-D WITH_CCACHE=ON \
+	-D NINJA_MAX_COMPILE_JOBS=${NPROC} -DNINJA_MAX_LINK_JOBS=${NPROC} \
 	-D CMAKE_BUILD_TYPE=Debug \
 	-D CMAKE_CXX_FLAGS_DEBUG="$CMAKE_CXX_FLAGS_DEBUG" \
 	-D CMAKE_C_FLAGS_DEBUG="$CMAKE_C_FLAGS_DEBUG" \
 	-D ENABLE_GIT_VERSION=OFF \
-	-D WITH_RADOSGW_AMQP_ENDPOINT=OFF \
-	-D WITH_RADOSGW_KAFKA_ENDPOINT=OFF \
 	-D WITH_SYSTEMD=OFF \
 	-D WITH_SYSTEM_BOOST=ON \
 	-D WITH_SYSTEM_NPM=ON \
 	-D WITH_LTTNG=OFF \
 	-D WITH_BABELTRACE=OFF \
 	-D WITH_CRIMSON=OFF \
-	-D WITH_FUSE=ON \
+	-D WITH_FUSE=OFF \
 	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
 	-D WITH_KVS=ON \
 	-D CEPH_MAN_DIR=man \
-	-D WITH_LIBCEPHFS=OFF \
+	-D WITH_LIBCEPHFS=ON \
 	-D WITH_CEPHFS=OFF \
-	-D WITH_MGR=YES \
+	-D WITH_MGR=ON -D WITH_MGR_DASHBOARD_FRONTEND=OFF \
 	-D WITH_RDMA=OFF \
 	-D WITH_SPDK=OFF \
 	-D WITH_JAEGER=OFF \
+	-D WITH_BREAKPAD=OFF \
 	-D WITH_LIBURING=OFF \
+	-D WITH_RADOSGW_AMQP_ENDPOINT=OFF \
+	-D WITH_RADOSGW_KAFKA_ENDPOINT=OFF \
+	-D WITH_RADOSGW_ARROW_FLIGHT=OFF \
+	-D WITH_RADOSGW_SELECT_PARQUET=OFF \
+	-D WITH_RADOSGW_POSIX=OFF \
+	-D WITH_NVMEOF_GATEWAY_MONITOR_CLIENT=OFF \
+	-D WITH_QATLIB=OFF -D WITH_QATZIP=OFF \
 	2>&1 | tee cmake.log
 
 echo -n "start building: "; date
 printenv
 
 cd ${BUILD_DIR}
+if [ -f build.ninja ]; then
+  ninja -j$NPROC 
+  ninja tests 
+else
   gmake -j$CPUS V=1 VERBOSE=1 
   gmake tests 
+fi
+
+# Build the tests
   echo -n "start testing: "; date ;
   ctest -j $CPUS || RETEST=1
 
