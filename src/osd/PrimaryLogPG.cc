@@ -5163,6 +5163,113 @@ void PrimaryLogPG::trim_object_snap(
   }
 }
 
+int PrimaryLogPG::rollback_then_trim(
+  bool first,
+  const hobject_t &coid,
+  snapid_t X,
+  const rollback_snap_info_t *rb_info,
+  bool do_trim,
+  PrimaryLogPG::OpContextUPtr *ctxp)
+{
+  *ctxp = NULL;
+
+  ObjectContextRef obc = get_object_context(coid, false, NULL);
+  if (!obc || !obc->ssc || !obc->ssc->exists) {
+    osd->clog->error() << __func__ << ": Can not process " << coid
+      << " repair needed " << (obc ? "(no obc->ssc or !exists)" : "(no obc)");
+    return -ENOENT;
+  }
+
+  hobject_t head_oid = coid.get_head();
+  ObjectContextRef head_obc = get_object_context(head_oid, false);
+  if (!head_obc) {
+    osd->clog->error() << __func__ << ": Can not process " << coid
+      << " repair needed, no snapset obc for " << head_oid;
+    return -ENOENT;
+  }
+
+  SnapSet& snapset = obc->ssc->snapset;
+  if (snapset.seq == 0) {
+    osd->clog->error() << "No snapset.seq for object " << coid;
+    return -ENOENT;
+  }
+
+  if (do_trim) {
+    auto citer = snapset.clone_snaps.find(coid.snap);
+    if (citer == snapset.clone_snaps.end()) {
+      osd->clog->error() << "No clone_snaps in snapset " << snapset
+    << " for object " << coid << "\n";
+      return -ENOENT;
+    }
+    if (citer->second.empty()) {
+      osd->clog->error() << "No object info snaps for object " << coid;
+      return -ENOENT;
+    }
+  }
+
+  OpContextUPtr ctx = simple_opc_create(obc);
+  ctx->head_obc = head_obc;
+
+  if (!ctx->lock_manager.get_snaptrimmer_write(
+ coid,
+ obc,
+ first)) {
+    close_op_ctx(ctx.release());
+    dout(10) << __func__ << ": Unable to get a wlock on " << coid << dendl;
+    return -ENOLCK;
+  }
+
+  if (!ctx->lock_manager.get_snaptrimmer_write(
+ head_oid,
+ head_obc,
+ first)) {
+    close_op_ctx(ctx.release());
+    dout(10) << __func__ << ": Unable to get a wlock on " << head_oid << dendl;
+    return -ENOLCK;
+  }
+
+  ctx->at_version = get_next_version();
+  ctx->new_snapset = snapset;
+  ctx->new_obs = head_obc->obs;
+
+  // Step 1: Apply rollback work for this object (if pending)
+  if (rb_info && snapset.seq < rb_info->rollback_id) {
+    ctx->snapc.seq = rb_info->rollback_id;
+    auto ops = build_pending_ops(pool.info, snapset.seq, rb_info->rollback_id);
+    if (!ops.empty()) {
+      execute_clone_plan(head_oid, ops, ctx->new_snapset, ctx->op_t.get());
+
+      // Register OBCs for rollback source clones
+      for (auto& op : ops) {
+        if (op.type == pending_op_t::ROLLBACK) {
+          const auto& clones = ctx->new_snapset.clones;
+          auto cit = std::lower_bound(clones.begin(), clones.end(), op.source);
+          if (cit == clones.end()) {
+            continue;
+          }
+          hobject_t src_clone = head_oid;
+          src_clone.snap = *cit;
+          ObjectContextRef src_obc = get_object_context(src_clone, false);
+          if (src_obc) {
+            ctx->op_t->add_obc(src_obc);
+          }
+        }
+      }
+
+      update_snapset_for_rollback(ctx.get(), ops, pool.info, ctx->op_t.get());
+      emit_rollback_log_entries(ctx.get(), ops);
+    }
+  }
+
+  // Step 2: Trim clone X from this object (if trim pass)
+  if (do_trim) {
+    trim_object_snap(ctx.get(), coid, X);
+  }
+
+  *ctxp = std::move(ctx);
+  return 0;
+}
+
 void PrimaryLogPG::kick_snap_trim()
 {
   ceph_assert(is_active());

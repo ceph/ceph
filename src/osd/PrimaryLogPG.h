@@ -1643,6 +1643,13 @@ public:
   int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
 		  OpContextUPtr *ctxp);
   void trim_object_snap(OpContext *ctx, const hobject_t &coid, snapid_t snap_to_trim);
+  int rollback_then_trim(
+    bool first,
+    const hobject_t &coid,
+    snapid_t X,
+    const rollback_snap_info_t *rb_info,
+    bool do_trim,
+    OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
