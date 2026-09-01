@@ -872,6 +872,40 @@ public:
     laddr_t dst_prefix,
     bool move_indirect);
 
+  /**
+   * alloc_and_copy_non_data_extent
+   *
+   * Used by move_region() to relocate a single-extent metadata mapping
+   * (OMAP_LEAF/OMAP_INNER) by content rather than by paddr: allocates a
+   * fresh extent and copies src_bptr's bytes into it.
+   */
+  template <typename T>
+  move_region_iertr::future<> alloc_and_copy_non_data_extent(
+    Transaction &t,
+    laddr_t dst_key,
+    extent_len_t length,
+    ceph::bufferptr &src_bptr) {
+    auto extent = co_await alloc_non_data_extent<T>(
+      t, laddr_hint_t::create_as_fixed(dst_key), length
+    ).handle_error_interruptible(
+      move_region_iertr::pass_further(),
+      crimson::ct_error::assert_all("invalid error"));
+    extent->set_bptr(src_bptr);
+  }
+
+  /**
+   * alloc_and_copy_data_extents
+   *
+   * Same as alloc_and_copy_non_data_extent(), for OBJECT_DATA_BLOCK,
+   * which may span multiple destination extents.
+   */
+  move_region_iertr::future<> alloc_and_copy_data_extents(
+    Transaction &t,
+    laddr_t dst_key,
+    extent_len_t length,
+    LBAMapping &dst,
+    ceph::bufferlist bl);
+
   /* alloc_extents
    *
    * allocates more than one new blocks of type T.

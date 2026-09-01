@@ -1171,6 +1171,29 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   });
 }
 
+TransactionManager::move_region_iertr::future<>
+TransactionManager::alloc_and_copy_data_extents(
+  Transaction &t,
+  laddr_t dst_key,
+  extent_len_t length,
+  LBAMapping &dst,
+  ceph::bufferlist bl)
+{
+  auto extents = co_await alloc_data_extents<ObjectDataBlock>(
+    t, laddr_hint_t::create_as_fixed(dst_key), length, dst
+  ).handle_error_interruptible(
+    move_region_iertr::pass_further(),
+    crimson::ct_error::assert_all("invalid error"));
+  auto iter = bl.begin();
+  extent_len_t off = 0;
+  for (auto &extent : extents) {
+    auto &ext = *extent;
+    assert(off + ext.get_length() <= length);
+    iter.copy(ext.get_length(), ext.get_bptr().c_str());
+    off += ext.get_length();
+  }
+}
+
 TransactionManager::move_region_ret
 TransactionManager::move_region(
   Transaction &t,
@@ -1210,53 +1233,29 @@ TransactionManager::move_region(
           {
             auto maybe_indirect_extent = co_await read_pin<ObjectDataBlock>(
               t, src);
-            auto extents = co_await alloc_data_extents<ObjectDataBlock>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length(),
-              dst
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            // alloc_data_extents() above inserted a new mapping
+            co_await alloc_and_copy_data_extents(
+              t, this_dst_key, src.get_length(), dst,
+              maybe_indirect_extent.get_bl());
+            // alloc_and_copy_data_extents() above inserted a new mapping
             src = co_await src.refresh();
-            [[maybe_unused]] auto off = 0;
-            auto bl = maybe_indirect_extent.get_bl();
-            auto iter = bl.begin();
-            for (auto &extent : extents) {
-              auto &ext = *extent;
-              assert(off + ext.get_length() <= src.get_length());
-              iter.copy(ext.get_length(), ext.get_bptr().c_str());
-              off += ext.get_length();
-            }
           }
           break;
         case extent_types_t::OMAP_LEAF:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapLeafNode>(
               t, src);
-            auto extent = co_await alloc_non_data_extent<OMapLeafNode>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length()
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            extent->set_bptr(maybe_indirect_extent.extent->get_bptr());
+            co_await alloc_and_copy_non_data_extent<OMapLeafNode>(
+              t, this_dst_key, src.get_length(),
+              maybe_indirect_extent.extent->get_bptr());
           }
           break;
         case extent_types_t::OMAP_INNER:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapInnerNode>(
               t, src);
-            auto extent = co_await alloc_non_data_extent<OMapInnerNode>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length()
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            extent->set_bptr(maybe_indirect_extent.extent->get_bptr());
+            co_await alloc_and_copy_non_data_extent<OMapInnerNode>(
+              t, this_dst_key, src.get_length(),
+              maybe_indirect_extent.extent->get_bptr());
           }
           break;
         default:
