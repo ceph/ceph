@@ -1,14 +1,26 @@
+# Create the subvolume in YAML (group "qa", name sv_0) and pass it to
+# the thrasher. Kernel clients mount that subvolume so the 2-workunit
+# workload (fsstress, iozone, kernel_untar, ...) runs on the path being
+# quarantined: kclient I/O blocks while quarantined and resumes after
+# disable. Fuse jobs keep the default root mount so they do not EACCES.
+overrides:
+  ceph:
+    subvols:
+      create: 1
+    log-ignorelist:
+      - quarantine
+      - evicting unresponsive client
+      - slow request
+  kclient:
+    client.0:
+      mount_subvol_num: 0
+
 tasks:
 - quarantine_thrasher:
+    subvolume: sv_0
+    subvolume_group: qa
     min_hold: 5
     max_hold: 20
     min_release: 5
     max_release: 15
     initial_delay: 15
-
-overrides:
-  ceph:
-    log-ignorelist:
-      - quarantine
-      - evicting unresponsive client
-      - slow request
