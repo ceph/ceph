@@ -235,6 +235,17 @@ public:
   /// Handle mid-scrub abort by re-enqueuing the job
   void on_mid_scrub_abort(delay_cause_t issue);
 
+  /**
+   * scan_snaps
+   *
+   * Validate the local SnapMapper against the authoritative snapset stored
+   * in each head object's SS_ATTR, and repair any discrepancies.
+   * Called on the primary after each local scrub map is built.
+   *
+   * @param map  The local shard's scrub map for the current chunk
+   */
+  void scan_snaps(const ScrubMap &map);
+
   /// Metrics for the last or current scrub session
   /// Persists across state transitions so it can be queried after scrub completes
   std::unique_ptr<ScrubMetrics> m_last_scrub_metrics;
