@@ -66,6 +66,7 @@ class Filer {
     uint64_t *psize;
     ceph::real_time *pmtime;
     utime_t *pumtime;
+    uint64_t *change_attr;
 
     int flags;
 
@@ -77,6 +78,7 @@ class Filer {
     uint64_t probing_off, probing_len;
 
     std::map<object_t, uint64_t> known_size;
+    std::map<object_t, uint64_t> change_attrs;
     ceph::real_time max_mtime;
 
     std::set<object_t> ops;
@@ -85,19 +87,20 @@ class Filer {
     bool found_size;
 
     Probe(inodeno_t i, const file_layout_t &l, snapid_t sn,
-	  uint64_t f, uint64_t *e, ceph::real_time *m, int fl, bool fw,
-	  Context *c) :
+	  uint64_t f, uint64_t *e, ceph::real_time *m, uint64_t *pca,
+          int fl, bool fw, Context *c) :
       ino(i), layout(l), snapid(sn),
-      psize(e), pmtime(m), pumtime(nullptr), flags(fl), fwd(fw), onfinish(c),
+      psize(e), pmtime(m), pumtime(nullptr), change_attr(pca),
+      flags(fl), fwd(fw), onfinish(c),
       probing_off(f), probing_len(0),
       err(0), found_size(false) {}
 
     Probe(inodeno_t i, const file_layout_t &l, snapid_t sn,
-	  uint64_t f, uint64_t *e, utime_t *m, int fl, bool fw,
+	  uint64_t f, uint64_t *e, utime_t *m, uint64_t *pca, int fl, bool fw,
 	  Context *c) :
       ino(i), layout(l), snapid(sn),
-      psize(e), pmtime(nullptr), pumtime(m), flags(fl), fwd(fw),
-      onfinish(c), probing_off(f), probing_len(0),
+      psize(e), pmtime(nullptr), pumtime(m), change_attr(pca),
+      flags(fl), fwd(fw), onfinish(c), probing_off(f), probing_len(0),
       err(0), found_size(false) {}
   };
 
@@ -220,6 +223,7 @@ class Filer {
 	    uint64_t start_from,
 	    uint64_t *end,
 	    ceph::real_time *mtime,
+            uint64_t *change_attr,
 	    bool fwd,
 	    int flags,
 	    Context *onfinish);
@@ -233,7 +237,7 @@ class Filer {
 	    int flags,
 	    Context *onfinish) {
     return probe(ino, layout, snapid, start_from, end,
-		 (ceph::real_time* )0, fwd, flags, onfinish);
+		 (ceph::real_time* )0, 0, fwd, flags, onfinish);
   }
 
   int probe(inodeno_t ino,
@@ -242,6 +246,7 @@ class Filer {
 	    uint64_t start_from,
 	    uint64_t *end,
 	    utime_t *mtime,
+            uint64_t *change_attr,
 	    bool fwd,
 	    int flags,
 	    Context *onfinish);
