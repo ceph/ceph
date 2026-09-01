@@ -149,7 +149,9 @@ set(librgw_common_srcs
   rgw_bucket_sync.cc
   rgw_rest_restore.cc
   rgw_sc_quota_checker.cc
-  rgw_inventory_parquet.cc)
+  rgw_inventory_parquet.cc
+  rgw_inventory_s3.cc
+  rgw_rest_inventory.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
