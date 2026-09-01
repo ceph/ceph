@@ -876,21 +876,22 @@ public:
    * alloc_and_copy_non_data_extent
    *
    * Used by move_region() to relocate a single-extent metadata mapping
-   * (OMAP_LEAF/OMAP_INNER) by content rather than by paddr: allocates a
-   * fresh extent and copies src_bptr's bytes into it.
+   * (OMAP_LEAF/OMAP_INNER) by content rather than by paddr.
    */
   template <typename T>
   move_region_iertr::future<> alloc_and_copy_non_data_extent(
     Transaction &t,
     laddr_t dst_key,
     extent_len_t length,
-    ceph::bufferptr &src_bptr) {
+    T &src_extent) {
     auto extent = co_await alloc_non_data_extent<T>(
       t, laddr_hint_t::create_as_fixed(dst_key), length
     ).handle_error_interruptible(
       move_region_iertr::pass_further(),
       crimson::ct_error::assert_all("invalid error"));
-    extent->set_bptr(src_bptr);
+    extent->rewrite(t, src_extent, 0);
+    extent->set_laddr(dst_key);
+    extent->set_last_committed_crc(extent->calc_crc32c());
   }
 
   /**
