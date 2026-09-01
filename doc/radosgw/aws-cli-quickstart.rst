@@ -1,9 +1,9 @@
-==========================================================
- Quickstart: Using the AWS CLI with a cephadm-deployed RGW
-==========================================================
+==============================
+ Quickstart: Using the AWS CLI
+==============================
 
 .. note:: This guide assumes you have already deployed a Ceph cluster
-   with cephadm and have at least one RGW (RADOS Gateway) daemon running.
+   and have at least one RGW (RADOS Gateway) daemon running.
    See :doc:`../cephadm/services/rgw` for deployment instructions.
 
 This page walks through the smallest possible path from a freshly
