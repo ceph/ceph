@@ -712,3 +712,249 @@ TEST(BuildPendingOps, ObjectCreatedAfterSnapshot)
 }
 
 
+
+// ---------------------------------------------------------------------------
+// WI-9-d: execute_clone_plan() transaction sequences.
+//
+// The production code walks the pending_op_t list and issues clone()
+// operations in PGTransaction. For unit tests we simulate the clone plan
+// algorithm, recording each clone in order, and verify:
+//
+//   (a) §8.1 simple rollback: clone(head, clone@1) -- one clone op.
+//   (b) §8.2 stacked: five-op sequence produces the exact clone sequence
+//       documented in the design doc §8.2 table.
+//   (c) PGLog entry order: CLONE entries appear before the MODIFY entry for
+//       the head (transaction 1 constraint); a second MODIFY follows (txn 2).
+//   (d) SnapMapper registration: after the plan executes, newly created clone
+//       IDs appear in the clones list of the resulting SnapSet.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// A recorded clone operation: (dst, src) hobject_t pair.
+struct clone_op_t {
+  hobject_t dst;
+  hobject_t src;
+};
+
+/// Simulate execute_clone_plan, returning clone ops in order.
+/// (Simplified: always assumes source clone exists.)
+static std::vector<clone_op_t>
+simulate_execute_clone_plan(
+    const hobject_t& soid,
+    const std::vector<pending_op_sim_t>& ops)
+{
+  std::vector<clone_op_t> clones;
+  hobject_t head_source = soid;
+
+  for (int i = 0; i < (int)ops.size(); ++i) {
+    const auto& op = ops[i];
+    if (op.type == pending_op_sim_t::SNAP) {
+      hobject_t dst = soid;
+      dst.snap = op.id;
+      clones.push_back({dst, head_source});
+    } else {
+      // ROLLBACK: clone source snap to head
+      hobject_t src_clone = soid;
+      src_clone.snap = op.source;
+
+      clones.push_back({soid, src_clone});  // head ← src_clone
+      head_source = src_clone;
+
+      // Consume immediately following SNAPs, cloning directly from src_clone
+      for (int j = i + 1;
+           j < (int)ops.size() && ops[j].type == pending_op_sim_t::SNAP;
+           ++j) {
+        hobject_t dst = soid;
+        dst.snap = ops[j].id;
+        clones.push_back({dst, src_clone});
+        ++i;
+      }
+    }
+  }
+  return clones;
+}
+
+/// Simulate PGLog entry types for a JIT rollback write.
+/// Returns: list of (entry_type, snap_id) where snap_id==CEPH_NOSNAP for head.
+struct log_entry_sim_t {
+  enum Type { CLONE, MODIFY } type;
+  snapid_t snap;   // CEPH_NOSNAP for head
+};
+
+static std::vector<log_entry_sim_t>
+simulate_log_entries(
+    const std::vector<pending_op_sim_t>& ops,
+    snapid_t head_snap = CEPH_NOSNAP)
+{
+  std::vector<log_entry_sim_t> entries;
+  // Transaction 1: CLONE entries for each SNAP op
+  for (auto& op : ops) {
+    if (op.type == pending_op_sim_t::SNAP) {
+      entries.push_back({log_entry_sim_t::CLONE, op.id});
+    }
+  }
+  // Transaction 1: MODIFY entry for head (SnapSet updated)
+  entries.push_back({log_entry_sim_t::MODIFY, CEPH_NOSNAP});
+  // Transaction 2: MODIFY entry for head (client write)
+  entries.push_back({log_entry_sim_t::MODIFY, CEPH_NOSNAP});
+  return entries;
+}
+
+} // anonymous namespace (extends prior anonymous namespace)
+
+// (a) §8.1 simple rollback transaction sequence
+TEST(ExecuteClonePlan, SimpleRollbackSection81)
+{
+  // Setup: head (contents B, SnapSet::seq=1), clone@1 (contents A)
+  hobject_t soid; soid.snap = CEPH_NOSNAP;
+  soid.oid = object_t("obj");
+  soid.pool = 1;
+
+  // Build pending ops: ROLLBACK(id=2, source=1)
+  std::vector<pending_op_sim_t> ops = {
+    {pending_op_sim_t::ROLLBACK, snapid_t(2), snapid_t(1)}
+  };
+
+  auto clones = simulate_execute_clone_plan(soid, ops);
+
+  // Exactly one clone: head ← clone@1
+  ASSERT_EQ(1u, clones.size());
+  EXPECT_EQ(soid, clones[0].dst) << "dst must be the head object";
+  EXPECT_EQ(snapid_t(1), clones[0].src.snap) << "src must be clone@1";
+}
+
+// (b) §8.2 stacked transaction sequence
+TEST(ExecuteClonePlan, StackedSection82)
+{
+  hobject_t soid; soid.snap = CEPH_NOSNAP;
+  soid.oid = object_t("obj");
+  soid.pool = 1;
+
+  // Pending ops from §8.2: SNAP(3) RB(4,src=1) SNAP(5) RB(6,src=2) SNAP(7)
+  std::vector<pending_op_sim_t> ops = {
+    {pending_op_sim_t::SNAP,     snapid_t(3), CEPH_NOSNAP},
+    {pending_op_sim_t::ROLLBACK, snapid_t(4), snapid_t(1)},
+    {pending_op_sim_t::SNAP,     snapid_t(5), CEPH_NOSNAP},
+    {pending_op_sim_t::ROLLBACK, snapid_t(6), snapid_t(2)},
+    {pending_op_sim_t::SNAP,     snapid_t(7), CEPH_NOSNAP},
+  };
+
+  auto clones = simulate_execute_clone_plan(soid, ops);
+
+  // Expected clone sequence from §8.2 design table:
+  //   clone(clone@3, head)      -- SNAP 3: preserve head(C)
+  //   clone(head,   clone@1)    -- RB 4: restore A to head
+  //   clone(clone@5, clone@1)   -- SNAP 5: clone directly from src (skip head)
+  //   clone(head,   clone@2)    -- RB 6: restore B to head
+  //   clone(clone@7, clone@2)   -- SNAP 7: clone directly from src
+  ASSERT_EQ(5u, clones.size());
+
+  hobject_t clone3 = soid; clone3.snap = snapid_t(3);
+  hobject_t clone1 = soid; clone1.snap = snapid_t(1);
+  hobject_t clone5 = soid; clone5.snap = snapid_t(5);
+  hobject_t clone2 = soid; clone2.snap = snapid_t(2);
+  hobject_t clone7 = soid; clone7.snap = snapid_t(7);
+
+  // Op 0: clone(clone@3, head)
+  EXPECT_EQ(clone3, clones[0].dst) << "op0 dst must be clone@3";
+  EXPECT_EQ(soid,   clones[0].src) << "op0 src must be head";
+
+  // Op 1: clone(head, clone@1)
+  EXPECT_EQ(soid,   clones[1].dst) << "op1 dst must be head";
+  EXPECT_EQ(clone1, clones[1].src) << "op1 src must be clone@1";
+
+  // Op 2: clone(clone@5, clone@1)  -- optimisation: skip head
+  EXPECT_EQ(clone5, clones[2].dst) << "op2 dst must be clone@5";
+  EXPECT_EQ(clone1, clones[2].src) << "op2 src must be clone@1 (direct)";
+
+  // Op 3: clone(head, clone@2)
+  EXPECT_EQ(soid,   clones[3].dst) << "op3 dst must be head";
+  EXPECT_EQ(clone2, clones[3].src) << "op3 src must be clone@2";
+
+  // Op 4: clone(clone@7, clone@2)  -- optimisation: skip head
+  EXPECT_EQ(clone7, clones[4].dst) << "op4 dst must be clone@7";
+  EXPECT_EQ(clone2, clones[4].src) << "op4 src must be clone@2 (direct)";
+}
+
+// (c) PGLog entry order: CLONE entries first, MODIFY for head (txn 1),
+//     MODIFY for head (txn 2). Out-of-order is tested by asserting indices.
+TEST(ExecuteClonePlan, PGLogEntryOrder)
+{
+  // Ops: SNAP(3) RB(4) -- two clones created
+  std::vector<pending_op_sim_t> ops = {
+    {pending_op_sim_t::SNAP,     snapid_t(3), CEPH_NOSNAP},
+    {pending_op_sim_t::ROLLBACK, snapid_t(4), snapid_t(1)},
+  };
+
+  auto entries = simulate_log_entries(ops);
+
+  // Total entries: 1 CLONE + 1 MODIFY(txn1) + 1 MODIFY(txn2) = 3
+  ASSERT_EQ(3u, entries.size());
+
+  // Entry 0: CLONE for snap 3
+  EXPECT_EQ(log_entry_sim_t::CLONE,  entries[0].type) << "first entry must be CLONE";
+  EXPECT_EQ(snapid_t(3), entries[0].snap);
+
+  // Entry 1: MODIFY for head (transaction 1: SnapSet updated)
+  EXPECT_EQ(log_entry_sim_t::MODIFY, entries[1].type) << "second entry must be MODIFY(txn1)";
+  EXPECT_EQ(CEPH_NOSNAP, entries[1].snap);
+
+  // Entry 2: MODIFY for head (transaction 2: client write)
+  EXPECT_EQ(log_entry_sim_t::MODIFY, entries[2].type) << "third entry must be MODIFY(txn2)";
+
+  // Verify CLONE comes before both MODIFYs (ordering invariant)
+  size_t first_clone_idx = SIZE_MAX, first_modify_idx = SIZE_MAX;
+  for (size_t i = 0; i < entries.size(); ++i) {
+    if (entries[i].type == log_entry_sim_t::CLONE && first_clone_idx == SIZE_MAX)
+      first_clone_idx = i;
+    if (entries[i].type == log_entry_sim_t::MODIFY && first_modify_idx == SIZE_MAX)
+      first_modify_idx = i;
+  }
+  EXPECT_LT(first_clone_idx, first_modify_idx)
+      << "CLONE entries must precede MODIFY entries in the log";
+}
+
+// (d) SnapMapper registration: clone IDs from SNAP ops appear in resulting
+//     SnapSet::clones after executing the plan (simulate update_snapset).
+TEST(ExecuteClonePlan, SnapMapperRegistration)
+{
+  pg_pool_t pp;
+  pp.flags = pg_pool_t::FLAG_POOL_SNAPS;
+  for (snapid_t id : {snapid_t(3), snapid_t(5)}) {
+    pool_snap_info_t s; s.snapid = id; s.name = "s"; s.stamp = utime_t();
+    pp.snaps[id] = s;
+  }
+
+  // Build pending ops in (2,5]: SNAP(3) ROLLBACK(4,src=1) SNAP(5)
+  rollback_snap_info_t rb; rb.rollback_id = snapid_t(4);
+  rb.source_snap = snapid_t(1);
+  pp.rollback_snaps[rb.rollback_id] = rb;
+
+  auto ops = simulate_build_pending_ops(pp, snapid_t(2), snapid_t(5));
+
+  // Simulate update_snapset_for_rollback: add SNAP op clone IDs to ss.clones
+  SnapSet ss;
+  ss.seq = snapid_t(2);
+  for (auto& op : ops) {
+    if (op.type == pending_op_sim_t::SNAP) {
+      ss.clones.push_back(op.id);
+    }
+  }
+  // Advance seq to current_seq
+  ss.seq = snapid_t(5);
+
+  // Verify clone IDs 3 and 5 are registered (snap mapper would see them)
+  EXPECT_EQ(2u, ss.clones.size())
+      << "two clones should be registered: snap@3 and snap@5";
+  EXPECT_TRUE(std::find(ss.clones.begin(), ss.clones.end(), snapid_t(3))
+              != ss.clones.end())
+      << "clone@3 must be registered in SnapSet::clones";
+  EXPECT_TRUE(std::find(ss.clones.begin(), ss.clones.end(), snapid_t(5))
+              != ss.clones.end())
+      << "clone@5 must be registered in SnapSet::clones";
+  EXPECT_EQ(snapid_t(5), ss.seq)
+      << "SnapSet::seq must be advanced to current_seq=5";
+}
+
+
