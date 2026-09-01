@@ -754,7 +754,6 @@ static SimpleCmd::Commands all_cmds = {
   { "mdlog list", OPT::MDLOG_LIST },
   { "mdlog autotrim", OPT::MDLOG_AUTOTRIM },
   { "mdlog trim", OPT::MDLOG_TRIM },
-  { "mdlog fetch", OPT::MDLOG_FETCH },
   { "mdlog status", OPT::MDLOG_STATUS },
   { "sync error list", OPT::SYNC_ERROR_LIST },
   { "sync error trim", OPT::SYNC_ERROR_TRIM },
