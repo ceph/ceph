@@ -620,6 +620,7 @@ TransactionManager::relocate_shadow_extent(
     )->template cast<LogicalChildNode>();
   } else {
     extent = co_await std::move(v.get_child_fut());
+    ceph_assert(extent->is_stable());
     if (extent->is_stable_dirty()) {
       // the extent is dirty, skip it.
       DEBUGT("skipping dirty extent: {}", t, *extent);
