@@ -70,8 +70,8 @@ jobs:
              python3 ceph/src/script/redmine-upkeep.py
              --github-action
              --git-dir=./ceph/
-             (inputs.debug && '--debug' || '')
-             format('--limit={0}', inputs.limit)
+             ${{ inputs.debug && '--debug' || '' }}
+             ${{ format('--limit={0}', inputs.limit) }}
         env:
           REDMINE_API_KEY: ${{ secrets.REDMINE_API_KEY_BACKPORT_BOT }}
 
