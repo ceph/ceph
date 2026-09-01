@@ -15590,6 +15590,7 @@ bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
     rollback_snap_info_t rb;
     rb.source_snap = m->snapid;
     rb.rollback_id = pp.get_snap_seq() + 1;
+    rb.snapc = m->snapc;
 
     pp.snap_seq = rb.rollback_id;
     pp.set_snap_epoch(pending_inc.epoch);
