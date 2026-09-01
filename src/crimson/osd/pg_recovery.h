@@ -86,7 +86,8 @@ private:
     const hobject_t& soid,
     const ObjectRecoveryInfo& recovery_info,
     bool is_delete,
-    ceph::os::Transaction& t);
+    ceph::os::Transaction& t,
+    bool is_repair = false);
   void on_global_recover (
     const hobject_t& soid,
     const object_stat_sum_t& stat_diff,
