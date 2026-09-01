@@ -13,7 +13,7 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
+using rgw::IAM::Policy;
 namespace {
 
 class RGWS3VectorBase : public RGWDefaultResponseOp {
@@ -446,7 +446,13 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    op_ret = rgw::s3vector::delete_vector_bucket_policy(configuration, this, y);
+    op_ret = retry_raced_bucket_write(this, s->bucket.get(), [this] {
+      rgw::sal::Attrs& attrs = s->bucket->get_attrs();
+      attrs.erase(RGW_ATTR_IAM_POLICY);
+      attrs.erase(RGW_ATTR_IAM_POLICY_REMOVE_SELF_ACCESS);
+      op_ret = s->bucket->put_info(this, false, real_time(), s->yield);
+      return op_ret;
+    }, y);
   }
 };
 
@@ -963,10 +969,14 @@ public:
 private:
   int verify_permission(optional_yield y) override {
     ldpp_dout(this, 10) << "INFO: verifying permission for s3vector PutVectorBucketPolicy" << dendl;
+    // Check if user is root account then user can put the policy
+    if(s->auth.identity->is_root_of(s->bucket_owner.id)) {
+      return 0;
+    }
     // policy TODO: implement permission check
-    /*if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsPutVectorBucketPolicy)) {
+    if (!verify_bucket_permission(this, s, rgw::IAM::s3vectorsPutVectorBucketPolicy)) {
       return -EACCES;
-    }*/
+    }
     return 0;
   }
 
@@ -990,12 +1000,30 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    // policy TODO: implement
+    try{
+      const Policy p(s->cct, &s->bucket_tenant, configuration.policy,
+                      s->cct->_conf.get_val<bool> ("rgw_policy_reject_invalid_principals"));
+
+      if(s->public_access_block.BlockPublicPolicy && rgw::IAM::is_public(p)){
+        op_ret = -EACCES;
+        return;
+      }
+      op_ret = retry_raced_bucket_write(this, bucket.get(), [&p, this, &bucket]{
+              rgw::sal::Attrs attrs = bucket->get_attrs();
+              attrs[RGW_ATTR_IAM_POLICY].clear();
+              attrs[RGW_ATTR_IAM_POLICY].append(p.text);
+              return bucket->set_attrs(std::move(attrs));}, y);
+    }catch(rgw::IAM::PolicyParseException& e) {
+      ldpp_dout(this, 5) << "failed to parse the policy" << e.what() << dendl;
+      op_ret = -EINVAL;
+      s->err.message = e.what();
+    }
   }
 };
 
 class RGWS3VectorGetVectorBucketPolicy : public RGWS3VectorBase {
   rgw::s3vector::get_vector_bucket_policy_t configuration;
+  bufferlist policy;
 public:
   explicit RGWS3VectorGetVectorBucketPolicy(bufferlist&& data) : RGWS3VectorBase(std::move(data)) {}
 private:
@@ -1012,7 +1040,6 @@ private:
   std::string canonical_name() const override { return fmt::format("REST.{}.S3VECTOR.GetVectorBucketPolicy", s->info.method); }
   RGWOpType get_type() override { return RGW_OP_S3VECTOR_GET_VECTOR_BUCKET_POLICY; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-
   int init_processing(optional_yield y) override {
     return do_init_processing(configuration, y);
   }
@@ -1028,7 +1055,24 @@ private:
       ldpp_dout(this, 1) << "ERROR: failed to load s3vector bucket " << bucket_id << ". error: " << op_ret << dendl;
       return;
     }
-    // policy TODO: implement
+    rgw::sal::Attrs attrs(s->bucket_attrs);
+    auto attr = attrs.find(RGW_ATTR_IAM_POLICY);
+    if(attr == attrs.end()) {
+      ldpp_dout(this, 20) << "can't find vector bucket IAM POLICY attr bucket_name = "
+        << configuration.vector_bucket_name << dendl;
+      op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
+      s->err.message = "The vector bucket policy does not exist";
+      return;
+    } else {
+      policy = attrs[RGW_ATTR_IAM_POLICY];
+      
+      if(policy.length() == 0) { 
+        ldpp_dout(this, 10) << "The vector bucket policy doesnot exist, bucket_policy = "
+          << configuration.vector_bucket_name << dendl;
+          op_ret = -ERR_NO_SUCH_BUCKET_POLICY;
+          return;
+      }
+    }
   }
 };
 
