@@ -100,6 +100,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
         msg->pgid = pg.get_pgid();
         msg->map_epoch = pg.get_osdmap_epoch();
         msg->min_epoch = pg.get_last_peering_reset();
+        msg->is_repair = pg.get_peering_state().is_repair();
         msg->pushes.push_back(std::move(push));
         msg->set_priority(pg.get_recovery_op_priority());
         seastar::future<> push_future = get_recovering(soid).wait_for_pushes(shard);
@@ -271,7 +272,8 @@ RecoveryBackend::on_local_recover_persist(
     ceph::os::Transaction(),
     [FNAME, this, soid, &_recovery_info, is_delete, epoch_frozen](auto &t) {
     return pg.get_recovery_handler()->on_local_recover(
-      soid, _recovery_info, is_delete, t
+      soid, _recovery_info, is_delete, t,
+      pg.get_peering_state().is_repair()
     ).then_interruptible([FNAME, this, &t] {
       DEBUGDPP("submitting transaction", pg);
       return crimson::os::with_store_do_transaction(
@@ -837,7 +839,9 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
       [FNAME, this, from](auto& pull_op) {
       const hobject_t& soid = pull_op.soid;
       DEBUGDPP("{}", pg, soid);
-      return backend->stat(coll, ghobject_t(soid)).then_interruptible(
+      return backend->stat(coll, ghobject_t(soid)).handle_error_interruptible(
+        crimson::ct_error::assert_all("stat failed during recovery push")
+      ).then_interruptible(
         [this, &pull_op](auto st) {
         ObjectRecoveryInfo &recovery_info = pull_op.recovery_info;
         ObjectRecoveryProgress &progress = pull_op.recovery_progress;
@@ -860,6 +864,7 @@ ReplicatedRecoveryBackend::handle_pull(Ref<MOSDPGPull> m)
         msg->pgid = pg.get_pgid();
         msg->map_epoch = pg.get_osdmap_epoch();
         msg->min_epoch = pg.get_last_peering_reset();
+        msg->is_repair = pg.get_peering_state().is_repair();
         msg->set_priority(pg.get_recovery_op_priority());
         msg->pushes.push_back(std::move(push_op));
         return shard_services.send_to_osd(from.osd, std::move(msg),
@@ -956,7 +961,8 @@ ReplicatedRecoveryBackend::_handle_pull_response(
     manager.lock_excl_sync(); /* cannot already be locked */
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.soid, get_recovering(push_op.soid).pull_info->recovery_info,
-      false, t
+      false, t,
+      pg.get_peering_state().is_repair()
     );
     DEBUGDPP("submitting transaction, complete", pg);
     co_await interruptor::make_interruptible(
@@ -1138,7 +1144,7 @@ ReplicatedRecoveryBackend::handle_push(
 
     co_await pg.get_recovery_handler()->on_local_recover(
       push_op.recovery_info.soid, push_op.recovery_info,
-      false, t);
+      false, t, m->is_repair);
 
     co_await interruptor::make_interruptible(
       crimson::os::with_store_do_transaction(
@@ -1227,6 +1233,7 @@ ReplicatedRecoveryBackend::handle_push_reply(
       msg->pgid = pg.get_pgid();
       msg->map_epoch = pg.get_osdmap_epoch();
       msg->min_epoch = pg.get_last_peering_reset();
+      msg->is_repair = pg.get_peering_state().is_repair();
       msg->set_priority(pg.get_recovery_op_priority());
       msg->pushes.push_back(std::move(*push_op));
       return shard_services.send_to_osd(from.osd,
@@ -1337,7 +1344,8 @@ ReplicatedRecoveryBackend::prep_push_target(
   // clone overlap content in local object if using a new object
   auto st = co_await interruptor::make_interruptible(
     crimson::os::with_store<&crimson::os::FuturizedStore::Shard::stat>(
-      store, coll, ghobject_t(recovery_info.soid), 0));
+      store, coll, ghobject_t(recovery_info.soid), 0).handle_error(
+      crimson::ct_error::assert_all("stat failed during recovery clone")));
 
   // TODO: pg num bytes counting
   uint64_t local_size = std::min(recovery_info.size, (uint64_t)st.st_size);
