@@ -41,7 +41,6 @@ int rgw_admin_bilog(const DoutPrefixProvider* dpp,
   int max_entries = opts.max_entries;
   int shard_id = opts.shard_id;
   bool yes_i_really_mean_it = opts.yes_i_really_mean_it;
-  int ret = 0;
 
   if (command == OPT::BILOG_LIST) {
     if (bucket_name.empty()) {

@@ -19,10 +19,6 @@ using ceph::Formatter;
 using namespace rgw_admin;
 using namespace std;
 
-static const DoutPrefixProvider* g_admin_dpp;
-static rgw::sal::Driver* g_admin_driver;
-
-
 #include "compressor/Compressor.h"
 #include "driver/rados/rgw_sal_rados.h"
 #include "radosgw-admin/admin_remote.h"
@@ -33,16 +29,6 @@ static rgw::sal::Driver* g_admin_driver;
 #include "rgw_rest_conn.h"
 #include "services/svc_sync_modules.h"
 
-namespace {
-
-#undef driver
-#define driver g_admin_driver
-#undef dpp
-#define dpp g_admin_dpp
-
-
-} // anonymous namespace
-
 int rgw_admin_period(const DoutPrefixProvider* dpp,
                 rgw::sal::Driver* driver,
                 rgw::sal::ConfigStore* cfgstore,
@@ -50,8 +36,6 @@ int rgw_admin_period(const DoutPrefixProvider* dpp,
                 Formatter* formatter,
                 const rgw_admin_period_options& o)
 {
-  g_admin_dpp = dpp;
-  g_admin_driver = driver;
   auto command = o.command;
 
   auto& realm_id = *o.realm_id;

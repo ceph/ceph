@@ -43,7 +43,6 @@ int rgw_admin_bi(const DoutPrefixProvider* dpp,
   bool max_entries_specified = opts.max_entries_specified;
   bool specified_shard_id = opts.specified_shard_id;
   bool yes_i_really_mean_it = opts.yes_i_really_mean_it;
-  int ret = 0;
 
   if (command == OPT::BI_GET) {
     if (bucket_name.empty()) {

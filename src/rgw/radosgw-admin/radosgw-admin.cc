@@ -955,14 +955,6 @@ static void show_user_info(RGWUserInfo& info, Formatter *formatter)
   cout << std::endl;
 }
 
-static void show_perm_policy(string perm_policy, Formatter* formatter)
-{
-  formatter->open_object_section("role");
-  formatter->dump_string("Permission policy", perm_policy);
-  formatter->close_section();
-  formatter->flush(cout);
-}
-
 class StoreDestructor {
   rgw::sal::Driver* driver;
   ceph::async::io_context_pool* pool;
@@ -977,21 +969,6 @@ public:
     rgw_http_client_cleanup();
   }
 };
-
-static int init_bucket(const rgw_bucket& b,
-                       std::unique_ptr<rgw::sal::Bucket>* bucket)
-{
-  return driver->load_bucket(dpp(), b, bucket, null_yield);
-}
-
-static int init_bucket(const string& tenant_name,
-		       const string& bucket_name,
-		       const string& bucket_id,
-                       std::unique_ptr<rgw::sal::Bucket>* bucket)
-{
-  rgw_bucket b{tenant_name, bucket_name, bucket_id};
-  return init_bucket(b, bucket);
-}
 
 static int read_input(const string& infile, bufferlist& bl)
 {
@@ -1095,14 +1072,6 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
   return true;
 }
 
-static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
-{
-  string val = bl.to_str();
-  f->dump_string(field_name, val.c_str() /* hide encoded null termination chars */);
-
-  return true;
-}
-
 static void parse_tier_config_param(const string& s, map<string, string, ltstr_nocase>& out)
 {
   int level = 0;
@@ -1136,26 +1105,6 @@ static void parse_tier_config_param(const string& s, map<string, string, ltstr_n
     }
   }
 }
-
-#ifdef WITH_RADOSGW_RADOS
-static int check_pool_support_omap(const rgw_pool& pool)
-{
-  librados::IoCtx io_ctx;
-  int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);
-  if (ret < 0) {
-     // the pool may not exist at this moment, we have no way to check if it supports omap.
-     return 0;
-  }
-
-  ret = io_ctx.omap_clear("__omap_test_not_exist_oid__");
-  if (ret == -EOPNOTSUPP) {
-    io_ctx.close();
-    return ret;
-  }
-  io_ctx.close();
-  return 0;
-}
-#endif
 
 void resolve_zone_id_opt(std::optional<string>& zone_name, std::optional<rgw_zone_id>& zone_id)
 {

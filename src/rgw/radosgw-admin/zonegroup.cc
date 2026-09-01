@@ -19,23 +19,9 @@ using ceph::Formatter;
 using namespace rgw_admin;
 using namespace std;
 
-static const DoutPrefixProvider* g_admin_dpp;
-static rgw::sal::Driver* g_admin_driver;
-
-
 #include "driver/rados/rgw_sal_rados.h"
 #include "rgw_zone_features.h"
 #include "services/svc_sync_modules.h"
-
-namespace {
-
-#undef driver
-#define driver g_admin_driver
-#undef dpp
-#define dpp g_admin_dpp
-
-
-} // anonymous namespace
 
 int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
                 rgw::sal::Driver* driver,
@@ -44,8 +30,6 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
                 Formatter* formatter,
                 const rgw_admin_zonegroup_options& o)
 {
-  g_admin_dpp = dpp;
-  g_admin_driver = driver;
   auto command = o.command;
 
   auto& zonegroup_id = *o.zonegroup_id;
@@ -80,7 +64,6 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
   auto is_master_set = o.is_master_set;
   auto is_read_only_set = o.is_read_only_set;
   auto sync_from_all = o.sync_from_all;
-  auto yes_i_really_mean_it = o.yes_i_really_mean_it;
 #ifdef WITH_RADOSGW_RADOS
   auto& enable_features = *o.enable_features;
   auto& disable_features = *o.disable_features;

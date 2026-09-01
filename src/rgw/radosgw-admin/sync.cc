@@ -794,8 +794,6 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
   auto& opt_bucket_name = *o.opt_bucket_name;
   auto& opt_source_zone_id = *o.opt_source_zone_id;
   auto& opt_dest_zone_id = *o.opt_dest_zone_id;
-  auto& opt_source_zone_name = *o.opt_source_zone_name;
-  auto& opt_dest_zone_name = *o.opt_dest_zone_name;
   auto& opt_zone_ids = *o.opt_zone_ids;
   auto& opt_source_zone_ids = *o.opt_source_zone_ids;
   auto& opt_dest_zone_ids = *o.opt_dest_zone_ids;

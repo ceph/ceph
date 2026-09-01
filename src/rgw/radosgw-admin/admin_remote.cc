@@ -23,12 +23,9 @@ using ceph::Formatter;
 using namespace std;
 
 static const DoutPrefixProvider* g_admin_dpp;
-static rgw::sal::Driver* g_admin_driver;
 
 namespace {
 
-#undef driver
-#define driver g_admin_driver
 #undef dpp
 #define dpp g_admin_dpp
 
@@ -141,7 +138,6 @@ int rgw_admin_send_to_remote_or_url(RGWRESTConn *conn, const string& url,
                                     rgw::sal::Driver* driver)
 {
   g_admin_dpp = dpp;
-  g_admin_driver = driver;
   if (url.empty()) {
     return send_to_remote_gateway(conn, info, in_data, parser);
   }
@@ -158,7 +154,6 @@ int rgw_admin_commit_period(rgw::sal::ConfigStore* cfgstore,
                             rgw::sal::Driver* driver)
 {
   g_admin_dpp = dpp;
-  g_admin_driver = driver;
   auto& master_zone = period.get_master_zone().id;
   if (master_zone.empty()) {
     cerr << "cannot commit period: period does not have a master zone of a master zonegroup" << std::endl;
@@ -278,7 +273,6 @@ int rgw_admin_update_period(rgw::sal::ConfigStore* cfgstore,
                             rgw::sal::Driver* driver)
 {
   g_admin_dpp = dpp;
-  g_admin_driver = driver;
   RGWRealm realm;
   std::unique_ptr<rgw::sal::RealmWriter> realm_writer;
   int ret = rgw::read_realm(dpp, null_yield, cfgstore,
@@ -335,7 +329,6 @@ int rgw_admin_do_period_pull(rgw::sal::ConfigStore* cfgstore,
                              rgw::sal::Driver* driver)
 {
   g_admin_dpp = dpp;
-  g_admin_driver = driver;
   RGWEnv env;
   req_info info(g_ceph_context, &env);
   info.method = "GET";

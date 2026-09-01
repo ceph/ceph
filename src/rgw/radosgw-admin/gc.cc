@@ -27,7 +27,6 @@ int rgw_admin_gc(const DoutPrefixProvider* dpp,
   int shard_id = opts.shard_id;
   bool specified_shard_id = opts.specified_shard_id;
   bool include_all = opts.include_all;
-  int ret = 0;
 
   if (command == OPT::GC_LIST) {
     if (specified_shard_id) {

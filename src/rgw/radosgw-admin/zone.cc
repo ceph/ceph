@@ -19,10 +19,6 @@ using ceph::Formatter;
 using namespace rgw_admin;
 using namespace std;
 
-static const DoutPrefixProvider* g_admin_dpp;
-static rgw::sal::Driver* g_admin_driver;
-
-
 #include "compressor/Compressor.h"
 #include "driver/rados/rgw_sal_rados.h"
 #include "rgw_zone_features.h"
@@ -30,14 +26,8 @@ static rgw::sal::Driver* g_admin_driver;
 
 namespace {
 
-#undef driver
-#define driver g_admin_driver
-#undef dpp
-#define dpp g_admin_dpp
-
-
 #ifdef WITH_RADOSGW_RADOS
-static int check_pool_support_omap(const rgw_pool& pool)
+static int check_pool_support_omap(rgw::sal::Driver* driver, const rgw_pool& pool)
 {
   librados::IoCtx io_ctx;
   int ret = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_rados_handle()->ioctx_create(pool.to_str().c_str(), io_ctx);
@@ -64,8 +54,6 @@ int rgw_admin_zone(const DoutPrefixProvider* dpp,
                 Formatter* formatter,
                 const rgw_admin_zone_options& o)
 {
-  g_admin_dpp = dpp;
-  g_admin_driver = driver;
   auto command = o.command;
 
   auto& zonegroup_id = *o.zonegroup_id;
@@ -76,16 +64,12 @@ int rgw_admin_zone(const DoutPrefixProvider* dpp,
   auto& realm_id = *o.realm_id;
   auto& realm_name = *o.realm_name;
   auto& placement_id = *o.placement_id;
-  auto& url = *o.url;
   auto& access_key = *o.access_key;
   auto& secret_key = *o.secret_key;
   auto& infile = *o.infile;
   auto& sync_from = *o.sync_from;
   auto& sync_from_rm = *o.sync_from_rm;
   auto& endpoints = *o.endpoints;
-  auto& master_zone = *o.master_zone;
-  auto& format = *o.format;
-  auto& api_name = *o.api_name;
   auto& tier_type = *o.tier_type;
   auto& redirect_zone = *o.redirect_zone;
   auto& tier_config_add = *o.tier_config_add;
@@ -96,7 +80,6 @@ int rgw_admin_zone(const DoutPrefixProvider* dpp,
   auto& compression_type = *o.compression_type;
   auto& bucket_index_max_shards = *o.bucket_index_max_shards;
   auto& opt_storage_class = *o.opt_storage_class;
-  auto& opt_region = *o.opt_region;
   auto tier_type_specified = o.tier_type_specified;
   auto sync_from_all_specified = o.sync_from_all_specified;
   auto redirect_zone_set = o.redirect_zone_set;
@@ -108,15 +91,12 @@ int rgw_admin_zone(const DoutPrefixProvider* dpp,
   auto is_master_set = o.is_master_set;
   auto is_read_only_set = o.is_read_only_set;
   auto sync_from_all = o.sync_from_all;
-  auto yes_i_really_mean_it = o.yes_i_really_mean_it;
 #ifdef WITH_RADOSGW_RADOS
   auto& placement_index_type = *o.placement_index_type;
   auto index_type_specified = o.index_type_specified;
   auto& enable_features = *o.enable_features;
   auto& disable_features = *o.disable_features;
 #endif
-  auto num_shards_specified = o.num_shards_specified;
-  auto num_shards = o.num_shards;
 
   switch (command) {
     case OPT::ZONE_CREATE:
@@ -664,7 +644,7 @@ int rgw_admin_zone(const DoutPrefixProvider* dpp,
             info.inline_data = placement_inline_data;
           }
 
-          ret = check_pool_support_omap(info.get_data_extra_pool());
+          ret = check_pool_support_omap(driver, info.get_data_extra_pool());
           if (ret < 0) {
              cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
                  << "' does not support omap" << std::endl;

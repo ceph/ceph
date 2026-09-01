@@ -190,17 +190,10 @@ int rgw_admin_object(const DoutPrefixProvider* dpp,
   auto& objects_file = *opts.objects_file;
   auto& end_date = *opts.end_date;
   auto& start_date = *opts.start_date;
-  auto& marker = *opts.marker;
-  int max_entries = opts.max_entries;
-  int shard_id = opts.shard_id;
-  bool max_entries_specified = opts.max_entries_specified;
-  bool specified_shard_id = opts.specified_shard_id;
   int64_t min_rewrite_size = opts.min_rewrite_size;
   int64_t max_rewrite_size = opts.max_rewrite_size;
   uint64_t min_rewrite_stripe_size = opts.min_rewrite_stripe_size;
   bool yes_i_really_mean_it = opts.yes_i_really_mean_it;
-  bool fix = opts.fix;
-  bool remove_bad = opts.remove_bad;
   int ret = 0;
 
   if (command == OPT::OBJECT_PUT) {
@@ -479,10 +472,10 @@ int rgw_admin_object(const DoutPrefixProvider* dpp,
         utime_t ut(entry.meta.mtime);
         ut.gmtime(formatter->dump_stream("mtime"));
 
-        if ((entry.meta.size < min_rewrite_size) ||
-            (entry.meta.size > max_rewrite_size) ||
-            (start_epoch > 0 && start_epoch > (uint64_t)ut.sec()) ||
-            (end_epoch > 0 && end_epoch < (uint64_t)ut.sec())) {
+        if ((static_cast<int64_t>(entry.meta.size) < min_rewrite_size) ||
+            (static_cast<int64_t>(entry.meta.size) > max_rewrite_size) ||
+            (start_epoch > 0 && start_epoch > static_cast<uint64_t>(ut.sec())) ||
+            (end_epoch > 0 && end_epoch < static_cast<uint64_t>(ut.sec()))) {
           formatter->dump_string("status", "Skipped");
         } else {
 	  std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(key);

@@ -31,7 +31,6 @@ int rgw_admin_bucket_logging(const DoutPrefixProvider* dpp,
   auto& tenant = *opts.tenant;
   auto& bucket_name = *opts.bucket_name;
   auto& bucket_id = *opts.bucket_id;
-  int ret = 0;
 
   if (command == OPT::BUCKET_LOGGING_FLUSH) {
     if (bucket_name.empty()) {

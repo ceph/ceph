@@ -50,7 +50,6 @@ int rgw_admin_reshard(const DoutPrefixProvider* dpp,
   int num_shards = opts.num_shards;
   int shard_id = opts.shard_id;
   bool num_shards_specified = opts.num_shards_specified;
-  bool max_entries_specified = opts.max_entries_specified;
   bool specified_shard_id = opts.specified_shard_id;
   bool yes_i_really_mean_it = opts.yes_i_really_mean_it;
   int ret = 0;

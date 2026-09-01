@@ -29,7 +29,6 @@ int rgw_admin_olh(const DoutPrefixProvider* dpp,
   auto& bucket_name = *opts.bucket_name;
   auto& bucket_id = *opts.bucket_id;
   auto& object = *opts.object;
-  int ret = 0;
 
   if (command == OPT::OLH_GET || command == OPT::OLH_READLOG) {
     if (bucket_name.empty()) {

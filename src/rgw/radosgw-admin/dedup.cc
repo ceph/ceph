@@ -74,13 +74,13 @@ int rgw_admin_dedup(const DoutPrefixProvider* dpp,
 
         if (have_max_bucket_index_ops) {
           throttle_action_t action = { .op_type = BUCKET_INDEX_OP,
-                                       .limit = max_bucket_index_ops};
+                                       .limit = static_cast<uint32_t>(max_bucket_index_ops)};
           throttle_msg.vec.push_back(action);
         }
 
         if (have_max_metadata_ops) {
           throttle_action_t action = { .op_type = METADATA_ACCESS_OP,
-                                       .limit = max_metadata_ops};
+                                       .limit = static_cast<uint32_t>(max_metadata_ops)};
           throttle_msg.vec.push_back(action);
         }
       }

@@ -19,25 +19,11 @@ using ceph::Formatter;
 using namespace rgw_admin;
 using namespace std;
 
-static const DoutPrefixProvider* g_admin_dpp;
-static rgw::sal::Driver* g_admin_driver;
-
-
 #include "radosgw-admin/admin_remote.h"
 #include "rgw_http_client.h"
 #include "rgw_http_errors.h"
 #include "rgw_rest_client.h"
 #include "rgw_rest_conn.h"
-
-namespace {
-
-#undef driver
-#define driver g_admin_driver
-#undef dpp
-#define dpp g_admin_dpp
-
-
-} // anonymous namespace
 
 int rgw_admin_realm(const DoutPrefixProvider* dpp,
                 rgw::sal::Driver* driver,
@@ -46,23 +32,18 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
                 Formatter* formatter,
                 const rgw_admin_realm_options& o)
 {
-  g_admin_dpp = dpp;
-  g_admin_driver = driver;
   auto command = o.command;
 
   auto& realm_id = *o.realm_id;
   auto& realm_name = *o.realm_name;
   auto& realm_new_name = *o.realm_new_name;
   auto& period_id = *o.period_id;
-  auto& period_epoch = *o.period_epoch;
   auto& url = *o.url;
   auto& access_key = *o.access_key;
   auto& secret_key = *o.secret_key;
-  auto& remote = *o.remote;
   auto& infile = *o.infile;
   auto& opt_region = *o.opt_region;
   auto set_default = o.set_default;
-  auto yes_i_really_mean_it = o.yes_i_really_mean_it;
 
   switch (command) {
     case OPT::REALM_CREATE:

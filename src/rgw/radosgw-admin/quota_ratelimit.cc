@@ -14,9 +14,6 @@ using namespace rgw_admin;
 using namespace std;
 
 static const DoutPrefixProvider* g_admin_dpp;
-static rgw::sal::Driver* g_admin_driver;
-#undef driver
-#define driver g_admin_driver
 #undef dpp
 #define dpp g_admin_dpp
 
@@ -329,7 +326,6 @@ int rgw_admin_quota_ratelimit(const DoutPrefixProvider* dpp,
                               const rgw_admin_quota_ratelimit_options& opts)
 {
   g_admin_dpp = dpp;
-  g_admin_driver = driver;
   auto& command = opts.command;
   auto& tenant = *opts.tenant;
   auto& bucket_name = *opts.bucket_name;
