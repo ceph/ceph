@@ -15,6 +15,10 @@ class PglogBasedRecovery;
 class RecoveryBackend;
 class PGRecovery;
 
+namespace scrub {
+  class PGScrubber;
+}
+
 class PGRecoveryListener {
 public:
   virtual crimson::osd::ShardServices& get_shard_services() = 0;
@@ -36,12 +40,14 @@ public:
   virtual const pg_info_t& get_info() const= 0;
   virtual seastar::future<> stop() = 0;
   virtual void publish_stats_to_osd() = 0;
+  virtual void inc_osd_stat_repaired() = 0;
   virtual OSDriver &get_osdriver() = 0;
   virtual SnapMapper &get_snap_mapper() = 0;
   virtual void set_pglog_based_recovery_op(
     crimson::osd::PglogBasedRecovery *op) = 0;
   virtual void reset_pglog_based_recovery_op() = 0;
   virtual void schedule_event_after(PGPeeringEventRef evt, float delay) = 0;
+  virtual scrub::PGScrubber* get_scrubber() = 0;
 };
 
 }
