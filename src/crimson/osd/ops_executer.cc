@@ -1541,6 +1541,28 @@ static PG::interruptible_future<> do_pgls_filtered(
   });
 }
 
+static PG::interruptible_future<> do_scrub_ls(
+  const PG& pg,
+  const MOSDOp* m,
+  OSDOp& osd_op)
+{
+  int r = pg.do_scrub_ls(m, &osd_op);
+
+  if (r < 0) {
+    if (r == -EINVAL) {
+      throw crimson::osd::invalid_argument{};
+    } else if (r == -EAGAIN) {
+      throw crimson::osd::error(std::errc::resource_unavailable_try_again);
+    } else if (r == -ENOENT) {
+      throw crimson::osd::object_not_found{};
+    } else {
+      throw crimson::osd::make_error(r);
+    }
+  }
+
+  return seastar::now();
+}
+
 PgOpsExecuter::interruptible_future<>
 PgOpsExecuter::execute_op(OSDOp& osd_op)
 {
@@ -1554,6 +1576,8 @@ PgOpsExecuter::execute_op(OSDOp& osd_op)
     return do_pgnls(pg, nspace, osd_op);
   case CEPH_OSD_OP_PGNLS_FILTER:
     return do_pgnls_filtered(pg, nspace, osd_op);
+  case CEPH_OSD_OP_SCRUBLS:
+    return do_scrub_ls(pg, m, osd_op);
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
