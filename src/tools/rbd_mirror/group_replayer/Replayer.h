@@ -185,6 +185,12 @@ private:
  *          |                                 |                                                    |                                 |
  *          |                                 v                                                    |                                 |
  *          |                      CREATE_MIRROR_GROUP_SNAPSHOT                                    |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                        GET_MIRROR_PEER_LIST                                          |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                      SET_MIRROR_SNAPSHOT_METADATA                                    |                                 |
  *          |                                 | m_retry_validate_snap = true                       |                                 |
  *          |                                 v                                                    |                                 |
  *          |                      UPDATE_LOCAL_GROUP_STATE                                        |                                 |
@@ -365,6 +371,7 @@ private:
   std::vector<cls::rbd::GroupSnapshot> m_user_snapshots;
   std::vector<std::pair<std::string, ImageReplayer<ImageCtxT> *>> m_replayers_by_image_id;
   std::unordered_set<std::string> m_remote_snap_ids;
+  std::set<std::string> m_mirror_peer_uuids;
   const cls::rbd::GroupSnapshot* m_last_complete_local_snap = nullptr;
   const cls::rbd::GroupSnapshot* m_last_local_snap = nullptr;
   cls::rbd::GroupSnapshot* m_mirror_snap_to_sync = nullptr;
@@ -374,6 +381,7 @@ private:
   Context* m_on_shutdown = nullptr;
 
   AsyncOpTracker m_in_flight_op_tracker;
+  librados::IoCtx m_default_ns_ioctx;
   bufferlist m_out_bl;
 
   int m_error_code = 0;
@@ -429,7 +437,10 @@ private:
   void create_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void handle_create_user_group_snapshots(int r);
   void create_mirror_group_snapshot(std::unique_lock<ceph::mutex>* locker);
-  void handle_create_mirror_group_snapshot(int r);
+  void get_mirror_peer_list(std::unique_lock<ceph::mutex>* locker);
+  void handle_get_mirror_peer_list(int r);
+  void set_mirror_snapshot_metadata(std::unique_lock<ceph::mutex>* locker);
+  void handle_set_mirror_snapshot_metadata(int r);
 
   void update_local_group_state(std::unique_lock<ceph::mutex>* locker);
   void handle_update_local_group_state(int r);

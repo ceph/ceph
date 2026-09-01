@@ -923,14 +923,6 @@ void Replayer<I>::create_mirror_group_snapshot(
     m_snapshot_start = ceph_clock_now();
   }
 
-  const auto& snap_ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
-      m_mirror_snap_to_sync->snapshot_namespace);
-
-  auto snap_state =
-    snap_ns.state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ?
-    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY :
-    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED;
-
   auto itl = std::find_if(
       m_local_group_snaps.begin(), m_local_group_snaps.end(),
       [group_snap_id](const cls::rbd::GroupSnapshot &s) {
@@ -945,32 +937,87 @@ void Replayer<I>::create_mirror_group_snapshot(
     return;
   }
 
-  int r;
-  std::set<std::string> mirror_peer_uuids;
-  if (snap_state == cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED) {
-    librados::IoCtx default_ns_io_ctx;
-    default_ns_io_ctx.dup(m_local_io_ctx);
+  m_mirror_peer_uuids.clear();
+  get_mirror_peer_list(locker);
+}
 
-    default_ns_io_ctx.set_namespace("");
-    std::vector<cls::rbd::MirrorPeer> mirror_peers;
-    r = librbd::cls_client::mirror_peer_list(&default_ns_io_ctx, &mirror_peers);
-    if (r < 0) {
-      derr << "failed to list mirror peers: " << cpp_strerror(r) << dendl;
-      handle_replay_complete(locker, r, "failed to list mirror peers");
-      return;
-    }
+template <typename I>
+void Replayer<I>::get_mirror_peer_list(
+    std::unique_lock<ceph::mutex>* locker) {
+  dout(10) << dendl;
 
-    for (auto &peer : mirror_peers) {
-      if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
-        continue;
-      }
-      mirror_peer_uuids.insert(peer.uuid);
-    }
+  const auto& snap_ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+      m_mirror_snap_to_sync->snapshot_namespace);
+
+  auto snap_state =
+    snap_ns.state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ?
+    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY :
+    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED;
+
+  if (snap_state != cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED) {
+    set_mirror_snapshot_metadata(locker);
+    return;
   }
+
+  m_default_ns_ioctx.dup(m_local_io_ctx);
+  m_default_ns_ioctx.set_namespace("");
+
+  m_in_flight_op_tracker.start_op();
+  librados::ObjectReadOperation op;
+  librbd::cls_client::mirror_peer_list_start(&op);
+
+  auto comp = create_rados_callback<
+      Replayer<I>,
+      &Replayer<I>::handle_get_mirror_peer_list>(this);
+
+  m_out_bl.clear();
+  int r = m_default_ns_ioctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+void Replayer<I>::handle_get_mirror_peer_list(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  std::unique_lock locker{m_lock};
+  m_in_flight_op_tracker.finish_op();
+  if (is_replay_interrupted(&locker)) {
+    return;
+  }
+
+  std::vector<cls::rbd::MirrorPeer> peers;
+  if (r == 0) {
+    auto it = m_out_bl.cbegin();
+    r = librbd::cls_client::mirror_peer_list_finish(&it, &peers);
+  }
+
+  if (r < 0) {
+    derr << "error listing mirror peers" << cpp_strerror(r) << dendl;
+    handle_replay_complete(&locker, r, "error listing mirror peers");
+    return;
+  }
+
+  m_mirror_peer_uuids.clear();
+  for (auto &peer : peers) {
+    if (peer.mirror_peer_direction == cls::rbd::MIRROR_PEER_DIRECTION_RX) {
+      continue;
+    }
+    m_mirror_peer_uuids.insert(peer.uuid);
+  }
+
+  set_mirror_snapshot_metadata(&locker);
+}
+
+template <typename I>
+void Replayer<I>::set_mirror_snapshot_metadata(
+    std::unique_lock<ceph::mutex>* locker) {
+  auto group_snap_id = m_mirror_snap_to_sync->id;
+  dout(10) << group_snap_id << dendl;
 
   librados::Rados rados(m_local_io_ctx);
   int8_t require_osd_release;
-  r = rados.get_min_compatible_osd(&require_osd_release);
+  int r = rados.get_min_compatible_osd(&require_osd_release);
   if (r < 0) {
     derr << "failed to retrieve min OSD release: " << cpp_strerror(r)
          << dendl;
@@ -978,10 +1025,17 @@ void Replayer<I>::create_mirror_group_snapshot(
     return;
   }
 
+  const auto& snap_ns = std::get<cls::rbd::GroupSnapshotNamespaceMirror>(
+    m_mirror_snap_to_sync->snapshot_namespace);
+
+  auto snap_state =
+    snap_ns.state == cls::rbd::MIRROR_SNAPSHOT_STATE_PRIMARY ?
+    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY :
+    cls::rbd::MIRROR_SNAPSHOT_STATE_NON_PRIMARY_DEMOTED;
+
   auto complete = cls::rbd::get_mirror_group_snapshot_complete_initial(require_osd_release);
   auto mirror_namespace = cls::rbd::GroupSnapshotNamespaceMirror(snap_state,
-                           mirror_peer_uuids, m_remote_mirror_uuid, group_snap_id,
-                           complete);
+        m_mirror_peer_uuids, m_remote_mirror_uuid, group_snap_id, complete);
 
   cls::rbd::GroupSnapshot local_snap =
   {group_snap_id, mirror_namespace,
@@ -992,10 +1046,9 @@ void Replayer<I>::create_mirror_group_snapshot(
 
   auto comp = create_rados_callback(
       new LambdaContext([this](int r) {
-        handle_create_mirror_group_snapshot(r);
+        handle_set_mirror_snapshot_metadata(r);
         m_in_flight_op_tracker.finish_op();
         }));
-
   m_in_flight_op_tracker.start_op();
   librados::ObjectWriteOperation op;
   librbd::cls_client::group_snap_set(&op, local_snap);
@@ -1006,17 +1059,16 @@ void Replayer<I>::create_mirror_group_snapshot(
 }
 
 template <typename I>
-void Replayer<I>::handle_create_mirror_group_snapshot(int r) {
-  auto group_snap_id = m_mirror_snap_to_sync->id;
-  dout(10) << "group_snap_id=" << group_snap_id << ", r=" << r << dendl;
-  std::unique_lock locker{m_lock};
+void Replayer<I>::handle_set_mirror_snapshot_metadata(int r) {
+  dout(10) << "r=" << r << dendl;
 
+  std::unique_lock locker{m_lock};
   if (is_replay_interrupted(&locker)) {
     return;
   }
 
   if (r < 0) {
-    derr << "failed to create mirror snapshot: " << group_snap_id
+    derr << "failed to create mirror snapshot: " << m_mirror_snap_to_sync->id
          << ", error: " << cpp_strerror(r) << dendl;
     handle_replay_complete(&locker, r, "failed to create mirror snapshot");
     return;
