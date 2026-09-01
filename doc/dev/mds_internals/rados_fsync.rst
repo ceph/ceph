@@ -124,6 +124,7 @@ We need to build a bunch of internal interfaces for this.
 - client only enables fsync skip when the MDS supports it
 - Track when setattr() is invoked and don't fsync-to-rados when those fields
   aren't acknowledged by the MDS.
+- actually look at change_attr when probing files
 
 9. Development todo
 -------------------
