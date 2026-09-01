@@ -13325,6 +13325,7 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   bool mds_flush = false;
   if (!syncdataonly && in->dirty_caps) {
     if (do_rados_fsync && // rados fsync enabled
+        in->unsafe_ops.empty() && // we don't have to wait for ops anyway
         in->inline_version == CEPH_INLINE_NONE && // not inline
         !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL) && // only write caps are dirty
         !in->dirty_setattr && // we haven't had a setattr
