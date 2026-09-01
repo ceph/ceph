@@ -5,9 +5,6 @@
 
 #include <charconv>
 #include <optional>
-#include <boost/range/adaptor/filtered.hpp>
-#include <boost/range/adaptor/transformed.hpp>
-#include <boost/range/algorithm/copy.hpp>
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include "include/err.h" // for MAX_ERRNO
@@ -501,6 +498,14 @@ PGBackend::write_iertr::future<> PGBackend::_writefull(
       os.oi.size - bl.length());
   }
   if (bl.length()) {
+    // Compute data digest for writefull (always writes whole object from offset 0)
+    bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+    if (!skip_data_digest) {
+      os.oi.set_data_digest(bl.crc32c(-1));
+    } else {
+      os.oi.clear_data_digest();
+    }
+
     txn.write(
       coll->get_cid(), ghobject_t{os.oi.soid}, 0, bl.length(),
       bl, flags);
@@ -718,13 +723,30 @@ PGBackend::write_iertr::future<> PGBackend::write(
       txn.nop();
     }
   } else {
+    // Compute data digest before the write consumes buf
+    bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+    if (offset == 0 && length >= os.oi.size && !skip_data_digest) {
+      // Writing whole object from start: fresh digest
+      os.oi.set_data_digest(buf.crc32c(-1));
+    } else if (offset == os.oi.size && os.oi.is_data_digest()) {
+      // Appending to end with an existing digest
+      if (skip_data_digest) {
+        os.oi.clear_data_digest();
+      } else {
+        os.oi.set_data_digest(buf.crc32c(os.oi.data_digest));
+      }
+    } else {
+      // Partial write or overwrite: digest no longer valid
+      os.oi.clear_data_digest();
+    }
+
     txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
-	      offset, length, std::move(buf), op.flags);
+              offset, length, std::move(buf), op.flags);
     update_size_and_usage(delta_stats, osd_op_params.modified_ranges,
                           os.oi, offset, length);
   }
   osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
-						     op.extent.length);
+                                                     op.extent.length);
   logger().debug("{} clean_regions modified", __func__);
 
   return seastar::now();
@@ -752,6 +774,25 @@ PGBackend::interruptible_future<> PGBackend::write_same(
     repeated_indata.append(osd_op.indata);
   }
   maybe_create_new_object(os, txn, delta_stats);
+
+  // Compute data digest before the write consumes repeated_indata
+  bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+  const uint64_t offset = op.writesame.offset;
+  if (offset == 0 && len >= os.oi.size && !skip_data_digest) {
+    // Writing whole object from start: fresh digest
+    os.oi.set_data_digest(repeated_indata.crc32c(-1));
+  } else if (offset == os.oi.size && os.oi.is_data_digest()) {
+    // Appending to end with an existing digest
+    if (skip_data_digest) {
+      os.oi.clear_data_digest();
+    } else {
+      os.oi.set_data_digest(repeated_indata.crc32c(os.oi.data_digest));
+    }
+  } else {
+    // Partial write or overwrite: digest no longer valid
+    os.oi.clear_data_digest();
+  }
+
   txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
             op.writesame.offset, len,
             std::move(repeated_indata), op.flags);
@@ -901,6 +942,18 @@ PGBackend::append_ierrorator::future<> PGBackend::append(
   }
   maybe_create_new_object(os, txn, delta_stats);
   if (op.extent.length) {
+    // Compute data digest before the write consumes osd_op.indata.
+    // Append always writes at the current end of the object (offset == os.oi.size),
+    // so follow the same branch logic as write() with offset == os.oi.size.
+    bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+    if (os.oi.is_data_digest() && !skip_data_digest) {
+      // Incrementally extend an existing digest
+      os.oi.set_data_digest(osd_op.indata.crc32c(os.oi.data_digest));
+    } else {
+      // No prior digest or digest tracking is disabled: invalidate
+      os.oi.clear_data_digest();
+    }
+
     txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
               os.oi.size /* offset */, op.extent.length,
               std::move(osd_op.indata), op.flags);
@@ -1089,23 +1142,19 @@ PGBackend::list_objects(
       store, coll, gstart, gend, limit, 0));
 
   std::vector<hobject_t> objects;
-  boost::copy(
-    gobjects |
-    boost::adaptors::filtered([](const ghobject_t& o) {
-      if (o.is_pgmeta()) {
-	return false;
-      } else if (o.hobj.is_temp()) {
-	return false;
-      } else if (o.is_internal_pg_local()) {
-	return false;
-      } else {
-	return o.is_no_gen();
-      }
-    }) |
-    boost::adaptors::transformed([](const ghobject_t& o) {
-      return o.hobj;
-    }),
-    std::back_inserter(objects));
+  objects.reserve(gobjects.size());
+  for (const auto& o : gobjects) {
+    if (o.is_pgmeta()) {
+      continue;
+    } else if (o.hobj.is_temp()) {
+      continue;
+    } else if (o.is_internal_pg_local()) {
+      continue;
+    } else if (!o.is_no_gen()) {
+      continue;
+    }
+    objects.push_back(o.hobj);
+  }
   co_return std::make_tuple(objects, next.hobj);
 }
 
