@@ -9,17 +9,15 @@
 
 #include "common/ceph_json.h"
 #include "common/errno.h"
-#include "common/Formatter.h"
 #include "rgw_account.h"
-#include "rgw_formats.h"
 #include "rgw_sal.h"
 
-using ceph::Formatter;
 using namespace rgw_admin;
 
 int rgw_admin_account(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       RGWStreamFlusher& stream_flusher,
+                      ceph::Formatter* formatter,
                       const rgw_admin_account_options& o)
 {
   switch (o.command) {
@@ -108,7 +106,6 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
 
     bool truncated = false;
     uint64_t count = 0;
-    Formatter* formatter = stream_flusher.get_formatter();
 
     if (o.max_entries_specified) {
       formatter->open_object_section("result");

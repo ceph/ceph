@@ -12256,7 +12256,7 @@ int main(int argc, const char **argv)
     account_opts.reset_stats = reset_stats;
     account_opts.max_entries = max_entries;
     account_opts.max_entries_specified = max_entries_specified;
-    ret = rgw_admin_account(dpp(), driver, stream_flusher, account_opts);
+    ret = rgw_admin_account(dpp(), driver, stream_flusher, formatter.get(), account_opts);
     if (ret != 0) {
       return ret;
     }

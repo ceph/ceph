@@ -35,4 +35,5 @@ struct rgw_admin_account_options {
 int rgw_admin_account(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       RGWStreamFlusher& stream_flusher,
+                      ceph::Formatter* formatter,
                       const rgw_admin_account_options& opts);
