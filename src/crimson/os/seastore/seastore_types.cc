@@ -1231,6 +1231,8 @@ std::ostream& operator<<(std::ostream& out, write_policy_t w)
     return out << "WRITE_BACK";
   case write_policy_t::WRITE_THROUGH:
     return out << "WRITE_THROUGH";
+  default:
+    return out << "INVALID_WRITE_POLICY_TYPE!";
   }
 }
 
@@ -1304,6 +1306,8 @@ std::ostream& operator<<(std::ostream& out, backend_type_t btype) {
     return out << "SEGMENTED";
   case backend_type_t::RANDOM_BLOCK:
     return out << "RANDOM_BLOCK";
+  default:
+    return out << "INVALID_BACKEND_TYPE!";
   }
 }
 
