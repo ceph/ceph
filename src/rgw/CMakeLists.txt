@@ -829,7 +829,8 @@ endif(WITH_RADOSGW_ARROW_FLIGHT)
 if(WITH_RADOSGW_RADOS)
   list(APPEND radosgw_admin_rados_srcs
     radosgw-admin/sync_checkpoint.cc
-    radosgw-admin/orphan.cc)
+    radosgw-admin/orphan.cc
+    radosgw-admin/log.cc)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} ${radosgw_admin_rados_srcs})
   target_link_libraries(radosgw-admin

@@ -213,9 +213,7 @@ enum class OPT {
   BUCKET_LOGGING_LIST,
   POLICY,
 #ifdef WITH_RADOSGW_RADOS
-  LOG_LIST,
-  LOG_SHOW,
-  LOG_RM,
+#include "radosgw-admin/opt_log.inc"
 #endif
   USAGE_SHOW,
   USAGE_TRIM,

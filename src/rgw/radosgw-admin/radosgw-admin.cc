@@ -54,6 +54,7 @@ extern "C" {
 #ifdef WITH_RADOSGW_RADOS
 #include "radosgw-admin/orphan.h"
 #include "radosgw-admin/sync_checkpoint.h"
+#include "radosgw-admin/log.h"
 #endif
 #include "radosgw-admin/radosgw-admin.h"
 
@@ -7886,137 +7887,21 @@ int main(int argc, const char **argv)
     return 0;
   }
 
-  if (opt_cmd == OPT::LOG_LIST) {
-    // filter by date?
-    if (date.size() && date.size() != 10) {
-      cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
-      return EINVAL;
-    }
-
-    formatter->reset();
-    formatter->open_array_section("logs");
-    RGWAccessHandle h;
-    int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->log_list_init(dpp(), date, &h);
-    if (r == -ENOENT) {
-      // no logs.
-    } else {
-      if (r < 0) {
-        cerr << "log list: error " << r << std::endl;
-        return -r;
-      }
-      while (true) {
-        string name;
-        int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->log_list_next(h, &name);
-        if (r == -ENOENT)
-          break;
-        if (r < 0) {
-          cerr << "log list: error " << r << std::endl;
-          return -r;
-        }
-        formatter->dump_string("object", name);
-      }
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-    cout << std::endl;
-  }
-
-  if (opt_cmd == OPT::LOG_SHOW || opt_cmd == OPT::LOG_RM) {
-    if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
-      cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
-      exit(1);
-    }
-
-    string oid;
-    if (!object.empty()) {
-      oid = object;
-    } else {
-      oid = date;
-      oid += "-";
-      oid += bucket_id;
-      oid += "-";
-      oid += bucket_name;
-    }
-
-    if (opt_cmd == OPT::LOG_SHOW) {
-      RGWAccessHandle h;
-
-      int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->log_show_init(dpp(), oid, &h);
-      if (r < 0) {
-	cerr << "error opening log " << oid << ": " << cpp_strerror(-r) << std::endl;
-	return -r;
-      }
-
-      formatter->reset();
-      formatter->open_object_section("log");
-
-      struct rgw_log_entry entry;
-
-      // peek at first entry to get bucket metadata
-      r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->log_show_next(dpp(), h, &entry);
-      if (r < 0) {
-	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
-	return -r;
-      }
-      formatter->dump_string("bucket_id", entry.bucket_id);
-      formatter->dump_string("bucket_owner", to_string(entry.bucket_owner));
-      formatter->dump_string("bucket", entry.bucket);
-
-      uint64_t agg_time = 0;
-      uint64_t agg_bytes_sent = 0;
-      uint64_t agg_bytes_received = 0;
-      uint64_t total_entries = 0;
-
-      if (show_log_entries)
-        formatter->open_array_section("log_entries");
-
-      do {
-        using namespace std::chrono;
-        uint64_t total_time = duration_cast<milliseconds>(entry.total_time).count();
-
-        agg_time += total_time;
-        agg_bytes_sent += entry.bytes_sent;
-        agg_bytes_received += entry.bytes_received;
-        total_entries++;
-
-        if (skip_zero_entries && entry.bytes_sent == 0 &&
-            entry.bytes_received == 0)
-          goto next;
-
-        if (show_log_entries) {
-
-	  rgw_format_ops_log_entry(entry, formatter.get());
-	  formatter->flush(cout);
-        }
-next:
-	r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->log_show_next(dpp(), h, &entry);
-      } while (r > 0);
-
-      if (r < 0) {
-      	cerr << "error reading log " << oid << ": " << cpp_strerror(-r) << std::endl;
-	return -r;
-      }
-      if (show_log_entries)
-        formatter->close_section();
-
-      if (show_log_sum) {
-        formatter->open_object_section("log_sum");
-	formatter->dump_int("bytes_sent", agg_bytes_sent);
-	formatter->dump_int("bytes_received", agg_bytes_received);
-	formatter->dump_int("total_time", agg_time);
-	formatter->dump_int("total_entries", total_entries);
-        formatter->close_section();
-      }
-      formatter->close_section();
-      formatter->flush(cout);
-      cout << std::endl;
-    }
-    if (opt_cmd == OPT::LOG_RM) {
-      int r = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->log_remove(dpp(), oid);
-      if (r < 0) {
-	cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;
-	return -r;
-      }
+  if (opt_cmd == OPT::LOG_LIST ||
+      opt_cmd == OPT::LOG_SHOW ||
+      opt_cmd == OPT::LOG_RM) {
+    rgw_admin_log_options log_opts;
+    log_opts.command = opt_cmd;
+    log_opts.date = &date;
+    log_opts.object = &object;
+    log_opts.bucket_name = &bucket_name;
+    log_opts.bucket_id = &bucket_id;
+    log_opts.show_log_entries = show_log_entries;
+    log_opts.show_log_sum = show_log_sum;
+    log_opts.skip_zero_entries = skip_zero_entries;
+    int ret = rgw_admin_log(dpp(), driver, formatter.get(), log_opts);
+    if (ret != 0) {
+      return ret;
     }
   }
 #endif
