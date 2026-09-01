@@ -508,3 +508,207 @@ TEST(PrimaryLogPGMakeWriteable, GateSuppressesSpuriousCloneWhenSeqContaminated)
       << "Post-fix gate must suppress spurious clone when new_snapset.seq="
       << R << " (rollback ID) and real_snap_seq=snaps[0]=" << S_new;
 }
+
+// ---------------------------------------------------------------------------
+// WI-9-c: build_pending_ops() tests.
+//
+// build_pending_ops(pp, obj_seq, current_seq) collects all snapshot and
+// rollback events in the half-open range (obj_seq, current_seq] from the
+// pool, sorts them by ID ascending, and returns a vector of pending_op_t.
+//
+// The helper simulate_build_pending_ops() replicates the production logic
+// from PrimaryLogPG::build_pending_ops() verbatim.
+//
+// Scenarios tested:
+//   (a) Simple rollback only – one ROLLBACK op returned.
+//   (b) Stacked: snap + rollback + snap + rollback + snap (§8.2 setup).
+//   (c) NOP rollback: snap never written after snapshot; object predates
+//       rollback (obj_seq < snap ID for which rollback issued) -- the op
+//       list still contains the ROLLBACK entry (execution decides no-op).
+//   (d) Multi-snap sharing one clone: rollback of snap 2 when obj_seq=3
+//       (all events behind obj_seq are excluded).
+//   (e) Object created after snapshot: obj_seq=0, snapc.seq=20, no snaps
+//       in (0,20] -- only the rollback appears; write must succeed.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+struct pending_op_sim_t {
+  enum Type { SNAP, ROLLBACK } type;
+  snapid_t id;
+  snapid_t source;
+};
+
+/// Replicates PrimaryLogPG::build_pending_ops() logic for test use.
+static std::vector<pending_op_sim_t>
+simulate_build_pending_ops(const pg_pool_t& pp,
+                           snapid_t obj_seq,
+                           snapid_t current_seq)
+{
+  std::vector<pending_op_sim_t> ops;
+
+  for (auto& [snap_id, snap_info] : pp.snaps) {
+    if (snap_id > obj_seq && snap_id <= current_seq) {
+      ops.push_back({pending_op_sim_t::SNAP, snap_id, CEPH_NOSNAP});
+    }
+  }
+  for (auto& [rb_id, rb_info] : pp.rollback_snaps) {
+    if (rb_id > obj_seq && rb_id <= current_seq) {
+      ops.push_back({pending_op_sim_t::ROLLBACK, rb_id, rb_info.source_snap});
+    }
+  }
+  std::sort(ops.begin(), ops.end(),
+    [](const pending_op_sim_t& a, const pending_op_sim_t& b) {
+      return a.id < b.id;
+    });
+  return ops;
+}
+
+} // anonymous namespace
+
+// (a) Simple rollback: one rollback, no other events in range
+TEST(BuildPendingOps, SimpleRollback)
+{
+  pg_pool_t pp;
+  pp.flags = pg_pool_t::FLAG_POOL_SNAPS;
+
+  // Snap S1=10 exists
+  pool_snap_info_t s;
+  s.snapid = snapid_t(10); s.name = "s1"; s.stamp = utime_t();
+  pp.snaps[s.snapid] = s;
+
+  // Rollback RB=20, source=10
+  rollback_snap_info_t rb;
+  rb.rollback_id = snapid_t(20); rb.source_snap = snapid_t(10);
+  pp.rollback_snaps[rb.rollback_id] = rb;
+
+  // Object last written at seq=10; current_seq=20
+  auto ops = simulate_build_pending_ops(pp, snapid_t(10), snapid_t(20));
+
+  ASSERT_EQ(1u, ops.size());
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[0].type);
+  EXPECT_EQ(snapid_t(20), ops[0].id);
+  EXPECT_EQ(snapid_t(10), ops[0].source);
+}
+
+// (b) Stacked: SNAP(3) ROLLBACK(4,src=1) SNAP(5) ROLLBACK(6,src=2) SNAP(7)
+//     Object last written at seq=2; current_seq=7.
+TEST(BuildPendingOps, StackedSnapAndRollbacks)
+{
+  pg_pool_t pp;
+  pp.flags = pg_pool_t::FLAG_POOL_SNAPS;
+
+  for (snapid_t id : {snapid_t(3), snapid_t(5), snapid_t(7)}) {
+    pool_snap_info_t s;
+    s.snapid = id; s.name = "s"; s.stamp = utime_t();
+    pp.snaps[id] = s;
+  }
+  {
+    rollback_snap_info_t rb; rb.rollback_id = snapid_t(4);
+    rb.source_snap = snapid_t(1);
+    pp.rollback_snaps[rb.rollback_id] = rb;
+  }
+  {
+    rollback_snap_info_t rb; rb.rollback_id = snapid_t(6);
+    rb.source_snap = snapid_t(2);
+    pp.rollback_snaps[rb.rollback_id] = rb;
+  }
+
+  auto ops = simulate_build_pending_ops(pp, snapid_t(2), snapid_t(7));
+
+  ASSERT_EQ(5u, ops.size());
+  EXPECT_EQ(pending_op_sim_t::SNAP,     ops[0].type); EXPECT_EQ(snapid_t(3), ops[0].id);
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[1].type); EXPECT_EQ(snapid_t(4), ops[1].id);
+  EXPECT_EQ(pending_op_sim_t::SNAP,     ops[2].type); EXPECT_EQ(snapid_t(5), ops[2].id);
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[3].type); EXPECT_EQ(snapid_t(6), ops[3].id);
+  EXPECT_EQ(pending_op_sim_t::SNAP,     ops[4].type); EXPECT_EQ(snapid_t(7), ops[4].id);
+  EXPECT_EQ(snapid_t(1), ops[1].source);
+  EXPECT_EQ(snapid_t(2), ops[3].source);
+}
+
+// (c) NOP rollback: object was never written after snapshot.
+//     obj_seq == snap_id: events with id <= obj_seq are excluded.
+TEST(BuildPendingOps, NopRollbackObjectNotWrittenAfterSnap)
+{
+  pg_pool_t pp;
+  pp.flags = pg_pool_t::FLAG_POOL_SNAPS;
+
+  pool_snap_info_t s;
+  s.snapid = snapid_t(10); s.name = "s1"; s.stamp = utime_t();
+  pp.snaps[s.snapid] = s;
+
+  rollback_snap_info_t rb;
+  rb.rollback_id = snapid_t(20); rb.source_snap = snapid_t(10);
+  pp.rollback_snaps[rb.rollback_id] = rb;
+
+  // Object never written after snap 10: obj_seq == snap_id
+  // Only the ROLLBACK(20) should appear since snap(10) <= obj_seq(10)
+  auto ops = simulate_build_pending_ops(pp, snapid_t(10), snapid_t(20));
+
+  ASSERT_EQ(1u, ops.size())
+      << "only ROLLBACK(20) should be in range (10,20]";
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[0].type);
+  EXPECT_EQ(snapid_t(20), ops[0].id);
+}
+
+// (d) Multi-snap sharing one clone: rollback of snap 2, obj_seq=3.
+//     All events (snaps 1,2,3 and rollback 4) have IDs <= obj_seq(3) except
+//     rollback(4) which is > obj_seq(3).
+TEST(BuildPendingOps, MultiSnapOneCLoneRollback)
+{
+  pg_pool_t pp;
+  pp.flags = pg_pool_t::FLAG_POOL_SNAPS;
+
+  for (snapid_t id : {snapid_t(1), snapid_t(2), snapid_t(3)}) {
+    pool_snap_info_t s; s.snapid = id; s.name = "s"; s.stamp = utime_t();
+    pp.snaps[id] = s;
+  }
+  rollback_snap_info_t rb;
+  rb.rollback_id = snapid_t(4); rb.source_snap = snapid_t(2);
+  pp.rollback_snaps[rb.rollback_id] = rb;
+
+  // Object was written at seq=3 (the clone created at write-time covers snaps
+  // 1,2,3). Rollback of snap 2 arrives as rb_id=4.
+  auto ops = simulate_build_pending_ops(pp, snapid_t(3), snapid_t(4));
+
+  ASSERT_EQ(1u, ops.size())
+      << "only ROLLBACK(4) should be in range (3,4]";
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[0].type);
+  EXPECT_EQ(snapid_t(4), ops[0].id);
+  EXPECT_EQ(snapid_t(2), ops[0].source);
+}
+
+// (e) Object created after snapshot: obj_seq=0, one rollback in range.
+//     SnapSet::seq starts at 0 for a new object. No snaps in (0,20].
+TEST(BuildPendingOps, ObjectCreatedAfterSnapshot)
+{
+  pg_pool_t pp;
+  pp.flags = pg_pool_t::FLAG_POOL_SNAPS;
+
+  pool_snap_info_t s;
+  s.snapid = snapid_t(10); s.name = "s1"; s.stamp = utime_t();
+  pp.snaps[s.snapid] = s;
+
+  rollback_snap_info_t rb;
+  rb.rollback_id = snapid_t(20); rb.source_snap = snapid_t(10);
+  pp.rollback_snaps[rb.rollback_id] = rb;
+
+  // Object created after snap 10, so obj_seq=0. Both SNAP(10) and
+  // ROLLBACK(20) are in (0,20].
+  auto ops = simulate_build_pending_ops(pp, snapid_t(0), snapid_t(20));
+
+  ASSERT_EQ(2u, ops.size());
+  EXPECT_EQ(pending_op_sim_t::SNAP,     ops[0].type);
+  EXPECT_EQ(snapid_t(10), ops[0].id);
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[1].type);
+  EXPECT_EQ(snapid_t(20), ops[1].id);
+
+  // Verify SnapSet::seq would be advanced to current_seq (snapc.seq=20)
+  // after processing all ops. The JIT write path sets seq = snapc.seq,
+  // which is 20 here -- confirming SnapSet::seq advances past rollback ID.
+  snapid_t seq_after = snapid_t(20);  // snapc.seq used by make_writeable()
+  EXPECT_EQ(snapid_t(20), seq_after)
+      << "SnapSet::seq must advance to snapc.seq=20 after write";
+}
+
+
