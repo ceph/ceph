@@ -16764,11 +16764,15 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     return transit< NotTrimming >();
   }
 
+  const rollback_snap_info_t* rb_info =
+    find_rollback_for_source(pg->rollback_trimq, snap_to_trim);
+
   for (auto &&object: *to_trim) {
     // Get next
-    ldout(pg->cct, 10) << "AwaitAsyncWork react trimming " << object << dendl;
+    ldout(pg->cct, 10) << "AwaitAsyncWork react processing " << object << dendl;
     OpContextUPtr ctx;
-    int error = pg->trim_object(in_flight.empty(), object, snap_to_trim, &ctx);
+    int error = pg->rollback_then_trim(
+      in_flight.empty(), object, snap_to_trim, rb_info, is_trim, &ctx);
     if (error) {
       if (error == -ENOLCK) {
 	ldout(pg->cct, 10) << "could not get write lock on obj "
