@@ -66,6 +66,38 @@ cluster to retrieve centrally-stored configuration for the entire cluster.
 After a complete set of configuration options is available, the startup of the
 daemon or process will commence.
 
+Unknown Options
+---------------
+
+A configuration option may be renamed, retyped or removed between Ceph
+releases, so a daemon or client may be given an option that no longer exists.
+Each source treats that case differently:
+
+- In a configuration file, an unknown option is ignored silently.
+- In the central configuration database, an unknown option is retained but has
+  no effect.
+- On the command line, an unknown option is ignored with a warning, which is
+  written to the daemon log. This applies to both the ``--name=value`` and the
+  ``--name value`` form. An unrecognized argument that takes no value is still
+  an error, because it is far more likely to be a mistyped command argument
+  than a configuration option.
+- In the ``CEPH_ARGS`` environment variable, which is parsed exactly as the
+  command line is, an unknown option is ignored silently.
+
+Whether an option is recognized at all is decided by the version of the
+binary that parses it, because the set of known options is compiled into each
+package rather than retrieved from the cluster. On a host whose packages are
+at a different revision, or during a staggered upgrade, the same option may
+therefore be applied by one process and ignored by another. An option that a
+newer Monitor accepts from ``ceph config set`` may likewise be unknown to an
+older daemon, which will ignore it.
+
+.. warning:: Because a misspelled option is ignored rather than rejected, a
+   typo in an option name will not prevent a daemon from starting, and outside
+   of the command line it produces no warning at all. After setting an option,
+   confirm that it took effect, for example with ``ceph config show`` for a
+   running daemon or with ``--show-config-value <option>``.
+
 .. _bootstrap-options:
 
 Bootstrap Options
