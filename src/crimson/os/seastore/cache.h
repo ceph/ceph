@@ -771,6 +771,21 @@ public:
   }
 
 private:
+  /**
+   * maybe_page_aligned_bptr
+   *
+   * Return a page-aligned buffer covering src[offset, length).
+   * If the slice is already page-aligned (and uniquely owned when
+   * share_ok is false), share it and skip the copy.
+   */
+  ceph::bufferptr maybe_page_aligned_bptr(
+    const ceph::bufferptr &src,
+    extent_len_t offset,
+    extent_len_t length,
+    bool share_ok,
+    uint64_t &copy_counter,
+    uint64_t &skip_counter);
+
   using get_extent_ertr = base_ertr;
   template <typename T>
   using read_extent_ret = get_extent_ertr::future<TCachedExtentRef<T>>;
@@ -1282,9 +1297,15 @@ public:
     LOG_PREFIX(Cache::alloc_remapped_extent);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
-      // shallow copy the buffer from original extent
-      auto nbp = ceph::bufferptr(buffer::create_page_aligned(remap_length));
-      original_bptr->copy_out(remap_offset, remap_length, nbp.c_str());
+      // Share the parent buffer when the leftover slice is already
+      // page-aligned; otherwise deep-copy into a page-aligned ptr.
+      auto nbp = maybe_page_aligned_bptr(
+        *original_bptr,
+        remap_offset,
+        remap_length,
+        true /* share_ok */,
+        stats.remap_bptr_copy,
+        stats.remap_bptr_skip);
       // ExtentPlacementManager::alloc_new_extent will make a new
       // (relative/temp) paddr, so make extent directly
       ext = CachedExtent::make_cached_extent_ref<T>(std::move(nbp));
@@ -1915,6 +1936,11 @@ private:
     uint64_t write_hit_cold = 0;
     uint64_t read_hit_hot = 0;
     uint64_t read_hit_cold = 0;
+
+    uint64_t remap_bptr_copy = 0;
+    uint64_t remap_bptr_skip = 0;
+    uint64_t exist_mutate_bptr_copy = 0;
+    uint64_t exist_mutate_bptr_skip = 0;
 
     rewrite_stats_t trim_rewrites;
     rewrite_stats_t reclaim_rewrites;
