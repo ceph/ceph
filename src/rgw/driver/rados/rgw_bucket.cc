@@ -1651,18 +1651,18 @@ static int bucket_restore_stats(rgw::sal::Driver* driver,
 // O(objects); only call when explicitly requested.
 //
 // Index entry semantics:
-// - BIIndexType::Plain covers all data entries: regular objects (all versions),
-//   delete markers (category=None, exists=false, skipped below), and in-progress
-//   multipart metadata/parts (category=MultiMeta/MultiPart). Completed multipart
-//   objects appear as regular Main entries.
+// - BIIndexType::Plain covers all data entries. Only Main entries are included
+//   here: this is the same accounting category exposed by bucket stats and is
+//   the billable object population. Multipart metadata/parts are deliberately
+//   excluded; they must not silently change the meaning of the billable total.
 // - BIIndexType::Instance is a secondary lookup index for versioned objects and
 //   must NOT be scanned here to avoid double-counting.
 // - BIIndexType::OLH entries are version-pointer records with no data size.
 //
-// Accounting: num_objects counts every Plain entry with exists=true, including
-// historical versions and multipart parts. It is not equivalent to the number of
-// user-visible S3 objects. size/size_actual/size_utilized follow the same
-// semantics as RGWStorageStats.
+// Accounting: num_objects counts every Main entry with exists=true, including
+// historical versions. It is not equivalent to the number of user-visible S3
+// objects. size/size_actual/size_utilized follow the same semantics as
+// RGWStorageStats.
 //
 // Resharding: uses the current index generation. Objects being migrated may be
 // temporarily undercounted. Consistent with read_stats() behavior.
@@ -1713,7 +1713,7 @@ static int read_storage_class_stats(
                              << ": " << err.what() << dendl;
           return -EIO;
         }
-        if (!dir_entry.exists) {
+        if (!dir_entry.exists || dir_entry.meta.category != RGWObjCategory::Main) {
           continue;
         }
         const std::string& sc =
@@ -1725,6 +1725,38 @@ static int read_storage_class_stats(
         s.num_objects++;
       }
     } while (is_truncated);
+  }
+  return 0;
+}
+
+static int reconcile_storage_class_stats(
+    const std::map<std::string, RGWStorageClassStats>& sc_stats,
+    const std::map<RGWObjCategory, RGWStorageStats>& stats,
+    const DoutPrefixProvider* dpp, const std::string& bucket_name)
+{
+  RGWStorageClassStats total;
+  for (const auto& entry : sc_stats) {
+    total += entry.second;
+  }
+
+  const auto iter = stats.find(RGWObjCategory::Main);
+  const RGWStorageStats empty;
+  const auto& expected = iter == stats.end() ? empty : iter->second;
+  if (total.size != expected.size ||
+      total.size_rounded != expected.size_rounded ||
+      total.size_utilized != expected.size_utilized ||
+      total.num_objects != expected.num_objects) {
+    ldpp_dout(dpp, -1)
+      << "ERROR: storage class stats reconciliation failed for bucket="
+      << bucket_name << " (class size=" << total.size
+      << ", bucket size=" << expected.size
+      << "; class size_actual=" << total.size_rounded
+      << ", bucket size_actual=" << expected.size_rounded
+      << "; class size_utilized=" << total.size_utilized
+      << ", bucket size_utilized=" << expected.size_utilized
+      << "; class objects=" << total.num_objects
+      << ", bucket objects=" << expected.num_objects << ")" << dendl;
+    return -EUCLEAN;
   }
   return 0;
 }
@@ -1766,15 +1798,25 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
   }
 
   std::map<std::string, RGWStorageClassStats> sc_stats;
-  if (show_storage_classes && has_index) {
+  if (show_storage_classes) {
+    if (!has_index) {
+      return -EOPNOTSUPP;
+    }
     auto* rados_store = dynamic_cast<rgw::sal::RadosStore*>(driver);
-    if (rados_store) {
-      ret = read_storage_class_stats(dpp, y, rados_store, bucket.get(), sc_stats);
-      if (ret < 0) {
-        ldpp_dout(dpp, -1) << "ERROR: storage class stats scan failed for bucket="
-                           << bucket->get_name() << " ret=" << ret << dendl;
-        return ret;
-      }
+    if (!rados_store) {
+      ldpp_dout(dpp, -1) << "ERROR: storage class stats require the RADOS driver"
+                         << " for bucket=" << bucket->get_name() << dendl;
+      return -EOPNOTSUPP;
+    }
+    ret = read_storage_class_stats(dpp, y, rados_store, bucket.get(), sc_stats);
+    if (ret < 0) {
+      ldpp_dout(dpp, -1) << "ERROR: storage class stats scan failed for bucket="
+                         << bucket->get_name() << " ret=" << ret << dendl;
+      return ret;
+    }
+    ret = reconcile_storage_class_stats(sc_stats, stats, dpp, bucket->get_name());
+    if (ret < 0) {
+      return ret;
     }
   }
 
@@ -1809,7 +1851,7 @@ static int bucket_stats(rgw::sal::Driver* driver, const rgw::SiteConfig& site,
     formatter->dump_string("master_ver", master_ver);
     formatter->dump_string("max_marker", max_marker);
     dump_bucket_usage(stats, formatter);
-    if (!sc_stats.empty()) {
+    if (show_storage_classes) {
       dump_storage_class_usage(sc_stats, formatter);
     }
   }
@@ -3994,4 +4036,3 @@ void RGWBucketEntryPoint::decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("old_bucket_info", old_bucket_info, obj);
   }
 }
-

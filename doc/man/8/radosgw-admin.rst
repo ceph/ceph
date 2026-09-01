@@ -927,7 +927,9 @@ Options
 
    Show per-storage-class size and object counts in bucket stats output.
    Triggers a full index scan (O(n) in object count); intended for billing
-   or quota reporting, not real-time queries. Requires ``--bucket``.
+   or quota reporting, not real-time queries. The reported object and byte
+   totals reconcile with the ``rgw.main`` usage category; incomplete
+   multipart parts are excluded. Requires ``--bucket``.
 
 Quota Options
 =============
