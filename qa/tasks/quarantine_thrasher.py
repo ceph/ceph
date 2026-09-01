@@ -1,9 +1,11 @@
 """
 Thrash quarantine by randomly enabling/disabling quarantine on a subvolume
-while MDS daemons may be killed and restarted by mds_thrash.
+while a workload may be running on that subvolume (and MDS daemons may be
+killed by a sibling thrash task).
 
-This validates that quarantine state (persisted in inode optmetadata) survives
-MDS failovers and that cap revocation completes correctly after recovery.
+Subvolume creation and cleanup are owned by the suite YAML (typically
+overrides.ceph.subvols plus kclient mount_subvol_num). This task only
+cycles quarantine on the named subvolume.
 
 Modeled after quiescer.py — the quarantine equivalent of quiesce thrashing.
 """
@@ -12,7 +14,6 @@ import errno
 import json
 import logging
 import random
-import time
 
 from io import StringIO
 
@@ -22,25 +23,20 @@ from tasks.thrasher import ThrasherGreenlet
 
 log = logging.getLogger(__name__)
 
-SUBVOLUME_NAME = "quarantine_thrash_subvol"
-TEST_FILE = "thrash_test.txt"
-TEST_DATA = "Quarantine thrash test data."
-
 
 class QuarantineThrasher(ThrasherGreenlet):
     """
-    Periodically enables and disables quarantine on a subvolume, verifying
-    that data access is blocked while quarantine is active and restored
-    after it is lifted.
+    Periodically enables and disables quarantine on a pre-created subvolume,
+    verifying that quarantine is enforced while active and lifted afterward.
 
-    While MDS thrash is running in parallel, this exercises:
-    - Quarantine enable during MDS failover (journal in flight)
-    - Quarantine disable during MDS failover (cap revocation in flight)
-    - Quarantine state recovery after MDS restart
-    - Cap revocation completing on the new active MDS
-    - Data integrity after quarantine cycles
+    Pair this with a kernel-client workload mounted on the same subvolume
+    (kclient mount_subvol_num). Kernel I/O blocks while quarantined and
+    resumes when quarantine is disabled; ceph-fuse would error instead.
 
     Parameters:
+        subvolume:        subvolume name (required; created by suite YAML)
+        subvolume_group:  subvolume group name                      (default: None)
+        volume:           filesystem / volume name                  (default: fs name)
         initial_delay:    seconds before first cycle                (default: 10)
         min_hold:         minimum seconds to hold quarantine        (default: 5)
         max_hold:         maximum seconds to hold quarantine        (default: 30)
@@ -54,6 +50,9 @@ class QuarantineThrasher(ThrasherGreenlet):
 
     def __init__(self, ctx, fscid,
                  cluster_name='ceph',
+                 subvolume=None,
+                 subvolume_group=None,
+                 volume=None,
                  initial_delay=10,
                  min_hold=5,
                  max_hold=30,
@@ -65,6 +64,12 @@ class QuarantineThrasher(ThrasherGreenlet):
                  seed=None,
                  **kwargs):
         super(QuarantineThrasher, self).__init__()
+
+        if not subvolume:
+            raise ValueError(
+                "quarantine_thrasher requires 'subvolume'; create the "
+                "subvolume in suite YAML (e.g. overrides.ceph.subvols) "
+                "and pass its name here")
 
         self.fs = Filesystem(ctx, fscid=fscid, cluster_name=cluster_name)
         self.logger = log.getChild('fs.[{f}]'.format(f=self.fs.name))
@@ -86,10 +91,14 @@ class QuarantineThrasher(ThrasherGreenlet):
         self.max_retries = max_retries
         self.retry_delay = retry_delay
 
-        self.volname = self.fs.name
-        self.subvol_created = False
+        self.volname = volume or self.fs.name
+        self.subvolume = subvolume
+        self.subvolume_group = subvolume_group
         self.quarantine_enabled = False
-        self.subvol_path = None
+
+        self.logger.info("Target subvolume %s/%s (group %s)",
+                         self.volname, self.subvolume,
+                         self.subvolume_group or "_nogroup")
 
     def _run_ceph_cmd(self, *args):
         """Run a ceph CLI command, return (rc, stdout)."""
@@ -106,37 +115,25 @@ class QuarantineThrasher(ThrasherGreenlet):
                                % (' '.join(args), rc, out))
         return out
 
+    def _subvol_args(self):
+        args = [self.volname, self.subvolume]
+        if self.subvolume_group:
+            args.extend(["--group_name", self.subvolume_group])
+        return args
+
     def _rcinfo(self, rc):
         return "%d (%s)" % (rc, errno.errorcode.get(rc, 'Unknown'))
 
-    # -- Setup / cleanup ------------------------------------------------------
+    # -- Cleanup --------------------------------------------------------------
 
-    def _setup_subvolume(self):
-        """Create the test subvolume and write test data."""
-        self.logger.info("Creating subvolume %s", SUBVOLUME_NAME)
-        self._fs_cmd("subvolume", "create", self.volname,
-                     SUBVOLUME_NAME, "--mode=777")
-        self.subvol_created = True
-
-        self.subvol_path = self._fs_cmd("subvolume", "getpath",
-                                        self.volname,
-                                        SUBVOLUME_NAME).strip()
-        self.logger.info("Subvolume path: %s", self.subvol_path)
-
-    def _cleanup_subvolume(self):
-        """Remove the test subvolume, disabling quarantine if needed."""
-        if not self.subvol_created:
+    def _cleanup(self):
+        """Lift quarantine if we left it enabled. Do not remove the subvolume."""
+        if not self.quarantine_enabled:
             return
-        if self.quarantine_enabled:
-            try:
-                self._quarantine_op("disable")
-            except Exception as e:
-                self.logger.warning("Cleanup: disable quarantine failed: %s", e)
         try:
-            self._fs_cmd("subvolume", "rm", self.volname,
-                         SUBVOLUME_NAME, "--force")
+            self._quarantine_op("disable")
         except Exception as e:
-            self.logger.warning("Cleanup: rm subvolume failed: %s", e)
+            self.logger.warning("Cleanup: disable quarantine failed: %s", e)
 
     # -- Quarantine operations ------------------------------------------------
 
@@ -149,8 +146,7 @@ class QuarantineThrasher(ThrasherGreenlet):
             self.proceed_unless_stopped()
 
             rc, out = self._run_ceph_cmd(
-                'fs', 'subvolume', 'quarantine', op,
-                self.volname, SUBVOLUME_NAME)
+                'fs', 'subvolume', 'quarantine', op, *self._subvol_args())
 
             if rc == 0:
                 self.quarantine_enabled = (op == "enable")
@@ -179,8 +175,7 @@ class QuarantineThrasher(ThrasherGreenlet):
         """Verify quarantine is enforced: subvolume info should show enabled,
         getpath should be blocked."""
         try:
-            out = self._fs_cmd("subvolume", "info", self.volname,
-                               SUBVOLUME_NAME)
+            out = self._fs_cmd("subvolume", "info", *self._subvol_args())
             info = json.loads(out)
             if info.get("quarantine") == "enabled":
                 self.logger.info("Verified: quarantine enforced "
@@ -190,9 +185,8 @@ class QuarantineThrasher(ThrasherGreenlet):
         except Exception as e:
             self.logger.warning("Could not verify quarantine via info: %s", e)
 
-        # Fallback: check that getpath is blocked
         rc, _ = self._run_ceph_cmd('fs', 'subvolume', 'getpath',
-                                   self.volname, SUBVOLUME_NAME)
+                                   *self._subvol_args())
         if rc == errno.EACCES:
             self.logger.info("Verified: quarantine enforced "
                              "(getpath returned EACCES)")
@@ -206,8 +200,7 @@ class QuarantineThrasher(ThrasherGreenlet):
         """Verify quarantine is lifted: subvolume info should show disabled,
         getpath should succeed."""
         try:
-            out = self._fs_cmd("subvolume", "info", self.volname,
-                               SUBVOLUME_NAME)
+            out = self._fs_cmd("subvolume", "info", *self._subvol_args())
             info = json.loads(out)
             if info.get("quarantine") == "disabled":
                 self.logger.info("Verified: quarantine lifted "
@@ -217,9 +210,8 @@ class QuarantineThrasher(ThrasherGreenlet):
         except Exception as e:
             self.logger.warning("Could not verify lift via info: %s", e)
 
-        # Fallback: check that getpath works
         rc, out = self._run_ceph_cmd('fs', 'subvolume', 'getpath',
-                                     self.volname, SUBVOLUME_NAME)
+                                     *self._subvol_args())
         if rc == 0 and out.strip():
             self.logger.info("Verified: quarantine lifted "
                              "(getpath returned %s)", out.strip())
@@ -234,7 +226,6 @@ class QuarantineThrasher(ThrasherGreenlet):
     def do_quarantine_cycle(self, hold_time, cycle):
         """Run one enable → hold → verify → disable → verify cycle."""
 
-        # Enable
         self.logger.info("Cycle %d: enabling quarantine (will hold %.1fs)",
                          cycle, hold_time)
         self._quarantine_op("enable")
@@ -242,10 +233,8 @@ class QuarantineThrasher(ThrasherGreenlet):
         self.logger.info("Cycle %d: quarantine enabled, verifying", cycle)
         self._verify_quarantine_enforced()
 
-        # Hold
         self.sleep_unless_stopped(hold_time)
 
-        # Disable
         self.logger.info("Cycle %d: disabling quarantine", cycle)
         self._quarantine_op("disable")
 
@@ -255,7 +244,6 @@ class QuarantineThrasher(ThrasherGreenlet):
     def _run(self):
         try:
             self.fs.wait_for_daemons()
-            self._setup_subvolume()
 
             self.logger.info("Ready to start quarantine thrashing; "
                              "initial delay: %d sec", self.initial_delay)
@@ -296,7 +284,7 @@ def stop_all_quarantine_thrashers(thrashers):
             continue
         thrasher.stop()
         thrasher.join()
-        thrasher._cleanup_subvolume()
+        thrasher._cleanup()
         if thrasher.exception is not None:
             raise RuntimeError(
                 "error during quarantine thrashing: %s" % thrasher.exception)
@@ -306,13 +294,15 @@ def stop_all_quarantine_thrashers(thrashers):
 def task(ctx, config):
     """
     Stress test quarantine by randomly enabling/disabling quarantine on a
-    subvolume while MDS thrash is running.
+    subvolume created by the suite YAML.
 
-    Modeled after the quiescer task — exercises quarantine during MDS
-    failovers by cycling enable/disable while mds_thrash kills daemons.
+    The suite must create the subvolume (overrides.ceph.subvols) and pass
+    its name. To exercise blocked I/O, mount a kernel client on that
+    subvolume (kclient mount_subvol_num) so the 2-workunit workload
+    (fsstress, kernel_untar, ...) runs on the path being quarantined.
 
     Each cycle:
-      1. Enable quarantine on the test subvolume
+      1. Enable quarantine on the named subvolume
       2. Verify quarantine is enforced (info shows enabled, getpath blocked)
       3. Hold for a random duration
       4. Disable quarantine
@@ -321,7 +311,17 @@ def task(ctx, config):
 
     Example config::
 
+        overrides:
+          ceph:
+            subvols:
+              create: 1
+          kclient:
+            client.0:
+              mount_subvol_num: 0
+        tasks:
         - quarantine_thrasher:
+            subvolume: sv_0
+            subvolume_group: qa
             min_hold: 5
             max_hold: 20
             initial_delay: 10
