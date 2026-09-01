@@ -819,7 +819,8 @@ endif()
 
 set(radosgw_admin_srcs
   radosgw-admin/radosgw-admin.cc
-  radosgw-admin/account.cc)
+  radosgw-admin/account.cc
+  radosgw-admin/user.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
