@@ -133,6 +133,8 @@ target_link_libraries(
   crimson
   crimson-common
   crimson::gtest)
+add_ceph_unittest(unittest-crimson-scrub
+  --memory 256M --smp 1)
 
 add_executable(ceph_test_crimson_scrub_scheduling
   test_crimson_scrub_scheduling.cc
