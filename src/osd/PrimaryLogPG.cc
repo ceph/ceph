@@ -9010,6 +9010,14 @@ void PrimaryLogPG::_make_clone(
   rmattr_maybe_cache(clone_obc, t, SS_ATTR);
 }
 
+// Helper: build a set of snap IDs from a SnapContext.
+// Used for unmanaged-snap pools where pg_pool_t::snaps is empty.
+static std::set<snapid_t>
+snap_id_set_from_snapc(const SnapContext& sc)
+{
+  return std::set<snapid_t>(sc.snaps.begin(), sc.snaps.end());
+}
+
 std::vector<PrimaryLogPG::pending_op_t>
 PrimaryLogPG::build_pending_ops(
   const pg_pool_t& pp,
@@ -9018,10 +9026,32 @@ PrimaryLogPG::build_pending_ops(
 {
   std::vector<pending_op_t> ops;
 
-  // Add SNAP entries: pool-managed snaps with id in (obj_seq, current_seq]
-  for (auto& [snap_id, snap_info] : pp.snaps) {
-    if (snap_id > obj_seq && snap_id <= current_seq) {
-      ops.push_back({pending_op_t::SNAP, snap_id, CEPH_NOSNAP});
+  if (!pp.snaps.empty()) {
+    // Pool-managed snaps: use pg_pool_t::snaps for SNAP entries.
+    for (auto& [snap_id, snap_info] : pp.snaps) {
+      if (snap_id > obj_seq && snap_id <= current_seq) {
+        ops.push_back({pending_op_t::SNAP, snap_id, CEPH_NOSNAP});
+      }
+    }
+  } else {
+    // Unmanaged-snap pool: pg_pool_t::snaps is empty.  For each rollback in
+    // the range, use the SnapContext stored in that rollback_snap_info_t to
+    // discover snap IDs that were live at the time the rollback was requested.
+    // This prevents missing clone(head → T) steps when a later snapshot T
+    // exists at rollback time.
+    std::set<snapid_t> emitted_snaps;
+    for (auto& [rb_id, rb_info] : pp.rollback_snaps) {
+      if (rb_id > obj_seq && rb_id <= current_seq) {
+        auto snap_ids = snap_id_set_from_snapc(rb_info.snapc);
+        for (snapid_t sid : snap_ids) {
+          if (sid > obj_seq && sid <= current_seq &&
+              sid != rb_id &&
+              emitted_snaps.find(sid) == emitted_snaps.end()) {
+            ops.push_back({pending_op_t::SNAP, sid, CEPH_NOSNAP});
+            emitted_snaps.insert(sid);
+          }
+        }
+      }
     }
   }
 
