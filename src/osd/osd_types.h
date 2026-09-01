@@ -1103,6 +1103,8 @@ inline std::ostream& operator<<(std::ostream& out, const pool_snap_info_t& si) {
 struct rollback_snap_info_t {
   snapid_t rollback_id;   // unique ID allocated for this rollback (from snap_seq)
   snapid_t source_snap;   // the snapshot to restore from
+  SnapContext snapc;      // unmanaged only: client-supplied SnapContext at request time
+                          // always empty for pool-managed rollbacks
 
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &p);
