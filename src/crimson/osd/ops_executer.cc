@@ -887,7 +887,6 @@ OpsExecuter::flush_changes_and_submit(
     ceph_assert(want_mutate);
   }
 
-  apply_stats();
   if (want_mutate) {
     osd_op_params->at_version = pg->get_next_version();
     osd_op_params->pg_trim_to = pg->get_pg_trim_to();
@@ -902,6 +901,10 @@ OpsExecuter::flush_changes_and_submit(
 
     log_entries.emplace_back(prepare_head_update(ops, txn));
 
+    // must follow prepare_head_update(): it accounts for the bytes the newest
+    // clone now holds on to.
+    apply_stats();
+
     if (auto log_rit = log_entries.rbegin(); log_rit != log_entries.rend()) {
       ceph_assert(log_rit->version == osd_op_params->at_version);
     }
@@ -915,6 +918,8 @@ OpsExecuter::flush_changes_and_submit(
 
     submitted = std::move(_submitted);
     all_completed = std::move(_all_completed);
+  } else {
+    apply_stats();
   }
 
   if (op_effects.size()) [[unlikely]] {
@@ -979,7 +984,15 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
     obc->obs.oi.last_reqid = osd_op_params->req_id;
     obc->obs.oi.mtime = osd_op_params->mtime;
     obc->obs.oi.local_mtime = ceph_clock_now();
-    
+
+    // Mark the object dirty if it was clean before this write transaction.
+    // This mirrors classic OSD's make_writeable() and must happen exactly once
+    // per transaction, based on the object's state at operation start.
+    if (!initial_obs_dirty) {
+      obc->obs.oi.set_flag(object_info_t::FLAG_DIRTY);
+      ++delta_stats.num_objects_dirty;
+    }
+
     obc->ssc->exists = true;
     pg->get_backend().set_metadata(
       obc->obs.oi.soid,
@@ -990,7 +1003,7 @@ pg_log_entry_t OpsExecuter::prepare_head_update(
     // reset cached ObjectState without enforcing eviction
     obc->obs.oi = object_info_t(obc->obs.oi.soid);
   }
-  
+
   DEBUGDPP("entry: {}", *pg, ret);
   return ret;
 }
@@ -1042,8 +1055,17 @@ void OpsExecuter::prepare_cloning_ctx(
   cloning_ctx->clone_obc = prepare_clone(cloning_ctx->coid, initial_obs);
 
   delta_stats.num_objects++;
+  if (cloning_ctx->clone_obc->obs.oi.is_dirty()) {
+    delta_stats.num_objects_dirty++;
+  }
   if (cloning_ctx->clone_obc->obs.oi.is_omap()) {
     delta_stats.num_objects_omap++;
+  }
+  if (cloning_ctx->clone_obc->obs.oi.is_cache_pinned()) {
+    delta_stats.num_objects_pinned++;
+  }
+  if (cloning_ctx->clone_obc->obs.oi.has_manifest()) {
+    delta_stats.num_objects_manifest++;
   }
   delta_stats.num_object_clones++;
   // newsnapset is obc's ssc
@@ -1098,11 +1120,15 @@ pg_log_entry_t OpsExecuter::complete_cloning_ctx()
 void OpsExecuter::update_clone_overlap() {
   interval_set<uint64_t> *newest_overlap;
   if (cloning_ctx) {
+    if (cloning_ctx->new_snapset.clone_overlap.empty()) {
+      return;
+    }
     newest_overlap =
       &cloning_ctx->new_snapset.clone_overlap.rbegin()->second;
-  } else if (op_info.may_write() 
-    && obc->obs.exists 
-    && !obc->ssc->snapset.clones.empty()) {
+  } else if (op_info.may_write()
+    && obc->obs.exists
+    && !obc->ssc->snapset.clones.empty()
+    && !obc->ssc->snapset.clone_overlap.empty()) {
     newest_overlap =
       &obc->ssc->snapset.clone_overlap.rbegin()->second;
   } else {
@@ -1154,6 +1180,7 @@ OpsExecuter::OpsExecuter(Ref<PG> _pg,
     msg(std::move(msg)),
     conn(conn),
     txn(pg->min_peer_features()),
+    initial_obs_dirty(obc->obs.oi.is_dirty()),
     snapc(_snapc)
 {
   if (op_info.may_write() && should_clone(*obc, snapc)) {

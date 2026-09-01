@@ -196,6 +196,7 @@ private:
 
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
+  bool initial_obs_dirty = false; ///< FLAG_DIRTY on the object before this op
 
   SnapContext snapc; // writer snap context
   struct CloningContext {
