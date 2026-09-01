@@ -132,15 +132,6 @@ static const DoutPrefixProvider* dpp() {
     } \
   } while (0)
 
-#define CHECK_SUCCESS(x, msg) \
-  do { \
-    int _x_val = (x); \
-    if (_x_val < 0) { \
-      cerr << msg << ": " << cpp_strerror(-_x_val) << std::endl; \
-      return _x_val; \
-    } \
-  } while (0)
-
 using namespace std;
 using rgw::run_coro;
 
