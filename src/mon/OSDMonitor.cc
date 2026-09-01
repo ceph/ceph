@@ -15337,6 +15337,17 @@ bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
       _pool_op_reply(op, -ENOENT, osdmap.get_epoch());
       return true;
     }
+    // Validate client-supplied SnapContext
+    if (!m->snapc.is_valid()) {
+      _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
+    if (m->snapc.seq < m->snapid ||
+        std::find(m->snapc.snaps.begin(), m->snapc.snaps.end(),
+                  m->snapid) == m->snapc.snaps.end()) {
+      _pool_op_reply(op, -EINVAL, osdmap.get_epoch());
+      return true;
+    }
     // Idempotency: already have a pending rollback for this snap ID?
     for (auto& [rb_id, rb] : p->rollback_snaps) {
       if (rb.source_snap == m->snapid) {
