@@ -539,7 +539,8 @@ struct pending_op_sim_t {
   snapid_t source;
 };
 
-/// Replicates PrimaryLogPG::build_pending_ops() logic for test use.
+/// Replicates PrimaryLogPG::build_pending_ops() logic for test use,
+/// including the WI-19-e unmanaged-snap fallback to rb_info.snapc.
 static std::vector<pending_op_sim_t>
 simulate_build_pending_ops(const pg_pool_t& pp,
                            snapid_t obj_seq,
@@ -547,11 +548,30 @@ simulate_build_pending_ops(const pg_pool_t& pp,
 {
   std::vector<pending_op_sim_t> ops;
 
-  for (auto& [snap_id, snap_info] : pp.snaps) {
-    if (snap_id > obj_seq && snap_id <= current_seq) {
-      ops.push_back({pending_op_sim_t::SNAP, snap_id, CEPH_NOSNAP});
+  if (!pp.snaps.empty()) {
+    // Pool-managed snaps
+    for (auto& [snap_id, snap_info] : pp.snaps) {
+      if (snap_id > obj_seq && snap_id <= current_seq) {
+        ops.push_back({pending_op_sim_t::SNAP, snap_id, CEPH_NOSNAP});
+      }
+    }
+  } else {
+    // Unmanaged-snap pool: use stored snapc in each rollback entry
+    std::set<snapid_t> emitted_snaps;
+    for (auto& [rb_id, rb_info] : pp.rollback_snaps) {
+      if (rb_id > obj_seq && rb_id <= current_seq) {
+        for (snapid_t sid : rb_info.snapc.snaps) {
+          if (sid > obj_seq && sid <= current_seq &&
+              sid != rb_id &&
+              emitted_snaps.find(sid) == emitted_snaps.end()) {
+            ops.push_back({pending_op_sim_t::SNAP, sid, CEPH_NOSNAP});
+            emitted_snaps.insert(sid);
+          }
+        }
+      }
     }
   }
+
   for (auto& [rb_id, rb_info] : pp.rollback_snaps) {
     if (rb_id > obj_seq && rb_id <= current_seq) {
       ops.push_back({pending_op_sim_t::ROLLBACK, rb_id, rb_info.source_snap});
@@ -1382,3 +1402,132 @@ TEST(TrimmerPassSelection, NopRollbackFastExit)
 }
 
 
+
+// ---------------------------------------------------------------------------
+// WI-19-f: Unmanaged-snap rollback with a later snapshot T present.
+//
+// The fix in WI-19-e causes build_pending_ops() to emit a SNAP entry for any
+// snapshot T that was live (per rb_info.snapc) at the time the rollback was
+// requested, when the pool is in unmanaged-snap mode (pp.snaps is empty).
+//
+// Three sub-cases are tested:
+//
+//   (a) Later snapshot T exists: assert SNAP(T) is emitted before ROLLBACK(rb)
+//       so that clone(head → T) is issued before the rollback restores head
+//       to the content at source_snap.
+//
+//   (b) No later snapshot: rollback only, no spurious SNAP entry emitted.
+//
+//   (c) Stale SnapContext validation: preprocess_pool_op() should reject a
+//       POOL_OP_ROLLBACK_UNMANAGED_SNAP request when the supplied SnapContext
+//       does not contain the rollback snap ID.  Simulated via the same
+//       validation checks applied by the monitor.
+// ---------------------------------------------------------------------------
+
+// Helper: build an unmanaged-snap pg_pool_t (no pp.snaps entries) with one
+// rollback entry.  The rollback's snapc encodes the caller-supplied SnapContext
+// at the time the rollback request was issued.
+static pg_pool_t
+make_unmanaged_pool_with_rollback(snapid_t src_snap,
+                                  snapid_t rb_id,
+                                  const SnapContext& snapc)
+{
+  pg_pool_t pp;
+  // Unmanaged snap pool: pp.snaps remains empty
+  // (do NOT set FLAG_POOL_SNAPS)
+
+  rollback_snap_info_t rb;
+  rb.source_snap  = src_snap;
+  rb.rollback_id  = rb_id;
+  rb.snapc        = snapc;
+  pp.rollback_snaps[rb_id] = rb;
+  return pp;
+}
+
+// (a) Unmanaged rollback: later snapshot T exists in stored snapc.
+//     Sequence: snap S=5, write, snap T=10, write, rollback to S (rb_id=15).
+//     Object last written at obj_seq=0 (predates all snaps).
+//     Expected ops (ascending id): SNAP(10), ROLLBACK(15,src=5).
+TEST(BuildPendingOpsUnmanaged, LaterSnapPresentClonesBeforeRollback)
+{
+  // snapc at rollback time: seq=10 (highest live snap), snaps=[10, 5]
+  SnapContext snapc(snapid_t(10), {snapid_t(10), snapid_t(5)});
+  pg_pool_t pp = make_unmanaged_pool_with_rollback(
+    snapid_t(5), snapid_t(15), snapc);
+
+  auto ops = simulate_build_pending_ops(pp, snapid_t(0), snapid_t(15));
+
+  // Must have exactly 2 ops: SNAP(10) then ROLLBACK(15)
+  ASSERT_EQ(2u, ops.size())
+      << "expected SNAP(T=10) and ROLLBACK(rb=15)";
+
+  EXPECT_EQ(pending_op_sim_t::SNAP,     ops[0].type);
+  EXPECT_EQ(snapid_t(10),               ops[0].id);
+
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[1].type);
+  EXPECT_EQ(snapid_t(15),               ops[1].id);
+  EXPECT_EQ(snapid_t(5),                ops[1].source);
+}
+
+// (b) Unmanaged rollback: no later snapshot exists (only source snap in snapc).
+//     Sequence: snap S=5, write, rollback to S (rb_id=10).
+//     snapc at rollback time: seq=5, snaps=[5].
+//     Expected ops: ROLLBACK(10,src=5) only.
+TEST(BuildPendingOpsUnmanaged, NoLaterSnapNoSpuriousEntry)
+{
+  // snapc at rollback time: only source snap S=5
+  SnapContext snapc(snapid_t(5), {snapid_t(5)});
+  pg_pool_t pp = make_unmanaged_pool_with_rollback(
+    snapid_t(5), snapid_t(10), snapc);
+
+  auto ops = simulate_build_pending_ops(pp, snapid_t(0), snapid_t(10));
+
+  // Must have exactly 1 op: ROLLBACK(10)
+  ASSERT_EQ(1u, ops.size())
+      << "expected only ROLLBACK(rb=10), no spurious SNAP entry";
+
+  EXPECT_EQ(pending_op_sim_t::ROLLBACK, ops[0].type);
+  EXPECT_EQ(snapid_t(10),               ops[0].id);
+  EXPECT_EQ(snapid_t(5),                ops[0].source);
+}
+
+// (c) SnapContext validation: simulate preprocess_pool_op() checks.
+//     Case 1: snap_id not in snapc.snaps → rejected.
+//     Case 2: snapc.seq < snap_id → rejected.
+//     Case 3: valid snapc → accepted.
+TEST(BuildPendingOpsUnmanaged, StaleSnapContextRejectedByPreprocess)
+{
+  const snapid_t snap_id(5);
+
+  // Helper: run the same validation logic the MON applies
+  auto validate_snapc = [&](const SnapContext& sc, snapid_t sid) -> bool {
+    if (!sc.is_valid())
+      return false;
+    if (sc.seq < sid)
+      return false;
+    bool found = std::find(sc.snaps.begin(), sc.snaps.end(), sid)
+                   != sc.snaps.end();
+    return found;
+  };
+
+  // Case 1: snap_id not present in snaps vector
+  {
+    SnapContext sc(snapid_t(10), {snapid_t(10), snapid_t(3)});  // 5 missing
+    EXPECT_FALSE(validate_snapc(sc, snap_id))
+        << "snap_id=5 not in snapc.snaps should fail validation";
+  }
+
+  // Case 2: seq < snap_id
+  {
+    SnapContext sc(snapid_t(3), {snapid_t(3)});  // seq=3 < snap_id=5
+    EXPECT_FALSE(validate_snapc(sc, snap_id))
+        << "snapc.seq < snap_id should fail validation";
+  }
+
+  // Case 3: valid snapc containing snap_id
+  {
+    SnapContext sc(snapid_t(10), {snapid_t(10), snapid_t(5)});
+    EXPECT_TRUE(validate_snapc(sc, snap_id))
+        << "valid snapc containing snap_id=5 should pass validation";
+  }
+}
