@@ -3532,25 +3532,43 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise make_ex(ret, "Failed to roll back pool to snap %s" % snap_name)
         return int(_rollback_id)
 
-    def rollback_self_managed_snap(self, snap_id: int) -> int:
+    def rollback_self_managed_snap(self, snap_id: int,
+                                   snapc_seq: int,
+                                   snapc_snaps: List[int]) -> int:
         """
         Initiate a pool-level snapshot rollback (selfmanaged snaps).
 
         Completes in O(1) time; background work is performed by OSDs.
 
         :param snap_id: the selfmanaged snap ID to restore from
+        :param snapc_seq: current SnapContext sequence (highest live snap ID)
+        :param snapc_snaps: list of all live snap IDs in descending order
         :returns: rollback ID (int) allocated for this rollback
         :raises: :class:`Error` on failure, including:
             - :class:`PermissionError` if require_osd_release < umbrella
             - :class:`ObjectNotFound` if snap ID has been deleted
+            - :class:`InvalidArgument` if SnapContext is invalid
         """
         self.require_ioctx_open()
         cdef:
             rados_snap_t _snap_id = snap_id
+            rados_snap_t _snapc_seq = snapc_seq
+            rados_snap_t *_snaps = NULL
+            int _num_snaps = len(snapc_snaps)
             uint64_t _rollback_id = 0
-        with nogil:
-            ret = rados_ioctx_selfmanaged_snap_rollback_all(self.io, _snap_id,
-                                                             &_rollback_id)
+        try:
+            if _num_snaps > 0:
+                _snaps = <rados_snap_t *>malloc(_num_snaps * sizeof(rados_snap_t))
+                if not _snaps:
+                    raise MemoryError("Failed to allocate snap context array")
+                for i in range(_num_snaps):
+                    _snaps[i] = snapc_snaps[i]
+            with nogil:
+                ret = rados_ioctx_selfmanaged_snap_rollback_all(
+                    self.io, _snap_id, _snapc_seq, _snaps, _num_snaps,
+                    &_rollback_id)
+        finally:
+            free(_snaps)
         if ret != 0:
             raise make_ex(ret,
                 "Failed to roll back pool to selfmanaged snap %d" % snap_id)

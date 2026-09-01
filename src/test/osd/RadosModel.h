@@ -2128,7 +2128,18 @@ public:
       }
       r = context->io_ctx.snap_rollback(snapname, &rollback_id);
     } else {
-      r = context->io_ctx.selfmanaged_snap_rollback(rados_snap, &rollback_id);
+      // Build snapc from all currently live selfmanaged snap IDs, in
+      // descending order (highest snap ID first).
+      std::vector<librados::snap_t> snapc_snaps;
+      snapc_snaps.reserve(context->snaps.size());
+      for (auto& [seq, sid] : context->snaps)
+        snapc_snaps.push_back(static_cast<librados::snap_t>(sid));
+      std::sort(snapc_snaps.begin(), snapc_snaps.end(),
+                std::greater<librados::snap_t>());
+      librados::snap_t snapc_seq =
+        snapc_snaps.empty() ? rados_snap : snapc_snaps.front();
+      r = context->io_ctx.selfmanaged_snap_rollback(rados_snap, snapc_seq,
+                                                    snapc_snaps, &rollback_id);
     }
 
     if (r < 0) {

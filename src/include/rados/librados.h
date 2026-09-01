@@ -1430,16 +1430,22 @@ CEPH_RADOS_API int rados_ioctx_snap_rollback_all(rados_ioctx_t io,
 /**
  * Initiate a pool-level snapshot rollback (selfmanaged snaps).
  *
- * @param io        the pool I/O context
- * @param snap_id   selfmanaged snap ID to restore from
- * @param rollback_id  [out] allocated rollback ID
+ * @param io             the pool I/O context
+ * @param snap_id        selfmanaged snap ID to restore from
+ * @param snapc_seq      current SnapContext sequence (highest live snap ID)
+ * @param snapc_snaps    array of live snap IDs in descending order
+ * @param num_snapc_snaps number of entries in snapc_snaps
+ * @param rollback_id    [out] allocated rollback ID
  * @returns 0 on success, negative error code on failure
  *   -EPERM   cluster require_osd_release < umbrella
  *   -ENOENT  snap ID has been deleted
- *   -EINVAL  pool is in pool-managed-snap mode
+ *   -EINVAL  pool is in pool-managed-snap mode or SnapContext is invalid
  */
 CEPH_RADOS_API int rados_ioctx_selfmanaged_snap_rollback_all(rados_ioctx_t io,
                                                               uint64_t snap_id,
+                                                              rados_snap_t snapc_seq,
+                                                              const rados_snap_t *snapc_snaps,
+                                                              int num_snapc_snaps,
                                                               uint64_t *rollback_id);
 
 /**

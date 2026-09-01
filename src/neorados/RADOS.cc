@@ -1158,12 +1158,20 @@ void RADOS::rollback_pool_snap_(std::int64_t pool,
 
 void RADOS::rollback_selfmanaged_snap_(std::int64_t pool,
 				       std::uint64_t snap,
+				       std::uint64_t snapc_seq,
+				       std::vector<std::uint64_t> snapc_snaps,
 				       SMSnapComp c)
 {
+  std::vector<snapid_t> snv;
+  snv.reserve(snapc_snaps.size());
+  for (auto s : snapc_snaps)
+    snv.push_back(snapid_t(s));
+  SnapContext snapc(snapc_seq, snv);
+
   auto e = asio::prefer(get_executor(),
 			asio::execution::outstanding_work.tracked);
   impl->objecter->rollback_selfmanaged_snap(
-    pool, snapid_t(snap),
+    pool, snapid_t(snap), snapc,
     asio::bind_executor(
       std::move(e),
       [c = std::move(c)](bs::error_code ec, bufferlist bl) mutable {

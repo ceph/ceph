@@ -115,7 +115,8 @@ struct librados::IoCtxImpl {
   int selfmanaged_snap_rollback_object(const object_t& oid,
                                        ::SnapContext& snapc, uint64_t snapid);
   int snap_rollback(const char *snapName, uint64_t *rollback_id);
-  int selfmanaged_snap_rollback(uint64_t snap_id, uint64_t *rollback_id);
+  int selfmanaged_snap_rollback(uint64_t snap_id, const ::SnapContext& snapc,
+                                uint64_t *rollback_id);
 
   // io
   int nlist(Objecter::NListContext *context, int max_entries);

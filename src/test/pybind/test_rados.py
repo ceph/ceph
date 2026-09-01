@@ -1404,8 +1404,11 @@ class TestIoCtxSelfManagedSnaps(object):
         self.ioctx.set_self_managed_snap_write([snap_id_0, snap_id_1])
         self.ioctx.write('foo', b'contents_b')
         try:
-            # Pool-level rollback to snap0 (content A)
-            rollback_id = self.ioctx.rollback_self_managed_snap(snap_id_0)
+            # Pool-level rollback to snap0 (content A);
+            # snapc_seq = snap_id_1 (highest live snap), snaps = [snap_id_1, snap_id_0]
+            snaps = sorted([snap_id_0, snap_id_1], reverse=True)
+            rollback_id = self.ioctx.rollback_self_managed_snap(
+                snap_id_0, snap_id_1, snaps)
             assert isinstance(rollback_id, int)
             assert rollback_id > 0
             assert rollback_id > snap_id_0

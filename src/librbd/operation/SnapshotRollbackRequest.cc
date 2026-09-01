@@ -303,8 +303,18 @@ void SnapshotRollbackRequest<I>::send_rollback_objects() {
         ldout(cct, 5) << this << " " << __func__
                       << ": using pool-op rollback fast path" << dendl;
         uint64_t rollback_id = 0;
+        // Capture the current SnapContext under image_lock so the MON can
+        // detect and preserve any snapshots that were created after m_snap_id.
+        librados::snap_t snapc_seq;
+        std::vector<librados::snap_t> snapc_snaps;
+        {
+          std::shared_lock image_locker{image_ctx.image_lock};
+          snapc_seq = image_ctx.snapc.seq;
+          snapc_snaps = image_ctx.snaps;
+        }
         // RBD always uses selfmanaged snaps on its data pool
-        r = image_ctx.data_ctx.selfmanaged_snap_rollback(m_snap_id,
+        r = image_ctx.data_ctx.selfmanaged_snap_rollback(m_snap_id, snapc_seq,
+                                                         snapc_snaps,
                                                          &rollback_id);
         if (r == 0) {
           // Pool-op issued; proceed directly to handle_rollback_objects()

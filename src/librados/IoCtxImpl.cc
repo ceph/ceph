@@ -519,6 +519,7 @@ int librados::IoCtxImpl::snap_rollback(const char *snapName,
 }
 
 int librados::IoCtxImpl::selfmanaged_snap_rollback(uint64_t snap_id,
+                                                   const ::SnapContext& snapc,
                                                    uint64_t *rollback_id)
 {
   ceph::mutex mylock =
@@ -529,7 +530,7 @@ int librados::IoCtxImpl::selfmanaged_snap_rollback(uint64_t snap_id,
   ceph::buffer::list reply_bl;
 
   objecter->rollback_selfmanaged_snap(
-    poolid, snapid_t(snap_id),
+    poolid, snapid_t(snap_id), snapc,
     [&mylock, &cond, &done, &reply, &reply_bl]
     (boost::system::error_code ec, ceph::buffer::list bl) {
       std::lock_guard l{mylock};

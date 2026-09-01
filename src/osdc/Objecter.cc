@@ -4455,6 +4455,7 @@ void Objecter::rollback_pool_snap(int64_t pool, std::string_view snap_name,
 }
 
 void Objecter::rollback_selfmanaged_snap(int64_t pool, snapid_t snap,
+                                         const SnapContext& snapc,
                                          decltype(PoolOp::onfinish)&& onfinish)
 {
   unique_lock wl(rwlock);
@@ -4467,6 +4468,7 @@ void Objecter::rollback_selfmanaged_snap(int64_t pool, snapid_t snap,
   op->onfinish = std::move(onfinish);
   op->pool_op = POOL_OP_ROLLBACK_UNMANAGED_SNAP;
   op->snapid = snap;
+  op->snapc = snapc;
   pool_ops[op->tid] = op;
 
   pool_op_submit(op);
@@ -4566,6 +4568,7 @@ void Objecter::_pool_op_submit(PoolOp *op)
 		       last_seen_osdmap_version);
   if (op->snapid) m->snapid = op->snapid;
   if (op->crush_rule) m->crush_rule = op->crush_rule;
+  if (!op->snapc.empty()) m->snapc = op->snapc;
   monc->send_mon_message(m);
   op->last_submit = ceph::coarse_mono_clock::now();
 

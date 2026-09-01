@@ -262,8 +262,12 @@ TEST_P(LibRadosSnapshotsSelfManaged, PoolSelfmanagedSnapRollback) {
   ASSERT_EQ(0, rados_write(ioctx, "foo", buf2, sizeof(buf2), 0));
   // Issue pool-level selfmanaged snap rollback to snap0 (content A)
   uint64_t rollback_id = 0;
-  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_rollback_all(ioctx, snap0,
-                                                          &rollback_id));
+  ASSERT_EQ(0, rados_ioctx_selfmanaged_snap_rollback_all(
+      ioctx, snap0,
+      static_cast<rados_snap_t>(snap1),
+      reinterpret_cast<const rados_snap_t*>(my_snaps.data()),
+      static_cast<int>(my_snaps.size()),
+      &rollback_id));
   EXPECT_GT(rollback_id, snap0);
   // Read back and verify content equals snapshot content (A, not B)
   char buf3[bufsize];

@@ -2308,6 +2308,7 @@ public:
     int pool_op = 0;
     int16_t crush_rule = 0;
     snapid_t snapid = 0;
+    SnapContext snapc;
     ceph::coarse_mono_time last_submit;
 
     PoolOp() {}
@@ -3916,10 +3917,12 @@ public:
   }
 
   void rollback_selfmanaged_snap(int64_t pool, snapid_t snap,
+                                 const SnapContext& snapc,
                                  decltype(PoolOp::onfinish)&& onfinish);
   void rollback_selfmanaged_snap(int64_t pool, snapid_t snap,
+                                 const SnapContext& snapc,
                                  Context* c) {
-    rollback_selfmanaged_snap(pool, snap,
+    rollback_selfmanaged_snap(pool, snap, snapc,
                               OpContextVert<ceph::buffer::list>(c, nullptr));
   }
 

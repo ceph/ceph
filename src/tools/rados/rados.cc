@@ -3387,7 +3387,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
         cerr << "error: selfmanaged snap ID must be a positive integer" << std::endl;
         return 1;
       }
-      ret = io_ctx.selfmanaged_snap_rollback(snap_id, &rollback_id);
+      // For the CLI, supply a minimal SnapContext containing only the target
+      // snap ID.  This is equivalent to pre-fix behaviour: no later-snapshot
+      // cloning will occur, which is safe when the caller has no additional
+      // snap context available.
+      std::vector<snap_t> snapc_snaps = { static_cast<snap_t>(snap_id) };
+      ret = io_ctx.selfmanaged_snap_rollback(snap_id, snap_id, snapc_snaps,
+                                             &rollback_id);
     } else {
       // pool-managed snaps: argument is a snap name
       ret = io_ctx.snap_rollback(nargs[1], &rollback_id);

@@ -992,7 +992,8 @@ TEST_P(LibRadosSnapshotsSelfManagedPP, PoolSelfmanagedSnapRollbackPP) {
   ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
   // Issue pool-level selfmanaged snap rollback to snap[1] (the first snap, content A)
   uint64_t rollback_id = 0;
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[1], &rollback_id));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[1], my_snaps[0], my_snaps,
+                                                &rollback_id));
   EXPECT_GT(rollback_id, my_snaps[1]);
   // Read back and verify content equals snapshot content (A, not B)
   bufferlist bl3;
@@ -1014,8 +1015,10 @@ TEST_P(LibRadosSnapshotsSelfManagedPP, PoolSelfmanagedSnapRollbackIdempotentPP) 
   bl.append(buf, sizeof(buf));
   ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
   uint64_t id1 = 0, id2 = 0;
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[0], &id1));
-  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[0], &id2));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[0], my_snaps[0], my_snaps,
+                                                &id1));
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_rollback(my_snaps[0], my_snaps[0], my_snaps,
+                                                &id2));
   EXPECT_EQ(id1, id2);
   ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(my_snaps.back()));
 }

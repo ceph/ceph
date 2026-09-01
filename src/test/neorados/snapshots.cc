@@ -455,9 +455,13 @@ CORO_TEST_F(NeoRadosSelfManagedSnaps, PoolSelfmanagedSnapRollback, NeoRadosTest)
   const auto bl2 = filled_buffer_list(0xdd, len);
   co_await execute(oid, WriteOp{}.write_full(bl2), ioc);
 
-  // Issue pool-level selfmanaged snap rollback to snap0 (content A)
+  // Issue pool-level selfmanaged snap rollback to snap0 (content A).
+  // my_snaps is stored in ascending order; highest snap ID = my_snaps[1].
+  // Build snapc_snaps in descending order.
+  std::vector<uint64_t> snapc_snaps = {my_snaps[1], my_snaps[0]};
   auto rollback_id = co_await rados().rollback_selfmanaged_snap(
-    ioc.get_pool(), my_snaps[0], asio::use_awaitable);
+    ioc.get_pool(), my_snaps[0], my_snaps[1], std::move(snapc_snaps),
+    asio::use_awaitable);
   EXPECT_GT(rollback_id, my_snaps[0]);
 
   // Read back and verify content equals snapshot content (A, not B)
