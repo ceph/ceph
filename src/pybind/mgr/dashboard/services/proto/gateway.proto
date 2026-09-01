@@ -122,6 +122,9 @@ service Gateway {
 	// Deletes a host from a namespace
 	rpc namespace_delete_host(namespace_delete_host_req) returns (req_status) {}
 
+	// Unpins a namespace load balancing group
+	rpc namespace_unpin(namespace_unpin_req) returns (req_status) {}
+
 	// Adds a host to a subsystem
 	rpc add_host(add_host_req) returns (req_status) {}
 
@@ -298,6 +301,11 @@ message namespace_delete_host_req {
 	string host_nqn = 3;
 }
 
+message namespace_unpin_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+}
+
 message create_subsystem_req {
 	string subsystem_nqn = 1;
 	string serial_number = 2;
@@ -309,6 +317,7 @@ message create_subsystem_req {
 	repeated string network_mask = 8;
 	optional bool secure_listeners = 9;
 	optional uint32 port = 10;
+	optional string model_name = 11;
 }
 
 message delete_subsystem_req {
@@ -365,6 +374,7 @@ message del_kmip_server_endpoints_req {
 	string subsystem_nqn = 1;
 	string server_name = 2;
 	repeated kmip_server_endpoint endpoints = 3;
+	optional bool force = 4;
 }
 
 message list_kmip_server_endpoints_req {
@@ -784,6 +794,8 @@ message connections_info {
 }
 
 message namespace_cli {
+	reserved 25;
+	reserved "encryption_algorithm";
 	uint32 nsid = 1;
 	string bdev_name = 2;
 	string rbd_image_name = 3;
@@ -808,8 +820,9 @@ message namespace_cli {
 	optional string rbd_data_pool_name = 22;
 	optional string location = 23;
 	optional string rados_namespace_name = 24;
-	optional EncryptionAlgorithm encryption_algorithm = 25;
 	repeated encryption_entry encryption_entries = 26;
+	optional bool degraded = 27;
+	optional bool pinned = 28;
 }
 
 message namespaces_info {
