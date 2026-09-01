@@ -13,7 +13,7 @@
 #include "driver/rados/rgw_bucket.h"
 #include "include/utime.h"
 #include "rgw_account.h"
-#include "rgw_iam_policy.h"
+#include "rgw_iam_managed_policy.h"
 #include "rgw_sal.h"
 #include "rgw_user.h"
 
