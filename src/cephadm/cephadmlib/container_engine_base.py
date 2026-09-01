@@ -1,5 +1,8 @@
 # container_engine_base.py - container engine base class
 
+from typing import List, Dict
+
+from .context import CephadmContext
 from .exe_utils import find_program
 
 
@@ -20,3 +23,13 @@ class ContainerEngine:
 
     def __str__(self) -> str:
         return f'{self.EXE} ({self.path})'
+
+    def service_args(
+        self, ctx: CephadmContext, service_name: str
+    ) -> List[str]:
+        return []
+
+    def update_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        pass
