@@ -122,11 +122,9 @@ We need to build a bunch of internal interfaces for this.
 - Stable mtime.
 - client-side config option enabling us to skip fsync
 - client only enables fsync skip when the MDS supports it
+- Track when setattr() is invoked and don't fsync-to-rados when those fields
+  aren't acknowledged by the MDS.
 
 9. Development todo
 -------------------
-- Track when setattr() is invoked and don't fsync-to-rados when those fields
-  aren't acknowledged by the MDS. (This covers several bits of metadata and
-  scenarios that are otherwise difficult to separate from the caps dirtied by
-  a write() call.)
 - Include change_attr param in MClientRequest (for Client::_do_setattr).
