@@ -11052,6 +11052,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   string rs;
   bufferlist rdata;
   int err = 0;
+  int64_t migrate_pool_id = -1;
 
   string format = cmd_getval_or<string>(cmdmap, "format", "plain");
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
@@ -14319,14 +14320,110 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
                                get_last_committed() + 1));
     return true;
-  } else if (prefix == "osd pool create") {
-    auto source_pool_name = cmd_getval_or<std::string>(cmdmap, "migrate_from_pool", "");
-
+  } else if (prefix == "osd pool create" || prefix == "osd pool migrate") {
+    bool is_migrate = (prefix == "osd pool migrate");
     string poolstr;
     cmd_getval(cmdmap, "pool", poolstr);
     bool confirm = false;
     //confirmation may be set to true only by internal operations.
     cmd_getval(cmdmap, "yes_i_really_mean_it", confirm);
+
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+
+    if (is_migrate) {
+      if (pool_id < 0) {
+        ss << "pool '" << poolstr << "' does not exist";
+        err = -ENOENT;
+        goto reply_no_propose;
+      }
+
+      if (pending_inc.old_pools.count(pool_id)) {
+        ss << "pool '" << poolstr << "' is pending removal";
+        err = -ENOENT;
+        goto reply_no_propose;
+      }
+
+      string old_pool_name;
+      int suffix_iter = 1;
+      while (true) {
+        old_pool_name = ".migrate-" + std::to_string(suffix_iter);
+        int64_t old_pool_id = osdmap.lookup_pg_pool_name(old_pool_name);
+        if (old_pool_id >= 0) {
+          suffix_iter++;
+          continue;
+        }
+        bool pending_exists = false;
+        for (auto& [id, name] : pending_inc.new_pool_names) {
+          if (name == old_pool_name) {
+            pending_exists = true;
+            break;
+          }
+        }
+        if (pending_exists) {
+          suffix_iter++;
+          continue;
+        }
+        break;
+      }
+
+      bool experimental_enabled =
+        g_ceph_context->check_experimental_feature_enabled("poolmigration");
+      if (!experimental_enabled) {
+        ss << "Pool migration is an experimental feature that may cause "
+           << "unrecoverable data corruption. If you are sure, add "
+           << "'poolmigration' to the experimental features config "
+           << "(enable_experimental_unrecoverable_data_corrupting_features).";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      if (osdmap.require_min_compat_client < ceph_release_t::umbrella) {
+        ss << "require_min_compat_client "
+           << osdmap.require_min_compat_client
+           << " < umbrella, which is required for pool migration. "
+           << "Try 'ceph osd set-require-min-compat-client umbrella' "
+           << "before using the new feature";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+        ss << "All OSDs must be upgraded to umbrella or "
+            << "later before using pool migration";
+        err = -EPERM;
+        goto reply_no_propose;
+      }
+
+      const pg_pool_t *source_pool = osdmap.get_pg_pool(pool_id);
+      if (source_pool->is_migrating()) {
+        ss << "Cannot migrate from a pool which is part of an ongoing migration";
+        err = -EINVAL;
+        goto reply_no_propose;
+      }
+
+      int ret = _prepare_rename_pool(pool_id, old_pool_name);
+      if (ret < 0) {
+        ss << "failed to rename pool '" << poolstr << "' to '" << old_pool_name << "': " << cpp_strerror(ret);
+        err = ret;
+        goto reply_no_propose;
+      }
+
+      migrate_pool_id = pool_id;
+    }
+
+    string source_pool_name;
+    if (is_migrate) {
+      // Find the pending renamed name of the source pool
+      for (auto& [id, name] : pending_inc.new_pool_names) {
+        if (id == migrate_pool_id) {
+          source_pool_name = name;
+          break;
+        }
+      }
+    } else {
+      source_pool_name = cmd_getval_or<std::string>(cmdmap, "migrate_from_pool", "");
+    }
+
     if (poolstr[0] == '.' && !confirm) {
       ss << "pool names beginning with . are not allowed";
       err = 0;
@@ -14334,8 +14431,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     string default_type_str, pool_type_str;
-    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
-    if (pool_id >= 0) {
+    if (pool_id >= 0 &&
+        (!pending_inc.new_pool_names.count(pool_id) ||
+         pending_inc.new_pool_names[pool_id] == poolstr)) {
       if (source_pool_name.empty()) {
         default_type_str = g_conf().get_val<string>("osd_pool_default_type");
         pool_type_str = cmd_getval_or<string>(cmdmap, "pool_type", default_type_str);
@@ -14391,6 +14489,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
 
       source_pool_id = osdmap.lookup_pg_pool_name(source_pool_name);
+      if (source_pool_id < 0) {
+        for (auto& [id, name] : pending_inc.new_pool_names) {
+          if (name == source_pool_name) {
+            source_pool_id = id;
+            break;
+          }
+        }
+      }
       if (source_pool_id < 0) {
         ss << "migrate_from_pool expects the name of an existing pool. "
            << source_pool_name << " does not exist";
@@ -14596,7 +14702,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply_no_propose;
       }
     } else {
-      ss << "pool '" << poolstr << "' created";
+      if (prefix == "osd pool migrate") {
+        ss << "pool '" << poolstr << "' renamed to '" << source_pool_name << "' and started migrating to '" << poolstr << "'";
+      } else {
+        ss << "pool '" << poolstr << "' created";
+      }
     }
     getline(ss, rs);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
@@ -15477,6 +15587,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   }
 
  reply_no_propose:
+  if (migrate_pool_id >= 0) {
+    pending_inc.new_pool_names.erase(migrate_pool_id);
+  }
   getline(ss, rs);
   if (err < 0 && rs.length() == 0)
     rs = cpp_strerror(err);
@@ -15486,10 +15599,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
  update:
   getline(ss, rs);
   wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
-					    get_last_committed() + 1));
+ 				    get_last_committed() + 1));
   return true;
 
  wait:
+  if (migrate_pool_id >= 0) {
+    pending_inc.new_pool_names.erase(migrate_pool_id);
+  }
   // XXX
   // Some osd commands split changes across two epochs.
   // It seems this is mostly for crush rule changes. It doesn't need
