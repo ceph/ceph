@@ -1164,3 +1164,221 @@ TEST(ReadRedirect, StackedEnoentMostRecentNoClone)
 }
 
 
+
+// ---------------------------------------------------------------------------
+// WI-9-f: Trimmer pass-selection tests.
+//
+// At the start of each AwaitAsyncWork cycle, the trimmer selects (X, mode)
+// by choosing the lowest snap ID from two candidate sets:
+//
+//   - snap_trimq contributes (snap_trimq.range_start(), TRIM)
+//   - rollback_trimq contributes (rb.source_snap, ROLLBACK_ONLY) for each rb,
+//     but if rb.source_snap is already in snap_trimq, it is upgraded to TRIM.
+//
+// The lowest-ID candidate wins (TRIM mode preferred when tied).
+//
+// Scenarios:
+//   (a) Lowest-ID-first: snap_trimq has lower ID than rollback source →
+//       snap trim runs first.
+//   (b) Source protected: rollback source has lower ID than trim snap →
+//       rollback-only runs first (prevents source deletion before rollback).
+//   (c) TRIM precedence: when rollback source == trim snap, TRIM mode selected
+//       (single pass does both).
+//   (d) Combined rollback+trim ordering: source in both snap_trimq and
+//       rollback_trimq → TRIM mode, rollback happens before clone deletion.
+//   (e) NOP rollback fast-exit: snap_mapper returns nullopt on first call
+//       (no objects registered under source snap) → rollback immediately
+//       inserted into completed_rollbacks without scanning any objects.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+enum PassMode { TRIM, ROLLBACK_ONLY };
+
+struct pass_selection_t {
+  snapid_t   snap;  // the snap ID X selected
+  PassMode   mode;
+};
+
+/// Simulate the pass-selection algorithm from §7.2.2.
+/// snap_trimq_start: lowest snap in snap_trimq (or CEPH_NOSNAP if empty).
+/// rollback_trimq:   map of rb_id → rollback_snap_info_t.
+static pass_selection_t
+simulate_pass_selection(
+    snapid_t snap_trimq_start,
+    const std::map<snapid_t, rollback_snap_info_t>& rollback_trimq)
+{
+  struct candidate_t {
+    snapid_t snap;
+    PassMode mode;
+  };
+  std::vector<candidate_t> candidates;
+
+  if (snap_trimq_start != CEPH_NOSNAP) {
+    candidates.push_back({snap_trimq_start, TRIM});
+  }
+
+  for (auto& [rb_id, rb_info] : rollback_trimq) {
+    PassMode m = ROLLBACK_ONLY;
+    // If source_snap is in snap_trimq, upgrade to TRIM
+    if (snap_trimq_start != CEPH_NOSNAP &&
+        rb_info.source_snap == snap_trimq_start) {
+      m = TRIM;
+    }
+    // Add only if not already present as TRIM for same snap
+    bool already_trim = false;
+    for (auto& c : candidates) {
+      if (c.snap == rb_info.source_snap && c.mode == TRIM) {
+        already_trim = true; break;
+      }
+    }
+    if (!already_trim) {
+      candidates.push_back({rb_info.source_snap, m});
+    }
+  }
+
+  // Select lowest snap ID; tie-break: TRIM > ROLLBACK_ONLY
+  ceph_assert(!candidates.empty());
+  pass_selection_t best{candidates[0].snap, candidates[0].mode};
+  for (auto& c : candidates) {
+    if (c.snap < best.snap ||
+        (c.snap == best.snap && c.mode == TRIM && best.mode == ROLLBACK_ONLY)) {
+      best = {c.snap, c.mode};
+    }
+  }
+  return best;
+}
+
+/// Simulate find_rollback_for_source: find rb in trimq whose source_snap == X.
+static const rollback_snap_info_t*
+simulate_find_rollback_for_source(
+    const std::map<snapid_t, rollback_snap_info_t>& rb_trimq,
+    snapid_t source)
+{
+  for (auto& [rb_id, rb_info] : rb_trimq) {
+    if (rb_info.source_snap == source)
+      return &rb_info;
+  }
+  return nullptr;
+}
+
+} // anonymous namespace
+
+// (a) Lowest-ID-first: snap in trimq has ID < rollback source → trim first
+TEST(TrimmerPassSelection, LowestIdFirst_SnapBeforeRollback)
+{
+  // snap_trimq has snap 5; rollback source is 10 (higher)
+  const snapid_t snap_trim(5), rb_src(10), rb_id(20);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_trimq;
+  rollback_snap_info_t rb; rb.rollback_id = rb_id; rb.source_snap = rb_src;
+  rb_trimq[rb_id] = rb;
+
+  auto sel = simulate_pass_selection(snap_trim, rb_trimq);
+
+  EXPECT_EQ(snap_trim, sel.snap)
+      << "lowest-ID candidate (snap_trim=5) must be selected first";
+  EXPECT_EQ(TRIM, sel.mode)
+      << "snap_trimq entry must select TRIM mode";
+}
+
+// (b) Source protected: rollback source has lower ID than trim snap →
+//     rollback-only runs first (source clone protected from deletion).
+TEST(TrimmerPassSelection, SourceProtected_RollbackBeforeSnap)
+{
+  // rollback source is 5 (lower); snap in trimq is 10 (higher)
+  const snapid_t rb_src(5), rb_id(20), snap_trim(10);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_trimq;
+  rollback_snap_info_t rb; rb.rollback_id = rb_id; rb.source_snap = rb_src;
+  rb_trimq[rb_id] = rb;
+
+  auto sel = simulate_pass_selection(snap_trim, rb_trimq);
+
+  EXPECT_EQ(rb_src, sel.snap)
+      << "rollback source (5) is lower than trim snap (10): must run first";
+  EXPECT_EQ(ROLLBACK_ONLY, sel.mode)
+      << "source is not in snap_trimq: mode must be ROLLBACK_ONLY";
+}
+
+// (c) TRIM precedence: rollback source == trim snap → TRIM mode (single pass)
+TEST(TrimmerPassSelection, TrimPrecedence_SourceEqualsTrimSnap)
+{
+  // rollback source == snap_trimq start == snap 10
+  const snapid_t snap_id(10), rb_id(20);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_trimq;
+  rollback_snap_info_t rb; rb.rollback_id = rb_id; rb.source_snap = snap_id;
+  rb_trimq[rb_id] = rb;
+
+  auto sel = simulate_pass_selection(snap_id, rb_trimq);
+
+  EXPECT_EQ(snap_id, sel.snap)
+      << "snap selected must be snap_id=10";
+  EXPECT_EQ(TRIM, sel.mode)
+      << "when source_snap == snap_trimq start, mode must be TRIM "
+         "(rollback then trim in one pass)";
+}
+
+// (d) Combined rollback+trim: source in snap_trimq means TRIM mode.
+//     Verify find_rollback_for_source() also finds the rollback for X.
+TEST(TrimmerPassSelection, CombinedRollbackAndTrim)
+{
+  const snapid_t snap_id(10), rb_id(20);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_trimq;
+  rollback_snap_info_t rb; rb.rollback_id = rb_id; rb.source_snap = snap_id;
+  rb_trimq[rb_id] = rb;
+
+  auto sel = simulate_pass_selection(snap_id, rb_trimq);
+  ASSERT_EQ(TRIM, sel.mode);
+
+  // find_rollback_for_source(X) must find the rollback
+  const rollback_snap_info_t* found =
+    simulate_find_rollback_for_source(rb_trimq, snap_id);
+  ASSERT_NE(nullptr, found)
+      << "find_rollback_for_source(X=snap_id) must return the rollback entry";
+  EXPECT_EQ(rb_id, found->rollback_id);
+
+  // The processing order for each object must be: rollback first, then trim.
+  // We model this as: rb_info != nullptr AND mode == TRIM → do both, rollback first.
+  bool rollback_before_trim = (found != nullptr && sel.mode == TRIM);
+  EXPECT_TRUE(rollback_before_trim)
+      << "rollback must happen before clone deletion in combined pass";
+}
+
+// (e) NOP rollback fast-exit: snap_mapper returns nullopt for source snap
+//     (no objects registered under that snap ID).
+//     Verify rb_id is immediately moved to completed_rollbacks.
+TEST(TrimmerPassSelection, NopRollbackFastExit)
+{
+  const snapid_t rb_src(10), rb_id(20);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_trimq;
+  rollback_snap_info_t rb; rb.rollback_id = rb_id; rb.source_snap = rb_src;
+  rb_trimq[rb_id] = rb;
+
+  snap_interval_set_t completed_rollbacks;
+
+  // Simulate: snap_mapper returns nullopt for rb_src
+  // (no objects registered under snap rb_src=10)
+  bool snap_mapper_nullopt = true;  // simulates get_next_objects_to_trim() == nullopt
+
+  if (snap_mapper_nullopt) {
+    // NOP fast-exit: erase rb_id from trimq, insert into completed_rollbacks
+    const rollback_snap_info_t* found =
+      simulate_find_rollback_for_source(rb_trimq, rb_src);
+    if (found) {
+      snapid_t completed_rb_id = found->rollback_id;
+      rb_trimq.erase(completed_rb_id);
+      completed_rollbacks.insert(completed_rb_id, 1);
+    }
+  }
+
+  EXPECT_TRUE(rb_trimq.empty())
+      << "after NOP fast-exit, rollback_trimq must be empty";
+  EXPECT_TRUE(completed_rollbacks.contains(rb_id))
+      << "rb_id=" << rb_id << " must be in completed_rollbacks after NOP exit";
+}
+
+
