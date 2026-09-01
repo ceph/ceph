@@ -3362,6 +3362,17 @@ public:
     ObjectOperation *extra_ops = NULL) {
     Op *o = prepare_stat_op(oid, oloc, snap, psize, pmtime, flags,
 			    onfinish, objver, extra_ops);
+    if (extra_ops) { // fill in out_bl/out_rval/out_ec
+      for (size_t i=0; i<extra_ops->out_bl.size(); ++i) {
+        o->out_bl[i] = extra_ops->out_bl[i];
+      }
+      for (size_t i=0; i<extra_ops->out_rval.size(); ++i) {
+        o->out_rval[i] = extra_ops->out_rval[i];
+      }
+      for (size_t i=0; i<extra_ops->out_ec.size(); ++i) {
+        o->out_ec[i] = extra_ops->out_ec[i];
+      }
+    }
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
