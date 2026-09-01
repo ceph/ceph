@@ -969,6 +969,10 @@ TEST_P(seastore_test_t, stat_nonexistent)
 {
   run_async([this] {
     auto st = sharded_seastore->stat(coll, make_oid(99)).handle_error(
+      crimson::ct_error::enoent::handle([] {
+        struct stat empty = {};
+        return seastar::make_ready_future<struct stat>(empty);
+      }),
       crimson::ct_error::assert_all("stat failed in stat_nonexistent")
     ).get();
     EXPECT_EQ(st.st_size, 0);
