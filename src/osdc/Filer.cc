@@ -168,9 +168,12 @@ public:
   object_t oid;
   uint64_t size;
   ceph::real_time mtime;
+  bufferlist change_attr_bl;
+  int change_attr_retval;
   C_Probe(Filer *f, Probe *p, object_t o) : filer(f), probe(p), oid(o),
 					    size(0) {}
   void finish(int r) override {
+    bool got_obj = r == 0;
     if (r == -ENOENT) {
       r = 0;
       ceph_assert(size == 0);
@@ -181,8 +184,10 @@ public:
       Probe::unique_lock pl(probe->lock);
       if (r != 0) {
 	probe->err = r;
+      } else if (got_obj && !change_attr_retval) {
+        auto p = change_attr_bl.cbegin();
+        decode(probe->change_attrs[oid], p);
       }
-
       probe_complete = filer->_probed(probe, oid, size, mtime, pl);
       ceph_assert(!pl.owns_lock());
     }
@@ -199,6 +204,7 @@ int Filer::probe(inodeno_t ino,
 		 uint64_t start_from,
 		 uint64_t *end, // LB, when !fwd
 		 ceph::real_time *pmtime,
+                 uint64_t *change_attr,
 		 bool fwd,
 		 int flags,
 		 Context *onfinish)
@@ -211,7 +217,7 @@ int Filer::probe(inodeno_t ino,
   ceph_assert(snapid);  // (until there is a non-NOSNAP write)
 
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime,
-			   flags, fwd, onfinish);
+			   change_attr, flags, fwd, onfinish);
 
   return probe_impl(probe, layout, start_from, end);
 }
@@ -222,6 +228,7 @@ int Filer::probe(inodeno_t ino,
 		 uint64_t start_from,
 		 uint64_t *end, // LB, when !fwd
 		 utime_t *pmtime,
+                 uint64_t *change_attr,
 		 bool fwd,
 		 int flags,
 		 Context *onfinish)
@@ -234,7 +241,7 @@ int Filer::probe(inodeno_t ino,
   ceph_assert(snapid);  // (until there is a non-NOSNAP write)
 
   Probe *probe = new Probe(ino, *layout, snapid, start_from, end, pmtime,
-			   flags, fwd, onfinish);
+			   change_attr, flags, fwd, onfinish);
   return probe_impl(probe, layout, start_from, end);
 }
 
@@ -293,9 +300,12 @@ void Filer::_probe(Probe *probe, Probe::unique_lock& pl)
   for (std::vector<ObjectExtent>::iterator i = stat_extents.begin();
        i != stat_extents.end(); ++i) {
     C_Probe *c = new C_Probe(this, probe, i->oid);
+    ObjectOperation change_attr_op;
+    change_attr_op.getxattr(CHANGE_ATTR_NAME, &c->change_attr_bl,
+                            &c->change_attr_retval);
     objecter->stat(i->oid, i->oloc, probe->snapid, &c->size, &c->mtime,
 		   probe->flags | CEPH_OSD_FLAG_RWORDERED,
-		   new C_OnFinisher(c, finisher));
+		   new C_OnFinisher(c, finisher), NULL, &change_attr_op);
   }
 }
 
@@ -315,6 +325,10 @@ bool Filer::_probed(Probe *probe, const object_t& oid, uint64_t size,
   probe->known_size[oid] = size;
   if (mtime > probe->max_mtime)
     probe->max_mtime = mtime;
+
+  if (probe->change_attr && probe->change_attrs[oid] > *probe->change_attr) {
+    *probe->change_attr = probe->change_attrs[oid];
+  }
 
   ceph_assert(probe->ops.count(oid));
   probe->ops.erase(oid);
