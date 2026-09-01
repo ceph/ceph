@@ -12,25 +12,24 @@
 #include "rgw_account.h"
 #include "rgw_sal.h"
 
-using namespace rgw_admin;
+using ceph::Formatter;
 
 int rgw_admin_account(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       RGWStreamFlusher& stream_flusher,
-                      ceph::Formatter* formatter,
                       const rgw_admin_account_options& o)
 {
   switch (o.command) {
-  case OPT::ACCOUNT_CREATE:
-  case OPT::ACCOUNT_MODIFY:
-  case OPT::ACCOUNT_GET:
-  case OPT::ACCOUNT_STATS:
-  case OPT::ACCOUNT_RM: {
+  case rgw_admin::OPT::ACCOUNT_CREATE:
+  case rgw_admin::OPT::ACCOUNT_MODIFY:
+  case rgw_admin::OPT::ACCOUNT_GET:
+  case rgw_admin::OPT::ACCOUNT_STATS:
+  case rgw_admin::OPT::ACCOUNT_RM: {
     auto op_state = rgw::account::AdminOpState{
-      .account_id = *o.account_id,
-      .tenant = *o.tenant,
-      .account_name = *o.account_name,
-      .email = *o.user_email,
+      .account_id = std::string(o.account_id),
+      .tenant = std::string(o.tenant),
+      .account_name = std::string(o.account_name),
+      .email = std::string(o.user_email),
       .max_users = o.max_users ? *o.max_users : std::nullopt,
       .max_roles = o.max_roles ? *o.max_roles : std::nullopt,
       .max_groups = o.max_groups ? *o.max_groups : std::nullopt,
@@ -42,7 +41,7 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
     std::string err_msg;
     int ret = 0;
 
-    if (o.command == OPT::ACCOUNT_CREATE) {
+    if (o.command == rgw_admin::OPT::ACCOUNT_CREATE) {
       ret = rgw::account::create(dpp, driver, op_state, err_msg,
                                  stream_flusher, null_yield);
       if (ret < 0) {
@@ -52,7 +51,7 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
       }
     }
 
-    if (o.command == OPT::ACCOUNT_MODIFY) {
+    if (o.command == rgw_admin::OPT::ACCOUNT_MODIFY) {
       ret = rgw::account::modify(dpp, driver, op_state, err_msg,
                                  stream_flusher, null_yield);
       if (ret < 0) {
@@ -62,7 +61,7 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
       }
     }
 
-    if (o.command == OPT::ACCOUNT_GET) {
+    if (o.command == rgw_admin::OPT::ACCOUNT_GET) {
       ret = rgw::account::info(dpp, driver, op_state, err_msg,
                                stream_flusher, null_yield);
       if (ret < 0) {
@@ -72,7 +71,7 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
       }
     }
 
-    if (o.command == OPT::ACCOUNT_STATS) {
+    if (o.command == rgw_admin::OPT::ACCOUNT_STATS) {
       ret = rgw::account::stats(dpp, driver, op_state,
                                 o.sync_stats, o.reset_stats, err_msg,
                                 stream_flusher, null_yield);
@@ -83,7 +82,7 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
       }
     }
 
-    if (o.command == OPT::ACCOUNT_RM) {
+    if (o.command == rgw_admin::OPT::ACCOUNT_RM) {
       ret = rgw::account::remove(dpp, driver, op_state, err_msg,
                                  stream_flusher, null_yield);
       if (ret < 0) {
@@ -95,10 +94,10 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  case OPT::ACCOUNT_LIST: {
+  case rgw_admin::OPT::ACCOUNT_LIST: {
     void* handle = nullptr;
     int max = 1000;
-    int ret = driver->meta_list_keys_init(dpp, "account", *o.marker, &handle);
+    int ret = driver->meta_list_keys_init(dpp, "account", std::string(o.marker), &handle);
     if (ret < 0) {
       std::cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -106,6 +105,7 @@ int rgw_admin_account(const DoutPrefixProvider* dpp,
 
     bool truncated = false;
     uint64_t count = 0;
+    Formatter* formatter = stream_flusher.get_formatter();
 
     if (o.max_entries_specified) {
       formatter->open_object_section("result");

@@ -176,6 +176,7 @@ enum class OPT {
 #include "radosgw-admin/opt_log.inc"
 #endif
 #include "radosgw-admin/opt_usage.inc"
+#include "radosgw-admin/opt_account.inc"
   OBJECT_PUT,
   OBJECT_RM,
   OBJECT_UNLINK,
@@ -357,7 +358,6 @@ enum class OPT {
 #endif
 #include "radosgw-admin/opt_pubsub.inc"
 #include "radosgw-admin/opt_script.inc"
-#include "radosgw-admin/opt_account.inc"
   RESTORE_STATUS,
   RESTORE_LIST,
   GLOBAL_CORS_GET,

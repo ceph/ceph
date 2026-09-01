@@ -5,21 +5,21 @@
 
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "radosgw-admin/radosgw-admin.h"
 
 class DoutPrefixProvider;
 class RGWStreamFlusher;
-namespace ceph { class Formatter; }
 namespace rgw::sal { class Driver; }
 
 struct rgw_admin_account_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  const std::string* tenant = nullptr;
-  const std::string* account_id = nullptr;
-  const std::string* account_name = nullptr;
-  const std::string* user_email = nullptr;
-  const std::string* marker = nullptr;
+  std::string_view tenant;
+  std::string_view account_id;
+  std::string_view account_name;
+  std::string_view user_email;
+  std::string_view marker;
   const std::optional<int>* max_users = nullptr;
   const std::optional<int>* max_roles = nullptr;
   const std::optional<int>* max_groups = nullptr;
@@ -35,5 +35,4 @@ struct rgw_admin_account_options {
 int rgw_admin_account(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       RGWStreamFlusher& stream_flusher,
-                      ceph::Formatter* formatter,
                       const rgw_admin_account_options& opts);

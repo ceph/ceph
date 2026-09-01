@@ -7107,6 +7107,35 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (opt_cmd == OPT::ACCOUNT_CREATE ||
+      opt_cmd == OPT::ACCOUNT_MODIFY ||
+      opt_cmd == OPT::ACCOUNT_GET ||
+      opt_cmd == OPT::ACCOUNT_STATS ||
+      opt_cmd == OPT::ACCOUNT_RM ||
+      opt_cmd == OPT::ACCOUNT_LIST) {
+    rgw_admin_account_options account_opts;
+    account_opts.command = opt_cmd;
+    account_opts.tenant = tenant;
+    account_opts.account_id = account_id;
+    account_opts.account_name = account_name;
+    account_opts.user_email = user_email;
+    account_opts.marker = marker;
+    account_opts.max_users = &max_users;
+    account_opts.max_roles = &max_roles;
+    account_opts.max_groups = &max_groups;
+    account_opts.max_access_keys = &max_access_keys;
+    account_opts.max_buckets = &max_buckets;
+    account_opts.purge_data = static_cast<bool>(purge_data);
+    account_opts.sync_stats = sync_stats;
+    account_opts.reset_stats = reset_stats;
+    account_opts.max_entries = max_entries;
+    account_opts.max_entries_specified = max_entries_specified;
+    ret = rgw_admin_account(dpp(), driver, stream_flusher, account_opts);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
   if (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE ||
       opt_cmd == OPT::QUOTA_DISABLE || opt_cmd == OPT::RATELIMIT_SET ||
       opt_cmd == OPT::RATELIMIT_ENABLE || opt_cmd == OPT::RATELIMIT_DISABLE ||
@@ -10449,35 +10478,6 @@ int main(int argc, const char **argv)
 #endif
 
 
-  if (opt_cmd == OPT::ACCOUNT_CREATE ||
-      opt_cmd == OPT::ACCOUNT_MODIFY ||
-      opt_cmd == OPT::ACCOUNT_GET ||
-      opt_cmd == OPT::ACCOUNT_STATS ||
-      opt_cmd == OPT::ACCOUNT_RM ||
-      opt_cmd == OPT::ACCOUNT_LIST)
-  {
-    rgw_admin_account_options account_opts;
-    account_opts.command = opt_cmd;
-    account_opts.tenant = &tenant;
-    account_opts.account_id = &account_id;
-    account_opts.account_name = &account_name;
-    account_opts.user_email = &user_email;
-    account_opts.marker = &marker;
-    account_opts.max_users = &max_users;
-    account_opts.max_roles = &max_roles;
-    account_opts.max_groups = &max_groups;
-    account_opts.max_access_keys = &max_access_keys;
-    account_opts.max_buckets = &max_buckets;
-    account_opts.purge_data = static_cast<bool>(purge_data);
-    account_opts.sync_stats = sync_stats;
-    account_opts.reset_stats = reset_stats;
-    account_opts.max_entries = max_entries;
-    account_opts.max_entries_specified = max_entries_specified;
-    ret = rgw_admin_account(dpp(), driver, stream_flusher, formatter.get(), account_opts);
-    if (ret != 0) {
-      return ret;
-    }
-  }
   if (opt_cmd == OPT::RESTORE_STATUS ||
       opt_cmd == OPT::RESTORE_LIST) {
     rgw::restore::RestoreEntry entry;
