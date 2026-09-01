@@ -5247,6 +5247,10 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
 
   ceph_tid_t flush_tid = ++last_flush_tid;
   in->flushing_cap_tids[flush_tid] = flushing;
+  if (in->dirty_setattr) {
+    in->dirty_setattr = false;
+    in->unflushed_setattr_tid = flush_tid;
+  }
 
   if (!in->flushing_caps) {
     ldout(cct, 10) << __func__ << " " << ccap_string(flushing) << " " << *in << dendl;
@@ -8579,8 +8583,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     in->ctime = ceph_clock_now();
     if (issued & CEPH_CAP_AUTH_EXCL)
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
-    else if (issued & CEPH_CAP_FILE_EXCL)
+    else if (issued & CEPH_CAP_FILE_EXCL) {
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
+    }
     else if (issued & CEPH_CAP_XATTR_EXCL)
       in->mark_caps_dirty(CEPH_CAP_XATTR_EXCL);
     else
@@ -8825,6 +8831,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         in->cap_dirtier_uid = perms.uid();
         in->cap_dirtier_gid = perms.gid();
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+        in->dirty_setattr = true;
         mask &= ~(CEPH_SETATTR_SIZE);
         mask |= CEPH_SETATTR_MTIME;
       } else {
@@ -8852,6 +8859,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
                (paux && in->fscrypt_file != *paux)) {
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
@@ -8866,12 +8874,14 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->ctime = ceph_clock_now();
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_MTIME;
     } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_mtime) > in->mtime) {
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_MTIME;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
 	       in->mtime != utime_t(stx->stx_mtime)) {
@@ -8889,12 +8899,14 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->ctime = ceph_clock_now();
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_ATIME;
     } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_atime) > in->atime) {
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_ATIME;
     } else {
       /* If we do not hold EXCL or WR caps, we MUST pass this request to the MDS
@@ -13427,9 +13439,13 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   }
   bool mds_flush = false;
   if (!syncdataonly && in->dirty_caps) {
-    if (do_rados_fsync &&
-        in->inline_version == CEPH_INLINE_NONE &&
-        !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL)) {
+    if (do_rados_fsync && // rados fsync enabled
+        in->inline_version == CEPH_INLINE_NONE && // not inline
+        !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL) && // only write caps are dirty
+        !in->dirty_setattr && // we haven't had a setattr
+        // and finally, we don't have a still-flushing setattr
+        (in->flushing_cap_tids.empty() ||
+         in->unflushed_setattr_tid < in->flushing_cap_tids.begin()->first)) {
       // we don't need to sync to the MDS when we we can recover
       // everything via Filer::probe()
       mds_flush = false;
