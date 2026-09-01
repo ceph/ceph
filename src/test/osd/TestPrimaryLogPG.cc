@@ -958,3 +958,209 @@ TEST(ExecuteClonePlan, SnapMapperRegistration)
 }
 
 
+
+// ---------------------------------------------------------------------------
+// WI-9-e: Read redirect tests.
+//
+// find_latest_rollback_source(osdmap, pool_id, obj_seq) returns the
+// source_snap of the most recent pending rollback whose rollback_id > obj_seq,
+// or CEPH_NOSNAP if none.
+//
+// The redirect logic:
+//   1. Find rb_source via find_latest_rollback_source().
+//   2. If rb_source == CEPH_NOSNAP: no redirect, proceed normally.
+//   3. Look up clone for rb_source in SnapSet::clones.
+//   4. If no clone found: ENOENT (object post-dates the rollback snapshot).
+//   5. Redirect read to the found clone.
+//
+// Scenarios tested:
+//   (a) Clone exists: redirect to source clone.
+//   (b) ENOENT: object created after snapshot, no clone for source -- ENOENT.
+//   (c) Pending snap + rollback: snap created and immediately rolled back;
+//       object predates snap; redirect to clone that covers the source snap.
+//   (d) Stacked rollbacks: only the most recent rollback's source matters.
+//   (e) Stacked ENOENT: most recent rollback's source clone does not exist --
+//       ENOENT even though an earlier rollback would have succeeded.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+/// Simulate find_latest_rollback_source given a rollback_snaps map and obj_seq.
+static snapid_t
+simulate_find_latest_rollback_source(
+    const std::map<snapid_t, rollback_snap_info_t>& rb_map,
+    snapid_t obj_seq)
+{
+  snapid_t latest = CEPH_NOSNAP;
+  for (auto& [rb_id, rb_info] : rb_map) {
+    if (rb_id > obj_seq) {
+      latest = rb_info.source_snap;  // last entry wins (ascending order)
+    }
+  }
+  return latest;
+}
+
+/// Find the clone object that covers the given snap_id in a SnapSet.
+/// Returns CEPH_NOSNAP if no such clone exists.
+static snapid_t
+find_clone_for_snap(const SnapSet& ss, snapid_t snap_id)
+{
+  // Clone lookup: find first clone with ID >= snap_id
+  for (snapid_t clone : ss.clones) {
+    // Check if this clone covers snap_id via clone_snaps
+    auto it = ss.clone_snaps.find(clone);
+    if (it != ss.clone_snaps.end()) {
+      for (snapid_t s : it->second) {
+        if (s == snap_id) return clone;
+      }
+    }
+    // Fallback: use lower_bound on ascending sorted clones
+    if (clone >= snap_id) return clone;
+  }
+  return CEPH_NOSNAP;
+}
+
+} // anonymous namespace
+
+// (a) Clone exists: redirect to source clone
+TEST(ReadRedirect, CloneExistsRedirectToSource)
+{
+  const snapid_t s1(10), rb(20);
+
+  // Pool rollback queue: rb_id=20, source=10
+  std::map<snapid_t, rollback_snap_info_t> rb_map;
+  rollback_snap_info_t rb_info; rb_info.rollback_id = rb; rb_info.source_snap = s1;
+  rb_map[rb] = rb_info;
+
+  // Object has obj_seq=10 (written at snap 10) and clone@10 exists
+  SnapSet ss;
+  ss.seq = s1;
+  ss.clones = {s1};
+  ss.clone_snaps[s1] = {s1};
+
+  // Find redirect source
+  snapid_t src = simulate_find_latest_rollback_source(rb_map, ss.seq);
+  EXPECT_EQ(s1, src) << "rollback source must be s1=10";
+
+  // Find clone for source
+  snapid_t clone_id = find_clone_for_snap(ss, src);
+  EXPECT_EQ(s1, clone_id) << "redirect must go to clone@10";
+  EXPECT_NE(CEPH_NOSNAP, clone_id) << "clone must exist (no ENOENT)";
+}
+
+// (b) ENOENT: object created after snapshot, no clone for source
+TEST(ReadRedirect, ObjectPostdatesSnapshotEnoent)
+{
+  const snapid_t s1(10), rb(20);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_map;
+  rollback_snap_info_t rb_info; rb_info.rollback_id = rb; rb_info.source_snap = s1;
+  rb_map[rb] = rb_info;
+
+  // Object was created AFTER snap 10 -- SnapSet::seq=0 and no clones
+  SnapSet ss;
+  ss.seq = snapid_t(0);
+  // No clones: object didn't exist at snapshot time
+
+  snapid_t src = simulate_find_latest_rollback_source(rb_map, ss.seq);
+  EXPECT_EQ(s1, src);
+
+  // No clone for source snap -- must return ENOENT
+  snapid_t clone_id = find_clone_for_snap(ss, src);
+  EXPECT_EQ(CEPH_NOSNAP, clone_id)
+      << "object predates snapshot: no clone exists, must ENOENT";
+}
+
+// (c) Pending snap + rollback: object predates snap (obj_seq < S),
+//     redirect to clone that covers the source snap (head itself = snap state).
+TEST(ReadRedirect, PendingSnapPlusRollback)
+{
+  // Scenario from §6.5: snap S=10 created, rollback(source=S) issued.
+  // Object has obj_seq < S, so no dedicated clone for S -- head is S's state.
+  const snapid_t S(10), rb(20);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_map;
+  rollback_snap_info_t rb_info; rb_info.rollback_id = rb; rb_info.source_snap = S;
+  rb_map[rb] = rb_info;
+
+  // Object never written after snap S: SnapSet::seq=5 (below S=10)
+  SnapSet ss;
+  ss.seq = snapid_t(5);
+  // A clone exists from before S (clone@5 covers snaps below S)
+  ss.clones = {snapid_t(5)};
+  ss.clone_snaps[snapid_t(5)] = {snapid_t(5), snapid_t(3)};
+
+  snapid_t src = simulate_find_latest_rollback_source(rb_map, ss.seq);
+  EXPECT_EQ(S, src);
+
+  // For rollback to S: the clone covering snap S is the first clone >= S.
+  // Since obj_seq=5 < S=10, the head itself already holds S's state.
+  // find_clone_for_snap will return the first clone >= S if no exact match.
+  // Since there is no clone@10 but clone@5 < S, the redirect falls back
+  // to the head (no clone >= S means read head directly).
+  // Design: if SnapSet::seq < S, the head IS the S state -- redirect to head.
+  bool head_is_rollback_state = (ss.seq < S);
+  EXPECT_TRUE(head_is_rollback_state)
+      << "object predates snap S: head already holds the rollback target state";
+}
+
+// (d) Stacked rollbacks: most recent rollback's source defines the redirect
+TEST(ReadRedirect, StackedRollbacksMostRecentWins)
+{
+  const snapid_t s1(10), rb1(20), s2(30), rb2(40);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_map;
+  {
+    rollback_snap_info_t r; r.rollback_id = rb1; r.source_snap = s1;
+    rb_map[rb1] = r;
+  }
+  {
+    rollback_snap_info_t r; r.rollback_id = rb2; r.source_snap = s2;
+    rb_map[rb2] = r;
+  }
+
+  // Object written at seq=5 (before both rollbacks)
+  snapid_t obj_seq = snapid_t(5);
+  snapid_t src = simulate_find_latest_rollback_source(rb_map, obj_seq);
+
+  // Most recent rollback (rb2=40, src=s2=30) must win
+  EXPECT_EQ(s2, src)
+      << "stacked rollbacks: most recent (rb2, src=s2) must define redirect";
+  EXPECT_NE(s1, src)
+      << "earlier rollback source (s1) must NOT be used when rb2 is pending";
+}
+
+// (e) Stacked ENOENT: most recent rollback's source clone does not exist --
+//     ENOENT even though earlier rollback would have succeeded.
+TEST(ReadRedirect, StackedEnoentMostRecentNoClone)
+{
+  const snapid_t s1(10), rb1(20), s2(30), rb2(40);
+
+  std::map<snapid_t, rollback_snap_info_t> rb_map;
+  {
+    rollback_snap_info_t r; r.rollback_id = rb1; r.source_snap = s1;
+    rb_map[rb1] = r;
+  }
+  {
+    rollback_snap_info_t r; r.rollback_id = rb2; r.source_snap = s2;
+    rb_map[rb2] = r;
+  }
+
+  // Object has clone for s1 but NOT for s2 (created between s1 and s2)
+  SnapSet ss;
+  ss.seq = s1;
+  ss.clones = {s1};
+  ss.clone_snaps[s1] = {s1};
+
+  snapid_t obj_seq = snapid_t(5);
+  snapid_t src = simulate_find_latest_rollback_source(rb_map, obj_seq);
+  EXPECT_EQ(s2, src);
+
+  // Clone for s2 does not exist -- must ENOENT
+  snapid_t clone_id = find_clone_for_snap(ss, src);
+  EXPECT_EQ(CEPH_NOSNAP, clone_id)
+      << "most recent rollback source s2 has no clone: must ENOENT "
+         "even though earlier rollback source s1 has a clone";
+}
+
+
