@@ -359,6 +359,7 @@ void PG::clear_primary_state()
   snap_trimq.clear();
   rollback_trimq.clear();
   snap_trimq_repeat.clear();
+  rollback_trimq_repeat.clear();
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();
 
@@ -525,6 +526,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
 
   child->snap_trimq = snap_trimq;
   child->snap_trimq_repeat = snap_trimq_repeat;
+  child->rollback_trimq_repeat = rollback_trimq_repeat;
 
   _split_into(child_pgid, child, split_bits);
 

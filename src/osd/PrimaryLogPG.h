@@ -1273,6 +1273,12 @@ protected:
     int64_t pool_id,
     snapid_t obj_seq);
 
+  // find_rollback_for_source() finds the pending rollback in rollback_trimq
+  // whose source_snap == source, if any.
+  static const rollback_snap_info_t* find_rollback_for_source(
+    const std::map<snapid_t, rollback_snap_info_t>& rb_trimq,
+    snapid_t source);
+
   void make_writeable(OpContext *ctx);
   void log_op_stats(const OpRequest& op, uint64_t inb, uint64_t outb);
 
@@ -1729,6 +1735,8 @@ private:
 
     std::set<hobject_t> in_flight;
     snapid_t snap_to_trim;
+    snapid_t snap_being_processed;
+    bool is_trim_pass = true;
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),

@@ -9077,6 +9077,18 @@ snapid_t PrimaryLogPG::find_latest_rollback_source(
   return latest_source;
 }
 
+const rollback_snap_info_t* PrimaryLogPG::find_rollback_for_source(
+  const std::map<snapid_t, rollback_snap_info_t>& rb_trimq,
+  snapid_t source)
+{
+  for (auto& [rb_id, rb_info] : rb_trimq) {
+    if (rb_info.source_snap == source) {
+      return &rb_info;
+    }
+  }
+  return nullptr;
+}
+
 void PrimaryLogPG::make_writeable(OpContext *ctx)
 {
   const hobject_t& soid = ctx->obs->oi.soid;
