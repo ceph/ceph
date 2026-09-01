@@ -562,13 +562,14 @@ class PgOpsExecuter {
 
 public:
   PgOpsExecuter(const PG& pg, const MOSDOp& msg)
-    : pg(pg), nspace(msg.get_hobj().nspace) {
+    : pg(pg), m(&msg), nspace(msg.get_hobj().nspace) {
   }
 
   interruptible_future<> execute_op(OSDOp& osd_op);
 
 private:
   const PG& pg;
+  const MOSDOp* m;
   const std::string& nspace;
 };
 
