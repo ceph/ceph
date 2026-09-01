@@ -550,6 +550,122 @@ Combined Examples
       /
       increase(rgw_lc_per_bucket_objects_scanned[24h])
 
+Bucket Reshard Metrics
+======================
+
+The following metrics related to bucket resharding are tracked across buckets by the Ceph Object Gateway.
+
+.. list-table:: Ceph Object Gateway Across-Bucket Bucket Reshard Metrics
+   :widths: 25 25 75
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - ``active``
+     - Gauge
+     - Number of currently active bucket reshards
+   * - ``active_shard_count``
+     - Gauge
+     - Number of bucket shards currently being resharded
+   * - ``ok``
+     - Counter
+     - Number of successful bucket reshards
+   * - ``failed``
+     - Counter
+     - Number of failed bucket reshards
+   * - ``start_time``
+     - Gauge
+     - Most recent bucket reshard start timestamp (Unix epoch seconds)
+   * - ``ok_end_time``
+     - Gauge
+     - Most recent bucket reshard success end timestamp (Unix epoch seconds)
+   * - ``failed_end_time``
+     - Gauge
+     - Most recent bucket reshard failed end timestamp (Unix epoch seconds)
+   * - ``ok_time_avg``
+     - Gauge
+     - Average time successful reshards take
+
+Bucket reshard metrics across buckets are in the "rgw/counters" section and all have the prefix "rgw_reshard_".
+
+The following metrics related to bucket resharding are tracked per bucket by the Ceph Object Gateway.
+
+.. list-table:: Ceph Object Gateway Per-Bucket Bucket Reshard Metrics
+   :widths: 25 25 75
+   :header-rows: 1
+
+   * - Name
+     - Type
+     - Description
+   * - ``active_shard_count``
+     - Gauge
+     - Number of bucket shards currently being resharded for this bucket
+   * - ``ok``
+     - Counter
+     - Number of successful bucket reshards for this bucket
+   * - ``failed``
+     - Counter
+     - Number of failed bucket reshards for this bucket
+   * - ``start_time``
+     - Gauge
+     - Most recent bucket reshard start timestamp (Unix epoch seconds) for this bucket
+   * - ``ok_end_time``
+     - Gauge
+     - Most recent bucket reshard success end timestamp (Unix epoch seconds) for this bucket
+   * - ``failed_end_time``
+     - Gauge
+     - Most recent bucket reshard failed end timestamp (Unix epoch seconds) for this bucket
+   * - ``ok_time_avg``
+     - Gauge
+     - Average time successful reshards take for this bucket
+
+Bucket reshard metrics are labeled per-bucket in the ``rgw_bucket_reshard_per_bucket`` section.
+
+Information about bucket reshard metrics can be seen in the ``rgw_bucket_reshard_per_bucket``
+section from the output of the ``counter schema`` command.
+
+To retrieve bucket reshard metrics from a ``radosgw`` daemon's admin socket, see the
+``rgw_bucket_reshard_per_bucket`` section in the output of the ``counter dump`` command::
+
+    "rgw_bucket_reshard_per_bucket": [
+        {
+            "labels": {
+                "bucket": "bkt1"
+            },
+            "counters": {
+                "bucket_reshard_per_bucket_ok": 2,
+                "bucket_reshard_per_bucket_failed": 0,
+                "bucket_reshard_per_bucket_start_time": 1788288849,
+                "bucket_reshard_per_bucket_ok_end_time": 1788288849,
+                "bucket_reshard_per_bucket_failed_end_time": 0,
+                "bucket_reshard_per_bucket_ok_time_avg": {
+                    "avgcount": 2,
+                    "sum": 0.220919428,
+                    "avgtime": 0.110459714
+                }
+            }
+        },
+	...
+    ],
+
+Bucket Reshard Counter Cache
+----------------------------
+
+To track bucket reshard events per bucket, set :confval:`rgw_bucket_reshard_counters_cache` to ``true``. The default value is ``false``.
+
+Bucket reshard metrics are stored as labeled performance counters in memory. All counters are lost when the Ceph Object Gateway restarts or crashes.
+
+Since ``ceph-mgr`` cannot expose labeled counters today; use the per-host ``ceph-exporter`` daemon to scrape these metrics.
+
+Bucket Reshard Counter Cache Size & Eviction
+--------------------------------------------
+
+The :confval:`rgw_bucket_reshard_counters_cache_size` option can be used to set number of entries in the cache.
+
+When the number of cached counters exceeds this value, the least recently used (LRU) counters are evicted.
+
+
 Sending Metrics to Prometheus
 =============================
 
@@ -567,6 +683,8 @@ The following Ceph Object Gateway op metrics related settings can be set via ``c
 .. confval:: rgw_user_counters_cache_size
 .. confval:: rgw_bucket_counters_cache
 .. confval:: rgw_bucket_counters_cache_size
+.. confval:: rgw_bucket_reshard_counters_cache
+.. confval:: rgw_bucket_reshard_counters_cache_size
 
 The following are notable ceph-exporter related settings can be set via ``ceph config set global CONFIG_VARIABLE VALUE``.
 
