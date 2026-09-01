@@ -9207,7 +9207,12 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
     make_writeable(ctx);
 
   int log_op_type;
-  if (ctx->use_replace_op) {
+  // REPLACE (op 11) was added in umbrella. Tentacle is_update() does not
+  // include it, so a mixed-version peer that later becomes primary will
+  // assert in recover_primary. Only use REPLACE once require_osd_release
+  // says every OSD understands it; until then keep the old MODIFY/DELETE.
+  if (ctx->use_replace_op &&
+      get_osdmap()->require_osd_release >= ceph_release_t::umbrella) {
     log_op_type = pg_log_entry_t::REPLACE;
   } else {
     log_op_type = ctx->new_obs.exists ? pg_log_entry_t::MODIFY :
