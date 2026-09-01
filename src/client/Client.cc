@@ -13114,6 +13114,7 @@ void Client::C_nonblocking_fsync_state::advance()
 
   ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
 
+  bool mds_flush = false;
   switch (progress) {
   case 0:
     ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - case 0" << dendl;
@@ -13128,6 +13129,22 @@ void Client::C_nonblocking_fsync_state::advance()
     }
 
     if (!syncdataonly && in->dirty_caps) {
+      if (clnt->do_rados_fsync && // rados fsync enabled
+          in->unsafe_ops.empty() && // we don't have to wait for ops anyway
+          in->inline_version == CEPH_INLINE_NONE && // not inline
+          !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL) && // only write caps are dirty
+          !in->dirty_setattr && // we haven't had a setattr
+          // and finally, we don't have a still-flushing setattr
+          (in->flushing_cap_tids.empty() ||
+           in->unflushed_setattr_tid < in->flushing_cap_tids.begin()->first)) {
+        // we don't need to sync to the MDS when we we can recover
+      // everything via Filer::probe()
+        mds_flush = false;
+      } else {
+        mds_flush = true;
+      }
+    }
+    if (mds_flush) {
       clnt->check_caps(in, CHECK_CAPS_NODELAY|CHECK_CAPS_SYNCHRONOUS);
       if (in->flushing_caps)
         flush_tid = clnt->last_flush_tid;
