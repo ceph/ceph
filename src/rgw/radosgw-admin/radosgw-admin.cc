@@ -63,6 +63,10 @@ extern "C" {
 #include "radosgw-admin/quota_ratelimit.h"
 #include "radosgw-admin/script.h"
 #include "radosgw-admin/pubsub.h"
+#include "radosgw-admin/realm.h"
+#include "radosgw-admin/zonegroup.h"
+#include "radosgw-admin/zone.h"
+#include "radosgw-admin/period.h"
 #include "radosgw-admin/radosgw-admin.h"
 
 #include "rgw/async_utils.h"
@@ -1113,300 +1117,6 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 }
 
 #ifdef WITH_RADOSGW_RADOS
-/// search for a matching zone/zonegroup id and return a connection if found
-static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver,
-                                                    const RGWZoneGroup& zonegroup,
-                                                    const std::string& remote)
-{
-  boost::optional<RGWRESTConn> conn;
-  if (remote == zonegroup.get_id()) {
-    conn.emplace(driver->ctx(), driver, remote, zonegroup.endpoints, zonegroup.api_name);
-  } else {
-    for (const auto& z : zonegroup.zones) {
-      const auto& zone = z.second;
-      if (remote == zone.id) {
-        conn.emplace(driver->ctx(), driver, remote, zone.endpoints, zonegroup.api_name);
-        break;
-      }
-    }
-  }
-  return conn;
-}
-
-/// search each zonegroup for a connection
-static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* driver,
-                                                    const RGWPeriodMap& period_map,
-                                                    const std::string& remote)
-{
-  boost::optional<RGWRESTConn> conn;
-  for (const auto& zg : period_map.zonegroups) {
-    conn = get_remote_conn(driver, zg.second, remote);
-    if (conn) {
-      break;
-    }
-  }
-  return conn;
-}
-#endif // WITH_RADOSGW_RADOS
-
-// we expect a very small response
-static constexpr size_t MAX_REST_RESPONSE = 128 * 1024;
-
-static int send_to_remote_gateway(RGWRESTConn* conn, req_info& info,
-                                  bufferlist& in_data, JSONParser& parser)
-{
-  if (!conn) {
-    return -EINVAL;
-  }
-
-  ceph::bufferlist response;
-  rgw_user user;
-  auto result = conn->forward(dpp(), user, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
-  if (!result) {
-    return result.error();
-  }
-  int ret = rgw_http_error_to_errno(*result);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = parser.parse(response.c_str(), response.length());
-  if (ret < 0) {
-    cerr << "failed to parse response" << std::endl;
-    return ret;
-  }
-  return 0;
-}
-
-static int send_to_url(const string& url,
-                       std::optional<string> opt_region,
-                       const string& access,
-                       const string& secret, req_info& info,
-                       bufferlist& in_data, JSONParser& parser)
-{
-  if (access.empty() || secret.empty()) {
-    cerr << "An --access-key and --secret must be provided with --url." << std::endl;
-    return -EINVAL;
-  }
-  RGWAccessKey key;
-  key.id = access;
-  key.key = secret;
-
-  param_vec_t params;
-  RGWRESTSimpleRequest req(g_ceph_context, info.method, url, NULL, &params, opt_region);
-
-  bufferlist response;
-  auto result = req.forward_request(dpp(), key, info, MAX_REST_RESPONSE, &in_data, &response, null_yield);
-  if (!result) {
-    return result.error();
-  }
-  int ret = rgw_http_error_to_errno(*result);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ret = parser.parse(response.c_str(), response.length());
-  if (ret < 0) {
-    cout << "failed to parse response" << std::endl;
-    return ret;
-  }
-  return 0;
-}
-
-static int send_to_remote_or_url(RGWRESTConn *conn, const string& url,
-                                 std::optional<string> opt_region,
-                                 const string& access, const string& secret,
-                                 req_info& info, bufferlist& in_data,
-                                 JSONParser& parser)
-{
-  if (url.empty()) {
-    return send_to_remote_gateway(conn, info, in_data, parser);
-  }
-  return send_to_url(url, opt_region, access, secret, info, in_data, parser);
-}
-
-static int commit_period(rgw::sal::ConfigStore* cfgstore,
-                         RGWRealm& realm, rgw::sal::RealmWriter& realm_writer,
-                         RGWPeriod& period, string remote, const string& url,
-                         std::optional<string> opt_region,
-                         const string& access, const string& secret,
-                         bool force, rgw::SiteConfig* site)
-{
-  auto& master_zone = period.get_master_zone().id;
-  if (master_zone.empty()) {
-    cerr << "cannot commit period: period does not have a master zone of a master zonegroup" << std::endl;
-    return -EINVAL;
-  }
-  // are we the period's master zone?
-  if (driver->get_zone()->get_id() == master_zone) {
-    // read the current period
-    RGWPeriod current_period;
-    int ret = cfgstore->read_period(dpp(), null_yield, realm.current_period,
-                                    std::nullopt, current_period);
-    if (ret < 0) {
-      cerr << "failed to load current period: " << cpp_strerror(ret) << std::endl;
-      return ret;
-    }
-    // the master zone can commit locally
-    ret = rgw::commit_period(dpp(), null_yield, cfgstore, driver,
-                             realm, realm_writer, current_period,
-                             period, cerr, force, *site);
-    if (ret < 0) {
-      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
-    }
-    (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
-    return ret;
-  }
-
-  if (remote.empty() && url.empty()) {
-    // use the new master zone's connection
-    remote = master_zone;
-    cerr << "Sending period to new master zone " << remote << std::endl;
-  }
-  boost::optional<RGWRESTConn> conn;
-  RGWRESTConn *remote_conn = nullptr;
-  if (!remote.empty()) {
-#ifdef WITH_RADOSGW_RADOS
-    conn = get_remote_conn(static_cast<rgw::sal::RadosStore*>(driver), period.get_map(), remote);
-    if (!conn) {
-      cerr << "failed to find a zone or zonegroup for remote "
-          << remote << std::endl;
-      return -ENOENT;
-    }
-    remote_conn = &*conn;
-#else
-    cerr << "ERROR: sending the period to a remote zone by id (--remote) "
-        "requires the RADOS backend; use --url instead" << std::endl;
-    return -ENOTSUP;
-#endif
-  }
-
-  // push period to the master with an empty period id
-  period.set_id(string());
-
-  RGWEnv env;
-  req_info info(g_ceph_context, &env);
-  info.method = "POST";
-  info.request_uri = "/admin/realm/period";
-
-  // json format into a bufferlist
-  JSONFormatter jf(false);
-  encode_json("period", period, &jf);
-  bufferlist bl;
-  jf.flush(bl);
-
-  JSONParser p;
-  int ret = send_to_remote_or_url(remote_conn, url, opt_region, access, secret, info, bl, p);
-  if (ret < 0) {
-    cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-
-    // did we parse an error message?
-    auto message = p.find_obj("Message");
-    if (message) {
-      cerr << "Reason: " << message->get_data() << std::endl;
-    }
-    return ret;
-  }
-
-  // decode the response and driver it back
-  try {
-    decode_json_obj(period, &p);
-  } catch (const JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.what() << std::endl;
-    return -EINVAL;
-  }
-  if (period.get_id().empty()) {
-    cerr << "Period commit got back an empty period id" << std::endl;
-    return -EINVAL;
-  }
-  // the master zone gave us back the period that it committed, so it's
-  // safe to save it as our latest epoch
-  constexpr bool exclusive = false;
-  ret = cfgstore->create_period(dpp(), null_yield, exclusive, period);
-  if (ret < 0) {
-    cerr << "Error storing committed period " << period.get_id() << ": "
-        << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-
-  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period.get_id(), period.get_epoch());
-  if (ret == -EEXIST) {
-    // already have this epoch (or a more recent one)
-    cerr << "already have epoch >= " << period.get_epoch()
-        << " for period " << period.get_id() << std::endl;
-    return 0;
-  }
-  if (ret < 0) {
-    cerr << "Error updating latest epoch for period " << period.get_id() << ": " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-
-  ret = rgw::reflect_period(dpp(), null_yield, cfgstore, period);
-  if (ret < 0) {
-    cerr << "Error updating local objects: " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-
-  (void) cfgstore->realm_notify_new_period(dpp(), null_yield, period);
-  return ret;
-}
-
-static int update_period(rgw::sal::ConfigStore* cfgstore,
-                         const string& realm_id, const string& realm_name,
-                         const string& period_epoch, bool commit,
-                         const string& remote, const string& url,
-                         std::optional<string> opt_region,
-                         const string& access, const string& secret,
-                         Formatter *formatter, bool force, rgw::SiteConfig* site)
-{
-  RGWRealm realm;
-  std::unique_ptr<rgw::sal::RealmWriter> realm_writer;
-  int ret = rgw::read_realm(dpp(), null_yield, cfgstore,
-                            realm_id, realm_name,
-                            realm, &realm_writer);
-  if (ret < 0) {
-    cerr << "failed to load realm " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  std::optional<epoch_t> epoch;
-  if (!period_epoch.empty()) {
-    epoch = atoi(period_epoch.c_str());
-  }
-  RGWPeriod period;
-  ret = cfgstore->read_period(dpp(), null_yield, realm.current_period,
-                              epoch, period);
-  if (ret < 0) {
-    cerr << "failed to load current period: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  // convert to the realm's staging period
-  rgw::fork_period(dpp(), period);
-  // update the staging period with all of the realm's zonegroups
-  ret = rgw::update_period(dpp(), null_yield, cfgstore, period);
-  if (ret < 0) {
-    return ret;
-  }
-
-  constexpr bool exclusive = false;
-  ret = cfgstore->create_period(dpp(), null_yield, exclusive, period);
-  if (ret < 0) {
-    cerr << "failed to driver period: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  if (commit) {
-    ret = commit_period(cfgstore, realm, *realm_writer, period, remote, url,
-                        opt_region, access, secret, force, site);
-    if (ret < 0) {
-      cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
-      return ret;
-    }
-  }
-  encode_json("period", period, formatter);
-  formatter->flush(cout);
-  return 0;
-}
-
-#ifdef WITH_RADOSGW_RADOS
 static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
                                 const string& bucket_id,
 				std::unique_ptr<rgw::sal::Bucket>* bucket)
@@ -1420,64 +1130,6 @@ static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
   return 0;
 }
 #endif
-
-static int do_period_pull(rgw::sal::ConfigStore* cfgstore,
-                          RGWRESTConn *remote_conn, const string& url,
-                          std::optional<string> opt_region,
-                          const string& access_key, const string& secret_key,
-                          const string& realm_id, const string& realm_name,
-                          const string& period_id, const string& period_epoch,
-                          RGWPeriod *period)
-{
-  RGWEnv env;
-  req_info info(g_ceph_context, &env);
-  info.method = "GET";
-  info.request_uri = "/admin/realm/period";
-
-  map<string, string> &params = info.args.get_params();
-  if (!realm_id.empty())
-    params["realm_id"] = realm_id;
-  if (!realm_name.empty())
-    params["realm_name"] = realm_name;
-  if (!period_id.empty())
-    params["period_id"] = period_id;
-  if (!period_epoch.empty())
-    params["epoch"] = period_epoch;
-
-  bufferlist bl;
-  JSONParser p;
-  int ret = send_to_remote_or_url(remote_conn, url, opt_region, access_key, secret_key,
-                                  info, bl, p);
-  if (ret < 0) {
-    cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-    return ret;
-  }
-  try {
-    decode_json_obj(*period, &p);
-  } catch (const JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.what() << std::endl;
-    return -EINVAL;
-  }
-  constexpr bool exclusive = false;
-  ret = cfgstore->create_period(dpp(), null_yield, exclusive, *period);
-  if (ret < 0) {
-    cerr << "Error storing period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
-  }
-
-  ret = cfgstore->update_latest_epoch(dpp(), null_yield, period->get_id(), period->get_epoch());
-  if (ret == -EEXIST) {
-    // already have this epoch (or a more recent one)
-    cerr << "already have epoch >= " << period->get_epoch()
-        << " for period " << period->get_id() << std::endl;
-    return 0;
-  }
-  if (ret < 0) {
-    cerr << "Error updating latest epoch for period " << period->get_id() << ": " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-
-  return 0;
-}
 
 void flush_ss(stringstream& ss, list<string>& l)
 {
@@ -4149,1933 +3801,237 @@ int main(int argc, const char **argv)
 
   StoreDestructor store_destructor(driver, &context_pool);
 
-  if (raw_storage_op) {
+  auto fill_period_options = [&](rgw_admin_period_options& o) {
+    o.command = opt_cmd;
+    o.realm_id = &realm_id;
+    o.realm_name = &realm_name;
+    o.period_id = &period_id;
+    o.period_epoch = &period_epoch;
+    o.url = &url;
+    o.access_key = &access_key;
+    o.secret_key = &secret_key;
+    o.remote = &remote;
+    o.quota_scope = &quota_scope;
+    o.ratelimit_scope = &ratelimit_scope;
+    o.opt_region = &opt_region;
+    o.commit = commit;
+    o.staging = staging;
+    o.yes_i_really_mean_it = yes_i_really_mean_it;
+    o.have_max_read_ops = have_max_read_ops;
+    o.have_max_write_ops = have_max_write_ops;
+    o.have_max_list_ops = have_max_list_ops;
+    o.have_max_delete_ops = have_max_delete_ops;
+    o.have_max_read_bytes = have_max_read_bytes;
+    o.have_max_write_bytes = have_max_write_bytes;
+    o.have_max_size = have_max_size;
+    o.have_max_objects = have_max_objects;
+    o.max_read_ops = max_read_ops;
+    o.max_write_ops = max_write_ops;
+    o.max_list_ops = max_list_ops;
+    o.max_delete_ops = max_delete_ops;
+    o.max_read_bytes = max_read_bytes;
+    o.max_write_bytes = max_write_bytes;
+    o.max_size = max_size;
+    o.max_objects = max_objects;
+  };
+
+  auto fill_realm_options = [&](rgw_admin_realm_options& o) {
+    o.command = opt_cmd;
+    o.realm_id = &realm_id;
+    o.realm_name = &realm_name;
+    o.realm_new_name = &realm_new_name;
+    o.period_id = &period_id;
+    o.period_epoch = &period_epoch;
+    o.url = &url;
+    o.access_key = &access_key;
+    o.secret_key = &secret_key;
+    o.remote = &remote;
+    o.infile = &infile;
+    o.opt_region = &opt_region;
+    o.set_default = set_default;
+    o.yes_i_really_mean_it = yes_i_really_mean_it;
+  };
+
+  auto fill_zonegroup_options = [&](rgw_admin_zonegroup_options& o) {
+    o.command = opt_cmd;
+    o.zonegroup_id = &zonegroup_id;
+    o.zonegroup_name = &zonegroup_name;
+    o.zonegroup_new_name = &zonegroup_new_name;
+    o.zone_id = &zone_id;
+    o.zone_name = &zone_name;
+    o.realm_id = &realm_id;
+    o.realm_name = &realm_name;
+    o.placement_id = &placement_id;
+    o.infile = &infile;
+    o.tags = &tags;
+    o.tags_add = &tags_add;
+    o.tags_rm = &tags_rm;
+    o.sync_from = &sync_from;
+    o.sync_from_rm = &sync_from_rm;
+    o.endpoints = &endpoints;
+    o.master_zone = &master_zone;
+    o.api_name = &api_name;
+    o.tier_type = &tier_type;
+    o.tier_type_specified = tier_type_specified;
+    o.tier_config_add = &tier_config_add;
+    o.tier_config_rm = &tier_config_rm;
+    o.redirect_zone = &redirect_zone;
+    o.opt_storage_class = &opt_storage_class;
+    o.bucket_index_max_shards = &bucket_index_max_shards;
+    o.sync_from_all_specified = sync_from_all_specified;
+    o.redirect_zone_set = redirect_zone_set;
+    o.sync_from_all = sync_from_all;
+    o.set_default = set_default;
+    o.read_only = read_only;
+    o.is_master = is_master;
+    o.is_master_set = is_master_set;
+    o.is_read_only_set = is_read_only_set;
+    o.yes_i_really_mean_it = yes_i_really_mean_it;
+#ifdef WITH_RADOSGW_RADOS
+    o.enable_features = &enable_features;
+    o.disable_features = &disable_features;
+#endif
+  };
+
+  auto fill_zone_options = [&](rgw_admin_zone_options& o) {
+    o.command = opt_cmd;
+    o.zonegroup_id = &zonegroup_id;
+    o.zonegroup_name = &zonegroup_name;
+    o.zone_id = &zone_id;
+    o.zone_name = &zone_name;
+    o.zone_new_name = &zone_new_name;
+    o.realm_id = &realm_id;
+    o.realm_name = &realm_name;
+    o.placement_id = &placement_id;
+    o.url = &url;
+    o.access_key = &access_key;
+    o.secret_key = &secret_key;
+    o.infile = &infile;
+    o.sync_from = &sync_from;
+    o.sync_from_rm = &sync_from_rm;
+    o.endpoints = &endpoints;
+    o.master_zone = &master_zone;
+    o.format = &format;
+    o.api_name = &api_name;
+    o.tier_type = &tier_type;
+    o.tier_type_specified = tier_type_specified;
+    o.tier_config_add = &tier_config_add;
+    o.tier_config_rm = &tier_config_rm;
+    o.index_pool = &index_pool;
+    o.data_pool = &data_pool;
+    o.data_extra_pool = &data_extra_pool;
+    o.compression_type = &compression_type;
+    o.bucket_index_max_shards = &bucket_index_max_shards;
+    o.redirect_zone = &redirect_zone;
+    o.redirect_zone_set = redirect_zone_set;
+    o.placement_inline_data = placement_inline_data;
+    o.placement_inline_data_specified = placement_inline_data_specified;
+    o.opt_storage_class = &opt_storage_class;
+    o.opt_region = &opt_region;
+    o.sync_from_all_specified = sync_from_all_specified;
+    o.set_default = set_default;
+    o.read_only = read_only;
+    o.is_master = is_master;
+    o.is_master_set = is_master_set;
+    o.is_read_only_set = is_read_only_set;
+    o.sync_from_all = sync_from_all;
+    o.yes_i_really_mean_it = yes_i_really_mean_it;
+    o.num_shards_specified = num_shards_specified;
+    o.num_shards = num_shards;
+#ifdef WITH_RADOSGW_RADOS
+    o.placement_index_type = &placement_index_type;
+    o.index_type_specified = index_type_specified;
+    o.enable_features = &enable_features;
+    o.disable_features = &disable_features;
+#endif
+  };
+
+  auto dispatch_raw_storage = [&]() -> int {
     switch (opt_cmd) {
     case OPT::PERIOD_DELETE:
-      {
-	if (period_id.empty()) {
-	  cerr << "missing period id" << std::endl;
-	  return EINVAL;
-	}
-        int ret = cfgstore->delete_period(dpp(), null_yield, period_id);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't delete period: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-      }
-      break;
     case OPT::PERIOD_GET:
-      {
-        std::optional<epoch_t> epoch;
-	if (!period_epoch.empty()) {
-	  epoch = atoi(period_epoch.c_str());
-	}
-        if (staging) {
-          RGWRealm realm;
-          int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                    realm_id, realm_name, realm);
-          if (ret < 0 ) {
-            cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          realm_id = realm.get_id();
-          realm_name = realm.get_name();
-          period_id = RGWPeriod::get_staging_id(realm_id);
-          epoch = 1;
-        }
-        if (period_id.empty()) {
-          // use realm's current period
-          RGWRealm realm;
-          int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                    realm_id, realm_name, realm);
-          if (ret < 0 ) {
-            cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          period_id = realm.current_period;
-        }
-
-	RGWPeriod period;
-        int ret = cfgstore->read_period(dpp(), null_yield, period_id,
-                                        epoch, period);
-	if (ret < 0) {
-	  cerr << "failed to load period: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	encode_json("period", period, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
     case OPT::PERIOD_GET_CURRENT:
-      {
-        RGWRealm realm;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm);
-	if (ret < 0) {
-          std::cerr << "failed to load realm: " << cpp_strerror(ret) << std::endl;
-	  return -ret;
-	}
-
-	formatter->open_object_section("period_get_current");
-	encode_json("current_period", realm.current_period, formatter.get());
-	formatter->close_section();
-	formatter->flush(cout);
-      }
-      break;
-    case OPT::PERIOD_LIST:
-      {
-        Formatter::ObjectSection periods_list{*formatter, "periods_list"};
-        Formatter::ArraySection periods{*formatter, "periods"};
-        rgw::sal::ListResult<std::string> listing;
-        std::array<std::string, 1000> period_ids; // list in pages of 1000
-        do {
-          int ret = cfgstore->list_period_ids(dpp(), null_yield, listing.next,
-                                              period_ids, listing);
-          if (ret < 0) {
-            std::cerr << "failed to list periods: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          for (const auto& id : listing.entries) {
-            encode_json("id", id, formatter.get());
-          }
-        } while (!listing.next.empty());
-      } // close sections periods and periods_list
-      formatter->flush(cout);
-      break;
-    case OPT::PERIOD_UPDATE:
-      {
-        int ret = update_period(cfgstore.get(), realm_id, realm_name,
-                                period_epoch, commit, remote, url,
-                                opt_region, access_key, secret_key,
-                                formatter.get(), yes_i_really_mean_it, site.get());
-	if (ret < 0) {
-	  return -ret;
-	}
-      }
-      break;
     case OPT::PERIOD_PULL:
-      {
-        if (url.empty()) {
-          cerr << "A --url must be provided." << std::endl;
-          return EINVAL;
-        }
-        // load realm for current period
-        RGWRealm realm;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm);
-        if (ret < 0 ) {
-          cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-        period_id = realm.current_period;
-
-        RGWPeriod period;
-        ret = do_period_pull(cfgstore.get(), nullptr, url,
-                                 opt_region, access_key, secret_key,
-                                 realm_id, realm_name, period_id, period_epoch,
-                                 &period);
-        if (ret < 0) {
-          cerr << "period pull failed: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        encode_json("period", period, formatter.get());
-        formatter->flush(cout);
-      }
-      break;
-    case OPT::GLOBAL_RATELIMIT_GET:
-    case OPT::GLOBAL_RATELIMIT_SET:
-    case OPT::GLOBAL_RATELIMIT_ENABLE:
-    case OPT::GLOBAL_RATELIMIT_DISABLE:
-      {
-        if (realm_id.empty()) {
-          if (!realm_name.empty()) {
-            // look up realm_id for the given realm_name
-            int ret = cfgstore->read_realm_id(dpp(), null_yield,
-                                              realm_name, realm_id);
-            if (ret < 0) {
-              cerr << "ERROR: failed to read realm for " << realm_name
-                  << ": " << cpp_strerror(-ret) << std::endl;
-              return -ret;
-            }
-          } else {
-            // use default realm_id when none is given
-            int ret = cfgstore->read_default_realm_id(dpp(), null_yield,
-                                                      realm_id);
-            if (ret < 0 && ret != -ENOENT) { // on ENOENT, use empty realm_id
-              cerr << "ERROR: failed to read default realm: "
-                  << cpp_strerror(-ret) << std::endl;
-              return -ret;
-            }
-          }
-        }
-
-        RGWPeriodConfig period_config;
-        int ret = cfgstore->read_period_config(dpp(), null_yield, realm_id,
-                                               period_config);
-        if (ret < 0 && ret != -ENOENT) {
-          cerr << "ERROR: failed to read period config: "
-              << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-        bool ratelimit_configured = true;
-        formatter->open_object_section("period_config");
-        if (ratelimit_scope == "bucket") {
-          ratelimit_configured = set_ratelimit_info(period_config.bucket_ratelimit, opt_cmd,
-                         max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                         max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
-          encode_json("bucket_ratelimit", period_config.bucket_ratelimit, formatter.get());
-        } else if (ratelimit_scope == "user") {
-          ratelimit_configured = set_ratelimit_info(period_config.user_ratelimit, opt_cmd,
-                         max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                         max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
-          encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
-        } else if (ratelimit_scope == "anonymous") {
-          ratelimit_configured = set_ratelimit_info(period_config.anon_ratelimit, opt_cmd,
-                         max_read_ops, max_write_ops, max_list_ops,max_delete_ops,
-                         max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
-          encode_json("anonymous_ratelimit", period_config.anon_ratelimit, formatter.get());
-        } else if (ratelimit_scope.empty() && opt_cmd == OPT::GLOBAL_RATELIMIT_GET) {
-          // if no scope is given for GET, print both
-          encode_json("bucket_ratelimit", period_config.bucket_ratelimit, formatter.get());
-          encode_json("user_ratelimit", period_config.user_ratelimit, formatter.get());
-          encode_json("anonymous_ratelimit", period_config.anon_ratelimit, formatter.get());
-        } else {
-          cerr << "ERROR: invalid rate limit scope specification. Please specify "
-              "either --ratelimit-scope=bucket, or --ratelimit-scope=user or --ratelimit-scope=anonymous" << std::endl;
-          return EINVAL;
-        }
-        if (!ratelimit_configured) {
-          cerr << "ERROR: no rate limit values have been specified" << std::endl;
-          return EINVAL;
-        }
-
-        formatter->close_section();
-
-        if (opt_cmd != OPT::GLOBAL_RATELIMIT_GET) {
-          // write the modified period config
-          constexpr bool exclusive = false;
-          ret = cfgstore->write_period_config(dpp(), null_yield, exclusive,
-                                              realm_id, period_config);
-          if (ret < 0) {
-            cerr << "ERROR: failed to write period config: "
-                << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          if (!realm_id.empty()) {
-            cout << "Global ratelimit changes saved. Use 'period update' to apply "
-                "them to the staging period, and 'period commit' to commit the "
-                "new period." << std::endl;
-          } else {
-            cout << "Global ratelimit changes saved. They will take effect as "
-                "the gateways are restarted." << std::endl;
-          }
-        }
-
-        formatter->flush(cout);
-      }
-      break;
+    case OPT::PERIOD_LIST:
+    case OPT::PERIOD_UPDATE:
     case OPT::GLOBAL_QUOTA_GET:
     case OPT::GLOBAL_QUOTA_SET:
     case OPT::GLOBAL_QUOTA_ENABLE:
     case OPT::GLOBAL_QUOTA_DISABLE:
-      {
-        if (realm_id.empty()) {
-          if (!realm_name.empty()) {
-            // look up realm_id for the given realm_name
-            int ret = cfgstore->read_realm_id(dpp(), null_yield,
-                                              realm_name, realm_id);
-            if (ret < 0) {
-              cerr << "ERROR: failed to read realm for " << realm_name
-                  << ": " << cpp_strerror(-ret) << std::endl;
-              return -ret;
-            }
-          } else {
-            // use default realm_id when none is given
-            int ret = cfgstore->read_default_realm_id(dpp(), null_yield,
-                                                      realm_id);
-            if (ret < 0 && ret != -ENOENT) { // on ENOENT, use empty realm_id
-              cerr << "ERROR: failed to read default realm: "
-                  << cpp_strerror(-ret) << std::endl;
-              return -ret;
-            }
-          }
-        }
-
-        RGWPeriodConfig period_config;
-        int ret = cfgstore->read_period_config(dpp(), null_yield, realm_id,
-                                               period_config);
-        if (ret < 0 && ret != -ENOENT) {
-          cerr << "ERROR: failed to read period config: "
-              << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        formatter->open_object_section("period_config");
-        if (quota_scope == "bucket") {
-          set_quota_info(period_config.quota.bucket_quota, opt_cmd,
-                         max_size, max_objects,
-                         have_max_size, have_max_objects);
-          encode_json("bucket quota", period_config.quota.bucket_quota, formatter.get());
-        } else if (quota_scope == "user") {
-          set_quota_info(period_config.quota.user_quota, opt_cmd,
-                         max_size, max_objects,
-                         have_max_size, have_max_objects);
-          encode_json("user quota", period_config.quota.user_quota, formatter.get());
-        } else if (quota_scope.empty() && opt_cmd == OPT::GLOBAL_QUOTA_GET) {
-          // if no scope is given for GET, print both
-          encode_json("bucket quota", period_config.quota.bucket_quota, formatter.get());
-          encode_json("user quota", period_config.quota.user_quota, formatter.get());
-        } else {
-          cerr << "ERROR: invalid quota scope specification. Please specify "
-              "either --quota-scope=bucket or --quota-scope=user" << std::endl;
-          return EINVAL;
-        }
-        formatter->close_section();
-
-        if (opt_cmd != OPT::GLOBAL_QUOTA_GET) {
-          // write the modified period config
-          constexpr bool exclusive = false;
-          ret = cfgstore->write_period_config(dpp(), null_yield, exclusive,
-                                              realm_id, period_config);
-          if (ret < 0) {
-            cerr << "ERROR: failed to write period config: "
-                << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          if (!realm_id.empty()) {
-            cout << "Global quota changes saved. Use 'period update' to apply "
-                "them to the staging period, and 'period commit' to commit the "
-                "new period." << std::endl;
-          } else {
-            cout << "Global quota changes saved. They will take effect as "
-                "the gateways are restarted." << std::endl;
-          }
-        }
-
-        formatter->flush(cout);
-      }
-      break;
+    case OPT::GLOBAL_RATELIMIT_GET:
+    case OPT::GLOBAL_RATELIMIT_SET:
+    case OPT::GLOBAL_RATELIMIT_ENABLE:
+    case OPT::GLOBAL_RATELIMIT_DISABLE: {
+      rgw_admin_period_options o;
+      fill_period_options(o);
+      return rgw_admin_period(dpp(), driver, cfgstore.get(), *site,
+                              formatter.get(), o);
+    }
     case OPT::REALM_CREATE:
-      {
-	if (realm_name.empty()) {
-	  cerr << "missing realm name" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWRealm realm;
-        realm.name = realm_name;
-
-        constexpr bool exclusive = true;
-	int ret = rgw::create_realm(dpp(), null_yield, cfgstore.get(),
-                                    exclusive, realm);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't create realm " << realm_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_realm(dpp(), null_yield, cfgstore.get(), realm);
-          if (ret < 0) {
-            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-	encode_json("realm", realm, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
     case OPT::REALM_DELETE:
-      {
-	if (realm_id.empty() && realm_name.empty()) {
-	  cerr << "missing realm name or id" << std::endl;
-	  return EINVAL;
-	}
-	RGWRealm realm;
-        std::unique_ptr<rgw::sal::RealmWriter> writer;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm, &writer);
-	if (ret < 0) {
-	  cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        ret = writer->remove(dpp(), null_yield);
-	if (ret < 0) {
-	  cerr << "failed to remove realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-      }
-      break;
     case OPT::REALM_GET:
-      {
-	RGWRealm realm;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm);
-	if (ret < 0) {
-	  if (ret == -ENOENT && realm_name.empty() && realm_id.empty()) {
-	    cerr << "missing realm name or id, or default realm not found" << std::endl;
-	  } else {
-	    cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-          }
-	  return -ret;
-	}
-	encode_json("realm", realm, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
     case OPT::REALM_GET_DEFAULT:
-      {
-	string default_id;
-	int ret = cfgstore->read_default_realm_id(dpp(), null_yield, default_id);
-	if (ret == -ENOENT) {
-	  cout << "No default realm is set" << std::endl;
-	  return -ret;
-	} else if (ret < 0) {
-	  cerr << "Error reading default realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	cout << "default realm: " << default_id << std::endl;
-      }
-      break;
     case OPT::REALM_LIST:
-      {
-        std::string default_id;
-        int ret = cfgstore->read_default_realm_id(dpp(), null_yield,
-                                                  default_id);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "could not determine default realm: " << cpp_strerror(-ret) << std::endl;
-	}
-
-        Formatter::ObjectSection realms_list{*formatter, "realms_list"};
-        encode_json("default_info", default_id, formatter.get());
-
-        Formatter::ArraySection realms{*formatter, "realms"};
-        rgw::sal::ListResult<std::string> listing;
-        std::array<std::string, 1000> names; // list in pages of 1000
-        do {
-          ret = cfgstore->list_realm_names(dpp(), null_yield, listing.next,
-                                           names, listing);
-          if (ret < 0) {
-            std::cerr << "failed to list realms: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          for (const auto& name : listing.entries) {
-            encode_json("name", name, formatter.get());
-          }
-        } while (!listing.next.empty());
-      } // close sections realms and realms_list
-      formatter->flush(cout);
-      break;
     case OPT::REALM_LIST_PERIODS:
-      {
-        // use realm's current period
-        RGWRealm realm;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm);
-        if (ret < 0) {
-          cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-        period_id = realm.current_period;
-
-        Formatter::ObjectSection periods_list{*formatter, "realm_periods_list"};
-	encode_json("current_period", period_id, formatter.get());
-
-        Formatter::ArraySection periods{*formatter, "periods"};
-
-        while (!period_id.empty()) {
-          RGWPeriod period;
-          ret = cfgstore->read_period(dpp(), null_yield, period_id,
-                                      std::nullopt, period);
-          if (ret < 0) {
-            cerr << "failed to load period id " << period_id
-                << ": " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          encode_json("id", period_id, formatter.get());
-          period_id = period.predecessor_uuid;
-        }
-      } // close sections periods and realm_periods_list
-      formatter->flush(cout);
-      break;
-
     case OPT::REALM_RENAME:
-      {
-	if (realm_new_name.empty()) {
-	  cerr << "missing realm new name" << std::endl;
-	  return EINVAL;
-	}
-	if (realm_name.empty() && realm_id.empty()) {
-	  cerr << "missing realm name or id" << std::endl;
-	  return EINVAL;
-	}
-
-        RGWRealm realm;
-        std::unique_ptr<rgw::sal::RealmWriter> writer;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm, &writer);
-	if (ret < 0) {
-	  cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        ret = writer->rename(dpp(), null_yield, realm, realm_new_name);
-	if (ret < 0) {
-	  cerr << "rename failed: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        cout << "Realm name updated. Note that the realm name is not carried "
-            "by the period, so this change does not propagate on its own. On "
-            "each of the realm's other clusters, either run this command "
-            "again or run 'radosgw-admin realm pull' to pick up the new name."
-            << std::endl;
-      }
-      break;
     case OPT::REALM_SET:
-      {
-	if (realm_id.empty() && realm_name.empty()) {
-	  cerr << "no realm name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	bool new_realm = false;
-        RGWRealm realm;
-        std::unique_ptr<rgw::sal::RealmWriter> writer;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm, &writer);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	} else if (ret == -ENOENT) {
-	  new_realm = true;
-	}
-	ret = read_decode_json(infile, realm);
-	if (ret < 0) {
-	  return 1;
-	}
-	if (!realm_name.empty() && realm.get_name() != realm_name) {
-	  cerr << "mismatch between --rgw-realm " << realm_name << " and json input file name " <<
-	    realm.get_name() << std::endl;
-	  return EINVAL;
-	}
-	/* new realm */
-	if (new_realm) {
-	  cout << "clearing period and epoch for new realm" << std::endl;
-	  realm.clear_current_period_and_epoch();
-          constexpr bool exclusive = true;
-          ret = rgw::create_realm(dpp(), null_yield, cfgstore.get(),
-                                  exclusive, realm);
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't create new realm: " << cpp_strerror(-ret) << std::endl;
-	    return 1;
-	  }
-	} else {
-          ret = writer->write(dpp(), null_yield, realm);
-	  if (ret < 0) {
-	    cerr << "ERROR: couldn't write realm info: " << cpp_strerror(-ret) << std::endl;
-	    return 1;
-	  }
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_realm(dpp(), null_yield, cfgstore.get(), realm);
-          if (ret < 0) {
-            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-	encode_json("realm", realm, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
-
     case OPT::REALM_DEFAULT:
-      {
-        RGWRealm realm;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm);
-	if (ret < 0) {
-	  cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        ret = rgw::set_default_realm(dpp(), null_yield, cfgstore.get(), realm);
-	if (ret < 0) {
-	  cerr << "failed to set realm as default: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-      }
-      break;
     case OPT::REALM_DEFAULT_RM:
-      if (int ret = cfgstore->delete_default_realm_id(dpp(), null_yield); ret < 0) {
-        cerr << "failed to remove default realm: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      break;
-    case OPT::REALM_PULL:
-      {
-        if (url.empty()) {
-          cerr << "A --url must be provided." << std::endl;
-          return EINVAL;
-        }
-        RGWEnv env;
-        req_info info(g_ceph_context, &env);
-        info.method = "GET";
-        info.request_uri = "/admin/realm";
-
-        map<string, string> &params = info.args.get_params();
-        if (!realm_id.empty())
-          params["id"] = realm_id;
-        if (!realm_name.empty())
-          params["name"] = realm_name;
-
-        bufferlist bl;
-        JSONParser p;
-        int ret = send_to_url(url, opt_region, access_key, secret_key, info, bl, p);
-        if (ret < 0) {
-          cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-          if (ret == -EACCES) {
-            cerr << "If the realm has been changed on the master zone, the "
-                "master zone's gateway may need to be restarted to recognize "
-                "this user." << std::endl;
-          }
-          return -ret;
-        }
-        RGWRealm realm;
-        try {
-          decode_json_obj(realm, &p);
-        } catch (const JSONDecoder::err& e) {
-          cerr << "failed to decode JSON response: " << e.what() << std::endl;
-          return EINVAL;
-        }
-        RGWPeriod period;
-        auto& current_period = realm.get_current_period();
-        if (!current_period.empty()) {
-          // pull the latest epoch of the realm's current period
-          ret = do_period_pull(cfgstore.get(), nullptr, url, opt_region,
-                               access_key, secret_key,
-                               realm_id, realm_name, current_period, "",
-                               &period);
-          if (ret < 0) {
-            cerr << "could not fetch period " << current_period << std::endl;
-            return -ret;
-          }
-        }
-        constexpr bool exclusive = false;
-        ret = rgw::create_realm(dpp(), null_yield, cfgstore.get(),
-                                exclusive, realm);
-        if (ret < 0) {
-          cerr << "Error storing realm " << realm.get_id() << ": "
-            << cpp_strerror(ret) << std::endl;
-          return -ret;
-        }
-
-        if (set_default) {
-          ret = rgw::set_default_realm(dpp(), null_yield, cfgstore.get(), realm);
-          if (ret < 0) {
-            cerr << "failed to set realm " << realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-        encode_json("realm", realm, formatter.get());
-        formatter->flush(cout);
-      }
-      break;
-
+    case OPT::REALM_PULL: {
+      rgw_admin_realm_options o;
+      fill_realm_options(o);
+      return rgw_admin_realm(dpp(), driver, cfgstore.get(), *site,
+                             formatter.get(), o);
+    }
     case OPT::ZONEGROUP_ADD:
-      {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-
-        // load the zonegroup and zone params
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> zonegroup_writer;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name,
-                                      zonegroup, &zonegroup_writer);
-	if (ret < 0) {
-	  cerr << "failed to load zonegroup " << zonegroup_name << " id "
-              << zonegroup_id << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneParams zone_params;
-        std::unique_ptr<rgw::sal::ZoneWriter> zone_writer;
-        ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                             zone_id, zone_name, zone_params, &zone_writer);
-	if (ret < 0) {
-	  cerr << "unable to load zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        // update zone_params if necessary
-        bool need_zone_update = false;
-
-        if (zone_params.realm_id != zonegroup.realm_id) {
-          if (!zone_params.realm_id.empty()) {
-            cerr << "WARNING: overwriting zone realm_id=" << zone_params.realm_id
-                << " to match zonegroup realm_id=" << zonegroup.realm_id << std::endl;
-          }
-          zone_params.realm_id = zonegroup.realm_id;
-          need_zone_update = true;
-        }
-
-        for (auto a : tier_config_add) {
-          ret = zone_params.tier_config.set(a.first, a.second);
-          if (ret < 0) {
-            cerr << "ERROR: failed to set configurable: " << a << std::endl;
-            return EINVAL;
-          }
-          need_zone_update = true;
-        }
-
-        if (need_zone_update) {
-          ret = zone_writer->write(dpp(), null_yield, zone_params);
-          if (ret < 0) {
-            cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-        }
-
-        const bool *pis_master = (is_master_set ? &is_master : nullptr);
-        const bool *pread_only = (is_read_only_set ? &read_only : nullptr);
-        const bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
-        const string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
-
-        // validate --tier-type if specified
-        const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
-        if (ptier_type) {
-#ifdef WITH_RADOSGW_RADOS
-          auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
-          if (!sync_mgr->get_module(*ptier_type, nullptr)) {
-            ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
-                << *ptier_type << ",  valid sync modules: "
-                << sync_mgr->get_registered_module_names() << dendl;
-            return EINVAL;
-          }
-#else
-          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
-          return EINVAL;
-#endif
-        }
-
-        if (enable_features.empty()) { // enable all features by default
-          enable_features.insert(rgw::zone_features::supported.begin(),
-                                 rgw::zone_features::supported.end());
-        }
-
-        // add/update the public zone information stored in the zonegroup
-        ret = rgw::add_zone_to_group(dpp(), zonegroup, zone_params,
-                                     pis_master, pread_only, endpoints,
-                                     ptier_type, psync_from_all,
-                                     sync_from, sync_from_rm,
-                                     predirect_zone, bucket_index_max_shards,
-                                     enable_features, disable_features);
-        if (ret < 0) {
-          return -ret;
-        }
-
-        // write the updated zonegroup
-        ret = zonegroup_writer->write(dpp(), null_yield, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to write updated zonegroup " << zonegroup.get_name()
-              << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        encode_json("zonegroup", zonegroup, formatter.get());
-        formatter->flush(cout);
-      }
-      break;
     case OPT::ZONEGROUP_CREATE:
-      {
-	if (zonegroup_name.empty()) {
-	  cerr << "Missing zonegroup name" << std::endl;
-	  return EINVAL;
-	}
-	RGWRealm realm;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm);
-	if (ret < 0) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroup zonegroup;
-        zonegroup.name = zonegroup_name;
-        zonegroup.is_master = is_master;
-        zonegroup.realm_id = realm.get_id();
-        zonegroup.endpoints = endpoints;
-        zonegroup.api_name = (api_name.empty() ? zonegroup_name : api_name);
-
-        zonegroup.enabled_features = enable_features;
-        if (zonegroup.enabled_features.empty()) { // enable features by default
-          zonegroup.enabled_features.insert(rgw::zone_features::enabled.begin(),
-                                            rgw::zone_features::enabled.end());
-        }
-        for (const auto& feature : disable_features) {
-          auto i = zonegroup.enabled_features.find(feature);
-          if (i == zonegroup.enabled_features.end()) {
-            ldout(cct, 1) << "WARNING: zone feature \"" << feature
-                << "\" was not enabled in zonegroup " << zonegroup_name << dendl;
-            continue;
-          }
-          zonegroup.enabled_features.erase(i);
-        }
-
-        constexpr bool exclusive = true;
-        ret = rgw::create_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                    exclusive, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to create zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                           zonegroup);
-          if (ret < 0) {
-            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-	encode_json("zonegroup", zonegroup, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
     case OPT::ZONEGROUP_DEFAULT:
-      {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWZoneGroup zonegroup;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name,
-                                      zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        ret = rgw::set_default_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                         zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to set zonegroup as default: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-      }
-      break;
     case OPT::ZONEGROUP_DELETE:
-      {
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name,
-                                      zonegroup, &writer);
-	if (ret < 0) {
-	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        ret = writer->remove(dpp(), null_yield);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't delete zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-      }
-      break;
     case OPT::ZONEGROUP_GET:
-      {
-	RGWZoneGroup zonegroup;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	encode_json("zonegroup", zonegroup, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
-    case OPT::ZONEGROUP_LIST:
-      {
-        RGWZoneGroup default_zonegroup;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      {}, {}, default_zonegroup);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "could not determine default zonegroup: " << cpp_strerror(-ret) << std::endl;
-	}
-
-        Formatter::ObjectSection zonegroups_list{*formatter, "zonegroups_list"};
-        encode_json("default_info", default_zonegroup.id, formatter.get());
-
-        Formatter::ArraySection zonegroups{*formatter, "zonegroups"};
-        rgw::sal::ListResult<std::string> listing;
-        std::array<std::string, 1000> names; // list in pages of 1000
-        do {
-          ret = cfgstore->list_zonegroup_names(dpp(), null_yield, listing.next,
-                                               names, listing);
-          if (ret < 0) {
-            std::cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          for (const auto& name : listing.entries) {
-            encode_json("name", name, formatter.get());
-          }
-        } while (!listing.next.empty());
-      } // close sections zonegroups and zonegroups_list
-      formatter->flush(cout);
-      break;
     case OPT::ZONEGROUP_MODIFY:
-      {
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name,
-                                      zonegroup, &writer);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        bool need_update = false;
-
-        if (!master_zone.empty()) {
-          zonegroup.master_zone = master_zone;
-          need_update = true;
-        }
-
-	if (is_master_set) {
-	  zonegroup.is_master = is_master;
-          need_update = true;
-        }
-
-        if (!endpoints.empty()) {
-          zonegroup.endpoints = endpoints;
-          need_update = true;
-        }
-
-        if (!api_name.empty()) {
-          zonegroup.api_name = api_name;
-          need_update = true;
-        }
-
-        if (!realm_id.empty()) {
-          zonegroup.realm_id = realm_id;
-          need_update = true;
-        } else if (!realm_name.empty()) {
-          // get realm id from name
-          ret = cfgstore->read_realm_id(dpp(), null_yield, realm_name,
-                                        zonegroup.realm_id);
-          if (ret < 0) {
-            cerr << "failed to find realm by name " << realm_name << std::endl;
-            return -ret;
-          }
-          need_update = true;
-        }
-
-        if (bucket_index_max_shards) {
-          for (auto& [name, zone] : zonegroup.zones) {
-            zone.bucket_index_max_shards = *bucket_index_max_shards;
-          }
-          need_update = true;
-        }
-
-        for (const auto& feature : enable_features) {
-          zonegroup.enabled_features.insert(feature);
-          need_update = true;
-        }
-        for (const auto& feature : disable_features) {
-          auto i = zonegroup.enabled_features.find(feature);
-          if (i == zonegroup.enabled_features.end()) {
-            ldout(cct, 1) << "WARNING: zone feature \"" << feature
-                << "\" was not enabled in zonegroup "
-                << zonegroup.get_name() << dendl;
-            continue;
-          }
-          zonegroup.enabled_features.erase(i);
-          need_update = true;
-        }
-
-        if (need_update) {
-	  ret = writer->write(dpp(), null_yield, zonegroup);
-	  if (ret < 0) {
-	    cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                           zonegroup);
-          if (ret < 0) {
-            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-        encode_json("zonegroup", zonegroup, formatter.get());
-        formatter->flush(cout);
-      }
-      break;
     case OPT::ZONEGROUP_SET:
-      {
-	RGWRealm realm;
-        int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                  realm_id, realm_name, realm);
-	bool default_realm_not_exist = (ret == -ENOENT && realm_id.empty() && realm_name.empty());
-
-	if (ret < 0 && !default_realm_not_exist) {
-	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroup zonegroup;
-	ret = read_decode_json(infile, zonegroup);
-	if (ret < 0) {
-	  return 1;
-	}
-	if (zonegroup.realm_id.empty() && !default_realm_not_exist) {
-	  zonegroup.realm_id = realm.get_id();
-	}
-        // validate zonegroup features
-        for (const auto& feature : zonegroup.enabled_features) {
-          if (!rgw::zone_features::supports(feature)) {
-            std::cerr << "ERROR: Unrecognized zonegroup feature \""
-                << feature << "\"" << std::endl;
-            return EINVAL;
-          }
-        }
-        for (const auto& [name, zone] : zonegroup.zones) {
-          // validate zone features
-          for (const auto& feature : zone.supported_features) {
-            if (!rgw::zone_features::supports(feature)) {
-              std::cerr << "ERROR: Unrecognized zone feature \""
-                  << feature << "\" in zone " << zone.name << std::endl;
-              return EINVAL;
-            }
-          }
-          // zone must support everything zonegroup does
-          for (const auto& feature : zonegroup.enabled_features) {
-            if (!zone.supports(feature)) {
-              std::cerr << "ERROR: Zone " << name << " does not support feature \""
-                  << feature << "\" required by zonegroup" << std::endl;
-              return EINVAL;
-            }
-          }
-        }
-
-        // create/overwrite the zonegroup info
-        constexpr bool exclusive = false;
-        ret = rgw::create_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                    exclusive, zonegroup);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't create zonegroup info: " << cpp_strerror(-ret) << std::endl;
-	  return 1;
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                           zonegroup);
-          if (ret < 0) {
-            cerr << "failed to set zonegroup " << zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-	encode_json("zonegroup", zonegroup, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
+    case OPT::ZONEGROUP_LIST:
     case OPT::ZONEGROUP_REMOVE:
-      {
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name,
-                                      zonegroup, &writer);
-        if (ret < 0) {
-          cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        if (zone_id.empty()) {
-          if (zone_name.empty()) {
-            cerr << "no --zone-id or --rgw-zone name provided" << std::endl;
-            return EINVAL;
-          }
-          // look up zone id by name
-          for (auto& z : zonegroup.zones) {
-            if (zone_name == z.second.name) {
-              zone_id = z.second.id;
-              break;
-            }
-          }
-          if (zone_id.empty()) {
-            cerr << "zone name " << zone_name << " not found in zonegroup "
-                << zonegroup.get_name() << std::endl;
-            return ENOENT;
-          }
-        }
-
-        ret = rgw::remove_zone_from_group(dpp(), zonegroup, zone_id);
-        if (ret < 0) {
-          cerr << "failed to remove zone: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        ret = writer->write(dpp(), null_yield, zonegroup);
-        if (ret < 0) {
-          cerr << "failed to write zonegroup: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        encode_json("zonegroup", zonegroup, formatter.get());
-        formatter->flush(cout);
-      }
-      break;
     case OPT::ZONEGROUP_RENAME:
-      {
-	if (zonegroup_new_name.empty()) {
-	  cerr << " missing zonegroup new name" << std::endl;
-	  return EINVAL;
-	}
-	if (zonegroup_id.empty() && zonegroup_name.empty()) {
-	  cerr << "no zonegroup name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name,
-                                      zonegroup, &writer);
-	if (ret < 0) {
-	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-        zonegroup.api_name = zonegroup_new_name;
-        ret = writer->rename(dpp(), null_yield, zonegroup, zonegroup_new_name);
-	if (ret < 0) {
-	  cerr << "failed to rename zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-      }
-      break;
-    case OPT::ZONEGROUP_PLACEMENT_LIST:
-      {
-	RGWZoneGroup zonegroup;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
-    case OPT::ZONEGROUP_PLACEMENT_GET:
-      {
-	if (placement_id.empty()) {
-	  cerr << "ERROR: --placement-id not specified" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWZoneGroup zonegroup;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	auto p = zonegroup.placement_targets.find(placement_id);
-	if (p == zonegroup.placement_targets.end()) {
-	  cerr << "failed to find a zonegroup placement target named '" << placement_id << "'" << std::endl;
-	  return -ENOENT;
-	}
-	encode_json("placement_targets", p->second, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
     case OPT::ZONEGROUP_PLACEMENT_ADD:
     case OPT::ZONEGROUP_PLACEMENT_MODIFY:
     case OPT::ZONEGROUP_PLACEMENT_RM:
-    case OPT::ZONEGROUP_PLACEMENT_DEFAULT:
-      {
-    if (placement_id.empty()) {
-      cerr << "ERROR: --placement-id not specified" << std::endl;
-      return EINVAL;
+    case OPT::ZONEGROUP_PLACEMENT_LIST:
+    case OPT::ZONEGROUP_PLACEMENT_GET:
+    case OPT::ZONEGROUP_PLACEMENT_DEFAULT: {
+      rgw_admin_zonegroup_options o;
+      fill_zonegroup_options(o);
+      return rgw_admin_zonegroup(dpp(), driver, cfgstore.get(), *site,
+                                 formatter.get(), o);
     }
-
-    rgw_placement_rule rule;
-    rule.from_str(placement_id);
-
-    if (!rule.storage_class.empty() && opt_storage_class &&
-        rule.storage_class != *opt_storage_class) {
-      cerr << "ERROR: provided contradicting storage class configuration" << std::endl;
-      return EINVAL;
-    } else if (rule.storage_class.empty()) {
-      rule.storage_class = opt_storage_class.value_or(string());
-    }
-
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
-        int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                      zonegroup_id, zonegroup_name,
-                                      zonegroup, &writer);
-	if (ret < 0) {
-	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-    if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_ADD ||
-      opt_cmd == OPT::ZONEGROUP_PLACEMENT_MODIFY) {
-      RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
-      if (!tags.empty()) {
-        target.tags.clear();
-        for (auto& t : tags) {
-          target.tags.insert(t);
-        }
-      }
-
-      target.name = placement_id;
-      for (auto& t : tags_rm) {
-        target.tags.erase(t);
-      }
-      for (auto& t : tags_add) {
-        target.tags.insert(t);
-      }
-      target.storage_classes.insert(rule.get_storage_class());
-
-      /* Tier options */
-      bool tier_class = false;
-      std::string storage_class = rule.get_storage_class();
-      RGWZoneGroupPlacementTier t;
-      RGWZoneGroupPlacementTier *pt = &t;
-
-	  auto ptiter = target.tier_targets.find(storage_class);
-	  if (ptiter != target.tier_targets.end()) {
-        pt = &ptiter->second;
-        tier_class = true;
-      } else if (tier_type_specified) {
-        if (RGWTierType::is_tier_type_supported(tier_type)) {
-          /* we support only cloud-s3 & cloud-s3-glacier tier-type for now.
-           * Once set cant be reset. */
-          tier_class = true;
-          pt->tier_type = tier_type;
-          pt->storage_class = storage_class;
-        } else {
-	      cerr << "ERROR: Invalid tier-type specified" << std::endl;
-	      return EINVAL;
-        }
-      }
-
-      if (tier_class) {
-        if (tier_config_add.size() > 0) {
-          JSONFormattable tconfig;
-          for (auto add : tier_config_add) {
-            int r = tconfig.set(add.first, add.second);
-            if (r < 0) {
-              cerr << "ERROR: failed to set configurable: " << add << std::endl;
-              return EINVAL;
-            }
-          }
-          int r = pt->update_params(tconfig);
-          if (r < 0) {
-            cerr << "ERROR: failed to update tier_config options"<< std::endl;
-          }
-        }
-        if (tier_config_rm.size() > 0) {
-          JSONFormattable tconfig;
-          for (auto add : tier_config_rm) {
-            int r = tconfig.set(add.first, add.second);
-            if (r < 0) {
-              cerr << "ERROR: failed to set configurable: " << add << std::endl;
-              return EINVAL;
-            }
-          }
-          int r = pt->clear_params(tconfig);
-          if (r < 0) {
-            cerr << "ERROR: failed to update tier_config options"<< std::endl;
-          }
-        }
-
-        target.tier_targets.emplace(std::make_pair(storage_class, *pt));
-      }
-
-      if (zonegroup.default_placement.empty()) {
-        zonegroup.default_placement.init(rule.name, RGW_STORAGE_CLASS_STANDARD);
-      }
-    } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_RM) {
-      if (!opt_storage_class || opt_storage_class->empty()) {
-        zonegroup.placement_targets.erase(placement_id);
-        if (zonegroup.default_placement.name == placement_id) {
-          // clear default placement
-          zonegroup.default_placement.clear();
-        }
-      } else {
-        auto iter = zonegroup.placement_targets.find(placement_id);
-        if (iter != zonegroup.placement_targets.end()) {
-          RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[placement_id];
-          info.storage_classes.erase(*opt_storage_class);
-
-          if (zonegroup.default_placement == rule) {
-            // clear default storage class
-            zonegroup.default_placement.storage_class.clear();
-          }
-
-	      auto ptiter = info.tier_targets.find(*opt_storage_class);
-	      if (ptiter != info.tier_targets.end()) {
-		    info.tier_targets.erase(ptiter);
-	      }
-        }
-      }
-    } else if (opt_cmd == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {
-      if (!zonegroup.placement_targets.count(placement_id)) {
-        cerr << "failed to find a zonegroup placement target named '"
-             << placement_id << "'" << std::endl;
-        return -ENOENT;
-      }
-      zonegroup.default_placement = rule;
-    }
-
-    ret = writer->write(dpp(), null_yield, zonegroup);
-    if (ret < 0) {
-      cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    encode_json("placement_targets", zonegroup.placement_targets, formatter.get());
-    formatter->flush(cout);
-      }
-      break;
     case OPT::ZONE_CREATE:
-      {
-        if (zone_name.empty()) {
-	  cerr << "zone name not provided" << std::endl;
-	  return EINVAL;
-        }
-
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> zonegroup_writer;
-	/* if the user didn't provide zonegroup info , create stand alone zone */
-	if (!zonegroup_id.empty() || !zonegroup_name.empty()) {
-          int ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                        zonegroup_id, zonegroup_name,
-                                        zonegroup, &zonegroup_writer);
-	  if (ret < 0) {
-	    cerr << "failed to load zonegroup " << zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-	  if (realm_id.empty() && realm_name.empty()) {
-	    realm_id = zonegroup.realm_id;
-	  }
-	}
-
-        // create the local zone params
-	RGWZoneParams zone_params;
-        zone_params.id = zone_id;
-        zone_params.name = zone_name;
-
-        zone_params.system_key.id = access_key;
-        zone_params.system_key.key = secret_key;
-	zone_params.realm_id = realm_id;
-        for (const auto& a : tier_config_add) {
-          int r = zone_params.tier_config.set(a.first, a.second);
-          if (r < 0) {
-            cerr << "ERROR: failed to set configurable: " << a << std::endl;
-            return EINVAL;
-          }
-        }
-
-        if (zone_params.realm_id.empty()) {
-          RGWRealm realm;
-          int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                    realm_id, realm_name, realm);
-          if (ret < 0 && ret != -ENOENT) {
-            cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          zone_params.realm_id = realm.id;
-          cerr << "NOTICE: set zone's realm_id=" << realm.id << std::endl;
-        }
-
-        constexpr bool exclusive = true;
-        int ret = rgw::create_zone(dpp(), null_yield, cfgstore.get(),
-                                   exclusive, zone_params);
-	if (ret < 0) {
-	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	if (zonegroup_writer) {
-          const bool *pis_master = (is_master_set ? &is_master : nullptr);
-          const bool *pread_only = (is_read_only_set ? &read_only : nullptr);
-          const bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
-          const string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
-
-          // validate --tier-type if specified
-          const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
-          if (ptier_type) {
-#ifdef WITH_RADOSGW_RADOS
-            auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
-            if (!sync_mgr->get_module(*ptier_type, nullptr)) {
-              ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
-                  << *ptier_type << ",  valid sync modules: "
-                  << sync_mgr->get_registered_module_names() << dendl;
-              return EINVAL;
-            }
-#else
-            ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
-            return EINVAL;
-#endif
-          }
-
-          if (enable_features.empty()) { // enable all features by default
-            enable_features.insert(rgw::zone_features::supported.begin(),
-                                   rgw::zone_features::supported.end());
-          }
-
-          // add/update the public zone information stored in the zonegroup
-          ret = rgw::add_zone_to_group(dpp(), zonegroup, zone_params,
-                                       pis_master, pread_only, endpoints,
-                                       ptier_type, psync_from_all,
-                                       sync_from, sync_from_rm,
-                                       predirect_zone, bucket_index_max_shards,
-                                       enable_features, disable_features);
-          if (ret < 0) {
-            return -ret;
-          }
-
-          // write the updated zonegroup
-          ret = zonegroup_writer->write(dpp(), null_yield, zonegroup);
-	  if (ret < 0) {
-	    cerr << "failed to add zone " << zone_name << " to zonegroup " << zonegroup.get_name()
-		 << ": " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_zone(dpp(), null_yield, cfgstore.get(),
-                                      zone_params);
-          if (ret < 0) {
-            cerr << "failed to set zone " << zone_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-	encode_json("zone", zone_params, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
-    case OPT::ZONE_DEFAULT:
-      {
-	if (zone_id.empty() && zone_name.empty()) {
-	  cerr << "no zone name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	RGWZoneParams zone_params;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone_params);
-	if (ret < 0) {
-	  cerr << "unable to load zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        ret = rgw::set_default_zone(dpp(), null_yield, cfgstore.get(),
-                                    zone_params);
-	if (ret < 0) {
-	  cerr << "failed to set zone as default: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-      }
-      break;
     case OPT::ZONE_DELETE:
-      {
-	if (zone_id.empty() && zone_name.empty()) {
-	  cerr << "no zone name or id provided" << std::endl;
-	  return EINVAL;
-	}
-	RGWZoneParams zone_params;
-        std::unique_ptr<rgw::sal::ZoneWriter> writer;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone_params, &writer);
-	if (ret < 0) {
-	  cerr << "failed to load zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        ret = rgw::delete_zone(dpp(), null_yield, cfgstore.get(),
-                               zone_params, *writer);
-	if (ret < 0) {
-	  cerr << "failed to delete zone " << zone_params.get_name()
-              << ": " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-      }
-      break;
     case OPT::ZONE_GET:
-      {
-	RGWZoneParams zone_params;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone_params);
-	if (ret < 0) {
-	  cerr << "failed to load zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	encode_json("zone", zone_params, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
-    case OPT::ZONE_SET:
-      {
-	RGWZoneParams zone;
-        std::unique_ptr<rgw::sal::ZoneWriter> writer;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone, &writer);
-        if (ret < 0 && ret != -ENOENT) {
-	  cerr << "failed to load zone: " << cpp_strerror(ret) << std::endl;
-          return -ret;
-        }
-
-        string orig_id = zone.get_id();
-
-	ret = read_decode_json(infile, zone);
-	if (ret < 0) {
-	  return 1;
-	}
-
-	if (zone.realm_id.empty()) {
-	  RGWRealm realm;
-          ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                realm_id, realm_name, realm);
-	  if (ret < 0 && ret != -ENOENT) {
-	    cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-	  zone.realm_id = realm.get_id();
-          cerr << "NOTICE: set zone's realm_id=" << zone.realm_id << std::endl;
-	}
-
-	if (!zone_name.empty() && !zone.get_name().empty() && zone.get_name() != zone_name) {
-	  cerr << "ERROR: zone name " << zone_name << " is different than the zone name " << zone.get_name() << " in the provided json " << std::endl;
-	  return EINVAL;
-	}
-
-        if (zone.get_name().empty()) {
-          zone.set_name(zone_name);
-          if (zone.get_name().empty()) {
-            cerr << "no zone name specified" << std::endl;
-            return EINVAL;
-          }
-        }
-
-        zone_name = zone.get_name();
-
-        if (zone.get_id().empty()) {
-          zone.set_id(orig_id);
-        }
-
-        constexpr bool exclusive = false;
-        ret = rgw::create_zone(dpp(), null_yield, cfgstore.get(),
-                               exclusive, zone);
-	if (ret < 0) {
-	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_zone(dpp(), null_yield, cfgstore.get(), zone);
-          if (ret < 0) {
-            cerr << "failed to set zone " << zone_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-	encode_json("zone", zone, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
-    case OPT::ZONE_LIST:
-      {
-        RGWZoneParams default_zone_params;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 {}, {}, default_zone_params);
-	if (ret < 0 && ret != -ENOENT) {
-	  cerr << "could not determine default zone: " << cpp_strerror(-ret) << std::endl;
-	}
-
-        Formatter::ObjectSection zones_list{*formatter, "zones_list"};
-        encode_json("default_info", default_zone_params.id, formatter.get());
-
-        Formatter::ArraySection zones{*formatter, "zones"};
-        rgw::sal::ListResult<std::string> listing;
-        std::array<std::string, 1000> names; // list in pages of 1000
-        do {
-          ret = cfgstore->list_zone_names(dpp(), null_yield, listing.next,
-                                          names, listing);
-          if (ret < 0) {
-            std::cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-          for (const auto& name : listing.entries) {
-            encode_json("name", name, formatter.get());
-          }
-        } while (!listing.next.empty());
-      } // close sections zones and zones_list
-      formatter->flush(cout);
-      break;
     case OPT::ZONE_MODIFY:
-      {
-	RGWZoneParams zone_params;
-        std::unique_ptr<rgw::sal::ZoneWriter> zone_writer;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone_params, &zone_writer);
-        if (ret < 0) {
-	  cerr << "failed to load zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        bool need_zone_update = false;
-        if (!access_key.empty()) {
-          zone_params.system_key.id = access_key;
-          need_zone_update = true;
-        }
-
-        if (!secret_key.empty()) {
-          zone_params.system_key.key = secret_key;
-          need_zone_update = true;
-        }
-
-        if (!realm_id.empty()) {
-          zone_params.realm_id = realm_id;
-          need_zone_update = true;
-        } else if (!realm_name.empty()) {
-          // get realm id from name
-          ret = cfgstore->read_realm_id(dpp(), null_yield,
-                                        realm_name, zone_params.realm_id);
-          if (ret < 0) {
-            cerr << "failed to find realm by name " << realm_name << std::endl;
-            return -ret;
-          }
-          need_zone_update = true;
-        }
-
-        for (const auto& add : tier_config_add) {
-          ret = zone_params.tier_config.set(add.first, add.second);
-          if (ret < 0) {
-            cerr << "ERROR: failed to set configurable: " << add << std::endl;
-            return EINVAL;
-          }
-          need_zone_update = true;
-        }
-
-        for (const auto& rm : tier_config_rm) {
-          if (!rm.first.empty()) { /* otherwise will remove the entire config */
-            zone_params.tier_config.erase(rm.first);
-            need_zone_update = true;
-          }
-        }
-
-        if (need_zone_update) {
-          ret = zone_writer->write(dpp(), null_yield, zone_params);
-          if (ret < 0) {
-            cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
-            return -ret;
-          }
-        }
-
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> zonegroup_writer;
-        ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                  zonegroup_id, zonegroup_name,
-                                  zonegroup, &zonegroup_writer);
-	if (ret < 0) {
-	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        const bool *pis_master = (is_master_set ? &is_master : nullptr);
-        const bool *pread_only = (is_read_only_set ? &read_only : nullptr);
-        const bool *psync_from_all = (sync_from_all_specified ? &sync_from_all : nullptr);
-        const string *predirect_zone = (redirect_zone_set ? &redirect_zone : nullptr);
-
-        // validate --tier-type if specified
-        const string *ptier_type = (tier_type_specified ? &tier_type : nullptr);
-        if (ptier_type) {
-#ifdef WITH_RADOSGW_RADOS
-          auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
-          if (!sync_mgr->get_module(*ptier_type, nullptr)) {
-            ldpp_dout(dpp(), -1) << "ERROR: could not find sync module: "
-                << *ptier_type << ",  valid sync modules: "
-                << sync_mgr->get_registered_module_names() << dendl;
-            return EINVAL;
-          }
-#else
-          ldpp_dout(dpp(), -1) << "ERROR: --tier-type requires the RADOS backend" << dendl;
-          return EINVAL;
-#endif
-        }
-
-        if (enable_features.empty()) { // enable all features by default
-          enable_features.insert(rgw::zone_features::supported.begin(),
-                                 rgw::zone_features::supported.end());
-        }
-
-        // add/update the public zone information stored in the zonegroup
-        ret = rgw::add_zone_to_group(dpp(), zonegroup, zone_params,
-                                     pis_master, pread_only, endpoints,
-                                     ptier_type, psync_from_all,
-                                     sync_from, sync_from_rm,
-                                     predirect_zone, bucket_index_max_shards,
-                                     enable_features, disable_features);
-        if (ret < 0) {
-          return -ret;
-        }
-
-        // write the updated zonegroup
-        ret = zonegroup_writer->write(dpp(), null_yield, zonegroup);
-	if (ret < 0) {
-	  cerr << "failed to update zonegroup: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-        if (set_default) {
-          ret = rgw::set_default_zone(dpp(), null_yield, cfgstore.get(),
-                                      zone_params);
-          if (ret < 0) {
-            cerr << "failed to set zone " << zone_name << " as default: " << cpp_strerror(-ret) << std::endl;
-          }
-        }
-
-        encode_json("zone", zone_params, formatter.get());
-        formatter->flush(cout);
-      }
-      break;
+    case OPT::ZONE_SET:
+    case OPT::ZONE_LIST:
     case OPT::ZONE_RENAME:
-      {
-	if (zone_new_name.empty()) {
-	  cerr << " missing zone new name" << std::endl;
-	  return EINVAL;
-	}
-	if (zone_id.empty() && zone_name.empty()) {
-	  cerr << "no zone name or id provided" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWZoneParams zone_params;
-        std::unique_ptr<rgw::sal::ZoneWriter> zone_writer;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone_params, &zone_writer);
-	if (ret < 0) {
-	  cerr << "failed to load zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-	ret = zone_writer->rename(dpp(), null_yield, zone_params, zone_new_name);
-	if (ret < 0) {
-	  cerr << "failed to rename zone " << zone_name << " to " << zone_new_name << ": " << cpp_strerror(-ret)
-	       << std::endl;
-	  return -ret;
-	}
-
-	RGWZoneGroup zonegroup;
-        std::unique_ptr<rgw::sal::ZoneGroupWriter> zonegroup_writer;
-        ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                  zonegroup_id, zonegroup_name,
-                                  zonegroup, &zonegroup_writer);
-	if (ret < 0) {
-	  cerr << "WARNING: failed to load zonegroup " << zonegroup_name << std::endl;
-          return EXIT_SUCCESS;
-	}
-
-        auto z = zonegroup.zones.find(zone_params.id);
-        if (z == zonegroup.zones.end()) {
-          return EXIT_SUCCESS;
-        }
-        z->second.name = zone_params.name;
-
-        ret = zonegroup_writer->write(dpp(), null_yield, zonegroup);
-        if (ret < 0) {
-          cerr << "Error in zonegroup rename for " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-	}
-      }
-      break;
+    case OPT::ZONE_DEFAULT:
 #ifdef WITH_RADOSGW_RADOS
     case OPT::ZONE_PLACEMENT_ADD:
 #endif
     case OPT::ZONE_PLACEMENT_MODIFY:
     case OPT::ZONE_PLACEMENT_RM:
-      {
-        if (placement_id.empty()) {
-          cerr << "ERROR: --placement-id not specified" << std::endl;
-          return EINVAL;
-        }
-        // validate compression type
-        if (compression_type && *compression_type != "random"
-            && !Compressor::get_comp_alg_type(*compression_type)) {
-          std::cerr << "Unrecognized compression type" << std::endl;
-          return EINVAL;
-        }
-
-	RGWZoneParams zone;
-        std::unique_ptr<rgw::sal::ZoneWriter> writer;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone, &writer);
-        if (ret < 0) {
-	  cerr << "failed to init zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-
-#ifdef WITH_RADOSGW_RADOS
-        if (opt_cmd == OPT::ZONE_PLACEMENT_ADD ||
-	    opt_cmd == OPT::ZONE_PLACEMENT_MODIFY) {
-	  RGWZoneGroup zonegroup;
-          ret = rgw::read_zonegroup(dpp(), null_yield, cfgstore.get(),
-                                    zonegroup_id, zonegroup_name, zonegroup);
-	  if (ret < 0) {
-	    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
-	    return -ret;
-	  }
-
-	  auto ptiter = zonegroup.placement_targets.find(placement_id);
-	  if (ptiter == zonegroup.placement_targets.end()) {
-	    cerr << "ERROR: placement id '" << placement_id << "' is not configured in zonegroup placement targets" << std::endl;
-	    return EINVAL;
-	  }
-
-	  string storage_class = rgw_placement_rule::get_canonical_storage_class(opt_storage_class.value_or(string()));
-	  if (ptiter->second.storage_classes.find(storage_class) == ptiter->second.storage_classes.end()) {
-	    cerr << "ERROR: storage class '" << storage_class << "' is not defined in zonegroup '" << placement_id << "' placement target" << std::endl;
-	    return EINVAL;
-	  }
-	  if (ptiter->second.tier_targets.find(storage_class) != ptiter->second.tier_targets.end()) {
-	    cerr << "ERROR: storage class '" << storage_class << "' is of tier type in zonegroup '" << placement_id << "' placement target" << std::endl;
-	    return EINVAL;
-	  }
-
-          RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
-
-	  string opt_index_pool = index_pool.value_or(string());
-	  string opt_data_pool = data_pool.value_or(string());
-
-	  if (!opt_index_pool.empty()) {
-	    info.index_pool = opt_index_pool;
-	  }
-
-	  if (info.index_pool.empty()) {
-            cerr << "ERROR: index pool not configured, need to specify --index-pool" << std::endl;
-            return EINVAL;
-	  }
-
-	  if (opt_data_pool.empty()) {
-	    const RGWZoneStorageClass *porig_sc{nullptr};
-	    if (info.storage_classes.find(storage_class, &porig_sc)) {
-	      if (porig_sc->data_pool) {
-		opt_data_pool = porig_sc->data_pool->to_str();
-	      }
-	    }
-	    if (opt_data_pool.empty()) {
-	      cerr << "ERROR: data pool not configured, need to specify --data-pool" << std::endl;
-	      return EINVAL;
-	    }
-	  }
-
-          rgw_pool dp = opt_data_pool;
-          info.storage_classes.set_storage_class(storage_class, &dp, compression_type.get_ptr());
-
-          if (data_extra_pool) {
-            info.data_extra_pool = *data_extra_pool;
-          }
-          if (index_type_specified) {
-	    info.index_type = placement_index_type;
-          }
-          if (placement_inline_data_specified) {
-            info.inline_data = placement_inline_data;
-          }
-
-          ret = check_pool_support_omap(info.get_data_extra_pool());
-          if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
-                 << "' does not support omap" << std::endl;
-             return ret;
-          }
-        } else 
-#endif
-	    if (opt_cmd == OPT::ZONE_PLACEMENT_RM) {
-          if (!opt_storage_class ||
-              opt_storage_class->empty()) {
-            zone.placement_pools.erase(placement_id);
-          } else {
-            auto iter = zone.placement_pools.find(placement_id);
-            if (iter != zone.placement_pools.end()) {
-              RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
-              info.storage_classes.remove_storage_class(*opt_storage_class);
-            }
-          }
-        }
-
-        ret = writer->write(dpp(), null_yield, zone);
-        if (ret < 0) {
-          cerr << "failed to save zone info: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-
-        encode_json("zone", zone, formatter.get());
-        formatter->flush(cout);
-      }
-      break;
     case OPT::ZONE_PLACEMENT_LIST:
-      {
-	RGWZoneParams zone;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone);
-	if (ret < 0) {
-	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	encode_json("placement_pools", zone.placement_pools, formatter.get());
-	formatter->flush(cout);
-      }
-      break;
-    case OPT::ZONE_PLACEMENT_GET:
-      {
-	if (placement_id.empty()) {
-	  cerr << "ERROR: --placement-id not specified" << std::endl;
-	  return EINVAL;
-	}
-
-	RGWZoneParams zone;
-        int ret = rgw::read_zone(dpp(), null_yield, cfgstore.get(),
-                                 zone_id, zone_name, zone);
-	if (ret < 0) {
-	  cerr << "unable to initialize zone: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
-	}
-	auto p = zone.placement_pools.find(placement_id);
-	if (p == zone.placement_pools.end()) {
-	  cerr << "ERROR: zone placement target '" << placement_id << "' not found" << std::endl;
-	  return ENOENT;
-	}
-	encode_json("placement_pools", p->second, formatter.get());
-	formatter->flush(cout);
-      }
-    default:
-      break;
+    case OPT::ZONE_PLACEMENT_GET: {
+      rgw_admin_zone_options o;
+      fill_zone_options(o);
+      return rgw_admin_zone(dpp(), driver, cfgstore.get(), *site,
+                            formatter.get(), o);
     }
-    return 0;
+    default:
+      cerr << "internal error: unhandled raw storage command" << std::endl;
+      return EINVAL;
+    }
+  };
+
+  if (raw_storage_op) {
+    return dispatch_raw_storage();
   }
 
   resolve_zone_id_opt(opt_effective_zone_name, opt_effective_zone_id);
@@ -6295,90 +4251,13 @@ int main(int argc, const char **argv)
 
     break;
   case OPT::PERIOD_PUSH:
-    {
-      RGWEnv env;
-      req_info info(g_ceph_context, &env);
-      info.method = "POST";
-      info.request_uri = "/admin/realm/period";
-
-      map<string, string> &params = info.args.get_params();
-      if (!realm_id.empty())
-        params["realm_id"] = realm_id;
-      if (!realm_name.empty())
-        params["realm_name"] = realm_name;
-      if (!period_id.empty())
-        params["period_id"] = period_id;
-      if (!period_epoch.empty())
-        params["epoch"] = period_epoch;
-
-      // load the period
-      RGWPeriod period;
-      int ret = cfgstore->read_period(dpp(), null_yield, period_id,
-                                      std::nullopt, period);
-      if (ret < 0) {
-        cerr << "failed to load period: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      // json format into a bufferlist
-      JSONFormatter jf(false);
-      encode_json("period", period, &jf);
-      bufferlist bl;
-      jf.flush(bl);
-
-      JSONParser p;
-      ret = send_to_remote_or_url(nullptr, url, opt_region,
-                                  access_key, secret_key,
-                                  info, bl, p);
-      if (ret < 0) {
-        cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
-    return 0;
   case OPT::PERIOD_UPDATE:
-    {
-      int ret = update_period(cfgstore.get(), realm_id, realm_name,
-                              period_epoch, commit, remote, url,
-                              opt_region, access_key, secret_key,
-                              formatter.get(), yes_i_really_mean_it, site.get());
-      if (ret < 0) {
-	return -ret;
-      }
-    }
-    return 0;
-  case OPT::PERIOD_COMMIT:
-    {
-      // read realm and staging period
-      RGWRealm realm;
-      std::unique_ptr<rgw::sal::RealmWriter> realm_writer;
-      int ret = rgw::read_realm(dpp(), null_yield, cfgstore.get(),
-                                realm_id, realm_name,
-                                realm, &realm_writer);
-      if (ret < 0) {
-        cerr << "Error initializing realm: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      period_id = rgw::get_staging_period_id(realm.id);
-      epoch_t epoch = 1;
-
-      RGWPeriod period;
-      ret = cfgstore->read_period(dpp(), null_yield, period_id, epoch, period);
-      if (ret < 0) {
-        cerr << "failed to load period: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      ret = commit_period(cfgstore.get(), realm, *realm_writer, period,
-                          remote, url, opt_region, access_key, secret_key,
-                          yes_i_really_mean_it, site.get());
-      if (ret < 0) {
-        cerr << "failed to commit period: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      encode_json("period", period, formatter.get());
-      formatter->flush(cout);
-    }
-    return 0;
+  case OPT::PERIOD_COMMIT: {
+    rgw_admin_period_options o;
+    fill_period_options(o);
+    return rgw_admin_period(dpp(), driver, cfgstore.get(), *site,
+                            formatter.get(), o);
+  }
   case OPT::ROLE_CREATE:
     {
       if (role_name.empty()) {

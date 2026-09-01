@@ -825,7 +825,12 @@ set(radosgw_admin_srcs
   radosgw-admin/usage.cc
   radosgw-admin/quota_ratelimit.cc
   radosgw-admin/script.cc
-  radosgw-admin/pubsub.cc)
+  radosgw-admin/pubsub.cc
+  radosgw-admin/admin_remote.cc
+  radosgw-admin/realm.cc
+  radosgw-admin/zonegroup.cc
+  radosgw-admin/zone.cc
+  radosgw-admin/period.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
