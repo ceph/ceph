@@ -93,3 +93,31 @@ inline int rgw_admin_read_decode_json(const std::string& infile, T& t, K *k)
 
   return 0;
 }
+
+template <class T>
+inline bool rgw_admin_decode_dump(const char *field_name, ceph::bufferlist& bl,
+                                   ceph::Formatter *f)
+{
+  T t;
+
+  auto iter = bl.cbegin();
+
+  try {
+    decode(t, iter);
+  } catch (ceph::buffer::error& err) {
+    return false;
+  }
+
+  encode_json(field_name, t, f);
+
+  return true;
+}
+
+inline bool rgw_admin_dump_string(const char *field_name, ceph::bufferlist& bl,
+                                  ceph::Formatter *f)
+{
+  std::string val = bl.to_str();
+  f->dump_string(field_name, val.c_str());
+
+  return true;
+}

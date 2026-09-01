@@ -830,7 +830,23 @@ set(radosgw_admin_srcs
   radosgw-admin/realm.cc
   radosgw-admin/zonegroup.cc
   radosgw-admin/zone.cc
-  radosgw-admin/period.cc)
+  radosgw-admin/period.cc
+  radosgw-admin/bucket_logging.cc
+  radosgw-admin/object.cc
+  radosgw-admin/bi.cc
+  radosgw-admin/olh.cc
+  radosgw-admin/dedup.cc
+  radosgw-admin/gc.cc
+  radosgw-admin/lc.cc
+  radosgw-admin/bucket_sync.cc
+  radosgw-admin/bilog.cc
+  radosgw-admin/role.cc
+  radosgw-admin/reshard.cc
+  radosgw-admin/cors.cc
+  radosgw-admin/metadata.cc
+  radosgw-admin/sync.cc
+  radosgw-admin/mfa.cc
+  radosgw-admin/restore.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
@@ -842,7 +858,9 @@ if(WITH_RADOSGW_RADOS)
   list(APPEND radosgw_admin_rados_srcs
     radosgw-admin/sync_checkpoint.cc
     radosgw-admin/orphan.cc
-    radosgw-admin/log.cc)
+    radosgw-admin/log.cc
+    radosgw-admin/datalog.cc
+    radosgw-admin/bucket_resync_encrypted_multipart.cc)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} ${radosgw_admin_rados_srcs})
   target_link_libraries(radosgw-admin

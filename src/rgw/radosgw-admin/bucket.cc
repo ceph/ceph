@@ -385,6 +385,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   auto& err = *o.err;
   auto& new_bucket_name = *o.new_bucket_name;
   auto& account_id = *o.account_id;
+  auto& format = *o.format;
   auto& start_date = *o.start_date;
   auto& end_date = *o.end_date;
 
@@ -1008,6 +1009,22 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
       cerr << "failed to " << (enabled ? "unsuspend" : "suspend")
            << " bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
+    }
+  }
+
+  if (command == rgw_admin::OPT::POLICY) {
+    if (format == "xml") {
+      ret = RGWBucketAdminOp::dump_s3_policy(driver, bucket_op, std::cout, dpp, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else {
+      ret = RGWBucketAdminOp::get_policy(driver, bucket_op, stream_flusher, dpp, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
   }
 

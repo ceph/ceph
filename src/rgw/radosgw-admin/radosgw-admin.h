@@ -153,67 +153,23 @@ namespace rgw_admin {
 enum class OPT {
   NO_CMD,
 #include "radosgw-admin/opt_user.inc"
-  USER_POLICY_ATTACH,
-  USER_POLICY_DETACH,
-  USER_POLICY_LIST_ATTACHED,
 #include "radosgw-admin/opt_bucket.inc"
 #ifdef WITH_RADOSGW_RADOS
-  BUCKET_SYNC_CHECKPOINT,
-  BUCKET_SYNC_INFO,
-  BUCKET_SYNC_STATUS,
-  BUCKET_SYNC_MARKERS,
-  BUCKET_SYNC_INIT,
-  BUCKET_SYNC_RUN,
-  BUCKET_SYNC_DISABLE,
-  BUCKET_SYNC_ENABLE,
-  BUCKET_RESYNC_ENCRYPTED_MULTIPART,
+#include "radosgw-admin/opt_bucket_resync_encrypted_multipart.inc"
 #endif
-  BUCKET_LOGGING_FLUSH,
-  BUCKET_LOGGING_INFO,
-  BUCKET_LOGGING_LIST,
-  POLICY,
+#include "radosgw-admin/opt_bucket_sync.inc"
+#include "radosgw-admin/opt_bucket_logging.inc"
 #ifdef WITH_RADOSGW_RADOS
 #include "radosgw-admin/opt_log.inc"
 #endif
 #include "radosgw-admin/opt_usage.inc"
 #include "radosgw-admin/opt_account.inc"
-  OBJECT_PUT,
-  OBJECT_RM,
-  OBJECT_UNLINK,
-  OBJECT_STAT,
-#ifdef WITH_RADOSGW_RADOS
-  OBJECT_MANIFEST,
-  OBJECT_REWRITE,
-  OBJECT_REINDEX,
-#endif
-  OBJECTS_EXPIRE,
-  OBJECTS_EXPIRE_STALE_LIST,
-  OBJECTS_EXPIRE_STALE_RM,
-#ifdef WITH_RADOSGW_RADOS
-  BI_GET,
-  BI_PUT,
-  BI_LIST,
-  BI_PURGE,
-  OLH_GET,
-  OLH_READLOG,
-#endif
-#ifdef WITH_RADOSGW_RADOS
-  DEDUP_STATS,
-  DEDUP_ESTIMATE,
-  DEDUP_ABORT,
-  DEDUP_EXEC,
-  DEDUP_PAUSE,
-  DEDUP_RESUME,
-  DEDUP_THROTTLE,
-  GC_LIST,
-  GC_PROCESS,
-#endif
-  LC_LIST,
-  LC_GET,
-#ifdef WITH_RADOSGW_RADOS
-  LC_PROCESS,
-#endif
-  LC_RESHARD_FIX,
+#include "radosgw-admin/opt_object.inc"
+#include "radosgw-admin/opt_bi.inc"
+#include "radosgw-admin/opt_olh.inc"
+#include "radosgw-admin/opt_dedup.inc"
+#include "radosgw-admin/opt_gc.inc"
+#include "radosgw-admin/opt_lc.inc"
 #ifdef WITH_RADOSGW_RADOS
   ORPHANS_FIND,
   ORPHANS_FINISH,
@@ -224,97 +180,23 @@ enum class OPT {
 #include "radosgw-admin/opt_zonegroup.inc"
 #include "radosgw-admin/opt_zone.inc"
 #include "radosgw-admin/opt_period.inc"
-  CAPS_ADD,
-  CAPS_RM,
 #ifdef WITH_RADOSGW_RADOS
-  METADATA_GET,
-  METADATA_PUT,
-  METADATA_RM,
-  METADATA_LIST,
-  METADATA_SYNC_STATUS,
-  METADATA_SYNC_INIT,
-  METADATA_SYNC_RUN,
-  MDLOG_LIST,
-  MDLOG_AUTOTRIM,
-  MDLOG_TRIM,
-  MDLOG_STATUS,
-  SYNC_ERROR_LIST,
-  SYNC_ERROR_TRIM,
+#include "radosgw-admin/opt_metadata.inc"
+#include "radosgw-admin/opt_sync.inc"
 #endif
-  SYNC_GROUP_CREATE,
-  SYNC_GROUP_MODIFY,
-  SYNC_GROUP_GET,
-  SYNC_GROUP_REMOVE,
-  SYNC_GROUP_FLOW_CREATE,
-  SYNC_GROUP_FLOW_REMOVE,
-  SYNC_GROUP_PIPE_CREATE,
-  SYNC_GROUP_PIPE_MODIFY,
-  SYNC_GROUP_PIPE_REMOVE,
-  SYNC_POLICY_GET,
-  BILOG_LIST,
+#include "radosgw-admin/opt_bilog.inc"
 #ifdef WITH_RADOSGW_RADOS
-  BILOG_TRIM,
-  BILOG_STATUS,
-  BILOG_AUTOTRIM,
-  DATA_SYNC_STATUS,
-  DATA_SYNC_INIT,
-  DATA_SYNC_RUN,
+#include "radosgw-admin/opt_datalog.inc"
 #endif
-  DATALOG_LIST,
-  DATALOG_STATUS,
-  DATALOG_AUTOTRIM,
-  DATALOG_TRIM,
-  DATALOG_TYPE,
-  DATALOG_PRUNE,
-  DATALOG_SEMAPHORE_LIST,
-  DATALOG_SEMAPHORE_RESET,
-  GLOBAL_QUOTA_GET,
-  GLOBAL_QUOTA_SET,
-  GLOBAL_QUOTA_ENABLE,
-  GLOBAL_QUOTA_DISABLE,
-  GLOBAL_RATELIMIT_GET,
-  GLOBAL_RATELIMIT_SET,
-  GLOBAL_RATELIMIT_ENABLE,
-  GLOBAL_RATELIMIT_DISABLE,
-  SYNC_INFO,
+#include "radosgw-admin/opt_role.inc"
 #ifdef WITH_RADOSGW_RADOS
-  SYNC_STATUS,
-#endif
-  ROLE_CREATE,
-  ROLE_DELETE,
-  ROLE_GET,
-  ROLE_TRUST_POLICY_MODIFY,
-  ROLE_LIST,
-  ROLE_POLICY_PUT,
-  ROLE_POLICY_LIST,
-  ROLE_POLICY_GET,
-  ROLE_POLICY_DELETE,
-  ROLE_POLICY_ATTACH,
-  ROLE_POLICY_DETACH,
-  ROLE_POLICY_LIST_ATTACHED,
-  ROLE_UPDATE,
-#ifdef WITH_RADOSGW_RADOS
-  RESHARD_ADD,
-  RESHARD_LIST,
-  RESHARD_STATUS,
-  RESHARD_PROCESS,
-  RESHARD_CANCEL,
-  MFA_CREATE,
-  MFA_REMOVE,
-  MFA_GET,
-  MFA_LIST,
-  MFA_CHECK,
-  MFA_RESYNC,
-  RESHARD_STALE_INSTANCES_LIST,
-  RESHARD_STALE_INSTANCES_DELETE,
-  RESHARDLOG_LIST,
-  RESHARDLOG_PURGE,
+#include "radosgw-admin/opt_reshard.inc"
+#include "radosgw-admin/opt_mfa.inc"
 #endif
 #include "radosgw-admin/opt_pubsub.inc"
 #include "radosgw-admin/opt_script.inc"
-  RESTORE_STATUS,
-  RESTORE_LIST,
-  GLOBAL_CORS_GET,
+#include "radosgw-admin/opt_restore.inc"
+#include "radosgw-admin/opt_cors.inc"
 };
 
 } // namespace rgw_admin

@@ -32,6 +32,17 @@ int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
                           const rgw_admin_user_mutate_options& opts,
                           std::string& err_msg);
 
+struct rgw_admin_user_policy_options {
+  rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
+  std::string* policy_arn = nullptr;
+};
+
+int rgw_admin_user_policy(const DoutPrefixProvider* dpp,
+                          rgw::sal::Driver* driver,
+                          ceph::Formatter* formatter,
+                          std::unique_ptr<rgw::sal::User>& user,
+                          const rgw_admin_user_policy_options& opts);
+
 struct rgw_admin_user_query_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
   const std::string* tenant = nullptr;
