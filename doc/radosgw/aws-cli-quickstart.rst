@@ -20,40 +20,47 @@ Prerequisites
 - The internal or external IP/hostname and port RGW is listening on
   (default port is 80 unless configured otherwise)
 
-Create an RGW user
-===================
+Get RGW credentials
+====================
 
-RGW manages its own users, separately from any cloud provider's IAM.
-Create one with ``radosgw-admin``, run inside a ``cephadm shell``:
+This guide assumes you already have an RGW ``access_key`` and
+``secret_key``. Most users configuring an S3 client will already have
+been given these by whoever administers the cluster, this guide
+focuses on using them, not creating them.
 
-.. prompt:: bash $
+If you're a cluster administrator and need to create a new user, see
+:ref:`radosgw-user-management` for the full ``radosgw-admin user
+create`` workflow.
 
-   sudo cephadm shell -- radosgw-admin user create \
-       --uid=myuser \
-       --display-name="My User" \
-       --email=myuser@example.com
-
-The output includes an ``access_key`` and ``secret_key`` under
-``"keys"``. These are what you will use in place of AWS credentials.
-
-.. warning:: Treat these keys like any other credential. Do not commit
-   them to version control or include them in screenshots you intend
-   to share publicly.
+.. warning:: Treat your access and secret keys like any other
+   credential. Do not commit them to version control or include them
+   in screenshots you intend to share publicly.
 
 Install and configure the AWS CLI
 ==================================
 
 The standard AWS CLI works against any S3-compatible endpoint,
-including RGW, by pointing it at your RGW address instead of AWS's:
+including RGW, by pointing it at your RGW address instead of AWS's.
 
 .. prompt:: bash $
 
    pip3 install awscli --break-system-packages
-   aws configure --profile ceph
+
+Set the endpoint for your profile once, so you don't need to repeat
+it on every command:
+
+.. prompt:: bash $
+
+   aws --profile ceph configure set endpoint_url http://<RGW_HOST>:80
+   aws --profile ceph configure
 
 When prompted, enter the ``access_key`` and ``secret_key`` from the
 previous step. Leave region and output format blank, RGW does not
 require them.
+
+This writes the endpoint into ``~/.aws/config`` under the
+``[profile ceph]`` section, so commands using ``--profile ceph``
+automatically use it, no need for ``--endpoint-url`` on every command.
 
 .. note:: On some systems, ``pip``-installed binaries land in
    ``~/.local/bin``, which may not be on your ``PATH`` by default. If
@@ -63,16 +70,16 @@ require them.
 Verify it works
 ================
 
-Every command below needs ``--endpoint-url`` pointing at your RGW
-address, since the AWS CLI otherwise assumes the real AWS S3 endpoint:
+Since the endpoint is already set on the ``ceph`` profile, these
+commands work the same way you'd use them against real AWS S3:
 
 .. prompt:: bash $
 
-   aws --profile ceph --endpoint-url http://<RGW_HOST>:80 s3 mb s3://my-test-bucket
+   aws --profile ceph s3 mb s3://my-test-bucket
    echo "hello from RGW" > test.txt
-   aws --profile ceph --endpoint-url http://<RGW_HOST>:80 s3 cp test.txt s3://my-test-bucket/
-   aws --profile ceph --endpoint-url http://<RGW_HOST>:80 s3 ls s3://my-test-bucket/
-   aws --profile ceph --endpoint-url http://<RGW_HOST>:80 s3 cp s3://my-test-bucket/test.txt downloaded.txt
+   aws --profile ceph s3 cp test.txt s3://my-test-bucket/
+   aws --profile ceph s3 ls s3://my-test-bucket/
+   aws --profile ceph s3 cp s3://my-test-bucket/test.txt downloaded.txt
    cat downloaded.txt
 
 If the final ``cat`` prints ``hello from RGW``, the round trip worked
