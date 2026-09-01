@@ -120,7 +120,7 @@ For RPMs::
 
   https://download.ceph.com/rpm-{version}
 
-The major releases of Ceph are summarized at: :ref:`Releases <ceph-releases-index>`
+The major releases of Ceph are summarized at: `Releases`_
 
 .. tip:: For non-US users: There might be a mirror close to you where
          to download Ceph from. For more information see: `Ceph Mirrors`_.
@@ -390,3 +390,7 @@ line to get the short codename.
 .. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
 .. _the shaman page: https://shaman.ceph.com
 .. _Ceph Mirrors: ../mirrors
+
+.. Needs to be an external link because doc/releases/index.rst is not in
+   stable branches and we want to always use the main branch version
+.. _Releases: https://docs.ceph.com/en/latest/releases/
