@@ -16513,10 +16513,6 @@ boost::statechart::result PrimaryLogPG::WaitReservation::react(const SnapTrimRes
     return transit< NotTrimming >();
   }
 
-  context<Trimming>().snap_to_trim = pg->snap_trimq.range_start();
-  ldout(pg->cct, 10) << "NotTrimming: trimming "
-		     << pg->snap_trimq.range_start()
-		     << dendl;
   return transit< AwaitAsyncWork >();
 }
 
@@ -16538,7 +16534,6 @@ PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
 boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
 {
   PrimaryLogPGRef pg = context< SnapTrimmer >().pg;
-  snapid_t snap_to_trim = context<Trimming>().snap_to_trim;
   auto &in_flight = context<Trimming>().in_flight;
   ceph_assert(in_flight.empty());
 
@@ -16549,7 +16544,33 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
     return transit< NotTrimming >();
   }
 
-  ldout(pg->cct, 10) << "AwaitAsyncWork: trimming snap " << snap_to_trim << dendl;
+  // Pass-selection fairness (section 7.2.2):
+  // Collect candidates from snap_trimq and rollback_trimq.
+  // candidate map: snap ID -> is_trim_pass
+  std::map<snapid_t, bool> candidates;
+  if (!pg->snap_trimq.empty()) {
+    candidates[pg->snap_trimq.range_start()] = true;
+  }
+  for (auto& [rb_id, rb_info] : pg->rollback_trimq) {
+    if (candidates.find(rb_info.source_snap) == candidates.end()) {
+      candidates[rb_info.source_snap] = false; // ROLLBACK_ONLY
+    }
+  }
+
+  if (candidates.empty()) {
+    ldout(pg->cct, 10) << "AwaitAsyncWork: no trim or rollback candidates" << dendl;
+    post_event(KickTrim());
+    return transit< NotTrimming >();
+  }
+
+  auto [selected_snap, is_trim] = *candidates.begin(); // lowest snap ID
+  context<Trimming>().snap_being_processed = selected_snap;
+  context<Trimming>().is_trim_pass = is_trim;
+  context<Trimming>().snap_to_trim = selected_snap;
+  snapid_t snap_to_trim = selected_snap;
+
+  ldout(pg->cct, 10) << "AwaitAsyncWork: selected snap " << selected_snap
+       << " is_trim_pass=" << is_trim << dendl;
 
   unsigned max = pg->cct->_conf->osd_pg_max_concurrent_snap_trims;
   // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
