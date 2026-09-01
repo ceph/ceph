@@ -35,6 +35,12 @@ RADOS / OSD / Erasure Coding
   Ships with health warnings for deprecated EC plugins/techniques and for
   Blaum-Roth EC profiles whose ``w+1`` isn't prime; non-4k-aligned chunk
   sizes are now rejected for optimized EC.
+- **Security**: CephX authentication hardening -- new ``AES256KRB5`` cipher
+  (replacing weaker legacy key types as the default), online key rotation
+  for mon/OSD/MDS daemons during upgrades, and fixes for CVE-2025-30156
+  (AES-CBC misuse enabling authentication bypass), CVE-2026-39944,
+  CVE-2026-50152, and CVE-2026-54330
+  (`pr#71172 <https://github.com/ceph/ceph/pull/71172>`_).
 - Monitor: new optional RocksDB backup/restore mechanism
   (``mon_backup_interval``, ``ceph tell mon.* backup``, offline restore
   via ``ceph-mon --restore-backup``).
@@ -95,6 +101,11 @@ RGW (RADOS Gateway)
   injected into IAM policy.
 - STS/OIDC: ``GetCallerIdentity``, JWT/JWKS signature validation, OIDC
   multisite support.
+- SigV4: fixed a regression (present in 19.2.6/20.2.4) that rejected
+  requests with an unsigned ``Content-Type``, breaking presigned PUT
+  uploads; ``x-amz-content-sha256`` is no longer required in
+  ``SignedHeaders`` for S3 requests
+  (`pr#71363 <https://github.com/ceph/ceph/pull/71363>`_).
 - Multisite: numerous sync-correctness fixes (full-sync infinite loop,
   segfault during startup, forwarded awsv4/UNSIGNED-PAYLOAD requests,
   bucket-sync full-sync locking, zonegroup rename handling).
@@ -239,6 +250,7 @@ Changelog
 * Add /health/snapshot api (`pr#65019 <https://github.com/ceph/ceph/pull/65019>`_, Afreen Misbah)
 * Add Abhishek Desai into githubmap, organizationmap, mailmap (`pr#66083 <https://github.com/ceph/ceph/pull/66083>`_, Abhishek Desai)
 * Add cephadm-signed certificate support for all services (`pr#62106 <https://github.com/ceph/ceph/pull/62106>`_, Redouane Kachach)
+* add cephx update (`pr#71172 <https://github.com/ceph/ceph/pull/71172>`_, Patrick Donnelly, Adam King, David Galloway, Sage McTaggart, Marcus Watts, Pritha Srivastava, Yehuda Sadeh, Matan Breizman)
 * Add Devika Babrekar into githubmap, organizationmap, mailmap (`pr#66253 <https://github.com/ceph/ceph/pull/66253>`_, Devika Babrekar)
 * Add documentation for ceph_test_rados (`pr#68437 <https://github.com/ceph/ceph/pull/68437>`_, Alex Ainscow)
 * Add health warning for deprecated EC plugins and techniques (`pr#69026 <https://github.com/ceph/ceph/pull/69026>`_, Jamie Pryde)
@@ -849,6 +861,7 @@ Changelog
 * doc/man/8: Fix small errors and small improvements in mount.ceph.rst (`pr#64727 <https://github.com/ceph/ceph/pull/64727>`_, Ville Ojamo)
 * doc/man/8: Improve mount.ceph.rst (`pr#64726 <https://github.com/ceph/ceph/pull/64726>`_, Anthony D'Atri)
 * doc/man/cephadm: update `--orphan-initial-daemons` argument description (`pr#65013 <https://github.com/ceph/ceph/pull/65013>`_, Naveen Naidu)
+* doc/man: document ceph-bluestore-tool set-label-key and rm-label-key (`pr#71246 <https://github.com/ceph/ceph/pull/71246>`_, Akshay Nazare)
 * doc/man: fix broken markup in cephadm.rst (`pr#69014 <https://github.com/ceph/ceph/pull/69014>`_, Ville Ojamo)
 * doc/man: Fix inline formatting in ceph-bluestore-tool.rst (`pr#63330 <https://github.com/ceph/ceph/pull/63330>`_, Ville Ojamo)
 * doc/man: fix invalid directive missing a second colon (`pr#66815 <https://github.com/ceph/ceph/pull/66815>`_, Ville Ojamo)
@@ -1139,6 +1152,7 @@ Changelog
 * doc: Improve start/quick-rbd.rst (`pr#67672 <https://github.com/ceph/ceph/pull/67672>`_, Ville Ojamo)
 * doc: Introduce Crimson User Guide (`pr#65899 <https://github.com/ceph/ceph/pull/65899>`_, Matan Breizman)
 * doc: mgr/dashboard: add OAuth2 SSO documentation (`pr#60440 <https://github.com/ceph/ceph/pull/60440>`_, Zac Dover, Pedro Gonzalez Gomez)
+* doc: mgr/nfs: Documentation for NFS ratelimiting commands (`pr#70808 <https://github.com/ceph/ceph/pull/70808>`_, Shweta Bhosale)
 * doc: Pin pip to <25.3 for RTD as a workaround for pybind in admin/doc-read-the-docs.txt (`pr#66059 <https://github.com/ceph/ceph/pull/66059>`_, Ville Ojamo)
 * doc: quincy 17.2.9 release notes (`pr#63267 <https://github.com/ceph/ceph/pull/63267>`_, Laura Flores, Yuri Weinstein, Enrico Bocchi)
 * doc: reef 18.2.7 release notes (`pr#63090 <https://github.com/ceph/ceph/pull/63090>`_, Laura Flores, Yuri Weinstein)
@@ -1426,11 +1440,13 @@ Changelog
 * mgr/cephadm: configurable per-service stop timeout (`pr#65468 <https://github.com/ceph/ceph/pull/65468>`_, Kushal Deb)
 * mgr/cephadm: Control cephadm files logging based on a mgr flag (`pr#69735 <https://github.com/ceph/ceph/pull/69735>`_, Ashwin M. Joshi)
 * mgr/cephadm: create default pool for nvmeof (`pr#68239 <https://github.com/ceph/ceph/pull/68239>`_, Kushal Deb)
+* mgr/cephadm: deduplicate HAProxy_Hosts in NFS ganesha.conf (`pr#70813 <https://github.com/ceph/ceph/pull/70813>`_, Shweta Bhosale)
 * mgr/cephadm: disallow changing OSD service type to non-OSD types (`pr#62984 <https://github.com/ceph/ceph/pull/62984>`_, Joshua Blanch)
 * mgr/cephadm: don't mark nvmeof daemons without pool and group in name as stray (`pr#63170 <https://github.com/ceph/ceph/pull/63170>`_, Adam King)
 * mgr/cephadm: don't remove and deploy new daemon if ports change during upgrade (`pr#63563 <https://github.com/ceph/ceph/pull/63563>`_, Adam King)
 * mgr/cephadm: don't remove TLS certs if svc still has daemons on host (`pr#66255 <https://github.com/ceph/ceph/pull/66255>`_, Redouane Kachach)
 * mgr/cephadm: don't try to map /etc/kmip if it doesn't exist (`pr#68153 <https://github.com/ceph/ceph/pull/68153>`_, Gil Bregman)
+* mgr/cephadm: During upgrade if NFS cluster is using old nodeids, keep using it (`pr#70809 <https://github.com/ceph/ceph/pull/70809>`_, Shweta Bhosale)
 * mgr/cephadm: Fix alertmanager TLS and global security handling (`pr#65641 <https://github.com/ceph/ceph/pull/65641>`_, Redouane Kachach)
 * mgr/cephadm: fix custom alertmanager webhooks (`pr#59889 <https://github.com/ceph/ceph/pull/59889>`_, Adam King)
 * mgr/cephadm: fix KeyError when host is removed during serve loop (`pr#67735 <https://github.com/ceph/ceph/pull/67735>`_, bachmanity1)
@@ -1612,6 +1628,7 @@ Changelog
 * mgr/dashboard: add tab structure to File Systems page and embed Ceph-Filesystem Overview dashboard (`pr#64405 <https://github.com/ceph/ceph/pull/64405>`_, Abhishek Desai)
 * mgr/dashboard: add telemetry status to overview-health-card (`pr#67950 <https://github.com/ceph/ceph/pull/67950>`_, Pedro Gonzalez Gomez)
 * mgr/dashboard: add text-label-list component (`pr#65735 <https://github.com/ceph/ceph/pull/65735>`_, Pedro Gonzalez Gomez)
+* mgr/dashboard: add text/javascript to gzip mime types (`pr#70925 <https://github.com/ceph/ceph/pull/70925>`_, Afreen Misbah)
 * mgr/dashboard: Added application label to pool_metadata query (`pr#62743 <https://github.com/ceph/ceph/pull/62743>`_, Ankush Behl)
 * mgr/dashboard: added node-exporter dashboard (`pr#62360 <https://github.com/ceph/ceph/pull/62360>`_, Ankush Behl)
 * mgr/dashboard: Adding QAT Compression dropdown on RGW Service form (`pr#66507 <https://github.com/ceph/ceph/pull/66507>`_, Devika Babrekar)
@@ -1991,6 +2008,7 @@ Changelog
 * mgr: avoid explicit dropping of ref (`pr#62445 <https://github.com/ceph/ceph/pull/62445>`_, Milind Changire)
 * mgr: Bucket scoped OSD upgrades using ok-to-upgrade (`pr#68398 <https://github.com/ceph/ceph/pull/68398>`_, Ashwin M. Joshi)
 * mgr: change cleanup and scanning cephfs connection logs to be less noisy (`pr#68634 <https://github.com/ceph/ceph/pull/68634>`_, Omid Yoosefi)
+* mgr: don't record a crash dump for NotImplementedError from dispatch_remote (`pr#70983 <https://github.com/ceph/ceph/pull/70983>`_, Nitzan Mordechai, Sebastian Marschke)
 * mgr: ensure that all modules have started before advertising active mgr (`pr#63859 <https://github.com/ceph/ceph/pull/63859>`_, Laura Flores)
 * mgr: filter root logger fallback (`pr#69928 <https://github.com/ceph/ceph/pull/69928>`_, Matthew N Heler)
 * mgr: Fix autoscaling PG distribution (`pr#67551 <https://github.com/ceph/ceph/pull/67551>`_, Eric Zhang)
@@ -2184,6 +2202,7 @@ Changelog
 * osd/PeeringState: handle race condition of RemoteReservationRevoked event for Backfilling state (`pr#67122 <https://github.com/ceph/ceph/pull/67122>`_, Naveen Naidu)
 * osd/PeeringState: re-evaluate full OSDs while waiting for recovery re… (`pr#63296 <https://github.com/ceph/ceph/pull/63296>`_, Nitzan Mordechai)
 * osd/PrimaryLogPG: avoid redundant container clones and lookups (`pr#65513 <https://github.com/ceph/ceph/pull/65513>`_, Garry Drankovich)
+* osd/PrimaryLogPG: Do not log REPLACE until require_osd_release is umbrella (`pr#71183 <https://github.com/ceph/ceph/pull/71183>`_, Aishwarya Mathuria)
 * osd/PrimaryLogPG: encode an empty data_bl for empty sparse reads (`pr#66912 <https://github.com/ceph/ceph/pull/66912>`_, Ilya Dryomov)
 * osd/PrimaryLogPG: Relax replicated reads when recovering (`pr#62805 <https://github.com/ceph/ceph/pull/62805>`_, Matan Breizman)
 * osd/rados/rgw/cephfs: Modernize cls interface with compile time safety (`pr#66258 <https://github.com/ceph/ceph/pull/66258>`_, Alex Ainscow)
@@ -2378,6 +2397,7 @@ Changelog
 * qa/distros: add centos 9 stream back to supported distros (`pr#67957 <https://github.com/ceph/ceph/pull/67957>`_, Casey Bodley)
 * qa/distros: add rocky 10.0 as supported distro/container host (`pr#66055 <https://github.com/ceph/ceph/pull/66055>`_, Adam King, David Galloway, Casey Bodley)
 * qa/distros: add ubuntu 24.04 as supported distro/container host (`pr#67683 <https://github.com/ceph/ceph/pull/67683>`_, Patrick Donnelly, Adam King, Casey Bodley)
+* qa/distros: ask for Rocky by major, not a point release (`pr#71195 <https://github.com/ceph/ceph/pull/71195>`_, David Galloway)
 * qa/dnsmasq: use managed dnsmasq instead of editing resolv.conf (`pr#70005 <https://github.com/ceph/ceph/pull/70005>`_, Casey Bodley)
 * qa/lsan.supp: suppress CPython 3.10 interpreter shutdown leaks (`pr#68615 <https://github.com/ceph/ceph/pull/68615>`_, Kefu Chai)
 * qa/multisite: fix test_bucket_remove failure (`pr#68167 <https://github.com/ceph/ceph/pull/68167>`_, Shilpa Jagannath)
@@ -2445,7 +2465,7 @@ Changelog
 * qa/suites/upgrade: update ignorelist with cephfs specific warnings (under stress-split) (`issue#71615 <http://tracker.ceph.com/issues/71615>`_, `pr#64494 <https://github.com/ceph/ceph/pull/64494>`_, Venky Shankar)
 * qa/suites/upgrade: update upgrade paths and exclude rocky10 from non-supported distros (`pr#67127 <https://github.com/ceph/ceph/pull/67127>`_, Laura Flores)
 * qa/suites: Exclude ceph-osd-\* when installing LTS releases (`pr#67086 <https://github.com/ceph/ceph/pull/67086>`_, Matan Breizman)
-* qa/suites: remove centos restriction from valgrind yaml (`issue#18126 <http://tracker.ceph.com/issues/18126>`_, `issue#20360 <http://tracker.ceph.com/issues/20360>`_, `pr#66193 <https://github.com/ceph/ceph/pull/66193>`_, Samuel Just)
+* qa/suites: remove centos restriction from valgrind yaml (`issue#20360 <http://tracker.ceph.com/issues/20360>`_, `issue#18126 <http://tracker.ceph.com/issues/18126>`_, `pr#66193 <https://github.com/ceph/ceph/pull/66193>`_, Samuel Just)
 * qa/suites: wait longer before stopping OSDs with valgrind (`pr#62823 <https://github.com/ceph/ceph/pull/62823>`_, Nitzan Mordechai)
 * qa/tasks/admin_socket.py: replace git.ceph.com with GitHub raw URLs (`pr#68342 <https://github.com/ceph/ceph/pull/68342>`_, Matan Breizman)
 * qa/tasks/backfill_toofull.py: Fix assert failures with & without compression (`pr#67829 <https://github.com/ceph/ceph/pull/67829>`_, Sridhar Seshasayee)
@@ -2640,6 +2660,7 @@ Changelog
 * rgw/admin: Fix assert on datalog list of invalid shard (`pr#62770 <https://github.com/ceph/ceph/pull/62770>`_, Adam C. Emerson)
 * rgw/admin: guard bilog autotrim on non-exporting (archive) zones (`pr#70455 <https://github.com/ceph/ceph/pull/70455>`_, Oguzhan Ozmen)
 * rgw/adminops: support for adding restore operation (`pr#66249 <https://github.com/ceph/ceph/pull/66249>`_, Jiffin Tony Thottan)
+* rgw/auth: Fixed Content-Type always needing to be in the signature and don't require x-amz-content-sha256 in signed headers (`pr#71363 <https://github.com/ceph/ceph/pull/71363>`_, Casey Bodley, Adam C. Emerson, Elliot Courant)
 * rgw/auth: Remove legacy Keystone admin token (`pr#62201 <https://github.com/ceph/ceph/pull/62201>`_, Tobias Urdin)
 * rgw/beast: add frontend option 'tls_groups' (`pr#67856 <https://github.com/ceph/ceph/pull/67856>`_, Casey Bodley)
 * rgw/beast: add ssl_ciphersuites option for tls 1.3 (`pr#68934 <https://github.com/ceph/ceph/pull/68934>`_, Casey Bodley)
@@ -3107,6 +3128,7 @@ Changelog
 * test/erasure-code: Use memory comparisons that are safe on big endian arch (`pr#67218 <https://github.com/ceph/ceph/pull/67218>`_, Jamie Pryde)
 * test/fio_ceph_messenger: fix building errors (`pr#70198 <https://github.com/ceph/ceph/pull/70198>`_, Igor Fedotov)
 * test/fs/CMakeLists.txt: add ceph-common to ceph_test_trim_caps and ceph_test_ino_release_cb (`pr#63925 <https://github.com/ceph/ceph/pull/63925>`_, Samuel Just)
+* test/kafka: support archived kafka versions (`pr#71450 <https://github.com/ceph/ceph/pull/71450>`_, Yuval Lifshitz, Adam C. Emerson)
 * test/lazy-omap-stats: overload get_output() to accept both lvalue and… (`pr#66277 <https://github.com/ceph/ceph/pull/66277>`_, Nitzan Mordechai)
 * test/libcephfs: copy DT_NEEDED entries from input libraries (`pr#62865 <https://github.com/ceph/ceph/pull/62865>`_, Patrick Donnelly)
 * test/libcephfs: reduce SnapDiffDeletionRecreation bulk_count on Windows (`pr#69203 <https://github.com/ceph/ceph/pull/69203>`_, Kefu Chai)
