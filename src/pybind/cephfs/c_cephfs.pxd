@@ -4,6 +4,10 @@
 from libc.stdint cimport *
 from types cimport *
 
+cdef extern from "../include/platform_errno.h":
+    ctypedef signed int int32_t;
+    int32_t ceph_to_hostos_errno(int32_t e)
+
 cdef extern from "cephfs/ceph_ll_client.h":
     cdef struct statx "ceph_statx":
         uint32_t    stx_mask
