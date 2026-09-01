@@ -15,6 +15,7 @@
 #include "rgw_log.h"
 #include "rgw_sal.h"
 
+using ceph::Formatter;
 using namespace rgw_admin;
 using namespace std;
 

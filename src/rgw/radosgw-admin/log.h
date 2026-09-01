@@ -8,7 +8,7 @@
 #include "radosgw-admin/radosgw-admin.h"
 
 class DoutPrefixProvider;
-class Formatter;
+namespace ceph { class Formatter; }
 namespace rgw::sal { class Driver; }
 
 struct rgw_admin_log_options {
@@ -24,5 +24,5 @@ struct rgw_admin_log_options {
 
 int rgw_admin_log(const DoutPrefixProvider* dpp,
                   rgw::sal::Driver* driver,
-                  Formatter* formatter,
+                  ceph::Formatter* formatter,
                   const rgw_admin_log_options& opts);
