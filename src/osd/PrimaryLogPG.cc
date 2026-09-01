@@ -16730,35 +16730,75 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   auto to_trim =
       pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max);
   if (!to_trim.has_value()) {
-    // Done!
-    ldout(pg->cct, 10) << "no more entries to trim" << dendl;
+    // Done with scan for snap_to_trim!
+    ldout(pg->cct, 10) << "no more entries for snap " << snap_to_trim << dendl;
 
-    pg->snap_trimq.erase(snap_to_trim);
+    const rollback_snap_info_t* rb_info =
+      find_rollback_for_source(pg->rollback_trimq, snap_to_trim);
 
-    if (auto it = pg->snap_trimq_repeat.find(snap_to_trim);
-        it != pg->snap_trimq_repeat.end()) {
-      ldout(pg->cct, 10) << " removing from snap_trimq_repeat" << dendl;
-      pg->snap_trimq_repeat.erase(it);
-    } else {
-      ldout(pg->cct, 10) << "adding snap " << snap_to_trim
-			 << " to purged_snaps"
-			 << dendl;
-      ObjectStore::Transaction t;
-      pg->recovery_state.adjust_purged_snaps(
-	[snap_to_trim](auto &purged_snaps) {
-	  purged_snaps.insert(snap_to_trim);
-	});
-      pg->write_if_dirty(t);
-
-      ldout(pg->cct, 10) << "purged_snaps now "
-			 << pg->info.purged_snaps << ", snap_trimq now "
-			 << pg->snap_trimq << dendl;
-
-      int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
-      ceph_assert(tr == 0);
-
-      pg->recovery_state.share_pg_info();
+    bool deferred_jit = false;
+    if (rb_info) {
+      snapid_t rb_id = rb_info->rollback_id;
+      if (pg->jit_rollback_inflight.count(rb_id) &&
+          pg->jit_rollback_inflight[rb_id] > 0) {
+        // JIT work still in flight -- defer completion; requeue a check
+        ldout(pg->cct, 10) << "JIT rollback " << rb_id
+                           << " still in flight (" << pg->jit_rollback_inflight[rb_id]
+                           << "), deferring completion" << dendl;
+        pg->rollback_trimq_repeat.insert(rb_id);
+        deferred_jit = true;
+      } else {
+        ldout(pg->cct, 10) << "marking rollback " << rb_id << " complete" << dendl;
+        pg->rollback_trimq.erase(rb_id);
+        pg->jit_rollback_inflight.erase(rb_id);
+        if (auto it = pg->rollback_trimq_repeat.find(rb_id);
+            it != pg->rollback_trimq_repeat.end()) {
+          pg->rollback_trimq_repeat.erase(it);
+        }
+        ObjectStore::Transaction t;
+        pg->recovery_state.adjust_completed_rollbacks(
+          [rb_id](auto& cr) { cr.insert(rb_id); });
+        pg->write_if_dirty(t);
+        int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
+        ceph_assert(tr == 0);
+        pg->recovery_state.share_pg_info();
+      }
     }
+
+    if (deferred_jit) {
+      // Transition back to WaitTrimTimer instead of marking complete
+      return transit< WaitTrimTimer >();
+    }
+
+    if (is_trim) {
+      pg->snap_trimq.erase(snap_to_trim);
+
+      if (auto it = pg->snap_trimq_repeat.find(snap_to_trim);
+          it != pg->snap_trimq_repeat.end()) {
+        ldout(pg->cct, 10) << " removing from snap_trimq_repeat" << dendl;
+        pg->snap_trimq_repeat.erase(it);
+      } else {
+        ldout(pg->cct, 10) << "adding snap " << snap_to_trim
+				 << " to purged_snaps"
+				 << dendl;
+        ObjectStore::Transaction t;
+        pg->recovery_state.adjust_purged_snaps(
+		[snap_to_trim](auto &purged_snaps) {
+		  purged_snaps.insert(snap_to_trim);
+		});
+        pg->write_if_dirty(t);
+
+        ldout(pg->cct, 10) << "purged_snaps now "
+				 << pg->info.purged_snaps << ", snap_trimq now "
+				 << pg->snap_trimq << dendl;
+
+        int tr = pg->osd->store->queue_transaction(pg->ch, std::move(t), NULL);
+        ceph_assert(tr == 0);
+
+        pg->recovery_state.share_pg_info();
+      }
+    }
+
     post_event(KickTrim());
     pg->set_snaptrim_duration();
     return transit< NotTrimming >();
