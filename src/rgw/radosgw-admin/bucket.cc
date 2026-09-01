@@ -396,8 +396,8 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   int orphan_stale_secs = o.orphan_stale_secs;
   int num_shards = o.num_shards;
   int shard_id = o.shard_id;
-  int64_t min_rewrite_size = o.min_rewrite_size;
-  int64_t max_rewrite_size = o.max_rewrite_size;
+  uint64_t min_rewrite_size = o.min_rewrite_size;
+  uint64_t max_rewrite_size = o.max_rewrite_size;
   uint64_t min_rewrite_stripe_size = o.min_rewrite_stripe_size;
 
   bool max_entries_specified = o.max_entries_specified;

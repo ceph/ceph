@@ -822,7 +822,10 @@ set(radosgw_admin_srcs
   radosgw-admin/account.cc
   radosgw-admin/bucket.cc
   radosgw-admin/user.cc
-  radosgw-admin/usage.cc)
+  radosgw-admin/usage.cc
+  radosgw-admin/quota_ratelimit.cc
+  radosgw-admin/script.cc
+  radosgw-admin/pubsub.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin

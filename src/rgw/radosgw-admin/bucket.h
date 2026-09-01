@@ -85,8 +85,8 @@ struct rgw_admin_bucket_options {
   int num_shards = 0;
   int shard_id = 0;
   ceph::timespan min_age{};
-  int64_t min_rewrite_size = 0;
-  int64_t max_rewrite_size = 0;
+  uint64_t min_rewrite_size = 0;
+  uint64_t max_rewrite_size = 0;
   uint64_t min_rewrite_stripe_size = 0;
   ceph::timespan opt_retry_delay_ms{};
   ceph::timespan opt_timeout_sec{};

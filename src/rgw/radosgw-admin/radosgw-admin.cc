@@ -60,6 +60,9 @@ extern "C" {
 #include "radosgw-admin/bucket.h"
 #include "radosgw-admin/user.h"
 #include "radosgw-admin/usage.h"
+#include "radosgw-admin/quota_ratelimit.h"
+#include "radosgw-admin/script.h"
+#include "radosgw-admin/pubsub.h"
 #include "radosgw-admin/radosgw-admin.h"
 
 #include "rgw/async_utils.h"
@@ -969,15 +972,6 @@ static void show_reshard_status(
 }
 #endif
 
-static void show_topics_info_v2(const rgw_pubsub_topic& topic,
-                                const std::set<std::string>& subscribed_buckets,
-                                Formatter* formatter) {
-  formatter->open_object_section("topic");
-  topic.dump(formatter);
-  encode_json("subscribed_buckets", subscribed_buckets, formatter);
-  formatter->close_section();
-}
-
 class StoreDestructor {
   rgw::sal::Driver* driver;
   ceph::async::io_context_pool* pool;
@@ -1117,306 +1111,6 @@ static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 
   return true;
 }
-
-bool set_ratelimit_info(RGWRateLimitInfo& ratelimit, OPT opt_cmd, int64_t max_read_ops, int64_t max_write_ops,
-                    int64_t max_list_ops, int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
-                    bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
-                    bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
-{
-  bool ratelimit_configured = true;
-  switch (opt_cmd) {
-    case OPT::RATELIMIT_ENABLE:
-    case OPT::GLOBAL_RATELIMIT_ENABLE:
-      ratelimit.enabled = true;
-      break;
-
-    case OPT::RATELIMIT_SET:
-    case OPT::GLOBAL_RATELIMIT_SET:
-      ratelimit_configured = false;
-      if (have_max_read_ops) {
-        if (max_read_ops >= 0) {
-          ratelimit.max_read_ops = max_read_ops;
-          ratelimit_configured = true;
-        }
-      }
-      if (have_max_write_ops) {
-        if (max_write_ops >= 0) {
-          ratelimit.max_write_ops = max_write_ops;
-          ratelimit_configured = true;
-        }
-      }
-      if (have_max_list_ops) {
-        if (max_list_ops >= 0) {
-          ratelimit.max_list_ops = max_list_ops;
-          ratelimit_configured = true;
-        }
-      }
-      if (have_max_delete_ops) {
-        if (max_delete_ops >= 0) {
-          ratelimit.max_delete_ops = max_delete_ops;
-          ratelimit_configured = true;
-        }
-      }
-      if (have_max_read_bytes) {
-        if (max_read_bytes >= 0) {
-          ratelimit.max_read_bytes = max_read_bytes;
-          ratelimit_configured = true;
-        }
-      }
-      if (have_max_write_bytes) {
-        if (max_write_bytes >= 0) {
-          ratelimit.max_write_bytes = max_write_bytes;
-          ratelimit_configured = true;
-        }
-      }
-      break;
-    case OPT::RATELIMIT_DISABLE:
-    case OPT::GLOBAL_RATELIMIT_DISABLE:
-      ratelimit.enabled = false;
-      break;
-    default:
-      break;
-  }
-  return ratelimit_configured;
-}
-
-void set_quota_info(RGWQuotaInfo& quota, OPT opt_cmd, int64_t max_size, int64_t max_objects,
-                    bool have_max_size, bool have_max_objects)
-{
-  switch (opt_cmd) {
-    case OPT::QUOTA_ENABLE:
-    case OPT::GLOBAL_QUOTA_ENABLE:
-      quota.enabled = true;
-
-      // falling through on purpose
-
-    case OPT::QUOTA_SET:
-    case OPT::GLOBAL_QUOTA_SET:
-      if (have_max_objects) {
-        if (max_objects < 0) {
-          quota.max_objects = -1;
-        } else {
-          quota.max_objects = max_objects;
-        }
-      }
-      if (have_max_size) {
-        if (max_size < 0) {
-          quota.max_size = -1;
-        } else {
-          quota.max_size = rgw_rounded_kb(max_size) * 1024;
-        }
-      }
-      break;
-    case OPT::QUOTA_DISABLE:
-    case OPT::GLOBAL_QUOTA_DISABLE:
-      quota.enabled = false;
-      break;
-    default:
-      break;
-  }
-}
-
-int set_bucket_quota(rgw::sal::Driver* driver, OPT opt_cmd,
-                     const string& tenant_name, const string& bucket_name,
-                     int64_t max_size, int64_t max_objects,
-                     bool have_max_size, bool have_max_objects)
-{
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
-                              &bucket, null_yield);
-  if (r < 0) {
-    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-
-  set_quota_info(bucket->get_info().quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
-
-  r = bucket->put_info(dpp(), false, real_time(), null_yield);
-  if (r < 0) {
-    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-  return 0;
-}
-
-int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
-                     const string& tenant_name, const string& bucket_name,
-                     int64_t max_read_ops, int64_t max_write_ops, int64_t max_list_ops,
-                     int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
-                     bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
-                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
-{
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
-                              &bucket, null_yield);
-  if (r < 0) {
-    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-  RGWRateLimitInfo ratelimit_info;
-  auto iter = bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
-  if(iter != bucket->get_attrs().end()) {
-    try {
-      bufferlist& bl = iter->second;
-      auto biter = bl.cbegin();
-      decode(ratelimit_info, biter);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
-      return -EIO;
-    }
-  }
-  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops, max_list_ops,
-                         max_delete_ops, max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
-  if (!ratelimit_configured) {
-    ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
-    return -EINVAL;
-  }
-  bufferlist bl;
-  ratelimit_info.encode(bl);
-  rgw::sal::Attrs attr;
-  attr[RGW_ATTR_RATELIMIT] = bl;
-  r = bucket->merge_and_store_attrs(dpp(), attr, null_yield);
-  if (r < 0) {
-    cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-  return 0;
-}
-
-int set_user_ratelimit(OPT opt_cmd, std::unique_ptr<rgw::sal::User>& user,
-                     int64_t max_read_ops, int64_t max_write_ops, int64_t max_list_ops,
-                     int64_t max_delete_ops, int64_t max_read_bytes, int64_t max_write_bytes,
-                     bool have_max_read_ops, bool have_max_write_ops, bool have_max_list_ops,
-                     bool have_max_delete_ops, bool have_max_read_bytes, bool have_max_write_bytes)
-{
-  RGWRateLimitInfo ratelimit_info;
-  user->load_user(dpp(), null_yield);
-  auto iter = user->get_attrs().find(RGW_ATTR_RATELIMIT);
-  if(iter != user->get_attrs().end()) {
-    try {
-      bufferlist& bl = iter->second;
-      auto biter = bl.cbegin();
-      decode(ratelimit_info, biter);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
-      return -EIO;
-    }
-  }
-  bool ratelimit_configured = set_ratelimit_info(ratelimit_info, opt_cmd, max_read_ops, max_write_ops, max_list_ops,
-                         max_delete_ops, max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops, have_max_list_ops,
-                         have_max_delete_ops, have_max_read_bytes, have_max_write_bytes);
-  if (!ratelimit_configured) {
-    ldpp_dout(dpp(), 0) << "ERROR: no rate limit values have been specified" << dendl;
-    return -EINVAL;
-  }
-  bufferlist bl;
-  ratelimit_info.encode(bl);
-  rgw::sal::Attrs attr;
-  attr[RGW_ATTR_RATELIMIT] = bl;
-  int r = user->merge_and_store_attrs(dpp(), attr, null_yield);
-  if (r < 0) {
-    cerr << "ERROR: failed writing user instance info: " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-  return 0;
-}
-
-int show_user_ratelimit(std::unique_ptr<rgw::sal::User>& user, Formatter *formatter)
-{
-  RGWRateLimitInfo ratelimit_info;
-  user->load_user(dpp(), null_yield);
-  auto iter = user->get_attrs().find(RGW_ATTR_RATELIMIT);
-  if(iter != user->get_attrs().end()) {
-    try {
-      bufferlist& bl = iter->second;
-      auto biter = bl.cbegin();
-      decode(ratelimit_info, biter);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
-      return -EIO;
-    }
-  } else {
-    return -ENOENT;
-  }
-
-  formatter->open_object_section("user_ratelimit");
-  encode_json("user_ratelimit", ratelimit_info, formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
-  return 0;
-}
-
-int show_bucket_ratelimit(rgw::sal::Driver* driver, const string& tenant_name,
-                          const string& bucket_name, Formatter *formatter)
-{
-  std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
-                              &bucket, null_yield);
-  if (r < 0) {
-    cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
-    return -r;
-  }
-  RGWRateLimitInfo ratelimit_info;
-  auto iter = bucket->get_attrs().find(RGW_ATTR_RATELIMIT);
-  if (iter != bucket->get_attrs().end()) {
-    try {
-      bufferlist& bl = iter->second;
-      auto biter = bl.cbegin();
-      decode(ratelimit_info, biter);
-    } catch (buffer::error& err) {
-      ldpp_dout(dpp(), 0) << "ERROR: failed to decode rate limit" << dendl;
-      return -EIO;
-    }
-  }
-  formatter->open_object_section("bucket_ratelimit");
-  encode_json("bucket_ratelimit", ratelimit_info, formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-  cout << std::endl;
-  return 0;
-}
-int set_user_bucket_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
-                          bool have_max_size, bool have_max_objects)
-{
-  RGWUserInfo& user_info = op_state.get_user_info();
-
-  set_quota_info(user_info.quota.bucket_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
-
-  op_state.set_bucket_quota(user_info.quota.bucket_quota);
-
-  string err;
-  int r = user.modify(dpp(), op_state, null_yield, &err);
-  if (r < 0) {
-    cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
-    return -r;
-  }
-  return 0;
-}
-
-int set_user_quota(OPT opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, int64_t max_size, int64_t max_objects,
-                   bool have_max_size, bool have_max_objects)
-{
-  RGWUserInfo& user_info = op_state.get_user_info();
-
-  set_quota_info(user_info.quota.user_quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
-
-  op_state.set_user_quota(user_info.quota.user_quota);
-
-  string err;
-  int r = user.modify(dpp(), op_state, null_yield, &err);
-  if (r < 0) {
-    cerr << "ERROR: failed updating user info: " << cpp_strerror(-r) << ": " << err << std::endl;
-    return -r;
-  }
-  return 0;
-}
-
-
-
 
 #ifdef WITH_RADOSGW_RADOS
 /// search for a matching zone/zonegroup id and return a connection if found
@@ -7413,6 +7107,92 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE ||
+      opt_cmd == OPT::QUOTA_DISABLE || opt_cmd == OPT::RATELIMIT_SET ||
+      opt_cmd == OPT::RATELIMIT_ENABLE || opt_cmd == OPT::RATELIMIT_DISABLE ||
+      opt_cmd == OPT::RATELIMIT_GET) {
+    rgw_admin_quota_ratelimit_options qopts;
+    qopts.command = opt_cmd;
+    qopts.tenant = &tenant;
+    qopts.bucket_name = &bucket_name;
+    qopts.account_id = &account_id;
+    qopts.account_name = &account_name;
+    qopts.quota_scope = &quota_scope;
+    qopts.ratelimit_scope = &ratelimit_scope;
+    qopts.max_size = max_size;
+    qopts.max_objects = max_objects;
+    qopts.max_read_ops = max_read_ops;
+    qopts.max_write_ops = max_write_ops;
+    qopts.max_list_ops = max_list_ops;
+    qopts.max_delete_ops = max_delete_ops;
+    qopts.max_read_bytes = max_read_bytes;
+    qopts.max_write_bytes = max_write_bytes;
+    qopts.have_max_size = have_max_size;
+    qopts.have_max_objects = have_max_objects;
+    qopts.have_max_read_ops = have_max_read_ops;
+    qopts.have_max_write_ops = have_max_write_ops;
+    qopts.have_max_list_ops = have_max_list_ops;
+    qopts.have_max_delete_ops = have_max_delete_ops;
+    qopts.have_max_read_bytes = have_max_read_bytes;
+    qopts.have_max_write_bytes = have_max_write_bytes;
+    ret = rgw_admin_quota_ratelimit(dpp(), driver, stream_flusher, formatter.get(),
+                                    ruser, user_op, user, qopts);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  if (opt_cmd == OPT::SCRIPT_PUT || opt_cmd == OPT::SCRIPT_GET ||
+      opt_cmd == OPT::SCRIPT_RM ||
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+      opt_cmd == OPT::SCRIPT_PACKAGE_ADD ||
+      opt_cmd == OPT::SCRIPT_PACKAGE_RM ||
+      opt_cmd == OPT::SCRIPT_PACKAGE_LIST ||
+      opt_cmd == OPT::SCRIPT_PACKAGE_RELOAD ||
+#endif
+      false) {
+    rgw_admin_script_options sopts;
+    sopts.command = opt_cmd;
+    sopts.tenant = &tenant;
+    sopts.infile = &infile;
+    sopts.script_package = &script_package;
+    sopts.str_script_ctx = &str_script_ctx;
+    sopts.allow_compilation = allow_compilation;
+    ret = rgw_admin_script(dpp(), driver, sopts);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_LIST ||
+      opt_cmd == OPT::PUBSUB_TOPIC_LIST ||
+      opt_cmd == OPT::PUBSUB_TOPIC_GET ||
+      opt_cmd == OPT::PUBSUB_NOTIFICATION_GET ||
+      opt_cmd == OPT::PUBSUB_TOPIC_RM ||
+      opt_cmd == OPT::PUBSUB_NOTIFICATION_RM
+#ifdef WITH_RADOSGW_RADOS
+      || opt_cmd == OPT::PUBSUB_TOPIC_STATS
+      || opt_cmd == OPT::PUBSUB_TOPIC_DUMP
+#endif
+      ) {
+    rgw_admin_pubsub_options pubsub_opts;
+    pubsub_opts.command = opt_cmd;
+    pubsub_opts.tenant = tenant;
+    pubsub_opts.account_id = account_id;
+    pubsub_opts.bucket_name = bucket_name;
+    pubsub_opts.bucket_id = bucket_id;
+    pubsub_opts.topic_name = topic_name;
+    pubsub_opts.notification_id = notification_id;
+    pubsub_opts.marker = marker;
+    pubsub_opts.max_entries = max_entries;
+    pubsub_opts.max_entries_specified = max_entries_specified;
+    ret = rgw_admin_pubsub(dpp(), driver, *site, user.get(), formatter.get(),
+                           pubsub_opts);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
 
 #ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::OLH_GET || opt_cmd == OPT::OLH_READLOG) {
@@ -10313,126 +10093,6 @@ int main(int argc, const char **argv)
   }
 #endif
 
-  bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
-
-  if (quota_op) {
-    if (!bucket_name.empty()) {
-      if (!quota_scope.empty() && quota_scope != "bucket") {
-        cerr << "ERROR: invalid quota scope specification." << std::endl;
-        return EINVAL;
-      }
-      set_bucket_quota(driver, opt_cmd, tenant, bucket_name,
-                       max_size, max_objects, have_max_size, have_max_objects);
-    } else if (!rgw::sal::User::empty(user)) {
-      if (quota_scope == "bucket") {
-        return set_user_bucket_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
-      } else if (quota_scope == "user") {
-        return set_user_quota(opt_cmd, ruser, user_op, max_size, max_objects, have_max_size, have_max_objects);
-      } else {
-        cerr << "ERROR: invalid quota scope specification. Please specify either --quota-scope=bucket, or --quota-scope=user" << std::endl;
-        return EINVAL;
-      }
-    } else if (!account_id.empty() || !account_name.empty()) {
-      // set account quota
-      rgw::account::AdminOpState op_state;
-      op_state.account_id = account_id;
-      op_state.tenant = tenant;
-      op_state.account_name = account_name;
-
-      if (quota_scope != "bucket" && quota_scope != "account") {
-        cerr << "ERROR: invalid quota scope specification. Please specify "
-            "either --quota-scope=bucket or --quota-scope=account" << std::endl;
-        return EINVAL;
-      }
-      op_state.quota_scope = quota_scope;
-
-      if (opt_cmd == OPT::QUOTA_ENABLE) {
-        op_state.quota_enabled = true;
-      } else if (opt_cmd == OPT::QUOTA_DISABLE) {
-        op_state.quota_enabled = false;
-      }
-      if (have_max_objects) {
-        op_state.quota_max_objects = std::max<int64_t>(-1, max_objects);
-      }
-      if (have_max_size) {
-        if (max_size < 0) {
-          op_state.quota_max_size = -1;
-        } else {
-          op_state.quota_max_size = rgw_rounded_kb(max_size) * 1024;
-        }
-      }
-
-      std::string err_msg;
-      ret = rgw::account::modify(dpp(), driver, op_state, err_msg,
-                                 stream_flusher, null_yield);
-      if (ret < 0) {
-        cerr << "ERROR: failed to set account quota with "
-            << cpp_strerror(-ret) << ": " << err_msg << std::endl;
-        return -ret;
-      }
-    } else {
-      cerr << "ERROR: bucket name or uid or account is required for quota operation" << std::endl;
-      return EINVAL;
-    }
-  }
-
-  bool ratelimit_op_set = (opt_cmd == OPT::RATELIMIT_SET || opt_cmd == OPT::RATELIMIT_ENABLE || opt_cmd == OPT::RATELIMIT_DISABLE);
-  bool ratelimit_op_get = opt_cmd == OPT::RATELIMIT_GET;
-  if (ratelimit_op_set) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
-      cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
-      return EINVAL;
-    }
-
-    if (!bucket_name.empty()) {
-      if (!ratelimit_scope.empty() && ratelimit_scope != "bucket") {
-        cerr << "ERROR: invalid ratelimit scope specification. (bucket scope is not bucket but bucket has been specified)" << std::endl;
-        return EINVAL;
-      }
-      return set_bucket_ratelimit(driver, opt_cmd, tenant, bucket_name,
-                           max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                           max_read_bytes, max_write_bytes,
-                           have_max_read_ops, have_max_write_ops, have_max_list_ops, have_max_delete_ops,
-                           have_max_read_bytes, have_max_write_bytes);
-    } else if (!rgw::sal::User::empty(user)) {
-      if (ratelimit_scope == "user") {
-        return set_user_ratelimit(opt_cmd, user, max_read_ops, max_write_ops, max_list_ops, max_delete_ops,
-                         max_read_bytes, max_write_bytes,
-                         have_max_read_ops, have_max_write_ops, have_max_list_ops, have_max_delete_ops,
-                         have_max_read_bytes, have_max_write_bytes);
-      } else {
-        cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
-        return EINVAL;
-      }
-    }
-  }
-
-  if (ratelimit_op_get) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
-      cerr << "ERROR: bucket name or uid is required for ratelimit operation" << std::endl;
-      return EINVAL;
-    }
-
-    if (!bucket_name.empty()) {
-      if (!ratelimit_scope.empty() && ratelimit_scope != "bucket") {
-        cerr << "ERROR: invalid ratelimit scope specification. (bucket scope is not bucket but bucket has been specified)" << std::endl;
-        return EINVAL;
-      }
-      return show_bucket_ratelimit(driver, tenant, bucket_name, formatter.get());
-    } else if (!rgw::sal::User::empty(user)) {
-      if (ratelimit_scope == "user") {
-        int ret = show_user_ratelimit(user, formatter.get());
-        if (ret < 0) {
-          std::cerr << "ERROR: failed to get a ratelimit for user id: '" << user->get_id() << "', errno: " << cpp_strerror(-ret) << std::endl;
-        }
-        return ret;
-      } else {
-        cerr << "ERROR: invalid ratelimit scope specification. Please specify either --ratelimit-scope=bucket, or --ratelimit-scope=user" << std::endl;
-        return EINVAL;
-      }
-    }
-  }
-
 #ifdef WITH_RADOSGW_RADOS
   if (opt_cmd == OPT::MFA_CREATE) {
     rados::cls::otp::otp_info_t config;
@@ -10788,485 +10448,6 @@ int main(int argc, const char **argv)
   }
 #endif
 
-  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_LIST) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-      return EINVAL;
-    }
-
-    rgw_pubsub_bucket_topics result;
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
-        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
-      ret = get_bucket_notifications(dpp(), bucket.get(), result);
-      if (ret < 0) {
-        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret)
-             << std::endl;
-        return -ret;
-      }
-    } else {
-      const std::string& account = !account_id.empty() ? account_id : tenant;
-      RGWPubSub ps(driver, account, *site);
-      const RGWPubSub::Bucket b(ps, bucket.get());
-      ret = b.get_topics(dpp(), result, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
-    encode_json("result", result, formatter.get());
-    formatter->flush(cout);
-  }
-
-  if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
-    const std::string& account = !account_id.empty() ? account_id : tenant;
-    RGWPubSub ps(driver, account, *site);
-    std::string next_token = marker;
-
-    std::optional<rgw_owner> owner;
-    if (!rgw::sal::User::empty(user)) {
-      owner = user->get_id();
-    } else if (!account_id.empty()) {
-      owner = rgw_account_id{account_id};
-    }
-
-    rgw_pubsub_topics result;
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
-        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
-      formatter->open_array_section("topics");
-      do {
-        int ret = ps.get_topics_v2(dpp(), next_token, max_entries,
-                                   result, next_token, null_yield);
-        if (ret < 0 && ret != -ENOENT) {
-          cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
-        for (const auto& [_, topic] : result.topics) {
-          if (owner && *owner != topic.owner) {
-            continue;
-          }
-          std::set<std::string> subscribed_buckets;
-          ret = driver->get_bucket_topic_mapping(topic, subscribed_buckets,
-                                                 null_yield, dpp());
-          if (ret < 0) {
-            cerr << "failed to fetch bucket topic mapping info for topic: "
-                 << topic.name << ", ret=" << ret << std::endl;
-          }
-          show_topics_info_v2(topic, subscribed_buckets, formatter.get());
-          if (max_entries_specified) {
-            --max_entries;
-          }
-        }
-        result.topics.clear();
-      } while (!next_token.empty() && max_entries > 0);
-      formatter->close_section(); // topics
-    } else { // v1, list all topics
-      int ret = ps.get_topics_v1(dpp(), result, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-      encode_json("result", result, formatter.get());
-    }
-    if (max_entries_specified) {
-      encode_json("truncated", !next_token.empty(), formatter.get());
-      if (!next_token.empty()) {
-        encode_json("marker", next_token, formatter.get());
-      }
-    }
-    formatter->flush(cout);
-  }
-
-  if (opt_cmd == OPT::PUBSUB_TOPIC_GET) {
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    const std::string& account = !account_id.empty() ? account_id : tenant;
-    RGWPubSub ps(driver, account, *site);
-
-    rgw_pubsub_topic topic;
-    std::set<std::string> subscribed_buckets;
-    ret =
-        ps.get_topic(dpp(), topic_name, topic, null_yield, &subscribed_buckets);
-    if (ret < 0) {
-      cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
-        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
-      show_topics_info_v2(topic, subscribed_buckets, formatter.get());
-    } else {
-      encode_json("topic", topic, formatter.get());
-    }
-    formatter->flush(cout);
-  }
-
-  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_GET) {
-    if (notification_id.empty()) {
-      cerr << "ERROR: notification-id was not provided (via --notification-id)" << std::endl;
-      return EINVAL;
-    }
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-      return EINVAL;
-    }
-
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    rgw_pubsub_bucket_topics bucket_topics;
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2) &&
-        driver->stat_topics_v1(tenant, null_yield, dpp()) == -ENOENT) {
-      ret = get_bucket_notifications(dpp(), bucket.get(), bucket_topics);
-      if (ret < 0) {
-        cerr << "ERROR: could not get bucket notifications: "
-             << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    } else {
-      const std::string& account = !account_id.empty() ? account_id : tenant;
-      RGWPubSub ps(driver, account, *site);
-      const RGWPubSub::Bucket b(ps, bucket.get());
-      ret = b.get_topics(dpp(), bucket_topics, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-    }
-    auto iter = find_unique_topic(bucket_topics, notification_id);
-    if (!iter) {
-      cerr << "ERROR: notification was not found" << std::endl;
-      return -ENOENT;
-    }
-    encode_json("notification", *iter, formatter.get());
-    formatter->flush(cout);
-  }
-
-  if (opt_cmd == OPT::PUBSUB_TOPIC_RM) {
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    if (!driver->is_meta_master()) {
-      cerr << "ERROR: Run 'topic rm' from master zone " << std::endl;
-      return -EINVAL;
-    }
-
-    const std::string& account = !account_id.empty() ? account_id : tenant;
-    RGWPubSub ps(driver, account, *site);
-
-    ret = ps.remove_topic(dpp(), topic_name, null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: could not remove topic: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
-  if (opt_cmd == OPT::PUBSUB_NOTIFICATION_RM) {
-    if (bucket_name.empty()) {
-      cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
-      return EINVAL;
-    }
-    if (!driver->is_meta_master()) {
-      cerr << "ERROR: Run 'notification rm' from master zone " << std::endl;
-      return -EINVAL;
-    }
-    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
-    if (ret < 0) {
-      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
-      if (ret = driver->stat_topics_v1(tenant, null_yield, dpp()); ret != -ENOENT) {
-        cerr << "WARNING: " << (ret == 0 ? "topic migration in process" : "cannot determine topic migration status. ret = " + std::to_string(ret))
-          << ". please try again later" << std::endl;
-        return -ret;
-      }
-      ret = remove_notification_v2(dpp(), driver, bucket.get(), notification_id,
-                                   null_yield);
-    } else {
-      const std::string& account = !account_id.empty() ? account_id : tenant;
-      RGWPubSub ps(driver, account, *site);
-
-      rgw_pubsub_bucket_topics bucket_topics;
-      const RGWPubSub::Bucket b(ps, bucket.get());
-      ret = b.get_topics(dpp(), bucket_topics, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
-        return -ret;
-      }
-
-      rgw_pubsub_topic_filter bucket_topic;
-      if(notification_id.empty()) {
-        ret = b.remove_notifications(dpp(), null_yield);
-      } else {
-        ret = b.remove_notification_by_id(dpp(), notification_id, null_yield);
-      }
-    }
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not remove notification: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-  }
-
-#ifdef WITH_RADOSGW_RADOS
-  if (opt_cmd == OPT::PUBSUB_TOPIC_STATS) {
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    const std::string& account = !account_id.empty() ? account_id : tenant;
-    RGWPubSub ps(driver, account, *site);
-
-    rgw_pubsub_topic topic;
-    ret = ps.get_topic(dpp(), topic_name, topic, null_yield, nullptr);
-    if (ret < 0) {
-      cerr << "ERROR: could not get topic: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    if (topic.dest.persistent_queue.empty()) {
-      cerr << "This topic does not have a persistent queue." << std::endl;
-      return ENOENT;
-    }
-
-    auto ioctx = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx();
-    rgw::notify::rgw_topic_stats stats;
-    ret = rgw::notify::get_persistent_queue_stats(
-        dpp(), ioctx,
-        topic.dest.get_shard_names(), stats, null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: could not get persistent queues: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    encode_json("", stats, formatter.get());
-    formatter->flush(cout);
-  }
-  
-  if (opt_cmd == OPT::PUBSUB_TOPIC_DUMP) {
-    if (topic_name.empty()) {
-      cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
-      return EINVAL;
-    }
-    const std::string& account = !account_id.empty() ? account_id : tenant;
-    RGWPubSub ps(driver, account, *site);
-
-    rgw_pubsub_topic topic;
-    ret = ps.get_topic(dpp(), topic_name, topic, null_yield, nullptr);
-    if (ret < 0) {
-      cerr << "ERROR: could not get topic. error: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    if (topic.dest.persistent_queue.empty()) {
-      cerr << "ERROR: topic does not have a persistent queue" << std::endl;
-      return ENOENT;
-    }
-
-    auto ioctx = static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx();
-    std::string marker;
-    std::string end_marker;
-    librados::ObjectReadOperation rop;
-    std::vector<cls_queue_entry> queue_entries;
-    bool truncated;
-    formatter->open_array_section("eventEntries");
-
-    for (const auto& shard_name: topic.dest.get_shard_names()){
-      truncated = true; 
-      marker.clear();
-      while (truncated) {
-        bufferlist bl;
-        int rc;
-        cls_2pc_queue_list_entries(rop, marker, max_entries, &bl, &rc);
-        ioctx.operate(shard_name, &rop, nullptr);
-        if (rc < 0 ) {
-          cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;
-          return -rc;
-        }
-        rc = cls_2pc_queue_list_entries_result(bl, queue_entries, &truncated, end_marker);
-        if (rc < 0) {
-          cerr << "ERROR: failed to parse list entries from queue (skipping). error: " << cpp_strerror(-ret) << std::endl;
-          return -rc;
-        }
-        std::for_each(queue_entries.cbegin(), 
-          queue_entries.cend(), 
-          [&formatter](const auto& queue_entry) {
-            rgw::notify::event_entry_t event_entry;
-            bufferlist::const_iterator iter{&queue_entry.data};
-            try {
-              event_entry.decode(iter);
-              encode_json("", event_entry, formatter.get());
-            } catch (const buffer::error& e) {
-              cerr << "ERROR: failed to decode queue entry. error: " << e.what() << std::endl;
-            }
-          });
-        formatter->flush(cout);
-        marker = end_marker;
-      }
-    }
-    formatter->close_section();
-    formatter->flush(cout);
-  }
-#endif
-
-  if (opt_cmd == OPT::SCRIPT_PUT) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    if (infile.empty()) {
-      cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
-      return EINVAL;
-    }
-    bufferlist bl;
-    auto rc = read_input(infile, bl);
-    if (rc < 0) {
-      cerr << "ERROR: failed to read script: '" << infile << "'. error: " << rc << std::endl;
-      return -rc;
-    }
-    const std::string script = bl.to_str();
-    std::string err_msg;
-    if (!rgw::lua::verify(script, err_msg)) {
-      cerr << "ERROR: script: '" << infile << "' has error: " << std::endl << err_msg << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    if (script_ctx == rgw::lua::context::background && !tenant.empty()) {
-      cerr << "ERROR: cannot specify tenant in background context" << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
-    if (rc < 0) {
-      cerr << "ERROR: failed to put script. error: " << rc << std::endl;
-      return -rc;
-    }
-  }
-
-  if (opt_cmd == OPT::SCRIPT_GET) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
-    if (rc == -ENOENT) {
-      std::cout << "no script exists for context: " << *str_script_ctx << 
-        (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
-    } else if (rc < 0) {
-      cerr << "ERROR: failed to read script. error: " << rc << std::endl;
-      return -rc;
-    } else {
-      std::cout << script << std::endl;
-    }
-  }
-  
-  if (opt_cmd == OPT::SCRIPT_RM) {
-    if (!str_script_ctx) {
-      cerr << "ERROR: context was not provided (via --context)" << std::endl;
-      return EINVAL;
-    }
-    const rgw::lua::context script_ctx = rgw::lua::to_context(*str_script_ctx);
-    if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
-      return EINVAL;
-    }
-    auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
-    if (rc < 0) {
-      cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
-      return -rc;
-    }
-  }
-
-  if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
-#ifdef WITH_RADOSGW_LUA_PACKAGES
-    if (!script_package) {
-      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
-      return EINVAL;
-    }
-    const auto rc = rgw::lua::add_package(dpp(), driver, null_yield, *script_package, bool(allow_compilation));
-    if (rc < 0) {
-      cerr << "ERROR: failed to add Lua package: " << script_package << " .error: " << rc << std::endl;
-      return -rc;
-    }
-#else
-    cerr << "ERROR: adding Lua packages is not permitted" << std::endl;
-    return EPERM;
-#endif
-  }
-
-  if (opt_cmd == OPT::SCRIPT_PACKAGE_RM) {
-#ifdef WITH_RADOSGW_LUA_PACKAGES
-    if (!script_package) {
-      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
-      return EINVAL;
-    }
-    const auto rc = rgw::lua::remove_package(dpp(), driver, null_yield, *script_package);
-    if (rc == -ENOENT) {
-      cerr << "WARNING: package " << script_package << " did not exists or already removed" << std::endl;
-      return 0;
-    }
-    if (rc < 0) {
-      cerr << "ERROR: failed to remove Lua package: " << script_package << " .error: " << rc << std::endl;
-      return -rc;
-    }
-#else
-    cerr << "ERROR: removing Lua packages in not permitted" << std::endl;
-    return EPERM;
-#endif
-  }
-
-  if (opt_cmd == OPT::SCRIPT_PACKAGE_LIST) {
-#ifdef WITH_RADOSGW_LUA_PACKAGES
-    rgw::lua::packages_t packages;
-    const auto rc = rgw::lua::list_packages(dpp(), driver, null_yield, packages);
-    if (rc == -ENOENT) {
-      std::cout << "no Lua packages in allowlist" << std::endl;
-    } else if (rc < 0) {
-      cerr << "ERROR: failed to read Lua packages allowlist. error: " << rc << std::endl;
-      return rc;
-    } else {
-      for (const auto& package : packages) {
-          std::cout << package << std::endl;
-      }
-    }
-#else
-    cerr << "ERROR: listing Lua packages in not permitted" << std::endl;
-    return EPERM;
-#endif
-  }
-
-  if (opt_cmd == OPT::SCRIPT_PACKAGE_RELOAD) {
-#ifdef WITH_RADOSGW_LUA_PACKAGES
-    const auto rc = rgw::lua::reload_packages(dpp(), driver, null_yield);
-    if (rc < 0) {
-      cerr << "ERROR: failed to reload Lua packages. error: " << rc << std::endl;
-      return rc;
-    }
-#else
-    cerr << "ERROR: reloading Lua packages in not permitted" << std::endl;
-    return EPERM;
-#endif
-  }
 
   if (opt_cmd == OPT::ACCOUNT_CREATE ||
       opt_cmd == OPT::ACCOUNT_MODIFY ||
