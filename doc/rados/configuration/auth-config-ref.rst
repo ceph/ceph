@@ -402,7 +402,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. code:: bash
 
-       ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_SERVICE_KEY_TYPE")'
+       ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_SERVICE_KEY_TYPE") | not'
 
    output gives ``true``. then there is no daemon that needs to be upgraded and you can continue.
 
