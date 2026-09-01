@@ -404,9 +404,9 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
        ceph --format=json health detail | jq '.checks | has("AUTH_INSECURE_SERVICE_KEY_TYPE") | not'
 
-   output gives ``true``. then there is no daemon that needs to be upgraded and you can continue.
+   output gives ``true`` and you can continue.
 
-   If it outputs ``false``, there is another daemon that needs to be upgraded.
+   If it outputs ``false``, then there is another daemon that needs to be upgraded.
    Check the output of ``ceph health detail``.
 
 #. **Upgrade the cipher for rotating service keys.**
