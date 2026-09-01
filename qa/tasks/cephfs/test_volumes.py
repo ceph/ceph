@@ -10297,6 +10297,23 @@ class TestMisc(TestVolumesHelper):
             mgr_sessions = [s for s in all_sessions if s.get('auth_name', {}).get('type') == 16]
             return all_sessions, mgr_sessions
 
+        def session_nonces(sessions):
+            nonces = set()
+            for s in sessions:
+                addr = (s.get('entity') or {}).get('addr') or {}
+                if 'nonce' in addr:
+                    nonces.add(addr['nonce'])
+            return nonces
+
+        def mgr_map_client_nonces():
+            mgr_map = self.mgr_cluster.get_mgr_map()
+            nonces = set()
+            for client in mgr_map.get('active_clients', []):
+                for addr in client.get('addrvec', []):
+                    if 'nonce' in addr:
+                        nonces.add(addr['nonce'])
+            return nonces
+
         # Ensure we start with only mgr sessions (if any)
         all_s, mgr_s = get_mgr_sessions()
         self.assertEqual(len(all_s), len(mgr_s), f"Non-mgr sessions found: {all_s}")
@@ -10313,6 +10330,16 @@ class TestMisc(TestVolumesHelper):
 
         # Store IDs for eviction check
         mgr_session_ids = [s['id'] for s in mgr_sessions]
+
+        # ceph mgr fail blocklists MgrMap.active_clients from the last
+        # beacon. Wait until the mon has learned the current CephFS
+        # client addrs so eviction is not raced by a stale client list.
+        needed_nonces = session_nonces(mgr_sessions)
+        self.assertTrue(needed_nonces,
+                        f"Missing session nonces in: {mgr_sessions}")
+        self.wait_until_true(
+            lambda: needed_nonces.issubset(mgr_map_client_nonces()),
+            timeout=30)
 
         # Fail the mgr
         mgr_id = self.mgr_cluster.get_active_id()
