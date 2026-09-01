@@ -1,8 +1,11 @@
-# Create the subvolume in YAML (group "qa", name sv_0) and pass it to
-# the thrasher. Kernel clients mount that subvolume so the 2-workunit
-# workload (fsstress, iozone, kernel_untar, ...) runs on the path being
-# quarantined: kclient I/O blocks while quarantined and resumes after
-# disable. Fuse jobs keep the default root mount so they do not EACCES.
+# Kernel-client only: kclient I/O blocks while the subvolume is
+# quarantined and resumes after disable. Fuse would get EACCES and
+# fail the workunit. The 2-workunit facet (fsstress, kernel_untar, ...)
+# runs on sv_0 via mount_subvol_num.
+teuthology:
+  postmerge:
+    - if is_fuse() then reject() end
+
 overrides:
   ceph:
     subvols:
