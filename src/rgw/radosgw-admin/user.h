@@ -41,7 +41,6 @@ struct rgw_admin_user_query_options {
   const std::string* account_name = nullptr;
   const std::string* path_prefix = nullptr;
   const std::string* marker = nullptr;
-  const std::string* policy_arn = nullptr;
   int max_entries = 0;
   bool max_entries_specified = false;
   bool account_root = false;

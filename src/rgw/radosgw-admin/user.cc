@@ -13,7 +13,6 @@
 #include "driver/rados/rgw_bucket.h"
 #include "include/utime.h"
 #include "rgw_account.h"
-#include "rgw_iam_managed_policy.h"
 #include "rgw_sal.h"
 #include "rgw_user.h"
 
@@ -27,16 +26,6 @@ void show_user_info(RGWUserInfo& info, Formatter* formatter)
   encode_json("user_info", info, formatter);
   formatter->flush(std::cout);
   std::cout << std::endl;
-}
-
-void show_policy_arns(const boost::container::flat_set<std::string>& arns,
-                      Formatter* formatter)
-{
-  formatter->open_array_section("AttachedPolicies");
-  for (const auto& arn : arns) {
-    formatter->dump_string("PolicyArn", arn);
-  }
-  formatter->close_section();
 }
 
 int init_bucket(const DoutPrefixProvider* dpp,
@@ -195,7 +184,6 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
   const std::string& account_name = *opts.account_name;
   const std::string& path_prefix = *opts.path_prefix;
   const std::string& marker = *opts.marker;
-  const std::string& policy_arn = *opts.policy_arn;
   int max_entries = opts.max_entries;
   bool max_entries_specified = opts.max_entries_specified;
   int ret = 0;
@@ -292,114 +280,6 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
     }
     formatter->flush(std::cout);
     break;
-  }
-  case rgw_admin::OPT::USER_POLICY_ATTACH: {
-    if (rgw::sal::User::empty(user)) {
-      cerr << "ERROR: uid not specified" << std::endl;
-      return EINVAL;
-    }
-    if (policy_arn.empty()) {
-      cerr << "policy arn is empty" << std::endl;
-      return EINVAL;
-    }
-    ret = user->load_user(dpp, null_yield);
-    if (ret < 0) {
-      return -ret;
-    }
-    if (user->get_info().account_id.empty()) {
-      std::cerr << "Managed policies are only supported for account users" << std::endl;
-      return EINVAL;
-    }
-
-    try {
-      if (!rgw::IAM::get_managed_policy(g_ceph_context, policy_arn)) {
-        cerr << "unrecognized policy arn " << policy_arn << std::endl;
-        return ENOENT;
-      }
-    } catch (rgw::IAM::PolicyParseException& e) {
-      cerr << "failed to parse managed policy: " << e.what() << std::endl;
-      return EINVAL;
-    }
-
-    rgw::IAM::ManagedPolicies policies;
-    auto& attrs = user->get_attrs();
-    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
-      decode(policies, it->second);
-    }
-    const bool inserted = policies.arns.insert(policy_arn).second;
-    if (!inserted) {
-      cout << "That managed policy is already attached." << std::endl;
-      return EEXIST;
-    }
-
-    bufferlist in_bl;
-    encode(policies, in_bl);
-    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
-
-    ret = user->store_user(dpp, null_yield, false);
-    if (ret < 0) {
-      return -ret;
-    }
-    cout << "Managed policy attached successfully" << std::endl;
-    return 0;
-  }
-  case rgw_admin::OPT::USER_POLICY_DETACH: {
-    if (rgw::sal::User::empty(user)) {
-      cerr << "ERROR: uid not specified" << std::endl;
-      return EINVAL;
-    }
-    if (policy_arn.empty()) {
-      cerr << "policy arn is empty" << std::endl;
-      return EINVAL;
-    }
-    ret = user->load_user(dpp, null_yield);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    rgw::IAM::ManagedPolicies policies;
-    auto& attrs = user->get_attrs();
-    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
-      decode(policies, it->second);
-    }
-
-    auto i = policies.arns.find(policy_arn);
-    if (i == policies.arns.end()) {
-      cout << "That managed policy is not attached." << std::endl;
-      return ENOENT;
-    }
-    policies.arns.erase(i);
-
-    bufferlist in_bl;
-    encode(policies, in_bl);
-    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
-
-    ret = user->store_user(dpp, null_yield, false);
-    if (ret < 0) {
-      return -ret;
-    }
-    cout << "Managed policy detached successfully" << std::endl;
-    return 0;
-  }
-  case rgw_admin::OPT::USER_POLICY_LIST_ATTACHED: {
-    if (rgw::sal::User::empty(user)) {
-      cerr << "ERROR: uid not specified" << std::endl;
-      return -EINVAL;
-    }
-    ret = user->load_user(dpp, null_yield);
-    if (ret < 0) {
-      return -ret;
-    }
-
-    rgw::IAM::ManagedPolicies policies;
-    auto& attrs = user->get_attrs();
-    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
-      decode(policies, it->second);
-    }
-
-    show_policy_arns(policies.arns, formatter);
-    formatter->flush(std::cout);
-    return 0;
   }
   case rgw_admin::OPT::USER_LIST: {
     if (!account_id.empty() || !account_name.empty()) {

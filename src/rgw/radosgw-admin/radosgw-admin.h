@@ -153,6 +153,14 @@ namespace rgw_admin {
 enum class OPT {
   NO_CMD,
 #include "radosgw-admin/opt_user.inc"
+  USER_POLICY_ATTACH,
+  USER_POLICY_DETACH,
+  USER_POLICY_LIST_ATTACHED,
+  SUBUSER_CREATE,
+  SUBUSER_MODIFY,
+  SUBUSER_RM,
+  KEY_CREATE,
+  KEY_RM,
   BUCKETS_LIST,
   BUCKET_LIMIT_CHECK,
 #ifdef WITH_RADOSGW_RADOS

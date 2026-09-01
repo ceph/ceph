@@ -9441,9 +9441,6 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT::USER_CHECK ||
       opt_cmd == OPT::USER_STATS ||
-      opt_cmd == OPT::USER_POLICY_ATTACH ||
-      opt_cmd == OPT::USER_POLICY_DETACH ||
-      opt_cmd == OPT::USER_POLICY_LIST_ATTACHED ||
       opt_cmd == OPT::USER_LIST) {
     rgw_admin_user_query_options query_opts;
     query_opts.command = opt_cmd;
@@ -9454,7 +9451,6 @@ int main(int argc, const char **argv)
     query_opts.account_name = &account_name;
     query_opts.path_prefix = &path_prefix;
     query_opts.marker = &marker;
-    query_opts.policy_arn = &policy_arn;
     query_opts.max_entries = max_entries;
     query_opts.max_entries_specified = max_entries_specified;
     query_opts.account_root = account_root;
@@ -9466,6 +9462,115 @@ int main(int argc, const char **argv)
     if (ret != 0) {
       return ret;
     }
+  }
+
+  if (opt_cmd == OPT::USER_POLICY_ATTACH) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    if (policy_arn.empty()) {
+      cerr << "policy arn is empty" << std::endl;
+      return EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+    if (user->get_info().account_id.empty()) {
+      std::cerr << "Managed policies are only supported for account users" << std::endl;
+      return EINVAL;
+    }
+
+    try {
+      if (!rgw::IAM::get_managed_policy(g_ceph_context, policy_arn)) {
+        cerr << "unrecognized policy arn " << policy_arn << std::endl;
+        return ENOENT;
+      }
+    } catch (rgw::IAM::PolicyParseException& e) {
+      cerr << "failed to parse managed policy: " << e.what() << std::endl;
+      return EINVAL;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+    const bool inserted = policies.arns.insert(policy_arn).second;
+    if (!inserted) {
+      cout << "That managed policy is already attached." << std::endl;
+      return EEXIST;
+    }
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    ret = user->store_user(dpp(), null_yield, false);
+    if (ret < 0) {
+      return -ret;
+    }
+    cout << "Managed policy attached successfully" << std::endl;
+    return 0;
+  }
+  if (opt_cmd == OPT::USER_POLICY_DETACH) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return EINVAL;
+    }
+    if (policy_arn.empty()) {
+      cerr << "policy arn is empty" << std::endl;
+      return EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+
+    auto i = policies.arns.find(policy_arn);
+    if (i == policies.arns.end()) {
+      cout << "That managed policy is not attached." << std::endl;
+      return ENOENT;
+    }
+    policies.arns.erase(i);
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    ret = user->store_user(dpp(), null_yield, false);
+    if (ret < 0) {
+      return -ret;
+    }
+    cout << "Managed policy detached successfully" << std::endl;
+    return 0;
+  }
+  if (opt_cmd == OPT::USER_POLICY_LIST_ATTACHED) {
+    if (rgw::sal::User::empty(user)) {
+      cerr << "ERROR: uid not specified" << std::endl;
+      return -EINVAL;
+    }
+    ret = user->load_user(dpp(), null_yield);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+
+    show_policy_arns(policies.arns, formatter.get());
+    formatter->flush(cout);
+    return 0;
   }
 
 #ifdef WITH_RADOSGW_RADOS
