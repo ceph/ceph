@@ -9,6 +9,7 @@
 #include "scrub_events.h"
 #include "crimson/os/futurized_store.h"
 #include "osd/osd_types.h"
+#include "osd/SnapMapper.h"
 #include <seastar/core/sleep.hh>
 #include <seastar/util/defer.hh>
 
@@ -69,7 +70,7 @@ ScrubRequested::ifut<> ScrubRequested::handle_event(PG &pg)
   // for the scheduler to pick up, not started immediately.
   // The scheduler will call start_scrub() which sets m_active_target before
   // calling handle_scrub_requested().
-  pg.scrubber.enqueue_scrub_requested(deep);
+  pg.scrubber.enqueue_scrub_requested(deep, repair);
   return seastar::now();
 }
 
@@ -114,9 +115,13 @@ ScrubFindRange::ifut<> ScrubFindRange::run(PG &pg)
 {
   LOG_PREFIX(ScrubFindRange::run);
   using crimson::common::local_conf;
+  
+  // Use osd_shallow_scrub_chunk_max for shallow scrubs, osd_scrub_chunk_max for deep scrubs
+  // This matches classic OSD behavior
+  const char* chunk_config = pg.scrubber.m_is_deep ? "osd_scrub_chunk_max" : "osd_shallow_scrub_chunk_max";
   auto [_, next] = co_await pg.backend->list_objects(
     begin,
-    local_conf().get_val<int64_t>("osd_scrub_chunk_max"));
+    local_conf().get_val<int64_t>(chunk_config));
 
   // We rely on seeing an entire set of snapshots in a single chunk
   auto end = next.get_max_object_boundary();
@@ -181,12 +186,17 @@ ScrubScan::ifut<> ScrubScan::run(PG &pg)
       ghobject_t(object, ghobject_t::NO_GEN, pg.get_pgid().shard));
   }
 
+  // Always run scan_snaps on every OSD (both primary and replica) so that
+  // snap-mapper inconsistencies are detected and repaired locally regardless
+  // of which shard holds the corrupt mapper entries.
+  pg.scrubber.scan_snaps(ret);
+
   if (local) {
     DEBUGDPP("complete, submitting local event", pg);
     pg.scrubber.handle_event(
       scrub::ScrubContext::scan_range_complete_t(
-	pg.get_pg_whoami(),
-	std::move(ret)));
+        pg.get_pg_whoami(),
+        std::move(ret)));
   } else {
     DEBUGDPP("complete, sending response to primary", pg);
     auto m = crimson::make_message<MOSDRepScrubMap>(
@@ -198,9 +208,9 @@ ScrubScan::ifut<> ScrubScan::run(PG &pg)
       scrub::ScrubContext::generate_and_submit_chunk_result_complete_t{});
     co_await interruptor::make_interruptible(
       pg.shard_services.send_to_osd(
-	pg.get_primary().osd,
-	std::move(m),
-	pg.get_osdmap_epoch()));
+        pg.get_primary().osd,
+        std::move(m),
+        pg.get_osdmap_epoch()));
   }
 }
 
@@ -217,7 +227,7 @@ ScrubScan::ifut<> ScrubScan::scan_object(
       pg.get_collection_ref(),
       obj,
       0)
-  ).then_interruptible([FNAME, &pg, &obj, &entry](struct stat obj_stat) {
+  ).safe_then_interruptible([FNAME, &pg, &obj, &entry](struct stat obj_stat) {
     DEBUGDPP("obj: {}, stat complete, size {}", pg, obj, obj_stat.st_size);
     entry.size = obj_stat.st_size;
     return crimson::os::with_store<&crimson::os::FuturizedStore::Shard::get_attrs>(
@@ -551,6 +561,97 @@ ScrubDigestUpdate::ifut<> ScrubDigestUpdate::run(PG &pg)
 }
 
 template class ScrubAsyncOpT<ScrubDigestUpdate>;
+
+ScrubSnapMapperRepair::ifut<> ScrubSnapMapperRepair::run(PG &pg)
+{
+  LOG_PREFIX(ScrubSnapMapperRepair::run);
+  DEBUGDPP("snap mapper check for {} expected: {}", pg, hoid, expected_snaps);
+
+  // All blocking KV I/O happens inside interruptor::async so it never
+  // executes on the Seastar reactor thread.
+  // We capture expected_snaps and hoid by value into the async closure.
+  auto txn = std::make_shared<ceph::os::Transaction>();
+  const auto hoid_copy = hoid;
+  const auto expected_copy = expected_snaps;
+
+  // need_write is heap-allocated so it's safe to capture by pointer into
+  // the async lambda (local references are unsafe across co_await).
+  auto need_write = std::make_shared<bool>(false);
+
+  co_await interruptor::async(
+    [&pg, txn, hoid_copy, expected_copy, need_write]() mutable {
+      using result_t = Scrub::SnapMapReaderI::result_t;
+
+      // Read current snap mapper entry (blocking KV I/O)
+      auto cur_snaps = pg.snap_mapper.get_snaps_check_consistency(hoid_copy);
+
+      Scrub::snap_mapper_op_t fix_op;
+      std::set<snapid_t> bogus_snaps;
+
+      if (!cur_snaps) {
+        switch (auto e = cur_snaps.error(); e.code) {
+          case result_t::code_t::not_found:
+            fix_op = Scrub::snap_mapper_op_t::add;
+            break;
+          case result_t::code_t::inconsistent:
+          default:
+            fix_op = Scrub::snap_mapper_op_t::overwrite;
+            break;
+        }
+      } else if (*cur_snaps == expected_copy) {
+        // Already correct — nothing to do
+        return;
+      } else {
+        fix_op = Scrub::snap_mapper_op_t::update;
+        bogus_snaps = std::move(*cur_snaps);
+      }
+
+      // Log the error (matches classic OSD pg_scrubber.cc log format)
+      const auto pgid = pg.get_pgid();
+      const auto whoami = pg.get_pg_whoami();
+      if (fix_op != Scrub::snap_mapper_op_t::add) {
+        auto errorstr = fmt::format(
+          "osd.{} found snap mapper error on pg {} oid {} snaps in mapper: {}, "
+          "oi: {} ...repaired",
+          whoami.osd, pgid, hoid_copy, bogus_snaps, expected_copy);
+        crimson::get_logger(ceph_subsys_osd).error("{}", errorstr);
+        pg.get_clog_error() << errorstr;
+      } else {
+        auto errorstr = fmt::format(
+          "osd.{} found snap mapper error on pg {} oid {} snaps missing in "
+          "mapper, should be: {} ...repaired",
+          whoami.osd, pgid, hoid_copy, expected_copy);
+        crimson::get_logger(ceph_subsys_osd).error("{}", errorstr);
+        pg.get_clog_error() << errorstr;
+      }
+
+      // Apply the fix
+      OSDriver::OSTransaction _t(pg.osdriver.get_transaction(txn.get()));
+      if (fix_op != Scrub::snap_mapper_op_t::add) {
+        int r = pg.snap_mapper.remove_oid(hoid_copy, &_t);
+        if (r < 0 && r != -ENOENT) {
+          crimson::get_logger(ceph_subsys_osd).error(
+            "ScrubSnapMapperRepair: remove_oid {} returned {}",
+            hoid_copy, cpp_strerror(r));
+        }
+      }
+      pg.snap_mapper.add_oid(hoid_copy, expected_copy, &_t);
+      *need_write = true;
+    });
+
+  if (*need_write) {
+    co_await interruptor::make_interruptible(
+      crimson::os::with_store_do_transaction(
+        pg.shard_services.get_store(pg.store_index),
+        pg.get_collection_ref(),
+        std::move(*txn)));
+    DEBUGDPP("snap mapper repair complete for {}", pg, hoid);
+  } else {
+    DEBUGDPP("snap mapper ok for {}", pg, hoid);
+  }
+}
+
+template class ScrubAsyncOpT<ScrubSnapMapperRepair>;
 
 }
 
