@@ -942,6 +942,55 @@ TEST_P(seastore_test_t, collection_split_with_clone)
   });
 }
 
+TEST_P(seastore_test_t, collection_split_with_omap)
+{
+  run_async([this] {
+    coll_t test_coll{spg_t{pg_t{1, 0}}};
+    coll_t test_coll2{spg_t{pg_t{17, 0}}};
+    auto src_coll = sharded_seastore->create_new_collection(test_coll).get();
+    {
+      CTransaction t;
+      t.create_collection(test_coll, 0);
+      do_transaction(std::move(t));
+    }
+    auto dst_coll = sharded_seastore->create_new_collection(test_coll2).get();
+    {
+      CTransaction t;
+      t.create_collection(test_coll2, 0);
+      do_transaction(std::move(t));
+    }
+
+    auto src_obj = object_state_t{test_coll, src_coll, make_oid(0)};
+    // No write -- isolates the metadata-region move from the data-region
+    // move that collection_split_with_clone already covers.
+    src_obj.touch(*sharded_seastore);
+    for (int i = 0; i < 10; i++) {
+      bufferlist bl;
+      std::string val = "value" + std::to_string(i);
+      bl.append(val);
+      src_obj.set_omap(*sharded_seastore, "key" + std::to_string(i), bl);
+    }
+
+    {
+      CTransaction t;
+      // bits=0 matches every object regardless of hash, so this object
+      // is guaranteed to move.
+      t.split_collection(test_coll, 0, 0, test_coll2);
+      do_transaction(std::move(t));
+    }
+
+    auto dst_obj = object_state_t{test_coll2, dst_coll, src_obj.oid};
+    dst_obj.omap = src_obj.omap;
+    auto kvs = dst_obj.get_omaps(*sharded_seastore, std::string());
+    EXPECT_EQ(kvs.size(), src_obj.omap.size());
+    for (auto &[k, v] : src_obj.omap) {
+      auto it = kvs.find(k);
+      ASSERT_NE(it, kvs.end()) << "missing omap key " << k;
+      EXPECT_EQ(it->second, v) << "wrong value for omap key " << k;
+    }
+  });
+}
+
 TEST_P(seastore_test_t, collection_merge)
 {
   run_async([this] {
