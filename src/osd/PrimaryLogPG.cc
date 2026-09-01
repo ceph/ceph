@@ -4863,7 +4863,6 @@ int PrimaryLogPG::trim_object(
 
   SnapSet& snapset = obc->ssc->snapset;
 
-  object_info_t &coi = obc->obs.oi;
   auto citer = snapset.clone_snaps.find(coid.snap);
   if (citer == snapset.clone_snaps.end()) {
     osd->clog->error() << "No clone_snaps in snapset " << snapset
@@ -4927,9 +4926,56 @@ int PrimaryLogPG::trim_object(
 
   ctx->at_version = get_next_version();
 
-  PGTransaction *t = ctx->op_t.get();
+  trim_object_snap(ctx.get(), coid, snap_to_trim);
 
+  *ctxp = std::move(ctx);
+  return 0;
+}
+
+void PrimaryLogPG::trim_object_snap(
+  OpContext *ctx,
+  const hobject_t &coid,
+  snapid_t snap_to_trim)
+{
+  ObjectContextRef obc = ctx->obc;
+  ObjectContextRef head_obc = ctx->head_obc;
+  hobject_t head_oid = coid.get_head();
+
+  SnapSet& snapset = obc->ssc->snapset;
+  object_info_t &coi = obc->obs.oi;
+  auto citer = snapset.clone_snaps.find(coid.snap);
+  if (citer == snapset.clone_snaps.end()) {
+    osd->clog->error() << "No clone_snaps in snapset " << snapset
+         << " for object " << coid << "\n";
+    return;
+  }
+  set<snapid_t> old_snaps(citer->second.begin(), citer->second.end());
+  if (old_snaps.empty()) {
+    osd->clog->error() << "No object info snaps for object " << coid;
+    return;
+  }
+
+  set<snapid_t> new_snaps;
+  const OSDMapRef& osdmap = get_osdmap();
+  for (auto i = old_snaps.begin(); i != old_snaps.end(); ++i) {
+    if (!osdmap->in_removed_snaps_queue(info.pgid.pgid.pool(), *i) &&
+	*i != snap_to_trim) {
+      new_snaps.insert(*i);
+    }
+  }
+
+  vector<snapid_t>::iterator p = snapset.clones.end();
+  if (new_snaps.empty()) {
+    p = std::find(snapset.clones.begin(), snapset.clones.end(), coid.snap);
+    if (p == snapset.clones.end()) {
+      osd->clog->error() << "Snap " << coid.snap << " not in clones";
+      return;
+    }
+  }
+
+  PGTransaction *t = ctx->op_t.get();
   int64_t num_objects_before_trim = ctx->delta_stats.num_objects;
+  bufferlist bl;
 
   if (new_snaps.empty()) {
     // remove clone
@@ -4956,7 +5002,7 @@ int PrimaryLogPG::trim_object(
 	snapset.clone_overlap[*p]);
 
       if (adjust_prev_bytes)
-	ctx->delta_stats.num_bytes += snapset.get_clone_bytes(*n);
+	ctx->delta_stats.num_bytes -= snapset.get_clone_bytes(*n);
     }
     ctx->delta_stats.num_objects--;
     if (coi.is_dirty())
@@ -4971,7 +5017,7 @@ int PrimaryLogPG::trim_object(
     if (coi.is_cache_pinned())
       ctx->delta_stats.num_objects_pinned--;
     if (coi.has_manifest()) {
-      dec_all_refcount_manifest(coi, ctx.get());
+      dec_all_refcount_manifest(coi, ctx);
       ctx->delta_stats.num_objects_manifest--;
     }
     obc->obs.exists = false;
@@ -5074,7 +5120,7 @@ int PrimaryLogPG::trim_object(
     }
     if (oi.has_manifest()) {
       ctx->delta_stats.num_objects_manifest--;
-      dec_all_refcount_manifest(oi, ctx.get());
+      dec_all_refcount_manifest(oi, ctx);
     }
     head_obc->obs.exists = false;
     head_obc->obs.oi = object_info_t(head_oid);
@@ -5115,9 +5161,6 @@ int PrimaryLogPG::trim_object(
       num_objects_before_trim - ctx->delta_stats.num_objects;
     add_objects_trimmed_count(num_objects_trimmed);
   }
-
-  *ctxp = std::move(ctx);
-  return 0;
 }
 
 void PrimaryLogPG::kick_snap_trim()
