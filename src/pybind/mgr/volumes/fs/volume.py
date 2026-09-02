@@ -252,10 +252,10 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        earmark    = kwargs['earmark']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
-        enctag = kwargs['enctag'] or '' # if not set, default to empty string
+        enctag = kwargs['enctag']
 
         oct_mode = octal_str_to_decimal_int(mode)
 
