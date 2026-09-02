@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SmbUsersgroupsResourceSidebarComponent } from './smb-usersgroups-resource-sidebar.component';
 import { ActivatedRoute, convertToParamMap, provideRouter, ParamMap } from '@angular/router';
+import { SMB_BASE_CEPHFS } from '../smb-route.util';
 import { BehaviorSubject } from 'rxjs';
 import { Component, Input } from '@angular/core';
 
@@ -23,7 +24,8 @@ describe('SmbUsersgroupsResourceSidebarComponent', () => {
     );
 
     const activatedRouteMock = {
-      paramMap: paramMapSubject.asObservable()
+      paramMap: paramMapSubject.asObservable(),
+      pathFromRoot: [{ snapshot: { data: { smbBasePath: SMB_BASE_CEPHFS, isRgw: false } } }]
     };
 
     await TestBed.configureTestingModule({

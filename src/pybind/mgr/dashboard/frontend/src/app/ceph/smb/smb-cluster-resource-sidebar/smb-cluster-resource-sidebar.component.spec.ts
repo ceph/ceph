@@ -1,5 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ActivatedRoute, convertToParamMap } from '@angular/router';
+import { SMB_BASE_CEPHFS } from '../smb-route.util';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { BehaviorSubject, of } from 'rxjs';
 
@@ -32,7 +33,8 @@ describe('SmbClusterResourceSidebarComponent', () => {
         {
           provide: ActivatedRoute,
           useValue: {
-            paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' }))
+            paramMap: of(convertToParamMap({ cluster_id: 'test-cluster' })),
+            pathFromRoot: [{ snapshot: { data: { smbBasePath: SMB_BASE_CEPHFS, isRgw: false } } }]
           }
         }
       ],

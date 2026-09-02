@@ -14,7 +14,7 @@ import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { SMBUsersGroups } from '../smb.model';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
@@ -23,17 +23,26 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-
-export const USERSGROUPS_PATH = 'cephfs/smb/standalone';
+import { resolveSmbRouteData } from '../smb-route.util';
 
 @Component({
   selector: 'cd-smb-users-list',
   templateUrl: './smb-usersgroups-list.component.html',
   styleUrls: ['./smb-usersgroups-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(USERSGROUPS_PATH) }],
+  providers: [
+    {
+      provide: URLBuilderService,
+      useFactory: (route: ActivatedRoute) => {
+        const { smbBasePath } = resolveSmbRouteData(route);
+        return new URLBuilderService(`${smbBasePath}/standalone`);
+      },
+      deps: [ActivatedRoute]
+    }
+  ],
   standalone: false
 })
 export class SmbUsersgroupsListComponent extends ListWithDetails implements OnInit {
+  private readonly usersGroupsPath: string;
   @ViewChild('groupsNamesTpl', { static: true })
   groupsNamesTpl: TemplateRef<any>;
   columns: CdTableColumn[];
@@ -47,6 +56,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
 
   constructor(
     private router: Router,
+    private route: ActivatedRoute,
     private urlBuilder: URLBuilderService,
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
@@ -56,6 +66,8 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().smb;
+    const { smbBasePath } = resolveSmbRouteData(this.route);
+    this.usersGroupsPath = `${smbBasePath}/standalone`;
   }
 
   ngOnInit() {
@@ -119,7 +131,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
           map((usersGroups: SMBUsersGroups[]) => {
             usersGroups.forEach((resource: SMBUsersGroups) => {
               resource['cdLink'] =
-                `/${USERSGROUPS_PATH}/${encodeURIComponent(resource.users_groups_id)}/overview`;
+                `/${this.usersGroupsPath}/${encodeURIComponent(resource.users_groups_id)}/overview`;
             });
             return usersGroups;
           }),
@@ -144,7 +156,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       itemNames: [usersGroupsId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${USERSGROUPS_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${this.usersGroupsPath}/${URLVerbs.DELETE}`, {
             usersGroupsId: usersGroupsId
           }),
           call: this.smbService.deleteUsersgroups(usersGroupsId)

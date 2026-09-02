@@ -11,8 +11,8 @@ import { SmbService } from '~/app/shared/api/smb.service';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { DomainSettings, JoinSource, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
-import { Router } from '@angular/router';
-import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.component';
+import { ActivatedRoute, Router } from '@angular/router';
+import { resolveSmbRouteData } from '../smb-route.util';
 
 @Component({
   selector: 'cd-smb-domain-setting-modal',
@@ -21,6 +21,7 @@ import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.compone
   standalone: false
 })
 export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
+  private readonly joinAuthPath: string;
   domainSettingsForm: CdFormGroup;
   realmNames: string[];
   joinAuths$: Observable<SMBJoinAuth[]>;
@@ -33,6 +34,7 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
     public smbService: SmbService,
     private cd: ChangeDetectorRef,
     private router: Router,
+    private route: ActivatedRoute,
     @Optional() @Inject('action') public action: string,
     @Optional() @Inject('resource') public resource: string,
     @Optional()
@@ -40,6 +42,8 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
     public domainSettingsObject?: DomainSettings
   ) {
     super();
+    const { smbBasePath } = resolveSmbRouteData(this.route);
+    this.joinAuthPath = `${smbBasePath}/active-directory`;
     this.action = this.actionLabels.UPDATE;
     this.resource = $localize`Active Directory (AD) parameters`;
   }
@@ -100,7 +104,7 @@ export class SmbDomainSettingModalComponent extends CdForm implements OnInit {
 
   navigateCreateJoinSource() {
     this.closeModal();
-    this.router.navigate([`${JOIN_AUTH_PATH}/${URLVerbs.CREATE}`]);
+    this.router.navigate([`${this.joinAuthPath}/${URLVerbs.CREATE}`]);
   }
 
   removeJoinSource(index: number) {
