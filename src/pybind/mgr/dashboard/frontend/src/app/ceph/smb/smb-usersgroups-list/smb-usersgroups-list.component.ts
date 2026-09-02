@@ -23,14 +23,19 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
-
-export const USERSGROUPS_PATH = 'cephfs/smb/standalone';
+import { getUsersGroupsPath } from '../utils';
 
 @Component({
   selector: 'cd-smb-users-list',
   templateUrl: './smb-usersgroups-list.component.html',
   styleUrls: ['./smb-usersgroups-list.component.scss'],
-  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(USERSGROUPS_PATH) }],
+  providers: [
+    {
+      provide: URLBuilderService,
+      useFactory: (router: Router) => new URLBuilderService(getUsersGroupsPath(router.url)),
+      deps: [Router]
+    }
+  ],
   standalone: false
 })
 export class SmbUsersgroupsListComponent extends ListWithDetails implements OnInit {
@@ -115,7 +120,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
           map((usersGroups: SMBUsersGroups[]) => {
             usersGroups.forEach((resource: SMBUsersGroups) => {
               resource['cdLink'] =
-                `/${USERSGROUPS_PATH}/${encodeURIComponent(resource.users_groups_id)}/overview`;
+                `/${getUsersGroupsPath(this.router.url)}/${encodeURIComponent(resource.users_groups_id)}/overview`;
             });
             return usersGroups;
           }),
@@ -140,7 +145,7 @@ export class SmbUsersgroupsListComponent extends ListWithDetails implements OnIn
       itemNames: [usersGroupsId],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${USERSGROUPS_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${getUsersGroupsPath(this.router.url)}/${URLVerbs.DELETE}`, {
             usersGroupsId: usersGroupsId
           }),
           call: this.smbService.deleteUsersgroups(usersGroupsId)
