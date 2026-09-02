@@ -58,6 +58,26 @@ def name_to_json(names):
     return json.dumps(namedict, indent=4, sort_keys=True)
 
 
+def _normalize_volume_create_options(kwargs):
+    out = dict(kwargs)  # copy kwargs to avoid mutating input dict
+    if out.get('protocols') == 'smb':
+        # set defaults that are preferred for smb unless manually given.
+        # protocols itself just chooses better defaults for real attributes
+        casesensitive = out['casesensitive']
+        out['casesensitive'] = False if casesensitive is None else casesensitive
+        earmark = out['earmark']
+        out['earmark'] = 'smb' if earmark is None else earmark
+        mode = out['mode']
+        out['mode'] = '777' if mode is None else mode
+    # if not set, default to 755
+    out['mode'] = out.get('mode') or '755'
+    # if not set, default to empty string --> no earmark
+    out['earmark'] = out.get('earmark') or ''
+    # if not set, default to empty string --> no encryption tag
+    out['enctag'] = out.get('enctag') or ''
+    return out
+
+
 class VolumeClient(CephfsClient["Module"]):
     def __init__(self, mgr):
         super().__init__(mgr)
@@ -249,6 +269,7 @@ class VolumeClient(CephfsClient["Module"]):
             raise ve
 
     def create_subvolume(self, **kwargs):
+        kwargs = _normalize_volume_create_options(kwargs)
         ret        = 0, "", ""
         volname    = kwargs['vol_name']
         subvolname = kwargs['sub_name']
@@ -259,10 +280,10 @@ class VolumeClient(CephfsClient["Module"]):
         gid        = kwargs['gid']
         mode       = kwargs['mode']
         isolate_nspace = kwargs['namespace_isolated']
-        earmark    = kwargs['earmark'] or ''  # if not set, default to empty string --> no earmark
+        earmark    = kwargs['earmark']
         normalization = kwargs['normalization']
         casesensitive = kwargs['casesensitive']
-        enctag    = kwargs['enctag'] or ''  # if not set, default to empty string --> no encryption tag
+        enctag    = kwargs['enctag']
 
         try:
             with open_volume(self, volname) as fs_handle:
