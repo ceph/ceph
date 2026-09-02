@@ -2094,7 +2094,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   bool created = false;
   auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
 
-  if (!vd_ent){
+  if (key.instance.empty() && !vd_ent){
     // A delete marker must be created even if the key does not exist
     // Create the versioned directory in order to be able to create a delete marker
     ret = make_ent(posix::ObjectType::VERSIONED);
@@ -2109,6 +2109,10 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
     }
     created = true;
     vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
+  }
+
+  if (!vd_ent) {
+    return 0;
   }
 
   bool update_cur_version = false;
@@ -2719,6 +2723,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
     auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
     if (vd_ent && vd_ent->curr_is_delete_marker()) {
       state.exists = false;
+      state.is_dm = true;
       return -ENOENT;
     }
   }
@@ -2835,6 +2840,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
   if (ret < 0)
     return ret;
 
+  state.obj.key.set_instance(ent->get_cur_version());
   POSIXBucket *b = static_cast<POSIXBucket *>(get_bucket());
   if (!b) {
     ldpp_dout(dpp, 0) << "ERROR: could not get bucket for " << get_name()
@@ -3866,6 +3872,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 {
   int ret;
   uint64_t orig_size = 0;
+
   auto exists = obj->check_exists(dpp);
   if (exists) {
     orig_size = obj->get_size();
