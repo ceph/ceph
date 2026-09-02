@@ -405,33 +405,44 @@ bool OSDMap::at_least_one_zone_has_min_size(const pg_pool_t& pool,
   return false;
 }                                      
 
-unsigned OSDMap::stretch_ec_num_acting_below_min_size(const pg_pool_t& pool,
+unsigned OSDMap::stretch_num_acting_below_min_size(const pg_pool_t& pool,
                                         const vector<int>& acting) const
 {
-  if(!pool.is_erasure() || !pool.is_stretch_pool() || pool.peering_crush_bucket_count == 0) {
+  if (!pool.is_stretch_pool()) {
     return 0;
   }
-
-  map<int, set<int>> zones;
-  get_stretch_zones(pool, &zones);
-  int deficit = 0;
-  for (const auto& [zone, zone_osd_set] : zones) {
-    if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
-        crush->get_non_shadow_id(zone) != (int)pool.peering_crush_mandatory_member) {
-      continue;
-    }
-    unsigned zone_acting = 0;
-    for (int osd : acting) {
-      if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
-        ++zone_acting;
+  // Special case for 3-zone clusters with 2 peering crush buckets
+  if (pool.num_zones == 3 && pool.peering_crush_bucket_count == 2) {
+    const auto cluster_min_size = pool.min_size * pool.num_zones;
+    const auto cluster_acting = std::count_if(
+      acting.begin(), acting.end(), [](int osd) {
+        return osd != CRUSH_ITEM_NONE;
+      });
+    return cluster_acting < cluster_min_size
+      ? cluster_min_size - cluster_acting
+      : 0;
+  } else {
+    // General case for stretch pools with num_zones < 3
+    map<int, set<int>> zones;
+    get_stretch_zones(pool, &zones);
+    int deficit = 0;
+    for (const auto& [zone, zone_osd_set] : zones) {
+      if (pool.peering_crush_mandatory_member != CRUSH_ITEM_NONE &&
+          crush->get_non_shadow_id(zone) != (int)pool.peering_crush_mandatory_member) {
+        continue;
+      }
+      unsigned zone_acting = 0;
+      for (int osd : acting) {
+        if (osd != CRUSH_ITEM_NONE && zone_osd_set.find(osd) != zone_osd_set.end()) {
+          ++zone_acting;
+        }
+      }
+      if (zone_acting < pool.min_size) {
+        deficit += (pool.min_size - zone_acting);
       }
     }
-
-    if (zone_acting < pool.min_size) {
-      deficit += (pool.min_size - zone_acting);
-    }
+    return deficit;
   }
-  return deficit;
 }
 
 bool OSDMap::subtree_type_is_down(

@@ -2355,6 +2355,7 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
       num_zones = 1;
       replica = size;
     }
+    min_size = min_size / num_zones;
   }
   DECODE_FINISH(bl);
   calc_pg_masks();

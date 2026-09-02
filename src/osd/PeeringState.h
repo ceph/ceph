@@ -2516,12 +2516,11 @@ public:
    * applicable stretch cluster constraints.
    */
   bool acting_set_writeable() {
-    if(pool.info.is_erasure() && pool.info.is_stretch_pool()) {
-      return (get_osdmap()->stretch_ec_num_acting_below_min_size(pool.info, acting) == 0) &&
+    if(pool.info.is_stretch_pool()) {
+      return (get_osdmap()->stretch_num_acting_below_min_size(pool.info, acting) == 0) &&
         (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
     } else {
-      return (actingset.size() >= pool.info.min_size) &&
-        (pool.info.stretch_set_can_peer(acting, *get_osdmap(), NULL));
+      return (actingset.size() >= pool.info.min_size);
     }
   }
 

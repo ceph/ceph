@@ -1578,8 +1578,9 @@ Also set ``peering_crush_bucket_count`` and
 A replicated pool created after ``ceph mon enable_stretch_mode`` while the
 cluster is in degraded stretch mode keeps its full ``size`` and
 ``peering_crush_bucket_target``, as the existing stretch pools do, and is given
-the degraded ``peering_crush_bucket_count`` and halved ``min_size``, so the
-healthy transition (11.4.4) restores it with the other stretch pools.
+the degraded ``peering_crush_bucket_count`` and the surviving zone as
+``peering_crush_mandatory_member``, so the healthy transition (11.4.4)
+restores it with the other stretch pools. Its ``min_size`` is not halved.
 
 **11.4.4 Healthy Stretch Mode** (``trigger_healthy_stretch_mode``)
 

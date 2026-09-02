@@ -579,6 +579,7 @@ private:
                        uint64_t repl_size,
 		       const uint64_t target_size_bytes,
 		       const float target_size_ratio,
+           int64_t min_size,
 		       const std::string &erasure_code_profile,
 		       const std::string &root,
            int64_t num_zones,

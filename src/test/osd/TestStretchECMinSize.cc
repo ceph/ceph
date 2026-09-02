@@ -25,10 +25,10 @@
  *     Returns true if ANY zone in the CRUSH topology has >= pool.min_size
  *     acting OSDs.
  *
- *   stretch_ec_num_acting_below_min_size(pool, acting)
+ *   stretch_num_acting_below_min_size(pool, acting)
  *     Returns the total per-zone deficit: sum over all zones of
- *     max(0, min_size - zone_acting_count).  Returns 0 for non-stretch or
- *     non-erasure pools.
+ *     max(0, min_size - zone_acting_count), except for 3AZ pools where
+ *     min_size applies to the whole cluster.  Returns 0 for non-stretch
  *
  * Topology used by all tests
  * ─────────────────────────
@@ -226,14 +226,14 @@ TEST_F(StretchECMinSizeTest, ZoneHasMinSize_EmptyActingSet)
 }
 
 // ===========================================================================
-// stretch_ec_num_acting_below_min_size
+// stretch_num_acting_below_min_size
 // ===========================================================================
 
 // All zones fully populated
 TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_AllZonesHealthy)
 {
   vector<int> acting = {0, 1, 2, 3, 4, 5};
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(*pool, acting));
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(*pool, acting));
 }
 
 // One zone exactly at min_size
@@ -241,7 +241,7 @@ TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_OneZoneAtMinSize)
 {
   vector<int> acting = {0, 1, CRUSH_ITEM_NONE,   // dc0: 2 = min_size
                         3, 4, 5};                 // dc1: 3
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(*pool, acting));
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(*pool, acting));
 }
 
 // dc0 has 1 OSD (< min_size=2) - deficit 1; dc1 OK
@@ -249,7 +249,7 @@ TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_OneZoneBelowMinSize)
 {
   vector<int> acting = {0, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE,
                         3, 4, 5};
-  EXPECT_EQ(1u, osdmap->stretch_ec_num_acting_below_min_size(*pool, acting));
+  EXPECT_EQ(1u, osdmap->stretch_num_acting_below_min_size(*pool, acting));
 }
 
 // Both zones have 1 OSD each - deficit 1+1 = 2
@@ -257,7 +257,7 @@ TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_BothZonesBelowMinSize)
 {
   vector<int> acting = {0, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE,
                         3, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE};
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(*pool, acting));
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(*pool, acting));
 }
 
 // dc1 completely empty - deficit = min_size = 2
@@ -265,14 +265,27 @@ TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_OneZoneCompletelyEmpty)
 {
   vector<int> acting = {0, 1, 2,
                         CRUSH_ITEM_NONE, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE};
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(*pool, acting));
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(*pool, acting));
 }
 
 // Both zones empty - deficit = 2 * min_size = 4
 TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_BothZonesEmpty)
 {
   vector<int> acting(6, CRUSH_ITEM_NONE);
-  EXPECT_EQ(4u, osdmap->stretch_ec_num_acting_below_min_size(*pool, acting));
+  EXPECT_EQ(4u, osdmap->stretch_num_acting_below_min_size(*pool, acting));
+}
+
+TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_ThreeAZCluster)
+{
+  pg_pool_t three_az_pool = *pool;
+  three_az_pool.num_zones = 3;
+  three_az_pool.peering_crush_bucket_count = 2;
+
+  vector<int> acting = {0, 1, 2, 3, 4, 5};
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(three_az_pool, acting));
+
+  acting = {0, 1, 2, 3, 4, CRUSH_ITEM_NONE};
+  EXPECT_EQ(1u, osdmap->stretch_num_acting_below_min_size(three_az_pool, acting));
 }
 
 // Non-stretch pool - always 0
@@ -282,17 +295,17 @@ TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_NonStretchPool)
   non_stretch.peering_crush_bucket_count = 0;
   vector<int> acting = {0, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE,
                         3, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE};
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(non_stretch, acting));
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(non_stretch, acting));
 }
 
-// Non-erasure pool - always 0
+// A replicated stretch pool is counted per zone, as an EC one is
 TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_ReplicatedPool)
 {
   pg_pool_t rep = *pool;
   rep.type = pg_pool_t::TYPE_REPLICATED;
   vector<int> acting = {0, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE,
                         3, CRUSH_ITEM_NONE, CRUSH_ITEM_NONE};
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(rep, acting));
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(rep, acting));
 }
 
 // Degraded stretch mode: only the mandatory zone contributes to the deficit.
@@ -302,11 +315,11 @@ TEST_F(StretchECMinSizeTest, NumActingBelowMinSize_MandatoryMemberOnlyCountsThat
   degraded.peering_crush_bucket_count = 1;
   degraded.peering_crush_mandatory_member = osdmap->crush->get_item_id("dc0");
   const int N = CRUSH_ITEM_NONE;
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(
     degraded, {0, 1, 2, N, N, N}));
-  EXPECT_EQ(1u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(1u, osdmap->stretch_num_acting_below_min_size(
     degraded, {0, N, N, 3, 4, 5}));
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(
     degraded, {N, N, N, 3, 4, 5}));
 }
 
@@ -332,11 +345,11 @@ TEST_F(StretchECMinSizeTest, PerDatacenterTakeRule_FindsBothZones)
   pg_pool_t per_dc = *pool;
   per_dc.crush_rule = rule_id;
   const int N = CRUSH_ITEM_NONE;
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(
     per_dc, {0, 1, 2, 3, 4, 5}));
-  EXPECT_EQ(1u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(1u, osdmap->stretch_num_acting_below_min_size(
     per_dc, {0, 1, 2, 3, N, N}));
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(
     per_dc, {N, N, N, 3, 4, 5}));
   EXPECT_TRUE(osdmap->at_least_one_zone_has_min_size(per_dc, {N, N, N, 3, 4, N}));
   EXPECT_FALSE(osdmap->at_least_one_zone_has_min_size(per_dc, {0, N, N, 3, N, N}));
@@ -366,16 +379,16 @@ TEST_F(StretchECMinSizeTest, DeviceClassRule_ShadowZonesCounted)
   pg_pool_t hdd = *pool;
   hdd.crush_rule = add_hdd_stretch_rule();
   const int N = CRUSH_ITEM_NONE;
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(
     hdd, {0, 1, 2, N, N, N}));
   EXPECT_TRUE(osdmap->at_least_one_zone_has_min_size(hdd, {0, 1, 2, 3, 4, 5}));
 
   // The mon stores the degraded-mode mandatory member as the normal bucket id
   hdd.peering_crush_bucket_count = 1;
   hdd.peering_crush_mandatory_member = osdmap->crush->get_item_id("dc0");
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(
     hdd, {0, 1, 2, N, N, N}));
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(
     hdd, {N, N, N, 3, 4, 5}));
 }
 
@@ -398,9 +411,9 @@ TEST_F(StretchECMinSizeTest, EmptyDatacenterUnderRoot_NoDeficit)
 {
   add_empty_datacenter("dc2");
   const int N = CRUSH_ITEM_NONE;
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(
     *pool, {0, 1, 2, 3, 4, 5}));
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(
     *pool, {0, 1, 2, N, N, N}));
 }
 
@@ -421,8 +434,8 @@ TEST_F(StretchECMinSizeTest, DeviceClassRule_DatacenterWithoutClassOsdsNoDeficit
   });
   ASSERT_TRUE(osdmap->crush->name_exists("dc2~hdd"));
   const int N = CRUSH_ITEM_NONE;
-  EXPECT_EQ(0u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(0u, osdmap->stretch_num_acting_below_min_size(
     hdd, {0, 1, 2, 3, 4, 5}));
-  EXPECT_EQ(2u, osdmap->stretch_ec_num_acting_below_min_size(
+  EXPECT_EQ(2u, osdmap->stretch_num_acting_below_min_size(
     hdd, {0, 1, 2, N, N, N}));
 }

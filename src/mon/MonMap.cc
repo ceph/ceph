@@ -390,6 +390,8 @@ void MonMap::decode(ceph::buffer::list::const_iterator& p)
   if (struct_v >= 11) {
     decode(global_stretch_mode_enabled, p);
   } else {
+    // There are currently no 3AZ that enables stretch mode,
+    // so a 3AZ cluster will not have global stretch mode enabled by default.
     global_stretch_mode_enabled = stretch_mode_enabled;
   }
   calc_addr_mons();
