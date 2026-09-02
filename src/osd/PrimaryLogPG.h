@@ -107,6 +107,7 @@ public:
     uint64_t truncate_seq;
     uint64_t truncate_size;
     bool whiteout; ///< Source object is whiteout
+    bool clone_trimmed_on_target; ///< All clone snaps trimmed on target; skip the copy-from write
     std::map<std::pair<uint64_t, entity_name_t>, watch_info_t> watchers;
 
     bool is_data_digest() {
@@ -124,7 +125,7 @@ public:
 	source_data_digest(-1), source_omap_digest(-1),
 	data_digest(-1), omap_digest(-1),
 	truncate_seq(0), truncate_size(0),
-        whiteout(false), watchers()
+        whiteout(false), clone_trimmed_on_target(false), watchers()
     {}
   };
 

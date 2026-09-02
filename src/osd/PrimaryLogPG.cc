@@ -2659,6 +2659,50 @@ void PrimaryLogPG::do_op_impl(OpRequestRef op)
           return;
         }
       }
+
+      // Pool migration clone copy-from: the ENOENT from find_object_context
+      // via the map_snapid_to_clone path means the target's head snapset does
+      // not list this clone. That happens when finish_copyfrom already pruned
+      // the clone from the snapset during head migration (because all of the
+      // clone's snaps were in removed_snaps_queue at that time). The clone
+      // does not need to be written to the target; reply with success so the
+      // source advances its migration watermark.
+      if (m->has_flag(CEPH_OSD_FLAG_MAP_SNAP_CLONE) && oid.is_snap()) {
+        for (auto&& osd_op : m->ops) {
+          if (osd_op.op.op == CEPH_OSD_OP_COPY_FROM &&
+              (osd_op.op.copy_from.flags & CEPH_OSD_COPY_FROM_FLAG_POOL_MIGRATION)) {
+            SnapSetContext *hssc = get_snapset_context(head, false);
+            if (hssc && hssc->exists) {
+              bool snapset_covers_clone = (hssc->snapset.seq >= oid.snap);
+              bool in_snapset = std::find(hssc->snapset.clones.begin(),
+                                          hssc->snapset.clones.end(),
+                                          oid.snap) != hssc->snapset.clones.end();
+              put_snapset_context(hssc);
+              if (snapset_covers_clone && !in_snapset) {
+                dout(20) << __func__ << " pool migration clone " << oid
+                         << " already pruned from head snapset, replying success"
+                         << dendl;
+                osd->reply_op_error(op, 0);
+                return;
+              }
+            } else {
+              // Head doesn't exist on the target at all as all clones
+              // were pruned from the snapset.
+              if (hssc) put_snapset_context(hssc);
+              const pg_pool_t *tpi = get_osdmap()->get_pg_pool(
+                                       info.pgid.pgid.pool());
+              if (tpi && tpi->is_migration_target()) {
+                dout(20) << __func__ << " pool migration clone " << oid
+                         << " pruned (head removed during migration), replying success"
+                         << dendl;
+                osd->reply_op_error(op, 0);
+                return;
+              }
+            }
+            break;
+          }
+        }
+      }
     }
     dout(20) << __func__ << ": find_object_context got error " << r << dendl;
     if (op->may_write() &&
@@ -10275,7 +10319,8 @@ void PrimaryLogPG::process_copy_chunk(hobject_t oid, ceph_tid_t tid, int r)
               [this, cop, hoid]() {
                 if (cop->obc) {
                   ObjectContextRef& cobc = cop->obc;
-                  CopyCallbackResults results(-ENOENT, &cop->results);
+                  cop->results.clone_trimmed_on_target = true;
+                  CopyCallbackResults results(0, &cop->results);
                   cop->cb->complete(results);
                   copy_ops.erase(cobc->obs.oi.soid);
                   cobc->stop_block();
@@ -10662,6 +10707,13 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
 {
   OpContext *ctx = cb->ctx;
   dout(20) << "finish_copyfrom on " << ctx->obs->oi.soid << dendl;
+
+  if (cb->results->clone_trimmed_on_target) {
+    dout(20) << __func__ << " " << ctx->obs->oi.soid
+             << " was trimmed on target, skipping write" << dendl;
+    ctx->pool_migration = true;
+    return;
+  }
 
   ObjectState& obs = ctx->new_obs;
   bool was_dirty = ctx->obc->obs.oi.is_dirty();
@@ -16000,37 +16052,6 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
 {
   dout(10) << __func__ << " " << oid << " failed with " << r << dendl;
 
-  if ((r == -ENOENT) && oid.is_snap()) {
-    ObjectContextRef obc = get_object_context(oid, false);
-    ceph_assert(obc);
-    auto p = obc->ssc->snapset.clone_snaps.find(oid.snap);
-    ceph_assert(p != obc->ssc->snapset.clone_snaps.end()); // warn?
-    auto snaps = p->second;
-    if (!snaps.empty()) {
-      vector<snapid_t>::iterator p = snaps.begin();
-      const OSDMapRef& osdmap = get_osdmap();
-      int64_t pool = info.pgid.pgid.pool();
-      while (p != snaps.end()) {
-        // make best effort to sanitize snaps/clones.
-        if (osdmap->in_removed_snaps_queue(pool, *p)) {
-          dout(10) << __func__ << " clone snap " << *p << " has been deleted"
-                   << dendl;
-          for (vector<snapid_t>::iterator q = p + 1;
-               q != snaps.end();
-               ++q)
-            *(q - 1) = *q;
-          snaps.resize(snaps.size() - 1);
-        } else {
-          ++p;
-        }
-      }
-      if (snaps.empty()) {
-        dout(10) << __func__ << " ENOENT was expected - no more snaps for " << oid << dendl;
-        return true;
-      }
-    }
-  }
-
   // If already quiescing, treat -EIO as retryable since it's expected
   // when C_Migrate::finish converts completions to -EIO during quiesce
   bool is_retryable = (r == -EBUSY || r == -ERANGE || r == -EOVERFLOW) ||
@@ -16059,7 +16080,7 @@ bool PrimaryLogPG::handle_pool_migration_copy_failure(hobject_t oid, int r)
                << pool_migrations_in_flight.size() << " in-flight migrations and "
                << pool_migration_source_delete_pending_lock.size() << " pending deletes" << dendl;
     } else {
-      // Fatal error - ENOENT means unfound (removed snaps already filtered earlier)
+      // Fatal error - ENOENT means the object was not found on the target (unfound)
       if (r == -ENOENT) {
         dout(10) << __func__ << " copy_from failed with ENOENT (unfound), entering quiesce mode" << dendl;
       } else {
