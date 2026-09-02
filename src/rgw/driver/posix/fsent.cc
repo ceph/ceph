@@ -1298,6 +1298,7 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
     }
   } else if (ret == 0) {
     created = true;
+    cur_version.reset();
   }
   ret = open(dpp);
   if (ret < 0) {
