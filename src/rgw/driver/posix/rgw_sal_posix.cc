@@ -2169,7 +2169,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
         Attrs attrs;
         bufferlist bl;
         if (old_cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
-            ::rgw::sal::posix::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+            ::rgw::sal::posix::get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
           fill_flags |= posix::FSEnt::FLAG_DELETE_MARKER;
         }
         old_cur_ent->fill_cache( dpp, null_yield,
@@ -2195,7 +2195,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
         Attrs attrs;
         bufferlist bl;
         if (cur_ent->read_attrs(dpp, y, attrs) >= 0 &&
-            ::rgw::sal::posix::get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+            ::rgw::sal::posix::get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
           fill_flags |= posix::FSEnt::FLAG_DELETE_MARKER;
         }
         cur_ent->fill_cache( dpp, null_yield,
@@ -2721,7 +2721,7 @@ int POSIXObject::stat(const DoutPrefixProvider* dpp)
 
   if (ent->get_type() == posix::ObjectType::VERSIONED) {
     auto* vd_ent = static_cast<posix::VersionedDirectory*>(ent.get());
-    if (vd_ent && vd_ent->curr_is_delete_marker()) {
+    if (vd_ent && vd_ent->cur_is_delete_marker()) {
       state.exists = false;
       state.is_dm = true;
       return -ENOENT;
