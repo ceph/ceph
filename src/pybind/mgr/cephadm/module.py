@@ -5215,7 +5215,8 @@ Then run the following:
     @handle_orch_error
     def set_osd_spec(self, service_name: str, osd_ids: List[str]) -> str:
         """
-        Update unit.meta file for osd with service name
+        Update unit.meta, BlueStore bdev label and filesystem osdspec_affinity
+        for the given OSDs so that `ceph osd metadata` reflects the new spec.
         """
         if service_name not in self.spec_store:
             raise OrchestratorError(f"Cannot find service '{service_name}' in the inventory. "
