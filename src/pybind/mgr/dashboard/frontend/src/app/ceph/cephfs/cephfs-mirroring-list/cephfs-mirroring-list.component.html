@@ -6,11 +6,14 @@
     columnMode="flex"
     selectionType="single"
     (updateSelection)="updateSelection($event)"
-    (fetchData)="loadDaemonStatus()">
-    <cd-table-actions class="table-actions"
-                      [permission]="permission"
-                      [selection]="selection"
-                      [tableActions]="tableActions">
+    (fetchData)="loadDaemonStatus()"
+  >
+    <cd-table-actions
+      class="table-actions"
+      [permission]="permission"
+      [selection]="selection"
+      [tableActions]="tableActions"
+    >
     </cd-table-actions>
   </cd-table>
 }

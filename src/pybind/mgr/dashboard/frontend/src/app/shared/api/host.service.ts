@@ -25,7 +25,10 @@ export class HostService extends ApiClient {
 
   predefinedLabels = ['mon', 'mgr', 'osd', 'mds', 'rgw', 'nfs', 'iscsi', 'rbd', 'grafana'];
 
-  constructor(private http: HttpClient, private deviceService: DeviceService) {
+  constructor(
+    private http: HttpClient,
+    private deviceService: DeviceService
+  ) {
     super();
   }
 

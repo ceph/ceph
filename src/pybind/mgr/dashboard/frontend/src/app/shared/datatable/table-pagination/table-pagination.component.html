@@ -1,12 +1,15 @@
-<nav class="pagination"
-     aria-label="Pagination"
-     i18n-aria-label>
+<nav
+  class="pagination"
+  aria-label="Pagination"
+  i18n-aria-label
+>
   <button
     class="pagination__btn pagination__btn_first"
     aria-label="Go to first page"
     i18n-aria-label
     [disabled]="!canPrevious()"
     (click)="selectPage(1)"
+    type="button"
   >
     <cd-icon type="angleDoubleLeft"></cd-icon>
   </button>
@@ -15,6 +18,7 @@
     aria-label="Go to previous page"
     i18n-aria-label
     [disabled]="!canPrevious()"
+    type="button"
     (click)="prevPage()"
   >
     <cd-icon type="leftArrow"></cd-icon>
@@ -39,6 +43,7 @@
     i18n-aria-label
     (click)="nextPage()"
     [disabled]="!canNext()"
+    type="button"
   >
     <cd-icon type="rightArrow"></cd-icon>
   </button>
@@ -48,6 +53,7 @@
     i18n-aria-label
     [disabled]="!canNext()"
     (click)="selectPage(totalPages)"
+    type="button"
   >
     <cd-icon type="angleDoubleRight"></cd-icon>
   </button>

@@ -129,8 +129,9 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
 
   private isSnapshotVisibilityEnabled(option?: ConfigFormModel) {
     const values = option?.value ?? [];
-    const clientValue = values.find((entry) => entry.section === SNAPSHOT_VISIBILITY_CONFIG_SECTION)
-      ?.value;
+    const clientValue = values.find(
+      (entry) => entry.section === SNAPSHOT_VISIBILITY_CONFIG_SECTION
+    )?.value;
     return String(clientValue).toLowerCase() === 'true';
   }
 

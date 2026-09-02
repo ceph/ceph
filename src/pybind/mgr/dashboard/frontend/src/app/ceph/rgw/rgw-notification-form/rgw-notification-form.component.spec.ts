@@ -58,7 +58,7 @@ describe('RgwNotificationFormComponent', () => {
 
     fixture = TestBed.createComponent(RgwNotificationFormComponent);
     component = fixture.componentInstance;
-    rgwBucketService = (TestBed.inject(RgwBucketService) as unknown) as MockRgwBucketService;
+    rgwBucketService = TestBed.inject(RgwBucketService) as unknown as MockRgwBucketService;
     fixture.detectChanges();
   });
 
@@ -66,7 +66,7 @@ describe('RgwNotificationFormComponent', () => {
     expect(component).toBeTruthy();
   });
   it('should call setNotification when submitting form', () => {
-    rgwBucketService = (TestBed.inject(RgwBucketService) as unknown) as MockRgwBucketService;
+    rgwBucketService = TestBed.inject(RgwBucketService) as unknown as MockRgwBucketService;
     component['notificationList'] = [];
     component.notificationForm.patchValue({
       id: 'notif-1',
