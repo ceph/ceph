@@ -2207,7 +2207,8 @@ class CephManager:
                                      erasure_code_crush_rule_name=None,
                                      min_size=None,
                                      erasure_code_use_overwrites=False,
-                                     num_zones=None):
+                                     num_zones=None,
+                                     osd_failure_domain=None):
         """
         Create a pool named unique_pool_X where X is unique.
         """
@@ -2222,7 +2223,8 @@ class CephManager:
                 erasure_code_crush_rule_name=erasure_code_crush_rule_name,
                 min_size=min_size,
                 erasure_code_use_overwrites=erasure_code_use_overwrites,
-                num_zones=num_zones)
+                num_zones=num_zones,
+                osd_failure_domain=osd_failure_domain)
         return name
 
     @contextlib.contextmanager
@@ -2236,7 +2238,8 @@ class CephManager:
                     erasure_code_crush_rule_name=None,
                     min_size=None,
                     erasure_code_use_overwrites=False,
-                    num_zones=None):
+                    num_zones=None,
+                    osd_failure_domain=None):
         """
         Create a pool named from the pool_name parameter.
         :param pool_name: name of the pool being created.
@@ -2247,6 +2250,9 @@ class CephManager:
                                              erasure coded pool using the crush rule
         :param erasure_code_use_overwrites: if true, allow overwrites
         :param num_zones: if set, configure the number of zones for pool
+        :param osd_failure_domain: if set, pass --osd_failure_domain to pool create;
+                                   required when num_zones > 1 and the CRUSH topology
+                                   uses a non-default failure domain (e.g. 'osd')
         """
         with self.lock:
             assert isinstance(pool_name, str)
@@ -2254,9 +2260,9 @@ class CephManager:
             assert pool_name not in self.pools
             self.log("creating pool_name %s" % (pool_name,))
             if erasure_code_profile_name:
-                cmd_args = ['osd', 'pool', 'create', 
-                            pool_name, str(pg_num), 
-                            str(pg_num), 'erasure', 
+                cmd_args = ['osd', 'pool', 'create',
+                            pool_name, str(pg_num),
+                            str(pg_num), 'erasure',
                             erasure_code_profile_name]
 
                 if erasure_code_crush_rule_name:
@@ -2264,12 +2270,16 @@ class CephManager:
 
                 if num_zones is not None:
                     cmd_args.extend(['--num_zones', str(num_zones)])
+                    if osd_failure_domain is not None:
+                        cmd_args.extend(['--osd_failure_domain', osd_failure_domain])
                 self.raw_cluster_cmd(*cmd_args)
             else:
                 cmd_args = ['osd', 'pool', 'create',
                             pool_name, str(pg_num)]
                 if num_zones is not None:
                     cmd_args.extend(['--num_zones', str(num_zones)])
+                    if osd_failure_domain is not None:
+                        cmd_args.extend(['--osd_failure_domain', osd_failure_domain])
                 self.raw_cluster_cmd(*cmd_args)
             if min_size is not None:
                 self.raw_cluster_cmd(
