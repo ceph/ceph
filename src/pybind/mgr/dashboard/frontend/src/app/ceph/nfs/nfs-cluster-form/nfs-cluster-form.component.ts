@@ -1,8 +1,10 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { ChangeDetectionStrategy, ChangeDetectorRef, Component, OnInit, ViewChild } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { ReactiveFormsModule, UntypedFormControl } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
+import { GridModule, InputModule } from 'carbon-components-angular';
+
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
-import _ from 'lodash';
-import { UntypedFormControl } from '@angular/forms';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { getFsalFromRoute, getPathfromFsal } from '../utils';
@@ -14,12 +16,24 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NFSBwIopConfig } from '../models/nfs-cluster-config';
 import { CdForm } from '~/app/shared/forms/cd-form';
+import { SharedModule } from '~/app/shared/shared.module';
+import { PipesModule } from '~/app/shared/pipes/pipes.module';
 
 @Component({
   selector: 'cd-nfs-cluster-form',
   templateUrl: './nfs-cluster-form.component.html',
   styleUrls: ['./nfs-cluster-form.component.scss'],
-  standalone: false
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [
+    CommonModule,
+    ReactiveFormsModule,
+    GridModule,
+    InputModule,
+    SharedModule,
+    PipesModule,
+    NfsRateLimitComponent
+  ]
 })
 export class NfsClusterFormComponent extends CdForm implements OnInit {
   @ViewChild(NfsRateLimitComponent, { static: false })
@@ -40,7 +54,8 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private nfsService: NfsService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private changeDetectorRef: ChangeDetectorRef
   ) {
     super();
     this.resource = $localize`Cluster`;
@@ -60,10 +75,14 @@ export class NfsClusterFormComponent extends CdForm implements OnInit {
       this.action = this.actionLabels.EDIT;
       this.nfsService.getClusterBandwidthOpsConfig(this.id).subscribe((data: NFSBwIopConfig) => {
         this.nfsBwIopConfig = data;
+        this.changeDetectorRef.markForCheck();
       });
       this.loadingReady();
+      this.changeDetectorRef.markForCheck();
     } else {
       this.action = this.actionLabels.CREATE;
+      this.loadingReady();
+      this.changeDetectorRef.markForCheck();
     }
   }
   childCompErrorHandler(event: Event) {

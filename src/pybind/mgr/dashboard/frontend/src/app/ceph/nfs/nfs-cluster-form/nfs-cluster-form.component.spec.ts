@@ -1,10 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { NfsClusterFormComponent } from './nfs-cluster-form.component';
 import { NotificationService } from '~/app/shared/services/notification.service';
-import { ReactiveFormsModule } from '@angular/forms';
-import { NfsRateLimitComponent } from '../nfs-rate-limit/nfs-rate-limit.component';
 import { RouterTestingModule } from '@angular/router/testing';
-import { CommonModule } from '@angular/common';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
@@ -16,8 +13,7 @@ describe('NfsClusterFormComponent', () => {
   let notificationService: NotificationService;
 
   configureTestBed({
-    imports: [ReactiveFormsModule, HttpClientTestingModule, CommonModule, RouterTestingModule],
-    declarations: [NfsClusterFormComponent, NfsRateLimitComponent],
+    imports: [HttpClientTestingModule, RouterTestingModule, NfsClusterFormComponent],
     providers: [FormatterService, { provide: CdDatePipe, useValue: { transform: (d: any) => d } }]
   });
 

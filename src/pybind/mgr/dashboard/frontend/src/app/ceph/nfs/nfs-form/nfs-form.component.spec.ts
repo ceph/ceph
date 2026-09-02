@@ -26,13 +26,15 @@ describe('NfsFormComponent', () => {
   let router: Router;
 
   configureTestBed({
-    declarations: [NfsFormComponent, NfsFormClientComponent, NfsRateLimitComponent],
+    declarations: [NfsFormComponent, NfsFormClientComponent],
     imports: [
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
       CommonModule,
-      NgbTypeaheadModule
+      NgbTypeaheadModule,
+      NfsRateLimitComponent
+    ],
     ],
     providers: [
       FormatterService,

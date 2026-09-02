@@ -1,7 +1,6 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ReactiveFormsModule, Validators } from '@angular/forms';
-import { CommonModule } from '@angular/common';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RouterTestingModule } from '@angular/router/testing';
 import { FormatterService } from '~/app/shared/services/formatter.service';
@@ -13,8 +12,7 @@ describe('NfsRateLimitComponent', () => {
   let fixture: ComponentFixture<NfsRateLimitComponent>;
 
   configureTestBed({
-    declarations: [NfsRateLimitComponent],
-    imports: [HttpClientTestingModule, RouterTestingModule, ReactiveFormsModule, CommonModule],
+    imports: [HttpClientTestingModule, RouterTestingModule, NfsRateLimitComponent],
     providers: [FormatterService]
   });
 

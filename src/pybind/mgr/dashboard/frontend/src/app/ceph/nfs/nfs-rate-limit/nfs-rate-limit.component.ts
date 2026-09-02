@@ -1,5 +1,15 @@
-import { ChangeDetectorRef, Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
-import { AbstractControl, UntypedFormControl, ValidationErrors, Validators } from '@angular/forms';
+import {
+  ChangeDetectionStrategy,
+  ChangeDetectorRef,
+  Component,
+  EventEmitter,
+  Input,
+  OnInit,
+  Output
+} from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { AbstractControl, ReactiveFormsModule, UntypedFormControl, ValidationErrors, Validators } from '@angular/forms';
+import { CheckboxModule, InputModule, SelectModule } from 'carbon-components-angular';
 import _ from 'lodash';
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
@@ -12,12 +22,15 @@ import {
   QOSTypeItem
 } from '../models/nfs-cluster-config';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { SharedModule } from '~/app/shared/shared.module';
 
 @Component({
   selector: 'cd-nfs-rate-limit-form',
   templateUrl: './nfs-rate-limit.component.html',
   styleUrls: ['./nfs-rate-limit.component.scss'],
-  standalone: false
+  standalone: true,
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  imports: [CommonModule, ReactiveFormsModule, SharedModule, CheckboxModule, SelectModule, InputModule]
 })
 export class NfsRateLimitComponent implements OnInit {
   @Input() action: string;

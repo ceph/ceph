@@ -46,7 +46,9 @@ import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component
     CheckboxModule,
     ButtonModule,
     IconModule,
-    TabsModule
+    TabsModule,
+    NfsClusterFormComponent,
+    NfsRateLimitComponent
   ],
   exports: [
     NfsListComponent,
@@ -64,9 +66,7 @@ import { NfsRateLimitComponent } from './nfs-rate-limit/nfs-rate-limit.component
     NfsFormComponent,
     NfsFormClientComponent,
     NfsClusterComponent,
-    NfsClusterDetailsComponent,
-    NfsClusterFormComponent,
-    NfsRateLimitComponent
+    NfsClusterDetailsComponent
   ]
 })
 export class NfsModule {
