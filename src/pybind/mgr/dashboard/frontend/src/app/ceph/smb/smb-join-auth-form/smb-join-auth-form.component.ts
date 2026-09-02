@@ -11,8 +11,8 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { JOIN_AUTH_RESOURCE, SMBCluster, SMBJoinAuth } from '../smb.model';
 import { Observable } from 'rxjs';
-import { JOIN_AUTH_PATH } from '../smb-join-auth-list/smb-join-auth-list.component';
 import { Location } from '@angular/common';
+import { getJoinAuthPath } from '../utils';
 
 @Component({
   selector: 'cd-smb-join-auth-form',
@@ -40,7 +40,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     private location: Location
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/${JOIN_AUTH_PATH}/${URLVerbs.EDIT}`);
+    this.editing = this.router.url.startsWith(`/${getJoinAuthPath(this.router.url)}/${URLVerbs.EDIT}`);
     this.resource = $localize`Active directory (AD) access resource`;
   }
 
@@ -97,7 +97,7 @@ export class SmbJoinAuthFormComponent extends CdForm implements OnInit {
     };
 
     const self = this;
-    let taskUrl = `${JOIN_AUTH_PATH}/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
+    let taskUrl = `${getJoinAuthPath(this.router.url)}/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {
