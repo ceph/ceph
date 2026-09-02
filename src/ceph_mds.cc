@@ -119,15 +119,30 @@ int main(int argc, const char **argv)
     dout(1) << __func__ << " not setting numa affinity" << dendl;
   }
   std::string val, action;
+  bool double_dash = false;
   for (std::vector<const char*>::iterator i = args.begin(); i != args.end(); ) {
     if (ceph_argparse_double_dash(args, i)) {
+      double_dash = true;
       break;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
       dout(0) << "--hot-standby is obsolete and has no effect" << dendl;
     }
     else {
-      derr << "Error: can't understand argument: " << *i << "\n" << dendl;
+      ++i;
+    }
+  }
+
+  // Anything left is unknown to both the config schema and to us. Drop the
+  // ones that were given as a config, so that a config which has since been
+  // renamed or removed does not stop the daemon from starting, and reject
+  // the rest as before.
+  if (!double_dash) {
+    for (const auto& opt : ceph_argparse_drop_unknown_conf_opts(args)) {
+      derr << "WARNING: ignoring unknown config option: " << opt << dendl;
+    }
+    if (!args.empty()) {
+      derr << "Error: can't understand argument: " << args.front() << "\n" << dendl;
       exit(1);
     }
   }

@@ -201,6 +201,10 @@ int main(int argc, const char **argv)
       ++i;
     }
   }
+  for (const auto& opt : ceph_argparse_drop_unknown_conf_opts(args)) {
+    derr << "WARNING: ignoring unknown config option: " << opt << dendl;
+  }
+
   if (!args.empty()) {
     cerr << "unrecognized arg " << args[0] << std::endl;
     exit(1);

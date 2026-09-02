@@ -1,3 +1,13 @@
+* A configuration option given on the command line that the daemon does not
+  recognize is now ignored with a warning instead of causing the daemon to
+  exit. A config option may be renamed, retyped or removed between releases,
+  and a deployed daemon that was given one should still start; this also
+  matches how an unknown option is already treated when it comes from a
+  configuration file or from the mon config database. Both the
+  ``--name=value`` and the ``--name value`` forms are covered. An unrecognized
+  argument that takes no value, such as a mistyped flag, is still an error.
+  The warning naming each ignored option is written to the daemon log.
+
 * ``src/script/ceph-backport.sh`` now runs on macOS in addition to Linux: it
   re-execs under GNU bash >= 4 when the system bash is too old, and honors a
   ``$GETOPT`` environment override so GNU getopt can be selected
