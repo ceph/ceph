@@ -4,6 +4,8 @@ import json
 import urllib.parse
 from collections import defaultdict
 
+import cephfs
+
 try:
     from mock import Mock, patch
 except ImportError:
@@ -528,6 +530,39 @@ class CephFSMirrorTest(ControllerTestCase):  # pylint: disable=too-many-public-m
         self.assertIn(error_message, response.get('detail', ''))
         mgr.remote.assert_called_once_with(
             'mirroring', 'snapshot_mirror_checkpoint_remove', fs_name, path, snap_name)
+
+    @patch('dashboard.controllers.cephfs.CephFS_')
+    def test_list_path_snapshots_success(self, mock_cephfs_cls):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        expected = [{
+            'name': 'snap1',
+            'path': '/volumes/g1/sv1/.snap/snap1',
+            'created': '2024-01-01T00:00:00Z'
+        }]
+        mock_cephfs_cls.return_value.ls_snapshots.return_value = expected
+
+        self._get(
+            f'/api/cephfs/mirror/{fs_name}/snapshots?path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody(expected)
+        mock_cephfs_cls.assert_called_once_with(fs_name)
+        mock_cephfs_cls.return_value.ls_snapshots.assert_called_once_with(path)
+
+    @patch('dashboard.controllers.cephfs.CephFS_')
+    def test_list_path_snapshots_missing_snapdir(self, mock_cephfs_cls):
+        fs_name = 'test_fs'
+        path = '/volumes/g1/sv1'
+        mock_cephfs_cls.return_value.ls_snapshots.side_effect = cephfs.ObjectNotFound(
+            errno.ENOENT, 'No such file or directory'
+        )
+
+        self._get(
+            f'/api/cephfs/mirror/{fs_name}/snapshots?path={urllib.parse.quote(path)}'
+        )
+        self.assertStatus(200)
+        self.assertJsonBody([])
 
     def test_mirror_status_success(self):
         fs_name = 'test_fs'
