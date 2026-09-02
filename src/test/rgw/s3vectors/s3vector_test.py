@@ -23,12 +23,9 @@ from . import(
     get_config_cluster2,
     get_config_rgw_client,
     get_config_master_cluster,
-    is_s3_backend,
+    has_backing_bucket,
     get_s3vector_backend,
-    get_s3vector_local_path,
-    get_s3vector_s3_endpoint,
-    get_s3vector_s3_region,
-    get_s3vector_s3_allow_http
+    get_s3vector_local_path
     )
 
 
@@ -109,9 +106,8 @@ def set_rgw_config_option(option, value, port=None, cluster=None):
     return out, ret
 
 
-def _configure_backend(host, port, cluster):
-    """ set the s3vector backend options on an RGW, so that it does not have to
-    be started with them """
+def _backend_options(host, port, cluster):
+    """ the s3vector backend options that fit the given zone """
     backend = get_s3vector_backend()
     options = {'rgw_s3vector_backend': backend}
     if backend == 'local':
@@ -120,14 +116,28 @@ def _configure_backend(host, port, cluster):
         local_path = get_s3vector_local_path() or '/tmp/rgw-s3vector-<cluster>-<port>'
         options['rgw_s3vector_local_path'] = local_path.replace(
             '<cluster>', cluster).replace('<port>', str(port))
-    elif backend == 's3':
-        allow_http = get_s3vector_s3_allow_http()
-        # by default, the RGW is sending the S3 requests to itself
-        scheme = 'http' if allow_http in ('true', 'True', '1') else 'https'
-        options['rgw_s3vector_s3_endpoint'] = get_s3vector_s3_endpoint() or \
-            f'{scheme}://{host}:{port}'
-        options['rgw_s3vector_s3_region'] = get_s3vector_s3_region() or get_config_zonegroup()
-        options['rgw_s3vector_s3_allow_http'] = allow_http
+    return options
+
+
+def backend_admin_args():
+    """
+    the s3vector backend options, as command line arguments of "radosgw-admin".
+    the options are set on the RGWs of the tested zones, and radosgw-admin does not
+    read them from there, so they have to be given to it explicitly whenever it has
+    to reach the vector data itself (e.g. when purging the data of a user)
+    """
+    options = _backend_options(get_config_host(), get_config_port(), get_config_cluster())
+    args = []
+    for option, value in options.items():
+        args += ['--' + option.replace('_', '-'), str(value)]
+    return args
+
+
+def _configure_backend(host, port, cluster):
+    """ set the s3vector backend options on an RGW, so that it does not have to
+    be started with them """
+    backend = get_s3vector_backend()
+    options = _backend_options(host, port, cluster)
 
     # the tests must run against the backend they were configured with: if it
     # cannot be set, the run is failed, and not done against another backend
@@ -159,7 +169,7 @@ def forbid_data_sync(configfile):
     bucket, so that there is no window in which a bucket is created but its data
     may still be synced. note that the metadata of the entities is still synced.
     """
-    if not get_config_host2() or not is_s3_backend():
+    if not get_config_host2() or not has_backing_bucket():
         # not a multisite configuration, or a backend that does not store the
         # vector data in S3 buckets, so there is nothing that may be synced
         yield
@@ -239,6 +249,22 @@ def connection2(service_name='s3vectors'):
     return client
 
 
+def service_connection(service_name, access_key, secret_key):
+    """ a connection to the tested zone with the given credentials """
+    hostname = get_config_host()
+    port_no = get_config_port()
+    if port_no == 443 or port_no == 8443:
+        scheme = 'https://'
+    else:
+        scheme = 'http://'
+
+    return boto3.client(service_name,
+            endpoint_url=scheme+hostname+':'+str(port_no),
+            aws_access_key_id=access_key,
+            aws_secret_access_key=secret_key,
+            region_name=get_config_zonegroup())
+
+
 def _wait_for_user(uid, tenant=None, retries=12, delay=5):
     """ wait for a user of the master zone to be synced to the tested zone """
     if get_config_cluster() == (get_config_master_cluster() or get_config_cluster()):
@@ -281,13 +307,55 @@ def another_user(tenant=None):
     else:
         scheme = 'http://'
 
-    client = boto3.client('s3vectors',
-            endpoint_url=scheme+hostname+':'+str(port_no),
-            aws_access_key_id=access_key,
-            aws_secret_access_key=secret_key,
-            region_name=get_config_zonegroup())
-
+    client = service_connection('s3vectors', access_key, secret_key)
     client.uid = uid
+    # the "s3" connection of the same user, to create the backing buckets
+    client.s3 = service_connection('s3', access_key, secret_key)
+    return client
+
+
+num_accounts = 0
+
+
+def another_account_user(account_id=None):
+    """
+    a root user of an account, in an account of its own when no account is given.
+    the buckets of an account, vector buckets included, belong to the account and
+    not to the user that created them
+    """
+    # accounts and users may be created only on the master zone, and are synced
+    # from there
+    master_cluster = get_config_master_cluster()
+    if master_cluster and master_cluster != get_config_cluster():
+        pytest.skip(f"cannot create a user: the master zone is in cluster "
+                    f"'{master_cluster}', and the tested zone is in '{get_config_cluster()}'")
+
+    global num_accounts
+    num_accounts += 1
+    if not account_id:
+        name = 'account' + run_prefix + str(num_accounts)
+        out, result = admin(['account', 'create', '--account-name', name,
+                             '--email', name + '@ceph.com'], cluster=master_cluster)
+        assert result == 0, f"failed to create account '{name}': {out}"
+        # the output of the command may be prefixed with warnings of the cluster
+        account_id = json.loads(out[out.index('{'):])['id']
+
+    access_key = str(time.time())
+    secret_key = str(time.time())
+    # the display name of an account user is its IAM user name, which allows no spaces
+    uid = 'accountman' + run_prefix + str(num_accounts)
+    out, result = admin(['user', 'create', '--uid', uid, '--display-name', uid,
+                         '--account-id', account_id, '--account-root',
+                         '--access-key', access_key, '--secret-key', secret_key],
+                        cluster=master_cluster)
+    assert result == 0, f"failed to create user '{uid}' of account '{account_id}': {out}"
+    _wait_for_user(uid)
+
+    client = service_connection('s3vectors', access_key, secret_key)
+    client.uid = uid
+    client.account_id = account_id
+    # the "s3" connection of the same user, to create the backing buckets
+    client.s3 = service_connection('s3', access_key, secret_key)
     return client
 
 
@@ -297,8 +365,8 @@ def another_user(tenant=None):
 
 def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None, retries=12, delay=5):
     """
-    When using S3/SAL backend, create a regular S3 bucket with the same name
-    as the vector bucket. Required because these backends store LanceDB data
+    When using the RGW backend, create a regular S3 bucket with the same name
+    as the vector bucket. Required because that backend stores LanceDB data
     directly in an S3 bucket with the vector bucket name.
     In a multisite configuration, the connection of the second zone should be
     used to create the bucket there as well, since a vector bucket cannot be
@@ -306,7 +374,7 @@ def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None, retries=12, de
     request in a zone that is not the master zone is forwarded to the master,
     and the bucket is created locally afterwards.
     """
-    if not is_s3_backend():
+    if not has_backing_bucket():
         return
     if not s3conn:
         s3conn = connection('s3')
@@ -334,14 +402,16 @@ def _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn=None, retries=12, de
         f"{retries * delay} seconds")
 
 
-def _delete_s3_bucket_for_vector_bucket(bucket_name):
+def _delete_s3_bucket_for_vector_bucket(bucket_name, s3conn=None):
     """
-    When using S3/SAL backend, delete the regular S3 bucket that was created
-    for the vector bucket.
+    When using the RGW backend, delete the regular S3 bucket that was created
+    for the vector bucket. The connection of the owner must be given when the
+    bucket is not owned by the main user, since it is not visible to it.
     """
-    if not is_s3_backend():
+    if not has_backing_bucket():
         return
-    s3conn = connection('s3')
+    if not s3conn:
+        s3conn = connection('s3')
     try:
         paginator = s3conn.get_paginator('list_objects_v2')
         for page in paginator.paginate(Bucket=bucket_name):
@@ -356,22 +426,6 @@ def _delete_s3_bucket_for_vector_bucket(bucket_name):
             log.info("S3 bucket '%s' does not exist, nothing to delete", bucket_name)
         else:
             log.warning("Failed to delete S3 bucket '%s': %s", bucket_name, str(err))
-
-
-def _purge_all_versions(s3conn, bucket_name):
-    """
-    Remove every version and delete marker from a versioned S3 bucket, so that
-    it is actually empty and can be deleted.
-    """
-    paginator = s3conn.get_paginator('list_object_versions')
-    for page in paginator.paginate(Bucket=bucket_name):
-        objects = []
-        for v in page.get('Versions', []):
-            objects.append({'Key': v['Key'], 'VersionId': v['VersionId']})
-        for dm in page.get('DeleteMarkers', []):
-            objects.append({'Key': dm['Key'], 'VersionId': dm['VersionId']})
-        if objects:
-            s3conn.delete_objects(Bucket=bucket_name, Delete={'Objects': objects})
 
 
 def _delete_all_indexes(conn, bucket_name):
@@ -776,7 +830,7 @@ def test_vector_buckets_deletion_with_buckets():
     _create_s3bucket(s3conn, bucket_name2)
     # delete the s3 bucket: for S3/SAL backends, empty it first (LanceDB data files);
     # for local backend, the bucket is empty since LanceDB uses local filesystem.
-    if is_s3_backend():
+    if has_backing_bucket():
         paginator = s3conn.get_paginator('list_objects_v2')
         for page in paginator.paginate(Bucket=bucket_name2):
             if 'Contents' in page:
@@ -3336,7 +3390,7 @@ def test_sal_error_propagation():
     underlying storage is gone. This validates the error chain:
     rgw_sal_wrapper -> store.rs -> LanceDB -> lancedb-c -> rgw_s3vector.cc
     """
-    if not is_s3_backend():
+    if not has_backing_bucket():
         pytest.skip("error propagation test only applies to S3/SAL backends")
 
     conn = connection()
@@ -3379,28 +3433,20 @@ def test_sal_error_propagation():
 def test_cross_owner_vector_bucket():
     """When the S3 bucket owner differs from the vector bucket owner,
     operations should fail without a bucket policy and succeed with one."""
-    if not is_s3_backend():
-        pytest.skip("cross-owner test only applies to S3/SAL backends")
+    if not has_backing_bucket():
+        pytest.skip("cross-owner test only applies to backends with a backing bucket")
 
     # user A (config user) creates the S3 bucket
     s3conn = connection('s3')
     bucket_name = gen_bucket_name()
     _create_s3bucket(s3conn, bucket_name)
 
-    # user B creates a vector bucket with the same name
+    # every operation reaching the backend is verified against the backing bucket,
+    # so user B cannot even create the vector bucket over the bucket of user A
     other = another_user()
-    result = other.create_vector_bucket(vectorBucketName=bucket_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    # without a bucket policy, user B should fail to create an index
-    index_name = 'cross-owner-idx'
-    try:
-        other.create_index(vectorBucketName=bucket_name, indexName=index_name,
-                           dataType='float32', dimension=4, distanceMetric='cosine')
-        assert False, "create_index should have failed without bucket policy"
-    except other.exceptions.ClientError as err:
-        log.info("create_index correctly failed without bucket policy: %s", err)
-        assert err.response['ResponseMetadata']['HTTPStatusCode'] >= 400
+    with pytest.raises(other.exceptions.ClientError) as exc_info:
+        other.create_vector_bucket(vectorBucketName=bucket_name)
+    assert exc_info.value.response['ResponseMetadata']['HTTPStatusCode'] >= 400
 
     # user A sets a bucket policy granting user B full access
     policy = json.dumps({
@@ -3417,7 +3463,12 @@ def test_cross_owner_vector_bucket():
     })
     s3conn.put_bucket_policy(Bucket=bucket_name, Policy=policy)
 
-    # now user B should be able to create an index and write/query vectors
+    # now user B should be able to create the vector bucket, an index, and
+    # write/query vectors
+    index_name = 'cross-owner-idx'
+    result = other.create_vector_bucket(vectorBucketName=bucket_name)
+    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
     result = other.create_index(vectorBucketName=bucket_name, indexName=index_name,
                                 dataType='float32', dimension=4, distanceMetric='cosine')
     assert result['ResponseMetadata']['HTTPStatusCode'] == 200
@@ -3437,73 +3488,211 @@ def test_cross_owner_vector_bucket():
 
 
 @pytest.mark.vector_bucket_test
-def test_versioned_s3_bucket():
-    """Vector bucket backed by an S3 bucket with versioning enabled."""
-    if not is_s3_backend():
-        pytest.skip("versioned bucket test only applies to S3/SAL backends")
-    if get_s3vector_backend() == 'rgw':
-        pytest.skip("versioned buckets not supported with RGW backend (null version IDs)")
-
-    conn = connection()
+def test_delete_user_with_vector_buckets():
+    """
+    A user owning vector buckets cannot be deleted unless its data is purged, and
+    purging it removes the vector buckets together with their indexes. Note that
+    the backing bucket belongs to the main user: it is an ordinary bucket, and
+    would have refused the deletion of the user by itself, hiding the check on the
+    vector buckets
+    """
+    dimension = 4
+    index_name = 'index-of-the-deleted-user'
+    main_conn = connection()
     s3conn = connection('s3')
+    conn = another_user()
+    uid = conn.uid
     bucket_name = gen_bucket_name()
+    try:
+        _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn)
+        if has_backing_bucket():
+            # the backing bucket belongs to the main user, so the user under test
+            # needs a policy on it to create indexes
+            policy = json.dumps({
+                "Version": "2012-10-17",
+                "Statement": [{
+                    "Effect": "Allow",
+                    "Principal": {"AWS": [f"arn:aws:iam:::user/{uid}"]},
+                    "Action": "s3:*",
+                    "Resource": [
+                        f"arn:aws:s3:::{bucket_name}",
+                        f"arn:aws:s3:::{bucket_name}/*"
+                    ]
+                }]
+            })
+            s3conn.put_bucket_policy(Bucket=bucket_name, Policy=policy)
 
-    # create an S3 bucket and enable versioning
-    _create_s3bucket(s3conn, bucket_name)
-    s3conn.put_bucket_versioning(Bucket=bucket_name,
-                                 VersioningConfiguration={'Status': 'Enabled'})
-
-    # create a vector bucket, index, and write/query vectors
-    result = conn.create_vector_bucket(vectorBucketName=bucket_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    index_name = 'versioned-idx'
-    result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
-                               dataType='float32', dimension=4, distanceMetric='cosine')
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-
-    vectors = generate_vectors(3, 4)
-    # upsert the same vectors multiple times to exercise overwrites with versioning
-    for i in range(3):
-        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name, vectors=vectors)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=generate_vectors(2, dimension))
         assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
-    # get vectors
-    vector_keys = [v['key'] for v in vectors]
-    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
-                              keys=vector_keys, returnData=True)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result['vectors']) == 3
+        # the user cannot be deleted while it owns a vector bucket
+        out, result = admin(['user', 'rm', '--uid', uid])
+        assert result != 0, f"user '{uid}' was deleted while it owns a vector bucket"
+        assert 'vector bucket' in out, f"unexpected error when deleting user '{uid}': {out}"
 
-    # query vectors
-    query_vector = generate_data(4, 0)
-    result = conn.query_vectors(vectorBucketName=bucket_name, indexName=index_name,
-                                queryVector=query_vector, topK=3)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result['vectors']) == 3
+        # purging the data of the user removes its vector buckets. note that
+        # radosgw-admin reaches the vector data itself, so it needs the backend
+        # options of the RGWs
+        out, result = admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
+        assert result == 0, f"failed to delete user '{uid}' with its data: {out}"
+        out, result = admin(['user', 'info', '--uid', uid])
+        assert result != 0, f"user '{uid}' still exists after it was deleted: {out}"
 
-    # delete vectors
-    result = conn.delete_vectors(vectorBucketName=bucket_name, indexName=index_name,
-                                 keys=vector_keys)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        # the indexes were purged together with the vector bucket: a vector bucket
+        # created again over the same storage holds none of them
+        result = main_conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = main_conn.list_indexes(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert result['indexes'] == [], \
+            f"the indexes of the deleted user were not purged: {result['indexes']}"
+    finally:
+        # best effort cleanup, in case the user was not deleted by the test
+        admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
+        try:
+            _delete_vector_bucket(main_conn, bucket_name)
+        except main_conn.exceptions.ClientError as err:
+            log.warning("failed to delete vector bucket '%s': %s", bucket_name, str(err))
+        _delete_s3_bucket_for_vector_bucket(bucket_name)
 
-    # verify they are gone
-    result = conn.get_vectors(vectorBucketName=bucket_name, indexName=index_name,
-                              keys=vector_keys)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    assert len(result['vectors']) == 0
 
-    # cleanup - delete the indexes, and then purge all versions and delete markers.
-    # the files that LanceDB removes are kept as noncurrent versions of the objects,
-    # so the vector bucket would still look like it holds indexes if the versions
-    # are not purged before it is deleted
-    _delete_all_indexes(conn, bucket_name)
-    _purge_all_versions(s3conn, bucket_name)
-    result = conn.delete_vector_bucket(vectorBucketName=bucket_name)
-    assert result['ResponseMetadata']['HTTPStatusCode'] == 200
-    # deleting the vector bucket removes the LanceDB files again, which leaves
-    # a new set of delete markers behind, so purge once more before the bucket
-    # itself can be deleted
-    _purge_all_versions(s3conn, bucket_name)
-    s3conn.delete_bucket(Bucket=bucket_name)
+@pytest.mark.vector_bucket_test
+def test_account_vector_buckets():
+    """
+    The vector buckets created by a user of an account belong to the account, like
+    its ordinary buckets: they are listed by every user of the account, and they
+    outlive the user that created them
+    """
+    dimension = 4
+    index_name = 'index-of-the-account'
+    conn = another_account_user()
+    other = another_account_user(account_id=conn.account_id)
+    bucket_name = gen_bucket_name()
+    try:
+        _ensure_s3_bucket_for_vector_bucket(bucket_name, conn.s3)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
 
+        # the vector bucket belongs to the account, so it is listed by the user that
+        # created it, and by any other user of the same account
+        for account_conn in (conn, other):
+            result = account_conn.list_vector_buckets()
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+            bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+            assert bucket_names == [bucket_name], \
+                f"user '{account_conn.uid}' of the account sees the vector buckets: {bucket_names}"
+            result = account_conn.get_vector_bucket(vectorBucketName=bucket_name)
+            assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # the vector bucket is not owned by the user that created it, so it is not
+        # part of the data of that user: the user is deleted with its data purged,
+        # and the vector bucket, with its indexes, remains with the account
+        out, result = admin(['user', 'rm', '--uid', conn.uid, '--purge-data'])
+        assert result == 0, f"failed to delete account user '{conn.uid}': {out}"
+        result = other.list_vector_buckets()
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        bucket_names = [b['vectorBucketName'] for b in result['vectorBuckets']]
+        assert bucket_names == [bucket_name], \
+            f"the vector bucket of the account did not outlive the user that created it: {bucket_names}"
+        result = other.list_indexes(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        assert [i['indexName'] for i in result['indexes']] == [index_name]
+    finally:
+        # best effort cleanup. the account and its users are left behind, as done
+        # for the users created by another_user()
+        try:
+            _delete_vector_bucket(other, bucket_name)
+        except other.exceptions.ClientError as err:
+            log.warning("failed to delete vector bucket '%s': %s", bucket_name, str(err))
+        _delete_s3_bucket_for_vector_bucket(bucket_name, other.s3)
+
+
+@pytest.mark.vector_bucket_test
+def test_delete_account_with_vector_buckets():
+    """
+    An account holding vector buckets cannot be deleted unless its data is purged,
+    and purging it removes them together with their indexes. The data is reached
+    with the credentials of the root user of the account
+    """
+    dimension = 4
+    index_name = 'index-of-the-account'
+    conn = another_account_user()
+    account_id = conn.account_id
+    bucket_name = gen_bucket_name()
+    try:
+        _ensure_s3_bucket_for_vector_bucket(bucket_name, conn.s3)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        # the account is not deleted while it holds a vector bucket. note that its
+        # users are still there afterwards: the vector buckets are handled before
+        # anything else is removed
+        out, result = admin(['account', 'rm', '--account-id', account_id])
+        assert result != 0, f"account '{account_id}' was deleted while it holds a vector bucket"
+        assert 'vector bucket' in out, \
+            f"unexpected error when deleting account '{account_id}': {out}"
+        out, result = admin(['user', 'info', '--uid', conn.uid])
+        assert result == 0, f"user '{conn.uid}' of the account was removed by the failed deletion: {out}"
+
+        # purging the data of the account removes its vector buckets. note that
+        # radosgw-admin reaches the vector data itself, so it needs the backend
+        # options of the RGWs
+        out, result = admin(['account', 'rm', '--account-id', account_id, '--purge-data'] +
+                            backend_admin_args())
+        assert result == 0, f"failed to delete account '{account_id}' with its data: {out}"
+        out, result = admin(['account', 'get', '--account-id', account_id])
+        assert result != 0, f"account '{account_id}' still exists after it was deleted: {out}"
+    finally:
+        # best effort cleanup, in case the account was not deleted by the test
+        admin(['account', 'rm', '--account-id', account_id, '--purge-data'] + backend_admin_args())
+
+
+@pytest.mark.vector_bucket_test
+def test_delete_user_owning_the_backing_bucket():
+    """
+    The data of a vector bucket is held in an ordinary bucket, which may belong to
+    the same user. Purging the data of that user must remove the vector bucket
+    before the bucket holding its data, or the indexes can no longer be reached
+    """
+    dimension = 4
+    index_name = 'index-over-an-owned-bucket'
+    conn = another_user()
+    uid = conn.uid
+    s3conn = conn.s3
+    bucket_name = gen_bucket_name()
+    try:
+        # unlike the other tests, the backing bucket belongs to the user under test
+        _ensure_s3_bucket_for_vector_bucket(bucket_name, s3conn)
+        result = conn.create_vector_bucket(vectorBucketName=bucket_name)
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.create_index(vectorBucketName=bucket_name, indexName=index_name,
+                                   dataType='float32', dimension=dimension,
+                                   distanceMetric='euclidean')
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+        result = conn.put_vectors(vectorBucketName=bucket_name, indexName=index_name,
+                                  vectors=generate_vectors(2, dimension))
+        assert result['ResponseMetadata']['HTTPStatusCode'] == 200
+
+        out, result = admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
+        assert result == 0, f"failed to delete user '{uid}' with its data: {out}"
+        out, result = admin(['user', 'info', '--uid', uid])
+        assert result != 0, f"user '{uid}' still exists after it was deleted: {out}"
+    finally:
+        # best effort cleanup, in case the user was not deleted by the test. the
+        # backing bucket belongs to the user, and is purged together with it
+        admin(['user', 'rm', '--uid', uid, '--purge-data'] + backend_admin_args())
