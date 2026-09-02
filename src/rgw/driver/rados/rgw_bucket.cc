@@ -1522,21 +1522,21 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
     return -ERR_PERMANENT_REDIRECT;
   }
 
-  if (bypass_gc)
-    ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
-  else
-    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
-  if (ret < 0)
-    return ret;
-
-  // forward to master zonegroup
+  // forward to master first
   const std::string delpath = "/admin/bucket";
   RGWEnv env;
   env.set("REQUEST_METHOD", "DELETE");
   env.set("SCRIPT_URI", delpath);
   env.set("REQUEST_URI", delpath);
-  env.set("QUERY_STRING", fmt::format("bucket={}&tenant={}", bucket->get_name(), bucket->get_tenant()));
   req_info req(dpp->get_cct(), &env);
+  req.args.append("bucket", bucket->get_name());
+  req.args.append("tenant", bucket->get_tenant());
+  if (op_state.will_delete_children()) {
+    req.args.append("purge-objects", "true");
+  }
+  if (bypass_gc) {
+    req.args.append("bypass-gc", "true");
+  }
   rgw_err err; // unused
 
   ret = rgw_forward_request_to_master(dpp, site, bucket->get_owner(), nullptr, nullptr, req, err, y);
@@ -1545,6 +1545,11 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
                       << ret << dendl;
     return ret;
   }
+
+  if (bypass_gc)
+    ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
+  else
+    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
 
   return ret;
 }
