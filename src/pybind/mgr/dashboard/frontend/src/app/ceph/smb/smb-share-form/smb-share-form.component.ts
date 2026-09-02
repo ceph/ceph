@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, inject, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 import { CdForm } from '~/app/shared/forms/cd-form';
@@ -9,6 +9,7 @@ import _ from 'lodash';
 import { map } from 'rxjs/operators';
 
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 
 import { Filesystem, PROVIDER, SHARE_RESOURCE, ShareRequestModel, SMBShare } from '../smb.model';
@@ -22,8 +23,6 @@ import { FormatterService } from '~/app/shared/services/formatter.service';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
-import { CLUSTER_PATH } from '../smb-cluster-list/smb-cluster-list.component';
-import { SHARE_PATH } from '../smb-share-list/smb-share-list.component';
 
 const QOS_IOPS_MAX = 1_000_000;
 const QOS_BW_MAX_BYTES = 2 ** 40;
@@ -49,6 +48,9 @@ function getBwMaxForUnit(unit: string): number {
   standalone: false
 })
 export class SmbShareFormComponent extends CdForm implements OnInit {
+  private readonly ctx = inject(SMB_CONTEXT);
+  private readonly clusterPath = `${this.ctx.basePath}/cluster`;
+  private readonly sharePath = `${this.ctx.basePath}/share`;
   smbShareForm: CdFormGroup;
   action: string;
   resource: string;
@@ -78,7 +80,7 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
   ) {
     super();
     this.resource = $localize`Share`;
-    this.isEdit = this.router.url.startsWith(`/${SHARE_PATH}/${URLVerbs.EDIT}`);
+    this.isEdit = !!this.route.snapshot.data['editing'];
     this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
   }
   ngOnInit() {
@@ -325,12 +327,12 @@ export class SmbShareFormComponent extends CdForm implements OnInit {
 
     this.taskWrapperService
       .wrapTaskAroundCall({
-        task: new FinishedTask(`${SHARE_PATH}/${urlVerb}`, { share_id }),
+        task: new FinishedTask(`${this.sharePath}/${urlVerb}`, { share_id }),
         call: this.smbService.createShare(requestModel)
       })
       .subscribe({
         complete: () => {
-          this.router.navigate([CLUSTER_PATH]);
+          this.router.navigate([this.clusterPath]);
         },
         error: () => {
           component.smbShareForm.setErrors({ cdSubmitButton: true });

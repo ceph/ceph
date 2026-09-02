@@ -1,6 +1,7 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { SmbUsersgroupsResourceSidebarComponent } from './smb-usersgroups-resource-sidebar.component';
 import { ActivatedRoute, convertToParamMap, provideRouter, ParamMap } from '@angular/router';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { BehaviorSubject } from 'rxjs';
 import { Component, Input } from '@angular/core';
 
@@ -28,7 +29,11 @@ describe('SmbUsersgroupsResourceSidebarComponent', () => {
 
     await TestBed.configureTestingModule({
       declarations: [SmbUsersgroupsResourceSidebarComponent, MockSidebarLayoutComponent],
-      providers: [provideRouter([]), { provide: ActivatedRoute, useValue: activatedRouteMock }]
+      providers: [
+        provideRouter([]),
+        { provide: ActivatedRoute, useValue: activatedRouteMock },
+        { provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbUsersgroupsResourceSidebarComponent);

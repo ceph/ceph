@@ -5,6 +5,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { SharedModule } from '~/app/shared/shared.module';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 describe('SmbJoinAuthListComponent', () => {
   let component: SmbJoinAuthListComponent;
@@ -13,7 +14,8 @@ describe('SmbJoinAuthListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [SmbJoinAuthListComponent],
-      imports: [SharedModule, HttpClientTestingModule, RouterTestingModule]
+      imports: [SharedModule, HttpClientTestingModule, RouterTestingModule],
+      providers: [{ provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbJoinAuthListComponent);
