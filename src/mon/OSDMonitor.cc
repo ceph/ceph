@@ -14045,6 +14045,75 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
+  } else if (prefix == "osd pool rollbacksnap") {
+    string poolstr;
+    cmd_getval(cmdmap, "pool", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    string snapname;
+    cmd_getval(cmdmap, "snap", snapname);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+      ss << "pool-level snapshot rollback requires all OSDs to be running "
+            "Umbrella or later";
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+    if (p->is_unmanaged_snaps_mode()) {
+      ss << "pool " << poolstr << " is in unmanaged snaps mode";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+    if (!p->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " does not exist";
+      err = -ENOENT;
+      goto reply_no_propose;
+    }
+    {
+      pg_pool_t *pp = nullptr;
+      if (pending_inc.new_pools.count(pool))
+        pp = &pending_inc.new_pools[pool];
+      if (!pp) {
+        pp = &pending_inc.new_pools[pool];
+        *pp = *p;
+      }
+      snapid_t source = pp->snap_exists(snapname.c_str());
+      // Idempotency: if a rollback of this snapshot is already pending,
+      // report success with the existing rollback id.
+      for (auto& [rb_id, rb] : pp->rollback_snaps) {
+        if (rb.source_snap == source) {
+          ss << "initiated rollback of pool " << poolstr
+             << " to snapshot '" << snapname << "'"
+             << " (rollback id " << rb_id << ")";
+          getline(ss, rs);
+          wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                                                     get_last_committed() + 1));
+          return true;
+        }
+      }
+      rollback_snap_info_t rb;
+      rb.source_snap  = source;
+      rb.rollback_id  = pp->get_snap_seq() + 1;
+
+      pp->snap_seq = rb.rollback_id;
+      pp->set_snap_epoch(pending_inc.epoch);
+      pp->rollback_snaps[rb.rollback_id] = rb;
+
+      pending_inc.new_pools[pool] = *pp;
+      pending_inc.new_rollback_snaps[pool][rb.rollback_id] = rb;
+
+      ss << "initiated rollback of pool " << poolstr
+         << " to snapshot '" << snapname << "'"
+         << " (rollback id " << rb.rollback_id << ")";
+    }
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                                               get_last_committed() + 1));
+    return true;
   } else if (prefix == "osd pool force-remove-snap") {
     /*
      *  Forces removal of snapshots in the range of
