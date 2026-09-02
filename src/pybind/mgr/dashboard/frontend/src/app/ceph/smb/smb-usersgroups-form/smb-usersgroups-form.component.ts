@@ -3,15 +3,17 @@ import {
   Component,
   computed,
   effect,
+  inject,
   OnInit,
   Signal,
   OnDestroy
 } from '@angular/core';
 import { FormArray, FormControl, Validators } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute } from '@angular/router';
 import { Observable } from 'rxjs';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
+import { SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -20,7 +22,6 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { Group, SMBCluster, SMBUsersGroups, User, USERSGROUPS_RESOURCE } from '../smb.model';
 import { Location } from '@angular/common';
-import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.component';
 
 @Component({
   selector: 'cd-smb-usersgroups-form',
@@ -29,6 +30,8 @@ import { USERSGROUPS_PATH } from '../smb-usersgroups-list/smb-usersgroups-list.c
   standalone: false
 })
 export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDestroy {
+  private readonly ctx = inject(SMB_CONTEXT);
+  private readonly usersGroupsPath = `${this.ctx.basePath}/standalone`;
   form: CdFormGroup;
   action: string;
   resource: string;
@@ -47,13 +50,12 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
     private taskWrapperService: TaskWrapperService,
     private formBuilder: CdFormBuilder,
     public smbService: SmbService,
-    private router: Router,
     private cd: ChangeDetectorRef,
     private route: ActivatedRoute,
     private location: Location
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/${USERSGROUPS_PATH}/${URLVerbs.EDIT}`);
+    this.editing = !!this.route.snapshot.data['editing'];
     this.resource = $localize`users and groups access resource`;
     effect(() => {
       const formData = this.uploadedData();
@@ -144,7 +146,7 @@ export class SmbUsersgroupsFormComponent extends CdForm implements OnInit, OnDes
 
     const self = this;
 
-    let taskUrl = `${USERSGROUPS_PATH}/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
+    let taskUrl = `${this.usersGroupsPath}/${this.editing ? URLVerbs.EDIT : URLVerbs.CREATE}`;
     this.taskWrapperService
       .wrapTaskAroundCall({
         task: new FinishedTask(taskUrl, {
