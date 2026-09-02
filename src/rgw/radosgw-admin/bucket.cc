@@ -374,23 +374,6 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
                      std::unique_ptr<rgw::sal::Bucket>& bucket,
                      rgw_admin_bucket_options& o)
 {
-
-  auto& tenant = o.tenant;
-  auto& bucket_name = o.bucket_name;
-  auto& bucket_id = o.bucket_id;
-  auto& object = o.object;
-  auto& object_version = o.object_version;
-  auto& marker = o.marker;
-  auto& metadata_key = o.metadata_key;
-  auto& err = o.err;
-  auto& new_bucket_name = o.new_bucket_name;
-  auto& account_id = o.account_id;
-  auto& format = o.format;
-  auto& start_date = o.start_date;
-  auto& end_date = o.end_date;
-
-  auto& opt_prefix = o.opt_prefix;
-
   int& ret = *o.ret;
   int max_entries = o.max_entries.value_or(1000);
   int max_concurrent_ios = o.max_concurrent_ios;
@@ -426,7 +409,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   if (command == rgw_admin::OPT::BUCKET_LIMIT_CHECK) {
     void *handle;
     std::list<std::string> user_ids;
-    metadata_key = "user";
+    o.metadata_key = "user";
     int max = 1000;
 
     bool truncated;
@@ -439,7 +422,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
     } else {
       /* list users in groups of max-keys, then perform user-bucket
        * limit-check on each group */
-     ret = driver->meta_list_keys_init(dpp, metadata_key, string(), &handle);
+     ret = driver->meta_list_keys_init(dpp, o.metadata_key, string(), &handle);
       if (ret < 0) {
 	cerr << "ERROR: buckets limit check can't get user metadata_key: "
 	     << cpp_strerror(-ret) << std::endl;
@@ -469,21 +452,21 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   } /* rgw_admin::OPT::BUCKET_LIMIT_CHECK */
 
   if (command == rgw_admin::OPT::BUCKETS_LIST) {
-    if (bucket_name.empty()) {
+    if (o.bucket_name.empty()) {
       if (!rgw::sal::User::empty(user)) {
         if (!user_op.has_existing_user()) {
           cerr << "ERROR: could not find user: " << user << std::endl;
           return -ENOENT;
         }
       }
-      bucket_op.marker = marker;
+      bucket_op.marker = o.marker;
       if (limit_specified)
         bucket_op.max_entries = *o.max_entries;
       else
         bucket_op.max_entries = 0; /* for backward compatibility */
       RGWBucketAdminOp::info(driver, site, bucket_op, stream_flusher, null_yield, dpp);
     } else {
-      int ret = rgw_admin_init_bucket(dpp, driver, tenant, bucket_name, bucket_id, &bucket);
+      int ret = rgw_admin_init_bucket(dpp, driver, o.tenant, o.bucket_name, o.bucket_id, &bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -509,13 +492,13 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 
       params.prefix = prefix;
       params.delim = delim;
-      // Support pagination for versioned buckets using --marker and --object-version
-      // For versioned buckets: use both --marker (name) and --object-version (instance)
-      // For non-versioned buckets: use only --marker (name)
-      if (!object_version.empty()) {
-        params.marker = rgw_obj_key(marker, object_version);
+      // Support pagination for versioned buckets using --o.marker and --o.object-version
+      // For versioned buckets: use both --o.marker (name) and --o.object-version (instance)
+      // For non-versioned buckets: use only --o.marker (name)
+      if (!o.object_version.empty()) {
+        params.marker = rgw_obj_key(o.marker, o.object_version);
       } else {
-        params.marker = rgw_obj_key(marker);
+        params.marker = rgw_obj_key(o.marker);
       }
       params.ns = ns;
       params.enforce_ns = false;
@@ -546,23 +529,23 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 
       formatter->close_section();
       formatter->flush(cout);
-    } /* have bucket_name */
+    } /* have o.bucket_name */
   } /* rgw_admin::OPT::BUCKETS_LIST */
 
 #ifdef WITH_RADOSGW_RADOS
   if (command == rgw_admin::OPT::BUCKET_RADOS_LIST) {
     RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(driver),
-			max_concurrent_ios, orphan_stale_secs, tenant);
+			max_concurrent_ios, orphan_stale_secs, o.tenant);
     if (o.rgw_obj_fs) {
       lister.set_field_separator(*o.rgw_obj_fs);
     }
 
-    if (bucket_name.empty()) {
+    if (o.bucket_name.empty()) {
       // yes_i_really_mean_it means continue with listing even if
       // there are indexless buckets
       ret = lister.run(dpp, yes_i_really_mean_it);
     } else {
-      ret = lister.run(dpp, bucket_name);
+      ret = lister.run(dpp, o.bucket_name);
     }
 
     if (ret < 0) {
@@ -581,11 +564,11 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 #endif
 
   if (command == rgw_admin::OPT::BUCKET_LAYOUT) {
-    if (bucket_name.empty()) {
+    if (o.bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = rgw_admin_init_bucket(dpp, driver, tenant, bucket_name, bucket_id, &bucket);
+    int ret = rgw_admin_init_bucket(dpp, driver, o.tenant, o.bucket_name, o.bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -597,9 +580,9 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   }
 
   if (command == rgw_admin::OPT::BUCKET_STATS) {
-    if (bucket_name.empty() && !bucket_id.empty()) {
+    if (o.bucket_name.empty() && !o.bucket_id.empty()) {
       rgw_bucket bucket_key;
-      if (!rgw_find_bucket_by_id(dpp, driver->ctx(), driver, marker, bucket_id, &bucket_key)) {
+      if (!rgw_find_bucket_by_id(dpp, driver->ctx(), driver, o.marker, o.bucket_id, &bucket_key)) {
         cerr << "failure: no such bucket id" << std::endl;
         return -ENOENT;
       }
@@ -615,15 +598,15 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 
     int r = RGWBucketAdminOp::info(driver, site, bucket_op, stream_flusher, null_yield, dpp);
     if (r < 0) {
-      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
+      cerr << "failure: " << cpp_strerror(-r) << ": " << o.err << std::endl;
       return posix_errortrans(-r);
     }
   }
 
 #ifdef WITH_RADOSGW_RADOS
   if (command == rgw_admin::OPT::BUCKET_LINK) {
-    bucket_op.set_bucket_id(bucket_id);
-    bucket_op.set_new_bucket_name(new_bucket_name);
+    bucket_op.set_bucket_id(o.bucket_id);
+    bucket_op.set_new_bucket_name(o.new_bucket_name);
     string link_err;
     int r = RGWBucketAdminOp::link(driver, bucket_op, dpp, null_yield, &link_err);
     if (r < 0) {
@@ -642,7 +625,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 #endif
 
   if (command == rgw_admin::OPT::BUCKET_SHARD_OBJECTS) {
-    const auto prefix = opt_prefix ? *opt_prefix : "obj"s;
+    const auto prefix = o.opt_prefix ? *o.opt_prefix : "obj"s;
     if (!num_shards_specified) {
       cerr << "ERROR: num-shards must be specified."
 	   << std::endl;
@@ -659,7 +642,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
       uint64_t ctr = 0;
       int shard;
       do {
-	obj = fmt::format("{}{:0>20}", prefix, ctr);
+	obj = fmt::o.format("{}{:0>20}", prefix, ctr);
 	shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
 	++ctr;
       } while (shard != shard_id);
@@ -671,7 +654,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
     } else {
       std::vector<std::string> objs(num_shards);
       for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
-	auto key = fmt::format("{}{:0>20}", prefix, ctr);
+	auto key = fmt::o.format("{}{:0>20}", prefix, ctr);
 	auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
 	if (objs[shard].empty()) {
 	  objs[shard] = std::move(key);
@@ -687,7 +670,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   }
 
   if (command == rgw_admin::OPT::BUCKET_OBJECT_SHARD) {
-    if (!num_shards_specified || object.empty()) {
+    if (!num_shards_specified || o.object.empty()) {
       cerr << "ERROR: num-shards and object must be specified."
 	   << std::endl;
       return EINVAL;
@@ -697,7 +680,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
       return EINVAL;
     }
     auto shard =
-      RGWSI_BucketIndex_RADOS::bucket_shard_index(object, num_shards);
+      RGWSI_BucketIndex_RADOS::bucket_shard_index(o.object, num_shards);
     formatter->open_object_section("obj_shard");
     encode_json("shard", shard, formatter);
     formatter->close_section();
@@ -705,17 +688,17 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   }
 
   if (command == rgw_admin::OPT::BUCKET_CHOWN) {
-    if (bucket_name.empty()) {
+    if (o.bucket_name.empty()) {
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
     }
 
-    bucket_op.account_id = account_id;
-    bucket_op.set_bucket_name(bucket_name);
-    bucket_op.set_new_bucket_name(new_bucket_name);
+    bucket_op.account_id = o.account_id;
+    bucket_op.set_bucket_name(o.bucket_name);
+    bucket_op.set_new_bucket_name(o.new_bucket_name);
     string chown_err;
 
-    int r = RGWBucketAdminOp::chown(driver, bucket_op, marker, dpp, null_yield, &chown_err);
+    int r = RGWBucketAdminOp::chown(driver, bucket_op, o.marker, dpp, null_yield, &chown_err);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << ": " << chown_err << std::endl;
       return -r;
@@ -724,12 +707,12 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 
 #ifdef WITH_RADOSGW_RADOS
   if (command == rgw_admin::OPT::BUCKET_REWRITE) {
-    if (bucket_name.empty()) {
+    if (o.bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
 
-    int ret = rgw_admin_init_bucket(dpp, driver, tenant, bucket_name, bucket_id, &bucket);
+    int ret = rgw_admin_init_bucket(dpp, driver, o.tenant, o.bucket_name, o.bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -738,15 +721,15 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
     uint64_t start_epoch = 0;
     uint64_t end_epoch = 0;
 
-    if (!end_date.empty()) {
-      int ret = utime_t::parse_date(end_date, &end_epoch, NULL);
+    if (!o.end_date.empty()) {
+      int ret = utime_t::parse_date(o.end_date, &end_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse end date" << std::endl;
         return EINVAL;
       }
     }
-    if (!start_date.empty()) {
-      int ret = utime_t::parse_date(start_date, &start_epoch, NULL);
+    if (!o.start_date.empty()) {
+      int ret = utime_t::parse_date(o.start_date, &start_epoch, NULL);
       if (ret < 0) {
         cerr << "ERROR: failed to parse start date" << std::endl;
         return EINVAL;
@@ -761,7 +744,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
     string empty_delimiter;
 
     formatter->open_object_section("result");
-    formatter->dump_string("bucket", bucket_name);
+    formatter->dump_string("bucket", o.bucket_name);
     formatter->open_array_section("objects");
 
     constexpr uint32_t NUM_ENTRIES = 1000;
@@ -842,9 +825,9 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 
   if (command == rgw_admin::OPT::BUCKET_RESHARD) {
     int ret = rgw_admin_check_reshard_bucket_params_impl(dpp, driver,
-					  bucket_name,
-					  tenant,
-					  bucket_id,
+					  o.bucket_name,
+					  o.tenant,
+					  o.bucket_id,
 					  num_shards_specified,
 					  num_shards,
 					  yes_i_really_mean_it,
@@ -899,7 +882,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 #endif
 
   if (command == rgw_admin::OPT::BUCKET_SET_MIN_SHARDS) {
-    if (bucket_name.empty()) {
+    if (o.bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return -EINVAL;
     }
@@ -914,7 +897,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
       return -EINVAL;
     }
 
-    int ret = rgw_admin_init_bucket(dpp, driver, tenant, bucket_name, bucket_id, &bucket);
+    int ret = rgw_admin_init_bucket(dpp, driver, o.tenant, o.bucket_name, o.bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -946,11 +929,11 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
 #ifdef WITH_RADOSGW_RADOS
   if (command == rgw_admin::OPT::BUCKET_CHECK) {
     if (check_head_obj_locator) {
-      if (bucket_name.empty()) {
+      if (o.bucket_name.empty()) {
         cerr << "ERROR: need to specify bucket name" << std::endl;
         return EINVAL;
       }
-      do_check_object_locator(dpp, driver, tenant, bucket_name, fix, remove_bad, formatter);
+      do_check_object_locator(dpp, driver, o.tenant, o.bucket_name, fix, remove_bad, formatter);
     } else {
       RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp);
     }
@@ -993,11 +976,11 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   }
 
   if ((command == rgw_admin::OPT::BUCKET_SUSPEND) || (command == rgw_admin::OPT::BUCKET_UNSUSPEND)) {
-    if (bucket_name.empty()) {
+    if (o.bucket_name.empty()) {
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    ret = rgw_admin_init_bucket(dpp, driver, tenant, bucket_name, bucket_id, &bucket);
+    ret = rgw_admin_init_bucket(dpp, driver, o.tenant, o.bucket_name, o.bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -1013,7 +996,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   }
 
   if (command == rgw_admin::OPT::POLICY) {
-    if (format == "xml") {
+    if (o.format == "xml") {
       ret = RGWBucketAdminOp::dump_s3_policy(driver, bucket_op, std::cout, dpp, null_yield);
       if (ret < 0) {
         cerr << "ERROR: failed to get policy: " << cpp_strerror(-ret) << std::endl;

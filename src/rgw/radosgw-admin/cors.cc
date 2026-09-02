@@ -15,10 +15,9 @@ using namespace std;
 
 int rgw_admin_cors(ceph::Formatter* formatter, const rgw_admin_cors_options& o)
 {
-  auto& command = o.command;
   int ret = 0;
 
-  if (command == OPT::GLOBAL_CORS_GET) {
+  if (o.command == OPT::GLOBAL_CORS_GET) {
     string allow_origins, allow_headers, allow_methods, expose_headers;
     ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
     if (ret < 0 || allow_origins.empty()) {

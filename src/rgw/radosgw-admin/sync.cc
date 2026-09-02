@@ -777,69 +777,27 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
                    ceph::Formatter* zone_formatter,
                    rgw_admin_sync_options& o)
 {
-  auto& command = o.command;
-  auto& source_zone = o.source_zone;
-  auto& marker = o.marker;
-  auto& start_marker = o.start_marker;
-  auto& end_marker = o.end_marker;
-  auto& start_date = o.start_date;
-  auto& end_date = o.end_date;
-  auto& period_id = o.period_id;
-  auto& realm_id = o.realm_id;
-  auto& realm_name = o.realm_name;
-  auto& zonegroup_id = o.zonegroup_id;
-  auto& zonegroup_name = o.zonegroup_name;
-  auto& opt_effective_zone_id = o.opt_effective_zone_id;
-  auto& opt_bucket = o.opt_bucket;
-  auto& opt_bucket_name = o.opt_bucket_name;
-  auto& opt_source_zone_id = o.opt_source_zone_id;
-  auto& opt_dest_zone_id = o.opt_dest_zone_id;
-  auto& opt_zone_ids = o.opt_zone_ids;
-  auto& opt_source_zone_ids = o.opt_source_zone_ids;
-  auto& opt_dest_zone_ids = o.opt_dest_zone_ids;
-  auto& opt_source_bucket = o.opt_source_bucket;
-  auto& opt_dest_bucket = o.opt_dest_bucket;
-  auto& opt_source_tenant = o.opt_source_tenant;
-  auto& opt_dest_tenant = o.opt_dest_tenant;
-  auto& opt_source_bucket_name = o.opt_source_bucket_name;
-  auto& opt_dest_bucket_name = o.opt_dest_bucket_name;
-  auto& opt_source_bucket_id = o.opt_source_bucket_id;
-  auto& opt_dest_bucket_id = o.opt_dest_bucket_id;
-  auto& opt_pipe_id = o.opt_pipe_id;
-  auto& opt_group_id = o.opt_group_id;
-  auto& opt_flow_id = o.opt_flow_id;
-  auto& opt_flow_type = o.opt_flow_type;
-  auto& opt_status = o.opt_status;
-  auto& opt_prefix = o.opt_prefix;
-  auto& opt_prefix_rm = o.opt_prefix_rm;
-  auto& opt_dest_owner = o.opt_dest_owner;
-  auto& opt_storage_class = o.opt_storage_class;
-  auto& opt_priority = o.opt_priority;
-  auto& opt_mode = o.opt_mode;
-  auto& tags_add = o.tags_add;
-  auto& tags_rm = o.tags_rm;
-  auto& user = o.user;
   int shard_id = o.shard_id;
   int trim_delay_ms = o.trim_delay_ms;
   bool specified_shard_id = o.specified_shard_id;
   int ret = 0;
 
-  if (command == OPT::MDLOG_LIST) {
-    if (!start_date.empty()) {
+  if (o.command == OPT::MDLOG_LIST) {
+    if (!o.start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_date.empty()) {
+    if (!o.end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_marker.empty()) {
+    if (!o.end_marker.empty()) {
       std::cerr << "end-marker not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!start_marker.empty()) {
-      if (marker.empty()) {
-	marker = start_marker;
+    if (!o.start_marker.empty()) {
+      if (o.marker.empty()) {
+	o.marker = o.start_marker;
       } else {
 	std::cerr << "start-marker and marker not both allowed." << std::endl;
 	return -EINVAL;
@@ -848,27 +806,27 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
     int i = (specified_shard_id ? shard_id : 0);
 
-    if (period_id.empty()) {
+    if (o.period_id.empty()) {
       // use realm's current period
       RGWRealm realm;
       int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                realm_id, realm_name, realm);
+                                o.realm_id, o.realm_name, realm);
       if (ret < 0 ) {
         cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-      period_id = realm.current_period;
+      o.period_id = realm.current_period;
       std::cerr << "No --period given, using current period="
-          << period_id << std::endl;
+          << o.period_id << std::endl;
     }
-    RGWMetadataLog *meta_log = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->get_log(period_id);
+    RGWMetadataLog *meta_log = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->get_log(o.period_id);
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
       void *handle;
       vector<cls::log::entry> entries;
 
-      meta_log->init_list_entries(i, {}, {}, marker, &handle);
+      meta_log->init_list_entries(i, {}, {}, o.marker, &handle);
       bool truncated;
       do {
 	int ret = meta_log->list_entries(dpp, handle, 1000, entries, NULL, &truncated, null_yield);
@@ -895,23 +853,23 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     formatter->flush(cout);
   }
 
-  if (command == OPT::MDLOG_STATUS) {
+  if (o.command == OPT::MDLOG_STATUS) {
     int i = (specified_shard_id ? shard_id : 0);
 
-    if (period_id.empty()) {
+    if (o.period_id.empty()) {
       // use realm's current period
       RGWRealm realm;
       int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                realm_id, realm_name, realm);
+                                o.realm_id, o.realm_name, realm);
       if (ret < 0 ) {
         cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
         return -ret;
       }
-      period_id = realm.current_period;
+      o.period_id = realm.current_period;
       std::cerr << "No --period given, using current period="
-          << period_id << std::endl;
+          << o.period_id << std::endl;
     }
-    RGWMetadataLog *meta_log = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->get_log(period_id);
+    RGWMetadataLog *meta_log = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->get_log(o.period_id);
 
     formatter->open_array_section("entries");
 
@@ -930,7 +888,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     formatter->flush(cout);
   }
 
-  if (command == OPT::MDLOG_AUTOTRIM) {
+  if (o.command == OPT::MDLOG_AUTOTRIM) {
     // need a full history for purging old mdlog periods
     static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->init_oldest_log_period(null_yield, dpp, cfgstore);
 
@@ -956,22 +914,22 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     }
   }
 
-  if (command == OPT::MDLOG_TRIM) {
-    if (!start_date.empty()) {
+  if (o.command == OPT::MDLOG_TRIM) {
+    if (!o.start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_date.empty()) {
+    if (!o.end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!start_marker.empty()) {
+    if (!o.start_marker.empty()) {
       std::cerr << "start-marker not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_marker.empty()) {
-      if (marker.empty()) {
-	marker = end_marker;
+    if (!o.end_marker.empty()) {
+      if (o.marker.empty()) {
+	o.marker = o.end_marker;
       } else {
 	std::cerr << "end-marker and marker not both allowed." << std::endl;
 	return -EINVAL;
@@ -983,31 +941,31 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
       return EINVAL;
     }
 
-    if (marker.empty()) {
+    if (o.marker.empty()) {
       cerr << "ERROR: marker must be specified for trim operation" << std::endl;
       return EINVAL;
     }
 
-    if (period_id.empty()) {
+    if (o.period_id.empty()) {
       std::cerr << "missing --period argument" << std::endl;
       return EINVAL;
     }
-    RGWMetadataLog *meta_log = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->get_log(period_id);
+    RGWMetadataLog *meta_log = static_cast<rgw::sal::RadosStore*>(driver)->svc()->mdlog->get_log(o.period_id);
 
     // trim until -ENODATA
     do {
-      ret = meta_log->trim(dpp, shard_id, {}, {}, {}, marker, null_yield);
+      ret = meta_log->trim(dpp, shard_id, {}, {}, {}, o.marker, null_yield);
     } while (ret == 0);
     if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
   }
-  if (command == OPT::SYNC_INFO) {
-    ret = sync_info(dpp, driver, opt_effective_zone_id, opt_bucket, zone_formatter);
+  if (o.command == OPT::SYNC_INFO) {
+    ret = sync_info(dpp, driver, o.opt_effective_zone_id, o.opt_bucket, zone_formatter);
   }
-  if (command == OPT::SYNC_STATUS) {
-    if (opt_bucket || opt_bucket_name) {
+  if (o.command == OPT::SYNC_STATUS) {
+    if (o.opt_bucket || o.opt_bucket_name) {
        cerr << "ERROR: 'sync status' command does not support --bucket option." << std::endl;
        cerr << "Use 'radosgw-admin bucket sync status --bucket=<bucketname>' instead." << std::endl;
        return EINVAL;
@@ -1015,8 +973,8 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     sync_status(dpp, driver, formatter);
   }
 
-  if (command == OPT::METADATA_SYNC_STATUS) {
-    if (opt_bucket || opt_bucket_name) {
+  if (o.command == OPT::METADATA_SYNC_STATUS) {
+    if (o.opt_bucket || o.opt_bucket_name) {
       cerr << "ERROR: 'metadata sync status' command does not support --bucket option." << std::endl;
       return EINVAL;
     }
@@ -1063,7 +1021,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
   }
 
-  if (command == OPT::METADATA_SYNC_INIT) {
+  if (o.command == OPT::METADATA_SYNC_INIT) {
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp);
@@ -1079,7 +1037,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
   }
 
 
-  if (command == OPT::METADATA_SYNC_RUN) {
+  if (o.command == OPT::METADATA_SYNC_RUN) {
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp);
@@ -1095,12 +1053,12 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     }
   }
 
-  if (command == OPT::DATA_SYNC_STATUS) {
-    if (source_zone.empty()) {
+  if (o.command == OPT::DATA_SYNC_STATUS) {
+    if (o.source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr);
+    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, o.source_zone, nullptr);
 
     int ret = sync.init(dpp);
     if (ret < 0) {
@@ -1164,13 +1122,13 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     }
   }
 
-  if (command == OPT::DATA_SYNC_INIT) {
-    if (source_zone.empty()) {
+  if (o.command == OPT::DATA_SYNC_INIT) {
+    if (o.source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
 
-    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr);
+    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, o.source_zone, nullptr);
 
     int ret = sync.init(dpp);
     if (ret < 0) {
@@ -1185,8 +1143,8 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     }
   }
 
-  if (command == OPT::DATA_SYNC_RUN) {
-    if (source_zone.empty()) {
+  if (o.command == OPT::DATA_SYNC_RUN) {
+    if (o.source_zone.empty()) {
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
@@ -1199,7 +1157,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
       return ret;
     }
 
-    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, source_zone, nullptr, sync_module);
+    RGWDataSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor, o.source_zone, nullptr, sync_module);
 
     ret = sync.init(dpp);
     if (ret < 0) {
@@ -1216,23 +1174,23 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
 
 
-  if (command == OPT::SYNC_ERROR_LIST) {
+  if (o.command == OPT::SYNC_ERROR_LIST) {
     int max_entries = o.max_entries.value_or(1000);
-    if (!start_date.empty()) {
+    if (!o.start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_date.empty()) {
+    if (!o.end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_marker.empty()) {
+    if (!o.end_marker.empty()) {
       std::cerr << "end-marker not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!start_marker.empty()) {
-      if (marker.empty()) {
-	marker = start_marker;
+    if (!o.start_marker.empty()) {
+      if (o.marker.empty()) {
+	o.marker = o.start_marker;
       } else {
 	std::cerr << "start-marker and marker not both allowed." << std::endl;
 	return -EINVAL;
@@ -1257,7 +1215,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
       do {
         vector<cls::log::entry> entries;
-        ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->timelog.list(dpp, oid, {}, {}, max_entries - count, entries, marker, &marker, &truncated,
+        ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->timelog.list(dpp, oid, {}, {}, max_entries - count, entries, o.marker, &o.marker, &truncated,
 					      null_yield);
 	if (ret == -ENOENT) {
 	  break;
@@ -1302,25 +1260,25 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     formatter->flush(cout);
   }
 
-  if (command == OPT::SYNC_ERROR_TRIM) {
-    if (!start_date.empty()) {
+  if (o.command == OPT::SYNC_ERROR_TRIM) {
+    if (!o.start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_date.empty()) {
+    if (!o.end_date.empty()) {
       std::cerr << "end-date not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!start_marker.empty()) {
+    if (!o.start_marker.empty()) {
       std::cerr << "start-marker not allowed." << std::endl;
       return -EINVAL;
     }
-    if (!end_marker.empty()) {
+    if (!o.end_marker.empty()) {
       std::cerr << "end_marker not allowed." << std::endl;
       return -EINVAL;
     }
-    if (marker.empty()) {
-      marker = "9"; // trims everything
+    if (o.marker.empty()) {
+      o.marker = "9"; // trims everything
     }
 
     if (shard_id < 0) {
@@ -1328,7 +1286,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     }
 
     for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
-      ret = trim_sync_error_log(dpp, driver, shard_id, marker, trim_delay_ms);
+      ret = trim_sync_error_log(dpp, driver, shard_id, o.marker, trim_delay_ms);
       if (ret < 0) {
         cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -1338,31 +1296,31 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
       }
     }
   }
-  if (command == OPT::SYNC_GROUP_CREATE ||
-      command == OPT::SYNC_GROUP_MODIFY) {
-    CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_status), "ERROR: --status is not specified (options: forbidden, allowed, enabled)", EINVAL);
+  if (o.command == OPT::SYNC_GROUP_CREATE ||
+      o.command == OPT::SYNC_GROUP_MODIFY) {
+    CHECK_TRUE(require_non_empty_opt(o.opt_group_id), "ERROR: --group-id not specified", EINVAL);
+    CHECK_TRUE(require_opt(o.opt_status), "ERROR: --status is not specified (options: forbidden, allowed, enabled)", EINVAL);
 
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    if (command == OPT::SYNC_GROUP_MODIFY) {
-      auto iter = sync_policy.groups.find(*opt_group_id);
+    if (o.command == OPT::SYNC_GROUP_MODIFY) {
+      auto iter = sync_policy.groups.find(*o.opt_group_id);
       if (iter == sync_policy.groups.end()) {
-        cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+        cerr << "ERROR: could not find group '" << *o.opt_group_id << "'" << std::endl;
         return ENOENT;
       }
     }
 
-    auto& group = sync_policy.groups[*opt_group_id];
-    group.id = *opt_group_id;
+    auto& group = sync_policy.groups[*o.opt_group_id];
+    group.id = *o.opt_group_id;
 
-    if (opt_status) {
-      if (!group.set_status(*opt_status)) {
+    if (o.opt_status) {
+      if (!group.set_status(*o.opt_status)) {
         cerr << "ERROR: unrecognized status (options: forbidden, allowed, enabled)" << std::endl;
         return EINVAL;
       }
@@ -1376,9 +1334,9 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     show_result(sync_policy, zone_formatter, cout);
   }
 
-  if (command == OPT::SYNC_GROUP_GET) {
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+  if (o.command == OPT::SYNC_GROUP_GET) {
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }
@@ -1386,12 +1344,12 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
     auto& groups = sync_policy.groups;
 
-    if (!opt_group_id) {
+    if (!o.opt_group_id) {
       show_result(groups, zone_formatter, cout);
     } else {
-      auto iter = sync_policy.groups.find(*opt_group_id);
+      auto iter = sync_policy.groups.find(*o.opt_group_id);
       if (iter == sync_policy.groups.end()) {
-        cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+        cerr << "ERROR: could not find group '" << *o.opt_group_id << "'" << std::endl;
         return ENOENT;
       }
 
@@ -1399,17 +1357,17 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     }
   }
 
-  if (command == OPT::SYNC_GROUP_REMOVE) {
-    CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
+  if (o.command == OPT::SYNC_GROUP_REMOVE) {
+    CHECK_TRUE(require_non_empty_opt(o.opt_group_id), "ERROR: --group-id not specified", EINVAL);
 
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    sync_policy.groups.erase(*opt_group_id);
+    sync_policy.groups.erase(*o.opt_group_id);
 
     ret = sync_policy_ctx.write_policy();
     if (ret < 0) {
@@ -1424,47 +1382,47 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     zone_formatter->flush(cout);
   }
 
-  if (command == OPT::SYNC_GROUP_FLOW_CREATE) {
-    CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_flow_type),
+  if (o.command == OPT::SYNC_GROUP_FLOW_CREATE) {
+    CHECK_TRUE(require_non_empty_opt(o.opt_group_id), "ERROR: --group-id not specified", EINVAL);
+    CHECK_TRUE(require_non_empty_opt(o.opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
+    CHECK_TRUE(require_opt(o.opt_flow_type),
                            "ERROR: --flow-type not specified (options: symmetrical, directional)", EINVAL);
-    CHECK_TRUE((symmetrical_flow_opt(*opt_flow_type) ||
-                            directional_flow_opt(*opt_flow_type)),
+    CHECK_TRUE((symmetrical_flow_opt(*o.opt_flow_type) ||
+                            directional_flow_opt(*o.opt_flow_type)),
                            "ERROR: --flow-type invalid (options: symmetrical, directional)", EINVAL);
 
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = sync_policy.groups.find(*opt_group_id);
+    auto iter = sync_policy.groups.find(*o.opt_group_id);
     if (iter == sync_policy.groups.end()) {
-      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      cerr << "ERROR: could not find group '" << *o.opt_group_id << "'" << std::endl;
       return ENOENT;
     }
 
     auto& group = iter->second;
 
-    if (symmetrical_flow_opt(*opt_flow_type)) {
-      CHECK_TRUE(require_non_empty_opt(opt_zone_ids), "ERROR: --zones not provided for symmetrical flow, or is empty", EINVAL);
+    if (symmetrical_flow_opt(*o.opt_flow_type)) {
+      CHECK_TRUE(require_non_empty_opt(o.opt_zone_ids), "ERROR: --zones not provided for symmetrical flow, or is empty", EINVAL);
 
       rgw_sync_symmetric_group *flow_group;
 
-      group.data_flow.find_or_create_symmetrical(*opt_flow_id, &flow_group);
+      group.data_flow.find_or_create_symmetrical(*o.opt_flow_id, &flow_group);
 
-      for (auto& z : *opt_zone_ids) {
+      for (auto& z : *o.opt_zone_ids) {
         flow_group->zones.insert(z);
       }
     } else { /* directional */
-      CHECK_TRUE(require_non_empty_opt(opt_source_zone_id), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
-      CHECK_TRUE(require_non_empty_opt(opt_dest_zone_id), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(o.opt_source_zone_id), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(o.opt_dest_zone_id), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
 
       rgw_sync_directional_rule *flow_rule;
 
-      group.data_flow.find_or_create_directional(*opt_source_zone_id, *opt_dest_zone_id, &flow_rule);
+      group.data_flow.find_or_create_directional(*o.opt_source_zone_id, *o.opt_dest_zone_id, &flow_rule);
     }
 
     ret = sync_policy_ctx.write_policy();
@@ -1475,37 +1433,37 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     show_result(sync_policy, zone_formatter, cout);
   }
 
-  if (command == OPT::SYNC_GROUP_FLOW_REMOVE) {
-    CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
-    CHECK_TRUE(require_opt(opt_flow_type),
+  if (o.command == OPT::SYNC_GROUP_FLOW_REMOVE) {
+    CHECK_TRUE(require_non_empty_opt(o.opt_group_id), "ERROR: --group-id not specified", EINVAL);
+    CHECK_TRUE(require_non_empty_opt(o.opt_flow_id), "ERROR: --flow-id not specified", EINVAL);
+    CHECK_TRUE(require_opt(o.opt_flow_type),
                            "ERROR: --flow-type not specified (options: symmetrical, directional)", EINVAL);
-    CHECK_TRUE((symmetrical_flow_opt(*opt_flow_type) ||
-                            directional_flow_opt(*opt_flow_type)),
+    CHECK_TRUE((symmetrical_flow_opt(*o.opt_flow_type) ||
+                            directional_flow_opt(*o.opt_flow_type)),
                            "ERROR: --flow-type invalid (options: symmetrical, directional)", EINVAL);
 
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = sync_policy.groups.find(*opt_group_id);
+    auto iter = sync_policy.groups.find(*o.opt_group_id);
     if (iter == sync_policy.groups.end()) {
-      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      cerr << "ERROR: could not find group '" << *o.opt_group_id << "'" << std::endl;
       return ENOENT;
     }
 
     auto& group = iter->second;
 
-    if (symmetrical_flow_opt(*opt_flow_type)) {
-      group.data_flow.remove_symmetrical(*opt_flow_id, opt_zone_ids);
+    if (symmetrical_flow_opt(*o.opt_flow_type)) {
+      group.data_flow.remove_symmetrical(*o.opt_flow_id, o.opt_zone_ids);
     } else { /* directional */
-      CHECK_TRUE(require_non_empty_opt(opt_source_zone_id), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
-      CHECK_TRUE(require_non_empty_opt(opt_dest_zone_id), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(o.opt_source_zone_id), "ERROR: --source-zone not provided for directional flow rule, or is empty", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(o.opt_dest_zone_id), "ERROR: --dest-zone not provided for directional flow rule, or is empty", EINVAL);
 
-      group.data_flow.remove_directional(*opt_source_zone_id, *opt_dest_zone_id);
+      group.data_flow.remove_directional(*o.opt_source_zone_id, *o.opt_dest_zone_id);
     }
     
     ret = sync_policy_ctx.write_policy();
@@ -1516,25 +1474,25 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     show_result(sync_policy, zone_formatter, cout);
   }
 
-  if (command == OPT::SYNC_GROUP_PIPE_CREATE ||
-      command == OPT::SYNC_GROUP_PIPE_MODIFY) {
-    CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
-    if (command == OPT::SYNC_GROUP_PIPE_CREATE) {
-      CHECK_TRUE(require_non_empty_opt(opt_source_zone_ids), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
-      CHECK_TRUE(require_non_empty_opt(opt_dest_zone_ids), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
+  if (o.command == OPT::SYNC_GROUP_PIPE_CREATE ||
+      o.command == OPT::SYNC_GROUP_PIPE_MODIFY) {
+    CHECK_TRUE(require_non_empty_opt(o.opt_group_id), "ERROR: --group-id not specified", EINVAL);
+    CHECK_TRUE(require_non_empty_opt(o.opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
+    if (o.command == OPT::SYNC_GROUP_PIPE_CREATE) {
+      CHECK_TRUE(require_non_empty_opt(o.opt_source_zone_ids), "ERROR: --source-zones not provided or is empty; should be list of zones or '*'", EINVAL);
+      CHECK_TRUE(require_non_empty_opt(o.opt_dest_zone_ids), "ERROR: --dest-zones not provided or is empty; should be list of zones or '*'", EINVAL);
     }
 
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = sync_policy.groups.find(*opt_group_id);
+    auto iter = sync_policy.groups.find(*o.opt_group_id);
     if (iter == sync_policy.groups.end()) {
-      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      cerr << "ERROR: could not find group '" << *o.opt_group_id << "'" << std::endl;
       return ENOENT;
     }
 
@@ -1542,43 +1500,43 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
     rgw_sync_bucket_pipes *pipe;
 
-    if (command == OPT::SYNC_GROUP_PIPE_CREATE) {
-      group.find_pipe(*opt_pipe_id, true, &pipe);
+    if (o.command == OPT::SYNC_GROUP_PIPE_CREATE) {
+      group.find_pipe(*o.opt_pipe_id, true, &pipe);
     } else {
-      if (!group.find_pipe(*opt_pipe_id, false, &pipe)) {
-        cerr << "ERROR: could not find pipe '" << *opt_pipe_id << "'" << std::endl;
+      if (!group.find_pipe(*o.opt_pipe_id, false, &pipe)) {
+        cerr << "ERROR: could not find pipe '" << *o.opt_pipe_id << "'" << std::endl;
         return ENOENT;
       }
     }
 
-    if (opt_source_zone_ids) {
-      pipe->source.add_zones(*opt_source_zone_ids);
+    if (o.opt_source_zone_ids) {
+      pipe->source.add_zones(*o.opt_source_zone_ids);
     }
-    pipe->source.set_bucket(opt_source_tenant,
-                            opt_source_bucket_name,
-                            opt_source_bucket_id);
-    if (opt_dest_zone_ids) {
-      pipe->dest.add_zones(*opt_dest_zone_ids);
+    pipe->source.set_bucket(o.opt_source_tenant,
+                            o.opt_source_bucket_name,
+                            o.opt_source_bucket_id);
+    if (o.opt_dest_zone_ids) {
+      pipe->dest.add_zones(*o.opt_dest_zone_ids);
     }
-    pipe->dest.set_bucket(opt_dest_tenant,
-                            opt_dest_bucket_name,
-                            opt_dest_bucket_id);
+    pipe->dest.set_bucket(o.opt_dest_tenant,
+                            o.opt_dest_bucket_name,
+                            o.opt_dest_bucket_id);
 
-    pipe->params.source.filter.set_prefix(opt_prefix, !!opt_prefix_rm);
-    pipe->params.source.filter.set_tags(tags_add, tags_rm);
-    if (opt_dest_owner) {
-      pipe->params.dest.set_owner(*opt_dest_owner);
+    pipe->params.source.filter.set_prefix(o.opt_prefix, !!o.opt_prefix_rm);
+    pipe->params.source.filter.set_tags(o.tags_add, o.tags_rm);
+    if (o.opt_dest_owner) {
+      pipe->params.dest.set_owner(*o.opt_dest_owner);
     }
-    if (opt_storage_class) {
-      pipe->params.dest.set_storage_class(*opt_storage_class);
+    if (o.opt_storage_class) {
+      pipe->params.dest.set_storage_class(*o.opt_storage_class);
     }
-    if (opt_priority) {
-      pipe->params.priority = *opt_priority;
+    if (o.opt_priority) {
+      pipe->params.priority = *o.opt_priority;
     }
-    if (opt_mode) {
-      if (*opt_mode == "system") {
+    if (o.opt_mode) {
+      if (*o.opt_mode == "system") {
         pipe->params.mode = rgw_sync_pipe_params::MODE_SYSTEM;
-      } else if (*opt_mode == "user") {
+      } else if (*o.opt_mode == "user") {
         pipe->params.mode = rgw_sync_pipe_params::MODE_USER;
       } else {
         cerr << "ERROR: bad mode value: should be one of the following: system, user" << std::endl;
@@ -1586,8 +1544,8 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
       }
     }
 
-    if (!rgw::sal::User::empty(user)) {
-      pipe->params.user = user->get_id();
+    if (!rgw::sal::User::empty(o.user)) {
+      pipe->params.user = o.user->get_id();
     } else if (pipe->params.mode == rgw_sync_pipe_params::MODE_USER &&
                !pipe->params.user.has_value()) {
       cerr << "ERROR: missing --uid for --mode=user" << std::endl;
@@ -1602,20 +1560,20 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     show_result(sync_policy, zone_formatter, cout);
   }
 
-  if (command == OPT::SYNC_GROUP_PIPE_REMOVE) {
-    CHECK_TRUE(require_non_empty_opt(opt_group_id), "ERROR: --group-id not specified", EINVAL);
-    CHECK_TRUE(require_non_empty_opt(opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
+  if (o.command == OPT::SYNC_GROUP_PIPE_REMOVE) {
+    CHECK_TRUE(require_non_empty_opt(o.opt_group_id), "ERROR: --group-id not specified", EINVAL);
+    CHECK_TRUE(require_non_empty_opt(o.opt_pipe_id), "ERROR: --pipe-id not specified", EINVAL);
 
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }
     auto& sync_policy = sync_policy_ctx.get_policy();
 
-    auto iter = sync_policy.groups.find(*opt_group_id);
+    auto iter = sync_policy.groups.find(*o.opt_group_id);
     if (iter == sync_policy.groups.end()) {
-      cerr << "ERROR: could not find group '" << *opt_group_id << "'" << std::endl;
+      cerr << "ERROR: could not find group '" << *o.opt_group_id << "'" << std::endl;
       return ENOENT;
     }
 
@@ -1623,34 +1581,34 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
     rgw_sync_bucket_pipes *pipe;
 
-    if (!group.find_pipe(*opt_pipe_id, false, &pipe)) {
-      cerr << "ERROR: could not find pipe '" << *opt_pipe_id << "'" << std::endl;
+    if (!group.find_pipe(*o.opt_pipe_id, false, &pipe)) {
+      cerr << "ERROR: could not find pipe '" << *o.opt_pipe_id << "'" << std::endl;
       return ENOENT;
     }
 
-    if (opt_source_zone_ids) {
-      pipe->source.remove_zones(*opt_source_zone_ids);
+    if (o.opt_source_zone_ids) {
+      pipe->source.remove_zones(*o.opt_source_zone_ids);
     }
 
-    pipe->source.remove_bucket(opt_source_tenant,
-                               opt_source_bucket_name,
-                               opt_source_bucket_id);
-    if (opt_dest_zone_ids) {
-      pipe->dest.remove_zones(*opt_dest_zone_ids);
+    pipe->source.remove_bucket(o.opt_source_tenant,
+                               o.opt_source_bucket_name,
+                               o.opt_source_bucket_id);
+    if (o.opt_dest_zone_ids) {
+      pipe->dest.remove_zones(*o.opt_dest_zone_ids);
     }
-    pipe->dest.remove_bucket(opt_dest_tenant,
-                             opt_dest_bucket_name,
-                             opt_dest_bucket_id);
+    pipe->dest.remove_bucket(o.opt_dest_tenant,
+                             o.opt_dest_bucket_name,
+                             o.opt_dest_bucket_id);
 
-    if (!(opt_source_zone_ids ||
-          opt_source_tenant ||
-          opt_source_bucket ||
-          opt_source_bucket_id ||
-          opt_dest_zone_ids ||
-          opt_dest_tenant ||
-          opt_dest_bucket ||
-          opt_dest_bucket_id)) {
-      group.remove_pipe(*opt_pipe_id);
+    if (!(o.opt_source_zone_ids ||
+          o.opt_source_tenant ||
+          o.opt_source_bucket ||
+          o.opt_source_bucket_id ||
+          o.opt_dest_zone_ids ||
+          o.opt_dest_tenant ||
+          o.opt_dest_bucket ||
+          o.opt_dest_bucket_id)) {
+      group.remove_pipe(*o.opt_pipe_id);
     }
 
     ret = sync_policy_ctx.write_policy();
@@ -1661,9 +1619,9 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
     show_result(sync_policy, zone_formatter, cout);
   }
 
-  if (command == OPT::SYNC_POLICY_GET) {
-    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, opt_bucket);
-    ret = sync_policy_ctx.init(zonegroup_id, zonegroup_name);
+  if (o.command == OPT::SYNC_POLICY_GET) {
+    SyncPolicyContext sync_policy_ctx(dpp, driver, cfgstore, o.opt_bucket);
+    ret = sync_policy_ctx.init(o.zonegroup_id, o.zonegroup_name);
     if (ret < 0) {
       return -ret;
     }

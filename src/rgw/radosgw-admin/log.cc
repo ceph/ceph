@@ -24,27 +24,22 @@ int rgw_admin_log(const DoutPrefixProvider* dpp,
                   Formatter* formatter,
                   const rgw_admin_log_options& o)
 {
-  auto command = o.command;
-  const auto& date = o.date;
-  const auto& object = o.object;
-  const auto& bucket_name = o.bucket_name;
-  const auto& bucket_id = o.bucket_id;
   const bool show_log_entries = o.show_log_entries;
   const bool show_log_sum = o.show_log_sum;
   const bool skip_zero_entries = o.skip_zero_entries;
 
   auto* rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
 
-  if (command == OPT::LOG_LIST) {
-    if (date.size() && date.size() != 10) {
-      cerr << "bad date format for '" << date << "', expect YYYY-MM-DD" << std::endl;
+  if (o.command == OPT::LOG_LIST) {
+    if (o.date.size() && o.date.size() != 10) {
+      cerr << "bad date format for '" << o.date << "', expect YYYY-MM-DD" << std::endl;
       return EINVAL;
     }
 
     formatter->reset();
     formatter->open_array_section("logs");
     RGWAccessHandle h;
-    int r = rados->log_list_init(dpp, date, &h);
+    int r = rados->log_list_init(dpp, o.date, &h);
     if (r == -ENOENT) {
       // no logs.
     } else {
@@ -71,24 +66,24 @@ int rgw_admin_log(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  if (command == OPT::LOG_SHOW || command == OPT::LOG_RM) {
-    if (object.empty() && (date.empty() || bucket_name.empty() || bucket_id.empty())) {
+  if (o.command == OPT::LOG_SHOW || o.command == OPT::LOG_RM) {
+    if (o.object.empty() && (o.date.empty() || o.bucket_name.empty() || o.bucket_id.empty())) {
       cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
       exit(1);
     }
 
     string oid;
-    if (!object.empty()) {
-      oid = object;
+    if (!o.object.empty()) {
+      oid = o.object;
     } else {
-      oid = date;
+      oid = o.date;
       oid += "-";
-      oid += bucket_id;
+      oid += o.bucket_id;
       oid += "-";
-      oid += bucket_name;
+      oid += o.bucket_name;
     }
 
-    if (command == OPT::LOG_SHOW) {
+    if (o.command == OPT::LOG_SHOW) {
       RGWAccessHandle h;
 
       int r = rados->log_show_init(dpp, oid, &h);
@@ -162,7 +157,7 @@ next:
       formatter->flush(cout);
       cout << std::endl;
     }
-    if (command == OPT::LOG_RM) {
+    if (o.command == OPT::LOG_RM) {
       int r = rados->log_remove(dpp, oid);
       if (r < 0) {
         cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;
