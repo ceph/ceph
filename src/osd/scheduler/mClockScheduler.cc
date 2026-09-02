@@ -490,9 +490,22 @@ void mClockScheduler::enqueue_front(OpSchedulerItem&& item)
     enqueue_high(immediate_class_priority, std::move(item), true);
   } else if (priority >= cutoff_priority) {
     enqueue_high(priority, std::move(item), true);
+  } else if (op_scheduler_class::client == id.class_id) {
+    // mClock does not support enqueue at front, so we redirect into the
+    // reserved requeued_class_priority bucket instead. dequeue() must
+    // never pull from the mclock-managed queue via the starvation-bound
+    // forced yield while this bucket is non-empty.
+    dout(10) << __func__ << " " << item
+             << " redirected into requeued_class_priority queue."
+             << dendl;
+    enqueue_high(requeued_class_priority, std::move(item), true);
   } else {
-    // mClock does not support enqueue at front, so we use
-    // the high queue with priority 0
+    // Non-client, non-immediate, lower than cutoff items redirected via
+    // enqueue_front() (background_recovery/background_best_effort) --
+    // no per-client tid-ordering invariant applies, so this keeps the
+    // original behavior: still ahead of the mclock-managed queue, same
+    // as always, but not exempted from the starvation-bound forced
+    // yield the way requeued_class_priority is.
     enqueue_high(0, std::move(item), true);
   }
 }
@@ -516,7 +529,16 @@ void mClockScheduler::enqueue_high(unsigned priority,
 
 WorkItem mClockScheduler::dequeue()
 {
-  if (!high_priority.empty() && mclock_queue_is_starved()) {
+  // True iff a client-class item that was pulled out of its normal queue
+  // position via enqueue_front() is currently waiting in high_priority.
+  // mClock has no insert-at-front, so the starvation-bound forced
+  // yield below must not pull anything from mClock managd queue while one
+  // of these is pending
+  const bool requeued_item_pending =
+    high_priority.count(requeued_class_priority) > 0;
+
+  if (!high_priority.empty() && !requeued_item_pending &&
+      mclock_queue_is_starved()) {
     // The mclock-managed queue has pending work that has gone unserviced
     // for at least high_priority_max_starve_time because high_priority
     // keeps being refilled. Give it one guaranteed try so classes like
@@ -551,19 +573,35 @@ WorkItem mClockScheduler::dequeue()
     auto iter = high_priority.begin();
     // invariant: high_priority entries are never empty
     assert(!iter->second.empty());
+    const priority_t popped_priority = iter->first;
     WorkItem ret{std::move(iter->second.back())};
     iter->second.pop_back();
-    if (iter->second.empty()) {
+    // Capture queue size BEFORE the possible erase() below. This is to
+    // ensure we don't violate the "entries are never empty" invariant,
+    // which could happen if we read later on using operator[] - as it
+    // would silently create a fresh empty entry.
+    const size_t remaining_in_queue = iter->second.size();
+    if (remaining_in_queue == 0) {
       // maintain invariant, high priority entries are never empty
       high_priority.erase(iter);
     }
-    ceph_assert(std::get_if<OpSchedulerItem>(&ret));
+    auto *item_ptr = std::get_if<OpSchedulerItem>(&ret);
+    ceph_assert(item_ptr);
 
     scheduler_id_t id = scheduler_id_t {
       op_scheduler_class::immediate,
       client_profile_id_t()
     };
     _put_mclock_counter(id);
+
+    // Log when a requeued_class_priority item is released.
+    if (popped_priority == requeued_class_priority) {
+      dout(10) << __func__ << " " << *item_ptr
+               << " released from requeued_class_priority, "
+               << remaining_in_queue << " item(s) still pending"
+               << dendl;
+    }
+
     return ret;
   } else {
     mclock_queue_t::PullReq result = scheduler.pull_request();
