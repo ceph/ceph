@@ -28,19 +28,17 @@ int rgw_admin_bi(const DoutPrefixProvider* dpp,
                  const rgw_admin_bi_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
-  auto& object = *opts.object;
-  auto& object_version = *opts.object_version;
-  auto& infile = *opts.infile;
-  auto& marker = *opts.marker;
-  int max_entries = opts.max_entries;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
+  auto& object = opts.object;
+  auto& object_version = opts.object_version;
+  auto& infile = opts.infile;
+  std::string marker = opts.marker;
   int shard_id = opts.shard_id;
 #ifdef WITH_RADOSGW_RADOS
   BIIndexType bi_index_type = opts.bi_index_type;
 #endif
-  bool max_entries_specified = opts.max_entries_specified;
   bool specified_shard_id = opts.specified_shard_id;
   bool yes_i_really_mean_it = opts.yes_i_really_mean_it;
 
@@ -124,11 +122,8 @@ int rgw_admin_bi(const DoutPrefixProvider* dpp,
 
     const int max_shards = rgw::num_shards(index);
 
-    if (max_entries_specified) {
-      max_entries = std::max(1, max_entries); // sanity
-    } else {
-      max_entries = 1000;
-    }
+    int max_entries = opts.max_entries.has_value()
+      ? std::max(1, *opts.max_entries) : 1000;
 
     ldpp_dout(dpp, 20) << "INFO: " << __func__ << ": max_entries=" <<
       max_entries << ", index=" << index << ", max_shards=" << max_shards <<

@@ -25,10 +25,10 @@ int rgw_admin_olh(const DoutPrefixProvider* dpp,
                   const rgw_admin_olh_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
-  auto& object = *opts.object;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
+  auto& object = opts.object;
 
   if (command == OPT::OLH_GET || command == OPT::OLH_READLOG) {
     if (bucket_name.empty()) {

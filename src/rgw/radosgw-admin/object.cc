@@ -181,15 +181,15 @@ int rgw_admin_object(const DoutPrefixProvider* dpp,
                      const rgw_admin_object_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
-  auto& object = *opts.object;
-  auto& object_version = *opts.object_version;
-  auto& infile = *opts.infile;
-  auto& objects_file = *opts.objects_file;
-  auto& end_date = *opts.end_date;
-  auto& start_date = *opts.start_date;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
+  auto& object = opts.object;
+  auto& object_version = opts.object_version;
+  auto& infile = opts.infile;
+  auto& objects_file = opts.objects_file;
+  auto& end_date = opts.end_date;
+  auto& start_date = opts.start_date;
   int64_t min_rewrite_size = opts.min_rewrite_size;
   int64_t max_rewrite_size = opts.max_rewrite_size;
   uint64_t min_rewrite_stripe_size = opts.min_rewrite_stripe_size;

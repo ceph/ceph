@@ -28,33 +28,33 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
                 rgw::sal::ConfigStore* cfgstore,
                 rgw::SiteConfig& site,
                 Formatter* formatter,
-                const rgw_admin_zonegroup_options& o)
+                rgw_admin_zonegroup_options& o)
 {
   auto command = o.command;
 
-  auto& zonegroup_id = *o.zonegroup_id;
-  auto& zonegroup_name = *o.zonegroup_name;
-  auto& zonegroup_new_name = *o.zonegroup_new_name;
-  auto& zone_id = *o.zone_id;
-  auto& zone_name = *o.zone_name;
-  auto& realm_id = *o.realm_id;
-  auto& realm_name = *o.realm_name;
-  auto& placement_id = *o.placement_id;
-  auto& infile = *o.infile;
-  auto& tags = *o.tags;
-  auto& tags_add = *o.tags_add;
-  auto& tags_rm = *o.tags_rm;
-  auto& sync_from = *o.sync_from;
-  auto& sync_from_rm = *o.sync_from_rm;
-  auto& endpoints = *o.endpoints;
-  auto& master_zone = *o.master_zone;
-  auto& api_name = *o.api_name;
-  auto& tier_type = *o.tier_type;
-  auto& redirect_zone = *o.redirect_zone;
-  auto& tier_config_add = *o.tier_config_add;
-  auto& tier_config_rm = *o.tier_config_rm;
-  auto& opt_storage_class = *o.opt_storage_class;
-  auto& bucket_index_max_shards = *o.bucket_index_max_shards;
+  auto& zonegroup_id = o.zonegroup_id;
+  auto& zonegroup_name = o.zonegroup_name;
+  auto& zonegroup_new_name = o.zonegroup_new_name;
+  auto& zone_id = o.zone_id;
+  auto& zone_name = o.zone_name;
+  auto& realm_id = o.realm_id;
+  auto& realm_name = o.realm_name;
+  auto& placement_id = o.placement_id;
+  auto& infile = o.infile;
+  auto& tags = o.tags;
+  auto& tags_add = o.tags_add;
+  auto& tags_rm = o.tags_rm;
+  auto& sync_from = o.sync_from;
+  auto& sync_from_rm = o.sync_from_rm;
+  auto& endpoints = o.endpoints;
+  auto& master_zone = o.master_zone;
+  auto& api_name = o.api_name;
+  auto& tier_type = o.tier_type;
+  auto& redirect_zone = o.redirect_zone;
+  auto& tier_config_add = o.tier_config_add;
+  auto& tier_config_rm = o.tier_config_rm;
+  auto& opt_storage_class = o.opt_storage_class;
+  auto& bucket_index_max_shards = o.bucket_index_max_shards;
   auto tier_type_specified = o.tier_type_specified;
   auto sync_from_all_specified = o.sync_from_all_specified;
   auto redirect_zone_set = o.redirect_zone_set;
@@ -65,8 +65,8 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
   auto is_read_only_set = o.is_read_only_set;
   auto sync_from_all = o.sync_from_all;
 #ifdef WITH_RADOSGW_RADOS
-  auto& enable_features = *o.enable_features;
-  auto& disable_features = *o.disable_features;
+  auto& enable_features = o.enable_features;
+  auto& disable_features = o.disable_features;
 #endif
 
   switch (command) {

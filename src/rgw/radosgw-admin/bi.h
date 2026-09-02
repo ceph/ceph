@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include "radosgw-admin/radosgw-admin.h"
 
@@ -17,19 +18,18 @@ namespace rgw::sal { class Driver; class Bucket; }
 
 struct rgw_admin_bi_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  std::string* bucket_id = nullptr;
-  std::string* object = nullptr;
-  std::string* object_version = nullptr;
-  std::string* infile = nullptr;
-  std::string* marker = nullptr;
-  int max_entries = -1;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
+  std::string object;
+  std::string object_version;
+  std::string infile;
+  std::string marker;
+  std::optional<int> max_entries;
   int shard_id = 0;
 #ifdef WITH_RADOSGW_RADOS
   BIIndexType bi_index_type = BIIndexType::Plain;
 #endif
-  bool max_entries_specified = false;
   bool specified_shard_id = false;
   bool yes_i_really_mean_it = false;
 };

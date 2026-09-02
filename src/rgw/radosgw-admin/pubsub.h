@@ -3,8 +3,8 @@
 
 #pragma once
 
+#include <optional>
 #include <string>
-#include <string_view>
 
 #include "radosgw-admin/radosgw-admin.h"
 
@@ -15,15 +15,14 @@ namespace rgw::sal { class Driver; class User; }
 
 struct rgw_admin_pubsub_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string_view tenant;
-  std::string_view account_id;
-  std::string_view bucket_name;
-  std::string_view bucket_id;
-  std::string_view topic_name;
-  std::string_view notification_id;
-  std::string_view marker;
-  int max_entries = 0;
-  bool max_entries_specified = false;
+  std::string tenant;
+  std::string account_id;
+  std::string bucket_name;
+  std::string bucket_id;
+  std::string topic_name;
+  std::string notification_id;
+  std::string marker;
+  std::optional<int> max_entries;
 };
 
 int rgw_admin_pubsub(const DoutPrefixProvider* dpp,

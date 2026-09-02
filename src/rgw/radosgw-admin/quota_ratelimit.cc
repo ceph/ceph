@@ -327,12 +327,12 @@ int rgw_admin_quota_ratelimit(const DoutPrefixProvider* dpp,
 {
   g_admin_dpp = dpp;
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& account_id = *opts.account_id;
-  auto& account_name = *opts.account_name;
-  auto& quota_scope = *opts.quota_scope;
-  auto& ratelimit_scope = *opts.ratelimit_scope;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& account_id = opts.account_id;
+  auto& account_name = opts.account_name;
+  auto& quota_scope = opts.quota_scope;
+  auto& ratelimit_scope = opts.ratelimit_scope;
   int64_t max_size = opts.max_size;
   int64_t max_objects = opts.max_objects;
   int64_t max_read_ops = opts.max_read_ops;

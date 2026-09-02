@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 #include "radosgw-admin/radosgw-admin.h"
 
@@ -15,15 +16,14 @@ namespace rgw::sal { class Driver; class Bucket; }
 
 struct rgw_admin_reshard_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  std::string* bucket_id = nullptr;
-  std::string* marker = nullptr;
-  int max_entries = -1;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
+  std::string marker;
+  std::optional<int> max_entries;
   int num_shards = 0;
   int shard_id = 0;
   bool num_shards_specified = false;
-  bool max_entries_specified = false;
   bool specified_shard_id = false;
   bool yes_i_really_mean_it = false;
 };
@@ -35,5 +35,5 @@ int rgw_admin_reshard(const DoutPrefixProvider* dpp,
                       RGWStreamFlusher& stream_flusher,
                       RGWBucketAdminOpState& bucket_op,
                       std::unique_ptr<rgw::sal::Bucket>& bucket,
-                      const rgw_admin_reshard_options& opts);
+                      rgw_admin_reshard_options& opts);
 

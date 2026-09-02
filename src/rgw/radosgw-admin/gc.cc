@@ -23,7 +23,7 @@ int rgw_admin_gc(const DoutPrefixProvider* dpp,
                  const rgw_admin_gc_options& opts)
 {
   auto& command = opts.command;
-  auto& marker = *opts.marker;
+  std::string marker = opts.marker;
   int shard_id = opts.shard_id;
   bool specified_shard_id = opts.specified_shard_id;
   bool include_all = opts.include_all;

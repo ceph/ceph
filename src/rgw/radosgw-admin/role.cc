@@ -95,24 +95,22 @@ static void show_policy_arns(const boost::container::flat_set<std::string>& arns
 int rgw_admin_role(const DoutPrefixProvider* dpp,
                    rgw::sal::Driver* driver,
                    ceph::Formatter* formatter,
-                   const rgw_admin_role_options& opts)
+                   rgw_admin_role_options& opts)
 {
   auto& command = opts.command;
-  auto& role_name = *opts.role_name;
-  auto& tenant = *opts.tenant;
-  auto& account_id = *opts.account_id;
-  auto& path = *opts.path;
-  auto& assume_role_doc = *opts.assume_role_doc;
-  auto& perm_policy_doc = *opts.perm_policy_doc;
-  auto& policy_name = *opts.policy_name;
-  auto& policy_arn = *opts.policy_arn;
-  auto& description = *opts.description;
-  auto& path_prefix = *opts.path_prefix;
-  auto& max_session_duration = *opts.max_session_duration;
-  auto& marker = *opts.marker;
-  auto& infile = *opts.infile;
-  int max_entries = opts.max_entries;
-  bool max_entries_specified = opts.max_entries_specified;
+  auto& role_name = opts.role_name;
+  auto& tenant = opts.tenant;
+  auto& account_id = opts.account_id;
+  auto& path = opts.path;
+  auto& assume_role_doc = opts.assume_role_doc;
+  auto& perm_policy_doc = opts.perm_policy_doc;
+  auto& policy_name = opts.policy_name;
+  auto& policy_arn = opts.policy_arn;
+  auto& description = opts.description;
+  auto& path_prefix = opts.path_prefix;
+  auto& max_session_duration = opts.max_session_duration;
+  auto& marker = opts.marker;
+  auto& infile = opts.infile;
   int ret = 0;
 
   switch (command) {
@@ -216,8 +214,8 @@ int rgw_admin_role(const DoutPrefixProvider* dpp,
       listing.next_marker = marker;
 
       int32_t remaining = std::numeric_limits<int32_t>::max();
-      if (max_entries_specified) {
-        remaining = max_entries;
+      if (opts.max_entries) {
+        remaining = *opts.max_entries;
         formatter->open_object_section("result");
       }
       formatter->open_array_section("Roles");
@@ -254,7 +252,7 @@ int rgw_admin_role(const DoutPrefixProvider* dpp,
 
       formatter->close_section(); // Roles
 
-      if (max_entries_specified) {
+      if (opts.max_entries) {
         if (!listing.next_marker.empty()) {
           encode_json("next-marker", listing.next_marker, formatter);
         }

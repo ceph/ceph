@@ -13,10 +13,10 @@ namespace rgw::sal { class Driver; }
 
 struct rgw_admin_log_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  const std::string* date = nullptr;
-  const std::string* object = nullptr;
-  const std::string* bucket_name = nullptr;
-  const std::string* bucket_id = nullptr;
+  std::string date;
+  std::string object;
+  std::string bucket_name;
+  std::string bucket_id;
   bool show_log_entries = true;
   bool show_log_sum = true;
   bool skip_zero_entries = false;

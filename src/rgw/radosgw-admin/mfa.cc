@@ -82,14 +82,14 @@ int rgw_admin_mfa(const DoutPrefixProvider* dpp,
                   RGWUser& ruser,
                   RGWUserAdminOpState& user_op,
                   std::unique_ptr<rgw::sal::User>& user,
-                  const rgw_admin_mfa_options& opts)
+                  rgw_admin_mfa_options& opts)
 {
   auto& command = opts.command;
-  auto& totp_serial = *opts.totp_serial;
-  auto& totp_seed = *opts.totp_seed;
-  auto& totp_seed_type = *opts.totp_seed_type;
-  auto& totp_pin = *opts.totp_pin;
-  auto& objv_tracker = *opts.objv_tracker;
+  auto& totp_serial = opts.totp_serial;
+  auto& totp_seed = opts.totp_seed;
+  auto& totp_seed_type = opts.totp_seed_type;
+  auto& totp_pin = opts.totp_pin;
+  RGWObjVersionTracker* objv_tracker = opts.objv_tracker;
   int totp_seconds = opts.totp_seconds;
   int totp_window = opts.totp_window;
 
@@ -138,11 +138,11 @@ int rgw_admin_mfa(const DoutPrefixProvider* dpp,
 
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(
         rgwrados::otp::get_meta_key(user->get_id()),
-        mtime, &objv_tracker,
+        mtime, objv_tracker,
         null_yield, dpp,
         MDLOG_STATUS_WRITE,
         [&] {
-      return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.create_mfa(dpp, user->get_id(), config, &objv_tracker, mtime, null_yield);
+      return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.create_mfa(dpp, user->get_id(), config, objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       cerr << "MFA creation failed, error: " << cpp_strerror(-ret) << std::endl;
@@ -175,11 +175,11 @@ int rgw_admin_mfa(const DoutPrefixProvider* dpp,
 
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(
         rgwrados::otp::get_meta_key(user->get_id()),
-        mtime, &objv_tracker,
+        mtime, objv_tracker,
         null_yield, dpp,
         MDLOG_STATUS_WRITE,
         [&] {
-      return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.remove_mfa(dpp, user->get_id(), totp_serial, &objv_tracker, mtime, null_yield);
+      return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.remove_mfa(dpp, user->get_id(), totp_serial, objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       cerr << "MFA removal failed, error: " << cpp_strerror(-ret) << std::endl;
@@ -323,11 +323,11 @@ int rgw_admin_mfa(const DoutPrefixProvider* dpp,
 
     ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->mutate(
         rgwrados::otp::get_meta_key(user->get_id()),
-        mtime, &objv_tracker,
+        mtime, objv_tracker,
         null_yield, dpp,
         MDLOG_STATUS_WRITE,
         [&] {
-      return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.create_mfa(dpp, user->get_id(), config, &objv_tracker, mtime, null_yield);
+      return static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->mfa.create_mfa(dpp, user->get_id(), config, objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       cerr << "MFA update failed, error: " << cpp_strerror(-ret) << std::endl;

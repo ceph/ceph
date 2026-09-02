@@ -2573,17 +2573,17 @@ int main(int argc, const char **argv)
 
   auto fill_period_options = [&](rgw_admin_period_options& o) {
     o.command = opt_cmd;
-    o.realm_id = &realm_id;
-    o.realm_name = &realm_name;
-    o.period_id = &period_id;
-    o.period_epoch = &period_epoch;
-    o.url = &url;
-    o.access_key = &access_key;
-    o.secret_key = &secret_key;
-    o.remote = &remote;
-    o.quota_scope = &quota_scope;
-    o.ratelimit_scope = &ratelimit_scope;
-    o.opt_region = &opt_region;
+    o.realm_id = realm_id;
+    o.realm_name = realm_name;
+    o.period_id = period_id;
+    o.period_epoch = period_epoch;
+    o.url = url;
+    o.access_key = access_key;
+    o.secret_key = secret_key;
+    o.remote = remote;
+    o.quota_scope = quota_scope;
+    o.ratelimit_scope = ratelimit_scope;
+    o.opt_region = opt_region;
     o.commit = commit;
     o.staging = staging;
     o.yes_i_really_mean_it = yes_i_really_mean_it;
@@ -2607,47 +2607,47 @@ int main(int argc, const char **argv)
 
   auto fill_realm_options = [&](rgw_admin_realm_options& o) {
     o.command = opt_cmd;
-    o.realm_id = &realm_id;
-    o.realm_name = &realm_name;
-    o.realm_new_name = &realm_new_name;
-    o.period_id = &period_id;
-    o.period_epoch = &period_epoch;
-    o.url = &url;
-    o.access_key = &access_key;
-    o.secret_key = &secret_key;
-    o.remote = &remote;
-    o.infile = &infile;
-    o.opt_region = &opt_region;
+    o.realm_id = realm_id;
+    o.realm_name = realm_name;
+    o.realm_new_name = realm_new_name;
+    o.period_id = period_id;
+    o.period_epoch = period_epoch;
+    o.url = url;
+    o.access_key = access_key;
+    o.secret_key = secret_key;
+    o.remote = remote;
+    o.infile = infile;
+    o.opt_region = opt_region;
     o.set_default = set_default;
     o.yes_i_really_mean_it = yes_i_really_mean_it;
   };
 
   auto fill_zonegroup_options = [&](rgw_admin_zonegroup_options& o) {
     o.command = opt_cmd;
-    o.zonegroup_id = &zonegroup_id;
-    o.zonegroup_name = &zonegroup_name;
-    o.zonegroup_new_name = &zonegroup_new_name;
-    o.zone_id = &zone_id;
-    o.zone_name = &zone_name;
-    o.realm_id = &realm_id;
-    o.realm_name = &realm_name;
-    o.placement_id = &placement_id;
-    o.infile = &infile;
-    o.tags = &tags;
-    o.tags_add = &tags_add;
-    o.tags_rm = &tags_rm;
-    o.sync_from = &sync_from;
-    o.sync_from_rm = &sync_from_rm;
-    o.endpoints = &endpoints;
-    o.master_zone = &master_zone;
-    o.api_name = &api_name;
-    o.tier_type = &tier_type;
+    o.zonegroup_id = zonegroup_id;
+    o.zonegroup_name = zonegroup_name;
+    o.zonegroup_new_name = zonegroup_new_name;
+    o.zone_id = zone_id;
+    o.zone_name = zone_name;
+    o.realm_id = realm_id;
+    o.realm_name = realm_name;
+    o.placement_id = placement_id;
+    o.infile = infile;
+    o.tags = tags;
+    o.tags_add = tags_add;
+    o.tags_rm = tags_rm;
+    o.sync_from = sync_from;
+    o.sync_from_rm = sync_from_rm;
+    o.endpoints = endpoints;
+    o.master_zone = master_zone;
+    o.api_name = api_name;
+    o.tier_type = tier_type;
     o.tier_type_specified = tier_type_specified;
-    o.tier_config_add = &tier_config_add;
-    o.tier_config_rm = &tier_config_rm;
-    o.redirect_zone = &redirect_zone;
-    o.opt_storage_class = &opt_storage_class;
-    o.bucket_index_max_shards = &bucket_index_max_shards;
+    o.tier_config_add = tier_config_add;
+    o.tier_config_rm = tier_config_rm;
+    o.redirect_zone = redirect_zone;
+    o.opt_storage_class = opt_storage_class;
+    o.bucket_index_max_shards = bucket_index_max_shards;
     o.sync_from_all_specified = sync_from_all_specified;
     o.redirect_zone_set = redirect_zone_set;
     o.sync_from_all = sync_from_all;
@@ -2658,46 +2658,46 @@ int main(int argc, const char **argv)
     o.is_read_only_set = is_read_only_set;
     o.yes_i_really_mean_it = yes_i_really_mean_it;
 #ifdef WITH_RADOSGW_RADOS
-    o.enable_features = &enable_features;
-    o.disable_features = &disable_features;
+    o.enable_features = enable_features;
+    o.disable_features = disable_features;
 #endif
   };
 
   auto fill_zone_options = [&](rgw_admin_zone_options& o) {
     o.command = opt_cmd;
-    o.zonegroup_id = &zonegroup_id;
-    o.zonegroup_name = &zonegroup_name;
-    o.zone_id = &zone_id;
-    o.zone_name = &zone_name;
-    o.zone_new_name = &zone_new_name;
-    o.realm_id = &realm_id;
-    o.realm_name = &realm_name;
-    o.placement_id = &placement_id;
-    o.url = &url;
-    o.access_key = &access_key;
-    o.secret_key = &secret_key;
-    o.infile = &infile;
-    o.sync_from = &sync_from;
-    o.sync_from_rm = &sync_from_rm;
-    o.endpoints = &endpoints;
-    o.master_zone = &master_zone;
-    o.format = &format;
-    o.api_name = &api_name;
-    o.tier_type = &tier_type;
+    o.zonegroup_id = zonegroup_id;
+    o.zonegroup_name = zonegroup_name;
+    o.zone_id = zone_id;
+    o.zone_name = zone_name;
+    o.zone_new_name = zone_new_name;
+    o.realm_id = realm_id;
+    o.realm_name = realm_name;
+    o.placement_id = placement_id;
+    o.url = url;
+    o.access_key = access_key;
+    o.secret_key = secret_key;
+    o.infile = infile;
+    o.sync_from = sync_from;
+    o.sync_from_rm = sync_from_rm;
+    o.endpoints = endpoints;
+    o.master_zone = master_zone;
+    o.format = format;
+    o.api_name = api_name;
+    o.tier_type = tier_type;
     o.tier_type_specified = tier_type_specified;
-    o.tier_config_add = &tier_config_add;
-    o.tier_config_rm = &tier_config_rm;
-    o.index_pool = &index_pool;
-    o.data_pool = &data_pool;
-    o.data_extra_pool = &data_extra_pool;
-    o.compression_type = &compression_type;
-    o.bucket_index_max_shards = &bucket_index_max_shards;
-    o.redirect_zone = &redirect_zone;
+    o.tier_config_add = tier_config_add;
+    o.tier_config_rm = tier_config_rm;
+    o.index_pool = index_pool;
+    o.data_pool = data_pool;
+    o.data_extra_pool = data_extra_pool;
+    o.compression_type = compression_type;
+    o.bucket_index_max_shards = bucket_index_max_shards;
+    o.redirect_zone = redirect_zone;
     o.redirect_zone_set = redirect_zone_set;
     o.placement_inline_data = placement_inline_data;
     o.placement_inline_data_specified = placement_inline_data_specified;
-    o.opt_storage_class = &opt_storage_class;
-    o.opt_region = &opt_region;
+    o.opt_storage_class = opt_storage_class;
+    o.opt_region = opt_region;
     o.sync_from_all_specified = sync_from_all_specified;
     o.set_default = set_default;
     o.read_only = read_only;
@@ -2709,10 +2709,10 @@ int main(int argc, const char **argv)
     o.num_shards_specified = num_shards_specified;
     o.num_shards = num_shards;
 #ifdef WITH_RADOSGW_RADOS
-    o.placement_index_type = &placement_index_type;
+    o.placement_index_type = placement_index_type;
     o.index_type_specified = index_type_specified;
-    o.enable_features = &enable_features;
-    o.disable_features = &disable_features;
+    o.enable_features = enable_features;
+    o.disable_features = disable_features;
 #endif
   };
 
@@ -2994,8 +2994,8 @@ int main(int argc, const char **argv)
   case OPT::CAPS_RM: {
     rgw_admin_user_mutate_options mutate_opts;
     mutate_opts.command = opt_cmd;
-    mutate_opts.access_key = &access_key;
-    mutate_opts.subuser = &subuser;
+    mutate_opts.access_key = access_key;
+    mutate_opts.subuser = subuser;
     mutate_opts.yes_i_really_mean_it = yes_i_really_mean_it;
     mutate_opts.generate_key = static_cast<int>(generate_key);
     ret = rgw_admin_user_mutate(dpp(), driver, formatter.get(), ruser,
@@ -3030,21 +3030,22 @@ int main(int argc, const char **argv)
   case OPT::ROLE_UPDATE: {
     rgw_admin_role_options ropts;
     ropts.command = opt_cmd;
-    ropts.role_name = &role_name;
-    ropts.tenant = &tenant;
-    ropts.account_id = &account_id;
-    ropts.path = &path;
-    ropts.assume_role_doc = &assume_role_doc;
-    ropts.perm_policy_doc = &perm_policy_doc;
-    ropts.policy_name = &policy_name;
-    ropts.policy_arn = &policy_arn;
-    ropts.description = &description;
-    ropts.path_prefix = &path_prefix;
-    ropts.max_session_duration = &max_session_duration;
-    ropts.marker = &marker;
-    ropts.infile = &infile;
-    ropts.max_entries = max_entries;
-    ropts.max_entries_specified = max_entries_specified;
+    ropts.role_name = role_name;
+    ropts.tenant = tenant;
+    ropts.account_id = account_id;
+    ropts.path = path;
+    ropts.assume_role_doc = assume_role_doc;
+    ropts.perm_policy_doc = perm_policy_doc;
+    ropts.policy_name = policy_name;
+    ropts.policy_arn = policy_arn;
+    ropts.description = description;
+    ropts.path_prefix = path_prefix;
+    ropts.max_session_duration = max_session_duration;
+    ropts.marker = marker;
+    ropts.infile = infile;
+    if (max_entries_specified) {
+      ropts.max_entries = max_entries;
+    }
     return rgw_admin_role(dpp(), driver, formatter.get(), ropts);
   }
   default:
@@ -3070,9 +3071,9 @@ int main(int argc, const char **argv)
       ) {
     rgw_admin_bucket_logging_options blog_opts;
     blog_opts.command = opt_cmd;
-    blog_opts.tenant = &tenant;
-    blog_opts.bucket_name = &bucket_name;
-    blog_opts.bucket_id = &bucket_id;
+    blog_opts.tenant = tenant;
+    blog_opts.bucket_name = bucket_name;
+    blog_opts.bucket_id = bucket_id;
     ret = rgw_admin_bucket_logging(dpp(), driver, formatter.get(), bucket, blog_opts);
     if (ret != 0) {
       return ret;
@@ -3083,10 +3084,10 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT::OLH_GET || opt_cmd == OPT::OLH_READLOG) {
     rgw_admin_olh_options olh_opts;
     olh_opts.command = opt_cmd;
-    olh_opts.tenant = &tenant;
-    olh_opts.bucket_name = &bucket_name;
-    olh_opts.bucket_id = &bucket_id;
-    olh_opts.object = &object;
+    olh_opts.tenant = tenant;
+    olh_opts.bucket_name = bucket_name;
+    olh_opts.bucket_id = bucket_id;
+    olh_opts.object = object;
     ret = rgw_admin_olh(dpp(), driver, formatter.get(), bucket, olh_opts);
     if (ret != 0) {
       return ret;
@@ -3097,17 +3098,18 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::BI_LIST || opt_cmd == OPT::BI_PURGE) {
     rgw_admin_bi_options bi_opts;
     bi_opts.command = opt_cmd;
-    bi_opts.tenant = &tenant;
-    bi_opts.bucket_name = &bucket_name;
-    bi_opts.bucket_id = &bucket_id;
-    bi_opts.object = &object;
-    bi_opts.object_version = &object_version;
-    bi_opts.infile = &infile;
-    bi_opts.marker = &marker;
-    bi_opts.max_entries = max_entries;
+    bi_opts.tenant = tenant;
+    bi_opts.bucket_name = bucket_name;
+    bi_opts.bucket_id = bucket_id;
+    bi_opts.object = object;
+    bi_opts.object_version = object_version;
+    bi_opts.infile = infile;
+    bi_opts.marker = marker;
+    if (max_entries_specified) {
+      bi_opts.max_entries = max_entries;
+    }
     bi_opts.shard_id = shard_id;
     bi_opts.bi_index_type = bi_index_type;
-    bi_opts.max_entries_specified = max_entries_specified;
     bi_opts.specified_shard_id = specified_shard_id;
     bi_opts.yes_i_really_mean_it = yes_i_really_mean_it;
     ret = rgw_admin_bi(dpp(), driver, formatter.get(), bucket, bi_opts);
@@ -3134,19 +3136,20 @@ int main(int argc, const char **argv)
       ) {
     rgw_admin_object_options oopts;
     oopts.command = opt_cmd;
-    oopts.tenant = &tenant;
-    oopts.bucket_name = &bucket_name;
-    oopts.bucket_id = &bucket_id;
-    oopts.object = &object;
-    oopts.object_version = &object_version;
-    oopts.infile = &infile;
-    oopts.objects_file = &objects_file;
-    oopts.end_date = &end_date;
-    oopts.start_date = &start_date;
-    oopts.marker = &marker;
-    oopts.max_entries = max_entries;
+    oopts.tenant = tenant;
+    oopts.bucket_name = bucket_name;
+    oopts.bucket_id = bucket_id;
+    oopts.object = object;
+    oopts.object_version = object_version;
+    oopts.infile = infile;
+    oopts.objects_file = objects_file;
+    oopts.end_date = end_date;
+    oopts.start_date = start_date;
+    oopts.marker = marker;
+    if (max_entries_specified) {
+      oopts.max_entries = max_entries;
+    }
     oopts.shard_id = shard_id;
-    oopts.max_entries_specified = max_entries_specified;
     oopts.specified_shard_id = specified_shard_id;
     oopts.min_rewrite_size = min_rewrite_size;
     oopts.max_rewrite_size = max_rewrite_size;
@@ -3173,15 +3176,16 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::RESHARDLOG_PURGE) {
     rgw_admin_reshard_options ropts;
     ropts.command = opt_cmd;
-    ropts.tenant = &tenant;
-    ropts.bucket_name = &bucket_name;
-    ropts.bucket_id = &bucket_id;
-    ropts.marker = &marker;
-    ropts.max_entries = max_entries;
+    ropts.tenant = tenant;
+    ropts.bucket_name = bucket_name;
+    ropts.bucket_id = bucket_id;
+    ropts.marker = marker;
+    if (max_entries_specified) {
+      ropts.max_entries = max_entries;
+    }
     ropts.num_shards = num_shards;
     ropts.shard_id = shard_id;
     ropts.num_shards_specified = num_shards_specified;
-    ropts.max_entries_specified = max_entries_specified;
     ropts.specified_shard_id = specified_shard_id;
     ropts.yes_i_really_mean_it = yes_i_really_mean_it;
     ret = rgw_admin_reshard(dpp(), driver, formatter.get(), stream_flusher,
@@ -3200,10 +3204,10 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::DEDUP_EXEC) {
     rgw_admin_dedup_options dopts;
     dopts.command = opt_cmd;
-    dopts.allow_bucket_list_file = &allow_bucket_list_file;
-    dopts.deny_bucket_list_file = &deny_bucket_list_file;
-    dopts.allow_storage_class_list_file = &allow_storage_class_list_file;
-    dopts.deny_storage_class_list_file = &deny_storage_class_list_file;
+    dopts.allow_bucket_list_file = allow_bucket_list_file;
+    dopts.deny_bucket_list_file = deny_bucket_list_file;
+    dopts.allow_storage_class_list_file = allow_storage_class_list_file;
+    dopts.deny_storage_class_list_file = deny_storage_class_list_file;
     dopts.yes_i_really_mean_it = yes_i_really_mean_it;
     dopts.throttle_stat = throttle_stat;
     dopts.have_max_bucket_index_ops = have_max_bucket_index_ops;
@@ -3219,7 +3223,7 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT::GC_LIST || opt_cmd == OPT::GC_PROCESS) {
     rgw_admin_gc_options gopts;
     gopts.command = opt_cmd;
-    gopts.marker = &marker;
+    gopts.marker = marker;
     gopts.shard_id = shard_id;
     gopts.specified_shard_id = specified_shard_id;
     gopts.include_all = include_all;
@@ -3237,9 +3241,9 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::LC_RESHARD_FIX) {
     rgw_admin_lc_options lopts;
     lopts.command = opt_cmd;
-    lopts.tenant = &tenant;
-    lopts.bucket_name = &bucket_name;
-    lopts.bucket_id = &bucket_id;
+    lopts.tenant = tenant;
+    lopts.bucket_name = bucket_name;
+    lopts.bucket_id = bucket_id;
     lopts.max_entries = max_entries;
     ret = rgw_admin_lc(dpp(), driver, formatter.get(), stream_flusher,
                        bucket_op, bucket, lopts);
@@ -3259,11 +3263,11 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::BUCKET_SYNC_RUN) {
     rgw_admin_bucket_sync_options bsopts;
     bsopts.command = opt_cmd;
-    bsopts.tenant = &tenant;
-    bsopts.bucket_name = &bucket_name;
-    bsopts.bucket_id = &bucket_id;
-    bsopts.source_zone = &source_zone;
-    bsopts.opt_source_bucket = &opt_source_bucket;
+    bsopts.tenant = tenant;
+    bsopts.bucket_name = bucket_name;
+    bsopts.bucket_id = bucket_id;
+    bsopts.source_zone = source_zone;
+    bsopts.opt_source_bucket = opt_source_bucket;
     bsopts.bucket_op = &bucket_op;
     bsopts.opt_retry_delay_ms = opt_retry_delay_ms;
     bsopts.opt_timeout_sec = opt_timeout_sec;
@@ -3282,13 +3286,13 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::BILOG_AUTOTRIM) {
     rgw_admin_bilog_options blopts;
     blopts.command = opt_cmd;
-    blopts.tenant = &tenant;
-    blopts.bucket_name = &bucket_name;
-    blopts.bucket_id = &bucket_id;
-    blopts.marker = &marker;
-    blopts.start_marker = &start_marker;
-    blopts.end_marker = &end_marker;
-    blopts.gen = &gen;
+    blopts.tenant = tenant;
+    blopts.bucket_name = bucket_name;
+    blopts.bucket_id = bucket_id;
+    blopts.marker = marker;
+    blopts.start_marker = start_marker;
+    blopts.end_marker = end_marker;
+    blopts.gen = gen;
     blopts.max_entries = max_entries;
     blopts.shard_id = shard_id;
     blopts.yes_i_really_mean_it = yes_i_really_mean_it;
@@ -3335,30 +3339,32 @@ int main(int argc, const char **argv)
       ) {
     rgw_admin_bucket_options bopts;
     bopts.command = opt_cmd;
-    bopts.tenant = &tenant;
-    bopts.bucket_name = &bucket_name;
-    bopts.bucket_id = &bucket_id;
-    bopts.object = &object;
-    bopts.object_version = &object_version;
-    bopts.marker = &marker;
-    bopts.source_zone = &source_zone;
-    bopts.metadata_key = &metadata_key;
-    bopts.err = &err;
-    bopts.new_bucket_name = &new_bucket_name;
-    bopts.account_id = &account_id;
-    bopts.format = &format;
-    bopts.start_date = &start_date;
-    bopts.end_date = &end_date;
-    bopts.opt_prefix = &opt_prefix;
-    bopts.opt_source_bucket = &opt_source_bucket;
-    bopts.inject_error_at = &inject_error_at;
-    bopts.inject_error_code = &inject_error_code;
-    bopts.inject_abort_at = &inject_abort_at;
-    bopts.inject_delay_at = &inject_delay_at;
-    bopts.inject_delay = &inject_delay;
-    bopts.rgw_obj_fs = &rgw_obj_fs;
+    bopts.tenant = tenant;
+    bopts.bucket_name = bucket_name;
+    bopts.bucket_id = bucket_id;
+    bopts.object = object;
+    bopts.object_version = object_version;
+    bopts.marker = marker;
+    bopts.source_zone = source_zone;
+    bopts.metadata_key = metadata_key;
+    bopts.err = err;
+    bopts.new_bucket_name = new_bucket_name;
+    bopts.account_id = account_id;
+    bopts.format = format;
+    bopts.start_date = start_date;
+    bopts.end_date = end_date;
+    bopts.opt_prefix = opt_prefix;
+    bopts.opt_source_bucket = opt_source_bucket;
+    bopts.inject_error_at = inject_error_at;
+    bopts.inject_error_code = inject_error_code;
+    bopts.inject_abort_at = inject_abort_at;
+    bopts.inject_delay_at = inject_delay_at;
+    bopts.inject_delay = inject_delay;
+    bopts.rgw_obj_fs = rgw_obj_fs;
     bopts.ret = &ret;
-    bopts.max_entries = max_entries;
+    if (max_entries_specified) {
+      bopts.max_entries = max_entries;
+    }
     bopts.max_concurrent_ios = max_concurrent_ios;
     bopts.orphan_stale_secs = orphan_stale_secs;
     bopts.num_shards = num_shards;
@@ -3369,7 +3375,6 @@ int main(int argc, const char **argv)
     bopts.min_rewrite_stripe_size = min_rewrite_stripe_size;
     bopts.opt_retry_delay_ms = opt_retry_delay_ms;
     bopts.opt_timeout_sec = opt_timeout_sec;
-    bopts.max_entries_specified = max_entries_specified;
     bopts.warnings_only = warnings_only;
     bopts.allow_unordered = allow_unordered;
     bopts.show_restore_stats = show_restore_stats;
@@ -3398,7 +3403,7 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::USER_POLICY_LIST_ATTACHED) {
     rgw_admin_user_policy_options upopts;
     upopts.command = opt_cmd;
-    upopts.policy_arn = &policy_arn;
+    upopts.policy_arn = policy_arn;
     ret = rgw_admin_user_policy(dpp(), driver, formatter.get(), user, upopts);
     if (ret != 0) {
       return ret;
@@ -3417,10 +3422,10 @@ int main(int argc, const char **argv)
   if (opt_cmd == OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART) {
     rgw_admin_bucket_resync_encrypted_multipart_options remopts;
     remopts.command = opt_cmd;
-    remopts.tenant = &tenant;
-    remopts.bucket_name = &bucket_name;
-    remopts.bucket_id = &bucket_id;
-    remopts.marker = &marker;
+    remopts.tenant = tenant;
+    remopts.bucket_name = bucket_name;
+    remopts.bucket_id = bucket_id;
+    remopts.marker = marker;
     remopts.yes_i_really_mean_it = yes_i_really_mean_it;
     ret = rgw_admin_bucket_resync_encrypted_multipart(
         dpp(), driver, formatter.get(), stream_flusher, bucket, remopts);
@@ -3438,10 +3443,10 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::LOG_RM) {
     rgw_admin_log_options log_opts;
     log_opts.command = opt_cmd;
-    log_opts.date = &date;
-    log_opts.object = &object;
-    log_opts.bucket_name = &bucket_name;
-    log_opts.bucket_id = &bucket_id;
+    log_opts.date = date;
+    log_opts.object = object;
+    log_opts.bucket_name = bucket_name;
+    log_opts.bucket_id = bucket_id;
     log_opts.show_log_entries = show_log_entries;
     log_opts.show_log_sum = show_log_sum;
     log_opts.skip_zero_entries = skip_zero_entries;
@@ -3457,12 +3462,12 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::USAGE_CLEAR) {
     rgw_admin_usage_options usage_opts;
     usage_opts.command = opt_cmd;
-    usage_opts.tenant = &tenant;
-    usage_opts.bucket_name = &bucket_name;
-    usage_opts.bucket_id = &bucket_id;
-    usage_opts.start_date = &start_date;
-    usage_opts.end_date = &end_date;
-    usage_opts.categories = &categories;
+    usage_opts.tenant = tenant;
+    usage_opts.bucket_name = bucket_name;
+    usage_opts.bucket_id = bucket_id;
+    usage_opts.start_date = start_date;
+    usage_opts.end_date = end_date;
+    usage_opts.categories = categories;
     usage_opts.show_log_entries = show_log_entries;
     usage_opts.show_log_sum = show_log_sum;
     usage_opts.yes_i_really_mean_it = yes_i_really_mean_it;
@@ -3509,12 +3514,12 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::RATELIMIT_GET) {
     rgw_admin_quota_ratelimit_options qopts;
     qopts.command = opt_cmd;
-    qopts.tenant = &tenant;
-    qopts.bucket_name = &bucket_name;
-    qopts.account_id = &account_id;
-    qopts.account_name = &account_name;
-    qopts.quota_scope = &quota_scope;
-    qopts.ratelimit_scope = &ratelimit_scope;
+    qopts.tenant = tenant;
+    qopts.bucket_name = bucket_name;
+    qopts.account_id = account_id;
+    qopts.account_name = account_name;
+    qopts.quota_scope = quota_scope;
+    qopts.ratelimit_scope = ratelimit_scope;
     qopts.max_size = max_size;
     qopts.max_objects = max_objects;
     qopts.max_read_ops = max_read_ops;
@@ -3549,10 +3554,10 @@ int main(int argc, const char **argv)
       false) {
     rgw_admin_script_options sopts;
     sopts.command = opt_cmd;
-    sopts.tenant = &tenant;
-    sopts.infile = &infile;
-    sopts.script_package = &script_package;
-    sopts.str_script_ctx = &str_script_ctx;
+    sopts.tenant = tenant;
+    sopts.infile = infile;
+    sopts.script_package = script_package;
+    sopts.str_script_ctx = str_script_ctx;
     sopts.allow_compilation = allow_compilation;
     ret = rgw_admin_script(dpp(), driver, sopts);
     if (ret != 0) {
@@ -3580,8 +3585,9 @@ int main(int argc, const char **argv)
     pubsub_opts.topic_name = topic_name;
     pubsub_opts.notification_id = notification_id;
     pubsub_opts.marker = marker;
-    pubsub_opts.max_entries = max_entries;
-    pubsub_opts.max_entries_specified = max_entries_specified;
+    if (max_entries_specified) {
+      pubsub_opts.max_entries = max_entries;
+    }
     ret = rgw_admin_pubsub(dpp(), driver, *site, user.get(), formatter.get(),
                            pubsub_opts);
     if (ret != 0) {
@@ -3709,15 +3715,16 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::USER_LIST) {
     rgw_admin_user_query_options query_opts;
     query_opts.command = opt_cmd;
-    query_opts.tenant = &tenant;
-    query_opts.bucket_name = &bucket_name;
-    query_opts.bucket_id = &bucket_id;
-    query_opts.account_id = &account_id;
-    query_opts.account_name = &account_name;
-    query_opts.path_prefix = &path_prefix;
-    query_opts.marker = &marker;
-    query_opts.max_entries = max_entries;
-    query_opts.max_entries_specified = max_entries_specified;
+    query_opts.tenant = tenant;
+    query_opts.bucket_name = bucket_name;
+    query_opts.bucket_id = bucket_id;
+    query_opts.account_id = account_id;
+    query_opts.account_name = account_name;
+    query_opts.path_prefix = path_prefix;
+    query_opts.marker = marker;
+    if (max_entries_specified) {
+      query_opts.max_entries = max_entries;
+    }
     query_opts.account_root = account_root;
     query_opts.sync_stats = sync_stats;
     query_opts.reset_stats = reset_stats;
@@ -3736,11 +3743,12 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::METADATA_LIST) {
     rgw_admin_metadata_options mopts;
     mopts.command = opt_cmd;
-    mopts.metadata_key = &metadata_key;
-    mopts.marker = &marker;
-    mopts.infile = &infile;
-    mopts.max_entries = max_entries;
-    mopts.max_entries_specified = max_entries_specified;
+    mopts.metadata_key = metadata_key;
+    mopts.marker = marker;
+    mopts.infile = infile;
+    if (max_entries_specified) {
+      mopts.max_entries = max_entries;
+    }
     ret = rgw_admin_metadata(dpp(), driver, formatter.get(), mopts);
     if (ret != 0) {
       return ret;
@@ -3773,53 +3781,54 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::SYNC_POLICY_GET) {
     rgw_admin_sync_options sopts;
     sopts.command = opt_cmd;
-    sopts.source_zone = &source_zone;
-    sopts.marker = &marker;
-    sopts.start_marker = &start_marker;
-    sopts.end_marker = &end_marker;
-    sopts.start_date = &start_date;
-    sopts.end_date = &end_date;
-    sopts.period_id = &period_id;
-    sopts.realm_id = &realm_id;
-    sopts.realm_name = &realm_name;
-    sopts.zonegroup_id = &zonegroup_id;
-    sopts.zonegroup_name = &zonegroup_name;
-    sopts.opt_effective_zone_id = &opt_effective_zone_id;
-    sopts.opt_bucket = &opt_bucket;
-    sopts.opt_bucket_name = &opt_bucket_name;
-    sopts.opt_source_zone_id = &opt_source_zone_id;
-    sopts.opt_dest_zone_id = &opt_dest_zone_id;
-    sopts.opt_source_zone_name = &opt_source_zone_name;
-    sopts.opt_dest_zone_name = &opt_dest_zone_name;
-    sopts.opt_zone_ids = &opt_zone_ids;
-    sopts.opt_source_zone_ids = &opt_source_zone_ids;
-    sopts.opt_dest_zone_ids = &opt_dest_zone_ids;
-    sopts.opt_source_bucket = &opt_source_bucket;
-    sopts.opt_dest_bucket = &opt_dest_bucket;
-    sopts.opt_source_tenant = &opt_source_tenant;
-    sopts.opt_dest_tenant = &opt_dest_tenant;
-    sopts.opt_source_bucket_name = &opt_source_bucket_name;
-    sopts.opt_dest_bucket_name = &opt_dest_bucket_name;
-    sopts.opt_source_bucket_id = &opt_source_bucket_id;
-    sopts.opt_dest_bucket_id = &opt_dest_bucket_id;
-    sopts.opt_pipe_id = &opt_pipe_id;
-    sopts.opt_group_id = &opt_group_id;
-    sopts.opt_flow_id = &opt_flow_id;
-    sopts.opt_flow_type = &opt_flow_type;
-    sopts.opt_status = &opt_status;
-    sopts.opt_prefix = &opt_prefix;
-    sopts.opt_prefix_rm = &opt_prefix_rm;
-    sopts.opt_dest_owner = &opt_dest_owner;
-    sopts.opt_storage_class = &opt_storage_class;
-    sopts.opt_priority = &opt_priority;
-    sopts.opt_mode = &opt_mode;
-    sopts.tags_add = &tags_add;
-    sopts.tags_rm = &tags_rm;
-    sopts.user = &user;
-    sopts.max_entries = max_entries;
+    sopts.source_zone = source_zone;
+    sopts.marker = marker;
+    sopts.start_marker = start_marker;
+    sopts.end_marker = end_marker;
+    sopts.start_date = start_date;
+    sopts.end_date = end_date;
+    sopts.period_id = period_id;
+    sopts.realm_id = realm_id;
+    sopts.realm_name = realm_name;
+    sopts.zonegroup_id = zonegroup_id;
+    sopts.zonegroup_name = zonegroup_name;
+    sopts.opt_effective_zone_id = opt_effective_zone_id;
+    sopts.opt_bucket = opt_bucket;
+    sopts.opt_bucket_name = opt_bucket_name;
+    sopts.opt_source_zone_id = opt_source_zone_id;
+    sopts.opt_dest_zone_id = opt_dest_zone_id;
+    sopts.opt_source_zone_name = opt_source_zone_name;
+    sopts.opt_dest_zone_name = opt_dest_zone_name;
+    sopts.opt_zone_ids = opt_zone_ids;
+    sopts.opt_source_zone_ids = opt_source_zone_ids;
+    sopts.opt_dest_zone_ids = opt_dest_zone_ids;
+    sopts.opt_source_bucket = opt_source_bucket;
+    sopts.opt_dest_bucket = opt_dest_bucket;
+    sopts.opt_source_tenant = opt_source_tenant;
+    sopts.opt_dest_tenant = opt_dest_tenant;
+    sopts.opt_source_bucket_name = opt_source_bucket_name;
+    sopts.opt_dest_bucket_name = opt_dest_bucket_name;
+    sopts.opt_source_bucket_id = opt_source_bucket_id;
+    sopts.opt_dest_bucket_id = opt_dest_bucket_id;
+    sopts.opt_pipe_id = opt_pipe_id;
+    sopts.opt_group_id = opt_group_id;
+    sopts.opt_flow_id = opt_flow_id;
+    sopts.opt_flow_type = opt_flow_type;
+    sopts.opt_status = opt_status;
+    sopts.opt_prefix = opt_prefix;
+    sopts.opt_prefix_rm = opt_prefix_rm;
+    sopts.opt_dest_owner = opt_dest_owner;
+    sopts.opt_storage_class = opt_storage_class;
+    sopts.opt_priority = opt_priority;
+    sopts.opt_mode = opt_mode;
+    sopts.tags_add = tags_add;
+    sopts.tags_rm = tags_rm;
+    sopts.user = std::move(user);
+    if (max_entries_specified) {
+      sopts.max_entries = max_entries;
+    }
     sopts.shard_id = shard_id;
     sopts.trim_delay_ms = trim_delay_ms;
-    sopts.max_entries_specified = max_entries_specified;
     sopts.specified_shard_id = specified_shard_id;
     ret = rgw_admin_sync(dpp(), driver, cfgstore.get(), *site, formatter.get(),
                          zone_formatter.get(), sopts);
@@ -3836,10 +3845,10 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::MFA_RESYNC) {
     rgw_admin_mfa_options mfa_opts;
     mfa_opts.command = opt_cmd;
-    mfa_opts.totp_serial = &totp_serial;
-    mfa_opts.totp_seed = &totp_seed;
-    mfa_opts.totp_seed_type = &totp_seed_type;
-    mfa_opts.totp_pin = &totp_pin;
+    mfa_opts.totp_serial = totp_serial;
+    mfa_opts.totp_seed = totp_seed;
+    mfa_opts.totp_seed_type = totp_seed_type;
+    mfa_opts.totp_pin = totp_pin;
     mfa_opts.objv_tracker = &objv_tracker;
     mfa_opts.totp_seconds = totp_seconds;
     mfa_opts.totp_window = totp_window;
@@ -3861,13 +3870,13 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::DATALOG_SEMAPHORE_RESET) {
     rgw_admin_datalog_options dopts;
     dopts.command = opt_cmd;
-    dopts.marker = &marker;
-    dopts.start_marker = &start_marker;
-    dopts.end_marker = &end_marker;
-    dopts.start_date = &start_date;
-    dopts.end_date = &end_date;
-    dopts.opt_log_type = &opt_log_type;
-    dopts.count = &count;
+    dopts.marker = marker;
+    dopts.start_marker = start_marker;
+    dopts.end_marker = end_marker;
+    dopts.start_date = start_date;
+    dopts.end_date = end_date;
+    dopts.opt_log_type = opt_log_type;
+    dopts.count = count;
     dopts.max_entries = max_entries;
     dopts.shard_id = shard_id;
     dopts.specified_shard_id = specified_shard_id;
@@ -3883,10 +3892,10 @@ int main(int argc, const char **argv)
       opt_cmd == OPT::RESTORE_LIST) {
     rgw_admin_restore_options ropts;
     ropts.command = opt_cmd;
-    ropts.tenant = &tenant;
-    ropts.bucket_name = &bucket_name;
-    ropts.object = &object;
-    ropts.restore_status_filter = &restore_status_filter;
+    ropts.tenant = tenant;
+    ropts.bucket_name = bucket_name;
+    ropts.object = object;
+    ropts.restore_status_filter = restore_status_filter;
     ret = rgw_admin_restore(dpp(), driver, stream_flusher, ropts);
     if (ret != 0) {
       return ret;

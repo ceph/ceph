@@ -18,11 +18,11 @@ namespace rgw::sal { class Driver; class Bucket; }
 
 struct rgw_admin_bucket_sync_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  std::string* bucket_id = nullptr;
-  rgw_zone_id* source_zone = nullptr;
-  std::optional<rgw_bucket>* opt_source_bucket = nullptr;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
+  rgw_zone_id source_zone;
+  std::optional<rgw_bucket> opt_source_bucket;
   RGWBucketAdminOpState* bucket_op = nullptr;
   ceph::timespan opt_retry_delay_ms = std::chrono::milliseconds(2000);
   ceph::timespan opt_timeout_sec = std::chrono::seconds(60);

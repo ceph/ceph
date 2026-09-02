@@ -30,19 +30,19 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
                 rgw::sal::ConfigStore* cfgstore,
                 rgw::SiteConfig& site,
                 Formatter* formatter,
-                const rgw_admin_realm_options& o)
+                rgw_admin_realm_options& o)
 {
   auto command = o.command;
 
-  auto& realm_id = *o.realm_id;
-  auto& realm_name = *o.realm_name;
-  auto& realm_new_name = *o.realm_new_name;
-  auto& period_id = *o.period_id;
-  auto& url = *o.url;
-  auto& access_key = *o.access_key;
-  auto& secret_key = *o.secret_key;
-  auto& infile = *o.infile;
-  auto& opt_region = *o.opt_region;
+  auto& realm_id = o.realm_id;
+  auto& realm_name = o.realm_name;
+  auto& realm_new_name = o.realm_new_name;
+  auto& period_id = o.period_id;
+  auto& url = o.url;
+  auto& access_key = o.access_key;
+  auto& secret_key = o.secret_key;
+  auto& infile = o.infile;
+  auto& opt_region = o.opt_region;
   auto set_default = o.set_default;
 
   switch (command) {

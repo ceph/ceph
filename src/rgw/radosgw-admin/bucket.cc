@@ -372,27 +372,27 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
                      RGWUserAdminOpState& user_op,
                      RGWBucketAdminOpState& bucket_op,
                      std::unique_ptr<rgw::sal::Bucket>& bucket,
-                     const rgw_admin_bucket_options& o)
+                     rgw_admin_bucket_options& o)
 {
 
-  auto& tenant = *o.tenant;
-  auto& bucket_name = *o.bucket_name;
-  auto& bucket_id = *o.bucket_id;
-  auto& object = *o.object;
-  auto& object_version = *o.object_version;
-  auto& marker = *o.marker;
-  auto& metadata_key = *o.metadata_key;
-  auto& err = *o.err;
-  auto& new_bucket_name = *o.new_bucket_name;
-  auto& account_id = *o.account_id;
-  auto& format = *o.format;
-  auto& start_date = *o.start_date;
-  auto& end_date = *o.end_date;
+  auto& tenant = o.tenant;
+  auto& bucket_name = o.bucket_name;
+  auto& bucket_id = o.bucket_id;
+  auto& object = o.object;
+  auto& object_version = o.object_version;
+  auto& marker = o.marker;
+  auto& metadata_key = o.metadata_key;
+  auto& err = o.err;
+  auto& new_bucket_name = o.new_bucket_name;
+  auto& account_id = o.account_id;
+  auto& format = o.format;
+  auto& start_date = o.start_date;
+  auto& end_date = o.end_date;
 
-  auto& opt_prefix = *o.opt_prefix;
+  auto& opt_prefix = o.opt_prefix;
 
   int& ret = *o.ret;
-  int max_entries = o.max_entries;
+  int max_entries = o.max_entries.value_or(1000);
   int max_concurrent_ios = o.max_concurrent_ios;
   int orphan_stale_secs = o.orphan_stale_secs;
   int num_shards = o.num_shards;
@@ -401,7 +401,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   uint64_t max_rewrite_size = o.max_rewrite_size;
   uint64_t min_rewrite_stripe_size = o.min_rewrite_stripe_size;
 
-  bool max_entries_specified = o.max_entries_specified;
+  const bool limit_specified = o.max_entries.has_value();
   bool warnings_only = o.warnings_only;
   bool allow_unordered = o.allow_unordered;
   bool show_restore_stats = o.show_restore_stats;
@@ -477,8 +477,8 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
         }
       }
       bucket_op.marker = marker;
-      if (max_entries_specified)
-        bucket_op.max_entries = max_entries;
+      if (limit_specified)
+        bucket_op.max_entries = *o.max_entries;
       else
         bucket_op.max_entries = 0; /* for backward compatibility */
       RGWBucketAdminOp::info(driver, site, bucket_op, stream_flusher, null_yield, dpp);
@@ -553,8 +553,8 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
   if (command == rgw_admin::OPT::BUCKET_RADOS_LIST) {
     RGWRadosList lister(static_cast<rgw::sal::RadosStore*>(driver),
 			max_concurrent_ios, orphan_stale_secs, tenant);
-    if (o.rgw_obj_fs && *o.rgw_obj_fs) {
-      lister.set_field_separator(**o.rgw_obj_fs);
+    if (o.rgw_obj_fs) {
+      lister.set_field_separator(*o.rgw_obj_fs);
     }
 
     if (bucket_name.empty()) {
@@ -607,8 +607,8 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
       bucket_op.set_bucket_name(bucket_key.name);
     }
     bucket_op.set_fetch_stats(true);
-    if (max_entries_specified)
-      bucket_op.max_entries = max_entries;
+      if (limit_specified)
+      bucket_op.max_entries = *o.max_entries;
     else
       bucket_op.max_entries = 0; /* for backward compatibility */
     bucket_op.set_restore_stats(bool(show_restore_stats));
@@ -881,14 +881,14 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
     }
 
     ReshardFaultInjector fault;
-    if (o.inject_error_at && *o.inject_error_at) {
-      const int code = -(o.inject_error_code && o.inject_error_code->has_value() ?
-                         o.inject_error_code->value() : EIO);
-      fault.inject(**o.inject_error_at, InjectError{code, dpp});
-    } else if (o.inject_abort_at && *o.inject_abort_at) {
-      fault.inject(**o.inject_abort_at, InjectAbort{});
-    } else if (o.inject_delay_at && *o.inject_delay_at) {
-      fault.inject(**o.inject_delay_at, InjectDelay{*o.inject_delay, dpp});
+    if (o.inject_error_at) {
+      const int code = -(o.inject_error_code.has_value() ?
+                         *o.inject_error_code : EIO);
+      fault.inject(*o.inject_error_at, InjectError{code, dpp});
+    } else if (o.inject_abort_at) {
+      fault.inject(*o.inject_abort_at, InjectAbort{});
+    } else if (o.inject_delay_at) {
+      fault.inject(*o.inject_delay_at, InjectDelay{o.inject_delay, dpp});
     }
     ret = br.execute(num_shards, fault, max_entries,
 		     cls_rgw_reshard_initiator::Admin,

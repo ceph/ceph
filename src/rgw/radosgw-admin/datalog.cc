@@ -26,16 +26,16 @@ int rgw_admin_datalog(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       ceph::async::io_context_pool& context_pool,
                       ceph::Formatter* formatter,
-                      const rgw_admin_datalog_options& opts)
+                      rgw_admin_datalog_options& opts)
 {
   auto& command = opts.command;
-  auto& marker = *opts.marker;
-  auto& start_marker = *opts.start_marker;
-  auto& end_marker = *opts.end_marker;
-  auto& start_date = *opts.start_date;
-  auto& end_date = *opts.end_date;
-  auto& opt_log_type = *opts.opt_log_type;
-  auto& count = *opts.count;
+  auto& marker = opts.marker;
+  auto& start_marker = opts.start_marker;
+  auto& end_marker = opts.end_marker;
+  auto& start_date = opts.start_date;
+  auto& end_date = opts.end_date;
+  auto& opt_log_type = opts.opt_log_type;
+  auto& count = opts.count;
   int max_entries = opts.max_entries;
   int shard_id = opts.shard_id;
   bool specified_shard_id = opts.specified_shard_id;

@@ -29,9 +29,9 @@ int rgw_admin_lc(const DoutPrefixProvider* dpp,
                  const rgw_admin_lc_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
   int max_entries = opts.max_entries;
   int ret = 0;
 

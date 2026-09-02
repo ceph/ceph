@@ -25,10 +25,10 @@ int rgw_admin_log(const DoutPrefixProvider* dpp,
                   const rgw_admin_log_options& o)
 {
   auto command = o.command;
-  const auto& date = *o.date;
-  const auto& object = *o.object;
-  const auto& bucket_name = *o.bucket_name;
-  const auto& bucket_id = *o.bucket_id;
+  const auto& date = o.date;
+  const auto& object = o.object;
+  const auto& bucket_name = o.bucket_name;
+  const auto& bucket_id = o.bucket_id;
   const bool show_log_entries = o.show_log_entries;
   const bool show_log_sum = o.show_log_sum;
   const bool skip_zero_entries = o.skip_zero_entries;

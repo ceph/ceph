@@ -128,7 +128,7 @@ int rgw_admin_pubsub(const DoutPrefixProvider* dpp,
       if (rgw::all_zonegroups_support(site, rgw::zone_features::notification_v2) &&
           driver->stat_topics_v1(std::string(opts.tenant), null_yield, dpp) == -ENOENT) {
         formatter->open_array_section("topics");
-        int max_entries = opts.max_entries;
+        int max_entries = opts.max_entries.value_or(0);
         do {
           ret = ps.get_topics_v2(dpp, next_token, max_entries,
                                  result, next_token, null_yield);
@@ -148,7 +148,7 @@ int rgw_admin_pubsub(const DoutPrefixProvider* dpp,
                         << topic.name << ", ret=" << ret << std::endl;
             }
             show_topics_info_v2(topic, subscribed_buckets, formatter);
-            if (opts.max_entries_specified) {
+            if (opts.max_entries) {
               --max_entries;
             }
           }
@@ -163,7 +163,7 @@ int rgw_admin_pubsub(const DoutPrefixProvider* dpp,
         }
         encode_json("result", result, formatter);
       }
-      if (opts.max_entries_specified) {
+      if (opts.max_entries) {
         encode_json("truncated", !next_token.empty(), formatter);
         if (!next_token.empty()) {
           encode_json("marker", next_token, formatter);
@@ -391,7 +391,7 @@ int rgw_admin_pubsub(const DoutPrefixProvider* dpp,
         while (truncated) {
           bufferlist bl;
           int rc;
-          cls_2pc_queue_list_entries(rop, marker, opts.max_entries, &bl, &rc);
+          cls_2pc_queue_list_entries(rop, marker, opts.max_entries.value_or(1000), &bl, &rc);
           ioctx.operate(shard_name, &rop, nullptr);
           if (rc < 0 ) {
             std::cerr << "ERROR: could not list entries from queue. error: " << cpp_strerror(-ret) << std::endl;

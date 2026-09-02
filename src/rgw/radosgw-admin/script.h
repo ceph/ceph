@@ -13,10 +13,10 @@ namespace rgw::sal { class Driver; }
 
 struct rgw_admin_script_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* infile = nullptr;
-  std::optional<std::string>* script_package = nullptr;
-  std::optional<std::string>* str_script_ctx = nullptr;
+  std::string tenant;
+  std::string infile;
+  std::optional<std::string> script_package;
+  std::optional<std::string> str_script_ctx;
   int allow_compilation = 0;
 };
 

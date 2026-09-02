@@ -35,13 +35,13 @@ int rgw_admin_usage(const DoutPrefixProvider* dpp,
                     RGWFormatterFlusher& stream_flusher,
                     std::unique_ptr<rgw::sal::User>& user,
                     std::unique_ptr<rgw::sal::Bucket>& bucket,
-                    const rgw_admin_usage_options& o)
+                    rgw_admin_usage_options& o)
 {
-  const std::string& tenant = *o.tenant;
-  const std::string& bucket_name = *o.bucket_name;
-  const std::string& bucket_id = *o.bucket_id;
-  const std::string& start_date = *o.start_date;
-  const std::string& end_date = *o.end_date;
+  const std::string& tenant = o.tenant;
+  const std::string& bucket_name = o.bucket_name;
+  const std::string& bucket_id = o.bucket_id;
+  const std::string& start_date = o.start_date;
+  const std::string& end_date = o.end_date;
 
   switch (o.command) {
   case rgw_admin::OPT::USAGE_SHOW: {
@@ -73,7 +73,7 @@ int rgw_admin_usage(const DoutPrefixProvider* dpp,
     }
     ret = RGWUsage::show(dpp, driver, user.get(), bucket.get(), start_epoch,
 			 end_epoch, o.show_log_entries, o.show_log_sum,
-                         o.categories, stream_flusher);
+                         &o.categories, stream_flusher);
     if (ret < 0) {
       cerr << "ERROR: failed to show usage" << std::endl;
       return 1;

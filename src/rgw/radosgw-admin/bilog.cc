@@ -28,16 +28,16 @@ int rgw_admin_bilog(const DoutPrefixProvider* dpp,
                     rgw::sal::Driver* driver,
                     ceph::Formatter* formatter,
                     std::unique_ptr<rgw::sal::Bucket>& bucket,
-                    const rgw_admin_bilog_options& opts)
+                    rgw_admin_bilog_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
-  auto& marker = *opts.marker;
-  auto& start_marker = *opts.start_marker;
-  auto& end_marker = *opts.end_marker;
-  auto& gen = *opts.gen;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
+  auto& marker = opts.marker;
+  auto& start_marker = opts.start_marker;
+  auto& end_marker = opts.end_marker;
+  auto& gen = opts.gen;
   int max_entries = opts.max_entries;
   int shard_id = opts.shard_id;
   bool yes_i_really_mean_it = opts.yes_i_really_mean_it;
@@ -102,11 +102,9 @@ int rgw_admin_bilog(const DoutPrefixProvider* dpp,
       return -ret;
     }
 
-    if (!gen) {
-      gen = 0;
-    }
+    uint64_t gen_val = gen.value_or(0);
     ret = bilog_trim(dpp, null_yield, static_cast<rgw::sal::RadosStore*>(driver),
-		     bucket->get_info(), *gen,
+		     bucket->get_info(), gen_val,
 		     shard_id, start_marker, end_marker);
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;

@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "radosgw-admin/radosgw-admin.h"
@@ -21,22 +22,21 @@ namespace rgw::sal { class Driver; class Bucket; }
 
 struct rgw_admin_object_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  std::string* bucket_id = nullptr;
-  std::string* object = nullptr;
-  std::string* object_version = nullptr;
-  std::string* infile = nullptr;
-  std::string* objects_file = nullptr;
-  std::string* end_date = nullptr;
-  std::string* start_date = nullptr;
-  std::string* marker = nullptr;
-  int max_entries = -1;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
+  std::string object;
+  std::string object_version;
+  std::string infile;
+  std::string objects_file;
+  std::string end_date;
+  std::string start_date;
+  std::string marker;
+  std::optional<int> max_entries;
   int shard_id = 0;
   int64_t min_rewrite_size = 0;
   int64_t max_rewrite_size = 0;
   uint64_t min_rewrite_stripe_size = 0;
-  bool max_entries_specified = false;
   bool specified_shard_id = false;
   bool yes_i_really_mean_it = false;
   bool fix = false;

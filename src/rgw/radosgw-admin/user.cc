@@ -68,7 +68,7 @@ int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
 
   switch (opts.command) {
   case rgw_admin::OPT::USER_INFO:
-    if (rgw::sal::User::empty(user) && opts.access_key->empty()) {
+    if (rgw::sal::User::empty(user) && opts.access_key.empty()) {
       cerr << "ERROR: --uid or --access-key required" << std::endl;
       return EINVAL;
     }
@@ -85,7 +85,7 @@ int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
 
       return -ret;
     }
-    if (!opts.subuser->empty()) {
+    if (!opts.subuser.empty()) {
       ret = ruser.subusers.add(dpp, user_op, null_yield, &err_msg);
       if (ret < 0) {
         cerr << "could not create subuser: " << err_msg << std::endl;
@@ -203,15 +203,15 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
                          std::unique_ptr<rgw::sal::Bucket>& bucket,
                          const rgw_admin_user_query_options& opts)
 {
-  const std::string& tenant = *opts.tenant;
-  const std::string& bucket_name = *opts.bucket_name;
-  const std::string& bucket_id = *opts.bucket_id;
-  const std::string& account_id = *opts.account_id;
-  const std::string& account_name = *opts.account_name;
-  const std::string& path_prefix = *opts.path_prefix;
-  const std::string& marker = *opts.marker;
-  int max_entries = opts.max_entries;
-  bool max_entries_specified = opts.max_entries_specified;
+  const std::string& tenant = opts.tenant;
+  const std::string& bucket_name = opts.bucket_name;
+  const std::string& bucket_id = opts.bucket_id;
+  const std::string& account_id = opts.account_id;
+  const std::string& account_name = opts.account_name;
+  const std::string& path_prefix = opts.path_prefix;
+  const std::string& marker = opts.marker;
+  const bool limit_specified = opts.max_entries.has_value();
+  const int max_entries = opts.max_entries.value_or(0);
   int ret = 0;
 
   switch (opts.command) {
@@ -317,7 +317,7 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
       std::string err_msg;
       ret = rgw::account::list_users(
           dpp, driver, op_state, path_prefix, marker,
-          max_entries_specified, max_entries, opts.account_root,
+          limit_specified, max_entries, opts.account_root,
           err_msg, stream_flusher, null_yield);
       if (ret < 0)  {
         cerr << "ERROR: " << err_msg << std::endl;
@@ -337,7 +337,7 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
     bool truncated = false;
     uint64_t count = 0;
 
-    if (max_entries_specified) {
+    if (limit_specified) {
       formatter->open_object_section("result");
     }
     formatter->open_array_section("keys");
@@ -345,7 +345,7 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
     uint64_t left = 0;
     do {
       list<string> keys;
-      left = (max_entries_specified ? max_entries - count : max);
+      left = (limit_specified ? max_entries - count : max);
       ret = driver->meta_list_keys_next(dpp, handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
@@ -362,7 +362,7 @@ int rgw_admin_user_query(const DoutPrefixProvider* dpp,
 
     formatter->close_section();
 
-    if (max_entries_specified) {
+    if (limit_specified) {
       encode_json("truncated", truncated, formatter);
       encode_json("count", count, formatter);
       if (truncated) {
@@ -388,7 +388,7 @@ int rgw_admin_user_policy(const DoutPrefixProvider* dpp,
                           const rgw_admin_user_policy_options& opts)
 {
   auto& command = opts.command;
-  auto& policy_arn = *opts.policy_arn;
+  auto& policy_arn = opts.policy_arn;
   int ret = 0;
 
   if (command == rgw_admin::OPT::USER_POLICY_ATTACH) {

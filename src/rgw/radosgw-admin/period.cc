@@ -34,21 +34,21 @@ int rgw_admin_period(const DoutPrefixProvider* dpp,
                 rgw::sal::ConfigStore* cfgstore,
                 rgw::SiteConfig& site,
                 Formatter* formatter,
-                const rgw_admin_period_options& o)
+                rgw_admin_period_options& o)
 {
   auto command = o.command;
 
-  auto& realm_id = *o.realm_id;
-  auto& realm_name = *o.realm_name;
-  auto& period_id = *o.period_id;
-  auto& period_epoch = *o.period_epoch;
-  auto& url = *o.url;
-  auto& access_key = *o.access_key;
-  auto& secret_key = *o.secret_key;
-  auto& remote = *o.remote;
-  auto& quota_scope = *o.quota_scope;
-  auto& ratelimit_scope = *o.ratelimit_scope;
-  auto& opt_region = *o.opt_region;
+  auto& realm_id = o.realm_id;
+  auto& realm_name = o.realm_name;
+  auto& period_id = o.period_id;
+  auto& period_epoch = o.period_epoch;
+  auto& url = o.url;
+  auto& access_key = o.access_key;
+  auto& secret_key = o.secret_key;
+  auto& remote = o.remote;
+  auto& quota_scope = o.quota_scope;
+  auto& ratelimit_scope = o.ratelimit_scope;
+  auto& opt_region = o.opt_region;
   auto commit = o.commit;
   auto staging = o.staging;
   auto yes_i_really_mean_it = o.yes_i_really_mean_it;

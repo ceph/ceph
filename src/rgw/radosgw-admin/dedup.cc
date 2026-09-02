@@ -22,10 +22,10 @@ int rgw_admin_dedup(const DoutPrefixProvider* dpp,
                     const rgw_admin_dedup_options& o)
 {
   auto& command = o.command;
-  auto& allow_bucket_list_file = *o.allow_bucket_list_file;
-  auto& deny_bucket_list_file = *o.deny_bucket_list_file;
-  auto& allow_storage_class_list_file = *o.allow_storage_class_list_file;
-  auto& deny_storage_class_list_file = *o.deny_storage_class_list_file;
+  auto& allow_bucket_list_file = o.allow_bucket_list_file;
+  auto& deny_bucket_list_file = o.deny_bucket_list_file;
+  auto& allow_storage_class_list_file = o.allow_storage_class_list_file;
+  auto& deny_storage_class_list_file = o.deny_storage_class_list_file;
   auto& yes_i_really_mean_it = o.yes_i_really_mean_it;
   auto& throttle_stat = o.throttle_stat;
   auto& have_max_bucket_index_ops = o.have_max_bucket_index_ops;

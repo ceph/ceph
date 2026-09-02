@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "radosgw-admin/radosgw-admin.h"
@@ -17,8 +18,8 @@ namespace rgw::sal { class Driver; class User; class Bucket; }
 
 struct rgw_admin_user_mutate_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  const std::string* access_key = nullptr;
-  const std::string* subuser = nullptr;
+  std::string access_key;
+  std::string subuser;
   bool yes_i_really_mean_it = false;
   int generate_key = 2; // 0=set-false, 1=set-true, 2=not-set
 };
@@ -34,7 +35,7 @@ int rgw_admin_user_mutate(const DoutPrefixProvider* dpp,
 
 struct rgw_admin_user_policy_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* policy_arn = nullptr;
+  std::string policy_arn;
 };
 
 int rgw_admin_user_policy(const DoutPrefixProvider* dpp,
@@ -45,15 +46,14 @@ int rgw_admin_user_policy(const DoutPrefixProvider* dpp,
 
 struct rgw_admin_user_query_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  const std::string* tenant = nullptr;
-  const std::string* bucket_name = nullptr;
-  const std::string* bucket_id = nullptr;
-  const std::string* account_id = nullptr;
-  const std::string* account_name = nullptr;
-  const std::string* path_prefix = nullptr;
-  const std::string* marker = nullptr;
-  int max_entries = 0;
-  bool max_entries_specified = false;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
+  std::string account_id;
+  std::string account_name;
+  std::string path_prefix;
+  std::string marker;
+  std::optional<int> max_entries;
   bool account_root = false;
   bool sync_stats = false;
   bool reset_stats = false;

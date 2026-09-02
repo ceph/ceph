@@ -21,35 +21,35 @@ namespace rgw::sal { class Driver; class ConfigStore; }
 
 struct rgw_admin_zone_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* zonegroup_id = nullptr;
-  std::string* zonegroup_name = nullptr;
-  std::string* zone_id = nullptr;
-  std::string* zone_name = nullptr;
-  std::string* zone_new_name = nullptr;
-  std::string* realm_id = nullptr;
-  std::string* realm_name = nullptr;
-  std::string* placement_id = nullptr;
-  std::string* url = nullptr;
-  std::string* access_key = nullptr;
-  std::string* secret_key = nullptr;
-  std::string* infile = nullptr;
-  std::list<std::string>* sync_from = nullptr;
-  std::list<std::string>* sync_from_rm = nullptr;
-  std::list<std::string>* endpoints = nullptr;
-  std::string* master_zone = nullptr;
-  std::string* format = nullptr;
-  std::string* api_name = nullptr;
-  std::string* tier_type = nullptr;
-  std::string* redirect_zone = nullptr;
-  std::map<std::string, std::string, ltstr_nocase>* tier_config_add = nullptr;
-  std::map<std::string, std::string, ltstr_nocase>* tier_config_rm = nullptr;
-  std::optional<std::string>* index_pool = nullptr;
-  std::optional<std::string>* data_pool = nullptr;
-  std::optional<std::string>* data_extra_pool = nullptr;
-  std::optional<std::string>* compression_type = nullptr;
-  std::optional<int>* bucket_index_max_shards = nullptr;
-  std::optional<std::string>* opt_storage_class = nullptr;
-  std::optional<std::string>* opt_region = nullptr;
+  std::string zonegroup_id;
+  std::string zonegroup_name;
+  std::string zone_id;
+  std::string zone_name;
+  std::string zone_new_name;
+  std::string realm_id;
+  std::string realm_name;
+  std::string placement_id;
+  std::string url;
+  std::string access_key;
+  std::string secret_key;
+  std::string infile;
+  std::list<std::string> sync_from;
+  std::list<std::string> sync_from_rm;
+  std::list<std::string> endpoints;
+  std::string master_zone;
+  std::string format;
+  std::string api_name;
+  std::string tier_type;
+  std::string redirect_zone;
+  std::map<std::string, std::string, ltstr_nocase> tier_config_add;
+  std::map<std::string, std::string, ltstr_nocase> tier_config_rm;
+  std::optional<std::string> index_pool;
+  std::optional<std::string> data_pool;
+  std::optional<std::string> data_extra_pool;
+  std::optional<std::string> compression_type;
+  std::optional<int> bucket_index_max_shards;
+  std::optional<std::string> opt_storage_class;
+  std::optional<std::string> opt_region;
   bool tier_type_specified = false;
   int sync_from_all_specified = false;
   bool redirect_zone_set = false;
@@ -65,10 +65,10 @@ struct rgw_admin_zone_options {
   bool num_shards_specified = false;
   int num_shards = 0;
 #ifdef WITH_RADOSGW_RADOS
-  rgw::BucketIndexType* placement_index_type = nullptr;
+  rgw::BucketIndexType placement_index_type;
   bool index_type_specified = false;
-  rgw::zone_features::set* enable_features = nullptr;
-  rgw::zone_features::set* disable_features = nullptr;
+  rgw::zone_features::set enable_features;
+  rgw::zone_features::set disable_features;
 #endif
 };
 
@@ -77,4 +77,4 @@ int rgw_admin_zone(const DoutPrefixProvider* dpp,
                    rgw::sal::ConfigStore* cfgstore,
                    rgw::SiteConfig& site,
                    ceph::Formatter* formatter,
-                   const rgw_admin_zone_options& opts);
+                   rgw_admin_zone_options& opts);

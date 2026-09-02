@@ -12,7 +12,7 @@ namespace rgw::sal { class Driver; }
 
 struct rgw_admin_gc_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* marker = nullptr;
+  std::string marker;
   int shard_id = 0;
   bool specified_shard_id = false;
   bool include_all = false;

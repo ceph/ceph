@@ -8,9 +8,8 @@
 #include <string>
 
 #include "rgw_common.h"
+#include "rgw_basic_types.h"
 #include "radosgw-admin/radosgw-admin.h"
-
-struct rgw_account_id;
 
 class DoutPrefixProvider;
 class RGWStreamFlusher;
@@ -33,12 +32,12 @@ void set_quota_info(RGWQuotaInfo& quota, rgw_admin::OPT command,
 
 struct rgw_admin_quota_ratelimit_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  rgw_account_id* account_id = nullptr;
-  std::string* account_name = nullptr;
-  std::string* quota_scope = nullptr;
-  std::string* ratelimit_scope = nullptr;
+  std::string tenant;
+  std::string bucket_name;
+  rgw_account_id account_id;
+  std::string account_name;
+  std::string quota_scope;
+  std::string ratelimit_scope;
   int64_t max_size = 0;
   int64_t max_objects = 0;
   int64_t max_read_ops = 0;

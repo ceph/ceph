@@ -66,16 +66,16 @@ int rgw_admin_script(const DoutPrefixProvider* dpp,
                      const rgw_admin_script_options& o)
 {
   auto& command = o.command;
-  auto& tenant = *o.tenant;
-  auto& infile = *o.infile;
-  auto* str_script_ctx = o.str_script_ctx;
+  auto& tenant = o.tenant;
+  auto& infile = o.infile;
+  auto& str_script_ctx = o.str_script_ctx;
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-  auto* script_package = o.script_package;
+  auto& script_package = o.script_package;
   const int allow_compilation = o.allow_compilation;
 #endif
 
   if (command == OPT::SCRIPT_PUT) {
-    if (!str_script_ctx || !str_script_ctx->has_value()) {
+    if (!str_script_ctx.has_value()) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
     }
@@ -96,9 +96,9 @@ int rgw_admin_script(const DoutPrefixProvider* dpp,
       return EINVAL;
     }
     const rgw::lua::context script_ctx =
-      rgw::lua::to_context(str_script_ctx->value());
+      rgw::lua::to_context(str_script_ctx.value());
     if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << str_script_ctx->value()
+      cerr << "ERROR: invalid script context: " << str_script_ctx.value()
            << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
@@ -116,14 +116,14 @@ int rgw_admin_script(const DoutPrefixProvider* dpp,
   }
 
   if (command == OPT::SCRIPT_GET) {
-    if (!str_script_ctx || !str_script_ctx->has_value()) {
+    if (!str_script_ctx.has_value()) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
     }
     const rgw::lua::context script_ctx =
-      rgw::lua::to_context(str_script_ctx->value());
+      rgw::lua::to_context(str_script_ctx.value());
     if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << str_script_ctx->value()
+      cerr << "ERROR: invalid script context: " << str_script_ctx.value()
            << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
@@ -132,7 +132,7 @@ int rgw_admin_script(const DoutPrefixProvider* dpp,
     const auto rc = rgw::lua::read_script(dpp, lua_manager.get(), tenant,
                                           null_yield, script_ctx, script);
     if (rc == -ENOENT) {
-      std::cout << "no script exists for context: " << str_script_ctx->value()
+      std::cout << "no script exists for context: " << str_script_ctx.value()
                 << (tenant.empty() ? "" : (" in tenant: " + tenant))
                 << std::endl;
     } else if (rc < 0) {
@@ -144,14 +144,14 @@ int rgw_admin_script(const DoutPrefixProvider* dpp,
   }
 
   if (command == OPT::SCRIPT_RM) {
-    if (!str_script_ctx || !str_script_ctx->has_value()) {
+    if (!str_script_ctx.has_value()) {
       cerr << "ERROR: context was not provided (via --context)" << std::endl;
       return EINVAL;
     }
     const rgw::lua::context script_ctx =
-      rgw::lua::to_context(str_script_ctx->value());
+      rgw::lua::to_context(str_script_ctx.value());
     if (script_ctx == rgw::lua::context::none) {
-      cerr << "ERROR: invalid script context: " << str_script_ctx->value()
+      cerr << "ERROR: invalid script context: " << str_script_ctx.value()
            << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
@@ -166,15 +166,15 @@ int rgw_admin_script(const DoutPrefixProvider* dpp,
 
   if (command == OPT::SCRIPT_PACKAGE_ADD) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-    if (!script_package || !script_package->has_value()) {
+    if (!script_package.has_value()) {
       cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::add_package(dpp, driver, null_yield,
-                                          script_package->value(),
+                                          script_package.value(),
                                           bool(allow_compilation));
     if (rc < 0) {
-      cerr << "ERROR: failed to add Lua package: " << script_package->value()
+      cerr << "ERROR: failed to add Lua package: " << script_package.value()
            << " .error: " << rc << std::endl;
       return -rc;
     }
@@ -186,19 +186,19 @@ int rgw_admin_script(const DoutPrefixProvider* dpp,
 
   if (command == OPT::SCRIPT_PACKAGE_RM) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
-    if (!script_package || !script_package->has_value()) {
+    if (!script_package.has_value()) {
       cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::remove_package(dpp, driver, null_yield,
-                                           script_package->value());
+                                           script_package.value());
     if (rc == -ENOENT) {
-      cerr << "WARNING: package " << script_package->value()
+      cerr << "WARNING: package " << script_package.value()
            << " did not exists or already removed" << std::endl;
       return 0;
     }
     if (rc < 0) {
-      cerr << "ERROR: failed to remove Lua package: " << script_package->value()
+      cerr << "ERROR: failed to remove Lua package: " << script_package.value()
            << " .error: " << rc << std::endl;
       return -rc;
     }

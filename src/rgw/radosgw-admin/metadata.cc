@@ -17,14 +17,14 @@ using namespace std;
 int rgw_admin_metadata(const DoutPrefixProvider* dpp,
                        rgw::sal::Driver* driver,
                        ceph::Formatter* formatter,
-                       const rgw_admin_metadata_options& opts)
+                       rgw_admin_metadata_options& opts)
 {
   auto& command = opts.command;
-  auto& metadata_key = *opts.metadata_key;
-  auto& marker = *opts.marker;
-  auto& infile = *opts.infile;
-  int max_entries = opts.max_entries;
-  bool max_entries_specified = opts.max_entries_specified;
+  auto& metadata_key = opts.metadata_key;
+  auto& marker = opts.marker;
+  auto& infile = opts.infile;
+  const bool limit_specified = opts.max_entries.has_value();
+  int max_entries = opts.max_entries.value_or(0);
 
     if (command == OPT::METADATA_GET) {
     int ret = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->get(metadata_key, formatter, null_yield, dpp);
@@ -70,7 +70,7 @@ int rgw_admin_metadata(const DoutPrefixProvider* dpp,
     bool truncated;
     uint64_t count = 0;
 
-    if (max_entries_specified) {
+    if (limit_specified) {
       formatter->open_object_section("result");
     }
     formatter->open_array_section("keys");
@@ -78,7 +78,7 @@ int rgw_admin_metadata(const DoutPrefixProvider* dpp,
     uint64_t left;
     do {
       list<string> keys;
-      left = (max_entries_specified ? max_entries - count : max);
+      left = (limit_specified ? max_entries - count : max);
       ret = driver->meta_list_keys_next(dpp, handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
@@ -94,7 +94,7 @@ int rgw_admin_metadata(const DoutPrefixProvider* dpp,
 
     formatter->close_section();
 
-    if (max_entries_specified) {
+    if (limit_specified) {
       encode_json("truncated", truncated, formatter);
       encode_json("count", count, formatter);
       if (truncated) {

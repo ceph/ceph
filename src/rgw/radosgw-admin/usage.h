@@ -17,12 +17,12 @@ namespace rgw::sal { class Driver; class User; class Bucket; }
 
 struct rgw_admin_usage_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  const std::string* tenant = nullptr;
-  const std::string* bucket_name = nullptr;
-  const std::string* bucket_id = nullptr;
-  const std::string* start_date = nullptr;
-  const std::string* end_date = nullptr;
-  std::map<std::string, bool>* categories = nullptr;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
+  std::string start_date;
+  std::string end_date;
+  std::map<std::string, bool> categories;
   bool show_log_entries = true;
   bool show_log_sum = true;
   bool yes_i_really_mean_it = false;
@@ -34,4 +34,4 @@ int rgw_admin_usage(const DoutPrefixProvider* dpp,
                     RGWFormatterFlusher& stream_flusher,
                     std::unique_ptr<rgw::sal::User>& user,
                     std::unique_ptr<rgw::sal::Bucket>& bucket,
-                    const rgw_admin_usage_options& opts);
+                    rgw_admin_usage_options& opts);

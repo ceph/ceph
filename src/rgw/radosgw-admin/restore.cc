@@ -21,10 +21,10 @@ int rgw_admin_restore(const DoutPrefixProvider* dpp,
                       const rgw_admin_restore_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& object = *opts.object;
-  auto& restore_status_filter = *opts.restore_status_filter;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& object = opts.object;
+  auto& restore_status_filter = opts.restore_status_filter;
 
   rgw::restore::RestoreEntry entry;
   entry.bucket = rgw_bucket {tenant, bucket_name};

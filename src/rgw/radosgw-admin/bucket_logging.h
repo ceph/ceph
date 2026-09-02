@@ -13,9 +13,9 @@ namespace rgw::sal { class Driver; class Bucket; }
 
 struct rgw_admin_bucket_logging_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  std::string* bucket_id = nullptr;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
 };
 
 

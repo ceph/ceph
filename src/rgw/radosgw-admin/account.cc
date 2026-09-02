@@ -98,7 +98,7 @@ int handle_account_list(const DoutPrefixProvider* dpp,
                         RGWStreamFlusher& stream_flusher,
                         const rgw_admin_account_options& o)
 {
-  if (o.max_entries && *o.max_entries < 0) {
+  if (o.max_entries && o.max_entries < 0) {
     return rgw_admin::report_error("invalid max entries", -EINVAL);
   }
 

@@ -26,10 +26,10 @@ int rgw_admin_bucket_resync_encrypted_multipart(
     const rgw_admin_bucket_resync_encrypted_multipart_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
-  auto& marker = *opts.marker;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
+  auto& marker = opts.marker;
   bool yes_i_really_mean_it = opts.yes_i_really_mean_it;
 
   if (command != OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART) {

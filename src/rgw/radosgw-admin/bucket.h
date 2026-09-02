@@ -54,32 +54,32 @@ int rgw_admin_check_min_obj_stripe_size(const DoutPrefixProvider* dpp,
 struct rgw_admin_bucket_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
 
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  std::string* bucket_id = nullptr;
-  std::string* object = nullptr;
-  std::string* object_version = nullptr;
-  std::string* marker = nullptr;
-  rgw_zone_id* source_zone = nullptr;
-  std::string* metadata_key = nullptr;
-  std::string* err = nullptr;
-  std::string* new_bucket_name = nullptr;
-  std::string* account_id = nullptr;
-  std::string* format = nullptr;
-  std::string* start_date = nullptr;
-  std::string* end_date = nullptr;
+  std::string tenant;
+  std::string bucket_name;
+  std::string bucket_id;
+  std::string object;
+  std::string object_version;
+  std::string marker;
+  rgw_zone_id source_zone;
+  std::string metadata_key;
+  std::string err;
+  std::string new_bucket_name;
+  std::string account_id;
+  std::string format;
+  std::string start_date;
+  std::string end_date;
 
-  std::optional<std::string>* opt_prefix = nullptr;
-  std::optional<rgw_bucket>* opt_source_bucket = nullptr;
-  std::optional<std::string>* inject_error_at = nullptr;
-  std::optional<int>* inject_error_code = nullptr;
-  std::optional<std::string>* inject_abort_at = nullptr;
-  std::optional<std::string>* inject_delay_at = nullptr;
-  ceph::timespan* inject_delay = nullptr;
-  std::optional<std::string>* rgw_obj_fs = nullptr;
+  std::optional<std::string> opt_prefix;
+  std::optional<rgw_bucket> opt_source_bucket;
+  std::optional<std::string> inject_error_at;
+  std::optional<int> inject_error_code;
+  std::optional<std::string> inject_abort_at;
+  std::optional<std::string> inject_delay_at;
+  ceph::timespan inject_delay;
+  std::optional<std::string> rgw_obj_fs;
 
   int* ret = nullptr;
-  int max_entries = 0;
+  std::optional<int> max_entries;
   int max_concurrent_ios = 0;
   int orphan_stale_secs = 0;
   int num_shards = 0;
@@ -91,7 +91,6 @@ struct rgw_admin_bucket_options {
   ceph::timespan opt_retry_delay_ms{};
   ceph::timespan opt_timeout_sec{};
 
-  bool max_entries_specified = false;
   bool warnings_only = false;
   bool allow_unordered = false;
   bool show_restore_stats = false;
@@ -119,4 +118,4 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
                      RGWUserAdminOpState& user_op,
                      RGWBucketAdminOpState& bucket_op,
                      std::unique_ptr<rgw::sal::Bucket>& bucket,
-                     const rgw_admin_bucket_options& opts);
+                     rgw_admin_bucket_options& opts);

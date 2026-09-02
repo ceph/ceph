@@ -14,10 +14,10 @@ namespace rgw::sal { class Driver; }
 
 struct rgw_admin_restore_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* tenant = nullptr;
-  std::string* bucket_name = nullptr;
-  std::string* object = nullptr;
-  std::optional<std::string>* restore_status_filter = nullptr;
+  std::string tenant;
+  std::string bucket_name;
+  std::string object;
+  std::optional<std::string> restore_status_filter;
 };
 
 int rgw_admin_restore(const DoutPrefixProvider* dpp,

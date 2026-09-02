@@ -28,9 +28,9 @@ int rgw_admin_bucket_logging(const DoutPrefixProvider* dpp,
                                    const rgw_admin_bucket_logging_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
 
   if (command == OPT::BUCKET_LOGGING_FLUSH) {
     if (bucket_name.empty()) {

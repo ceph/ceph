@@ -14,17 +14,17 @@ namespace rgw::sal { class Driver; class ConfigStore; }
 
 struct rgw_admin_realm_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* realm_id = nullptr;
-  std::string* realm_name = nullptr;
-  std::string* realm_new_name = nullptr;
-  std::string* period_id = nullptr;
-  std::string* period_epoch = nullptr;
-  std::string* url = nullptr;
-  std::string* access_key = nullptr;
-  std::string* secret_key = nullptr;
-  std::string* remote = nullptr;
-  std::string* infile = nullptr;
-  std::optional<std::string>* opt_region = nullptr;
+  std::string realm_id;
+  std::string realm_name;
+  std::string realm_new_name;
+  std::string period_id;
+  std::string period_epoch;
+  std::string url;
+  std::string access_key;
+  std::string secret_key;
+  std::string remote;
+  std::string infile;
+  std::optional<std::string> opt_region;
   bool set_default = false;
   bool yes_i_really_mean_it = false;
 };
@@ -34,4 +34,4 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
                     rgw::sal::ConfigStore* cfgstore,
                     rgw::SiteConfig& site,
                     ceph::Formatter* formatter,
-                    const rgw_admin_realm_options& opts);
+                    rgw_admin_realm_options& opts);

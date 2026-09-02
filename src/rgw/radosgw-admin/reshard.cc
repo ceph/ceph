@@ -39,14 +39,14 @@ int rgw_admin_reshard(const DoutPrefixProvider* dpp,
                       RGWStreamFlusher& stream_flusher,
                       RGWBucketAdminOpState& bucket_op,
                       std::unique_ptr<rgw::sal::Bucket>& bucket,
-                      const rgw_admin_reshard_options& opts)
+                      rgw_admin_reshard_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
-  auto& marker = *opts.marker;
-  int max_entries = opts.max_entries;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
+  auto& marker = opts.marker;
+  int max_entries = opts.max_entries.value_or(1000);
   int num_shards = opts.num_shards;
   int shard_id = opts.shard_id;
   bool num_shards_specified = opts.num_shards_specified;
@@ -85,9 +85,6 @@ int rgw_admin_reshard(const DoutPrefixProvider* dpp,
   if (command == OPT::RESHARD_LIST) {
     int ret;
     int count = 0;
-    if (max_entries < 0) {
-      max_entries = 1000;
-    }
 
     int num_logshards =
       driver->ctx()->_conf.get_val<uint64_t>("rgw_reshard_num_logs");
@@ -268,8 +265,6 @@ int rgw_admin_reshard(const DoutPrefixProvider* dpp,
 
     list<rgw_cls_bi_entry> entries;
     bool is_truncated;
-    if (max_entries < 0)
-      max_entries = 1000;
 
     const auto& index = bucket->get_info().layout.current_index;
     if (index.layout.type == rgw::BucketIndexType::Indexless) {

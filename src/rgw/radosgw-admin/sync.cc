@@ -775,54 +775,52 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
                    rgw::SiteConfig& site,
                    ceph::Formatter* formatter,
                    ceph::Formatter* zone_formatter,
-                   const rgw_admin_sync_options& o)
+                   rgw_admin_sync_options& o)
 {
   auto& command = o.command;
-  auto& source_zone = *o.source_zone;
-  auto& marker = *o.marker;
-  auto& start_marker = *o.start_marker;
-  auto& end_marker = *o.end_marker;
-  auto& start_date = *o.start_date;
-  auto& end_date = *o.end_date;
-  auto& period_id = *o.period_id;
-  auto& realm_id = *o.realm_id;
-  auto& realm_name = *o.realm_name;
-  auto& zonegroup_id = *o.zonegroup_id;
-  auto& zonegroup_name = *o.zonegroup_name;
-  auto& opt_effective_zone_id = *o.opt_effective_zone_id;
-  auto& opt_bucket = *o.opt_bucket;
-  auto& opt_bucket_name = *o.opt_bucket_name;
-  auto& opt_source_zone_id = *o.opt_source_zone_id;
-  auto& opt_dest_zone_id = *o.opt_dest_zone_id;
-  auto& opt_zone_ids = *o.opt_zone_ids;
-  auto& opt_source_zone_ids = *o.opt_source_zone_ids;
-  auto& opt_dest_zone_ids = *o.opt_dest_zone_ids;
-  auto& opt_source_bucket = *o.opt_source_bucket;
-  auto& opt_dest_bucket = *o.opt_dest_bucket;
-  auto& opt_source_tenant = *o.opt_source_tenant;
-  auto& opt_dest_tenant = *o.opt_dest_tenant;
-  auto& opt_source_bucket_name = *o.opt_source_bucket_name;
-  auto& opt_dest_bucket_name = *o.opt_dest_bucket_name;
-  auto& opt_source_bucket_id = *o.opt_source_bucket_id;
-  auto& opt_dest_bucket_id = *o.opt_dest_bucket_id;
-  auto& opt_pipe_id = *o.opt_pipe_id;
-  auto& opt_group_id = *o.opt_group_id;
-  auto& opt_flow_id = *o.opt_flow_id;
-  auto& opt_flow_type = *o.opt_flow_type;
-  auto& opt_status = *o.opt_status;
-  auto& opt_prefix = *o.opt_prefix;
-  auto& opt_prefix_rm = *o.opt_prefix_rm;
-  auto& opt_dest_owner = *o.opt_dest_owner;
-  auto& opt_storage_class = *o.opt_storage_class;
-  auto& opt_priority = *o.opt_priority;
-  auto& opt_mode = *o.opt_mode;
-  auto& tags_add = *o.tags_add;
-  auto& tags_rm = *o.tags_rm;
-  auto& user = *o.user;
-  int max_entries = o.max_entries;
+  auto& source_zone = o.source_zone;
+  auto& marker = o.marker;
+  auto& start_marker = o.start_marker;
+  auto& end_marker = o.end_marker;
+  auto& start_date = o.start_date;
+  auto& end_date = o.end_date;
+  auto& period_id = o.period_id;
+  auto& realm_id = o.realm_id;
+  auto& realm_name = o.realm_name;
+  auto& zonegroup_id = o.zonegroup_id;
+  auto& zonegroup_name = o.zonegroup_name;
+  auto& opt_effective_zone_id = o.opt_effective_zone_id;
+  auto& opt_bucket = o.opt_bucket;
+  auto& opt_bucket_name = o.opt_bucket_name;
+  auto& opt_source_zone_id = o.opt_source_zone_id;
+  auto& opt_dest_zone_id = o.opt_dest_zone_id;
+  auto& opt_zone_ids = o.opt_zone_ids;
+  auto& opt_source_zone_ids = o.opt_source_zone_ids;
+  auto& opt_dest_zone_ids = o.opt_dest_zone_ids;
+  auto& opt_source_bucket = o.opt_source_bucket;
+  auto& opt_dest_bucket = o.opt_dest_bucket;
+  auto& opt_source_tenant = o.opt_source_tenant;
+  auto& opt_dest_tenant = o.opt_dest_tenant;
+  auto& opt_source_bucket_name = o.opt_source_bucket_name;
+  auto& opt_dest_bucket_name = o.opt_dest_bucket_name;
+  auto& opt_source_bucket_id = o.opt_source_bucket_id;
+  auto& opt_dest_bucket_id = o.opt_dest_bucket_id;
+  auto& opt_pipe_id = o.opt_pipe_id;
+  auto& opt_group_id = o.opt_group_id;
+  auto& opt_flow_id = o.opt_flow_id;
+  auto& opt_flow_type = o.opt_flow_type;
+  auto& opt_status = o.opt_status;
+  auto& opt_prefix = o.opt_prefix;
+  auto& opt_prefix_rm = o.opt_prefix_rm;
+  auto& opt_dest_owner = o.opt_dest_owner;
+  auto& opt_storage_class = o.opt_storage_class;
+  auto& opt_priority = o.opt_priority;
+  auto& opt_mode = o.opt_mode;
+  auto& tags_add = o.tags_add;
+  auto& tags_rm = o.tags_rm;
+  auto& user = o.user;
   int shard_id = o.shard_id;
   int trim_delay_ms = o.trim_delay_ms;
-  bool max_entries_specified = o.max_entries_specified;
   bool specified_shard_id = o.specified_shard_id;
   int ret = 0;
 
@@ -1116,7 +1114,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
       set<string> recovering_buckets;
       rgw_data_sync_marker sync_marker;
       ret = sync.read_shard_status(dpp, shard_id, pending_buckets, recovering_buckets, &sync_marker, 
-                                   max_entries_specified ? max_entries : 20);
+                                   o.max_entries.value_or(20));
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: sync.read_shard_status() returned ret=" << ret << std::endl;
         return -ret;
@@ -1219,9 +1217,7 @@ int rgw_admin_sync(const DoutPrefixProvider* dpp,
 
 
   if (command == OPT::SYNC_ERROR_LIST) {
-    if (max_entries < 0) {
-      max_entries = 1000;
-    }
+    int max_entries = o.max_entries.value_or(1000);
     if (!start_date.empty()) {
       std::cerr << "start-date not allowed." << std::endl;
       return -EINVAL;

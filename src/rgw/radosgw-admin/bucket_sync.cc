@@ -343,7 +343,7 @@ struct bucket_sync_status_info {
 static int bucket_sync_status(const DoutPrefixProvider* dpp,
                               rgw::sal::Driver* driver, const RGWBucketInfo& info,
                               const rgw_zone_id& source_zone_id,
-			      std::optional<rgw_bucket>& opt_source_bucket,
+			      const std::optional<rgw_bucket>& opt_source_bucket,
                               bucket_sync_status_info& bucket_sync_info)
 {
   const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
@@ -435,11 +435,11 @@ int rgw_admin_bucket_sync(const DoutPrefixProvider* dpp,
                             const rgw_admin_bucket_sync_options& opts)
 {
   auto& command = opts.command;
-  auto& tenant = *opts.tenant;
-  auto& bucket_name = *opts.bucket_name;
-  auto& bucket_id = *opts.bucket_id;
-  auto& source_zone = *opts.source_zone;
-  auto& opt_source_bucket = *opts.opt_source_bucket;
+  auto& tenant = opts.tenant;
+  auto& bucket_name = opts.bucket_name;
+  auto& bucket_id = opts.bucket_id;
+  auto& source_zone = opts.source_zone;
+  auto& opt_source_bucket = opts.opt_source_bucket;
   auto opt_retry_delay_ms = opts.opt_retry_delay_ms;
   auto opt_timeout_sec = opts.opt_timeout_sec;
   bool extra_info = opts.extra_info;

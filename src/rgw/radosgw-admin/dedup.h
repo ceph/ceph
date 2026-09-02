@@ -15,10 +15,10 @@ namespace rgw::sal { class Driver; class User; class Bucket; class ConfigStore; 
 
 struct rgw_admin_dedup_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string* allow_bucket_list_file = nullptr;
-  std::string* deny_bucket_list_file = nullptr;
-  std::string* allow_storage_class_list_file = nullptr;
-  std::string* deny_storage_class_list_file = nullptr;
+  std::string allow_bucket_list_file;
+  std::string deny_bucket_list_file;
+  std::string allow_storage_class_list_file;
+  std::string deny_storage_class_list_file;
   bool yes_i_really_mean_it = false;
   bool throttle_stat = false;
   bool have_max_bucket_index_ops = false;
