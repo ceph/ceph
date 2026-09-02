@@ -5,7 +5,6 @@
 
 #include <optional>
 #include <string>
-#include <string_view>
 
 #include "radosgw-admin/radosgw-admin.h"
 
@@ -15,21 +14,20 @@ namespace rgw::sal { class Driver; }
 
 struct rgw_admin_account_options {
   rgw_admin::OPT command = rgw_admin::OPT::NO_CMD;
-  std::string_view tenant;
-  std::string_view account_id;
-  std::string_view account_name;
-  std::string_view user_email;
-  std::string_view marker;
-  const std::optional<int>* max_users = nullptr;
-  const std::optional<int>* max_roles = nullptr;
-  const std::optional<int>* max_groups = nullptr;
-  const std::optional<int>* max_access_keys = nullptr;
-  const std::optional<int>* max_buckets = nullptr;
+  std::string tenant;
+  std::string account_id;
+  std::string account_name;
+  std::string user_email;
+  std::string marker;
+  std::optional<int> max_users;
+  std::optional<int> max_roles;
+  std::optional<int> max_groups;
+  std::optional<int> max_access_keys;
+  std::optional<int> max_buckets;
+  std::optional<int> max_entries;
   bool purge_data = false;
   bool sync_stats = false;
   bool reset_stats = false;
-  int max_entries = 0;
-  bool max_entries_specified = false;
 };
 
 int rgw_admin_account(const DoutPrefixProvider* dpp,

@@ -3486,16 +3486,17 @@ int main(int argc, const char **argv)
     account_opts.account_name = account_name;
     account_opts.user_email = user_email;
     account_opts.marker = marker;
-    account_opts.max_users = &max_users;
-    account_opts.max_roles = &max_roles;
-    account_opts.max_groups = &max_groups;
-    account_opts.max_access_keys = &max_access_keys;
-    account_opts.max_buckets = &max_buckets;
+    account_opts.max_users = max_users;
+    account_opts.max_roles = max_roles;
+    account_opts.max_groups = max_groups;
+    account_opts.max_access_keys = max_access_keys;
+    account_opts.max_buckets = max_buckets;
     account_opts.purge_data = static_cast<bool>(purge_data);
     account_opts.sync_stats = sync_stats;
     account_opts.reset_stats = reset_stats;
-    account_opts.max_entries = max_entries;
-    account_opts.max_entries_specified = max_entries_specified;
+    if (max_entries_specified) {
+      account_opts.max_entries = max_entries;
+    }
     ret = rgw_admin_account(dpp(), driver, stream_flusher, account_opts);
     if (ret != 0) {
       return ret;
