@@ -98,6 +98,8 @@ check_cluster() {
 echo "=== bucket (bare) ==="
 # ============================================================
 
+# no arguments at all: the usage text, before any command is resolved
+check "no arguments" 1 'usage: radosgw-admin <cmd> [options...]'
 check "bare bucket" 1 'ERROR: Unknown command' bucket
 check "bare buckets (alias)" 1 'ERROR: Unknown command' buckets
 check "unknown subcommand" 1 "ERROR: Unrecognized argument: 'banana'" bucket banana
@@ -1530,6 +1532,9 @@ check "unknown command: unparsable int value" 22 "ERROR: failed to parse max ent
 # single-dash spellings are not flags
 check "list: -uid rejected" 22 'ERROR: invalid flag -uid' bucket list -uid u1 extra
 check "list: -uid=u1 rejected" 22 'ERROR: invalid flag -uid=u1' bucket list -uid=u1 extra
+# the same spellings without the trailing stray word
+check "list: -uid rejected (alone)" 22 'ERROR: invalid flag -uid' bucket list -uid u1
+check "list: -uid=u1 rejected (alone)" 22 'ERROR: invalid flag -uid=u1' bucket list -uid=u1
 # stray words after a consumed flag value
 check "list: stray word after --uid value" 1 'Command not found: bucket list extra' bucket list --uid u1 extra
 check "list: stray word after --uid= value" 1 'Command not found: bucket list extra' bucket list --uid=u1 extra
@@ -1555,6 +1560,8 @@ check_cluster "list: --bucket '' lists all buckets" 0 "" -- bucket list --bucket
 check_cluster "user info: no --uid or --access-key" 22 'ERROR: --uid or --access-key required' -- user info
 check "unknown command" 1 "ERROR: Unrecognized argument: 'banana'" banana list
 check "unknown command repeated" 1 "ERROR: Unrecognized argument: 'banana'" banana banana list
+# a subcommand word on its own is not a command
+check "subcommand word alone" 1 "ERROR: Unrecognized argument: 'list'" list
 
 # the same flags work on commands outside the bucket tree
 check_cluster "reshard list: --max-entries=5" 0 "" -- reshard list --max-entries=5
@@ -1641,6 +1648,11 @@ check "list: --secret-key takes --bucket, 'demo' is left as a command word" 1 'C
 # with no command word at all, only the flags are read
 check "unknown flag with no command" 22 'ERROR: invalid flag --banana' --banana
 check "--fix leaves a lone dash with no command" 22 'ERROR: invalid flag -' --fix -
+check "lone dash with no command" 22 'ERROR: invalid flag -' -
+# a known flag is consumed, so what is left is the missing command word:
+# exit 1, not the 22 an unknown flag gives
+check "known flag with no command" 1 'usage: radosgw-admin <cmd> [options...]' --fix
+check "known flag takes the unknown token, no command left" 1 'usage: radosgw-admin <cmd> [options...]' --bucket --banana
 
 # ============================================================
 echo ""
