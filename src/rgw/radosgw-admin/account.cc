@@ -3,7 +3,6 @@
 
 #include "radosgw-admin/account.h"
 
-#include <iostream>
 #include <list>
 #include <string>
 
@@ -12,6 +11,7 @@
 #include "include/scope_guard.h"
 #include "rgw_account.h"
 #include "rgw_sal.h"
+#include "radosgw-admin/util.h"
 
 using ceph::Formatter;
 
@@ -35,13 +35,6 @@ rgw::account::AdminOpState make_op_state(const rgw_admin_account_options& o)
   };
 }
 
-int report_error(const char* what, int ret, const std::string& err_msg)
-{
-  std::cerr << "ERROR: " << what << " with "
-            << cpp_strerror(-ret) << ": " << err_msg << std::endl;
-  return -ret;
-}
-
 int handle_account_op(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       RGWStreamFlusher& stream_flusher,
@@ -56,7 +49,7 @@ int handle_account_op(const DoutPrefixProvider* dpp,
     ret = rgw::account::create(dpp, driver, op_state, err_msg,
                                stream_flusher, null_yield);
     if (ret < 0) {
-      return report_error("failed to create account", ret, err_msg);
+      return rgw_admin::report_error("failed to create account", ret, err_msg);
     }
     break;
 
@@ -64,7 +57,7 @@ int handle_account_op(const DoutPrefixProvider* dpp,
     ret = rgw::account::modify(dpp, driver, op_state, err_msg,
                                stream_flusher, null_yield);
     if (ret < 0) {
-      return report_error("failed to modify account", ret, err_msg);
+      return rgw_admin::report_error("failed to modify account", ret, err_msg);
     }
     break;
 
@@ -72,7 +65,7 @@ int handle_account_op(const DoutPrefixProvider* dpp,
     ret = rgw::account::info(dpp, driver, op_state, err_msg,
                              stream_flusher, null_yield);
     if (ret < 0) {
-      return report_error("failed to read account", ret, err_msg);
+      return rgw_admin::report_error("failed to read account", ret, err_msg);
     }
     break;
 
@@ -81,7 +74,7 @@ int handle_account_op(const DoutPrefixProvider* dpp,
                               o.sync_stats, o.reset_stats, err_msg,
                               stream_flusher, null_yield);
     if (ret < 0) {
-      return report_error("failed to read account stats", ret, err_msg);
+      return rgw_admin::report_error("failed to read account stats", ret, err_msg);
     }
     break;
 
@@ -89,7 +82,7 @@ int handle_account_op(const DoutPrefixProvider* dpp,
     ret = rgw::account::remove(dpp, driver, op_state, err_msg,
                                stream_flusher, null_yield);
     if (ret < 0) {
-      return report_error("failed to remove account", ret, err_msg);
+      return rgw_admin::report_error("failed to remove account", ret, err_msg);
     }
     break;
 
@@ -105,11 +98,14 @@ int handle_account_list(const DoutPrefixProvider* dpp,
                         RGWStreamFlusher& stream_flusher,
                         const rgw_admin_account_options& o)
 {
+  if (o.max_entries && *o.max_entries < 0) {
+    return rgw_admin::report_error("invalid max entries", -EINVAL);
+  }
+
   void* handle = nullptr;
   int ret = driver->meta_list_keys_init(dpp, "account", o.marker, &handle);
   if (ret < 0) {
-    std::cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
+    return rgw_admin::report_error("can't get key", ret);
   }
 
   auto handle_guard = make_scope_guard([&] {
@@ -138,9 +134,7 @@ int handle_account_list(const DoutPrefixProvider* dpp,
 
     ret = driver->meta_list_keys_next(dpp, handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
-      std::cerr << "ERROR: lists_keys_next(): "
-                << cpp_strerror(-ret) << std::endl;
-      return -ret;
+      return rgw_admin::report_error("failed to list account keys", ret);
     }
     if (ret != -ENOENT) {
       for (const auto& key : keys) {
@@ -161,7 +155,7 @@ int handle_account_list(const DoutPrefixProvider* dpp,
     if (truncated) {
       encode_json("marker", driver->meta_get_marker(handle), formatter);
     }
-    formatter->close_section(); // result
+    formatter->close_section();
   }
   formatter->flush(std::cout);
 
