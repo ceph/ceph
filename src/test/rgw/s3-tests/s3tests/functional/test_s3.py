@@ -1270,6 +1270,73 @@ def test_bucket_listv2_unordered():
     assert status == 400
     assert error_code == 'InvalidArgument'
 
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_bucket_list_unordered_policy_reject():
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+
+    policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Deny',
+            'Principal': '*',
+            'Action': 's3:ListBucket',
+            'Resource': f'arn:aws:s3:::{bucket_name}',
+            'Condition': {
+                'Bool': {
+                    'rgw:allow-unordered': 'true'
+                }
+            }
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+    # expect success when allow-unordered is not specified
+    client.list_objects(Bucket=bucket_name)
+
+    # adds the unordered query parameter
+    def add_unordered(**kwargs):
+        kwargs['params']['url'] += "&allow-unordered=true"
+    client.meta.events.register('before-call.s3.ListObjects', add_unordered)
+
+    # expect AccessDenied when specified
+    e = assert_raises(ClientError, client.list_objects, Bucket=bucket_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_bucket_list_unordered_policy_require():
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+
+    policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Deny',
+            'Principal': '*',
+            'Action': 's3:ListBucket',
+            'Resource': f'arn:aws:s3:::{bucket_name}',
+            'Condition': {
+                'Bool': {
+                    'rgw:allow-unordered': 'false'
+                }
+            }
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+    # expect AccessDenied when allow-unordered is not specified
+    e = assert_raises(ClientError, client.list_objects, Bucket=bucket_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+    # adds the unordered query parameter
+    def add_unordered(**kwargs):
+        kwargs['params']['url'] += "&allow-unordered=true"
+    client.meta.events.register('before-call.s3.ListObjects', add_unordered)
+
+    # expect success when specified
+    client.list_objects(Bucket=bucket_name)
 
 def test_bucket_list_maxkeys_invalid():
     key_names = ['bar', 'baz', 'foo', 'quxx']
