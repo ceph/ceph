@@ -586,6 +586,14 @@ public:
       });
   }
 
+  /// Returns the (core_id, store_index) mapping for the PG that owns pgid.
+  /// Callers should use crimson::submit_to(core, ...) to run store operations
+  /// on the correct reactor rather than dispatching cross-shard.
+  seastar::future<std::pair<core_id_t, store_index_t>> get_pg_core_and_store(
+    spg_t pgid) {
+    return pg_to_shard_mapping.get_or_create_pg_mapping(pgid);
+  }
+
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
     return pg_to_shard_mapping.remove_pg_mapping(pgid);
