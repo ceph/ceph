@@ -4387,7 +4387,7 @@ uint64_t BlueFS::_flush_special(FileWriter *h)
   return new_data;
 }
 
-int BlueFS::truncate(FileWriter *h, uint64_t offset) /*_WF_L*/
+int BlueFS::truncate(FileWriter *h, uint64_t offset) /*_WF_WLDF*/
 {
   std::lock_guard hl(h->lock);
   auto& fnode = h->file->fnode;
@@ -4421,7 +4421,7 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset) /*_WF_L*/
   return _truncate_LDF(h, offset);
 }
 
-int BlueFS::truncate_unused(FileWriter *h) /*_WF_L*/
+int BlueFS::truncate_unused(FileWriter *h) /*_WF_WLDF*/
 {
   std::lock_guard hl(h->lock);
 
@@ -4454,6 +4454,7 @@ int BlueFS::_truncate_LDF(FileWriter *h, uint64_t offset) /*_WF_WLDF*/
   {
     std::lock_guard ll(log.lock);
     std::lock_guard dl(dirty.lock);
+    std::lock_guard fl(h->file->lock);
     if (h->file->deleted) {
       dout(10) << __func__ << " deleted, no-op" << dendl;
       return 0;
