@@ -254,6 +254,14 @@ def task(ctx, config):
                         config[setting] = pool_config[setting]
                         log.info("Set {setting} from pool-config: {value}".format(
                             setting=setting, value=pool_config[setting]))
+
+            crush_map_config = pool_config.get('crush_map_config', {})
+            if crush_map_config and 'osd_failure_domain' not in config:
+                failure_domain = crush_map_config.get('failure_domain')
+                if failure_domain is not None:
+                    config['osd_failure_domain'] = failure_domain
+                    log.info("Set osd_failure_domain from crush_map_config: %s",
+                             failure_domain)
         else:
             log.warning("use-pool-config is true but no pool-config found in overrides/ceph")
     
@@ -402,6 +410,7 @@ def task(ctx, config):
                         erasure_code_use_overwrites=
                             config.get('erasure_code_use_overwrites', False),
                         num_zones=config.get('num_zones',None),
+                        osd_failure_domain=config.get('osd_failure_domain', None),
                     )
                     created_pools.append(pool)
                     if config.get('fast_read', False):
