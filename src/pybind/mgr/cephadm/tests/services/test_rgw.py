@@ -2,6 +2,7 @@
 import pytest
 from unittest.mock import patch, MagicMock
 
+from cephadm.services.cephadmservice import RgwService
 from cephadm.services.service_registry import service_registry
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import RGWSpec, CertificateSource
@@ -551,3 +552,31 @@ class TestRGWService:
                         assert kwargs == {
                             'custom_sans': ['s3.example.com', '*.s3.example.com'],
                         }
+
+    def test_rgw_deps_change_on_frontend_extra_args(self, cephadm_module: CephadmOrchestrator):
+        mgr = cephadm_module
+        spec_no_reuse = RGWSpec(service_id="foo", rgw_frontend_port=8300)
+        spec_with_reuse = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                                  rgw_frontend_extra_args=['so_reuseport=1'])
+
+        deps_before = RgwService.get_dependencies(mgr, spec_no_reuse)
+        deps_after = RgwService.get_dependencies(mgr, spec_with_reuse)
+        assert deps_before != deps_after
+
+    def test_rgw_deps_change_on_frontend_type(self, cephadm_module: CephadmOrchestrator):
+        mgr = cephadm_module
+        spec_beast = RGWSpec(service_id="foo", rgw_frontend_type='beast')
+        spec_civetweb = RGWSpec(service_id="foo", rgw_frontend_type='civetweb')
+
+        deps_beast = RgwService.get_dependencies(mgr, spec_beast)
+        deps_civetweb = RgwService.get_dependencies(mgr, spec_civetweb)
+        assert deps_beast != deps_civetweb
+
+    def test_rgw_deps_stable_when_frontend_unchanged(self, cephadm_module: CephadmOrchestrator):
+        mgr = cephadm_module
+        spec = RGWSpec(service_id="foo", rgw_frontend_port=8300,
+                       rgw_frontend_extra_args=['so_reuseport=1'])
+
+        deps1 = RgwService.get_dependencies(mgr, spec)
+        deps2 = RgwService.get_dependencies(mgr, spec)
+        assert deps1 == deps2

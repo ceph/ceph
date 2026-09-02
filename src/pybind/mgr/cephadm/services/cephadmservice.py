@@ -1430,6 +1430,25 @@ class RgwService(CephService):
     def allow_colo(self) -> bool:
         return True
 
+    def choose_next_action(
+        self,
+        scheduled_action: utils.Action,
+        daemon_type: Optional[str],
+        spec: Optional[ServiceSpec],
+        curr_deps: List[str],
+        last_deps: List[str],
+        daemon: Optional[DaemonDescription] = None,
+    ) -> utils.NextDaemonStep:
+        step = super().choose_next_action(
+            scheduled_action, daemon_type, spec, curr_deps, last_deps
+        )
+        # rgw_frontends can't be changed at runtime, so a reconfig
+        # won't actually apply the new config. We need a full redeploy
+        # to restart the daemon with the updated frontend settings.
+        if step.action is utils.Action.RECONFIG:
+            return utils.NextDaemonStep(utils.Action.REDEPLOY)
+        return step
+
     @classmethod
     def get_dependencies(cls, mgr: "CephadmOrchestrator",
                          spec: Optional[ServiceSpec] = None,
@@ -1444,6 +1463,17 @@ class RgwService(CephService):
             if isinstance(ssl_cert, list):
                 ssl_cert = '\n'.join(ssl_cert)
             deps.append(f'ssl-cert:{utils.config_hash(ssl_cert)}')
+
+        # track frontend config so that changes to rgw_frontend_extra_args
+        # (ex: so_reuseport toggle) or frontend type trigger a reconfig
+        if rgw_spec:
+            frontend_parts = []
+            if rgw_spec.rgw_frontend_type:
+                frontend_parts.append(f'type={rgw_spec.rgw_frontend_type}')
+            if rgw_spec.rgw_frontend_extra_args:
+                frontend_parts.append(f'extra_args={rgw_spec.rgw_frontend_extra_args}')
+            if frontend_parts:
+                deps.append(f'frontend:{utils.config_hash(str(frontend_parts))}')
 
         parent_deps = super().get_dependencies(mgr, spec, daemon_type)
         return sorted(deps + parent_deps)
