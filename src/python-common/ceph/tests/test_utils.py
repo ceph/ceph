@@ -103,3 +103,26 @@ def test_valid_addr(addr_object: Address):
 ])
 def test_with_units_to_int(value, expected):
     assert with_units_to_int(value) == expected
+
+
+@pytest.mark.parametrize('value', [
+    # A unit suffix with nothing in front of it
+    'B',
+    'iB',
+    'K',
+    'KB',
+    'GiB',
+    # The B and iB suffixes are matched case sensitively, the unit letter
+    # is not, so '1g' is valid but '1gb' is not
+    '1gb',
+    # Not a size at all
+    'abc',
+    '1X',
+    # float() accepts these, int() then overflows
+    'inf',
+    '1e400',
+])
+def test_with_units_to_int_invalid(value):
+    # Callers guard on ValueError only, so every bad value must be one.
+    with pytest.raises(ValueError, match='invalid size'):
+        with_units_to_int(value)

@@ -243,6 +243,7 @@ def bytes_to_human(num: float, mode: str = 'decimal') -> str:
 def with_units_to_int(v: str) -> int:
     if not v:
         return 0
+    orig = v
     # A bare unit letter has no B or iB to select decimal or binary, so
     # treat it as binary, like size_to_bytes() above and like this helper
     # did before decimal units were added.
@@ -253,16 +254,22 @@ def with_units_to_int(v: str) -> int:
         v = v[:-1]
         bytes_mult = 1000
     mult = 1
-    if v[-1].upper() == 'K':
+    unit = v[-1:].upper()
+    if unit == 'K':
         mult = bytes_mult
         v = v[:-1]
-    elif v[-1].upper() == 'M':
+    elif unit == 'M':
         mult = bytes_mult * bytes_mult
         v = v[:-1]
-    elif v[-1].upper() == 'G':
+    elif unit == 'G':
         mult = bytes_mult * bytes_mult * bytes_mult
         v = v[:-1]
-    elif v[-1].upper() == 'T':
+    elif unit == 'T':
         mult = bytes_mult * bytes_mult * bytes_mult * bytes_mult
         v = v[:-1]
-    return int(float(v) * mult)
+    try:
+        return int(float(v) * mult)
+    except (ValueError, OverflowError):
+        raise ValueError(
+            f'invalid size "{orig}" (examples: 10737418240, 10G, 512M)'
+        ) from None
