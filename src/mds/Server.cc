@@ -6968,6 +6968,17 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       return;
     }
 
+    if (dn->get_alternate_name() == value) {
+      // name is already set with same value, this is a noop.
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    if (dn->get_alternate_name().size()) {
+      respond_to_request(mdr, -EPERM);
+      return;
+    }
+
     auto pi = cur->project_inode(mdr);
     pip = pi.inode.get();
 
