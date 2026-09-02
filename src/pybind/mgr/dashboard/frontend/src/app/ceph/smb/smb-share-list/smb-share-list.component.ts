@@ -1,4 +1,5 @@
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Router } from '@angular/router';
 import { Observable, BehaviorSubject, of } from 'rxjs';
 import { switchMap, catchError } from 'rxjs/operators';
 import { TableComponent } from '~/app/shared/datatable/table/table.component';
@@ -18,8 +19,7 @@ import { FinishedTask } from '~/app/shared/models/finished-task';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
-
-export const SHARE_PATH = 'cephfs/smb/share';
+import { getSharePath, isRgwSmbRoute } from '../utils';
 
 @Component({
   selector: 'cd-smb-share-list',
@@ -53,7 +53,8 @@ export class SmbShareListComponent implements OnInit {
     public actionLabels: ActionLabelsI18n,
     private smbService: SmbService,
     private taskWrapper: TaskWrapperService,
-    private modalService: ModalCdsService
+    private modalService: ModalCdsService,
+    private router: Router
   ) {
     this.permission = this.authStorageService.getPermissions().smb;
   }
@@ -115,31 +116,33 @@ export class SmbShareListComponent implements OnInit {
         flexGrow: 2
       }
     ];
-    this.tableActions = [
-      {
-        name: `${this.actionLabels.CREATE}`,
-        permission: 'create',
-        icon: Icons.add,
-        routerLink: () => [`/${SHARE_PATH}/${URLVerbs.CREATE}`, this.clusterId],
-        canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
-      },
-      {
-        name: this.actionLabels.EDIT,
-        permission: 'update',
-        icon: Icons.edit,
-        routerLink: () => [
-          `/${SHARE_PATH}/${URLVerbs.EDIT}`,
-          this.clusterId,
-          this.selection.first().name
-        ]
-      },
-      {
-        permission: 'delete',
-        icon: Icons.destroy,
-        click: () => this.deleteShareModal(),
-        name: this.actionLabels.DELETE
-      }
-    ];
+    const createAction: CdTableAction = {
+      name: `${this.actionLabels.CREATE}`,
+      permission: 'create',
+      icon: Icons.add,
+      routerLink: () => [`/${getSharePath(this.router.url)}/${URLVerbs.CREATE}`, this.clusterId],
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection
+    };
+    const editAction: CdTableAction = {
+      name: this.actionLabels.EDIT,
+      permission: 'update',
+      icon: Icons.edit,
+      routerLink: () => [
+        `/${getSharePath(this.router.url)}/${URLVerbs.EDIT}`,
+        this.clusterId,
+        this.selection.first().name
+      ]
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: Icons.destroy,
+      click: () => this.deleteShareModal(),
+      name: this.actionLabels.DELETE
+    };
+
+    this.tableActions = isRgwSmbRoute(this.router.url)
+      ? [editAction, deleteAction]
+      : [createAction, editAction, deleteAction];
 
     this.smbShares$ = this.subject$.pipe(
       switchMap(() =>
@@ -171,7 +174,7 @@ export class SmbShareListComponent implements OnInit {
       itemNames: [`Share: ${share_id} (${name}) from cluster: ${cluster_id}`],
       submitActionObservable: () =>
         this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask(`${SHARE_PATH}/${URLVerbs.DELETE}`, {
+          task: new FinishedTask(`${getSharePath(this.router.url)}/${URLVerbs.DELETE}`, {
             share_id: share_id
           }),
           call: this.smbService.deleteShare(cluster_id, share_id)
