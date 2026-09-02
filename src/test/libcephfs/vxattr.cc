@@ -571,3 +571,65 @@ TEST(LibCephFS, RmsnapSubvolumeSnapshotVisibility) {
   ASSERT_EQ(0, ceph_rmdir(cmount, subvol_path));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, AlternateName) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  char test_xattr_file[NAME_MAX];
+  sprintf(test_xattr_file, "test_fscrypt_%d", getpid());
+  int fd = ceph_open(cmount, test_xattr_file, O_RDWR|O_CREAT, 0666);
+  ASSERT_GT(fd, 0);
+
+  // check to ensure this fails as we do not have proper configs set to enter this mode
+  ASSERT_EQ(-EPERM, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_CREATE));
+
+  // set proper confs
+  ASSERT_EQ(ceph_conf_set(cmount, "client_fscrypt_as", "false"), 0);
+  ASSERT_EQ(ceph_conf_set(cmount, "client_alternate_name_visible", "true"), 0);
+  char buf[64];
+  ASSERT_EQ(-ENODATA, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_CREATE));
+
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ASSERT_EQ(0, ceph_mount(cmount, NULL));
+
+  // Respawn rank 0 to verify replay state of empty to not empty.
+  const char *cmd[1] = {"{\"prefix\": \"respawn\"}"};
+  char *outbuf = nullptr, *outs = nullptr;
+  size_t outbuf_len = 0, outs_len = 0;
+  int ret = ceph_mds_command(cmount, "0", cmd, 1, nullptr, 0,
+                            &outbuf, &outbuf_len, &outs, &outs_len);
+
+  bool exiting = (ret == 0 && outbuf && outbuf_len > 0 &&
+                  std::string(outbuf, outbuf_len).find("Respawning") != std::string::npos &&
+                  outs_len == 0);
+  ASSERT_EQ(exiting, true);
+
+  if (outbuf) ceph_buffer_free(outbuf);
+  if (outs) ceph_buffer_free(outs);
+
+  // sleep some time to wait for mds to respawn
+  std::this_thread::sleep_for(10s);
+
+  fd = ceph_open(cmount, test_xattr_file, O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp("foo", buf, 3));
+
+  ASSERT_EQ(0, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "foo", 3, XATTR_REPLACE));
+  ASSERT_EQ(-EPERM, ceph_fsetxattr(cmount, fd, "ceph.alternate_name", "bar", 3, XATTR_REPLACE));
+
+  ASSERT_EQ(-EINVAL, ceph_fremovexattr(cmount, fd, "ceph.alternate_name"));
+  ASSERT_EQ(3, ceph_fgetxattr(cmount, fd, "ceph.alternate_name", buf, sizeof(buf)));
+  ASSERT_EQ(0, memcmp("foo", buf, 3));
+
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ASSERT_EQ(0, ceph_unlink(cmount, test_xattr_file));
+  ASSERT_EQ(0, ceph_unmount(cmount));
+  ceph_shutdown(cmount);
+}
