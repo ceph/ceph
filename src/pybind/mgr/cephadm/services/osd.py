@@ -571,9 +571,24 @@ class RemoveUtil(object):
     def __init__(self, mgr: "CephadmOrchestrator") -> None:
         self.mgr: "CephadmOrchestrator" = mgr
 
-    def get_osds_in_cluster(self) -> List[str]:
-        osd_map = self.mgr.get_osdmap()
-        return [str(x.get('osd')) for x in osd_map.dump().get('osds', [])]
+    def get_osds_in_cluster(self) -> Optional[List[str]]:
+        """OSD ids present in the osdmap, or None if the osdmap could not be read.
+
+        Returning None rather than an empty list matters: callers use this to decide
+        whether a queued OSD still exists, and an empty list would make every OSD look
+        gone. A real cluster always has at least one OSD in its map, so an empty dump
+        means we failed to read it, not that the cluster is empty.
+        """
+        try:
+            osd_map = self.mgr.get_osdmap()
+            osds = osd_map.dump().get('osds', [])
+        except Exception:
+            logger.exception('failed to read the osdmap')
+            return None
+        if not osds:
+            logger.warning('osdmap contained no OSDs; treating as unreadable')
+            return None
+        return [str(x.get('osd')) for x in osds]
 
     def osd_df(self) -> dict:
         base_cmd = 'osd df'
@@ -890,8 +905,12 @@ class OSD:
         return self.rm_util.get_pg_count(self.osd_id)
 
     @property
-    def exists(self) -> bool:
-        return str(self.osd_id) in self.rm_util.get_osds_in_cluster()
+    def exists(self) -> Optional[bool]:
+        """True/False if known, None if the osdmap could not be read."""
+        in_cluster = self.rm_util.get_osds_in_cluster()
+        if in_cluster is None:
+            return None
+        return str(self.osd_id) in in_cluster
 
     def drain_status_human(self) -> str:
         default_status = 'not started'
@@ -1087,6 +1106,8 @@ class OSDRemovalQueue(object):
         # OSDs can always be cleaned up manually. This ensures that we run on existing OSDs
         with self.lock:
             for osd in self._not_in_cluster():
+                logger.info(
+                    f'{osd} is no longer in the osdmap, dropping it from the removal queue')
                 self.osds.remove(osd)
 
     def _ready_to_drain_osds(self) -> List["OSD"]:
@@ -1144,9 +1165,16 @@ class OSDRemovalQueue(object):
             return [osd.to_json() for osd in self.osds]
 
     def _not_in_cluster(self) -> List["OSD"]:
-        return [osd for osd in self.osds if not osd.exists]
+        # osd.exists is None when the osdmap could not be read. Do not treat that as
+        # "gone": dropping the queue on a transient read failure silently abandons an
+        # in-progress drain, and the empty queue is then persisted by _save_to_store(),
+        # so it does not come back on the next pass or after a mgr restart. Only evict
+        # an OSD we positively know is absent from the map.
+        return [osd for osd in self.osds if osd.exists is False]
 
     def enqueue(self, osd: "OSD") -> None:
+        # exists is None when the osdmap could not be read; `not None` is True, so an
+        # unreadable map refuses the enqueue rather than guessing.
         if not osd.exists:
             raise NotFoundError()
         with self.lock:

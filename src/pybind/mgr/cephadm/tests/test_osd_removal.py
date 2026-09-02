@@ -296,3 +296,39 @@ class TestOSDRemovalQueue:
         q.osds.add(osd_obj)
         q.rm(osd_obj)
         osd_obj.stop.assert_called_once()
+
+    def test_cleanup_keeps_queue_when_osdmap_unreadable(self, osd_obj):
+        """A transient osdmap read failure must not empty the removal queue.
+
+        cleanup() runs at the top of every process_removal_queue() pass, and that pass
+        ends by persisting the queue. If an unreadable osdmap made every queued OSD look
+        absent, an in-progress drain would be silently abandoned and the empty queue
+        written to the store, so it would not recover on the next pass or a mgr restart.
+        """
+        q = OSDRemovalQueue(mock.Mock())
+        q.osds.add(osd_obj)
+        assert q.queue_size() == 1
+
+        osd_obj.rm_util.get_osds_in_cluster.return_value = None
+        q.cleanup()
+        assert q.queue_size() == 1, "queue must survive an unreadable osdmap"
+
+        osd_obj.rm_util.get_osds_in_cluster.return_value = ['999']
+        q.cleanup()
+        assert q.queue_size() == 0, "an OSD positively absent from the map is evicted"
+
+    def test_cleanup_keeps_queue_when_osdmap_empty(self, rm_util, osd_obj):
+        """An empty osds list means we failed to read the map, not that all OSDs vanished.
+
+        Drives the real get_osds_in_cluster() through a mocked osdmap dump so the
+        empty-list -> None conversion this change introduces is actually exercised,
+        rather than stubbing the helper's return value.
+        """
+        q = OSDRemovalQueue(mock.Mock())
+        q.osds.add(osd_obj)
+        osd_obj.rm_util = rm_util
+        osd_map = mock.Mock()
+        osd_map.dump.return_value = {'osds': []}
+        rm_util.mgr.get_osdmap.return_value = osd_map
+        q.cleanup()
+        assert q.queue_size() == 1
