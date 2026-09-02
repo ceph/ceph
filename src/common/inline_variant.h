@@ -9,6 +9,9 @@
 
 template <class... Functions>
 struct overloaded : Functions... { using Functions::operator()...; };
+// Explicit deduction guide required for libc++ / MSVC (clang-16 + mingw-llvm)
+// where aggregate CTAD is not synthesised automatically.
+template <class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 template <typename Variant, typename... Functions>
 auto match(Variant const& variant, Functions... functions)
