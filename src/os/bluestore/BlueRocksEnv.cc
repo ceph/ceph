@@ -248,6 +248,12 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
     return true;
   }
 
+  // Indicates the upper layers if the current WritableFile implementation
+  // uses direct IO.
+  bool use_direct_io() const override {
+    return false;
+  }
+
   void SetWriteLifeTimeHint(rocksdb::Env::WriteLifeTimeHint hint) override {
     h->write_hint = (const int)hint;
   }
