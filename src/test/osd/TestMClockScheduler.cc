@@ -419,3 +419,156 @@ TEST(mClockSchedulerHDDTest, TestStarveTimeLiveReconfig) {
   g_ceph_context->_conf.rm_val("osd_mclock_max_starve_time_hdd");
   g_ceph_context->_conf.apply_changes(nullptr);
 }
+
+// Tests for out-of-order-abort scenario:
+//
+// enqueue_front() cannot preserve a redirected item's position relative
+// to other same-client items still sitting in the mclock-managed queue
+// (mClock has no insert-at-front), so a client-class item pulled out of
+// its normal queue position is instead routed to a reserved
+// high_priority bucket (requeued_class_priority), and dequeue()'s
+// starvation-bound forced yield is guarded to never pull from the
+// mclock-managed queue while that bucket is non-empty.
+
+// Scenario 1:
+// What this verifies: Op order preservation of two consecutive ops from
+// the same client when one op is requeued and the other remains in the
+// mclock managed queue.
+// 1. Enqueue two ops from the same client with consecutive tids
+// 2. Pull the first op out of the mclock queue and requeue into the
+//    requeued_class_priority queue using enqueue_front()
+// 3. Attempt pulling using dequeue() - This should result in the
+//    requeued item to be dequeued first, which preserves the client op order.
+TEST_F(mClockSchedulerTest, TestEnqueueFrontPreservesClientOrder) {
+  ASSERT_TRUE(q.empty());
+
+  // Step 1: Two ops from the same client, both sub-cutoff (client class) -
+  // simulates tids 10 and 11 arriving in order.
+  q.enqueue(create_item(10, client1, SchedulerClass::client));
+  q.enqueue(create_item(11, client1, SchedulerClass::client));
+
+  // Step 2: The first op is pulled from the mclock-managed queue for
+  // processing, then requeued via enqueue_front() -- simulates a PG-level
+  // requeue that happens before it actually applies.
+  auto a = get_item(q.dequeue());
+  ASSERT_EQ(10u, a.get_map_epoch());
+  q.enqueue_front(std::move(a));
+
+  // Step 3: The second item (epoch 11) is still sitting, untouched, in the
+  // mclock-managed queue. The requeued item (epoch 10) must come out first -
+  // if 11 came out first instead, this is exactly the out-of-order abort.
+  ASSERT_FALSE(q.empty());
+  auto next = get_item(q.dequeue());
+  ASSERT_EQ(10u, next.get_map_epoch());
+
+  ASSERT_FALSE(q.empty());
+  next = get_item(q.dequeue());
+  ASSERT_EQ(11u, next.get_map_epoch());
+
+  ASSERT_TRUE(q.empty());
+}
+
+// Scenario 2:
+// What this verifies: The dequeue() guard added for out-of-order-abort.
+// Once a client-class item is sitting in the reserved requeued_class_priority
+// bucket (i.e. it was pulled out of its normal position via enqueue_front(),
+// simulating a PG-level requeue), the starvation-bound forced yield must not
+// fire -- even once a completely unrelated item in the mclock-managed queue
+// has aged well past the starvation threshold and would otherwise be
+// scheduled (see TestStarvationForcesYield).
+//
+// Steps:
+//   1. Enqueue one client-class item and immediately redirect it via
+//      enqueue_front(), landing it in requeued_class_priority.
+//   2. Enqueue a second, unrelated item into the mclock-managed queue
+//      and let it sit past the 50ms SSD/NVMe starvation threshold.
+//   3. Assert the redirected item comes out first, and only then does
+//      the aged mclock-queue item follow -- proving the guard controlled
+//      the order. If the guard were missing, the aged item would be
+//      force-pulled ahead of the redirected one instead.
+TEST_F(mClockSchedulerTest, TestRequeuedItemBlocksForcedYield) {
+  ASSERT_TRUE(q.empty());
+
+  // Step 1. Enqueued and redirected in isolation, before anything else
+  // exists in the scheduler. This dequeue() also sets up
+  // last_mclock_service_time (see TestAllQueuesEnqueueDequeue).
+  q.enqueue(create_item(50, client2, SchedulerClass::client));
+  auto redirected = get_item(q.dequeue());
+  ASSERT_EQ(50u, redirected.get_map_epoch());
+  q.enqueue_front(std::move(redirected));
+
+  // Step 2: A different client's item now sits pending in the mclock-managed
+  // queue -- this is the one the starvation-bound forced yield would
+  // normally rescue once enough time has elapsed (see
+  // TestStarvationForcesYield).
+  q.enqueue(create_item(1, client1, SchedulerClass::background_best_effort));
+
+  // Let the mclock-queue item age past the 50ms SSD/NVMe starvation
+  // threshold -- ordinarily this alone is enough to force a yield (see
+  // TestStarvationForcesYield), but the redirected item pending in
+  // requeued_class_priority must suppress it, or this is exactly the
+  // out-of-order abort scenario: the starved mclock item would cut ahead
+  // of its redirected same-client sibling (without the fix).
+  std::this_thread::sleep_for(60ms);
+
+  // Step 3. The redirected item must come out first...
+  ASSERT_FALSE(q.empty());
+  auto r = get_item(q.dequeue());
+  ASSERT_EQ(50u, r.get_map_epoch());
+
+  // With the redirected item now cleared, the mclock-queue item is no
+  // longer artificially blocked and comes out next.
+  ASSERT_FALSE(q.empty());
+  r = get_item(q.dequeue());
+  ASSERT_EQ(1u, r.get_map_epoch());
+}
+
+// Scenario 3:
+// What this verifies: A non-client item not blocking the forced yield.
+// A non-client item (e.g. a requeued low-priority EC recovery-read
+// subOp gets redirected via enqueue_front(). The tid-ordering invariant
+// never applies to non-client-sourced ops, so this must land in the plain,
+// ungated priority 0 queue rather than requeued_class_priority.
+//
+// Steps:
+// 1. Enqueue a background_best_effort item from a client and redirect it to
+//    the requeued_class_priority queue.
+// 2. Enqueue another background_best_effort item from a  different client
+//    which sits in the mclock queue.
+// 3. Let the item in the mclock queue age past the starvation time (50ms).
+// 4. A dequeue() here should result in the item sitting in the mclock queue
+//    to be returned ahead of the non-client item sitting in the
+//    requeued_class_priority queue thus validating the requeue gate logic.
+TEST_F(mClockSchedulerTest, TestNonClientRequeueDoesNotBlockForcedYield) {
+  ASSERT_TRUE(q.empty());
+
+  // Step 1: Enqueue a non-client background_best_effort item, dequeue it and
+  // redirect it to the requeued_class_priority queue. The dequeue()
+  // also sets up last_mclock_service_time.
+  q.enqueue(create_item(50, client2, SchedulerClass::background_best_effort));
+  auto redirected = get_item(q.dequeue());
+  ASSERT_EQ(50u, redirected.get_map_epoch());
+  q.enqueue_front(std::move(redirected));
+
+  // Step 2: A different client's item now sits pending in the mclock-managed
+  // queue.
+  q.enqueue(create_item(1, client1, SchedulerClass::background_best_effort));
+
+  // Step 3: Age the mclock item past the 50ms starvation threshold.
+  std::this_thread::sleep_for(60ms);
+
+ // Step 4: A dequeue() now results in a forced yield and result in the mclock
+ // item to be scheduled ahead of the priority 0 item - its presence must not
+ // withhold scheduling of the starved mclock-queue item.
+  ASSERT_FALSE(q.empty());
+  auto r = get_item(q.dequeue());
+  ASSERT_EQ(1u, r.get_map_epoch());
+
+  // The non-client redirected item is still sitting in the plain
+  // priority 0 queue and drains normally afterward.
+  ASSERT_FALSE(q.empty());
+  r = get_item(q.dequeue());
+  ASSERT_EQ(50u, r.get_map_epoch());
+
+  ASSERT_TRUE(q.empty());
+}

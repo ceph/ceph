@@ -67,6 +67,25 @@ class mClockScheduler : public OpScheduler {
   priority_t immediate_class_priority = std::numeric_limits<priority_t>::max();
 
   /**
+   * requeued_class_priority
+   *
+   * Reserved high_priority bucket for SchedulerClass::client items
+   * pulled out of their normal queue position via enqueue_front() (e.g.
+   * PG::requeue_map_waiters()/requeue_op(), OSDShard::_wake_pg_slot()).
+   * mClock does not support inserting at the front of its own
+   * reservation/weight/limit-managed queue, so a redirected item cannot
+   * keep its position relative to other same-client items still sitting
+   * in that queue.
+   *
+   * Kept well below every real high_priority value (cutoff_priority >= 64).
+   * The starvation-bound forced yield must never pull from the mclock-managed
+   * queue while this bucket is non-empty.Set to SchedulerClass::client's own
+   * integer value purely so it self-documents in dumps/logs.
+   */
+  priority_t requeued_class_priority =
+    static_cast<priority_t>(SchedulerClass::client);
+
+  /**
    * last_mclock_service_time
    *
    * Time (per crimson::dmclock::get_time()) at which an item was last
