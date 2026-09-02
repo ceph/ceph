@@ -37,58 +37,75 @@ Cluster with one API and then retrieve that data with the other API.
 
 .. note:: Ceph Object Storage does **NOT** use the Ceph Metadata Server.
 
+Configuration
+=============
 
 .. toctree::
    :maxdepth: 1
 
-   HTTP Frontends <frontends>
-   Multisite Configuration <multisite>
-   Zone Features <zone-features>
-   Pool Placement and Storage Classes <placement>
-   Multisite Sync Policy Configuration <multisite-sync-policy>
-   Configuring Pools <pools>
+   Cephadm RGW deployment <cephadm-deploy-rgw>
    Config Reference <config-ref>
+   HTTP Frontends <frontends>
+   Configuring Pools <pools>
+   Zone Features <zone-features>
+   Multisite Configuration <multisite>
+   Compression <compression>
+
+
+Administration
+==============
+
+.. toctree::
+   :maxdepth: 1
+
    Admin Guide <admin>
    User Accounts <account>
-   S3 API <s3>
-   IAM API <iam>
-   Data Caching and CDN <rgw-cache.rst>
-   Swift API <swift>
-   Admin Ops API <adminops>
-   Python Binding <api>
-   Export over NFS <nfs>
-   OpenStack Keystone Integration <keystone>
-   OpenStack Barbican Integration <barbican>
-   HashiCorp Vault Integration <vault>
-   KMIP Integration <kmip>
-   Open Policy Agent Integration <opa>
    Multi-tenancy <multitenancy>
-   Compression <compression>
-   LDAP Authentication <ldap-auth>
-   Server-Side Encryption <encryption>
-   Bucket Policy <bucketpolicy>
-   Dynamic Bucket Index Resharding <dynamicresharding>
-   Multi-factor Authentication <mfa>
-   Sync Modules <sync-modules>
-   Bucket Notifications <notifications>
-   Data Layout in RADOS <layout>
-   STS <STS>
-   STS Lite <STSLite>
-   Keycloak <keycloak>
-   Session Tags <session-tags>
-   Role <role>
-   Orphan List and Associated Tooling <orphans>
-   OpenID Connect Provider <oidc>
+   Metrics <metrics>
+   Lua Scripting <lua-scripting>
    Troubleshooting <troubleshooting>
+   Orphan List and Associated Tooling <orphans>
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
-   QAT Acceleration for Encryption and Compression <qat-accel>
-   S3-select <s3select>
-   Lua Scripting <lua-scripting>
+
+
+Authentication
+==============
+
+.. toctree::
+   :maxdepth: 1
+
+   OpenStack Keystone Integration <keystone>
+   LDAP Authentication <ldap-auth>
+   Multi-factor Authentication <mfa>
+   Open Policy Agent Integration <opa>
+
+
+APIs
+====
+
+.. toctree::
+   :maxdepth: 1
+
+   S3 API <s3>
+   Swift API <swift>
+   IAM API <iam>
+   STS <STS>
+   STS Lite <STSLite>
+   Admin Ops API <adminops>
+   Python Binding <api>
+
+
+Other
+=====
+
+.. toctree::
+   :maxdepth: 1
+
+   Dynamic Bucket Index Resharding <dynamicresharding>
+   Sync Modules <sync-modules>
+   Data Layout in RADOS <layout>
+   Data Caching and CDN <rgw-cache>
    D3N Data Cache <d3n_datacache>
-   Cloud Transition <cloud-transition>
-   Cloud Restore <cloud-restore>
-   Metrics <metrics>
-   UADK Acceleration for Compression <uadk-accel>
-   Bucket Logging <bucket_logging>
+   Export over NFS <nfs>
    Full Object Deduplication <s3_objects_dedup>

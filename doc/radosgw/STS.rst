@@ -9,6 +9,14 @@ Ceph Object Gateway implements a subset of STS APIs that provide temporary crede
 These temporary credentials can be used to make subsequent S3 calls which will be authenticated by the STS engine in Ceph Object Gateway.
 Permissions of the temporary credentials can be further restricted via an IAM policy passed as a parameter to the STS APIs.
 
+.. toctree::
+   :maxdepth: 1
+
+   Role <role>
+   OpenID Connect Provider <oidc>
+   Keycloak <keycloak>
+   Session Tags <session-tags>
+
 STS REST APIs
 =============
 
