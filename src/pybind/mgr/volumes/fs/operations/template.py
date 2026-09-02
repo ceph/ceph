@@ -110,7 +110,7 @@ class SubvolumeTemplate(object):
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")
 
-    def create_clone(self, pool, source_volname, source_subvolume, snapname):
+    def create_clone(self, pool, source_volname, source_subvolume, snapname, namespace_isolated=False, preserve_namespace=False):
         """
         prepare a subvolume to be cloned.
 
@@ -118,6 +118,9 @@ class SubvolumeTemplate(object):
         :param source_volname: source volume of snapshot
         :param source_subvolume: source subvolume of snapshot
         :param snapname: snapshot name to be cloned from
+        :param namespace_isolated: If true, use separate RADOS namespace for this clone
+        :param preserve_namespace: If true, keep the source snapshot's RADOS namespace on the
+                                    clone instead of clearing it when pool is also provided
         :return: None
         """
         raise VolumeException(-errno.ENOTSUP, "operation not supported.")

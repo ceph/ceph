@@ -158,7 +158,7 @@ class TestVolumesHelper(CephFSTestCase):
             cval = int(self.mount_a.run_shell(['stat', '-c' '%Y', sink_path]).stdout.getvalue().strip())
             self.assertEqual(sval, cval)
 
-    def _verify_clone_root(self, source_path, clone_path, clone, clone_group, clone_pool):
+    def _verify_clone_root(self, source_path, clone_path, clone, clone_group, clone_pool, clone_pool_namespace=None):
         # verifies following clone root attrs quota, data_pool and pool_namespace
         # remaining attributes of clone root are validated in _verify_clone_attrs
 
@@ -174,15 +174,21 @@ class TestVolumesHelper(CephFSTestCase):
             # verify pool is set as per request
             self.assertEqual(clone_info["data_pool"], clone_pool)
         else:
-            # verify pool and pool namespace are inherited from snapshot
+            # verify pool is inherited from snapshot
             self.assertEqual(clone_info["data_pool"],
                              self.mount_a.getfattr(source_path, "ceph.dir.layout.pool"))
+
+        if clone_pool_namespace is not None:
+            # verify pool namespace matches the caller's explicit expectation
+            self.assertEqual(clone_info["pool_namespace"], clone_pool_namespace)
+        elif not clone_pool:
+            # verify pool namespace is inherited from snapshot
             self.assertEqual(clone_info["pool_namespace"],
                              self.mount_a.getfattr(source_path, "ceph.dir.layout.pool_namespace"))
 
     def _verify_clone(self, subvolume, snapshot, clone,
                       source_group=None, clone_group=None, clone_pool=None,
-                      subvol_path=None, source_version=2, timo=120):
+                      clone_pool_namespace=None, subvol_path=None, source_version=2, timo=120):
         # pass in subvol_path (subvolume path when snapshot was taken) when subvolume is removed
         # but snapshots are retained for clone verification
         path1 = self._get_subvolume_snapshot_path(subvolume, snapshot, source_group)
@@ -200,7 +206,7 @@ class TestVolumesHelper(CephFSTestCase):
             time.sleep(1)
         self.assertTrue(check < timo)
 
-        self._verify_clone_root(path1, path2, clone, clone_group, clone_pool)
+        self._verify_clone_root(path1, path2, clone, clone_group, clone_pool, clone_pool_namespace)
         self._verify_clone_attrs(path1, path2)
 
     def _gen_name(self, name, n):
@@ -5699,6 +5705,39 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
+    def test_subvolume_snapshot_info_pool_namespace(self):
+        """
+        tests that 'fs subvolume snapshot info' reports the snapshot's pool_namespace
+        """
+        subvolume = self._gen_subvol_name()
+        subvolume_iso = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create a plain subvolume and an isolated-namespace subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+        self._fs_cmd("subvolume", "create", self.volname, subvolume_iso, "--mode=777", "--namespace-isolated")
+
+        # snapshot both
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume_iso, snapshot)
+
+        snap_info = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume, snapshot))
+        self.assertEqual(snap_info["pool_namespace"], "")
+
+        snap_info_iso = json.loads(self._get_subvolume_snapshot_info(self.volname, subvolume_iso, snapshot))
+        self.assertEqual(snap_info_iso["pool_namespace"], f'fsvolumens___nogroup_{subvolume_iso}')
+
+        # remove snapshots
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume_iso, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume_iso)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_snapshot_in_group(self):
         subvolume = self._gen_subvol_name()
         group = self._gen_subvol_grp_name()
@@ -8883,6 +8922,363 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         # remove subvolumes
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
         self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_namespace_isolated(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=32)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # schedule a clone with a fresh, isolated namespace
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone, "--namespace-isolated")
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone
+        expected_namespace = f'fsvolumens___nogroup_{clone}'
+        self._verify_clone(subvolume, snapshot, clone, clone_pool_namespace=expected_namespace)
+
+        clone_info = json.loads(self._get_subvolume_info(self.volname, clone))
+        self.assertEqual(clone_info["pool_namespace"], expected_namespace)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_namespace_isolated_from_isolated_source(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # create an isolated-namespace source subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777", "--namespace-isolated")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=32)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # schedule a clone with a fresh, isolated namespace
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone, "--namespace-isolated")
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify the clone got its own fresh namespace, not the source's
+        source_namespace = f'fsvolumens___nogroup_{subvolume}'
+        expected_namespace = f'fsvolumens___nogroup_{clone}'
+        self._verify_clone(subvolume, snapshot, clone, clone_pool_namespace=expected_namespace)
+
+        clone_info = json.loads(self._get_subvolume_info(self.volname, clone))
+        self.assertEqual(clone_info["pool_namespace"], expected_namespace)
+        self.assertNotEqual(clone_info["pool_namespace"], source_namespace)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_namespace_isolated_with_pool_layout(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # add data pool
+        new_pool = "new_pool"
+        self.fs.add_data_pool(new_pool)
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=32)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # schedule a clone into a new pool with a fresh, isolated namespace
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone,
+                     "--pool_layout", new_pool, "--namespace-isolated")
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone
+        expected_namespace = f'fsvolumens___nogroup_{clone}'
+        self._verify_clone(subvolume, snapshot, clone, clone_pool=new_pool, clone_pool_namespace=expected_namespace)
+
+        clone_info = json.loads(self._get_subvolume_info(self.volname, clone))
+        self.assertEqual(clone_info["data_pool"], new_pool)
+        self.assertEqual(clone_info["pool_namespace"], expected_namespace)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_namespace_isolated_to_target_group(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+        group = self._gen_subvol_grp_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=32)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # create target group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # schedule a clone into the target group with a fresh, isolated namespace
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone,
+                     "--target_group_name", group, "--namespace-isolated")
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone, clone_group=group)
+
+        # verify clone
+        expected_namespace = f'fsvolumens__{group}_{clone}'
+        self._verify_clone(subvolume, snapshot, clone, clone_group=group, clone_pool_namespace=expected_namespace)
+
+        clone_info = json.loads(self._get_subvolume_info(self.volname, clone, group))
+        self.assertEqual(clone_info["pool_namespace"], expected_namespace)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone, group)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_pool_layout_preserve_namespace(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # add data pool
+        new_pool = "new_pool"
+        self.fs.add_data_pool(new_pool)
+
+        # create an isolated-namespace source subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777", "--namespace-isolated")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=32)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # a namespace only has meaning within the pool it was created in, so
+        # --preserve-namespace is rejected when --pool_layout names a
+        # different pool than the source subvolume's
+        self.negtest_ceph_cmd(
+            args=f'fs subvolume snapshot clone {self.volname} {subvolume} {snapshot} {clone} '
+                 f'--pool_layout {new_pool} --preserve-namespace',
+            retval=errno.EINVAL,
+            errmsgs=('differs from the source',))
+
+        # verify the clone subvolume was not created
+        try:
+            self._fs_cmd("subvolume", "getpath", self.volname, clone)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on getpath of non-existent clone")
+        else:
+            self.fail("expected the 'fs subvolume getpath' command to fail for a rejected clone")
+
+        # schedule a clone into the same pool as the source, preserving the namespace
+        source_pool = json.loads(self._get_subvolume_info(self.volname, subvolume))["data_pool"]
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone,
+                     "--pool_layout", source_pool, "--preserve-namespace")
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone
+        source_namespace = f'fsvolumens___nogroup_{subvolume}'
+        self._verify_clone(subvolume, snapshot, clone, clone_pool=source_pool, clone_pool_namespace=source_namespace)
+
+        clone_info = json.loads(self._get_subvolume_info(self.volname, clone))
+        self.assertEqual(clone_info["data_pool"], source_pool)
+        self.assertEqual(clone_info["pool_namespace"], source_namespace)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_preserve_namespace_without_pool_layout(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # create an isolated-namespace source subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777", "--namespace-isolated")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=32)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # schedule a clone with --preserve-namespace alone; this is a no-op
+        # since the namespace is inherited by default when --pool_layout is absent
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone, "--preserve-namespace")
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone matches the default inherit-from-snapshot behavior
+        self._verify_clone(subvolume, snapshot, clone)
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_preserve_namespace_from_non_isolated_source(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # add data pool
+        new_pool = "new_pool"
+        self.fs.add_data_pool(new_pool)
+
+        # create a plain (non-isolated) source subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=32)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # --preserve-namespace with a --pool_layout naming a different pool is
+        # rejected regardless of whether the source subvolume is namespace-isolated
+        self.negtest_ceph_cmd(
+            args=f'fs subvolume snapshot clone {self.volname} {subvolume} {snapshot} {clone} '
+                 f'--pool_layout {new_pool} --preserve-namespace',
+            retval=errno.EINVAL,
+            errmsgs=('differs from the source',))
+
+        # verify the clone subvolume was not created
+        try:
+            self._fs_cmd("subvolume", "getpath", self.volname, clone)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on getpath of non-existent clone")
+        else:
+            self.fail("expected the 'fs subvolume getpath' command to fail for a rejected clone")
+
+        # schedule a clone into the same pool as the source with --preserve-namespace;
+        # harmless no-op since the source never had a namespace to preserve
+        source_pool = json.loads(self._get_subvolume_info(self.volname, subvolume))["data_pool"]
+        self._fs_cmd("subvolume", "snapshot", "clone", self.volname, subvolume, snapshot, clone,
+                     "--pool_layout", source_pool, "--preserve-namespace")
+
+        # check clone status
+        self._wait_for_clone_to_complete(clone)
+
+        # verify clone
+        self._verify_clone(subvolume, snapshot, clone, clone_pool=source_pool, clone_pool_namespace="")
+
+        clone_info = json.loads(self._get_subvolume_info(self.volname, clone))
+        self.assertEqual(clone_info["data_pool"], source_pool)
+        self.assertEqual(clone_info["pool_namespace"], "")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolumes
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        self._fs_cmd("subvolume", "rm", self.volname, clone)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+    def test_subvolume_snapshot_clone_namespace_flags_mutually_exclusive(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+        clone = self._gen_subvol_clone_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--mode=777")
+
+        # do some IO
+        self._do_subvolume_io(subvolume, number_of_files=1)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # attempt a clone with both mutually exclusive namespace flags
+        self.negtest_ceph_cmd(
+            args=f'fs subvolume snapshot clone {self.volname} {subvolume} {snapshot} {clone} '
+                 f'--namespace-isolated --preserve-namespace',
+            retval=errno.EINVAL,
+            errmsgs=('mutually exclusive',))
+
+        # verify the clone subvolume was not created
+        try:
+            self._fs_cmd("subvolume", "getpath", self.volname, clone)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on getpath of non-existent clone")
+        else:
+            self.fail("expected the 'fs subvolume getpath' command to fail for a rejected clone")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
