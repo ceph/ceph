@@ -209,6 +209,24 @@ Possible resolutions:
 * **Do nothing. This script will ignore this issue while the upkeep-failed tag is applied.**
 """
 
+class BaseCommitMissingException(UpkeepException):
+    def __init__(self, issue_update, pr_id, base_ref, **kwargs):
+        super().__init__(issue_update, **kwargs)
+        self.pr_id = pr_id
+        self.base_ref = base_ref
+
+    def __str__(self):
+        return "Base commit could not be fetched"
+
+    def comment(self):
+        return f"""
+Issue #{self.issue_update.issue.id} references "PR #{self.pr_id}":https://github.com/ceph/ceph/pull/{self.pr_id}. The base branch `{self.base_ref}` or its commit could not be resolved locally.
+
+<pre>
+{self.traceback.strip()}
+</pre>
+"""
+
 class RedmineUpdateException(UpkeepException):
     def __init__(self, issue_update, **kwargs):
         super().__init__(issue_update, **kwargs)
@@ -869,10 +887,13 @@ class RedmineUpkeep:
 
         try:
             BASE = self.G.commit(base['sha'])
-        except git.exc.GitCommandError as e:
+        except (git.exc.GitCommandError, ValueError) as e:
             issue_update.logger.debug(f"Fetching {base['ref']}")
-            self.G.git.fetch(self.remote_url, base['ref'])
-            BASE = self.G.commit('FETCH_HEAD')
+            try:
+                self.G.git.fetch(self.remote_url, base['ref'])
+                BASE = self.G.commit('FETCH_HEAD')
+            except (git.exc.GitCommandError, ValueError) as e2:
+                raise BaseCommitMissingException(issue_update, pr_id, base['ref'], exception=e2, traceback=traceback.format_exc())
 
         m = self._find_merge_commit(issue_update, HEAD, BASE)
         if m:
