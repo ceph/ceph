@@ -291,7 +291,7 @@ function TEST_pool_create_stretch_replica() {
     ceph osd crush set osd.3 1.0 host=host4
 
     ceph osd pool create data0 --num-zones 2 || return 1
-    # num_replica_per_zone (2) replicas in each of the 2 zones
+    # replica (2) copies in each of the 2 zones
     test "$(ceph osd pool get data0 size -f json | jq .size)" = 4 || return 1
     test "$(ceph osd pool get data0 min_size -f json | jq .min_size)" = 2 || return 1
 

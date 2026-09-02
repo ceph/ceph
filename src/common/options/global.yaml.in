@@ -2624,6 +2624,16 @@ options:
   max: 10
   flags:
   - runtime
+- name: osd_pool_stretch_default_replica
+  type: uint
+  level: advanced
+  desc: Default number of replicas per zone for new stretch pools
+  default: 2
+  services:
+  - mon
+  min: 1
+  flags:
+  - runtime
 - name: osd_pool_default_min_size
   type: uint
   level: advanced

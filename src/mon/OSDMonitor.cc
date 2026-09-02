@@ -10347,11 +10347,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 
             // Validate FastEC support (required for multi-zone EC pools)
             if (auto r = enable_pool_ec_optimizations(p, true, false); !r) {
-              ss << "Multi-zone erasure coded pools require FastEC support. "
-                 << "The erasure code profile '" << p.erasure_code_profile << "' "
-                 << "does not support FastEC: " << r.error().message
-                 << " Please use a FastEC-compatible profile (e.g., plugin=jerasure technique=reed_sol_van, "
-                 << "or plugin=isa).";
+              ss << r.error().message;
               return r.error().error;
             }
           } else {
@@ -15535,7 +15531,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     root = cmd_getval_or<string>(cmdmap, "root", "default");
     int replica = cmd_getval_or<int64_t>(cmdmap, "replica", 0);
-    int num_replica_per_zone = cmd_getval_or<int64_t>(cmdmap, "num_replica_per_zone", 2);
+    int num_replica_per_zone = cmd_getval_or<int64_t>(
+      cmdmap, "replica",
+      g_conf().get_val<uint64_t>("osd_pool_stretch_default_replica"));
     if (!cmd_getval(cmdmap, "zone_failure_domain", zone_failure_domain) &&
         mon.monmap->global_stretch_mode_enabled && osdmap.stretch_mode_enabled) {
       // a global stretch mode pool is divided as the cluster is
@@ -15543,6 +15541,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     osd_failure_domain = cmd_getval_or<string>(cmdmap, "osd_failure_domain", "host");
     cmd_getval(cmdmap, "class", device_class);
+
+    if (pool_type == pg_pool_t::TYPE_REPLICATED && num_zones > 1 &&
+        replica == 0) {
+      replica = num_replica_per_zone;
+    }
 
     // Prevent specifying both size and replica
     if (cmdmap.count("size") && cmdmap.count("replica")) {

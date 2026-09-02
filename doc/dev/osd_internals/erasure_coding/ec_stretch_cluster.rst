@@ -200,7 +200,8 @@ These are the primary parameters required for standard deployments.
      across ``num_zones``.
   - *Pool Size*: For an EC pool, the resulting pool ``size`` is ``num_zones × (k + m)``. For a
     replicated pool created with ``num_zones`` greater than 1 and without ``--size``, it is
-    ``num_zones × num_replica_per_zone`` (4 for 2 zones of 2 replicas). In global stretch mode
+    ``num_zones × replica``, with ``--replica`` defaulting to
+    ``osd_pool_stretch_default_replica`` (2), so 4 for 2 zones. In global stretch mode
     (``ceph mon enable_stretch_mode``) a replicated pool's size is the number of zones ×
     ``mon_global_stretch_pool_replica``, and ``--size`` is refused.
 
@@ -251,6 +252,7 @@ These parameters are intended for advanced users and offer finer control over th
 
 **--replica**
   - *Definition*: For replicated pools, the number of replicas within each zone. (Replica only)
+  - *Default Value*: ``osd_pool_stretch_default_replica`` (2)
 
 .. note::
 
