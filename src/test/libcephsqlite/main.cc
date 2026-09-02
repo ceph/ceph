@@ -1080,6 +1080,21 @@ out:
   ASSERT_EQ(0, rc);
 }
 
+TEST_F(CephSQLiteTest, FileSizeStatError) {
+  EXPECT_EQ(0, cct->_conf.set_val("cephsqlite_inject_stat_error_probability", "1.0"));
+  cct->_conf.apply_changes(nullptr);
+
+  sqlite3_extended_result_codes(db, 1);
+  int rc = sqlite3_exec(db, "CREATE TABLE IF NOT EXISTS stat_error (a INT);", NULL, NULL, NULL);
+  std::string errmsg = sqlite3_errmsg(db);
+
+  cct->_conf.set_val("cephsqlite_inject_stat_error_probability", "0");
+  cct->_conf.apply_changes(nullptr);
+
+  ASSERT_EQ(SQLITE_IOERR, rc & 0xff)
+    << "sqlite3 error: " << rc << " `" << sqlite3_errstr(rc) << "': " << errmsg;
+}
+
 
 int main(int argc, char **argv) {
   auto args = argv_to_vec(argc, argv);
