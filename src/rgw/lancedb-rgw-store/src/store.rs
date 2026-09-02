@@ -95,6 +95,25 @@ pub struct RGWObjectStore {
 // Safety: The raw pointers reference RGW driver and DoutPrefixProvider which
 // are thread-safe -- they are shared across RGW request threads and RGW
 // provides atomic readers/writers for concurrent object access.
+/// Run a synchronous SAL/RADOS call without parking a tokio worker on it.
+///
+/// The object-store methods call RGW's SAL through the C wrapper with a null
+/// yield context, i.e. they block the calling thread on librados I/O.  When
+/// the future that owns them runs on the tokio runtime's worker threads (as
+/// it does once lancedb-c executes its work there), a blocked worker would
+/// stall unrelated tasks.  `block_in_place` hands the worker's scheduling
+/// slot to another thread for the duration of the call instead.  Outside a
+/// multi-thread runtime (unit tests, plain threads) the call runs directly.
+fn sal<T>(f: impl FnOnce() -> T) -> T {
+    use tokio::runtime::{Handle, RuntimeFlavor};
+    match Handle::try_current() {
+        Ok(handle) if handle.runtime_flavor() == RuntimeFlavor::MultiThread => {
+            tokio::task::block_in_place(f)
+        }
+        _ => f(),
+    }
+}
+
 unsafe impl Send for RGWObjectStore {}
 unsafe impl Sync for RGWObjectStore {}
 
@@ -277,7 +296,7 @@ impl ObjectStore for RGWObjectStore {
                     data: bytes.as_ptr() as *mut u8,
                     len: bytes.len(),
                 };
-                let result = unsafe {
+                let result = sal(|| unsafe {
                     ffi::rgw_put_object(
                         self.driver,
                         self.dpp,
@@ -286,7 +305,7 @@ impl ObjectStore for RGWObjectStore {
                         &obj,
                         &buf,
                     )
-                };
+                });
 
                 if result == 0 {
                     Ok(PutResult {
@@ -305,7 +324,7 @@ impl ObjectStore for RGWObjectStore {
                     len: bytes.len(),
                 };
 
-                let result = unsafe {
+                let result = sal(|| unsafe {
                     ffi::rgw_put_object_conditional(
                         self.driver,
                         self.dpp,
@@ -317,7 +336,7 @@ impl ObjectStore for RGWObjectStore {
                         if_nomatch.as_ptr(),
                         &mut canceled,
                     )
-                };
+                });
 
                 if result != 0 {
                     return Err(self.errno_to_error(result, location, "put (create)"));
@@ -349,7 +368,7 @@ impl ObjectStore for RGWObjectStore {
                     len: bytes.len(),
                 };
 
-                let result = unsafe {
+                let result = sal(|| unsafe {
                     ffi::rgw_put_object_conditional(
                         self.driver,
                         self.dpp,
@@ -361,7 +380,7 @@ impl ObjectStore for RGWObjectStore {
                         std::ptr::null(),
                         &mut canceled,
                     )
-                };
+                });
 
                 if result != 0 {
                     return Err(self.errno_to_error(result, location, "put (update)"));
@@ -435,7 +454,7 @@ impl ObjectStore for RGWObjectStore {
 
             let bytes = {
                 let mut buffer = ffi::CRgwBuffer::default();
-                let result = unsafe {
+                let result = sal(|| unsafe {
                     ffi::rgw_get_object(
                         self.driver,
                         self.dpp,
@@ -446,7 +465,7 @@ impl ObjectStore for RGWObjectStore {
                         total_len,
                         &mut buffer,
                     )
-                };
+                });
                 if result != 0 {
                     return Err(self.errno_to_error(result, location, "get"));
                 }
@@ -521,7 +540,7 @@ impl ObjectStore for RGWObjectStore {
                 let obj = CRgwObject::from_key(key_c.as_ptr());
 
                 let mut buffer = ffi::CRgwBuffer::default();
-                let result = unsafe {
+                let result = sal(|| unsafe {
                     ffi::rgw_get_object(
                         driver.as_ptr(),
                         dpp.as_ptr(),
@@ -532,7 +551,7 @@ impl ObjectStore for RGWObjectStore {
                         chunk_len,
                         &mut buffer,
                     )
-                };
+                });
 
                 if result != 0 {
                     return Some((
@@ -602,7 +621,7 @@ impl ObjectStore for RGWObjectStore {
                     let key_c = str_to_cstring(&location.to_string())?;
                     let obj = CRgwObject::from_key(key_c.as_ptr());
 
-                    let result = unsafe {
+                    let result = sal(|| unsafe {
                         ffi::rgw_delete_object(
                             driver.as_ptr(),
                             dpp.as_ptr(),
@@ -610,7 +629,7 @@ impl ObjectStore for RGWObjectStore {
                             &rgw_bucket,
                             &obj,
                         )
-                    };
+                    });
 
                     // ENOENT is already mapped to 0 by rgw_delete_object
                     if result == 0 {
@@ -674,7 +693,7 @@ impl ObjectStore for RGWObjectStore {
 
                 let mut result = ffi::CRgwListResult::default();
 
-                let ret = unsafe {
+                let ret = sal(|| unsafe {
                     ffi::rgw_list_objects(
                         driver.as_ptr(),
                         dpp.as_ptr(),
@@ -686,7 +705,7 @@ impl ObjectStore for RGWObjectStore {
                         1000,
                         &mut result,
                     )
-                };
+                });
 
                 if ret != 0 {
                     return Some((
@@ -782,7 +801,7 @@ impl ObjectStore for RGWObjectStore {
 
             let mut result = ffi::CRgwListResult::default();
 
-            let ret = unsafe {
+            let ret = sal(|| unsafe {
                 ffi::rgw_list_objects(
                     self.driver,
                     self.dpp,
@@ -794,7 +813,7 @@ impl ObjectStore for RGWObjectStore {
                     1000,
                     &mut result,
                 )
-            };
+            });
 
             if ret != 0 {
                 return Err(object_store::Error::Generic {
@@ -878,7 +897,7 @@ impl ObjectStore for RGWObjectStore {
 
         match options.mode {
             CopyMode::Overwrite => {
-                let result = unsafe {
+                let result = sal(|| unsafe {
                     ffi::rgw_copy_object(
                         self.driver,
                         self.dpp,
@@ -888,7 +907,7 @@ impl ObjectStore for RGWObjectStore {
                         &rgw_bucket,
                         &dst_obj,
                     )
-                };
+                });
 
                 if result == 0 {
                     Ok(())
@@ -899,7 +918,7 @@ impl ObjectStore for RGWObjectStore {
             CopyMode::Create => {
                 let if_nomatch = str_to_cstring("*")?;
 
-                let result = unsafe {
+                let result = sal(|| unsafe {
                     ffi::rgw_copy_object_conditional(
                         self.driver,
                         self.dpp,
@@ -911,7 +930,7 @@ impl ObjectStore for RGWObjectStore {
                         std::ptr::null(),
                         if_nomatch.as_ptr(),
                     )
-                };
+                });
 
                 if result == 0 {
                     Ok(())
@@ -944,7 +963,7 @@ impl ObjectStore for RGWObjectStore {
 
         let mut upload_id_ptr: *mut c_char = std::ptr::null_mut();
 
-        let result = unsafe {
+        let result = sal(|| unsafe {
             ffi::rgw_init_multipart(
                 self.driver,
                 self.dpp,
@@ -953,7 +972,7 @@ impl ObjectStore for RGWObjectStore {
                 &obj,
                 &mut upload_id_ptr,
             )
-        };
+        });
 
         if result != 0 {
             return Err(self.errno_to_error(result, location, "init_multipart"));
@@ -992,7 +1011,7 @@ impl RGWObjectStore {
 
         let mut meta = ffi::CRgwObjectMeta::default();
 
-        let result = unsafe {
+        let result = sal(|| unsafe {
             ffi::rgw_head_object(
                 self.driver,
                 self.dpp,
@@ -1001,7 +1020,7 @@ impl RGWObjectStore {
                 &obj,
                 &mut meta,
             )
-        };
+        });
 
         if result != 0 {
             return Err(self.errno_to_error(result, location, "head"));
@@ -1089,7 +1108,7 @@ impl MultipartUpload for RGWMultipartUpload {
             let bytes: Bytes = data.into();
             let mut etag_ptr: *mut c_char = std::ptr::null_mut();
 
-            let result = unsafe {
+            let result = sal(|| unsafe {
                 ffi::rgw_multipart_put_part(
                     driver.as_ptr(),
                     dpp.as_ptr(),
@@ -1102,7 +1121,7 @@ impl MultipartUpload for RGWMultipartUpload {
                     bytes.len(),
                     &mut etag_ptr,
                 )
-            };
+            });
 
             if result != 0 {
                 return Err(object_store::Error::Generic {
@@ -1148,7 +1167,7 @@ impl MultipartUpload for RGWMultipartUpload {
             .collect::<ObjectStoreResult<Vec<_>>>()?;
         let etag_ptrs: Vec<*const c_char> = etag_cstrings.iter().map(|s| s.as_ptr()).collect();
 
-        let result = unsafe {
+        let result = sal(|| unsafe {
             ffi::rgw_multipart_complete(
                 self.driver,
                 self.dpp,
@@ -1159,7 +1178,7 @@ impl MultipartUpload for RGWMultipartUpload {
                 etag_ptrs.as_ptr(),
                 etag_ptrs.len(),
             )
-        };
+        });
 
         drop(parts_guard);
 
@@ -1184,7 +1203,7 @@ impl MultipartUpload for RGWMultipartUpload {
         let obj = CRgwObject::from_key(key_c.as_ptr());
         let upload_id_c = str_to_cstring(&self.upload_id)?;
 
-        let result = unsafe {
+        let result = sal(|| unsafe {
             ffi::rgw_multipart_abort(
                 self.driver,
                 self.dpp,
@@ -1193,7 +1212,7 @@ impl MultipartUpload for RGWMultipartUpload {
                 &obj,
                 upload_id_c.as_ptr(),
             )
-        };
+        });
 
         if result != 0 {
             return Err(object_store::Error::Generic {
