@@ -493,7 +493,7 @@
             id="rgw_frontend_port"
             min="1"
             max="65535"
-            helperText="Port on which the service listens for client requests."
+            helperText="Port on which the service listens for HTTP or HTTPS client requests."
             i18n-helperText
             [invalid]="
               serviceForm.controls.rgw_frontend_port.invalid &&
@@ -520,51 +520,84 @@
           </ng-template>
         </div>
 
-        @if (!rgwModuleEnabled) {
-          <cd-alert-panel
-            type="warning"
-            spacingClass="mb-3"
-            actionName="Enable"
-            (action)="enableRgwModule()"
-            i18n-actionName
-            i18n
-          >
-            The RGW mgr module must be enabled to configure S3 hostnames. Enabling the module will
-            cause temporary manager downtime while it loads.
-          </cd-alert-panel>
-        }
-        <div class="form-item">
-          <cds-checkbox
-            i18n-label
-            formControlName="virtual_host_enabled"
-          >
-            Enable virtual-host style bucket access
-            @if (realmList.length === 0) {
-              <cd-help-text i18n>
-                Requires a multisite realm, zonegroup, and zone. Create a realm to enable
-                virtual-host style bucket access.
-              </cd-help-text>
-            } @else {
-              <cd-help-text i18n>
-                Allows bucket access via hostnames such as mybucket.s3.example.com.
-              </cd-help-text>
-            }
-          </cds-checkbox>
-        </div>
-        @if (serviceForm.controls.virtual_host_enabled.value) {
+        @if (serviceForm.controls.ssl.value) {
+          <!-- rgw_frontend_secondary_port -->
           <div class="form-item">
-            <cd-text-label-list
-              formControlName="zonegroup_hostnames"
-              label="S3 hostname"
-              i18n-label
-              helperText="Domain names for S3 virtual-host bucket access (e.g., s3.example.com). Enables bucket URLs like bucket.s3.example.com instead of s3.example.com/bucket."
+            <cds-number
+              label="Secondary Port"
+              formControlName="rgw_frontend_secondary_port"
+              id="rgw_frontend_secondary_port"
+              min="1"
+              max="65535"
+              helperText="Port on which the service listens for HTTP client requests."
               i18n-helperText
-            >
-            </cd-text-label-list>
+              [invalid]="
+                serviceForm.controls.rgw_frontend_secondary_port.invalid &&
+                serviceForm.controls.rgw_frontend_secondary_port.dirty
+              "
+              [invalidText]="invalidRgwFrontendSecondaryPortError">
+            </cds-number>
+            <ng-template #invalidRgwFrontendSecondaryPortError>
+              @if (serviceForm.showError('rgw_frontend_secondary_port', frm, 'min')) {
+              <span class="invalid-feedback"
+                    i18n>The value must be at least 1.</span>
+              }
+              @if (serviceForm.showError('rgw_frontend_secondary_port', frm, 'max')) {
+              <span class="invalid-feedback"
+                    i18n>The value cannot exceed 65535.</span>
+              }
+              @if (serviceForm.showError('rgw_frontend_secondary_port', frm, 'donotmatch')) {
+              <span class="invalid-feedback"
+                    i18n>Port and Secondary Port cannot have the same value.</span>
+              }
+            </ng-template>
           </div>
         }
-      }
 
+        @if (!rgwModuleEnabled) {
+         <cd-alert-panel
+           type="warning"
+           spacingClass="mb-3"
+           actionName="Enable"
+           (action)="enableRgwModule()"
+           i18n-actionName
+           i18n
+         >
+           The RGW mgr module must be enabled to configure S3 hostnames. Enabling the module will
+           cause temporary manager downtime while it loads.
+         </cd-alert-panel>
+         }
+      }
+      <div class="form-item">
+         <cds-checkbox
+          i18n-label
+          formControlName="virtual_host_enabled"
+        >
+          Enable virtual-host style bucket access
+          @if (realmList.length === 0) {
+            <cd-help-text i18n>
+              Requires a multisite realm, zonegroup, and zone. Create a realm to enable
+              virtual-host style bucket access.
+            </cd-help-text>
+          } @else {
+            <cd-help-text i18n>
+              Allows bucket access via hostnames such as mybucket.s3.example.com.
+            </cd-help-text>
+          }
+        </cds-checkbox>
+      </div>
+      @if (serviceForm.controls.virtual_host_enabled.value) {
+        <div class="form-item">
+          <cd-text-label-list
+            formControlName="zonegroup_hostnames"
+            label="S3 hostname"
+            i18n-label
+            helperText="Domain names for S3 virtual-host bucket access (e.g., s3.example.com). Enables bucket URLs like bucket.s3.example.com instead of s3.example.com/bucket."
+            i18n-helperText
+          >
+          </cd-text-label-list>
+        </div>
+      }
       <!-- iSCSI -->
       <!-- pool -->
       @if (serviceForm.controls.service_type.value === 'iscsi') {
