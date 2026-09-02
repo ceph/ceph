@@ -1,5 +1,7 @@
 # aws organizations
 
+## concepts
+
 limits https://docs.aws.amazon.com/organizations/latest/userguide/orgs_reference_limits.html
 
 organization
@@ -11,6 +13,14 @@ member account
 an existing account can call CreateOrganization to create an organization and become its management account
 then create or invite member accounts and organize them into a hierarchy of organizational units
 then create and apply policies (like service control policy) to organizational units or individual member accounts
+
+## motivation
+
+the AWS IAM api allows a user account to create distinct users/roles and manage their fine-grained access to account resources with iam policy. in ceph, cluster admins are responsible for creating new user accounts and establishing quota limits, but can then delegate the account root user's credentials to an end user for self-service management of the account and its resources
+
+the AWS Organizations api enables this self-service management at a higher level, allowing one user account to grow into a hierarchical collection of related member accounts. these member accounts can be created/removed without the need for a ceph cluster admin, provided that they're all subject (in aggregate) to the same limits as the original user account. the management account can add service control policy to different parts of this hierarchy to further restrict which permissions its member accounts can grant themselves via iam policy
+
+however, cluster admins may still take advantage of these features by keeping the organization's management account under their own control, and using organization apis to create member accounts on the behalf of end users. the admin can use service control policy to control which s3 features available to its members, enforce additional security policy, etc. the admin can also assume a member account's OrganizationAccountAccessRole to perform additional management/repair on their behalf
 
 ## api surface
 
