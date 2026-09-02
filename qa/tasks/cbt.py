@@ -69,17 +69,23 @@ class CBT(Task):
             install_cmd = ['sudo', 'yum', '-y', 'install']
             cbt_depends = ['librbd-devel', 'perf']
 
-            # pdsh is not available in the repos for el10, use el9 version which works fine
+            # pdsh is not available in the repos for el10, use el9 version which works fine.
+            # Pull it straight from the epel9 repo rather than hardcoding an rpm URL, since
+            # epel rebuilds/bumps pdsh and any pinned version eventually 404s. The repo is
+            # limited to the pdsh packages so nothing else gets resolved against el9.
             os_version = misc.get_distro_version(self.ctx)
             os_major_version = int(os_version.split('.')[0])
             if os_major_version >= 10:
                 self.log.info('Installing pdsh from el9 repo into el10 system')
-                pdsh_base = 'https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/Packages/p'
+                pdsh_packages = ['pdsh', 'pdsh-rcmd-ssh']
+                epel9_baseurl = 'https://dl.fedoraproject.org/pub/epel/9/Everything/x86_64/'
                 self.first_mon.run(args=[
-                    'sudo', 'yum', '-y', 'install',
-                    f'{pdsh_base}/pdsh-2.34-7.el9.x86_64.rpm',
-                    f'{pdsh_base}/pdsh-rcmd-ssh-2.34-7.el9.x86_64.rpm',
-                ])
+                    'sudo', 'yum', '-y',
+                    '--repofrompath', f'epel9-pdsh,{epel9_baseurl}',
+                    f'--setopt=epel9-pdsh.includepkgs={",".join(pdsh_packages)}',
+                    '--nogpgcheck',
+                    'install',
+                ] + pdsh_packages)
             else:
                 cbt_depends += ['pdsh', 'pdsh-rcmd-ssh']
 
