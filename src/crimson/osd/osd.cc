@@ -825,6 +825,12 @@ seastar::future<> OSD::start_asok_admin()
     asok->register_command(make_asok_hook<AssertAlwaysHook>());
     asok->register_command(make_asok_hook<InjectDataErrorHook>(get_shard_services()));
     asok->register_command(make_asok_hook<InjectMDataErrorHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<SetOmapValHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<RmOmapKeyHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<SetOmapHeaderHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<TruncObjHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<WriteObjHook>(get_shard_services()));
+    asok->register_command(make_asok_hook<RemoveObjHook>(get_shard_services()));
     // PG commands
     asok->register_command(make_asok_hook<pg::PGOldFormCommand>(*this));
     asok->register_command(make_asok_hook<pg::QueryCommand>(*this));

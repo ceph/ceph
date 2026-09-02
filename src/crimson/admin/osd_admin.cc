@@ -556,6 +556,380 @@ template std::unique_ptr<AdminSocketHook> make_asok_hook<InjectMDataErrorHook>(
   crimson::osd::ShardServices&);
 
 
+// Helper: like test_ops_get_object_name but also returns the spg_t so that
+// callers can open the right PG collection.
+static std::pair<ghobject_t, spg_t> test_ops_get_object_and_pg(
+  const OSDMap& osdmap,
+  const cmdmap_t& cmdmap)
+{
+  auto pool_id = [&] {
+    auto pool_arg = cmd_getval<std::string>(cmdmap, "pool");
+    if (!pool_arg) {
+      throw std::invalid_argument{"No 'pool' specified"};
+    }
+    int64_t pool = osdmap.lookup_pg_pool_name(*pool_arg);
+    if (pool < 0 && std::isdigit((*pool_arg)[0])) {
+      pool = std::atoll(pool_arg->c_str());
+    }
+    if (pool < 0) {
+      throw std::invalid_argument{fmt::format("Invalid pool '{}'", *pool_arg)};
+    }
+    return pool;
+  }();
+
+  auto [objname, nspace, raw_pg] = [&] {
+    auto obj_arg = cmd_getval<std::string>(cmdmap, "objname");
+    if (!obj_arg) {
+      throw std::invalid_argument{"No 'objname' specified"};
+    }
+    std::string objname, nspace;
+    if (std::size_t sep = obj_arg->find_first_of('/'); sep != obj_arg->npos) {
+      nspace  = obj_arg->substr(0, sep);
+      objname = obj_arg->substr(sep + 1);
+    } else {
+      objname = *obj_arg;
+    }
+    pg_t raw_pg;
+    if (object_locator_t oloc(pool_id, nspace);
+        osdmap.object_locator_to_pg(object_t(objname), oloc, raw_pg) < 0) {
+      throw std::invalid_argument{"Invalid namespace/objname"};
+    }
+    return std::make_tuple(std::move(objname), std::move(nspace), raw_pg);
+  }();
+
+  auto shard_id = cmd_getval_or<int64_t>(cmdmap, "shardid",
+                                         static_cast<int64_t>(shard_id_t::NO_SHARD));
+  ghobject_t gobj{
+    hobject_t{object_t{objname}, std::string{}, CEPH_NOSNAP,
+              raw_pg.ps(), pool_id, nspace},
+    ghobject_t::NO_GEN,
+    shard_id_t{static_cast<int8_t>(shard_id)}
+  };
+  spg_t pgid{osdmap.raw_pg_to_pg(raw_pg),
+             shard_id_t{static_cast<int8_t>(shard_id)}};
+  return {gobj, pgid};
+}
+
+
+// Usage:
+//   setomapval <pool> [namespace/]<obj-name> <key> <val>
+class SetOmapValHook : public AdminSocketHook {
+public:
+  explicit SetOmapValHook(crimson::osd::ShardServices& shard_services)
+    : AdminSocketHook("setomapval",
+        "name=pool,type=CephString "
+        "name=objname,type=CephObjectname "
+        "name=key,type=CephString "
+        "name=val,type=CephString",
+        "set an omap key/value on an object"),
+      shard_services(shard_services) {}
+
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(SetOmapValHook::call);
+    ghobject_t obj;
+    spg_t pgid;
+    try {
+      std::tie(obj, pgid) =
+        test_ops_get_object_and_pg(*shard_services.get_map(), cmdmap);
+    } catch (const std::invalid_argument& e) {
+      co_return tell_result_t(-EINVAL, e.what());
+    }
+    std::string key, val;
+    cmd_getval(cmdmap, "key", key);
+    cmd_getval(cmdmap, "val", val);
+
+    auto store = shard_services.get_store(META_STORE_INDEX);
+    auto ch = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::open_collection>(store, coll_t(pgid));
+    if (!ch) {
+      co_return tell_result_t(-ENOENT,
+        fmt::format("collection for pg {} not found", pgid));
+    }
+    ceph::os::Transaction t;
+    ceph::bufferlist valbl;
+    valbl.append(val);
+    t.omap_setkeys(ch->get_cid(), obj, std::map<std::string, ceph::bufferlist>{{key, valbl}});
+    co_await crimson::os::with_store_do_transaction(store, ch, std::move(t));
+    DEBUG("setomapval ok obj={} key={}", obj, key);
+    ceph::bufferlist out;
+    out.append("ok"sv);
+    co_return tell_result_t(0, std::string{}, std::move(out));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<SetOmapValHook>(crimson::osd::ShardServices&);
+
+
+// Usage:
+//   rmomapkey <pool> [namespace/]<obj-name> <key>
+class RmOmapKeyHook : public AdminSocketHook {
+public:
+  explicit RmOmapKeyHook(crimson::osd::ShardServices& shard_services)
+    : AdminSocketHook("rmomapkey",
+        "name=pool,type=CephString "
+        "name=objname,type=CephObjectname "
+        "name=key,type=CephString",
+        "remove an omap key from an object"),
+      shard_services(shard_services) {}
+
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(RmOmapKeyHook::call);
+    ghobject_t obj;
+    spg_t pgid;
+    try {
+      std::tie(obj, pgid) =
+        test_ops_get_object_and_pg(*shard_services.get_map(), cmdmap);
+    } catch (const std::invalid_argument& e) {
+      co_return tell_result_t(-EINVAL, e.what());
+    }
+    std::string key;
+    cmd_getval(cmdmap, "key", key);
+
+    auto store = shard_services.get_store(META_STORE_INDEX);
+    auto ch = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::open_collection>(store, coll_t(pgid));
+    if (!ch) {
+      co_return tell_result_t(-ENOENT,
+        fmt::format("collection for pg {} not found", pgid));
+    }
+    ceph::os::Transaction t;
+    t.omap_rmkey(ch->get_cid(), obj, key);
+    co_await crimson::os::with_store_do_transaction(store, ch, std::move(t));
+    DEBUG("rmomapkey ok obj={} key={}", obj, key);
+    ceph::bufferlist out;
+    out.append("ok"sv);
+    co_return tell_result_t(0, std::string{}, std::move(out));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<RmOmapKeyHook>(crimson::osd::ShardServices&);
+
+
+// Usage:
+//   setomapheader <pool> [namespace/]<obj-name> <header>
+class SetOmapHeaderHook : public AdminSocketHook {
+public:
+  explicit SetOmapHeaderHook(crimson::osd::ShardServices& shard_services)
+    : AdminSocketHook("setomapheader",
+        "name=pool,type=CephString "
+        "name=objname,type=CephObjectname "
+        "name=header,type=CephString",
+        "set the omap header on an object"),
+      shard_services(shard_services) {}
+
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(SetOmapHeaderHook::call);
+    ghobject_t obj;
+    spg_t pgid;
+    try {
+      std::tie(obj, pgid) =
+        test_ops_get_object_and_pg(*shard_services.get_map(), cmdmap);
+    } catch (const std::invalid_argument& e) {
+      co_return tell_result_t(-EINVAL, e.what());
+    }
+    std::string headerstr;
+    cmd_getval(cmdmap, "header", headerstr);
+
+    auto store = shard_services.get_store(META_STORE_INDEX);
+    auto ch = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::open_collection>(store, coll_t(pgid));
+    if (!ch) {
+      co_return tell_result_t(-ENOENT,
+        fmt::format("collection for pg {} not found", pgid));
+    }
+    ceph::os::Transaction t;
+    ceph::bufferlist hdrbl;
+    hdrbl.append(headerstr);
+    t.omap_setheader(ch->get_cid(), obj, hdrbl);
+    co_await crimson::os::with_store_do_transaction(store, ch, std::move(t));
+    DEBUG("setomapheader ok obj={}", obj);
+    ceph::bufferlist out;
+    out.append("ok"sv);
+    co_return tell_result_t(0, std::string{}, std::move(out));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<SetOmapHeaderHook>(crimson::osd::ShardServices&);
+
+
+// Usage:
+//   truncobj <pool> [namespace/]<obj-name> <len>
+class TruncObjHook : public AdminSocketHook {
+public:
+  explicit TruncObjHook(crimson::osd::ShardServices& shard_services)
+    : AdminSocketHook("truncobj",
+        "name=pool,type=CephString "
+        "name=objname,type=CephObjectname "
+        "name=len,type=CephInt",
+        "truncate an object to the given length"),
+      shard_services(shard_services) {}
+
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(TruncObjHook::call);
+    ghobject_t obj;
+    spg_t pgid;
+    try {
+      std::tie(obj, pgid) =
+        test_ops_get_object_and_pg(*shard_services.get_map(), cmdmap);
+    } catch (const std::invalid_argument& e) {
+      co_return tell_result_t(-EINVAL, e.what());
+    }
+    int64_t trunclen = 0;
+    cmd_getval(cmdmap, "len", trunclen);
+
+    auto store = shard_services.get_store(META_STORE_INDEX);
+    auto ch = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::open_collection>(store, coll_t(pgid));
+    if (!ch) {
+      co_return tell_result_t(-ENOENT,
+        fmt::format("collection for pg {} not found", pgid));
+    }
+    ceph::os::Transaction t;
+    t.truncate(ch->get_cid(), obj, static_cast<uint64_t>(trunclen));
+    co_await crimson::os::with_store_do_transaction(store, ch, std::move(t));
+    DEBUG("truncobj ok obj={} len={}", obj, trunclen);
+    ceph::bufferlist out;
+    out.append("ok"sv);
+    co_return tell_result_t(0, std::string{}, std::move(out));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<TruncObjHook>(crimson::osd::ShardServices&);
+
+
+// Usage:
+//   writeobj <pool> [namespace/]<obj-name> <offset> <len>
+// Overwrites <len> zero bytes at <offset> inside the object on this OSD only.
+// Use offset=0 to change data digest; use offset=size to append (size_mismatch).
+class WriteObjHook : public AdminSocketHook {
+public:
+  explicit WriteObjHook(crimson::osd::ShardServices& shard_services)
+    : AdminSocketHook("writeobj",
+        "name=pool,type=CephString "
+        "name=objname,type=CephObjectname "
+        "name=offset,type=CephInt "
+        "name=len,type=CephInt",
+        "write zero bytes into an object at the given offset (single-OSD, no replication)"),
+      shard_services(shard_services) {}
+
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(WriteObjHook::call);
+    ghobject_t obj;
+    spg_t pgid;
+    try {
+      std::tie(obj, pgid) =
+        test_ops_get_object_and_pg(*shard_services.get_map(), cmdmap);
+    } catch (const std::invalid_argument& e) {
+      co_return tell_result_t(-EINVAL, e.what());
+    }
+    int64_t offset = 0, len = 1;
+    cmd_getval(cmdmap, "offset", offset);
+    cmd_getval(cmdmap, "len", len);
+    if (len <= 0) {
+      co_return tell_result_t(-EINVAL, "len must be > 0");
+    }
+
+    auto store = shard_services.get_store(META_STORE_INDEX);
+    auto ch = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::open_collection>(store, coll_t(pgid));
+    if (!ch) {
+      co_return tell_result_t(-ENOENT,
+        fmt::format("collection for pg {} not found", pgid));
+    }
+    ceph::bufferlist zeros;
+    zeros.append_zero(static_cast<unsigned>(len));
+    ceph::os::Transaction t;
+    t.write(ch->get_cid(), obj,
+            static_cast<uint64_t>(offset), static_cast<uint64_t>(len), zeros);
+    co_await crimson::os::with_store_do_transaction(store, ch, std::move(t));
+    DEBUG("writeobj ok obj={} offset={} len={}", obj, offset, len);
+    ceph::bufferlist out;
+    out.append("ok"sv);
+    co_return tell_result_t(0, std::string{}, std::move(out));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<WriteObjHook>(crimson::osd::ShardServices&);
+
+
+// Usage:
+//   removeobj <pool> [namespace/]<obj-name>
+// Removes the object from this OSD only (no replication).
+class RemoveObjHook : public AdminSocketHook {
+public:
+  explicit RemoveObjHook(crimson::osd::ShardServices& shard_services)
+    : AdminSocketHook("removeobj",
+        "name=pool,type=CephString "
+        "name=objname,type=CephObjectname",
+        "remove an object from this OSD only (no replication)"),
+      shard_services(shard_services) {}
+
+  seastar::future<tell_result_t> call(const cmdmap_t& cmdmap,
+                                      std::string_view,
+                                      ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(RemoveObjHook::call);
+    ghobject_t obj;
+    spg_t pgid;
+    try {
+      std::tie(obj, pgid) =
+        test_ops_get_object_and_pg(*shard_services.get_map(), cmdmap);
+    } catch (const std::invalid_argument& e) {
+      co_return tell_result_t(-EINVAL, e.what());
+    }
+    auto store = shard_services.get_store(META_STORE_INDEX);
+    auto ch = co_await crimson::os::with_store<
+      &crimson::os::FuturizedStore::Shard::open_collection>(store, coll_t(pgid));
+    if (!ch) {
+      co_return tell_result_t(-ENOENT,
+        fmt::format("collection for pg {} not found", pgid));
+    }
+    ceph::os::Transaction t;
+    t.remove(ch->get_cid(), obj);
+    co_await crimson::os::with_store_do_transaction(store, ch, std::move(t));
+    DEBUG("removeobj ok obj={}", obj);
+    ceph::bufferlist out;
+    out.append("ok"sv);
+    co_return tell_result_t(0, std::string{}, std::move(out));
+  }
+
+private:
+  crimson::osd::ShardServices& shard_services;
+};
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<RemoveObjHook>(crimson::osd::ShardServices&);
+
+
 /**
  * An InFlightOps admin hook: dump current in-flight operations
  */
