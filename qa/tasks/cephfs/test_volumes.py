@@ -5121,6 +5121,151 @@ class TestSubvolumes(TestVolumesHelper):
             errmsgs='Error ENAMETOOLONG: use shorter group or subvol name, '
                     'combination of both should be less than 249 characters')
 
+    def test_subvolume_path_traversal_dot_and_dotdot_validation(self):
+        """
+        Verify that passing '.' or '..' as a subvolume name returns EINVAL and
+        fails early without side-effects across various subvolume commands.
+        """
+        group = self._gen_subvol_grp_name()
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        invalid_subvol_names = ['.', '..']
+
+        for invalid_name in invalid_subvol_names:
+            # 1. info
+            try:
+                self._fs_cmd("subvolume", "info", self.volname, invalid_name,
+                             "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'info' on subvolume '{invalid_name}'")
+            else:
+                self.fail("expected 'fs subvolume info' to fail for subvolume "
+                          f"'{invalid_name}'")
+
+            # 2. getpath
+            try:
+                self._fs_cmd("subvolume", "getpath", self.volname, invalid_name,
+                             "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'getpath' on subvolume '{invalid_name}'")
+            else:
+                self.fail(f"expected 'fs subvolume getpath' to fail for subvolume '{invalid_name}'")
+
+            # 3. metadata set
+            try:
+                self._fs_cmd("subvolume", "metadata", "set", self.volname, invalid_name,
+                             "key", "val", "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'metadata set' on subvolume '{invalid_name}'")
+            else:
+                self.fail("expected 'fs subvolume metadata set' to fail for subvolume "
+                          f"'{invalid_name}'")
+
+            # 4. rm
+            try:
+                self._fs_cmd("subvolume", "rm", self.volname, invalid_name,
+                             "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'rm' on subvolume '{invalid_name}'")
+            else:
+                self.fail(f"expected 'fs subvolume rm' to fail for subvolume '{invalid_name}'")
+
+            # 5. create
+            try:
+                self._fs_cmd("subvolume", "create", self.volname, invalid_name,
+                             "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'create' on subvolume '{invalid_name}'")
+            else:
+                self.fail(f"expected 'create' to fail for '{invalid_name}'")
+
+            # 6. resize
+            try:
+                self._fs_cmd("subvolume", "resize", self.volname, invalid_name,
+                             "inf", "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'resize' on subvolume '{invalid_name}'")
+            else:
+                self.fail(f"expected 'resize' to fail for '{invalid_name}'")
+
+            # 7. snapshot create
+            try:
+                self._fs_cmd("subvolume", "snapshot", "create", self.volname,
+                             invalid_name, "snap1", "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'snapshot create' on subvolume '{invalid_name}'")
+            else:
+                self.fail(f"expected 'snapshot create' to fail for '{invalid_name}'")
+
+            # 8. snapshot rm
+            try:
+                self._fs_cmd("subvolume", "snapshot", "rm", self.volname,
+                             invalid_name, "snap1", "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'snapshot rm' on subvolume '{invalid_name}'")
+            else:
+                self.fail(f"expected 'snapshot rm' to fail for '{invalid_name}'")
+
+            # 9. authorize
+            try:
+                self._fs_cmd("subvolume", "authorize", self.volname, invalid_name,
+                             "client1", "--group_name", group)
+            except CommandFailedError as ce:
+                self.assertEqual(ce.exitstatus, errno.EINVAL,
+                                 f"expected EINVAL for 'authorize' on subvolume '{invalid_name}'")
+            else:
+                self.fail(f"expected 'authorize' to fail for '{invalid_name}'")
+
+        # Clean up group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_subvolume_info_dot_does_not_corrupt_group_xattr(self):
+        """
+        Verify that running 'fs subvolume info' with '.' as subvolume name
+        does not mistakenly set 'ceph.dir.subvolume=1' on the parent group directory,
+        allowing subsequent subvolume creation to succeed normally.
+        """
+        group = self._gen_subvol_grp_name()
+        subvol_valid = self._gen_subvol_name()
+
+        # Create subvolume group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        # Trigger the bug condition by querying info on '.'
+        try:
+            self._fs_cmd("subvolume", "info", self.volname, ".", "--group_name", group)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.EINVAL,
+                             "expected EINVAL for 'info' on subvolume '.'")
+        else:
+            self.fail("expected 'fs subvolume info' with '.' to fail with EINVAL")
+
+        # Verify parent group xattr 'ceph.dir.subvolume' was not set to 1
+        xattr_val = self.mount_a.getfattr(group_path, "ceph.dir.subvolume")
+        self.assertNotEqual(xattr_val, "1",
+                            "parent subvolume group directory was incorrectly marked as subvolume")
+
+        # Confirm that creating a new subvolume in this group still works and is not blocked by EINVAL
+        self._fs_cmd("subvolume", "create", self.volname, subvol_valid, "--group_name", group)
+
+        # Confirm the new subvolume has a valid .meta file initialized
+        subvol_path = self._get_subvolume_path(self.volname, subvol_valid, group_name=group)
+        self.assertNotEqual(subvol_path, None)
+
+        # Clean up
+        self._fs_cmd("subvolume", "rm", self.volname, subvol_valid, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        self._wait_for_trash_empty()
+
 class TestPausePurging(TestVolumesHelper):
     '''
     Tests related to config "mgr/volumes/pause_purging".
