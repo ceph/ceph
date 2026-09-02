@@ -30,11 +30,11 @@ namespace {
 #define dpp g_admin_dpp
 
 #ifdef WITH_RADOSGW_RADOS
-static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* rados_driver,
+static std::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* rados_driver,
                                                     const RGWZoneGroup& zonegroup,
                                                     const std::string& remote)
 {
-  boost::optional<RGWRESTConn> conn;
+  std::optional<RGWRESTConn> conn;
   if (remote == zonegroup.get_id()) {
     conn.emplace(rados_driver->ctx(), rados_driver, remote, zonegroup.endpoints, zonegroup.api_name);
   } else {
@@ -49,11 +49,11 @@ static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* rados_
   return conn;
 }
 
-static boost::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* rados_driver,
+static std::optional<RGWRESTConn> get_remote_conn(rgw::sal::RadosStore* rados_driver,
                                                     const RGWPeriodMap& period_map,
                                                     const std::string& remote)
 {
-  boost::optional<RGWRESTConn> conn;
+  std::optional<RGWRESTConn> conn;
   for (const auto& zg : period_map.zonegroups) {
     conn = get_remote_conn(rados_driver, zg.second, remote);
     if (conn) {
@@ -181,7 +181,7 @@ int rgw_admin_commit_period(rgw::sal::ConfigStore* cfgstore,
     remote = master_zone;
     cerr << "Sending period to new master zone " << remote << std::endl;
   }
-  boost::optional<RGWRESTConn> conn;
+  std::optional<RGWRESTConn> conn;
   RGWRESTConn *remote_conn = nullptr;
   if (!remote.empty()) {
 #ifdef WITH_RADOSGW_RADOS

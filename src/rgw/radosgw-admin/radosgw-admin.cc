@@ -1419,15 +1419,15 @@ int main(int argc, const char **argv)
   map<string, string, ltstr_nocase> tier_config_add;
   map<string, string, ltstr_nocase> tier_config_rm;
 
-  boost::optional<string> index_pool;
-  boost::optional<string> data_pool;
-  boost::optional<string> data_extra_pool;
+  std::optional<string> index_pool;
+  std::optional<string> data_pool;
+  std::optional<string> data_extra_pool;
 #ifdef WITH_RADOSGW_RADOS
   rgw::BucketIndexType placement_index_type = rgw::BucketIndexType::Normal;
   bool index_type_specified = false;
 #endif
 
-  boost::optional<std::string> compression_type;
+  std::optional<std::string> compression_type;
 
   string totp_serial;
   string totp_seed;

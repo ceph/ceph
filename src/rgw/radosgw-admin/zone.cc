@@ -632,7 +632,8 @@ int rgw_admin_zone(const DoutPrefixProvider* dpp,
 	  }
 
           rgw_pool dp = opt_data_pool;
-          info.storage_classes.set_storage_class(storage_class, &dp, compression_type.get_ptr());
+          info.storage_classes.set_storage_class(storage_class, &dp,
+              compression_type.has_value() ? std::addressof(*compression_type) : nullptr);
 
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;

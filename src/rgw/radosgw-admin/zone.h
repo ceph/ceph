@@ -43,10 +43,10 @@ struct rgw_admin_zone_options {
   std::string* redirect_zone = nullptr;
   std::map<std::string, std::string, ltstr_nocase>* tier_config_add = nullptr;
   std::map<std::string, std::string, ltstr_nocase>* tier_config_rm = nullptr;
-  boost::optional<std::string>* index_pool = nullptr;
-  boost::optional<std::string>* data_pool = nullptr;
-  boost::optional<std::string>* data_extra_pool = nullptr;
-  boost::optional<std::string>* compression_type = nullptr;
+  std::optional<std::string>* index_pool = nullptr;
+  std::optional<std::string>* data_pool = nullptr;
+  std::optional<std::string>* data_extra_pool = nullptr;
+  std::optional<std::string>* compression_type = nullptr;
   std::optional<int>* bucket_index_max_shards = nullptr;
   std::optional<std::string>* opt_storage_class = nullptr;
   std::optional<std::string>* opt_region = nullptr;
