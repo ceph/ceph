@@ -243,9 +243,12 @@ def bytes_to_human(num: float, mode: str = 'decimal') -> str:
 def with_units_to_int(v: str) -> int:
     if not v:
         return 0
+    # A bare unit letter has no B or iB to select decimal or binary, so
+    # treat it as binary, like size_to_bytes() above and like this helper
+    # did before decimal units were added.
+    bytes_mult = 1024
     if v.endswith('iB'):
         v = v[:-2]
-        bytes_mult = 1024
     elif v.endswith('B'):
         v = v[:-1]
         bytes_mult = 1000
