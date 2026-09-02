@@ -32,12 +32,12 @@ class POSIXObject;
 using DeleteResult = rgw::sal::Object::DeleteOp::Result;
 
 extern const std::string ATTR_PREFIX;
-#define RGW_POSIX_ATTR_BUCKET_INFO "POSIX-Bucket-Info"
-#define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
-#define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
-#define RGW_POSIX_ATTR_VERSION "POSIX-version"
-#define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
-#define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "POSIX-Multipart-Total-Size"
+#define RGW_POSIX_ATTR_BUCKET_INFO "bucket-info"
+#define RGW_POSIX_ATTR_MPUPLOAD "multipart-upload"
+#define RGW_POSIX_ATTR_OBJECT_TYPE "object-type"
+#define RGW_POSIX_ATTR_DELETE_MARKER "delete-marker"
+#define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "multipart-part-count"
+#define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "multipart-total-size"
 extern const std::string mp_ns;
 extern const std::string MP_OBJ_PART_PFX;
 extern const std::string MP_OBJ_HEAD_NAME;
@@ -478,7 +478,7 @@ class VersionedDirectory : public Directory {
 protected:
   std::string instance_id;
   std::unique_ptr<FSEnt> cur_version;
-  bool curr_is_dm{false};
+  bool cur_is_dm{false};
 
 public:
   VersionedDirectory(std::string _name, Directory* _parent, CephContext* _ctx) : Directory(_name, _parent, _ctx)
@@ -526,7 +526,7 @@ public:
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
   int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
   int get_latest_version_ent(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt>& latest);
-  bool curr_is_delete_marker() { return curr_is_dm; };
+  bool cur_is_delete_marker() { return cur_is_dm; };
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<VersionedDirectory>(*this);
   }
