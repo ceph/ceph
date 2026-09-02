@@ -6865,6 +6865,18 @@ void Server::handle_client_setvxattr(const MDRequestRef& mdr, CInode *cur)
       respond_to_request(mdr, -ENAMETOOLONG);
       return;
     }
+
+    if (dn->get_alternate_name() == value) {
+      // name is already set with same value, this is a noop.
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    if (dn->get_alternate_name().size()) {
+      respond_to_request(mdr, -EPERM);
+      return;
+    }
+
     dn->set_alternate_name(value);
     mdr->ls = mdlog->get_current_segment();
   } else {

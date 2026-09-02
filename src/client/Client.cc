@@ -15749,6 +15749,9 @@ size_t Client::_vxattrcb_alternate_name(Inode *in, char *val, size_t size)
 int Client::_vxattrcb_alternate_name_set(Inode *in, const void *val, size_t size,
 				       const UserPerm& perms)
 {
+  if (!alternate_name_visible || fscrypt_as)
+    return -EPERM;
+
   return _do_setxattr(in, "ceph.alternate_name", val, size, VXATTR_ALTNAME, perms);
 }
 
