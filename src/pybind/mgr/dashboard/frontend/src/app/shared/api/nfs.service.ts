@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 
 import { Observable, throwError } from 'rxjs';
 import {
-  bwTypeItem,
+  BwTypeItem,
   NFSBwIopConfig,
   NFSCluster,
   QOSTypeItem
@@ -83,7 +83,7 @@ export class NfsService extends ApiClient {
       help: $localize`Allows individual per share and per client setting of export and client IOPS`
     }
   ];
-  bwType: bwTypeItem[] = [
+  bwType: BwTypeItem[] = [
     {
       value: 'Individual',
       help: $localize`Allows Individual IOPS limit for read and write operations`
@@ -192,13 +192,6 @@ export class NfsService extends ApiClient {
 
   enableQosOpsForCLuster(obj: NFSBwIopConfig) {
     return this.http.patch(`${this.apiPath}/cluster/qos/ops`, obj, {
-      headers: { Accept: this.getVersionHeaderValue(1, 0) },
-      observe: 'response'
-    });
-  }
-
-  enableOpsForExports(exportObj: NFSBwIopConfig) {
-    return this.http.patch(`${this.apiPath}/export/ops`, exportObj, {
       headers: { Accept: this.getVersionHeaderValue(1, 0) },
       observe: 'response'
     });
