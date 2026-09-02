@@ -1651,18 +1651,16 @@ static int bucket_restore_stats(rgw::sal::Driver* driver,
 // O(objects); only call when explicitly requested.
 //
 // Index entry semantics:
-// - BIIndexType::Plain covers all data entries. Only Main entries are included
-//   here: this is the same accounting category exposed by bucket stats and is
-//   the billable object population. Multipart metadata/parts are deliberately
-//   excluded; they must not silently change the meaning of the billable total.
-// - BIIndexType::Instance is a secondary lookup index for versioned objects and
-//   must NOT be scanned here to avoid double-counting.
+// - Unversioned objects are Plain entries with flags == 0. A versioned key also
+//   has a Plain version-marker entry, which must not be counted.
+// - Each versioned object version is stored as an Instance entry. Existing
+//   Instance entries must be counted, including non-current versions.
 // - BIIndexType::OLH entries are version-pointer records with no data size.
 //
-// Accounting: num_objects counts every Main entry with exists=true, including
-// historical versions. It is not equivalent to the number of user-visible S3
-// objects. size/size_actual/size_utilized follow the same semantics as
-// RGWStorageStats.
+// These inclusion rules intentionally mirror cls_rgw check_index() so the scan
+// accounts the same entries as the bucket index header. Only Main-category
+// entries are included: multipart metadata/parts are reported under different
+// bucket-stats categories and must not silently change the billable total.
 //
 // Resharding: uses the current index generation. Objects being migrated may be
 // temporarily undercounted. Consistent with read_stats() behavior.
@@ -1700,7 +1698,8 @@ static int read_storage_class_stats(
       }
       for (const auto& raw_entry : entries) {
         marker = raw_entry.idx;
-        if (raw_entry.type != BIIndexType::Plain) {
+        if (raw_entry.type != BIIndexType::Plain &&
+            raw_entry.type != BIIndexType::Instance) {
           continue;
         }
         rgw_bucket_dir_entry dir_entry;
@@ -1713,7 +1712,10 @@ static int read_storage_class_stats(
                              << ": " << err.what() << dendl;
           return -EIO;
         }
-        if (!dir_entry.exists || dir_entry.meta.category != RGWObjCategory::Main) {
+        const bool accounted_entry = dir_entry.exists &&
+            (raw_entry.type == BIIndexType::Instance || dir_entry.flags == 0);
+        if (!accounted_entry ||
+            dir_entry.meta.category != RGWObjCategory::Main) {
           continue;
         }
         const std::string& sc =
