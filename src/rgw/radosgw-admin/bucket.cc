@@ -642,7 +642,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
       uint64_t ctr = 0;
       int shard;
       do {
-	obj = fmt::o.format("{}{:0>20}", prefix, ctr);
+	obj = fmt::format("{}{:0>20}", prefix, ctr);
 	shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(obj, num_shards);
 	++ctr;
       } while (shard != shard_id);
@@ -654,7 +654,7 @@ int rgw_admin_bucket(const DoutPrefixProvider* dpp,
     } else {
       std::vector<std::string> objs(num_shards);
       for (uint64_t ctr = 0, shardsleft = num_shards; shardsleft > 0; ++ctr) {
-	auto key = fmt::o.format("{}{:0>20}", prefix, ctr);
+	auto key = fmt::format("{}{:0>20}", prefix, ctr);
 	auto shard = RGWSI_BucketIndex_RADOS::bucket_shard_index(key, num_shards);
 	if (objs[shard].empty()) {
 	  objs[shard] = std::move(key);
