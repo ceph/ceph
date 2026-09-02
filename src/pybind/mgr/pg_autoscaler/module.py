@@ -25,8 +25,6 @@ Some terminology is made up for the purposes of this module:
 
 INTERVAL = 5
 
-PG_NUM_MIN = 32  # unless specified on a per-pool basis
-
 if TYPE_CHECKING:
     import sys
     if sys.version_info >= (3, 8):
@@ -193,6 +191,7 @@ class PgAutoscaler(MgrModule):
     NATIVE_OPTIONS = [
         'mon_target_pg_per_osd',
         'mon_max_pg_per_osd',
+        'osd_pool_default_pg_num'
     ]
 
     MODULE_OPTIONS = [
@@ -223,6 +222,7 @@ class PgAutoscaler(MgrModule):
             self.sleep_interval = 60
             self.mon_target_pg_per_osd = 0
             self.threshold = 3.0
+            self.osd_pool_default_pg_num = 32
 
     def config_notify(self) -> None:
         for opt in self.NATIVE_OPTIONS:
@@ -535,7 +535,7 @@ class PgAutoscaler(MgrModule):
         """
         for i, group in enumerate(pool_groups):
             for pool_name, p in group.pools.items():
-                min_pg = p.get('options', {}).get('pg_num_min', PG_NUM_MIN)
+                min_pg = p.get('options', {}).get('pg_num_min', self.osd_pool_default_pg_num)
                 max_pg = p.get('options', {}).get('pg_num_max')
                 pool_pg_target = int(group.pg_target_total / group.size())
                 final_pool_pg_target_total = backtrack[i].current_pg_sum - backtrack[i].prev_pg_sum + group.rd_down_total
