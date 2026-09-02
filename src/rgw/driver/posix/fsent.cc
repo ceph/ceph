@@ -25,6 +25,7 @@ const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 const int64_t READ_SIZE = 128 * 1024;
 
+
 namespace posix {
 
 /*
@@ -1299,6 +1300,7 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
   } else if (ret == 0) {
     created = true;
     cur_version.reset();
+    cur_is_dm = false;
   }
   ret = open(dpp);
   if (ret < 0) {
@@ -1400,6 +1402,7 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
 
   if (force) {
     cur_version.reset();
+    cur_is_dm = false;
   }
 
   if (cur_version) {
@@ -1444,15 +1447,15 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
       return ret;
     }
     bufferlist bl;
-    if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-      uint16_t flags = 0;
-      ceph::decode(flags, bl);
-      if (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
+    if (get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
+      bool val{false};
+      ceph::decode(val, bl);
+      if (val) {
         ldpp_dout(dpp, 0) << "INFO: found a delete marker, "
                           << get_name() << dendl;
        // cur_version.reset();
        // return -ENOENT;
-        curr_is_dm = true;
+        cur_is_dm = true;
         return 0;
       }
     }
@@ -1656,10 +1659,10 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
   }
 
   buffer::list bl;
-  uint16_t flags = 0;
-  flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-  ceph::encode(flags, bl);
-  attrs[RGW_POSIX_ATTR_VERSION] = std::move(bl);
+  bool dm = 0;
+  dm = true;
+  ceph::encode(dm, bl);
+  attrs[RGW_POSIX_ATTR_DELETE_MARKER] = std::move(bl);
 
   // Write attributes before linking
   ret = marker->write_attrs(dpp, y, attrs, nullptr);
@@ -1728,7 +1731,7 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
     cur_version = std::move(f);
-    curr_is_dm = true;
+    cur_is_dm = true;
     return 0;
   } else {
     /* Delete specific version */
@@ -1748,7 +1751,7 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
         return ret;
       }
       bufferlist bl;
-      if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+      if (get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
         if (result) {
           result->delete_marker = true;
         }
@@ -1859,7 +1862,7 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
         if (ret < 0) {
           return ret;
         }
-        if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+        if (get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
           fill_flags |= FSEnt::FLAG_DELETE_MARKER;
         }
       }
