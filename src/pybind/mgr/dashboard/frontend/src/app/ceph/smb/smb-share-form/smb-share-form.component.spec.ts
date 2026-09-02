@@ -16,6 +16,7 @@ import {
 } from 'carbon-components-angular';
 import { SmbService } from '~/app/shared/api/smb.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { SMB_CEPHFS_CONTEXT, SMB_CONTEXT } from '~/app/shared/constants/smb.constant';
 
 describe('SmbShareFormComponent', () => {
   let component: SmbShareFormComponent;
@@ -37,7 +38,11 @@ describe('SmbShareFormComponent', () => {
         CheckboxModule
       ],
       declarations: [SmbShareFormComponent],
-      providers: [SmbService, TaskWrapperService]
+      providers: [
+        SmbService,
+        TaskWrapperService,
+        { provide: SMB_CONTEXT, useValue: SMB_CEPHFS_CONTEXT }
+      ]
     }).compileComponents();
 
     fixture = TestBed.createComponent(SmbShareFormComponent);
