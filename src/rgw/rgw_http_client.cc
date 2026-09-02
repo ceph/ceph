@@ -155,6 +155,10 @@ void rgw_http_req_data::set_state(int bitmask) {
   /* no need to lock here, moreover curl_easy_pause() might trigger
    * the data receive callback :/
    */
+  if (done || !curl_handle) {
+    // the request finished before the change was applied
+    return;
+  }
   CURLcode rc = curl_easy_pause(**curl_handle, bitmask);
   if (rc != CURLE_OK) {
     dout(0) << "ERROR: curl_easy_pause() returned rc=" << rc << dendl;
@@ -887,7 +891,15 @@ void RGWHTTPManager::_finish_request(rgw_http_req_data *req_data, int ret)
 
 void RGWHTTPManager::_set_req_state(set_state& ss)
 {
-  ss.req->set_state(ss.bitmask);
+  /*
+   * requests are erased from reqs under reqs_lock when they finish,
+   * so a missing id means there is nothing to pause or resume
+   */
+  auto iter = reqs.find(ss.id);
+  if (iter == reqs.end()) {
+    return;
+  }
+  iter->second->set_state(ss.bitmask);
 }
 /*
  * hook request to the curl multi handle
@@ -1085,7 +1097,7 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
 
   {
     std::lock_guard l{reqs_change_state_lock};
-    reqs_change_state.push_back(set_state(req_data, bitmask));
+    reqs_change_state.push_back(set_state(req_data->id, bitmask));
   }
   int ret = signal_thread();
   if (ret < 0) {
