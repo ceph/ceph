@@ -25,7 +25,16 @@
  * Based on https://github.com/third774/ng-bootstrap-form-validation
  */
 
-import { Directive, Host, HostBinding, Input, Optional, SkipSelf } from '@angular/core';
+import {
+  Directive,
+  ElementRef,
+  Host,
+  HostBinding,
+  HostListener,
+  Input,
+  Optional,
+  SkipSelf
+} from '@angular/core';
 import { ControlContainer, UntypedFormControl } from '@angular/forms';
 
 export function controlPath(name: string, parent: ControlContainer): string[] {
@@ -72,12 +81,27 @@ export class CdFormControlDirective {
     return this.parent ? this.parent.formDirective : null;
   }
 
+  @HostListener('input')
+  @HostListener('blur')
+  onInput() {
+    if (!this.control) {
+      return;
+    }
+    const nativeElement = this.elRef.nativeElement as HTMLInputElement;
+    if (nativeElement?.validity?.badInput) {
+      const errors: Record<string, any> = { ...this.control.errors, pattern: true };
+      delete errors['required'];
+      this.control.setErrors(errors);
+    }
+  }
+
   constructor(
     // this value might be null, but we union type it as such until
     // this issue is resolved: https://github.com/angular/angular/issues/25544
     @Optional()
     @Host()
     @SkipSelf()
-    private parent: ControlContainer
+    private parent: ControlContainer,
+    private elRef: ElementRef
   ) {}
 }
