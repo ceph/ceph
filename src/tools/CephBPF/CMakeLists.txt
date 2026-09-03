@@ -161,6 +161,7 @@ target_include_directories(radostrace PRIVATE
 )
 
 target_link_libraries(radostrace
+  legacy-option-headers
   libbpf::libbpf
   LibElf::LibElf
   LibDw::LibDw
