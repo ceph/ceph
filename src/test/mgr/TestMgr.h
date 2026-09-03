@@ -82,6 +82,12 @@ public:
     mc = std::make_unique<MonClient>(cct.get(), *icp);
     messenger.reset(
         Messenger::create_client_messenger(cct.get(), "unittest_mgr"));
+    // The messenger must be started for shutdown()/wait() in TearDown() to
+    // perform a full teardown: wait() returns early on a never-started
+    // messenger, skipping the final stack drain, so the loopback
+    // AsyncConnection's deferred cleanup would run on the msgr-worker
+    // thread after the messenger is destroyed and crash in ~AsyncConnection.
+    messenger->start();
     objecter =
         std::make_unique<Objecter>(cct.get(), messenger.get(), mc.get(), *icp);
 
