@@ -1,0 +1,10 @@
+[main]
+fastestmirror=true
+max_parallel_downloads=10
+metadata_expire=1h
+clean_requirements_on_remove=true
+assumeyes=true
+gpgcheck=1
+keepcache=0
+plugins=1
+installonly_limit=3
