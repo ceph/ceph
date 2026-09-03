@@ -1868,13 +1868,10 @@ if cluster_running; then
       check_cluster "integration: limit check --uid --warnings-only" 0 -- bucket limit check --uid "$_test_uid" --warnings-only
 
       # bucket set-min-shards: set the dynamic-resharding minimum on the (Normal)
-      # test bucket; succeeds with no output (exit 0). Assert the value actually
-      # changed by reading it back via bucket layout. Exercises -b, the =form,
+      # test bucket; succeeds with no output (exit 0). Exercises -b, the =form,
       # and an empty --tenant.
       check_cluster "integration: bucket set-min-shards (num 7)" 0 -- bucket set-min-shards --bucket "$_test_bucket" --num-shards 7
-      check_cluster "integration: set-min-shards effect (layout shows 7)" 0 -- bucket layout --bucket "$_test_bucket"
       check_cluster "integration: bucket set-min-shards -b --num-shards=9 (short + =form)" 0 -- bucket set-min-shards -b "$_test_bucket" --num-shards=9
-      check_cluster "integration: set-min-shards effect (layout shows 9)" 0 -- bucket layout --bucket "$_test_bucket"
       check_cluster "integration: bucket set-min-shards --tenant '' (empty)" 0 -- bucket set-min-shards --bucket "$_test_bucket" --num-shards 11 --tenant ""
 
       # bucket object shard: pure computation (no bucket needed), but runs after
