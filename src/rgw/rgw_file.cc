@@ -1506,13 +1506,15 @@ namespace rgw {
     if (factory == nullptr) {
       return false;
     }
-    /* XXXX seems like we should use a flag rather than is_linked(),
-     * as we now depend on safe_link mode */
-    /* in the non-delete case, handle may still be in handle table */
     if (fh_hook.is_linked()) {
-      /* in this case, we are being called from a context which holds
-       * the partition lock */
-      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_NONE);
+      if (fs->fh_cache.is_same_partition(fh.fh_hk.object,
+					 factory->fhk.fh_hk.object)) {
+	fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_NONE);
+      } else {
+	fs->fh_cache.unlock_for(factory->fhk.fh_hk.object);
+	fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+	fs->fh_cache.lock_for(factory->fhk.fh_hk.object);
+      }
     }
     return true;
   } /* RGWFileHandle::reclaim */
