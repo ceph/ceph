@@ -298,6 +298,7 @@ def test_preview_table_osd_smoke():
 
 @mock.patch("orchestrator.module.OrchestratorCli.release_name", new_callable=mock.PropertyMock)
 @mock.patch("orchestrator.module.OrchestratorCli._apply_misc")
+@mock.patch("orchestrator.module.OrchestratorCli.describe_service")
 @mock.patch("orchestrator.module.OrchestratorCli.remote")
 @mock.patch("orchestrator.module.OrchestratorCli.get")
 class TestApplyNvmeof:
@@ -305,21 +306,22 @@ class TestApplyNvmeof:
     def setup_method(self):
         self.m = OrchestratorCli('orchestrator', 0, 0)
 
-    def test_missing_group_raises_validation_error(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_missing_group_raises_validation_error(self, mock_get, mock_remote, mock_describe_service, mock_apply_misc, mock_release_name):
         res = self.m._apply_nvmeof(pool="mypool", group="")
 
         assert res.retval != 0
         assert "The --group argument is required" in res.stderr
         mock_apply_misc.assert_not_called()
 
-    def test_inbuf_raises_validation_error(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_inbuf_raises_validation_error(self, mock_get, mock_remote, mock_describe_service, mock_apply_misc, mock_release_name):
         res = self.m._apply_nvmeof(pool="mypool", group="mygroup", inbuf="some_yaml_content")
 
         assert res.retval != 0
         assert "unrecognized command -i; -h or --help for usage" in res.stderr
         mock_apply_misc.assert_not_called()
 
-    def test_custom_pool_skips_metadata_pool_creation(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_custom_pool_skips_metadata_pool_creation(self, mock_get, mock_remote, mock_describe_service, mock_apply_misc, mock_release_name):
+        mock_describe_service.return_value = OrchResult(result=[])
         mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
 
         res = self.m._apply_nvmeof(pool="custompool", group="mygroup")
@@ -328,7 +330,7 @@ class TestApplyNvmeof:
         mock_apply_misc.assert_called_once()
         assert res.retval == 0
 
-    def test_default_pool_fails_if_module_disabled(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_default_pool_fails_if_module_disabled(self, mock_get, mock_remote, mock_describe_service, mock_apply_misc, mock_release_name):
         mock_release_name.return_value = "squid"
         mock_get.return_value = {'modules': [], 'always_on_modules': {}}
 
@@ -342,14 +344,20 @@ class TestApplyNvmeof:
         mock_remote.assert_not_called()
         mock_apply_misc.assert_not_called()
 
-    def test_default_pool_creates_metadata_pool_if_module_enabled(self, mock_get, mock_remote, mock_apply_misc, mock_release_name):
+    def test_default_pool_creates_metadata_pool_if_module_enabled(self, mock_get, mock_remote, mock_describe_service, mock_apply_misc, mock_release_name):
         mock_release_name.return_value = "squid"
         mock_get.return_value = {'modules': ['nvmeof'], 'always_on_modules': {}}
+        mock_describe_service.return_value = OrchResult(result=[])
         mock_apply_misc.return_value = HandleCommandResult(retval=0, stdout="Success")
 
         res = self.m._apply_nvmeof(pool=".nvmeof", group="mygroup")
 
         mock_remote.assert_called_once_with('nvmeof', 'create_pool_if_not_exists')
+        mock_describe_service.assert_called_once_with(
+            service_type='nvmeof',
+            service_name='nvmeof.nvmeof.mygroup',
+            refresh=False,
+        )
         mock_apply_misc.assert_called_once()
         assert res.retval == 0
 
