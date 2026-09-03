@@ -97,6 +97,17 @@ to certificate files on disk:
    ceph config set mgr mgr/prometheus/key_file /path/to/key.pem
    ceph config set mgr mgr/prometheus/ssl true
 
+.. note::
+
+   Certificates configured with ``ceph prometheus set-ssl-certificate`` and
+   ``ceph prometheus set-ssl-certificate-key`` take precedence over
+   ``crt_file`` and ``key_file``. To switch to file-based certificates, clear
+   the stored certificate and key first:
+
+   .. prompt:: bash #
+
+      ceph prometheus clear-ssl-certificate
+
 To set a certificate for a specific manager daemon (e.g., ``mgr.a``),
 pass the manager ID:
 
