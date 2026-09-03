@@ -1076,10 +1076,11 @@ class OSDRemovalQueue(object):
             logger.debug(f"Removing {osd} from the queue.")
 
         # self could change while this is processing (osds get added from the CLI)
-        # The new set is: 'an intersection of all osds that are still not empty/removed (new_queue) and
-        # osds that were added while this method was executed'
+        # The resulting set must contain the OSDs from the original copy that are
+        # still not empty/removed (new_queue) + OSDs added while processing it.
+        completed_osds = set(all_osds) - new_queue
         with self.lock:
-            self.osds.intersection_update(new_queue)
+            self.osds.difference_update(completed_osds)
             self._save_to_store()
         return result
 
