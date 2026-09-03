@@ -2267,6 +2267,10 @@ else:
                 "gw_group": Param(str, "NVMeoF gateway group", True, None),
                 "server_address": Param(str, "NVMeoF gateway address", True, None),
                 "traddr": Param(str, "NVMeoF gateway address (deprecated)", True, None),
+                "keep_connections": Param(
+                    bool,
+                    "Do not disconnect existing connections from that host",
+                    True, False),
             },
         )
         @convert_to_model(model.RequestStatus)
@@ -2274,7 +2278,8 @@ else:
         def delete(self, nqn: str, host_nqn: str, force: Optional[bool] = False,
                    gw_group: Optional[str] = None,
                    server_address: Optional[str] = None,
-                   traddr: Optional[str] = None):
+                   traddr: Optional[str] = None,
+                   keep_connections: Optional[bool] = False):
             server_address = resolve_nvmeof_server_address(
                 server_address=server_address,
                 traddr=traddr
@@ -2283,7 +2288,8 @@ else:
                 gw_group=gw_group,
                 server_address=server_address
             ).stub.remove_host(
-                NVMeoFClient.pb2.remove_host_req(subsystem_nqn=nqn, host_nqn=host_nqn, force=force)
+                NVMeoFClient.pb2.remove_host_req(subsystem_nqn=nqn, host_nqn=host_nqn, force=force,
+                                                 keep_connections=keep_connections)
             )
 
         @Endpoint('PUT', '{host_nqn}/change_key')

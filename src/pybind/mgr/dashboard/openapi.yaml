@@ -10333,6 +10333,12 @@ paths:
         name: traddr
         schema:
           type: string
+      - default: false
+        description: Do not disconnect existing connections from that host
+        in: query
+        name: keep_connections
+        schema:
+          type: boolean
       responses:
         '202':
           content:
