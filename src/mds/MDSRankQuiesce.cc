@@ -370,8 +370,18 @@ void MDSRank::quiesce_cluster_update() {
 }
 
 bool MDSRank::quiesce_dispatch(const cref_t<Message> &m) {
+  const int type = m->get_type();
+  if (type != MSG_MDS_QUIESCE_DB_LISTING && type != MSG_MDS_QUIESCE_DB_ACK) {
+    return false;
+  }
+
+  /* Quiesce db messages are consumed here, from the top of _dispatch(), and
+   * so never reach MDSRank::handle_message() where the other message phases
+   * are charged; the timer has to live here to see them at all. */
+  MDSPhaseTracker::Timer phase_timer(&phase_tracker, l_mdsp_quiesce_message);
+
   try {
-    switch(m->get_type()) {
+    switch(type) {
       case MSG_MDS_QUIESCE_DB_LISTING:
       {
         const auto& req = ref_cast<MMDSQuiesceDbListing>(m);

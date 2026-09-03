@@ -239,9 +239,6 @@ int MDSPhaseTracker::phase_for_message(int message_type)
     return l_mdsp_heartbeat_message;
   case MSG_MDS_TABLE_REQUEST:
     return l_mdsp_table_message;
-  case MSG_MDS_QUIESCE_DB_LISTING:
-  case MSG_MDS_QUIESCE_DB_ACK:
-    return l_mdsp_quiesce_message;
   case MSG_MDS_SCRUB:
   case MSG_MDS_SCRUB_STATS:
     return l_mdsp_scrub_message;
