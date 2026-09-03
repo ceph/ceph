@@ -3,9 +3,16 @@ import logging
 from fnmatch import fnmatch
 from enum import Enum
 
-from cephadm.ssl_cert_utils import SSLCerts, SSLConfigException
+from cephadm.ssl_certs import SSLCerts
 from mgr_util import verify_tls, certificate_days_to_expire, ServerConfigException
-from cephadm.ssl_cert_utils import get_certificate_info, get_private_key_info
+from ceph.deployment.tls_utils import (
+    get_certificate_info,
+    get_private_key_info,
+    parse_tls_pem_bundle,
+    contains_private_key,
+    contains_multiple_pem_blocks,
+    SSLConfigException
+)
 from cephadm.tlsobject_types import Cert, PrivKey, TLSObjectScope, TLSObjectException, TLSObjectProtocol, TLSCredentials
 from cephadm.tlsobject_store import TLSObjectStore
 
@@ -363,6 +370,78 @@ class CertMgr:
     def save_key(self, key_name: str, key: str, service_name: Optional[str] = None, host: Optional[str] = None,
                  user_made: bool = False, editable: bool = False) -> None:
         self.key_store.save_tlsobject(key_name, key, service_name, host, user_made, editable)
+
+    def save_cert_key_from_pem(
+        self,
+        cert_name: str,
+        key_name: str,
+        pem_data: str,
+        service_name: Optional[str] = None,
+        host: Optional[str] = None,
+        user_made: bool = True,
+        editable: bool = True,
+    ) -> Tuple[str, str]:
+        """Ingest user-provided PEM data and store certificate/key objects.
+
+        This helper accepts either cert-only PEM data or a combined PEM bundle.
+
+        * **Single cert-only PEM**:
+          stored unchanged under *cert_name*. No key is saved and the returned
+          private key is an empty string.
+
+        * **Multi-block certificate chain without a key**:
+          parsed and normalised via ``parse_tls_pem_bundle()``. The resulting
+          certificate chain is stored under *cert_name*. No key is saved.
+
+        * **Combined PEM bundle** containing a private key and one or more
+          CERTIFICATE blocks:
+          parsed and split on ingest. The certificate chain is stored under
+          *cert_name* and the private key is stored under *key_name*. The private
+          key is validated against the leaf certificate before either object is
+          persisted.
+
+        Note:
+            Single-block cert-only input is not parsed or validated by this
+            method; callers that require certificate validation must perform it
+            separately.
+
+        Args:
+            cert_name: Logical certificate name in the TLS object store.
+            key_name: Logical private-key name in the TLS object store.
+            pem_data: Raw PEM string.
+            service_name: Service target for SERVICE-scoped objects.
+            host: Host target for HOST-scoped objects.
+            user_made: Mark the stored objects as user-provided.
+            editable: Allow subsequent CLI edits.
+
+        Returns:
+            ``(cert_chain, private_key)`` — the values stored or selected for
+            storage. ``private_key`` is an empty string when no private key block
+            was present.
+
+        Raises:
+            SSLConfigException: If bundle parsing or key/certificate validation
+                fails, for example because the bundle has multiple private keys,
+                no CERTIFICATE block, an encrypted/unsupported private key, or a
+                private key that does not match the leaf certificate.
+        """
+        if contains_private_key(pem_data) or contains_multiple_pem_blocks(pem_data):
+            # Combined PEM bundle or multi-block cert chain: parse and normalize before storing.
+            cert_chain, private_key = parse_tls_pem_bundle(pem_data)
+            logger.debug(
+                'certmgr: split fullchain PEM for %s (service=%s host=%s)',
+                cert_name, service_name, host,
+            )
+        else:
+            # Single cert block (most common case for existing callers).
+            cert_chain = pem_data
+            private_key = ''
+
+        self.cert_store.save_tlsobject(cert_name, cert_chain, service_name, host, user_made, editable)
+        if private_key:
+            self.key_store.save_tlsobject(key_name, private_key, service_name, host, user_made, editable)
+
+        return cert_chain, private_key
 
     def save_self_signed_cert_key_pair(self, service_name: str, tls_creds: TLSCredentials, host: str,
                                        label: Optional[str] = None) -> None:
