@@ -209,7 +209,7 @@ def run_admin_cmds(ctx,config):
                 'create', 'realms',
                 '-s', realm,
                 '-s', 'enabled=true',
-                '-s', 'accessTokenLifespan=1800',
+                '-s', 'accessTokenLifespan=3600',
                 '-o',
             ],
         )

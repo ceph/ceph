@@ -189,6 +189,7 @@ enum class OPT {
 #include "radosgw-admin/opt_datalog.inc"
 #endif
 #include "radosgw-admin/opt_role.inc"
+#include "radosgw-admin/opt_oidc.inc"
 #ifdef WITH_RADOSGW_RADOS
 #include "radosgw-admin/opt_reshard.inc"
 #include "radosgw-admin/opt_mfa.inc"

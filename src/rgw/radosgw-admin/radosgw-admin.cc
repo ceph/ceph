@@ -81,6 +81,7 @@ extern "C" {
 #endif
 #include "radosgw-admin/bilog.h"
 #include "radosgw-admin/role.h"
+#include "radosgw-admin/oidc.h"
 #include "radosgw-admin/reshard.h"
 #include "radosgw-admin/cors.h"
 
@@ -124,7 +125,6 @@ extern "C" {
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
 #include "rgw_data_access.h"
-#include "rgw_account.h"
 #include "rgw_bucket_logging.h"
 #include "rgw_dedup_cluster.h"
 #include "rgw_dedup_filter.h"
@@ -371,6 +371,11 @@ void usage()
   cout << "  role policy detach               detach a managed policy\n";
   cout << "  role policy list attached        list attached managed policies\n";
   cout << "  role update                      update max_session_duration of a role\n";
+  cout << "  oidc-provider create             create an OIDC provider (global if no --account-id)\n";
+  cout << "  oidc-provider modify             update thumbprints and/or client-ids of an OIDC provider\n";
+  cout << "  oidc-provider get                get an OIDC provider\n";
+  cout << "  oidc-provider delete             delete an OIDC provider\n";
+  cout << "  oidc-provider list               list OIDC providers\n";
   cout << "  reshard add                      schedule a resharding of a bucket\n";
   cout << "  reshard list                     list all bucket resharding or scheduled to be resharded\n";
   cout << "  reshard status                   read bucket resharding status\n";
@@ -581,6 +586,10 @@ void usage()
   cout << "   --path-prefix                 path prefix for filtering roles\n";
   cout << "   --description                 Role description\n";
   cout << "   --policy-arn                  ARN of a managed policy\n";
+  cout << "\nOIDC Provider options:\n";
+  cout << "   --provider-url                URL of the OIDC provider\n";
+  cout << "   --client-ids                  comma-separated list of client IDs\n";
+  cout << "   --thumbprints                 comma-separated list of thumbprints\n";
 #ifdef WITH_RADOSGW_RADOS
   cout << "\nMFA options:\n";
 #endif
@@ -870,6 +879,11 @@ static SimpleCmd::Commands all_cmds = {
   { "role policy detach", OPT::ROLE_POLICY_DETACH },
   { "role policy list attached", OPT::ROLE_POLICY_LIST_ATTACHED },
   { "role update", OPT::ROLE_UPDATE },
+  { "oidc-provider create", OPT::OIDC_PROVIDER_CREATE },
+  { "oidc-provider modify", OPT::OIDC_PROVIDER_MODIFY },
+  { "oidc-provider get", OPT::OIDC_PROVIDER_GET },
+  { "oidc-provider delete", OPT::OIDC_PROVIDER_DELETE },
+  { "oidc-provider list", OPT::OIDC_PROVIDER_LIST },
 #ifdef WITH_RADOSGW_RADOS
   { "reshard bucket", OPT::BUCKET_RESHARD },
   { "reshard add", OPT::RESHARD_ADD },
@@ -1244,6 +1258,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
+  std::string provider_url, client_ids_str, thumbprints_str;
   std::string description;
   std::string policy_arn;
   std::string redirect_zone;
@@ -2021,6 +2036,12 @@ int main(int argc, const char **argv)
       policy_arn = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-session-duration", (char*)NULL)) {
       max_session_duration = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--provider-url", (char*)NULL)) {
+      provider_url = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--client-ids", (char*)NULL)) {
+      client_ids_str = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--thumbprints", (char*)NULL)) {
+      thumbprints_str = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--description", (char*)NULL)) {
       description = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
@@ -2334,6 +2355,8 @@ int main(int argc, const char **argv)
 #endif
 			 OPT::ROLE_GET,
 			 OPT::ROLE_LIST,
+			 OPT::OIDC_PROVIDER_GET,
+			 OPT::OIDC_PROVIDER_LIST,
 			 OPT::ROLE_POLICY_LIST,
 			 OPT::ROLE_POLICY_GET,
 			 OPT::ROLE_POLICY_LIST_ATTACHED,
@@ -2449,6 +2472,11 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::ROLE_POLICY_DETACH
                           && opt_cmd != OPT::ROLE_POLICY_LIST_ATTACHED
                           && opt_cmd != OPT::ROLE_UPDATE
+                          && opt_cmd != OPT::OIDC_PROVIDER_CREATE
+                          && opt_cmd != OPT::OIDC_PROVIDER_MODIFY
+                          && opt_cmd != OPT::OIDC_PROVIDER_GET
+                          && opt_cmd != OPT::OIDC_PROVIDER_DELETE
+                          && opt_cmd != OPT::OIDC_PROVIDER_LIST
 #ifdef WITH_RADOSGW_RADOS
                           && opt_cmd != OPT::RESHARD_ADD
                           && opt_cmd != OPT::RESHARD_CANCEL
@@ -2832,6 +2860,8 @@ int main(int argc, const char **argv)
 #endif
                                         OPT::CAPS_ADD, OPT::CAPS_RM,
                                         OPT::ROLE_CREATE, OPT::ROLE_DELETE,
+                                        OPT::OIDC_PROVIDER_CREATE, OPT::OIDC_PROVIDER_MODIFY,
+                                        OPT::OIDC_PROVIDER_DELETE,
                                         OPT::ROLE_POLICY_PUT, OPT::ROLE_POLICY_DELETE,
                                         OPT::ROLE_POLICY_ATTACH, OPT::ROLE_POLICY_DETACH,
                                         OPT::USER_POLICY_ATTACH, OPT::USER_POLICY_DETACH,
@@ -3503,6 +3533,24 @@ int main(int argc, const char **argv)
       account_opts.max_entries = max_entries;
     }
     ret = rgw_admin_account(dpp(), driver, stream_flusher, account_opts);
+    if (ret != 0) {
+      return ret;
+    }
+  }
+
+  if (opt_cmd == OPT::OIDC_PROVIDER_CREATE ||
+      opt_cmd == OPT::OIDC_PROVIDER_MODIFY ||
+      opt_cmd == OPT::OIDC_PROVIDER_GET ||
+      opt_cmd == OPT::OIDC_PROVIDER_DELETE ||
+      opt_cmd == OPT::OIDC_PROVIDER_LIST) {
+    rgw_admin_oidc_options oidc_opts;
+    oidc_opts.command = opt_cmd;
+    oidc_opts.tenant = tenant;
+    oidc_opts.account_id = account_id;
+    oidc_opts.provider_url = provider_url;
+    oidc_opts.client_ids_str = client_ids_str;
+    oidc_opts.thumbprints_str = thumbprints_str;
+    ret = rgw_admin_oidc(dpp(), driver, formatter.get(), oidc_opts);
     if (ret != 0) {
       return ret;
     }

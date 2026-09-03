@@ -80,7 +80,6 @@ void RGWZone::dump(Formatter *f) const
   encode_json("id", id, f);
   encode_json("name", name, f);
   encode_json("endpoints", endpoints, f);
-  encode_json("log_meta", log_meta, f);
   encode_json("log_data", log_data, f);
   encode_json("bucket_index_max_shards", bucket_index_max_shards, f);
   encode_json("read_only", read_only, f);
@@ -99,7 +98,6 @@ void RGWZone::decode_json(JSONObj *obj)
     id = name;
   }
   JSONDecoder::decode_json("endpoints", endpoints, obj);
-  JSONDecoder::decode_json("log_meta", log_meta, obj);
   JSONDecoder::decode_json("log_data", log_data, obj);
   JSONDecoder::decode_json("bucket_index_max_shards", bucket_index_max_shards, obj);
   JSONDecoder::decode_json("read_only", read_only, obj);
@@ -941,6 +939,24 @@ std::string get_zonegroup_endpoint(const RGWZoneGroup& info)
     return z->second.endpoints.front();
   }
   return "";
+}
+
+const RGWZoneGroup* find_zonegroup_by_id(const RGWZoneGroup& local_zonegroup,
+                                         const std::optional<RGWPeriod>& period,
+                                         const std::string& zonegroup_id)
+{
+  if (local_zonegroup.equals(zonegroup_id)) {
+    return &local_zonegroup;
+  }
+  if (!period) {
+    return nullptr;
+  }
+  const auto& zonegroups = period->period_map.zonegroups;
+  auto z = zonegroups.find(zonegroup_id);
+  if (z == zonegroups.end()) {
+    return nullptr;
+  }
+  return &z->second;
 }
 
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,

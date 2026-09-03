@@ -841,6 +841,7 @@ set(radosgw_admin_srcs
   radosgw-admin/bucket_sync.cc
   radosgw-admin/bilog.cc
   radosgw-admin/role.cc
+  radosgw-admin/oidc.cc
   radosgw-admin/reshard.cc
   radosgw-admin/cors.cc
   radosgw-admin/metadata.cc
