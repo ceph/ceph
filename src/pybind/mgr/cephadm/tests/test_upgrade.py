@@ -789,6 +789,37 @@ def test_enough_mds_for_ok_to_stop(get, get_daemons_by_service, cephadm_module: 
         DaemonDescription(daemon_type='mds', daemon_id='myfs.test.host1.gfknd', service_name='mds.myfs.test'))
 
 
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+@mock.patch("cephadm.module.HostCache.get_daemons_by_service")
+@mock.patch("cephadm.CephadmOrchestrator.get")
+def test_enough_mds_for_ok_to_stop_uses_actual_membership(
+        get, get_daemons_by_service, cephadm_module: CephadmOrchestrator):
+    # mds_join_fs is a preference, not a constraint: a standby deployed by
+    # service mds.fsA can be promoted into a rank of fsB. The filesystem that
+    # lists the daemon has to win over the one its service name names,
+    # otherwise the wrong max_mds is compared and the ok-to-stop check is
+    # skipped for a daemon that is holding a rank.
+    mds = DaemonDescription(daemon_type='mds',
+                            daemon_id='fsA.host1.gfknd',
+                            service_name='mds.fsA')
+    get.side_effect = [{'filesystems': [
+        {'mdsmap': {'fs_name': 'fsA', 'max_mds': 3, 'info': {}}},
+        {'mdsmap': {'fs_name': 'fsB', 'max_mds': 2,
+                    'info': {'gid_1': {'name': 'fsA.host1.gfknd',
+                                       'state': 'up:active'}}}},
+    ]}]
+    get_daemons_by_service.side_effect = [[DaemonDescription()] * 3]
+    assert cephadm_module.upgrade._enough_mds_for_ok_to_stop(mds)
+
+    # with no membership recorded anywhere, the service naming convention is
+    # still used
+    get.side_effect = [{'filesystems': [
+        {'mdsmap': {'fs_name': 'fsA', 'max_mds': 2, 'info': {}}},
+    ]}]
+    get_daemons_by_service.side_effect = [[DaemonDescription()] * 3]
+    assert cephadm_module.upgrade._enough_mds_for_ok_to_stop(mds)
+
+
 def _mds_need_upgrade_entries() -> List[Tuple[DaemonDescription, bool]]:
     return [
         (DaemonDescription(

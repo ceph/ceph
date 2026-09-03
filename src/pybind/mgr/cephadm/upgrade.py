@@ -1415,27 +1415,36 @@ class CephadmUpgrade:
     def _enough_mds_for_ok_to_stop(self, mds_daemon: DaemonDescription) -> bool:
         # type (DaemonDescription) -> bool
 
-        # find fs this mds daemon belongs to
+        assert mds_daemon.daemon_id
         fsmap = self.mgr.get("fs_map")
+
+        # Find the fs this mds daemon belongs to. mds_join_fs, which the mds
+        # service sets from the service name, is only a preference: a standby
+        # can be promoted into a rank of any filesystem that is short on MDS.
+        # Prefer the filesystem that actually lists this daemon and fall back
+        # to the service naming convention when none does.
+        by_membership = None
+        by_service_name = None
+        service_fs_name = mds_daemon.service_name().split('.', 1)[1]
         for fs in fsmap.get('filesystems', []):
             mdsmap = fs["mdsmap"]
-            fs_name = mdsmap["fs_name"]
+            if any(info.get('name') == mds_daemon.daemon_id
+                   for info in mdsmap.get('info', {}).values()):
+                by_membership = mdsmap
+                break
+            if by_service_name is None and mdsmap["fs_name"] == service_fs_name:
+                by_service_name = mdsmap
 
-            assert mds_daemon.daemon_id
-            if fs_name != mds_daemon.service_name().split('.', 1)[1]:
-                # wrong fs for this mds daemon
-                continue
+        mdsmap = by_membership if by_membership is not None else by_service_name
+        if mdsmap is None:
+            return True  # if mds has no fs it should pass ok-to-stop
 
-            # get number of mds daemons for this fs
-            mds_count = len(
-                [daemon for daemon in self.mgr.cache.get_daemons_by_service(mds_daemon.service_name())])
+        # get number of mds daemons for this fs
+        mds_count = len(
+            [daemon for daemon in self.mgr.cache.get_daemons_by_service(mds_daemon.service_name())])
 
-            # standby mds daemons for this fs?
-            if mdsmap["max_mds"] < mds_count:
-                return True
-            return False
-
-        return True  # if mds has no fs it should pass ok-to-stop
+        # standby mds daemons for this fs?
+        return mdsmap["max_mds"] < mds_count
 
     def _detect_need_upgrade(self, daemons: List[DaemonDescription], target_digests: Optional[List[str]] = None, target_name: Optional[str] = None) -> Tuple[bool, List[Tuple[DaemonDescription, bool]], List[Tuple[DaemonDescription, bool]], int]:
         # this function takes a list of daemons and container digests. The purpose
