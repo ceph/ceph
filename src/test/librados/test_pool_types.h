@@ -53,7 +53,6 @@ inline std::string create_pool_by_type(
       if (result != "") {
         return result;
       }
-      result = set_allow_ec_overwrites_pp(pool_name, cluster, true);
       cluster.wait_for_latest_osdmap();
       return result;
     }
