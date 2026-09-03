@@ -1092,8 +1092,10 @@ touch pin/placeholder
         self.mount_a.run_shell([
             "rm", "-f", "kill_unlink_test/file_a"], wait=False)
 
-        # Wait for the MDS to finish crashing
-        time.sleep(10)
+        # Wait for the MDS to finish crashing.  The coredump is fully
+        # written before the rank is marked failed, so this also makes
+        # the subsequent delete_mds_coredump() deterministic.
+        self.fs.wait_for_death()
 
         # Clean up the core dump left by the crash
         self.delete_mds_coredump(rank0['name'])
@@ -1170,8 +1172,10 @@ touch pin/placeholder
         self.mount_a.run_shell([
             "rm", "-f", "kill_unlink_hl_test/file_a"], wait=False)
 
-        # Wait for the MDS to finish crashing
-        time.sleep(10)
+        # Wait for the MDS to finish crashing.  The coredump is fully
+        # written before the rank is marked failed, so this also makes
+        # the subsequent delete_mds_coredump() deterministic.
+        self.fs.wait_for_death()
 
         # Clean up the core dump left by the crash
         self.delete_mds_coredump(rank0['name'])
@@ -1205,8 +1209,10 @@ touch pin/placeholder
         self.mount_a.run_shell([
             "rm", "-f", "kill_unlink_hl_test/file_a_link"], wait=False)
 
-        # Wait for the MDS to finish crashing
-        time.sleep(10)
+        # Wait for the MDS to finish crashing.  The coredump is fully
+        # written before the rank is marked failed, so this also makes
+        # the subsequent delete_mds_coredump() deterministic.
+        self.fs.wait_for_death()
 
         # Clean up the core dump left by the crash
         self.delete_mds_coredump(rank0['name'])
