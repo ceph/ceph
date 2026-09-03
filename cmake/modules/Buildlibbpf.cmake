@@ -19,6 +19,7 @@ function(build_libbpf)
     CONFIGURE_COMMAND ""
     BUILD_COMMAND ${make_cmd}
       CC=${CMAKE_C_COMPILER}
+      EXTRA_CFLAGS=-fPIC
       BUILD_STATIC_ONLY=1
       OBJDIR=${libbpf_BINARY_DIR}/build
       DESTDIR=${libbpf_INSTALL_DIR}
