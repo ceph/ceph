@@ -29,6 +29,10 @@ int rgw_admin_gc(const DoutPrefixProvider* dpp,
   bool include_all = opts.include_all;
 
   if (command == OPT::GC_LIST) {
+    if (opts.bypass_gc) {
+      cerr << "ERROR: 'gc list' command does not support --bypass-gc option" << std::endl;
+      return EINVAL;
+    }
     if (specified_shard_id) {
       int max_gc_shards = min(static_cast<int>(driver->ctx()->_conf->rgw_gc_max_objs), rgw_shards_max());
       if (shard_id < 0 || shard_id >= max_gc_shards) {
@@ -73,6 +77,10 @@ int rgw_admin_gc(const DoutPrefixProvider* dpp,
   }
 
   if (command == OPT::GC_PROCESS) {
+    if (opts.bypass_gc) {
+      cerr << "ERROR: 'gc process' command does not support --bypass-gc option" << std::endl;
+      return EINVAL;
+    }
     if (specified_shard_id) {
       int max_gc_shards = min(static_cast<int>(driver->ctx()->_conf->rgw_gc_max_objs), rgw_shards_max());
       if (shard_id < 0 || shard_id >= max_gc_shards) {

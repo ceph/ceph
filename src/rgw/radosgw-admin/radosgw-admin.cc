@@ -3257,6 +3257,7 @@ int main(int argc, const char **argv)
     gopts.shard_id = shard_id;
     gopts.specified_shard_id = specified_shard_id;
     gopts.include_all = include_all;
+    gopts.bypass_gc = bypass_gc;
     ret = rgw_admin_gc(dpp(), driver, formatter.get(), gopts);
     if (ret != 0) {
       return ret;

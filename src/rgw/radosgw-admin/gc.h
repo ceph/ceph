@@ -16,6 +16,7 @@ struct rgw_admin_gc_options {
   int shard_id = 0;
   bool specified_shard_id = false;
   bool include_all = false;
+  bool bypass_gc = false;
 };
 
 
