@@ -13811,8 +13811,6 @@ void Client::_release_filelocks(Fh *fh)
   Inode *in = fh->inode.get();
   ldout(cct, 10) << __func__ << " " << fh << " ino " << in->ino << dendl;
 
-  list<ceph_filelock> activated_locks;
-
   list<pair<int, ceph_filelock> > to_release;
 
   if (fh->fcntl_locks) {
@@ -13820,7 +13818,7 @@ void Client::_release_filelocks(Fh *fh)
     for(auto p = lock_state->held_locks.begin(); p != lock_state->held_locks.end(); ) {
       auto q = p++;
       if (in->flags & I_ERROR_FILELOCK) {
-	lock_state->remove_lock(q->second, activated_locks);
+	lock_state->remove_lock(q->second);
       } else {
 	to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FCNTL, q->second));
       }
@@ -13832,7 +13830,7 @@ void Client::_release_filelocks(Fh *fh)
     for(auto p = lock_state->held_locks.begin(); p != lock_state->held_locks.end(); ) {
       auto q = p++;
       if (in->flags & I_ERROR_FILELOCK) {
-	lock_state->remove_lock(q->second, activated_locks);
+	lock_state->remove_lock(q->second);
       } else {
 	to_release.push_back(pair<int, ceph_filelock>(CEPH_LOCK_FLOCK, q->second));
       }
@@ -13883,8 +13881,7 @@ void Client::_update_lock_state(struct flock *fl, uint64_t owner,
   filelock.type = lock_cmd;
 
   if (filelock.type == CEPH_LOCK_UNLOCK) {
-    list<ceph_filelock> activated_locks;
-    lock_state->remove_lock(filelock, activated_locks);
+    lock_state->remove_lock(filelock);
   } else {
     bool r = lock_state->add_lock(filelock, false, false, NULL);
     ceph_assert(r);
