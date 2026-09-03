@@ -90,8 +90,7 @@ check_cluster() {
 # with the global placed both before and after the command.
 #
 # A consumed global lets the command run, so these rows need a cluster.
-# object shard prints the shard number for the object, here "shard": 10, which
-# shows the command reached its handler.
+# Exit 0 shows the command reached its handler.
 # ============================================================
 echo ""
 echo "=== ceph globals stripped before radosgw-admin's own flags (with cluster) ==="
@@ -115,16 +114,15 @@ check_cluster "global --rgw-zone default before command stripped" 0 -- \
   --rgw-zone default bucket object shard --object foo --num-shards 11
 
 # the same globals again on a second command, so the stripping is not specific
-# to one command. bucket list prints a listing; the rows assert its opening
-# bracket, not the contents, which are the cluster's.
+# to one command.
 check_cluster "global --rgw-zone default (space) on bucket list"        0 -- bucket list --rgw-zone default
 check_cluster "global --rgw-zone=default (= form) on bucket list"       0 -- bucket list --rgw-zone=default
 check_cluster "global --debug-rgw 5 (space) on bucket list"             0 -- bucket list --debug-rgw 5
 check_cluster "global --rgw-zone default before command on bucket list" 0 -- --rgw-zone default bucket list
 
 # ============================================================
-# These rows pair a global with an unknown flag. The error names the unknown flag,
-# not the global.
+# These rows pair a global with an unknown flag. The unknown flag is what
+# fails, so the exit code is the same as without the global.
 # ============================================================
 echo ""
 echo "=== ceph globals alongside an unknown flag (no cluster) ==="

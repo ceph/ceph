@@ -167,8 +167,6 @@ check "put: stray between script and put" 1 \
 check "put: unrecognized flag"  22 \
   script put --context prerequest --infile /dev/null --fakeflag
 
-# The list of valid contexts may change, so the assertion stops after the
-# invalid context.
 check_cluster "put: invalid context string" 22 -- \
   script put --context invalid_ctx --infile /dev/null
 
@@ -218,7 +216,7 @@ check_cluster "get: duplicate --context after get"  0 -- \
 check_cluster "get: duplicate --tenant after get"   0 -- \
   script get --context prerequest --tenant foo --tenant bar
 
-# both flags duplicated after get: the asserted message names the second value of each
+# both flags duplicated after get
 check_cluster "get: duplicate --context and --tenant after get"  0 -- \
   script get --context prerequest --context background --tenant foo --tenant bar
 
@@ -244,8 +242,6 @@ check "get: unrecognized flag"  22 \
 check_cluster "get: --infile is accepted and ignored"  0 -- \
   script get --infile /dev/null --context prerequest
 
-# The list of valid contexts may change, so the assertion stops after the
-# invalid context.
 check_cluster "get: invalid context string" 22 -- \
   script get --context invalid_ctx
 
@@ -298,8 +294,6 @@ check "rm: stray between script and rm" 1 \
 check "rm: unrecognized flag"  22 \
   script rm --context prerequest --fakeflag
 
-# The list of valid contexts may change, so the assertion stops after the
-# invalid context.
 check_cluster "rm: invalid context string" 22 -- \
   script rm --context invalid_ctx
 
@@ -434,9 +428,8 @@ check_cluster "script-package add: --allow-compilation before add" 22 -- script-
 check_cluster "script-package list: --format before list" 0 -- script-package --format json list
 check_cluster "script-package list: --tenant before list" 22 -- script-package --tenant t list
 
-# the same flag given twice. The message names the package it tried to add,
-# so this row shows the second value is the one that is used.
-check_cluster "script-package add: duplicate --package (last wins)" 22 -- script-package add --package a --package no-such-package
+# the same flag given twice
+check_cluster "script-package add: duplicate --package" 22 -- script-package add --package a --package no-such-package
 check_cluster "script-package rm: duplicate --package" 0 -- script-package rm --package a --package no-such-package
 check_cluster "script-package add: duplicate --allow-compilation" 22 -- script-package add --allow-compilation --allow-compilation --package no-such-package
 
@@ -483,7 +476,7 @@ check_cluster "integration: put prerequest script"    0 -- \
   script put --context prerequest --infile "$_script_file"
 check_cluster "integration: get prerequest script"    0 -- \
   script get --context prerequest
-check_cluster "integration: get postrequest finds nothing"    0 -- \
+check_cluster "integration: get postrequest (nothing put there)"    0 -- \
   script get --context postrequest
 check_cluster "integration: rm prerequest script"     0 -- \
   script rm --context prerequest
@@ -509,7 +502,7 @@ check_cluster "integration: put with tenant"          0 -- \
   script put --context prerequest --tenant testenant --infile "$_script_file"
 check_cluster "integration: get with same tenant"     0 -- \
   script get --context prerequest --tenant testenant
-check_cluster "integration: get without tenant finds nothing"       0 -- \
+check_cluster "integration: get without tenant"       0 -- \
   script get --context prerequest
 check_cluster "integration: rm with tenant"           0 -- \
   script rm --context prerequest --tenant testenant

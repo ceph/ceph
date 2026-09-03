@@ -526,8 +526,8 @@ check "object shard: --num-shards non-integer" 22 bucket object shard --object f
 # "08" = 8) and hex is rejected.
 # Object "bar" maps to shard 8 of 10 and shard 4 of 8.
 check "object shard: --num-shards hex rejected" 22 bucket object shard --object bar --num-shards 0x10
-check_cluster "object shard: --num-shards 010 parses as decimal 10" 0 -- bucket object shard --object bar --num-shards 010
-check_cluster "object shard: --num-shards 08 parses as 8" 0 -- bucket object shard --object bar --num-shards 08
+check_cluster "object shard: --num-shards 010 (leading zero)" 0 -- bucket object shard --object bar --num-shards 010
+check_cluster "object shard: --num-shards 08 (leading zero)" 0 -- bucket object shard --object bar --num-shards 08
 check_cluster "object shard: --num-shards 010 before subcommand (base-10)" 0 -- bucket --num-shards 010 object shard --object bar
 
 # handler-level (cluster): these validations run after driver init. The handler
@@ -707,11 +707,11 @@ check_cluster "radoslist: --orphan-stale-secs -5 accepted (negative value wraps)
 # --orphan-stale-secs is always read as base 10, like --max-concurrent-ios above.
 # "0x10" is rejected; "08" is accepted, which octal would not be.
 check "radoslist: --orphan-stale-secs hex rejected" 22 bucket radoslist --orphan-stale-secs 0x10
-check_cluster "radoslist: --orphan-stale-secs 08 accepted (not octal)" 0 -- bucket radoslist --bucket chk --orphan-stale-secs 08
+check_cluster "radoslist: --orphan-stale-secs 08 accepted (leading zero)" 0 -- bucket radoslist --bucket chk --orphan-stale-secs 08
 check "radoslist: --orphan-stale-secs out of range" 22 bucket radoslist --orphan-stale-secs 99999999999999999999
 
 # cluster: readonly command, lists rados objects backing the bucket (exit 0).
-check_cluster "radoslist: --bucket (lists, exit 0)" 0 -- bucket radoslist --bucket chk
+check_cluster "radoslist: --bucket" 0 -- bucket radoslist --bucket chk
 # unrelated flags alongside valid args: binary flag (--fix) takes 0 values ->
 # accepted; value option in =form binds -> accepted; both still exit 0.
 check_cluster "radoslist: unrelated binary flag --fix accepted" 0 -- bucket radoslist --bucket chk --fix
@@ -750,7 +750,7 @@ check "rados: no subcommand" 1 bucket rados
 check "rados list: --max-concurrent-ios non-integer" 22 bucket rados list --max-concurrent-ios abc
 check_cluster "rados list: --bucket before subcommand" 0 -- bucket --bucket chk rados list
 check_cluster "rados list: duplicate --rgw-obj-fs" 0 -- bucket rados list --bucket chk --rgw-obj-fs a --rgw-obj-fs b
-check_cluster "rados list: --bucket (lists, exit 0)" 0 -- bucket rados list --bucket chk
+check_cluster "rados list: --bucket" 0 -- bucket rados list --bucket chk
 
 # ============================================================
 echo ""
@@ -822,7 +822,6 @@ check "rm: unrecognized flag" 22 bucket rm --bucket mybucket --fakeflag
 
 check "rm: --bucket missing value" 1 bucket rm --bucket
 
-# the message spells the flag with an underscore, unlike the flag itself
 check_cluster "rm: --inconsistent-index without --yes-i-really-mean-it" 1 -- bucket rm --bucket nonexistent_test --inconsistent-index
 
 # ============================================================
@@ -950,8 +949,6 @@ check "sync run: --extra-info banana (left as stray)" 1 bucket sync run --extra-
 # handler-level (cluster). The leaves check different things and in a different
 # order: checkpoint/info/status/disable/enable want a bucket, while
 # markers/init/run want a source zone first and only then a bucket.
-# A --source-zone that does not exist also prints a warning of its own; the
-# rows below assert the error that follows it.
 check_cluster "sync checkpoint: missing --bucket" 22 -- bucket sync checkpoint
 check_cluster "sync info: missing --bucket" 22 -- bucket sync info
 check_cluster "sync status: missing --bucket" 22 -- bucket sync status
@@ -997,9 +994,8 @@ check_cluster "sync checkpoint: --timeout-sec non-integer accepted (silent exit 
 check_cluster "sync checkpoint: --retry-delay-ms non-integer accepted (silent exit 2)" 2 -- bucket sync checkpoint --bucket no-such-bucket --retry-delay-ms abc
 
 # flags before the leaf subcommand. The value still reaches the command, so a
-# nonexistent bucket still fails: status silently (exit 2, no message),
-# markers with its message. --tenant trips the global "no user ID" check
-# (exit 22).
+# nonexistent bucket still fails (exit 2). --tenant without a user ID is
+# rejected before the command runs (exit 22).
 check_cluster "sync status: --bucket before subcommand (silent exit 2)" 2 -- bucket --bucket no-such-bucket sync status
 check_cluster "sync status: -b before subcommand (short) (silent exit 2)" 2 -- bucket -b no-such-bucket sync status
 check_cluster "sync status: --bucket-id before subcommand (silent exit 2)" 2 -- bucket --bucket-id x sync status --bucket no-such-bucket
@@ -1441,9 +1437,8 @@ check "empty-= on int flag" 22 bucket list --max-entries=
 check "empty-= on --uid" 1 bucket list --uid=
 check "empty-= on -i" 1 bucket list -i=
 check "empty-= on --bucket-id" 1 bucket stats --bucket-id=
-# non-empty short-flag '=': the value is split off the flag, so the message
-# names the user without a leading '=' (uncaught by -b=, which never echoes).
-# an unknown user gives -ENOENT, so the exit code is 254
+# non-empty short-flag '=': the value is split off the flag. An unknown user
+# gives -ENOENT, so the exit code is 254
 check_cluster "non-empty -= on -i (value split off the flag)" 254 -- bucket list -i=nosuchuser
 # mid-line: "" is the value; the next word strays (the collapsed flag must not eat it)
 check "empty-= mid-line strays next word" 1 bucket list --bucket= foo
@@ -1816,7 +1811,7 @@ if cluster_running; then
       # binary flag empty-= keeps its silent-set behavior
       check_cluster "integration: binary flag empty-= unchanged" 0 -- bucket list --bucket "$_test_bucket" --allow-unordered=
       # -i=<uid>: the value is captured correctly (lists the user's bucket)
-      check_cluster "integration: -i=uid captures value" 0 -- bucket list -i="$_test_uid"
+      check_cluster "integration: bucket list -i=uid (=form)" 0 -- bucket list -i="$_test_uid"
       # value position: a token after a value-taking flag is its value, even
       # if it looks like a flag (the handler then fails)
       check_cluster "integration: flag value may look like a flag" 2 -- bucket stats --bucket --max-entries
@@ -1843,20 +1838,19 @@ if cluster_running; then
       # date check and fails with exit 22
       check_cluster "integration: bucket rewrite bad --start-date (exit 22)" 22 -- bucket rewrite --bucket "$_test_bucket" --start-date notadate
 
-      # status assertions: with a small (<4MB) object present, the per-object
-      # "status" field proves the filters actually work. Default min (4MB) skips
-      # it; atoll("abc")=0 disables the min filter so it is rewritten (Success);
-      # a past --end-time filters it out by date (Skipped).
+      # rerun with a small (<4MB) object in the bucket, so the per-object filters
+      # actually run: the default 4MB minimum, atoll("abc")=0 which disables it,
+      # an explicit minimum, and a past --end-time.
       echo "rewrite-status-probe" > /tmp/rw_small.txt
       AWS_ACCESS_KEY_ID="$_access_key" \
       AWS_SECRET_ACCESS_KEY="$_secret_key" \
       aws --endpoint-url "$_rgw_endpoint" \
         s3 cp /tmp/rw_small.txt "s3://$_test_bucket/" >/dev/null 2>&1
 
-      check_cluster "integration: rewrite small obj Skipped (default 4M min)" 0 -- bucket rewrite --bucket "$_test_bucket"
-      check_cluster "integration: rewrite --min-rewrite-size=abc Success (atoll->0)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
-      check_cluster "integration: rewrite --min-rewrite-size 1 Success" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
-      check_cluster "integration: rewrite past --end-time Skipped (date filter)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1 --end-time 2000-01-01
+      check_cluster "integration: rewrite (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket"
+      check_cluster "integration: rewrite --min-rewrite-size=abc (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size=abc
+      check_cluster "integration: rewrite --min-rewrite-size 1 (object in the bucket)" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1
+      check_cluster "integration: rewrite --end-time 2000-01-01" 0 -- bucket rewrite --bucket "$_test_bucket" --min-rewrite-size 1 --end-time 2000-01-01
 
       # remove the probe object so later lifecycle tests see an empty bucket
       AWS_ACCESS_KEY_ID="$_access_key" \
@@ -1886,8 +1880,8 @@ if cluster_running; then
       # bucket object shard: pure computation (no bucket needed), but runs after
       # driver init so a cluster is required. Deterministic: foo % 11 -> 10,
       # any object % 1 -> 0. Exercises -o short form, =form, and --format xml.
-      check_cluster "integration: object shard (foo/11 -> 10)" 0 -- bucket object shard --object foo --num-shards 11
-      check_cluster "integration: object shard (foo/1 -> 0)" 0 -- bucket object shard --object foo --num-shards 1
+      check_cluster "integration: object shard --num-shards 11" 0 -- bucket object shard --object foo --num-shards 11
+      check_cluster "integration: object shard --num-shards 1" 0 -- bucket object shard --object foo --num-shards 1
       check_cluster "integration: object shard -o --num-shards=11 (short + =form)" 0 -- bucket object shard -o foo --num-shards=11
       check_cluster "integration: object shard --format xml" 0 -- bucket object shard --object foo --num-shards 11 --format xml
 
@@ -1895,12 +1889,12 @@ if cluster_running; then
       # driver init. Deterministic sample object names per shard; --shard-id
       # picks one shard; --prefix changes the name prefix (default "obj").
       # Exercises the 'shard object' alias, =form, --prefix "", and --format xml.
-      check_cluster "integration: shard objects (num 4, lists objs)" 0 -- bucket shard objects --num-shards 4
-      check_cluster "integration: shard objects (num 1 -> single obj)" 0 -- bucket shard objects --num-shards 1
+      check_cluster "integration: shard objects --num-shards 4" 0 -- bucket shard objects --num-shards 4
+      check_cluster "integration: shard objects --num-shards 1" 0 -- bucket shard objects --num-shards 1
       check_cluster "integration: shard objects --shard-id 1" 0 -- bucket shard objects --num-shards 4 --shard-id 1
       check_cluster "integration: shard object (alias) --shard-id=1 (=form)" 0 -- bucket shard object --num-shards 4 --shard-id=1
       check_cluster "integration: shard objects --prefix myobj" 0 -- bucket shard objects --num-shards 4 --prefix myobj
-      check_cluster "integration: shard objects --prefix '' (engaged empty)" 0 -- bucket shard objects --num-shards 4 --prefix ""
+      check_cluster "integration: shard objects --prefix '' (empty value)" 0 -- bucket shard objects --num-shards 4 --prefix ""
       check_cluster "integration: shard objects --format xml" 0 -- bucket shard objects --num-shards 4 --shard-id 0 --format xml
 
       # bucket resync encrypted multipart: a repair op. On a non-replicated single-zone
@@ -1908,7 +1902,7 @@ if cluster_running; then
       # runs and emits the "modified" report (exit 0, idempotent on a normal bucket).
       # The binary flag's =false / space-form 'false' both leave it unset -> EPERM.
       check_cluster "integration: resync without --yes (EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket"
-      check_cluster "integration: resync --yes-i-really-mean-it (success)" 0 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it
+      check_cluster "integration: resync --yes-i-really-mean-it" 0 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it
       check_cluster "integration: resync --yes-i-really-mean-it=false (=form -> EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it=false
       check_cluster "integration: resync --yes-i-really-mean-it false (space form -> EPERM)" 1 -- bucket resync encrypted multipart --bucket "$_test_bucket" --yes-i-really-mean-it false
       # a value that is not true/1/false/0 still leaves the flag set, so =banana
@@ -1926,8 +1920,8 @@ if cluster_running; then
       # bucket logging on a bucket WITHOUT logging configured: info is silent
       # (exit 0, no output); list and flush print an error but still exit 0
       check_cluster "integration: logging info (no logging, silent)" 0 -- bucket logging info --bucket "$_test_bucket"
-      check_cluster "integration: logging list (no logging, msg + exit 0)" 0 -- bucket logging list --bucket "$_test_bucket"
-      check_cluster "integration: logging flush (no logging, msg + exit 0)" 0 -- bucket logging flush --bucket "$_test_bucket"
+      check_cluster "integration: logging list (no logging configured)" 0 -- bucket logging list --bucket "$_test_bucket"
+      check_cluster "integration: logging flush (no logging configured)" 0 -- bucket logging flush --bucket "$_test_bucket"
 
       # bucket unlink: unlink the bucket from the user
       check_cluster "integration: bucket unlink" 0 -- bucket unlink --bucket "$_test_bucket" --uid "$_test_uid"
@@ -1956,8 +1950,6 @@ if cluster_running; then
       # bucket sync on a real bucket. This is a single-zone cluster, so nothing
       # is replicated: info and checkpoint report that sync is disabled, and the
       # three leaves that need a source zone fail to resolve the zone name.
-      # That failure warns first and errors after; these rows assert the error,
-      # except the status row, which only warns.
       check_cluster "integration: sync info" 0 -- bucket sync info --bucket "$_test_bucket"
       check_cluster "integration: sync info -b (short)" 0 -- bucket sync info -b "$_test_bucket"
       check_cluster "integration: sync status" 0 -- bucket sync status --bucket "$_test_bucket"
@@ -1985,8 +1977,8 @@ if cluster_running; then
       check_cluster "integration: reshard -b (short)" 0 -- bucket reshard -b "$_test_bucket" --num-shards 13
       check_cluster "integration: reshard --max-entries" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 17 --max-entries 10
       # --format is accepted but this command reports its progress as plain text
-      # either way, so the output is the same as the rows above
-      check_cluster "integration: reshard --format json (output unchanged)" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 19 --format json
+      # either way
+      check_cluster "integration: reshard --format json" 0 -- bucket reshard --bucket "$_test_bucket" --num-shards 19 --format json
       check_cluster "integration: reshard --yes-i-really-mean-it=false (=form)" 234 -- bucket reshard --bucket "$_test_bucket" --num-shards 5 --yes-i-really-mean-it=false
 
       # bucket rm: remove the test bucket (it's empty, so no --purge-objects needed)
