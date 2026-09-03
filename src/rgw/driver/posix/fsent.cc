@@ -25,6 +25,7 @@ const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 const int64_t READ_SIZE = 128 * 1024;
 
+
 namespace posix {
 
 /*
@@ -58,6 +59,58 @@ struct OFDLockGuard {
     fcntl(fd, F_OFD_SETLK, &fl);
   }
 };
+
+
+/*  Versions */
+
+static std::string to_base36(uint64_t v)
+{
+  if (v == 0) return "0";
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  std::string result;
+  while (v > 0) {
+    result.insert(result.begin(), digits[v % 36]);
+    v /= 36;
+  }
+  return result;
+}
+
+#if 0
+static bool from_base36(const std::string& s, uint64_t& out)
+{
+  out = 0;
+  for (char c : s) {
+    uint64_t d;
+    if (c >= '0' && c <= '9') {
+      d = c - '0';
+    } else if (c >= 'a' && c <= 'z') {
+      d = 10 + (c - 'a');
+    } else {
+      return false;
+    }
+    out = out * 36 + d;
+  }
+  return true;
+}
+#endif
+
+
+static uint64_t statx_mtime_ns(const struct statx& stx)
+{
+  return (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+       + stx.stx_mtime.tv_nsec;
+}
+
+std::string posix_version_id_from_statx(const struct statx& stx)
+{
+  return "mtime-" + to_base36(statx_mtime_ns(stx))
+       + "-ino-" + to_base36(stx.stx_ino);
+}
+
+
+/* Versions ends */
+
+
 
 static int get_x_attrs(optional_yield y, const DoutPrefixProvider* dpp, int fd,
 		       Attrs& attrs, const std::string& display)
@@ -659,7 +712,7 @@ int File::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, std::s
     return ret;
   }
 
-  ret = stat(dpp);
+  ret = stat(dpp, true);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
@@ -1201,11 +1254,11 @@ std::unique_ptr<File> MPDirectory::get_part_file(int partnum)
 int MPDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield y,
                             fill_cache_cb_t &cb, uint32_t flags)
 {
-  int ret = FSEnt::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  int ret = FSEnt::fill_cache(dpp, y, cb, flags);
   if (ret < 0)
     return ret;
 
-  return Directory::fill_cache(dpp, y, cb, FSEnt::FLAG_NONE);
+  return Directory::fill_cache(dpp, y, cb, flags);
 }
 
 int VersionedDirectory::open(const DoutPrefixProvider* dpp)
@@ -1234,6 +1287,7 @@ int VersionedDirectory::open(const DoutPrefixProvider* dpp)
 
 int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, bool temp_file)
 {
+  bool created{false};
   int ret = mkdirat(parent->get_fd(), fname.c_str(), S_IRWXU);
   if (ret < 0) {
     ret = errno;
@@ -1243,8 +1297,11 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
 	  << cpp_strerror(ret) << dendl;
       return -ret;
     }
+  } else if (ret == 0) {
+    created = true;
+    cur_version.reset();
+    cur_is_dm = false;
   }
-
   ret = open(dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not open versioned directory " << get_name()
@@ -1252,13 +1309,15 @@ int VersionedDirectory::create(const DoutPrefixProvider* dpp, bool* existed, boo
     return ret;
   }
 
-  /* Need type attribute written */
-  Attrs attrs;
-  ret = write_attrs(dpp, null_yield, attrs, nullptr);
-  if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not write attrs for versioned directory " << get_name()
-                      << dendl;
-    return ret;
+  if (created) {
+    /* Need type attribute written */
+    Attrs attrs;
+    ret = write_attrs(dpp, null_yield, attrs, nullptr);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not write attrs for versioned directory " << get_name()
+                        << dendl;
+      return ret;
+    }
   }
 
   if (temp_file) {
@@ -1341,6 +1400,11 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
   if (ret < 0)
     return ret;
 
+  if (force) {
+    cur_version.reset();
+    cur_is_dm = false;
+  }
+
   if (cur_version) {
     /* Already have a File for the current version, use it */
     ret = cur_version->stat(dpp);
@@ -1383,14 +1447,16 @@ int VersionedDirectory::stat(const DoutPrefixProvider* dpp, bool force)
       return ret;
     }
     bufferlist bl;
-    if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-      uint16_t flags = 0;
-      ceph::decode(flags, bl);
-      if (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) {
-        ldpp_dout(dpp, 0) << "ERROR: a delete marker, returning ENOENT "
+    if (get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
+      bool val{false};
+      ceph::decode(val, bl);
+      if (val) {
+        ldpp_dout(dpp, 0) << "INFO: found a delete marker, "
                           << get_name() << dendl;
-        cur_version.reset();
-        return -ENOENT;
+       // cur_version.reset();
+       // return -ENOENT;
+        cur_is_dm = true;
+        return 0;
       }
     }
   }
@@ -1449,7 +1515,25 @@ int VersionedDirectory::link_temp_file(const DoutPrefixProvider *dpp, optional_y
 {
   if (!cur_version)
     return -EINVAL;
-  int ret = cur_version->link_temp_file(dpp, y, temp_fname);
+  // Get the mtime+inode info for the temp file via its fd
+
+  struct statx stx;
+  int ret = statx(cur_version->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret == 0) {
+    std::string ver_id = posix_version_id_from_statx (stx);
+    rgw_obj_key key = decode_obj_key(get_name());
+    key.instance = ver_id;
+    std::string versioned_fname = get_key_fname(key, true);
+    cur_version->set_name(versioned_fname);
+  } else {
+    ret = errno;
+    ldpp_dout(dpp, 0) << "ERROR: could not stat temp file for" << get_name() << ": "
+                      << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  ret = cur_version->link_temp_file(dpp, y, temp_fname);
   if (ret < 0)
     return ret;
 
@@ -1575,10 +1659,10 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
   }
 
   buffer::list bl;
-  uint16_t flags = 0;
-  flags |= rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
-  ceph::encode(flags, bl);
-  attrs[RGW_POSIX_ATTR_VERSION] = std::move(bl);
+  bool dm = 0;
+  dm = true;
+  ceph::encode(dm, bl);
+  attrs[RGW_POSIX_ATTR_DELETE_MARKER] = std::move(bl);
 
   // Write attributes before linking
   ret = marker->write_attrs(dpp, y, attrs, nullptr);
@@ -1587,6 +1671,17 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
   }
+  struct statx stx;
+  ret = statx(marker->get_fd(), "", AT_SYMLINK_NOFOLLOW | AT_EMPTY_PATH,
+		  STATX_ALL, &stx);
+  if (ret < 0) {
+    return ret;
+  }
+  std::string ver_id = posix_version_id_from_statx (stx);
+  rgw_obj_key key = decode_obj_key(get_name());
+  key.instance = ver_id;
+  std::string versioned_fname = get_key_fname(key, true);
+  marker->set_name(versioned_fname);
 
   // Link temp file to final name atomically
   ret = marker->link_temp_file(dpp, y, name);
@@ -1594,6 +1689,9 @@ int VersionedDirectory::add_delete_marker(const DoutPrefixProvider* dpp,
     // removing the temporary files before returning failure
     marker->remove(dpp, y, /*delete_children=*/false, nullptr);
     return ret;
+  }
+  if (instance_id.empty()){
+    instance_id = ver_id;
   }
 
   return 0;
@@ -1610,15 +1708,6 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
 
   if (instance_id.empty()) {
-    /* Check if directory is empty */
-    ret = for_each(dpp, [](const char *n) {
-      return -ENOENT;
-    });
-
-    if (ret == 0) {
-      /* We're empty, nuke us */
-      return Directory::remove(dpp, y, /*delete_children=*/true, result);
-    }
 
     /* Add a delete marker */
     std::unique_ptr<File> f;
@@ -1626,13 +1715,14 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     key.instance = gen_rand_instance_name();
     tgtname = get_key_fname(key, /*use_version=*/true);
 
-    result->delete_marker = true;
-    result->version_id = key.instance;
-
     f = std::make_unique<File>(tgtname, this, ctx);
     ret = add_delete_marker(dpp, y, f, tgtname);
     if (ret < 0) {
       return ret;
+    }
+    if (result) {
+      result->delete_marker = true;
+      result->version_id = instance_id;
     }
 
     newlink = true;
@@ -1641,6 +1731,7 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
       return ret;
     }
     cur_version = std::move(f);
+    cur_is_dm = true;
     return 0;
   } else {
     /* Delete specific version */
@@ -1660,13 +1751,17 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
         return ret;
       }
       bufferlist bl;
-      if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
-       result->delete_marker = true;
+      if (get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
+        if (result) {
+          result->delete_marker = true;
+        }
       }
       ret = f->remove(dpp, y, /*delete_children=*/true, result);
       if (ret < 0)
        return ret;
-      result->version_id = instance_id;
+      if (result) {
+        result->version_id = instance_id;
+      }
     } else {
       return ret;
     }
@@ -1703,6 +1798,11 @@ int VersionedDirectory::remove(const DoutPrefixProvider* dpp, optional_yield y,
     if (ret < 0) {
       return ret;
     }
+    ret = f->stat(dpp);
+    if (ret < 0) {
+      return ret;
+    }
+
     ret = set_cur_version_ent(dpp, f.get());
     if (ret < 0) {
       return ret;
@@ -1762,7 +1862,7 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
         if (ret < 0) {
           return ret;
         }
-        if (get_attr(attrs, RGW_POSIX_ATTR_VERSION, bl)) {
+        if (get_attr(attrs, RGW_POSIX_ATTR_DELETE_MARKER, bl)) {
           fill_flags |= FSEnt::FLAG_DELETE_MARKER;
         }
       }
@@ -1780,6 +1880,29 @@ int VersionedDirectory::fill_cache(const DoutPrefixProvider *dpp, optional_yield
     return ret;
   }
 
+  return 0;
+}
+
+int VersionedDirectory::get_latest_version_ent(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt> &latest)
+{
+  std::unique_ptr<Symlink> sl = std::make_unique<Symlink>(get_name(), this, ctx);
+  int ret = sl->stat(dpp);
+  if (ret < 0) {
+    if (ret == -ENOENT)
+      return 0;
+    return ret;
+  }
+
+  if (!sl->exists()) {
+    return 0;
+  }
+
+  auto nent = sl->get_target()->clone_base();
+  ret = nent->open(dpp);
+  if (ret < 0) {
+    return 0;
+  }
+  latest.swap(nent);
   return 0;
 }
 

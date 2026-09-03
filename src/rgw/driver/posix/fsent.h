@@ -32,12 +32,12 @@ class POSIXObject;
 using DeleteResult = rgw::sal::Object::DeleteOp::Result;
 
 extern const std::string ATTR_PREFIX;
-#define RGW_POSIX_ATTR_BUCKET_INFO "POSIX-Bucket-Info"
-#define RGW_POSIX_ATTR_MPUPLOAD "POSIX-Multipart-Upload"
-#define RGW_POSIX_ATTR_OBJECT_TYPE "POSIX-Object-Type"
-#define RGW_POSIX_ATTR_VERSION "POSIX-version"
-#define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "POSIX-Multipart-Part-Count"
-#define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "POSIX-Multipart-Total-Size"
+#define RGW_POSIX_ATTR_BUCKET_INFO "bucket-info"
+#define RGW_POSIX_ATTR_MPUPLOAD "multipart-upload"
+#define RGW_POSIX_ATTR_OBJECT_TYPE "object-type"
+#define RGW_POSIX_ATTR_DELETE_MARKER "delete-marker"
+#define RGW_POSIX_ATTR_MULTIPART_PART_COUNT "multipart-part-count"
+#define RGW_POSIX_ATTR_MULTIPART_TOTAL_SIZE "multipart-total-size"
 extern const std::string mp_ns;
 extern const std::string MP_OBJ_PART_PFX;
 extern const std::string MP_OBJ_HEAD_NAME;
@@ -257,6 +257,7 @@ public:
 
   int get_fd() { return fd; };
   std::string& get_name() { return fname; }
+  void set_name(const std::string& name) { fname = name; }
   Directory* get_parent() { return parent; }
   bool exists() { return exist; }
   struct statx& get_stx() { return stx; }
@@ -276,6 +277,7 @@ public:
   virtual std::unique_ptr<FSEnt> clone_base() = 0;
   virtual int fill_cache(const DoutPrefixProvider* dpp, optional_yield y, fill_cache_cb_t& cb, uint32_t flags);
   virtual std::string get_cur_version() { return ""; };
+  virtual std::string get_instance() { return ""; };
 };
 
 class File : public FSEnt {
@@ -476,6 +478,7 @@ class VersionedDirectory : public Directory {
 protected:
   std::string instance_id;
   std::unique_ptr<FSEnt> cur_version;
+  bool cur_is_dm{false};
 
 public:
   VersionedDirectory(std::string _name, Directory* _parent, CephContext* _ctx) : Directory(_name, _parent, _ctx)
@@ -515,12 +518,15 @@ public:
   virtual int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, std::string target_fname) override;
   virtual int remove(const DoutPrefixProvider* dpp, optional_yield y, bool delete_children, DeleteResult* result) override;
   virtual std::string get_cur_version() override;
+  virtual std::string get_instance() override { return instance_id; };
   std::string get_new_instance();
   int remove_symlink(const DoutPrefixProvider *dpp, optional_yield y, std::string match = "");
   int add_file(const DoutPrefixProvider *dpp, std::unique_ptr<FSEnt>&& file, bool* existed = nullptr, bool temp_file = false);
   int add_delete_marker(const DoutPrefixProvider* dpp, optional_yield y, std::unique_ptr<File>& marker, const std::string &name);
   FSEnt* get_cur_version_ent() { return cur_version.get(); };
   int set_cur_version_ent(const DoutPrefixProvider *dpp, FSEnt* file);
+  int get_latest_version_ent(const DoutPrefixProvider* dpp, std::unique_ptr<FSEnt>& latest);
+  bool cur_is_delete_marker() { return cur_is_dm; };
   virtual std::unique_ptr<FSEnt> clone_base() override {
     return std::make_unique<VersionedDirectory>(*this);
   }
@@ -535,6 +541,7 @@ public:
 };
 
 std::string get_key_fname(rgw_obj_key& key, bool use_version);
+std::string posix_version_id_from_statx(const struct statx& stx);
 
 } // namespace posix
 } } // namespace rgw::sal
