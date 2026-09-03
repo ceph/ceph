@@ -174,6 +174,12 @@
   This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
   It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 * RGW: Add SSE-KMS secrets cache
+* MON: Each monitor now reports four new perf counters covering its data
+  directory: ``data_disk_total_bytes``, ``data_disk_avail_bytes``,
+  ``data_disk_avail_percent``, and ``db_total_bytes`` (estimated on-disk size
+  of the key/value store). They surface automatically as ``ceph_mon_*``
+  Prometheus metrics via the ``prometheus`` mgr module and ``ceph-exporter``,
+  enabling trending of mon DB growth and filesystem free space.
 
 >=21.0.0
 
