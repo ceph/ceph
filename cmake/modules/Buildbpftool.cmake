@@ -12,6 +12,8 @@ function(build_bpftool)
     set(make_cmd make)
   endif()
 
+  file(MAKE_DIRECTORY "${bpftool_BINARY_DIR}")
+
   ExternalProject_Add(bpftool_ext
     SOURCE_DIR "${bpftool_SOURCE_DIR}/src"
     CONFIGURE_COMMAND ""
