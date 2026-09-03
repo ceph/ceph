@@ -909,6 +909,17 @@
       </div>
     </fieldset>
 
+    <cd-rgw-storage-class-quota
+      #bucketScQuota
+      idPrefix="bucket-sc-quota"
+      title="Bucket storage class quotas"
+      i18n-title
+      description="Limits for this bucket per storage class. Cap hot and cold tiers separately."
+      i18n-description
+      [savedQuotas]="savedStorageClassQuotas"
+    >
+    </cd-rgw-storage-class-quota>
+
     <!--Advanced-->
     <cd-form-advanced-fieldset>
       <!-- Placement target -->

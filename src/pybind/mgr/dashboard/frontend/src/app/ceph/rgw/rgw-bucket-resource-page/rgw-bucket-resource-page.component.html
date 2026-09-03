@@ -23,6 +23,59 @@
         </cd-resource-overview-card>
       </section>
 
+      @if (storageClassUsage.length) {
+        <section class="cds-mt-6">
+          <h2
+            class="bucket-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Storage class usage
+          </h2>
+          <p
+            class="bucket-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            Used size and objects for each storage class in this bucket.
+          </p>
+          <cd-table
+            [data]="storageClassUsage"
+            [columns]="storageClassUsageColumns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [searchField]="false"
+            [footer]="false"
+          >
+          </cd-table>
+        </section>
+      }
+
+      @if (storageClassQuotas.length) {
+        <section class="cds-mt-6">
+          <h2
+            class="bucket-resource-section__title cds--type-heading-03"
+            i18n
+          >
+            Storage class quotas
+          </h2>
+          <p
+            class="bucket-resource-section__description cds--type-body-compact-01"
+            i18n
+          >
+            Size and object limits per storage class, shown with current usage for hot and cold
+            tiers.
+          </p>
+          <cd-table
+            [data]="storageClassQuotas"
+            [columns]="storageClassQuotaColumns"
+            columnMode="flex"
+            [toolHeader]="false"
+            [searchField]="false"
+            [footer]="false"
+          >
+          </cd-table>
+        </section>
+      }
+
       @if (selection) {
         <cd-rgw-bucket-tags-table
           [bucket]="selection"

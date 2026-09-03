@@ -19,6 +19,7 @@ import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { RgwStorageClassQuotaComponent } from '../rgw-storage-class-quota/rgw-storage-class-quota.component';
 import { CheckboxModule, SelectModule } from 'carbon-components-angular';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { By } from '@angular/platform-browser';
@@ -37,7 +38,7 @@ describe('RgwBucketFormComponent', () => {
   let childComponent: RgwRateLimitComponent;
 
   configureTestBed({
-    declarations: [RgwBucketFormComponent, RgwRateLimitComponent],
+    declarations: [RgwBucketFormComponent, RgwRateLimitComponent, RgwStorageClassQuotaComponent],
     imports: [
       HttpClientTestingModule,
       ReactiveFormsModule,

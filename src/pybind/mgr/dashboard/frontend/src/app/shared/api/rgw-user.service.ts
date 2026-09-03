@@ -93,10 +93,11 @@ export class RgwUserService {
     });
   }
 
-  updateQuota(uid: string, args: Record<string, string>) {
+  updateQuota(uid: string, args: Record<string, any>) {
     return this.rgwDaemonService.request((params: HttpParams) => {
       _.keys(args).forEach((key) => {
-        params = params.append(key, args[key]);
+        const value = typeof args[key] === 'object' ? JSON.stringify(args[key]) : args[key];
+        params = params.append(key, value);
       });
       return this.http.put(`${this.url}/${uid}/quota`, null, { params: params });
     });

@@ -4,6 +4,8 @@ import { Subscription } from 'rxjs';
 import { Account } from '../models/rgw-user-accounts';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import { toStorageClassQuotaDisplayRows } from '../utils/rgw-storage-class-stats';
 
 @Component({
   selector: 'cd-rgw-user-accounts-resource-page',
@@ -21,6 +23,9 @@ export class RgwUserAccountsResourcePageComponent implements OnInit, OnDestroy {
   overviewField: OverviewField[] = [];
   quota: Record<string, string | number> = {};
   bucket_quota: Record<string, string | number> = {};
+  accountStorageClassQuotas: Record<string, string | number>[] = [];
+  bucketStorageClassQuotas: Record<string, string | number>[] = [];
+  storageClassQuotaColumns: CdTableColumn[] = [];
 
   constructor(
     private route: ActivatedRoute,
@@ -29,6 +34,28 @@ export class RgwUserAccountsResourcePageComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.section = this.route.snapshot.data['section'] ?? 'overview';
+    this.storageClassQuotaColumns = [
+      {
+        name: $localize`Storage class`,
+        prop: 'storage_class',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Enabled`,
+        prop: 'enabled',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Maximum size`,
+        prop: 'max_size',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Maximum objects`,
+        prop: 'max_objects',
+        flexGrow: 1
+      }
+    ];
 
     this.sub.add(
       this.route.parent?.data.subscribe((data) => {
@@ -50,6 +77,8 @@ export class RgwUserAccountsResourcePageComponent implements OnInit, OnDestroy {
       this.overviewField = [];
       this.quota = {};
       this.bucket_quota = {};
+      this.accountStorageClassQuotas = [];
+      this.bucketStorageClassQuotas = [];
       return;
     }
 
@@ -57,6 +86,14 @@ export class RgwUserAccountsResourcePageComponent implements OnInit, OnDestroy {
     this.overviewField = this.buildOverviewFields(account);
     this.quota = this.createDisplayValues('quota');
     this.bucket_quota = this.createDisplayValues('bucket_quota');
+    this.accountStorageClassQuotas = toStorageClassQuotaDisplayRows(
+      account.quota?.storage_class_quotas,
+      (bytes) => this.dimlessBinary.transform(bytes)
+    );
+    this.bucketStorageClassQuotas = toStorageClassQuotaDisplayRows(
+      account.bucket_quota?.storage_class_quotas,
+      (bytes) => this.dimlessBinary.transform(bytes)
+    );
   }
 
   private buildOverviewFields(account: Account): OverviewField[] {

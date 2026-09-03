@@ -5,6 +5,7 @@ import _ from 'lodash';
 import { BehaviorSubject, Observable, of as observableOf, throwError } from 'rxjs';
 import { catchError, distinctUntilChanged, map, mapTo, shareReplay, tap } from 'rxjs/operators';
 import { Bucket } from '~/app/ceph/rgw/models/rgw-bucket';
+import { StorageClassQuota } from '~/app/ceph/rgw/models/rgw-user';
 import { RgwRateLimitConfig } from '~/app/ceph/rgw/models/rgw-rate-limit';
 
 import { ApiClient } from '~/app/shared/api/api-client';
@@ -237,6 +238,14 @@ export class RgwBucketService extends ApiClient {
         }
         params = params.appendAll(paramsObject);
         return this.http.put(`${this.url}/${bucket}`, null, { params: params });
+      })
+      .pipe(tap(() => this.invalidateBucketCache(bucket)));
+  }
+
+  setQuota(bucket: string, payload: { storage_class_quotas: StorageClassQuota[] }) {
+    return this.rgwDaemonService
+      .request((params: HttpParams) => {
+        return this.http.put(`${this.url}/${bucket}/quota`, payload, { params });
       })
       .pipe(tap(() => this.invalidateBucketCache(bucket)));
   }

@@ -26,6 +26,13 @@ import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import {
+  DUMMY_USER_STORAGE_CLASS_STATS,
+  extractUserStorageClassStats,
+  toStorageClassQuotaDisplayRows,
+  toStorageClassUsageRows
+} from '../utils/rgw-storage-class-stats';
+
 @Component({
   selector: 'cd-rgw-user-resource-page',
   templateUrl: './rgw-user-resource-page.component.html',
@@ -48,6 +55,11 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
   keysColumns: CdTableColumn[] = [];
   userQuota: Record<string, string | number> = {};
   bucketQuota: Record<string, string | number> = {};
+  userStorageClassQuotas: Record<string, string | number>[] = [];
+  bucketStorageClassQuotas: Record<string, string | number>[] = [];
+  storageClassQuotaColumns: CdTableColumn[] = [];
+  storageClassUsage: Record<string, string | number>[] = [];
+  storageClassUsageColumns: CdTableColumn[] = [];
   overviewFields: OverviewField[] = [];
 
   constructor(
@@ -77,6 +89,52 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
       }
     ];
 
+    this.storageClassUsageColumns = [
+      {
+        name: $localize`Storage class`,
+        prop: 'storage_class',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Placement`,
+        prop: 'placement',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Used size`,
+        prop: 'size',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Used objects`,
+        prop: 'num_objects',
+        flexGrow: 1
+      }
+    ];
+
+    this.storageClassQuotaColumns = [
+      {
+        name: $localize`Storage class`,
+        prop: 'storage_class',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Enabled`,
+        prop: 'enabled',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Maximum size`,
+        prop: 'max_size',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Maximum objects`,
+        prop: 'max_objects',
+        flexGrow: 1
+      }
+    ];
+
     this.sub.add(
       this.route.parent?.data.subscribe((data) => {
         this.isOverviewLoading = false;
@@ -98,6 +156,9 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
       this.overviewFields = [];
       this.userQuota = {};
       this.bucketQuota = {};
+      this.userStorageClassQuotas = [];
+      this.bucketStorageClassQuotas = [];
+      this.storageClassUsage = [];
       this.keys = [];
       return;
     }
@@ -107,6 +168,16 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
     this.overviewFields = this.buildOverviewFields(this.user, this.selection);
     this.userQuota = this.createDisplayValues(this.user?.user_quota);
     this.bucketQuota = this.createDisplayValues(this.user?.bucket_quota);
+    const formatSize = (bytes: number) => this.dimlessBinary.transform(bytes);
+    this.userStorageClassQuotas = toStorageClassQuotaDisplayRows(
+      this.user?.user_quota?.storage_class_quotas,
+      formatSize
+    );
+    this.bucketStorageClassQuotas = toStorageClassQuotaDisplayRows(
+      this.user?.bucket_quota?.storage_class_quotas,
+      formatSize
+    );
+    this.storageClassUsage = this.createStorageClassUsageRows(this.user);
     this.processKeys();
   }
 
@@ -238,6 +309,18 @@ export class RgwUserResourcePageComponent implements OnInit, OnDestroy {
           : quota.max_objects
         : '-'
     };
+  }
+
+  private createStorageClassUsageRows(user?: ExtendedRgwUser): Record<string, string | number>[] {
+    return toStorageClassUsageRows(
+      extractUserStorageClassStats(user),
+      DUMMY_USER_STORAGE_CLASS_STATS
+    ).map((row) => ({
+      storage_class: row.storage_class || '-',
+      placement: row.placement || '-',
+      size: this.dimlessBinary.transform(row.size),
+      num_objects: row.num_objects
+    }));
   }
 
   private processKeys(): void {
