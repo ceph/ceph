@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        bluestore_debug_fast_recovery_compare_chance: 1.0
