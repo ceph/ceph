@@ -24,6 +24,7 @@ def task(ctx, config):
             continue
         devs = teuthology.get_scratch_devices(remote)
         devs_by_remote[remote] = devs
+        expected_nqns = {dev.split('/')[-1] for dev in devs}
         existing_nvme_devs = set(discover_devs_via_sysfs(remote))
         base = '/sys/kernel/config/nvmet'
         remote.run(
@@ -93,7 +94,7 @@ def task(ctx, config):
                         'in a row; falling back to sysfs-based discovery'
                     )
                     new_devs = sorted(
-                        set(discover_devs_via_sysfs(remote))
+                        set(discover_devs_via_sysfs_by_nqn(remote, expected_nqns))
                         - existing_nvme_devs
                     )
                     for dev in new_devs:
@@ -307,6 +308,43 @@ def discover_devs_via_sysfs(remote) -> list:
         for line in out.getvalue().splitlines()
         if line.strip()
     ]
+
+
+def discover_devs_via_sysfs_by_nqn(remote, expected_nqns) -> list:
+    """
+    Return visible NVMe namespace heads for the expected subsystems.
+
+    The nvme_loop task uses each scratch-device basename as the subsystem
+    NQN. Walk /sys/class/nvme-subsystem so discovery remains compatible
+    with native NVMe multipath while excluding unrelated NVMe devices.
+    """
+    out = StringIO()
+    remote.run(
+        args=[
+            'bash', '-c',
+            'for s in /sys/class/nvme-subsystem/nvme-subsys*; do '
+            '[ -e "$s" ] || continue; '
+            'nqn=$(cat "$s/subsysnqn" 2>/dev/null) || continue; '
+            'for d in "$s"/nvme*n*; do '
+            '[ -e "$d" ] || continue; '
+            'n=$(basename "$d"); '
+            '[[ "$n" =~ ^nvme[0-9]+n[0-9]+$ ]] '
+            '&& printf "%s\\t/dev/%s\\n" "$nqn" "$n"; '
+            'done; '
+            'done'
+        ],
+        stdout=out,
+        check_status=False,
+    )
+    devices = []
+    for line in out.getvalue().splitlines():
+        try:
+            nqn, dev = line.split('\t', 1)
+        except ValueError:
+            continue
+        if nqn in expected_nqns:
+            devices.append(dev)
+    return devices
 
 
 def bluestore_zap(remote, device: str) -> None:
