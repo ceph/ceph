@@ -16039,10 +16039,12 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
   req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
-  req->set_alternate_name(wdr.alternate_name);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(wdr.alternate_name);
 #if defined(__linux__)
-  wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
+  }
   req->set_filepath(wdr.getpath());
   req->set_inode(wdr.diri);
   req->head.args.mknod.rdev = rdev;
@@ -16175,8 +16177,9 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
   req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
 
   req->set_filepath(wdr.getpath());
-  req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
   req->set_inode(wdr.diri);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
   if (fscrypt_options.fscrypt_auth.size())
     req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
@@ -16185,7 +16188,7 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
 #endif
   if (fscrypt_options.fscrypt_file.size())
     req->fscrypt_file = fscrypt_options.fscrypt_file;
-
+  }
   req->head.args.open.flags = cflags | CEPH_O_CREAT;
 
   req->head.args.open.stripe_unit = stripe_unit;
@@ -16279,16 +16282,17 @@ int Client::_mkdir(const walk_dentry_result& wdr, mode_t mode, const UserPerm& p
   req->set_inode(wdr.diri);
   req->dentry_drop = CEPH_CAP_FILE_SHARED;
   req->dentry_unless = CEPH_CAP_FILE_EXCL;
-  req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
-  if (fscrypt_options.fscrypt_auth.size())
-    req->fscrypt_auth = fscrypt_options.fscrypt_auth;
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr.alternate_name : alternate_name);
+    if (fscrypt_options.fscrypt_auth.size())
+      req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
-  else
-    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    else
+      wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
-  if (fscrypt_options.fscrypt_file.size())
-    req->fscrypt_file = fscrypt_options.fscrypt_file;
-
+    if (fscrypt_options.fscrypt_file.size())
+      req->fscrypt_file = fscrypt_options.fscrypt_file;
+  }
   mode |= S_IFDIR;
   bufferlist bl;
   int res = _posix_acl_create(wdr.diri, &mode, bl, perm);
@@ -16425,15 +16429,16 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
-
-  if (fscrypt_options.fscrypt_auth.size())
-    req->fscrypt_auth = fscrypt_options.fscrypt_auth;
+  if (!alternate_name_visible) {
+    if (fscrypt_options.fscrypt_auth.size())
+      req->fscrypt_auth = fscrypt_options.fscrypt_auth;
 #if defined(__linux__)
-  else
-    wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    else
+      wdr.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
-  if (fscrypt_options.fscrypt_file.size())
-    req->fscrypt_file = fscrypt_options.fscrypt_file;
+    if (fscrypt_options.fscrypt_file.size())
+      req->fscrypt_file = fscrypt_options.fscrypt_file;
+  }
 #if defined(__linux__)
   auto fscrypt_ctx = fscrypt->init_ctx(req->fscrypt_auth);
   if (fscrypt_ctx && fscrypt_as) {
@@ -16761,10 +16766,12 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 
   req->set_filepath(wdr_to.getpath());
   req->set_filepath2(wdr_from.getpath());
-  req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
 #if defined(__linux__)
-  wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
+  }
   int res;
   if (op == CEPH_MDS_OP_RENAME) {
     req->set_old_dentry(wdr_from.dn);
@@ -16873,10 +16880,12 @@ int Client::_link(Inode *diri_from, const char* path_from, Inode* diri_to, const
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
   req->set_filepath(wdr_to.getpath());
-  req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
+  if (!alternate_name_visible) {
+    req->set_alternate_name(alternate_name.empty() ? wdr_to.alternate_name : alternate_name);
 #if defined(__linux__)
-  wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
+    wdr_to.diri->gen_inherited_fscrypt_auth(&req->fscrypt_auth);
 #endif
+  }
   req->set_filepath2(wdr_from.getpath());
   req->set_inode(wdr_to.diri);
   req->inode_drop = CEPH_CAP_FILE_SHARED;
