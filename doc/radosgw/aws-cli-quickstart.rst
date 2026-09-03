@@ -44,7 +44,9 @@ including RGW, by pointing it at your RGW address instead of AWS's.
 
 .. prompt:: bash $
 
-   pip3 install awscli --break-system-packages
+   curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+   unzip awscliv2.zip
+   sudo ./aws/install
 
 Set the endpoint for your profile once, so you don't need to repeat
 it on every command:
@@ -62,10 +64,10 @@ This writes the endpoint into ``~/.aws/config`` under the
 ``[profile ceph]`` section, so commands using ``--profile ceph``
 automatically use it, no need for ``--endpoint-url`` on every command.
 
-.. note:: On some systems, ``pip``-installed binaries land in
-   ``~/.local/bin``, which may not be on your ``PATH`` by default. If
-   ``aws --version`` reports "command not found" after installing, add
-   ``export PATH=$PATH:$HOME/.local/bin`` to your shell profile.
+.. note:: This uses AWS's official bundled installer for Linux, the
+   recommended method per AWS's own documentation. It installs to
+   ``/usr/local/aws-cli`` with a symlink at ``/usr/local/bin/aws``, and
+   doesn't rely on ``pip`` or your system's Python packages at all.
 
 Verify it works
 ================
@@ -99,9 +101,15 @@ Common issues
    the ``--profile`` flag matches the profile name used in
    ``aws configure``.
 
-**Using a self-signed certificate (https endpoint)**
-   If your RGW is configured with ``protocol: https`` and a
-   self-signed certificate, add ``--no-verify-ssl`` to AWS CLI
-   commands, or use ``http://`` if TLS is not required for your
-   environment.
+**Using HTTPS instead of HTTP**
+   Many production RGW deployments enable TLS. If your cluster uses
+   HTTPS, replace ``http://`` with ``https://`` and port ``80`` with
+   ``443`` (or whatever port your deployment uses) in the commands
+   above. If the certificate is self-signed, you'll also need to add
+   ``--no-verify-ssl`` to AWS CLI commands.
 
+.. note:: RGW also supports several extensions to the standard S3 API
+   (e.g. unordered bucket listings, bucket notification filtering).
+   These aren't covered here to keep this guide beginner-focused, but
+   if you want to explore them, see the `RGW boto3/AWS CLI examples
+   <https://github.com/ceph/ceph/tree/main/examples/rgw/boto3>`_.
