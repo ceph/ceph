@@ -71,7 +71,8 @@ enum TestOpType {
   TEST_OP_TIER_FLUSH,
   TEST_OP_SET_CHUNK,
   TEST_OP_TIER_EVICT,
-  TEST_OP_MAPEXT
+  TEST_OP_MAPEXT,
+  TEST_OP_WRITE_ZEROS
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -1531,6 +1532,109 @@ public:
   std::string getType() override
   {
     return "ZeroOp";
+  }
+};
+
+class WriteZeroDataOp : public TestOp {
+public:
+  std::string oid;
+  librados::AioCompletion *comp = nullptr;
+  uint64_t offset = 0;
+  uint64_t length = 0;
+  uint64_t obj_size = 0;
+
+  WriteZeroDataOp(int n,
+                  RadosTestContext *context,
+                  const std::string &oid,
+                  TestOpStat *stat = 0)
+    : TestOp(n, context, stat), oid(oid)
+  {}
+
+  void _begin() override
+  {
+    std::lock_guard state_locker{context->state_lock};
+
+    ObjectDesc obj;
+    context->find_object(oid, &obj);
+
+    if (obj.deleted() || !obj.has_contents()) {
+      // Object does not exist yet — write at offset 0 with a random length.
+      offset = 0;
+      length = (rand() % context->max_size) + 1;
+      obj_size = length;
+    } else {
+      obj_size = obj.most_recent_gen()->get_length(obj.most_recent());
+      if (obj_size == 0) {
+        offset = 0;
+        length = (rand() % context->max_size) + 1;
+        obj_size = length;
+      } else {
+        offset = rand() % obj_size;
+        length = (rand() % (obj_size - offset)) + 1;
+      }
+    }
+
+    std::stringstream acc;
+    acc << context->prefix << "OID: " << oid << " snap "
+        << context->current_snap << std::endl;
+    ContDesc cont(context->seq_num, context->current_snap,
+                  context->seq_num, acc.str());
+    context->update_object(
+      new WriteZeroDataGenerator(offset, length, obj_size), oid, cont);
+    context->seq_num++;
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    context->cout_prefix() << num << ":  write_zeros oid " << oid
+      << " [" << offset << ", " << offset + length << ")"
+      << " obj_size " << obj_size << std::endl;
+
+    bufferlist bl;
+    bl.append_zero(length);
+
+    bufferlist contbl;
+    encode(cont, contbl);
+
+    auto *cb_arg = new std::pair<TestOp*, TestOp::CallbackInfo*>(
+      this, new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion(
+      (void*) cb_arg, &write_callback);
+
+    librados::ObjectWriteOperation op;
+    op.write(offset, bl);
+    op.setxattr("_header", contbl);
+    op.truncate(obj_size);
+    context->io_ctx.aio_operate(context->prefix + oid, comp, &op);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    std::lock_guard state_locker{context->state_lock};
+    ceph_assert(!done);
+    int r = comp->get_return_value();
+    if (r) {
+      std::cerr << "Error: oid " << oid << " write_zeros returned error code "
+                << r << std::endl;
+      ceph_abort();
+    }
+    context->update_object_version(oid, comp->get_version64());
+    comp->release();
+    comp = nullptr;
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  std::string getType() override
+  {
+    return "WriteZeroDataOp";
   }
 };
 

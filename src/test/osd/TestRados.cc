@@ -451,6 +451,13 @@ private:
       context.cout_prefix() << m_op << ": " << "mapext oid " << oid << std::endl;
       return new MapextOp(m_op, &context, oid, m_stats);
 
+    case TEST_OP_WRITE_ZEROS:
+      oid = *(rand_choose(context.oid_not_in_use));
+      context.cout_prefix() << m_op << ": " << "write_zeros oid "
+           << oid << " current snap is "
+           << context.current_snap << std::endl;
+      return new WriteZeroDataOp(m_op, &context, oid, m_stats);
+
     default:
       cerr << m_op << ": Invalid op type " << type << std::endl;
       ceph_abort();
@@ -563,6 +570,7 @@ int main(int argc, char **argv)
     { TEST_OP_SET_CHUNK, "set_chunk", true },
     { TEST_OP_TIER_EVICT, "tier_evict", true },
     { TEST_OP_MAPEXT, "mapext", true },
+    { TEST_OP_WRITE_ZEROS, "write_zeros", true },
     { TEST_OP_READ /* grr */, NULL },
   };
 
@@ -826,7 +834,8 @@ int main(int argc, char **argv)
       if (op == TEST_OP_WRITE ||
           op == TEST_OP_WRITE_EXCL ||
           op == TEST_OP_WRITESAME ||
-          op == TEST_OP_ZERO) {
+          op == TEST_OP_ZERO ||
+          op == TEST_OP_WRITE_ZEROS) {
         const char* op_name = nullptr;
         for (int j = 0; op_types[j].name; ++j) {
           if (op_types[j].op == op) {
