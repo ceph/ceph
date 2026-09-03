@@ -35,15 +35,15 @@ int rgw_admin_usage(const DoutPrefixProvider* dpp,
                     RGWFormatterFlusher& stream_flusher,
                     std::unique_ptr<rgw::sal::User>& user,
                     std::unique_ptr<rgw::sal::Bucket>& bucket,
-                    rgw_admin_usage_options& o)
+                    rgw_admin_usage_options& opts)
 {
-  const std::string& tenant = o.tenant;
-  const std::string& bucket_name = o.bucket_name;
-  const std::string& bucket_id = o.bucket_id;
-  const std::string& start_date = o.start_date;
-  const std::string& end_date = o.end_date;
+  const std::string& tenant = opts.tenant;
+  const std::string& bucket_name = opts.bucket_name;
+  const std::string& bucket_id = opts.bucket_id;
+  const std::string& start_date = opts.start_date;
+  const std::string& end_date = opts.end_date;
 
-  switch (o.command) {
+  switch (opts.command) {
   case rgw_admin::OPT::USAGE_SHOW: {
     uint64_t start_epoch = 0;
     uint64_t end_epoch = (uint64_t)-1;
@@ -72,8 +72,8 @@ int rgw_admin_usage(const DoutPrefixProvider* dpp,
       }
     }
     ret = RGWUsage::show(dpp, driver, user.get(), bucket.get(), start_epoch,
-			 end_epoch, o.show_log_entries, o.show_log_sum,
-                         &o.categories, stream_flusher);
+			 end_epoch, opts.show_log_entries, opts.show_log_sum,
+                         &opts.categories, stream_flusher);
     if (ret < 0) {
       cerr << "ERROR: failed to show usage" << std::endl;
       return 1;
@@ -82,7 +82,7 @@ int rgw_admin_usage(const DoutPrefixProvider* dpp,
   }
   case rgw_admin::OPT::USAGE_TRIM: {
     if (rgw::sal::User::empty(user) && bucket_name.empty() &&
-	start_date.empty() && end_date.empty() && !o.yes_i_really_mean_it) {
+	start_date.empty() && end_date.empty() && !opts.yes_i_really_mean_it) {
       cerr << "usage trim without user/date/bucket specified will remove *all* users data" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
       return 1;
@@ -123,7 +123,7 @@ int rgw_admin_usage(const DoutPrefixProvider* dpp,
     return 0;
   }
   case rgw_admin::OPT::USAGE_CLEAR: {
-    if (!o.yes_i_really_mean_it) {
+    if (!opts.yes_i_really_mean_it) {
       cerr << "usage clear would remove *all* users usage data for all time" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
       return 1;

@@ -19,15 +19,15 @@ namespace {
 int rgw_admin_dedup(const DoutPrefixProvider* dpp,
                     rgw::sal::Driver* driver,
                     ceph::Formatter* formatter,
-                    const rgw_admin_dedup_options& o)
+                    const rgw_admin_dedup_options& opts)
 {
-  if (o.command == OPT::DEDUP_STATS    ||
-      o.command == OPT::DEDUP_ESTIMATE ||
-      o.command == OPT::DEDUP_ABORT    ||
-      o.command == OPT::DEDUP_PAUSE    ||
-      o.command == OPT::DEDUP_RESUME   ||
-      o.command == OPT::DEDUP_THROTTLE ||
-      o.command == OPT::DEDUP_EXEC) {
+  if (opts.command == OPT::DEDUP_STATS    ||
+      opts.command == OPT::DEDUP_ESTIMATE ||
+      opts.command == OPT::DEDUP_ABORT    ||
+      opts.command == OPT::DEDUP_PAUSE    ||
+      opts.command == OPT::DEDUP_RESUME   ||
+      opts.command == OPT::DEDUP_THROTTLE ||
+      opts.command == OPT::DEDUP_EXEC) {
 
     using namespace rgw::dedup;
     rgw::sal::RadosStore *store = dynamic_cast<rgw::sal::RadosStore*>(driver);
@@ -37,7 +37,7 @@ int rgw_admin_dedup(const DoutPrefixProvider* dpp,
       return EPERM;
     }
 
-    if (o.command == OPT::DEDUP_STATS) {
+    if (opts.command == OPT::DEDUP_STATS) {
       int ret = cluster::collect_all_shard_stats(store, formatter, dpp);
       if (ret == 0) {
 	formatter->flush(cout);
@@ -48,27 +48,27 @@ int rgw_admin_dedup(const DoutPrefixProvider* dpp,
       return -ret;
     }
 
-    if (o.command == OPT::DEDUP_THROTTLE) {
+    if (opts.command == OPT::DEDUP_THROTTLE) {
       bufferlist urgent_msg_bl;
       urgent_msg_t urgent_msg = URGENT_MSG_THROTTLE;
       ceph::encode(urgent_msg, urgent_msg_bl);
       throttle_msg_t throttle_msg;
 
-      if (!o.throttle_stat) {
-        if (unlikely(!o.have_max_bucket_index_ops && !o.have_max_metadata_ops)) {
+      if (!opts.throttle_stat) {
+        if (unlikely(!opts.have_max_bucket_index_ops && !opts.have_max_metadata_ops)) {
           std::cerr << "dedup throttle must set either --max-bucket-index-ops or --max-metadata-ops" << std::endl;
           return EINVAL;
         }
 
-        if (o.have_max_bucket_index_ops) {
+        if (opts.have_max_bucket_index_ops) {
           throttle_action_t action = { .op_type = BUCKET_INDEX_OP,
-                                       .limit = static_cast<uint32_t>(o.max_bucket_index_ops)};
+                                       .limit = static_cast<uint32_t>(opts.max_bucket_index_ops)};
           throttle_msg.vec.push_back(action);
         }
 
-        if (o.have_max_metadata_ops) {
+        if (opts.have_max_metadata_ops) {
           throttle_action_t action = { .op_type = METADATA_ACCESS_OP,
-                                       .limit = static_cast<uint32_t>(o.max_metadata_ops)};
+                                       .limit = static_cast<uint32_t>(opts.max_metadata_ops)};
           throttle_msg.vec.push_back(action);
         }
       }
@@ -85,14 +85,14 @@ int rgw_admin_dedup(const DoutPrefixProvider* dpp,
       return -ret;
     }
 
-    if (o.command == OPT::DEDUP_ABORT  ||
-	o.command == OPT::DEDUP_PAUSE  ||
-	o.command == OPT::DEDUP_RESUME) {
+    if (opts.command == OPT::DEDUP_ABORT  ||
+	opts.command == OPT::DEDUP_PAUSE  ||
+	opts.command == OPT::DEDUP_RESUME) {
       urgent_msg_t urgent_msg;
-      if (o.command == OPT::DEDUP_ABORT) {
+      if (opts.command == OPT::DEDUP_ABORT) {
 	urgent_msg = URGENT_MSG_ABORT;
       }
-      else if (o.command == OPT::DEDUP_PAUSE) {
+      else if (opts.command == OPT::DEDUP_PAUSE) {
 	urgent_msg = URGENT_MSG_PASUE;
       }
       else {
@@ -101,13 +101,13 @@ int rgw_admin_dedup(const DoutPrefixProvider* dpp,
       return -cluster::dedup_control(store, dpp, urgent_msg);
     }
 
-    if (o.command == OPT::DEDUP_EXEC || o.command == OPT::DEDUP_ESTIMATE) {
+    if (opts.command == OPT::DEDUP_EXEC || opts.command == OPT::DEDUP_ESTIMATE) {
       dedup_req_type_t dedup_type = dedup_req_type_t::DEDUP_TYPE_NONE;
-      if (o.command == OPT::DEDUP_ESTIMATE) {
+      if (opts.command == OPT::DEDUP_ESTIMATE) {
 	dedup_type = dedup_req_type_t::DEDUP_TYPE_ESTIMATE;
       }
       else {
-	if (!o.yes_i_really_mean_it) {
+	if (!opts.yes_i_really_mean_it) {
 	  cerr << "Full Dedup is dangerous and could lead to data loss!\n"
 	       << "do you really mean it? (requires --yes-i-really-mean-it)"
 	       << std::endl;
@@ -121,9 +121,9 @@ int rgw_admin_dedup(const DoutPrefixProvider* dpp,
       }
 
       // Build the dedup filter from the supplied file paths
-      dedup_filter_t dedup_filter(o.allow_bucket_list_file, o.deny_bucket_list_file,
-				  o.allow_storage_class_list_file,
-				  o.deny_storage_class_list_file, dpp);
+      dedup_filter_t dedup_filter(opts.allow_bucket_list_file, opts.deny_bucket_list_file,
+				  opts.allow_storage_class_list_file,
+				  opts.deny_storage_class_list_file, dpp);
       int filter_err = dedup_filter.errcode();
       if (filter_err != 0) {
 	cerr << "ERROR: failed to build dedup filter: "

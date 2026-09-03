@@ -13,11 +13,11 @@
 using namespace rgw_admin;
 using namespace std;
 
-int rgw_admin_cors(ceph::Formatter* formatter, const rgw_admin_cors_options& o)
+int rgw_admin_cors(ceph::Formatter* formatter, const rgw_admin_cors_options& opts)
 {
   int ret = 0;
 
-  if (o.command == OPT::GLOBAL_CORS_GET) {
+  if (opts.command == OPT::GLOBAL_CORS_GET) {
     string allow_origins, allow_headers, allow_methods, expose_headers;
     ret = g_conf().get_val("rgw_gcors_allow_origins", &allow_origins);
     if (ret < 0 || allow_origins.empty()) {

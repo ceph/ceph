@@ -22,24 +22,24 @@ using namespace std;
 int rgw_admin_log(const DoutPrefixProvider* dpp,
                   rgw::sal::Driver* driver,
                   Formatter* formatter,
-                  const rgw_admin_log_options& o)
+                  const rgw_admin_log_options& opts)
 {
-  const bool show_log_entries = o.show_log_entries;
-  const bool show_log_sum = o.show_log_sum;
-  const bool skip_zero_entries = o.skip_zero_entries;
+  const bool show_log_entries = opts.show_log_entries;
+  const bool show_log_sum = opts.show_log_sum;
+  const bool skip_zero_entries = opts.skip_zero_entries;
 
   auto* rados = static_cast<rgw::sal::RadosStore*>(driver)->getRados();
 
-  if (o.command == OPT::LOG_LIST) {
-    if (o.date.size() && o.date.size() != 10) {
-      cerr << "bad date format for '" << o.date << "', expect YYYY-MM-DD" << std::endl;
+  if (opts.command == OPT::LOG_LIST) {
+    if (opts.date.size() && opts.date.size() != 10) {
+      cerr << "bad date format for '" << opts.date << "', expect YYYY-MM-DD" << std::endl;
       return EINVAL;
     }
 
     formatter->reset();
     formatter->open_array_section("logs");
     RGWAccessHandle h;
-    int r = rados->log_list_init(dpp, o.date, &h);
+    int r = rados->log_list_init(dpp, opts.date, &h);
     if (r == -ENOENT) {
       // no logs.
     } else {
@@ -66,24 +66,24 @@ int rgw_admin_log(const DoutPrefixProvider* dpp,
     return 0;
   }
 
-  if (o.command == OPT::LOG_SHOW || o.command == OPT::LOG_RM) {
-    if (o.object.empty() && (o.date.empty() || o.bucket_name.empty() || o.bucket_id.empty())) {
+  if (opts.command == OPT::LOG_SHOW || opts.command == OPT::LOG_RM) {
+    if (opts.object.empty() && (opts.date.empty() || opts.bucket_name.empty() || opts.bucket_id.empty())) {
       cerr << "specify an object or a date, bucket and bucket-id" << std::endl;
       exit(1);
     }
 
     string oid;
-    if (!o.object.empty()) {
-      oid = o.object;
+    if (!opts.object.empty()) {
+      oid = opts.object;
     } else {
-      oid = o.date;
+      oid = opts.date;
       oid += "-";
-      oid += o.bucket_id;
+      oid += opts.bucket_id;
       oid += "-";
-      oid += o.bucket_name;
+      oid += opts.bucket_name;
     }
 
-    if (o.command == OPT::LOG_SHOW) {
+    if (opts.command == OPT::LOG_SHOW) {
       RGWAccessHandle h;
 
       int r = rados->log_show_init(dpp, oid, &h);
@@ -157,7 +157,7 @@ next:
       formatter->flush(cout);
       cout << std::endl;
     }
-    if (o.command == OPT::LOG_RM) {
+    if (opts.command == OPT::LOG_RM) {
       int r = rados->log_remove(dpp, oid);
       if (r < 0) {
         cerr << "error removing log " << oid << ": " << cpp_strerror(-r) << std::endl;

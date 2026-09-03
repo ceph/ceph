@@ -28,12 +28,12 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
                 rgw::sal::ConfigStore* cfgstore,
                 rgw::SiteConfig& site,
                 Formatter* formatter,
-                rgw_admin_zonegroup_options& o)
+                rgw_admin_zonegroup_options& opts)
 {
-  switch (o.command) {
+  switch (opts.command) {
     case OPT::ZONEGROUP_ADD:
       {
-	if (o.zonegroup_id.empty() && o.zonegroup_name.empty()) {
+	if (opts.zonegroup_id.empty() && opts.zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
 	  return EINVAL;
 	}
@@ -42,18 +42,18 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 	RGWZoneGroup zonegroup;
         std::unique_ptr<rgw::sal::ZoneGroupWriter> zonegroup_writer;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name,
+                                      opts.zonegroup_id, opts.zonegroup_name,
                                       zonegroup, &zonegroup_writer);
 	if (ret < 0) {
-	  cerr << "failed to load zonegroup " << o.zonegroup_name << " id "
-              << o.zonegroup_id << ": " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to load zonegroup " << opts.zonegroup_name << " id "
+              << opts.zonegroup_id << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
 	RGWZoneParams zone_params;
         std::unique_ptr<rgw::sal::ZoneWriter> zone_writer;
         ret = rgw::read_zone(dpp, null_yield, cfgstore,
-                             o.zone_id, o.zone_name, zone_params, &zone_writer);
+                             opts.zone_id, opts.zone_name, zone_params, &zone_writer);
 	if (ret < 0) {
 	  cerr << "unable to load zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -71,7 +71,7 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
           need_zone_update = true;
         }
 
-        for (auto a : o.tier_config_add) {
+        for (auto a : opts.tier_config_add) {
           ret = zone_params.tier_config.set(a.first, a.second);
           if (ret < 0) {
             cerr << "ERROR: failed to set configurable: " << a << std::endl;
@@ -88,13 +88,13 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
           }
         }
 
-        const bool *pis_master = (o.is_master_set ? &o.is_master : nullptr);
-        const bool *pread_only = (o.is_read_only_set ? &o.read_only : nullptr);
-        const bool *psync_from_all = (o.sync_from_all_specified ? &o.sync_from_all : nullptr);
-        const string *predirect_zone = (o.redirect_zone_set ? &o.redirect_zone : nullptr);
+        const bool *pis_master = (opts.is_master_set ? &opts.is_master : nullptr);
+        const bool *pread_only = (opts.is_read_only_set ? &opts.read_only : nullptr);
+        const bool *psync_from_all = (opts.sync_from_all_specified ? &opts.sync_from_all : nullptr);
+        const string *predirect_zone = (opts.redirect_zone_set ? &opts.redirect_zone : nullptr);
 
         // validate --tier-type if specified
-        const string *ptier_type = (o.tier_type_specified ? &o.tier_type : nullptr);
+        const string *ptier_type = (opts.tier_type_specified ? &opts.tier_type : nullptr);
         if (ptier_type) {
 #ifdef WITH_RADOSGW_RADOS
           auto sync_mgr = static_cast<rgw::sal::RadosStore*>(driver)->svc()->sync_modules->get_manager();
@@ -110,18 +110,18 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 #endif
         }
 
-        if (o.enable_features.empty()) { // enable all features by default
-          o.enable_features.insert(rgw::zone_features::supported.begin(),
+        if (opts.enable_features.empty()) { // enable all features by default
+          opts.enable_features.insert(rgw::zone_features::supported.begin(),
                                  rgw::zone_features::supported.end());
         }
 
         // add/update the public zone information stored in the zonegroup
         ret = rgw::add_zone_to_group(dpp, zonegroup, zone_params,
-                                     pis_master, pread_only, o.endpoints,
+                                     pis_master, pread_only, opts.endpoints,
                                      ptier_type, psync_from_all,
-                                     o.sync_from, o.sync_from_rm,
-                                     predirect_zone, o.bucket_index_max_shards,
-                                     o.enable_features, o.disable_features);
+                                     opts.sync_from, opts.sync_from_rm,
+                                     predirect_zone, opts.bucket_index_max_shards,
+                                     opts.enable_features, opts.disable_features);
         if (ret < 0) {
           return -ret;
         }
@@ -140,35 +140,35 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       break;
     case OPT::ZONEGROUP_CREATE:
       {
-	if (o.zonegroup_name.empty()) {
+	if (opts.zonegroup_name.empty()) {
 	  cerr << "Missing zonegroup name" << std::endl;
 	  return EINVAL;
 	}
 	RGWRealm realm;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm);
+                                  opts.realm_id, opts.realm_name, realm);
 	if (ret < 0) {
 	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
 	RGWZoneGroup zonegroup;
-        zonegroup.name = o.zonegroup_name;
-        zonegroup.is_master = o.is_master;
+        zonegroup.name = opts.zonegroup_name;
+        zonegroup.is_master = opts.is_master;
         zonegroup.realm_id = realm.get_id();
-        zonegroup.endpoints = o.endpoints;
-        zonegroup.api_name = (o.api_name.empty() ? o.zonegroup_name : o.api_name);
+        zonegroup.endpoints = opts.endpoints;
+        zonegroup.api_name = (opts.api_name.empty() ? opts.zonegroup_name : opts.api_name);
 
-        zonegroup.enabled_features = o.enable_features;
+        zonegroup.enabled_features = opts.enable_features;
         if (zonegroup.enabled_features.empty()) { // enable features by default
           zonegroup.enabled_features.insert(rgw::zone_features::enabled.begin(),
                                             rgw::zone_features::enabled.end());
         }
-        for (const auto& feature : o.disable_features) {
+        for (const auto& feature : opts.disable_features) {
           auto i = zonegroup.enabled_features.find(feature);
           if (i == zonegroup.enabled_features.end()) {
             ldpp_dout(dpp, 1) << "WARNING: zone feature \"" << feature
-                << "\" was not enabled in zonegroup " << o.zonegroup_name << dendl;
+                << "\" was not enabled in zonegroup " << opts.zonegroup_name << dendl;
             continue;
           }
           zonegroup.enabled_features.erase(i);
@@ -178,15 +178,15 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
         ret = rgw::create_zonegroup(dpp, null_yield, cfgstore,
                                     exclusive, zonegroup);
 	if (ret < 0) {
-	  cerr << "failed to create zonegroup " << o.zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
+	  cerr << "failed to create zonegroup " << opts.zonegroup_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-        if (o.set_default) {
+        if (opts.set_default) {
           ret = rgw::set_default_zonegroup(dpp, null_yield, cfgstore,
                                            zonegroup);
           if (ret < 0) {
-            cerr << "failed to set zonegroup " << o.zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
+            cerr << "failed to set zonegroup " << opts.zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
 
@@ -196,14 +196,14 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       break;
     case OPT::ZONEGROUP_DEFAULT:
       {
-	if (o.zonegroup_id.empty() && o.zonegroup_name.empty()) {
+	if (opts.zonegroup_id.empty() && opts.zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
 	  return EINVAL;
 	}
 
 	RGWZoneGroup zonegroup;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name,
+                                      opts.zonegroup_id, opts.zonegroup_name,
                                       zonegroup);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -220,14 +220,14 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       break;
     case OPT::ZONEGROUP_DELETE:
       {
-	if (o.zonegroup_id.empty() && o.zonegroup_name.empty()) {
+	if (opts.zonegroup_id.empty() && opts.zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
 	  return EINVAL;
 	}
 	RGWZoneGroup zonegroup;
         std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name,
+                                      opts.zonegroup_id, opts.zonegroup_name,
                                       zonegroup, &writer);
 	if (ret < 0) {
 	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -244,7 +244,7 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       {
 	RGWZoneGroup zonegroup;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name, zonegroup);
+                                      opts.zonegroup_id, opts.zonegroup_name, zonegroup);
 	if (ret < 0) {
 	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -288,7 +288,7 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 	RGWZoneGroup zonegroup;
         std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name,
+                                      opts.zonegroup_id, opts.zonegroup_name,
                                       zonegroup, &writer);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
@@ -297,52 +297,52 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 
         bool need_update = false;
 
-        if (!o.master_zone.empty()) {
-          zonegroup.master_zone = o.master_zone;
+        if (!opts.master_zone.empty()) {
+          zonegroup.master_zone = opts.master_zone;
           need_update = true;
         }
 
-	if (o.is_master_set) {
-	  zonegroup.is_master = o.is_master;
+	if (opts.is_master_set) {
+	  zonegroup.is_master = opts.is_master;
           need_update = true;
         }
 
-        if (!o.endpoints.empty()) {
-          zonegroup.endpoints = o.endpoints;
+        if (!opts.endpoints.empty()) {
+          zonegroup.endpoints = opts.endpoints;
           need_update = true;
         }
 
-        if (!o.api_name.empty()) {
-          zonegroup.api_name = o.api_name;
+        if (!opts.api_name.empty()) {
+          zonegroup.api_name = opts.api_name;
           need_update = true;
         }
 
-        if (!o.realm_id.empty()) {
-          zonegroup.realm_id = o.realm_id;
+        if (!opts.realm_id.empty()) {
+          zonegroup.realm_id = opts.realm_id;
           need_update = true;
-        } else if (!o.realm_name.empty()) {
+        } else if (!opts.realm_name.empty()) {
           // get realm id from name
-          ret = cfgstore->read_realm_id(dpp, null_yield, o.realm_name,
+          ret = cfgstore->read_realm_id(dpp, null_yield, opts.realm_name,
                                         zonegroup.realm_id);
           if (ret < 0) {
-            cerr << "failed to find realm by name " << o.realm_name << std::endl;
+            cerr << "failed to find realm by name " << opts.realm_name << std::endl;
             return -ret;
           }
           need_update = true;
         }
 
-        if (o.bucket_index_max_shards) {
+        if (opts.bucket_index_max_shards) {
           for (auto& [name, zone] : zonegroup.zones) {
-            zone.bucket_index_max_shards = *o.bucket_index_max_shards;
+            zone.bucket_index_max_shards = *opts.bucket_index_max_shards;
           }
           need_update = true;
         }
 
-        for (const auto& feature : o.enable_features) {
+        for (const auto& feature : opts.enable_features) {
           zonegroup.enabled_features.insert(feature);
           need_update = true;
         }
-        for (const auto& feature : o.disable_features) {
+        for (const auto& feature : opts.disable_features) {
           auto i = zonegroup.enabled_features.find(feature);
           if (i == zonegroup.enabled_features.end()) {
             ldpp_dout(dpp, 1) << "WARNING: zone feature \"" << feature
@@ -362,11 +362,11 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 	  }
 	}
 
-        if (o.set_default) {
+        if (opts.set_default) {
           ret = rgw::set_default_zonegroup(dpp, null_yield, cfgstore,
                                            zonegroup);
           if (ret < 0) {
-            cerr << "failed to set zonegroup " << o.zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
+            cerr << "failed to set zonegroup " << opts.zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
 
@@ -378,8 +378,8 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       {
 	RGWRealm realm;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm);
-	bool default_realm_not_exist = (ret == -ENOENT && o.realm_id.empty() && o.realm_name.empty());
+                                  opts.realm_id, opts.realm_name, realm);
+	bool default_realm_not_exist = (ret == -ENOENT && opts.realm_id.empty() && opts.realm_name.empty());
 
 	if (ret < 0 && !default_realm_not_exist) {
 	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
@@ -387,7 +387,7 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 	}
 
 	RGWZoneGroup zonegroup;
-	ret = rgw_admin_read_decode_json(o.infile, zonegroup);
+	ret = rgw_admin_read_decode_json(opts.infile, zonegroup);
 	if (ret < 0) {
 	  return 1;
 	}
@@ -430,11 +430,11 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 	  return 1;
 	}
 
-        if (o.set_default) {
+        if (opts.set_default) {
           ret = rgw::set_default_zonegroup(dpp, null_yield, cfgstore,
                                            zonegroup);
           if (ret < 0) {
-            cerr << "failed to set zonegroup " << o.zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
+            cerr << "failed to set zonegroup " << opts.zonegroup_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
 
@@ -447,33 +447,33 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 	RGWZoneGroup zonegroup;
         std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name,
+                                      opts.zonegroup_id, opts.zonegroup_name,
                                       zonegroup, &writer);
         if (ret < 0) {
           cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
 
-        if (o.zone_id.empty()) {
-          if (o.zone_name.empty()) {
+        if (opts.zone_id.empty()) {
+          if (opts.zone_name.empty()) {
             cerr << "no --zone-id or --rgw-zone name provided" << std::endl;
             return EINVAL;
           }
           // look up zone id by name
           for (auto& z : zonegroup.zones) {
-            if (o.zone_name == z.second.name) {
-              o.zone_id = z.second.id;
+            if (opts.zone_name == z.second.name) {
+              opts.zone_id = z.second.id;
               break;
             }
           }
-          if (o.zone_id.empty()) {
-            cerr << "zone name " << o.zone_name << " not found in zonegroup "
+          if (opts.zone_id.empty()) {
+            cerr << "zone name " << opts.zone_name << " not found in zonegroup "
                 << zonegroup.get_name() << std::endl;
             return ENOENT;
           }
         }
 
-        ret = rgw::remove_zone_from_group(dpp, zonegroup, o.zone_id);
+        ret = rgw::remove_zone_from_group(dpp, zonegroup, opts.zone_id);
         if (ret < 0) {
           cerr << "failed to remove zone: " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -491,25 +491,25 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       break;
     case OPT::ZONEGROUP_RENAME:
       {
-	if (o.zonegroup_new_name.empty()) {
+	if (opts.zonegroup_new_name.empty()) {
 	  cerr << " missing zonegroup new name" << std::endl;
 	  return EINVAL;
 	}
-	if (o.zonegroup_id.empty() && o.zonegroup_name.empty()) {
+	if (opts.zonegroup_id.empty() && opts.zonegroup_name.empty()) {
 	  cerr << "no zonegroup name or id provided" << std::endl;
 	  return EINVAL;
 	}
 	RGWZoneGroup zonegroup;
         std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name,
+                                      opts.zonegroup_id, opts.zonegroup_name,
                                       zonegroup, &writer);
 	if (ret < 0) {
 	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-        zonegroup.api_name = o.zonegroup_new_name;
-        ret = writer->rename(dpp, null_yield, zonegroup, o.zonegroup_new_name);
+        zonegroup.api_name = opts.zonegroup_new_name;
+        ret = writer->rename(dpp, null_yield, zonegroup, opts.zonegroup_new_name);
 	if (ret < 0) {
 	  cerr << "failed to rename zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -520,7 +520,7 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       {
 	RGWZoneGroup zonegroup;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name, zonegroup);
+                                      opts.zonegroup_id, opts.zonegroup_name, zonegroup);
 	if (ret < 0) {
 	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -532,22 +532,22 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       break;
     case OPT::ZONEGROUP_PLACEMENT_GET:
       {
-	if (o.placement_id.empty()) {
+	if (opts.placement_id.empty()) {
 	  cerr << "ERROR: --placement-id not specified" << std::endl;
 	  return EINVAL;
 	}
 
 	RGWZoneGroup zonegroup;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name, zonegroup);
+                                      opts.zonegroup_id, opts.zonegroup_name, zonegroup);
 	if (ret < 0) {
 	  cerr << "failed to load zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-	auto p = zonegroup.placement_targets.find(o.placement_id);
+	auto p = zonegroup.placement_targets.find(opts.placement_id);
 	if (p == zonegroup.placement_targets.end()) {
-	  cerr << "failed to find a zonegroup placement target named '" << o.placement_id << "'" << std::endl;
+	  cerr << "failed to find a zonegroup placement target named '" << opts.placement_id << "'" << std::endl;
 	  return -ENOENT;
 	}
 	encode_json("placement_targets", p->second, formatter);
@@ -559,47 +559,47 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
     case OPT::ZONEGROUP_PLACEMENT_RM:
     case OPT::ZONEGROUP_PLACEMENT_DEFAULT:
       {
-    if (o.placement_id.empty()) {
+    if (opts.placement_id.empty()) {
       cerr << "ERROR: --placement-id not specified" << std::endl;
       return EINVAL;
     }
 
     rgw_placement_rule rule;
-    rule.from_str(o.placement_id);
+    rule.from_str(opts.placement_id);
 
-    if (!rule.storage_class.empty() && o.opt_storage_class &&
-        rule.storage_class != *o.opt_storage_class) {
+    if (!rule.storage_class.empty() && opts.opt_storage_class &&
+        rule.storage_class != *opts.opt_storage_class) {
       cerr << "ERROR: provided contradicting storage class configuration" << std::endl;
       return EINVAL;
     } else if (rule.storage_class.empty()) {
-      rule.storage_class = o.opt_storage_class.value_or(string());
+      rule.storage_class = opts.opt_storage_class.value_or(string());
     }
 
 	RGWZoneGroup zonegroup;
         std::unique_ptr<rgw::sal::ZoneGroupWriter> writer;
         int ret = rgw::read_zonegroup(dpp, null_yield, cfgstore,
-                                      o.zonegroup_id, o.zonegroup_name,
+                                      opts.zonegroup_id, opts.zonegroup_name,
                                       zonegroup, &writer);
 	if (ret < 0) {
 	  cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-    if (o.command == OPT::ZONEGROUP_PLACEMENT_ADD ||
-      o.command == OPT::ZONEGROUP_PLACEMENT_MODIFY) {
-      RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[o.placement_id];
-      if (!o.tags.empty()) {
+    if (opts.command == OPT::ZONEGROUP_PLACEMENT_ADD ||
+      opts.command == OPT::ZONEGROUP_PLACEMENT_MODIFY) {
+      RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[opts.placement_id];
+      if (!opts.tags.empty()) {
         target.tags.clear();
-        for (auto& t : o.tags) {
+        for (auto& t : opts.tags) {
           target.tags.insert(t);
         }
       }
 
-      target.name = o.placement_id;
-      for (auto& t : o.tags_rm) {
+      target.name = opts.placement_id;
+      for (auto& t : opts.tags_rm) {
         target.tags.erase(t);
       }
-      for (auto& t : o.tags_add) {
+      for (auto& t : opts.tags_add) {
         target.tags.insert(t);
       }
       target.storage_classes.insert(rule.get_storage_class());
@@ -614,12 +614,12 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
 	  if (ptiter != target.tier_targets.end()) {
         pt = &ptiter->second;
         tier_class = true;
-      } else if (o.tier_type_specified) {
-        if (RGWTierType::is_tier_type_supported(o.tier_type)) {
+      } else if (opts.tier_type_specified) {
+        if (RGWTierType::is_tier_type_supported(opts.tier_type)) {
           /* we support only cloud-s3 & cloud-s3-glacier tier-type for now.
            * Once set cant be reset. */
           tier_class = true;
-          pt->tier_type = o.tier_type;
+          pt->tier_type = opts.tier_type;
           pt->storage_class = storage_class;
         } else {
 	      cerr << "ERROR: Invalid tier-type specified" << std::endl;
@@ -628,9 +628,9 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       }
 
       if (tier_class) {
-        if (o.tier_config_add.size() > 0) {
+        if (opts.tier_config_add.size() > 0) {
           JSONFormattable tconfig;
-          for (auto add : o.tier_config_add) {
+          for (auto add : opts.tier_config_add) {
             int r = tconfig.set(add.first, add.second);
             if (r < 0) {
               cerr << "ERROR: failed to set configurable: " << add << std::endl;
@@ -642,9 +642,9 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
             cerr << "ERROR: failed to update tier_config options"<< std::endl;
           }
         }
-        if (o.tier_config_rm.size() > 0) {
+        if (opts.tier_config_rm.size() > 0) {
           JSONFormattable tconfig;
-          for (auto add : o.tier_config_rm) {
+          for (auto add : opts.tier_config_rm) {
             int r = tconfig.set(add.first, add.second);
             if (r < 0) {
               cerr << "ERROR: failed to set configurable: " << add << std::endl;
@@ -663,34 +663,34 @@ int rgw_admin_zonegroup(const DoutPrefixProvider* dpp,
       if (zonegroup.default_placement.empty()) {
         zonegroup.default_placement.init(rule.name, RGW_STORAGE_CLASS_STANDARD);
       }
-    } else if (o.command == OPT::ZONEGROUP_PLACEMENT_RM) {
-      if (!o.opt_storage_class || o.opt_storage_class->empty()) {
-        zonegroup.placement_targets.erase(o.placement_id);
-        if (zonegroup.default_placement.name == o.placement_id) {
+    } else if (opts.command == OPT::ZONEGROUP_PLACEMENT_RM) {
+      if (!opts.opt_storage_class || opts.opt_storage_class->empty()) {
+        zonegroup.placement_targets.erase(opts.placement_id);
+        if (zonegroup.default_placement.name == opts.placement_id) {
           // clear default placement
           zonegroup.default_placement.clear();
         }
       } else {
-        auto iter = zonegroup.placement_targets.find(o.placement_id);
+        auto iter = zonegroup.placement_targets.find(opts.placement_id);
         if (iter != zonegroup.placement_targets.end()) {
-          RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[o.placement_id];
-          info.storage_classes.erase(*o.opt_storage_class);
+          RGWZoneGroupPlacementTarget& info = zonegroup.placement_targets[opts.placement_id];
+          info.storage_classes.erase(*opts.opt_storage_class);
 
           if (zonegroup.default_placement == rule) {
             // clear default storage class
             zonegroup.default_placement.storage_class.clear();
           }
 
-	      auto ptiter = info.tier_targets.find(*o.opt_storage_class);
+	      auto ptiter = info.tier_targets.find(*opts.opt_storage_class);
 	      if (ptiter != info.tier_targets.end()) {
 		    info.tier_targets.erase(ptiter);
 	      }
         }
       }
-    } else if (o.command == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {
-      if (!zonegroup.placement_targets.count(o.placement_id)) {
+    } else if (opts.command == OPT::ZONEGROUP_PLACEMENT_DEFAULT) {
+      if (!zonegroup.placement_targets.count(opts.placement_id)) {
         cerr << "failed to find a zonegroup placement target named '"
-             << o.placement_id << "'" << std::endl;
+             << opts.placement_id << "'" << std::endl;
         return -ENOENT;
       }
       zonegroup.default_placement = rule;

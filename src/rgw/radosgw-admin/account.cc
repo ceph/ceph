@@ -19,32 +19,32 @@ namespace {
 
 constexpr int DEFAULT_MAX_KEYS = 1000;
 
-rgw::account::AdminOpState make_op_state(const rgw_admin_account_options& o)
+rgw::account::AdminOpState make_op_state(const rgw_admin_account_options& opts)
 {
   return rgw::account::AdminOpState{
-    .account_id = o.account_id,
-    .tenant = o.tenant,
-    .account_name = o.account_name,
-    .email = o.user_email,
-    .max_users = o.max_users,
-    .max_roles = o.max_roles,
-    .max_groups = o.max_groups,
-    .max_access_keys = o.max_access_keys,
-    .max_buckets = o.max_buckets,
-    .purge_data = o.purge_data,
+    .account_id = opts.account_id,
+    .tenant = opts.tenant,
+    .account_name = opts.account_name,
+    .email = opts.user_email,
+    .max_users = opts.max_users,
+    .max_roles = opts.max_roles,
+    .max_groups = opts.max_groups,
+    .max_access_keys = opts.max_access_keys,
+    .max_buckets = opts.max_buckets,
+    .purge_data = opts.purge_data,
   };
 }
 
 int handle_account_op(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       RGWStreamFlusher& stream_flusher,
-                      const rgw_admin_account_options& o)
+                      const rgw_admin_account_options& opts)
 {
-  auto op_state = make_op_state(o);
+  auto op_state = make_op_state(opts);
   std::string err_msg;
   int ret = 0;
 
-  switch (o.command) {
+  switch (opts.command) {
   case rgw_admin::OPT::ACCOUNT_CREATE:
     ret = rgw::account::create(dpp, driver, op_state, err_msg,
                                stream_flusher, null_yield);
@@ -71,7 +71,7 @@ int handle_account_op(const DoutPrefixProvider* dpp,
 
   case rgw_admin::OPT::ACCOUNT_STATS:
     ret = rgw::account::stats(dpp, driver, op_state,
-                              o.sync_stats, o.reset_stats, err_msg,
+                              opts.sync_stats, opts.reset_stats, err_msg,
                               stream_flusher, null_yield);
     if (ret < 0) {
       return rgw_admin::report_error("failed to read account stats", ret, err_msg);
@@ -96,14 +96,14 @@ int handle_account_op(const DoutPrefixProvider* dpp,
 int handle_account_list(const DoutPrefixProvider* dpp,
                         rgw::sal::Driver* driver,
                         RGWStreamFlusher& stream_flusher,
-                        const rgw_admin_account_options& o)
+                        const rgw_admin_account_options& opts)
 {
-  if (o.max_entries && o.max_entries < 0) {
+  if (opts.max_entries && opts.max_entries < 0) {
     return rgw_admin::report_error("invalid max entries", -EINVAL);
   }
 
   void* handle = nullptr;
-  int ret = driver->meta_list_keys_init(dpp, "account", o.marker, &handle);
+  int ret = driver->meta_list_keys_init(dpp, "account", opts.marker, &handle);
   if (ret < 0) {
     return rgw_admin::report_error("can't get key", ret);
   }
@@ -115,7 +115,7 @@ int handle_account_list(const DoutPrefixProvider* dpp,
   bool truncated = false;
   uint64_t count = 0;
   Formatter* formatter = stream_flusher.get_formatter();
-  const bool limit_specified = o.max_entries.has_value();
+  const bool limit_specified = opts.max_entries.has_value();
 
   if (limit_specified) {
     formatter->open_object_section("result");
@@ -125,7 +125,7 @@ int handle_account_list(const DoutPrefixProvider* dpp,
   do {
     std::list<std::string> keys;
     const uint64_t left = limit_specified
-        ? static_cast<uint64_t>(*o.max_entries) - count
+        ? static_cast<uint64_t>(*opts.max_entries) - count
         : static_cast<uint64_t>(DEFAULT_MAX_KEYS);
 
     if (left == 0) {
@@ -145,7 +145,7 @@ int handle_account_list(const DoutPrefixProvider* dpp,
     }
   } while (truncated &&
            (!limit_specified ||
-            count < static_cast<uint64_t>(*o.max_entries)));
+            count < static_cast<uint64_t>(*opts.max_entries)));
 
   formatter->close_section(); // keys
 
@@ -167,18 +167,18 @@ int handle_account_list(const DoutPrefixProvider* dpp,
 int rgw_admin_account(const DoutPrefixProvider* dpp,
                       rgw::sal::Driver* driver,
                       RGWStreamFlusher& stream_flusher,
-                      const rgw_admin_account_options& o)
+                      const rgw_admin_account_options& opts)
 {
-  switch (o.command) {
+  switch (opts.command) {
   case rgw_admin::OPT::ACCOUNT_CREATE:
   case rgw_admin::OPT::ACCOUNT_MODIFY:
   case rgw_admin::OPT::ACCOUNT_GET:
   case rgw_admin::OPT::ACCOUNT_STATS:
   case rgw_admin::OPT::ACCOUNT_RM:
-    return handle_account_op(dpp, driver, stream_flusher, o);
+    return handle_account_op(dpp, driver, stream_flusher, opts);
 
   case rgw_admin::OPT::ACCOUNT_LIST:
-    return handle_account_list(dpp, driver, stream_flusher, o);
+    return handle_account_list(dpp, driver, stream_flusher, opts);
 
   default:
     return EINVAL;

@@ -30,31 +30,31 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
                 rgw::sal::ConfigStore* cfgstore,
                 rgw::SiteConfig& site,
                 Formatter* formatter,
-                rgw_admin_realm_options& o)
+                rgw_admin_realm_options& opts)
 {
-  switch (o.command) {
+  switch (opts.command) {
     case OPT::REALM_CREATE:
       {
-	if (o.realm_name.empty()) {
+	if (opts.realm_name.empty()) {
 	  cerr << "missing realm name" << std::endl;
 	  return EINVAL;
 	}
 
 	RGWRealm realm;
-        realm.name = o.realm_name;
+        realm.name = opts.realm_name;
 
         constexpr bool exclusive = true;
 	int ret = rgw::create_realm(dpp, null_yield, cfgstore,
                                     exclusive, realm);
 	if (ret < 0) {
-	  cerr << "ERROR: couldn't create realm " << o.realm_name << ": " << cpp_strerror(-ret) << std::endl;
+	  cerr << "ERROR: couldn't create realm " << opts.realm_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-        if (o.set_default) {
+        if (opts.set_default) {
           ret = rgw::set_default_realm(dpp, null_yield, cfgstore, realm);
           if (ret < 0) {
-            cerr << "failed to set realm " << o.realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
+            cerr << "failed to set realm " << opts.realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
 
@@ -64,14 +64,14 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
       break;
     case OPT::REALM_DELETE:
       {
-	if (o.realm_id.empty() && o.realm_name.empty()) {
+	if (opts.realm_id.empty() && opts.realm_name.empty()) {
 	  cerr << "missing realm name or id" << std::endl;
 	  return EINVAL;
 	}
 	RGWRealm realm;
         std::unique_ptr<rgw::sal::RealmWriter> writer;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm, &writer);
+                                  opts.realm_id, opts.realm_name, realm, &writer);
 	if (ret < 0) {
 	  cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -88,9 +88,9 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
       {
 	RGWRealm realm;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm);
+                                  opts.realm_id, opts.realm_name, realm);
 	if (ret < 0) {
-	  if (ret == -ENOENT && o.realm_name.empty() && o.realm_id.empty()) {
+	  if (ret == -ENOENT && opts.realm_name.empty() && opts.realm_id.empty()) {
 	    cerr << "missing realm name or id, or default realm not found" << std::endl;
 	  } else {
 	    cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
@@ -149,29 +149,29 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
         // use realm's current period
         RGWRealm realm;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm);
+                                  opts.realm_id, opts.realm_name, realm);
         if (ret < 0) {
           cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        o.period_id = realm.current_period;
+        opts.period_id = realm.current_period;
 
         Formatter::ObjectSection periods_list{*formatter, "realm_periods_list"};
-	encode_json("current_period", o.period_id, formatter);
+	encode_json("current_period", opts.period_id, formatter);
 
         Formatter::ArraySection periods{*formatter, "periods"};
 
-        while (!o.period_id.empty()) {
+        while (!opts.period_id.empty()) {
           RGWPeriod period;
-          ret = cfgstore->read_period(dpp, null_yield, o.period_id,
+          ret = cfgstore->read_period(dpp, null_yield, opts.period_id,
                                       std::nullopt, period);
           if (ret < 0) {
-            cerr << "failed to load period id " << o.period_id
+            cerr << "failed to load period id " << opts.period_id
                 << ": " << cpp_strerror(-ret) << std::endl;
             return -ret;
           }
-          encode_json("id", o.period_id, formatter);
-          o.period_id = period.predecessor_uuid;
+          encode_json("id", opts.period_id, formatter);
+          opts.period_id = period.predecessor_uuid;
         }
       } // close sections periods and realm_periods_list
       formatter->flush(cout);
@@ -179,11 +179,11 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
 
     case OPT::REALM_RENAME:
       {
-	if (o.realm_new_name.empty()) {
+	if (opts.realm_new_name.empty()) {
 	  cerr << "missing realm new name" << std::endl;
 	  return EINVAL;
 	}
-	if (o.realm_name.empty() && o.realm_id.empty()) {
+	if (opts.realm_name.empty() && opts.realm_id.empty()) {
 	  cerr << "missing realm name or id" << std::endl;
 	  return EINVAL;
 	}
@@ -191,12 +191,12 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
         RGWRealm realm;
         std::unique_ptr<rgw::sal::RealmWriter> writer;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm, &writer);
+                                  opts.realm_id, opts.realm_name, realm, &writer);
 	if (ret < 0) {
 	  cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
-        ret = writer->rename(dpp, null_yield, realm, o.realm_new_name);
+        ret = writer->rename(dpp, null_yield, realm, opts.realm_new_name);
 	if (ret < 0) {
 	  cerr << "rename failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -208,7 +208,7 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
       break;
     case OPT::REALM_SET:
       {
-	if (o.realm_id.empty() && o.realm_name.empty()) {
+	if (opts.realm_id.empty() && opts.realm_name.empty()) {
 	  cerr << "no realm name or id provided" << std::endl;
 	  return EINVAL;
 	}
@@ -216,19 +216,19 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
         RGWRealm realm;
         std::unique_ptr<rgw::sal::RealmWriter> writer;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm, &writer);
+                                  opts.realm_id, opts.realm_name, realm, &writer);
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "failed to init realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	} else if (ret == -ENOENT) {
 	  new_realm = true;
 	}
-	ret = rgw_admin_read_decode_json(o.infile, realm);
+	ret = rgw_admin_read_decode_json(opts.infile, realm);
 	if (ret < 0) {
 	  return 1;
 	}
-	if (!o.realm_name.empty() && realm.get_name() != o.realm_name) {
-	  cerr << "mismatch between --rgw-realm " << o.realm_name << " and json input file name " <<
+	if (!opts.realm_name.empty() && realm.get_name() != opts.realm_name) {
+	  cerr << "mismatch between --rgw-realm " << opts.realm_name << " and json input file name " <<
 	    realm.get_name() << std::endl;
 	  return EINVAL;
 	}
@@ -251,10 +251,10 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
 	  }
 	}
 
-        if (o.set_default) {
+        if (opts.set_default) {
           ret = rgw::set_default_realm(dpp, null_yield, cfgstore, realm);
           if (ret < 0) {
-            cerr << "failed to set realm " << o.realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
+            cerr << "failed to set realm " << opts.realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
 	encode_json("realm", realm, formatter);
@@ -266,7 +266,7 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
       {
         RGWRealm realm;
         int ret = rgw::read_realm(dpp, null_yield, cfgstore,
-                                  o.realm_id, o.realm_name, realm);
+                                  opts.realm_id, opts.realm_name, realm);
 	if (ret < 0) {
 	  cerr << "failed to load realm: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -286,7 +286,7 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
       break;
     case OPT::REALM_PULL:
       {
-        if (o.url.empty()) {
+        if (opts.url.empty()) {
           cerr << "A --url must be provided." << std::endl;
           return EINVAL;
         }
@@ -296,14 +296,14 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
         info.request_uri = "/admin/realm";
 
         map<string, string> &params = info.args.get_params();
-        if (!o.realm_id.empty())
-          params["id"] = o.realm_id;
-        if (!o.realm_name.empty())
-          params["name"] = o.realm_name;
+        if (!opts.realm_id.empty())
+          params["id"] = opts.realm_id;
+        if (!opts.realm_name.empty())
+          params["name"] = opts.realm_name;
 
         bufferlist bl;
         JSONParser p;
-        int ret = rgw_admin_send_to_remote_or_url(nullptr, o.url, o.opt_region, o.access_key, o.secret_key, info, bl, p, dpp, driver);
+        int ret = rgw_admin_send_to_remote_or_url(nullptr, opts.url, opts.opt_region, opts.access_key, opts.secret_key, info, bl, p, dpp, driver);
         if (ret < 0) {
           cerr << "request failed: " << cpp_strerror(-ret) << std::endl;
           if (ret == -EACCES) {
@@ -324,9 +324,9 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
         auto& current_period = realm.get_current_period();
         if (!current_period.empty()) {
           // pull the latest epoch of the realm's current period
-          ret = rgw_admin_do_period_pull(cfgstore, nullptr, o.url, o.opt_region,
-                               o.access_key, o.secret_key,
-                               o.realm_id, o.realm_name, current_period, "",
+          ret = rgw_admin_do_period_pull(cfgstore, nullptr, opts.url, opts.opt_region,
+                               opts.access_key, opts.secret_key,
+                               opts.realm_id, opts.realm_name, current_period, "",
                                &period, dpp, driver);
           if (ret < 0) {
             cerr << "could not fetch period " << current_period << std::endl;
@@ -342,10 +342,10 @@ int rgw_admin_realm(const DoutPrefixProvider* dpp,
           return -ret;
         }
 
-        if (o.set_default) {
+        if (opts.set_default) {
           ret = rgw::set_default_realm(dpp, null_yield, cfgstore, realm);
           if (ret < 0) {
-            cerr << "failed to set realm " << o.realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
+            cerr << "failed to set realm " << opts.realm_name << " as default: " << cpp_strerror(-ret) << std::endl;
           }
         }
 
