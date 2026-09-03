@@ -18,6 +18,7 @@
 
 #include <atomic>
 #include <cstdint>
+#include <mutex>
 
 #include "common/ceph_time.h"
 #include "common/fair_mutex.h"
@@ -129,6 +130,12 @@ public:
    * An RAII scope charging exclusive wall time to `phase`.  Nesting is
    * tracked per thread, so a Timer may be used from any thread; every
    * instrumented scope but l_mdsp_heap_release holds mds_lock.
+   *
+   * A scope may straddle a set_enabled() cycle, which resets the counters
+   * from another thread; each Timer therefore remembers the generation it
+   * started in and its destructor drops the sample if a reset intervened,
+   * rather than charging time from before the reset into counters that are
+   * supposed to cover only the period since it.
    */
   class Timer {
   public:
@@ -139,6 +146,11 @@ public:
       if (!this->tracker) {
         return;
       }
+      /* Read the generation before the clock, so that a reset() racing with
+       * this constructor either has already published the generation we
+       * observe -- and therefore zeroed the counters before we started
+       * timing -- or publishes a newer one, and the destructor drops us. */
+      generation = this->tracker->generation.load(std::memory_order_acquire);
       parent = tl_current;
       tl_current = this;
       start = ceph::mono_clock::now();
@@ -149,12 +161,17 @@ public:
         return;
       }
       const auto total = ceph::mono_clock::now() - start;
-      tracker->account(phase, total > children ? total - children
-                                               : ceph::timespan::zero());
+      /* Unconditionally, and before the generation check: a parent that does
+       * survive must not be charged for a child that was dropped. */
       if (parent) {
         parent->children += total;
       }
       tl_current = parent;
+      if (generation != tracker->generation.load(std::memory_order_acquire)) {
+        return;
+      }
+      tracker->account(phase, total > children ? total - children
+                                               : ceph::timespan::zero());
     }
 
     Timer(const Timer&) = delete;
@@ -165,6 +182,7 @@ public:
 
     MDSPhaseTracker *tracker;
     int phase;
+    uint64_t generation = 0;
     Timer *parent = nullptr;
     ceph::mono_time start;
     ceph::timespan children = ceph::timespan::zero();
@@ -180,18 +198,23 @@ private:
 
   std::atomic<bool> enabled = false;
 
-  /* When tracking started; dump() reports everything relative to it.  Both
-   * this and the baselines below are written only by reset() but read by
-   * dump(), which runs without mds_lock, hence the atomics. */
-  std::atomic<uint64_t> since_ns = 0;
+  /* Bumped by every reset(); see MDSPhaseTracker::Timer. */
+  std::atomic<uint64_t> generation = 0;
 
-  /* mds_lock totals as of the last reset() */
-  std::atomic<uint64_t> baseline_acquisitions = 0;
-  std::atomic<uint64_t> baseline_wait_ns = 0;
-  std::atomic<uint64_t> baseline_held_ns = 0;
+  /* Everything below is written by reset(), which runs from
+   * handle_conf_change() without mds_lock, and read by update_lock_stats()
+   * on the tick thread and by dump() on an asok thread.  Both readers
+   * subtract one of these from a fresh mds_lock snapshot, so the snapshot
+   * has to be taken under the same mutex: taken outside it, a reset()
+   * landing in between would leave a newer baseline being subtracted from
+   * an older total and the wrapped difference being reported. */
+  mutable std::mutex stats_mutex;
 
-  /* the last mds_lock totals published, so that deltas can be tinc()'d;
-   * only touched by update_lock_stats(), which runs under mds_lock */
+  /// when tracking started; dump() reports everything relative to it
+  uint64_t since_ns = 0;
+  /// mds_lock totals as of the last reset(), subtracted by dump()
+  ceph::fair_mutex::stats baseline_lock_stats;
+  /// the last mds_lock totals published, so that deltas can be tinc()'d
   ceph::fair_mutex::stats last_lock_stats;
 };
 

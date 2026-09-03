@@ -25,8 +25,10 @@ Tracking is off by default. Turn it on with
    ceph config set mds mds_enable_phase_tracker true
 
 Enabling it resets the counters, so everything reported afterwards describes
-only the period since it was turned on. See `Cost`_ for what it costs to leave
-on, and why it is not on by default.
+only the period since it was turned on; work that was already in progress when
+it was turned on is not charged to any phase, since only part of it happened in
+the period being reported. See `Cost`_ for what it costs to leave on, and why
+it is not on by default.
 
 Reading the breakdown
 =====================
@@ -222,9 +224,10 @@ Accounting is not free, and because it happens under ``mds_lock`` its cost is
 serialized along with everything else. That is why it is off by default: a
 rank should not pay for instrumentation nobody is reading.
 
-Per instrumented scope the cost is two monotonic clock reads and the three
-atomic increments any Ceph time average already costs; per ``mds_lock``
-acquisition it is three more clock reads and three atomic increments. A client
+Per instrumented scope the cost is two monotonic clock reads, two loads of a
+generation counter, and the three atomic increments any Ceph time average
+already costs; per ``mds_lock`` acquisition it is three more clock reads and
+three atomic increments. A client
 request typically passes through two acquisitions and two scopes -- once on
 dispatch, once when its journal completion runs -- so roughly ten clock reads
 and a dozen increments, a few hundred nanoseconds of added serialized work per
