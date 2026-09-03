@@ -4372,6 +4372,30 @@ def _zap_osds(ctx: CephadmContext) -> None:
             # id isn't part of the output here!)
             logger.warning(f'Not zapping LVs (not implemented): {lv_names}')
 
+    c = get_ceph_volume_container(ctx,
+                                  args=['raw', 'list', '--format', 'json'],
+                                  volume_mounts=mounts,
+                                  envs=ctx.env)
+    out, err, code = call_throws(ctx, c.run_cmd())
+    if code:
+        raise Error('failed to list raw osds')
+    try:
+        raw_ls = json.loads(out)
+    except ValueError as e:
+        raise Error(f'Invalid JSON in ceph-volume raw list: {e}')
+    if not isinstance(raw_ls, dict):
+        raise Error('Invalid JSON in ceph-volume raw list: expected object')
+
+    seen = set()
+    for details in raw_ls.values():
+        if not isinstance(details, dict) or details.get('ceph_fsid') != ctx.fsid:
+            continue
+        for key in ('device', 'device_db', 'device_wal'):
+            path = details.get(key)
+            if path and path not in seen:
+                seen.add(path)
+                _zap(ctx, path)
+
 
 def command_zap_osds(ctx: CephadmContext) -> None:
     if not ctx.force:
