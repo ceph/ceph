@@ -82,6 +82,7 @@ public:
     mc = std::make_unique<MonClient>(cct.get(), *icp);
     messenger.reset(
         Messenger::create_client_messenger(cct.get(), "unittest_mgr"));
+    messenger->start();
     objecter =
         std::make_unique<Objecter>(cct.get(), messenger.get(), mc.get(), *icp);
 
