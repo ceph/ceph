@@ -651,6 +651,7 @@ Requires:	    libcephsqlite = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?weak_deps}
 Recommends:	ceph-mgr-alerts = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cephadm = %{_epoch_prefix}%{version}-%{release}
+Recommends:     ceph-mgr-ceph-secrets = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-cli-api = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
@@ -827,6 +828,16 @@ Requires:       openssh-clients
 %description mgr-cephadm
 ceph-mgr-cephadm is a ceph-mgr module for orchestration functions using
 the integrated cephadm deployment tool management operations.
+
+%package mgr-ceph-secrets
+BuildArch:         noarch
+Summary:           Ceph Manager module for managing secrets
+%if 0%{?suse_version}
+Group:             System/Filesystems
+%endif
+Requires:          ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+%description mgr-ceph-secrets
+ceph-mgr-ceph-secrets is a ceph-mgr module providing secret management.
 
 %package mgr-cli-api
 BuildArch:      noarch
@@ -2437,10 +2448,12 @@ fi
 %files mgr-cephadm
 %{_datadir}/ceph/mgr/cephadm
 
+%ceph_mgr_module_scripts mgr-cephadm
+
 %files mgr-ceph-secrets
 %{_datadir}/ceph/mgr/ceph_secrets
 
-%ceph_mgr_module_scripts mgr-cephadm
+%ceph_mgr_module_scripts mgr-ceph-secrets
 
 %files mgr-cli-api
 %{_datadir}/ceph/mgr/cli_api
