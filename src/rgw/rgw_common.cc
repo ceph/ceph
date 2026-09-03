@@ -3071,6 +3071,7 @@ void RGWAccountInfo::dump(Formatter * const f) const
   encode_json("max_groups", max_groups, f);
   encode_json("max_buckets", max_buckets, f);
   encode_json("max_access_keys", max_access_keys, f);
+  encode_json("flags", flags, f);
 }
 
 void RGWAccountInfo::decode_json(JSONObj* obj)
@@ -3086,6 +3087,7 @@ void RGWAccountInfo::decode_json(JSONObj* obj)
   JSONDecoder::decode_json("max_groups", max_groups, obj);
   JSONDecoder::decode_json("max_buckets", max_buckets, obj);
   JSONDecoder::decode_json("max_access_keys", max_access_keys, obj);
+  JSONDecoder::decode_json("flags", flags, obj);
 }
 
 std::list<RGWAccountInfo> RGWAccountInfo::generate_test_instances()

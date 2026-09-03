@@ -835,6 +835,10 @@ struct RGWUserInfo
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
+enum RGWAccountFlags {
+  ACCOUNT_SUSPENDED = 0x1,
+};
+
 // user account metadata
 struct RGWAccountInfo {
   rgw_account_id id;
@@ -859,8 +863,14 @@ struct RGWAccountInfo {
   static constexpr int32_t DEFAULT_ACCESS_KEY_LIMIT = 4;
   int32_t max_access_keys = DEFAULT_ACCESS_KEY_LIMIT;
 
+  uint32_t flags{0};
+
+  bool suspended() const {
+    return (flags & ACCOUNT_SUSPENDED) != 0;
+  }
+
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(id, bl);
     encode(tenant, bl);
     encode(name, bl);
@@ -872,11 +882,12 @@ struct RGWAccountInfo {
     encode(max_buckets, bl);
     encode(max_access_keys, bl);
     encode(bucket_quota, bl);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(id, bl);
     decode(tenant, bl);
     decode(name, bl);
@@ -889,6 +900,9 @@ struct RGWAccountInfo {
     decode(max_access_keys, bl);
     if (struct_v >= 2) {
       decode(bucket_quota, bl);
+    }
+    if (struct_v >= 3) {
+      decode(flags, bl);
     }
     DECODE_FINISH(bl);
   }
