@@ -107,124 +107,151 @@ private:
  * =============
  *
  * @verbatim
- *                                             CONSTRUCTOR
- *                                                 | m_state = STATE_INIT
- *                                                 v
- *                                               INIT
- *                                                 | m_state = STATE_REPLAYING
- *                                                 v
- *                                           LOAD_REPLAYER <---------------------------------------------------------------------- +
- *                                                 |                                                                               ^
- *                                                 v                                                                               |
- *                                         IS_RESYNC_REQUESTED                                                                     |
- *                                                 |  m_resync_requested ?                                                         |
- *                                   true          v         false                                                                 |
- *                         + <-------------------- + ------------------------> +                                                   |
- *                         |                                                   |                                                   |
- *                         v                                                   v                                                   |
- *                         + <--------------------------------- +     + -----> +                                                   |
- *                         |                                    ^     ^        |                                                   |
- *                         v                                    |     |        v                                                   |
- *             LOAD_REMOTE_GROUP_SNAPSHOTS                      |     | LOAD_LOCAL_GROUP_SNAPSHOTS                                 |
- *                         |                                    |     |        |                                                   |
- *                         | m_resync_requested ?               |     |        v role: primary? true                               |
- *              false      v       true                         |     |        + ----------------------------------------> +     ^ |
- *           + ----------- + ---------------- +                 |     |  false |     daemon restart one-time check:        |     | |
- *           |                                |  remote         |     |        v               snaps in creating phase    ╭─╮  --+ |
- *           + <------------------ +          v  primary? false╭─╮    |        + -----> PRUNE_CREATING_GROUP_SNAPSHOTS ->-╯|╰----> +
- *           |                     ^          + ------------->-╯|╰--> +        |                                           |       |
- *           v                     |          | true            |              v  is last group snap orphan ? true         v       |
- *  CHECK_LOCAL_GROUP_SNAPSHOTS    |          |                 |              + ----------------------------------------> +       |
- *           |                     |          |                 |        false |  if incomplete mirror snapshot is found,  |       |
- *  no snaps v                     |          |                 |              v   set m_retry_validate_snap = true        |       |
- *    + <--- + ----> +             |          |                 + <----------- +                                           |       |
- *    |              |             |         ╭─╮                      false    | m_resync_requested?                       |       |
- *    |              |             + <-------╯|╰-<---------------------------- +                                           |       |
- *    |              |                        |                       true                                                 |       |
- *    |              |                        |                                                                            |       |
- *    |              v  demoted/split-brain   v                                                                            v       |
- *    |              + ---------------------> + -------------------------------------------------------------------------> +       |
- *    |              |                                                                                                     |       |
- *    |              v   m_retry_validate_snap == true                                                                     |       |
- *    |              + ------------------------------------------------------------------> +                               |       |
- *    |              |                                                                     |                               |       |
- *    |              v                 r == -EAGAIN? m_refresh_snaps = false               v                               |       |
- *    |      PRUNE_GROUP_SNAPSHOTS ------------------------------------------------------> +                               |     ^ |
- *    |              |                                                                     |                               |     | |
- *    |              v   m_refresh_snaps == true? m_refresh_snaps = false                 ╭─╮                             ╭─╮  --+ |
- *    |              + ----------------------------------------------------------------->-╯|╰->------------------------->-╯|╰----> +
- *    |              |                                                                     v                               |       |
- *    v              v                 true                                               ╭─╮                              v       |
- *    + -----> IS_RENAME_REQUESTED ----------------------------------------------------->-╯|╰->--------------------------> +       |
- *                   |                                                                     |                               |       |
- *                   v                                                                     |                               v       |
- *    SCAN_FOR_UNSYNCED_GROUP_SNAPSHOTS                                                    |                HANDLE_REPLAY_COMPLETE |
- *                   |                                                                     |                                       |
- *                   v                                                                     |                                       |
- *        TRY_CREATE_GROUP_SNAPSHOT                                                        |                                       |
- *                   |    if all snaps synced                                              |                                       |
- *                   + --------> m_state = STATE_IDLE                                      |                                       |
- *                   |                                                                     |                                       |
- *                   v                                                                     |                                       |
- *       CREATE_GROUP_SNAPSHOT                                                             |                                       |
- *                   |                                                                     |                                       |
- *                   v                                                                     |                                       |
- *             + --- + --------------- +                                                   |                                       |
- *             |                       |                                                   |                                       |
- *             v                       v                                                   |                                       |
- *    CREATE_MIRROR_SNAPSHOT     CREATE_USER_SNAPSHOT                                      |                                       |
- *             | m_retry_validate_snap | m_retry_validate_snap                             |                                       |
- *             v               = true  |               = true                              |                                       |
- *    UPDATE_LOCAL_GROUP_STATE         |                                                   |                                       |
- *             |                       |                                                   |                                       |
- *             v                       v                                                   |                                       |
- *             + --------- + --------- +                                                   |                                       |
- *                         |                                                               v                                       |
- *                         + ------------------------> + <-------------------------------- +                                     ^ |
- *                                                     |                                                                         | |
- *                                                     v                             m_retry_validate_snap == false            --+ |
- *                                         SCHEDULE_LOAD_GROUP_SNAPSHOTS --------------------------------------------------------> +
- *                                                     |  m_retry_validate_snap == true : m_retry_validate_snap = false            ^
- *                                                     v  m_state = STATE_REPLAYING                                                |
- *                                       VALIDATE_LOCAL_GROUP_SNAPSHOTS                                                            |
- *                                                     |                                                                           |
- *                                                     v iterate m_local_group_snaps                                               |
- *                                 + ----------------- + ---------------- +                                                        |
- *                snapshot already |                                      | snapshot requires                                      |
- *                   complete      |                                      v     validation                                         |
- *                                 |                       VALIDATE_IMAGE_SNAPS_SYNC_COMPLETE                                      |
- *                                 |                                      |                                                        |
- *                                 |                                      v                                                        |
- *                                 |                         + ---------- + ---------- +                                           |
- *                                 |     is mirror snapshot  |                         | is user snapshot                          |
- *                                 |                         v                         v                                           |
- *                                 |             MIRROR_SNAPSHOT_COMPLETE      USER_SNAPSHOT_COMPLETE                              |
- *                                 |                         |                         |                                           |
- *                                 |                         v                         v                                           |
- *                                 |         LOCAL_GROUP_IMAGE_LIST_BY_ID      LOCAL_GROUP_IMAGE_LIST_BY_ID                        |
- *                                 |                         |                         |                                           |
- *                                 |                         v                         v                                           |
- *                                 |    HANDLE_MIRROR_SNAPSHOT_IMAGE_LIST      HANDLE_USER_SNAPSHOT_IMAGE_LIST                     |
- *                                 |                         |                         |                                           |
- *                                 |                         v                         v                                           |
- *                                 |         POST_MIRROR_SNAPSHOT_CREATED      POST_USER_SNAPSHOT_CREATED                          |
- *                                 |                         |                         |                                           |
- *                                 |                         v                         |                                           |
- *                                 |      CHECK_MIRROR_SNAPSHOT_SYNC_COMPLETE          |                                           |
- *                                 |                         |                         |                                           |
- *                                 |                         v                         |                                           |
- *                                 |            + ---------- + ---------- +            |                                           |
- *                                 |  images    |                         | all image  |                                           |
- *                                 |  syncing   |                         | snapshots  |                                           |
- *                                 |  ( retry   |                         |  sycned    |                                           |
- *                                 |   next     |                         v            |                                           |
- *                                 |   cycle)   |         SET_MIRROR_SNAPSHOT_COMPLETE |                                           |
- *                                 |            |                         |            |                                           |
- *                                 v            v                         v            v                                           |
- *                                 + ---------- + ---------- + ---------- + ---------- +                                         ^ |
- *                                                           |                                                                   | |
- *                                                           v c_gather waits for all callbacks                                --+ |
- *                                                           + ------------------------------------------------------------------> +
+ *                                         CONSTRUCTOR
+ *                                             | m_state = STATE_INIT
+ *                                             v
+ *                                           INIT
+ *                                             | m_state = STATE_REPLAYING
+ *                                             v
+ *                                       LOAD_REPLAYER <---------------------------------------------------------------------------- +
+ *                                             |                                                                                     ^
+ *                                             v                                                                                     |
+ *                                     IS_RESYNC_REQUESTED                                                                           |
+ *                                             |  m_resync_requested ?                                                               |
+ *                               true          v         false                                                                       |
+ *                     + <-------------------- + ------------------------> +                                                         |
+ *                     |                                                   |                                                         |
+ *                     v                                                   v                                                         |
+ *                     + <--------------------------------- +     + -----> +                                                         |
+ *                     |                                    ^     ^        |                                                         |
+ *                     v                                    |     |        v                                                         |
+ *         LOAD_REMOTE_GROUP_SNAPSHOTS                      |     | LOAD_LOCAL_GROUP_SNAPSHOTS                                       |
+ *                     |                                    |     |        |                                                         |
+ *          <--------- +                                    |     |        v role: primary? true                                     |
+ *          |          |                                    |     |        + ----------------------------------------> +           ^ |
+ *          |          v  m_resync_requested?               |     |  false |     daemon restart one-time check:        |           | |
+ *          |          + ------------- +                    |     |        v               snaps in creating phase    ╭─╮        --+ |
+ *          |    false |     true      |  remote            |     |        + -----> PRUNE_CREATING_GROUP_SNAPSHOTS ->-╯|╰----------> +
+ *          |          |               v  primary? false   ╭─╮    |        |                                           |             ^
+ *          v          |               + ------------->----╯|╰--> +        v  is last group snap orphan ? true         v             |
+ *          |          |               | true               |              + ----------------------------------------> +             |
+ *          |          |               |                    |        false |  if incomplete mirror snapshot is found,  |             |
+ *          |          |               |                    |              v   set m_retry_validate_snap = true        |             |
+ *          |          v               |                    |              |                                           |             |
+ *          |          |               |                    |              |  prune eligible local mirror snapshot    ╭─╮            |
+ *          |          |               |                    |              +-------> PRUNE_MIRROR_GROUP_SNAPSHOT --->-╯|╰----------> +
+ *          |          |               |                    |              |                                           |             ^
+ *          |          |               |                    + <----------- +                                           |             |
+ *          |          v              ╭─╮                         false    | m_resync_requested?                       |             |
+ *          |          +----------->--╯|╰---> + <-------<----------------- +                                           |             |
+ *          v                          |      |                       true                                             |             |
+ *  m_remote_group_snaps.empty()?      |      |                                                                        |             |
+ *          |  true                    v     ╭─╮                                                                       v             |
+ *          |          +-------------> + ->--╯|╰--->-------------------------------------------------------> HANDLE_REPLAY_COMPLETE  |
+ *          |          |                      |                                                                        |             |
+ *          |          |                      |                                                                        |             |
+ *          |          |                      v                                                                        |             |
+ *          |          |          SCAN_FOR_UNSYNCED_GROUP_SNAPSHOTS                                                    |             |
+ *          |          |                      |                                                                        ^             |
+ *          |          |                      |  demoted/split-brain                                                   |             |
+ *          |          |                      +-------------------------------------------------------------->---------+             |
+ *          |          ^                      |                                                                                      |
+ *          |          |                      |  !unlink_peer_uuids.empty() ?                                                        |
+ *          |          |                      +----------------------------------> MIRROR_GROUP_SNAPSHOT_UNLINK_PEER --->----------- +
+ *          |          ^                      |                                                                                      |
+ *          |          |                      |                                  no remote snap                                      |
+ *          |          |                      | m_retry_validate_snap == true   |-------------> PRUNE_MIRROR_GROUP_SNAPSHOT -------> +
+ *          |          |                      +---------------------------------+                                                    ^
+ *          |          |                      |                                 |----------------->|                                 |
+ *          |          |                      |    if all snaps synced                             |                                 |
+ *          |          |                      + --------> m_state = STATE_IDLE-------------------->|                                 |
+ *          |          |                      |                                                    |                                 |
+ *          |          |                      + found new mirror snapshot to sync                  |                                 |
+ *          |          |                      |                                                    |                                 |
+ *          |          |     true             v                                                    |                                 |
+ *          |          + <------------ IS_RENAME_REQUESTED                                         |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v             r == -EAGAIN? m_refresh_snaps = false  |                                 |
+ *          |                     PRUNE_USER_GROUP_SNAPSHOTS -------------------------------------->                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v  m_refresh_snaps == true? m_refresh_snaps = false ╭─╮                                |
+ *          |                                 +------------------------------------------------->-╯|╰->----------------------------> +
+ *          |                                 |                                                    |                                 ^
+ *          |                                 v                                                    |                                 |
+ *          |                     CREATE_USER_GROUP_SNAPSHOTS                                      |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                      CREATE_USER_GROUP_SNAPSHOT                                      |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                      CREATE_MIRROR_GROUP_SNAPSHOT                                    |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                        GET_MIRROR_PEER_LIST                                          |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                      SET_MIRROR_SNAPSHOT_METADATA                                    |                                 |
+ *          |                                 | m_retry_validate_snap = true                       |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                      UPDATE_LOCAL_GROUP_STATE                                        |                                 |
+ *          |                                 |                                                    |                                 |
+ *          |                                 v                                                    |                                 |
+ *          |                      SET_IMAGE_REPLAYER_LIMITS                                       |                                 |
+ *          |                                 |                                                    v                                 |
+ *          |                                 +<---------------------------------------------------                                ^ |
+ *          |                                 |                                                                                    | |
+ *          |                                 v                             m_retry_validate_snap == false                       --+ |
+ *          + -------------------> SCHEDULE_LOAD_GROUP_SNAPSHOTS ------------------------------------------------------------------> +
+ *                                             |  m_retry_validate_snap == true : m_retry_validate_snap = false                      ^
+ *                                             v  m_state = STATE_REPLAYING                                                          |
+ *                                VALIDATE_LOCAL_GROUP_SNAPSHOTS                                                                     |
+ *                                             |                                                                                     |
+ *                                             v iterate m_local_group_snaps                                                         |
+ *                         + ----------------- + ---------------- +                                                                  |
+ *        snapshot already |                                      | snapshot requires                                                |
+ *           complete      |                                      v     validation                                                   |
+ *                         |                       VALIDATE_IMAGE_SNAPS_SYNC_COMPLETE                                                |
+ *                         |                                      |                                                                  |
+ *                         |                                      v                                                                  |
+ *                         |                         + ---------- + ---------- +                                                     |
+ *                         |     is mirror snapshot  |                         | is user snapshot                                    |
+ *                         |                         v                         v                                                     |
+ *                         |             MIRROR_SNAPSHOT_COMPLETE      USER_SNAPSHOT_COMPLETE                                        |
+ *                         |                         |                         |                                                     |
+ *                         |                         v                         v                                                     |
+ *                         |         LOCAL_GROUP_IMAGE_LIST_BY_ID      LOCAL_GROUP_IMAGE_LIST_BY_ID                                  |
+ *                         |                         |                         |                                                     |
+ *                         |                         v                         v                                                     |
+ *                         |    HANDLE_MIRROR_SNAPSHOT_IMAGE_LIST      HANDLE_USER_SNAPSHOT_IMAGE_LIST                               |
+ *                         |                         |                         |                                                     |
+ *                         |                         v                         v                                                     |
+ *                         |         POST_MIRROR_SNAPSHOT_CREATED      POST_USER_SNAPSHOT_CREATED                                    |
+ *                         |                         |                         |                                                     |
+ *                         |                         v                         |                                                     |
+ *                         |      CHECK_MIRROR_SNAPSHOT_SYNC_COMPLETE          |                                                     |
+ *                         |                         |                         |                                                     |
+ *                         |                         v                         |                                                     |
+ *                         |               + ------- + ------- +               |                                                     |
+ *                         |        images |                   | all image     |                                                     |
+ *                         |       syncing |                   | snapshots     |                                                     |
+ *                         |  (retry next  |                   |  synced       |                                                     |
+ *                         |     cycle)    |                   v               |                                                     |
+ *                         |               |    SET_MIRROR_SNAPSHOT_COMPLETE   |                                                     |
+ *                         |               |                   |               |                                                     |
+ *                         |               |                   v               |                                                     |
+ *                         |               | MIRROR_GROUP_SNAPSHOT_UNLINK_PEER |                                                     |
+ *                         |               |                   |               |                                                     |
+ *                         v               v                   v               v                                                     |
+ *                         |               | UNLINK_PEER_UUID_FROM_IMAGE_SNAPS |                                                     |
+ *                         |               |                   |               |                                                     |
+ *                         |               |                   v               |                                                     |
+ *                         |               | UNLINK_PEER_UUID_FROM_GROUP_SNAP  |                                                     |
+ *                         |               |                   |               |                                                     |
+ *                         v               v                   v               v                                                     |
+ *                         + ------------- + ----------------- + ------------- +                                                   ^ |
+ *                                                   |                                                                             | |
+ *                                                   v c_gather waits for all callbacks                                          --+ |
+ *                                                   + ----------------------------------------------------------------------------> +
  *
  *
  *
@@ -249,19 +276,10 @@ private:
  *                 + ------------------------------> +
  *
  *
- *  PRUNE_GROUP_SNAPSHOTS PATH
+ *  PRUNE_USER_GROUP_SNAPSHOTS PATH
  *  ==========================
  *
- *        PRUNE_GROUP_SNAPSHOTS
- *                 |
- *                 v
  *      PRUNE_USER_GROUP_SNAPSHOTS
- *                 |
- *                 v
- *     PRUNE_MIRROR_GROUP_SNAPSHOT
- *                 |
- *                 v
- *    MIRROR_GROUP_SNAPSHOT_UNLINK_PEER
  *                 |
  *                 v
  *        PRUNE_GROUP_SNAPSHOT
@@ -273,11 +291,31 @@ private:
  *        PRUNE_IMAGE_SNAPSHOT -------------> SCHEDULE_LOAD_GROUP_SNAPSHOTS
  *                 |
  *                 v              error
- *        GROUP_SNAP_REMOVE ----------------> IS_RENAME_REQUESTED
+ *        GROUP_SNAP_REMOVE ----------------> HANDLE_REPLAY_COMPLETE
  *                 |
  *                 v  m_refresh_snaps = true
  *          LOAD_REPLAYER
  *
+ *
+ *  PRUNE_MIRROR_GROUP_SNAPSHOT PATH
+ *  ==========================
+ *
+ *     PRUNE_MIRROR_GROUP_SNAPSHOT
+ *                 |
+ *                 v
+ *        PRUNE_GROUP_SNAPSHOT
+ *                 |
+ *                 v
+ *      PRUNE_ALL_IMAGE_SNAPSHOTS
+ *                 |
+ *                 v             -EAGAIN
+ *        PRUNE_IMAGE_SNAPSHOT -------------> SCHEDULE_LOAD_GROUP_SNAPSHOTS
+ *                 |
+ *                 v              error
+ *        GROUP_SNAP_REMOVE ----------------> HANDLE_REPLAY_COMPLETE
+ *                 |
+ *                 v
+ *          LOAD_REPLAYER
  *
  *  SHUTDOWN PATH
  *  =============
@@ -297,7 +335,6 @@ private:
  * =================
  * GET_REPLAYERS_BY_IMAGE_ID
  * GET_GLOBAL_IMAGE_ID
- * SET_IMAGE_REPLAYER_LIMITS
  * SET_IMAGE_REPLAYER_END_LIMITS
  * NOTIFY_GROUP_LISTENER
  * IS_REPLAY_INTERRUPTED
@@ -331,21 +368,27 @@ private:
 
   std::vector<cls::rbd::GroupSnapshot> m_local_group_snaps;
   std::vector<cls::rbd::GroupSnapshot> m_remote_group_snaps;
+  std::vector<cls::rbd::GroupSnapshot> m_user_snapshots;
   std::vector<std::pair<std::string, ImageReplayer<ImageCtxT> *>> m_replayers_by_image_id;
+  std::unordered_set<std::string> m_remote_snap_ids;
+  std::set<std::string> m_mirror_peer_uuids;
+  const cls::rbd::GroupSnapshot* m_last_complete_local_snap = nullptr;
   const cls::rbd::GroupSnapshot* m_last_local_snap = nullptr;
-  const cls::rbd::GroupSnapshot* m_prune_group_snap = nullptr;
+  cls::rbd::GroupSnapshot* m_mirror_snap_to_sync = nullptr;
   bool m_update_group_state = true;
 
   Context* m_load_snapshots_task = nullptr;
   Context* m_on_shutdown = nullptr;
 
   AsyncOpTracker m_in_flight_op_tracker;
+  librados::IoCtx m_default_ns_ioctx;
   bufferlist m_out_bl;
 
   int m_error_code = 0;
   std::string m_error_description;
 
   bool m_retry_validate_snap = false;
+  std::string m_last_synced_remote_snap_id;
 
   utime_t m_snapshot_start;
   uint64_t m_last_snapshot_complete_seconds = 0;
@@ -389,24 +432,18 @@ private:
 
   void load_remote_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   void handle_load_remote_group_snapshots(int r);
-  void check_local_group_snapshots(std::unique_lock<ceph::mutex>* locker);
 
   void scan_for_unsynced_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void create_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
+  void handle_create_user_group_snapshots(int r);
+  void create_mirror_group_snapshot(std::unique_lock<ceph::mutex>* locker);
+  void get_mirror_peer_list(std::unique_lock<ceph::mutex>* locker);
+  void handle_get_mirror_peer_list(int r);
+  void set_mirror_snapshot_metadata(std::unique_lock<ceph::mutex>* locker);
+  void handle_set_mirror_snapshot_metadata(int r);
 
-  void try_create_group_snapshot(std::string prev_snap_id,
-                                 std::unique_lock<ceph::mutex>* locker);
-  void create_group_snapshot(cls::rbd::GroupSnapshot snap,
-                             std::unique_lock<ceph::mutex>* locker);
-
-  void create_mirror_snapshot(
-    cls::rbd::GroupSnapshot *snap,
-    const cls::rbd::MirrorSnapshotState &snap_state,
-    Context *on_finish);
-  void handle_create_mirror_snapshot(
-    int r, const std::string &group_snap_id, Context *on_finish);
-
-  void update_local_group_state(cls::rbd::GroupSnapshot snap);
-  void handle_update_local_group_state(int r, cls::rbd::GroupSnapshot snap);
+  void update_local_group_state(std::unique_lock<ceph::mutex>* locker);
+  void handle_update_local_group_state(int r);
 
   void mirror_snapshot_complete(
     const std::string &group_snap_id, Context *on_finish);
@@ -437,10 +474,9 @@ private:
   void handle_set_mirror_snapshot_complete(
     int r, const std::string &group_snap_id, Context *on_finish);
 
-  void create_user_snapshot(
-    cls::rbd::GroupSnapshot *snap,
-    Context *on_finish);
-  void handle_create_user_snapshot(
+  void create_user_group_snapshot(
+    cls::rbd::GroupSnapshot *snap, Context *on_finish);
+  void handle_create_user_group_snapshot(
       int r, const std::string &group_snap_id, Context *on_finish);
 
   void user_snapshot_complete(
@@ -461,9 +497,16 @@ private:
   void handle_post_user_snapshot_created(
     int r, const std::string &group_snap_id, Context *on_finish);
 
-  void mirror_group_snapshot_unlink_peer(const std::string &snap_id);
-  void handle_mirror_group_snapshot_unlink_peer(
-      int r, const std::string &snap_id);
+  void mirror_group_snapshot_unlink_peer(std::unique_lock<ceph::mutex>* locker,
+    const std::string &snap_id, Context *on_unlink);
+  void unlink_peer_uuid_from_image_snaps(
+    cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+  void handle_unlink_peer_uuid_from_image_snaps(
+    int r, cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+  void unlink_peer_uuid_from_group_snap(
+    cls::rbd::GroupSnapshot* remote_snap, Context* on_unlink);
+  void handle_unlink_peer_uuid_from_group_snap(
+    int r, const std::string &group_snap_id, Context* on_unlink);
 
   void prune_image_snapshot(ImageReplayer<ImageCtxT>* image_replayer,
       uint64_t snap_id,
@@ -482,9 +525,9 @@ private:
       const std::vector<cls::rbd::GroupImageStatus>& local_images,
       const std::vector<cls::rbd::GroupSnapshot>& prune_creating_snaps);
 
-  int prune_group_snapshots(std::unique_lock<ceph::mutex>* locker);
   int prune_user_group_snapshots(std::unique_lock<ceph::mutex>* locker);
-  int prune_mirror_group_snapshot(std::unique_lock<ceph::mutex>* locker);
+  void prune_mirror_group_snapshot(std::unique_lock<ceph::mutex>* locker,
+                                   const cls::rbd::GroupSnapshot* snap);
   int prune_group_snapshot(const cls::rbd::GroupSnapshot* snap,
                            std::unique_lock<ceph::mutex>* locker);
 
