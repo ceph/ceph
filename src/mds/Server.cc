@@ -12697,9 +12697,15 @@ bool Server::build_snap_diff(
 		<< " result mask: 0x" << std::hex << res_mask << std::dec
 		<< dendl;
 	      before.reset();
+	    } else if (!snapflush_pending(in)) {
+	      dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
+		<< dn->first << "/" << dn->last
+		<< dendl;
+	      before.reset();
+	      continue;
 	    } else {
-	      /* If attrs match, rdlock the filelock which waits for pending snap
-	       * flush so that latest metadata is fetched under the lock.
+	      /* attrs match but snapflush is pending; rdlock so metadata is
+	       * read after writeback completes.
 	       */
 	      if (!rdlock_file_start(in))
 		return false;
@@ -12715,6 +12721,7 @@ bool Server::build_snap_diff(
 	      } else {
 		dout(0) << __func__ << " attrs not changed " << dn->get_name() << " "
 		  << dn->first << "/" << dn->last
+		  << " (after snapflush)"
 		  << dendl;
 		before.reset();
 		continue;
