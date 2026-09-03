@@ -1018,6 +1018,286 @@ TEST_P(TestECFailoverWithPeering, ScrubPartialWrite) {
   std::cout << "=== ScrubPartialWrite test completed ===" << std::endl;
 }
 
+/**
+ * DivergentLogRewindThenSplit
+ *
+ * Organic reproduction of https://tracker.ceph.com/issues/68649.
+ * See debug_clone_issue/BUG_68649_TIMELINE.md for the incident log trace.
+ *
+ *  1. Trim the pg log to a high tail T (as teuthology's low osd_*_pg_log_entries
+ *     causes in the field).
+ *  2. Target misses a write and rejoins as an async-recovery target
+ *     (is_acting()==false, last_backfill==MAX) — the role in which append_log
+ *     rolls entries forward.  (The real incident used a post-backfill target,
+ *     which is equally !is_acting; async-recovery is the harness equivalent.)
+ *  3. Blocked (uncommitted, partial) writes to obj_head/obj_clone.  The
+ *     !is_acting target rolls them forward (crt→head), making them
+ *     non-rollbackable.
+ *  4. Recover the pre-existing missing (trigger) so last_complete climbs to
+ *     the head through the rolled-forward entries.
+ *  5. Interval change: proc_replica_log finds obj_head/obj_clone divergent with
+ *     prior_version ≤ log_tail, rewinds target to empty log + missing(2) with
+ *     last_complete == last_update == T.
+ *  6. PG split (pg_num 1→2): child inherits the empty log + missing(2).
+ *  7. Child's pg_notify carries last_complete == last_update; GetMissing's
+ *     identical-log fast-path clears peer_missing[target], hiding the missing
+ *     set.  A subsequent clone is forwarded to the target, which lacks the
+ *     object, and crashes with ENOENT in BlueStore.
+ *
+ * The test asserts the primary retains peer_missing[target].is_missing for
+ * obj_head/obj_clone after the split.  Fails without the reset_complete_to fix,
+ * passes with it.
+ */
+TEST_P(TestECFailoverWithPeering, DivergentLogRewindThenSplit) {
+  // Needs a coding shard (blocked) and an uninvolved data shard (failed) for
+  // the superseding interval; requires k>=3 and m>=2.
+  if (m < 2 || k < 3) {
+    GTEST_SKIP() << "DivergentLogRewindThenSplit requires k>=3 and m>=2";
+  }
+
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  // ScopedConfig guards restore these to their original values on test exit,
+  // even if the test aborts early via ASSERT_*.
+  ScopedConfig cfg_async_recovery("osd_async_recovery_min_cost", "0");
+  ScopedConfig cfg_trim_min("osd_pg_log_trim_min", "1");
+  ScopedConfig cfg_trim_max("osd_pg_log_trim_max", "1000");
+  osdmap->set_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT);
+
+  const int target = 1;
+  const pg_shard_t target_shard(target, shard_id_t(target));
+  const size_t data_size = stripe_unit * k;
+  const std::string pa(data_size, 'A'), pb(data_size, 'B');
+
+  // hash=1 routes obj_head/obj_clone into the child PG (seed 1) after the split.
+  set_object_hash("obj_head", 1);
+  set_object_hash("obj_clone", 1);
+
+  // Phase 1: commit the objects, then build a high log tail T.
+  create_and_write_verify("obj_head", pa);
+  create_and_write_verify("obj_clone", pa);
+  create_and_write_verify("trigger", pa);
+  enable_log_trimming = true;
+  set_target_pg_log_entries(1);
+  for (int i = 0; i < 10; ++i) {
+    write_verify("obj_head", 0, pa, data_size);
+    write_verify("obj_clone", 0, pa, data_size);
+  }
+
+  // Phase 2: target misses one "trigger" write; rejoins as async-recovery
+  // (is_acting()==false, last_backfill==MAX).
+  mark_osd_down(target);
+  write_verify("trigger", 0, pb, data_size);
+  mark_osd_up(target);
+  ASSERT_FALSE(get_peering_state(0)->is_acting(target_shard))
+    << "Target should rejoin as an async-recovery target (!is_acting)";
+  ASSERT_FALSE(get_peering_state(target)->get_info().is_incomplete())
+    << "Async-recovery target should be complete (last_backfill==MAX)";
+
+  // Phase 3: blocked writes to obj_head/obj_clone; target rolls them forward
+  // (crt→head), making them non-rollbackable.
+  const int blocked = k + 1;  // a coding shard
+  suspend_primary_to_osd(blocked);
+  ASSERT_EQ(-EINPROGRESS, write("obj_head", 0, pb, data_size));
+  ASSERT_EQ(-EINPROGRESS, write("obj_clone", 0, pb, data_size));
+  {
+    auto* t = get_peering_state(target);
+    ASSERT_EQ(t->get_pg_log().get_can_rollback_to(), t->get_pg_log().get_log().head)
+      << "Target must have rolled the partial writes forward (crt==head), "
+         "so they are non-rollbackable";
+  }
+
+  // Phase 4: recover "trigger" so last_complete climbs to the head through the
+  // rolled-forward entries.
+  run_recovery_and_verify_callbacks("trigger", target, pb);
+
+  // Stall reservation grants: the harness drives recovery directly, not through
+  // the reservation path.  Without stalling, a grant delivered across the split's
+  // interval change would hit a PeeringState in Reset and abort.
+  set_stall_recovery_reservations(true);
+
+  // Phase 5: interval change rewinds the target.  proc_replica_log finds
+  // obj_head/obj_clone divergent with prior_version <= log_tail and adds them
+  // to missing; the target ends up with an empty log and missing(2).
+  mark_osd_down(2);
+  unsuspend_primary_to_osd(blocked);
+  event_loop->run_until_idle();
+
+  {
+    auto* t = get_peering_state(target);
+    EXPECT_TRUE(t->get_pg_log().get_log().log.empty())
+      << "Target log should be rewound to empty";
+    EXPECT_EQ(t->get_pg_log().get_missing().num_missing(), 2u)
+      << "Target should be missing obj_head and obj_clone";
+    // reset_complete_to() on an empty-but-missing log must lower last_complete
+    // below last_update; this is the direct fix assertion (tracker 68649).
+    EXPECT_LT(t->get_info().last_complete, t->get_info().last_update)
+      << "bug 68649: reset_complete_to must lower last_complete on empty log";
+  }
+
+  // Raise the async-recovery cost so the child peers with the target as a full
+  // acting member; avoids pg_temp churn and matches the real incident (osd.11).
+  g_ceph_context->_conf.set_val("osd_async_recovery_min_cost", "100");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  // Phase 6: PG split — child inherits the empty log + missing(2).
+  split_pg();
+
+  auto* child_target = get_child_peering_state(target);
+  EXPECT_TRUE(child_target->get_pg_log().get_log().log.empty())
+    << "Child target log should be empty after split";
+  EXPECT_EQ(child_target->get_pg_log().get_missing().num_missing(), 2u)
+    << "Child target should inherit missing(2)";
+
+  // Phase 7: assert that the primary retains peer_missing[target] entries for
+  // the two affected objects.  This is the shared precondition consulted by
+  // both is_degraded_or_backfilling_object() (which blocks the op for full
+  // acting peers) and should_send_op() (which ships an empty op to
+  // async-recovery targets).  Without the fix, GetMissing's identical-log
+  // fast-path clears peer_missing[target] and neither gate fires, causing a
+  // clone write to reach a shard that is missing the object → ENOENT.
+  auto* child_primary = get_child_peering_state(0);
+  auto primary_has_peer_missing_entry = [&](const hobject_t& soid) -> bool {
+    if (child_primary->get_pg_log().get_missing().get_items().count(soid)) {
+      return true;
+    }
+    for (const auto& peer : child_primary->get_acting_recovery_backfill()) {
+      if (peer == child_primary->get_primary()) {
+        continue;
+      }
+      auto pm = child_primary->get_peer_missing().find(peer);
+      if (pm != child_primary->get_peer_missing().end() &&
+          pm->second.is_missing(soid)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const hobject_t head = make_test_object("obj_head");
+  const hobject_t clone = make_test_object("obj_clone");
+  ASSERT_EQ(child_target->get_pg_log().get_missing().num_missing(), 2u);
+  EXPECT_TRUE(primary_has_peer_missing_entry(head))
+    << "bug 68649: peer_missing[target] cleared by GetMissing identical-log "
+       "fast-path; primary would forward a write to obj_head to a shard that "
+       "is missing the object -> ENOENT in BlueStore";
+  EXPECT_TRUE(primary_has_peer_missing_entry(clone))
+    << "bug 68649: peer_missing[target] cleared by GetMissing identical-log "
+       "fast-path; primary would forward a write to obj_clone to a shard that "
+       "is missing the object -> ENOENT in BlueStore";
+
+  // cfg_async_recovery, cfg_trim_min, and cfg_trim_max restore automatically
+  // via ScopedConfig destructors at function exit.
+}
+
+/**
+ * DivergentLogRewindThenNewInterval
+ *
+ * Companion to DivergentLogRewindThenSplit that confirms the bug is not
+ * specific to a PG split: any subsequent interval where the corrupt target
+ * re-advertises last_complete == last_update triggers the same GetMissing
+ * identical-log fast-path.
+ */
+TEST_P(TestECFailoverWithPeering, DivergentLogRewindThenNewInterval) {
+  if (m < 2 || k < 3) {
+    GTEST_SKIP() << "DivergentLogRewindThenNewInterval requires k>=3 and m>=2";
+  }
+
+  ASSERT_TRUE(all_shards_active()) << "Initial peering must complete";
+
+  // ScopedConfig guards restore these to their original values on test exit,
+  // even if the test aborts early via ASSERT_*.
+  ScopedConfig cfg_async_recovery("osd_async_recovery_min_cost", "0");
+  ScopedConfig cfg_trim_min("osd_pg_log_trim_min", "1");
+  ScopedConfig cfg_trim_max("osd_pg_log_trim_max", "1000");
+  osdmap->set_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT);
+
+  const int target = 1;
+  const pg_shard_t target_shard(target, shard_id_t(target));
+  const size_t data_size = stripe_unit * k;
+  const std::string pa(data_size, 'A'), pb(data_size, 'B');
+
+  // Phase 1: commit the objects, then build a high log tail T.
+  create_and_write_verify("obj_head", pa);
+  create_and_write_verify("obj_clone", pa);
+  create_and_write_verify("trigger", pa);
+  enable_log_trimming = true;
+  set_target_pg_log_entries(1);
+  for (int i = 0; i < 10; ++i) {
+    write_verify("obj_head", 0, pa, data_size);
+    write_verify("obj_clone", 0, pa, data_size);
+  }
+
+  // Phase 2: target misses a trigger write; rejoins as async-recovery (!is_acting).
+  mark_osd_down(target);
+  write_verify("trigger", 0, pb, data_size);
+  mark_osd_up(target);
+  ASSERT_FALSE(get_peering_state(0)->is_acting(target_shard));
+
+  // Phase 3: blocked writes; target rolls them forward (crt→head), non-rollbackable.
+  const int blocked = k + 1;
+  suspend_primary_to_osd(blocked);
+  ASSERT_EQ(-EINPROGRESS, write("obj_head", 0, pb, data_size));
+  ASSERT_EQ(-EINPROGRESS, write("obj_clone", 0, pb, data_size));
+
+  // Phase 4: recover the pre-existing missing so last_complete reaches head.
+  run_recovery_and_verify_callbacks("trigger", target, pb);
+  set_stall_recovery_reservations(true);
+
+  // Phase 5: interval change rewinds the target to an empty log with missing(2).
+  mark_osd_down(2);
+  unsuspend_primary_to_osd(blocked);
+  event_loop->run_until_idle();
+  {
+    auto* t = get_peering_state(target);
+    ASSERT_TRUE(t->get_pg_log().get_log().log.empty());
+    ASSERT_EQ(t->get_pg_log().get_missing().num_missing(), 2u);
+  }
+
+  // Phase 6: plain new interval (no split).
+  g_ceph_context->_conf.set_val("osd_async_recovery_min_cost", "100");
+  g_ceph_context->_conf.apply_changes(nullptr);
+  advance_epoch();
+
+  // Phase 7: same peer_missing gate as DivergentLogRewindThenSplit.
+  // After raising osd_async_recovery_min_cost to 100 above, the target is
+  // a full acting peer (not async-recovery) in this interval, so
+  // is_degraded_or_backfilling_object() is what guards the write.  The
+  // underlying invariant in both cases is identical: peer_missing[target]
+  // must contain the soid.
+  auto* primary = get_peering_state(0);
+  auto primary_has_peer_missing_entry = [&](const hobject_t& soid) -> bool {
+    if (primary->get_pg_log().get_missing().get_items().count(soid)) {
+      return true;
+    }
+    for (const auto& peer : primary->get_acting_recovery_backfill()) {
+      if (peer == primary->get_primary()) {
+        continue;
+      }
+      auto pm = primary->get_peer_missing().find(peer);
+      if (pm != primary->get_peer_missing().end() &&
+          pm->second.is_missing(soid)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  const hobject_t head = make_test_object("obj_head");
+  const hobject_t clone = make_test_object("obj_clone");
+  EXPECT_TRUE(primary_has_peer_missing_entry(head))
+    << "bug 68649: peer_missing[target] cleared by GetMissing identical-log "
+       "fast-path; primary would forward a write to obj_head to a shard that "
+       "is missing the object -> ENOENT in BlueStore";
+  EXPECT_TRUE(primary_has_peer_missing_entry(clone))
+    << "bug 68649: peer_missing[target] cleared by GetMissing identical-log "
+       "fast-path; primary would forward a write to obj_clone to a shard that "
+       "is missing the object -> ENOENT in BlueStore";
+
+  // cfg_async_recovery, cfg_trim_min, and cfg_trim_max restore automatically
+  // via ScopedConfig destructors at function exit.
+}
+
 // ---------------------------------------------------------------------------
 // Instantiate TestECFailoverWithPeering with EC configurations
 // ---------------------------------------------------------------------------

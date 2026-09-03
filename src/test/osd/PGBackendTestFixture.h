@@ -20,6 +20,7 @@
 #include <random>
 #include <sstream>
 #include <iomanip>
+#include <string>
 #include <gtest/gtest.h>
 #include "common/errno.h"
 #include "test/osd/MockErasureCode.h"
@@ -43,6 +44,47 @@
 #include "test/osd/ScrubTestFixture.h"
 #include "osd/scrubber/scrub_backend.h"
 #include "osd/scrubber/pg_scrubber.h"
+
+/**
+ * RAII helper that saves a ceph config option on construction and restores
+ * it on destruction.  Use this in tests instead of a bare set_config() call
+ * whenever the config change must be undone even if the test exits early
+ * via ASSERT_* or an exception.
+ *
+ * Usage:
+ *   {
+ *     ScopedConfig guard("osd_pg_log_trim_max", "1000");
+ *     // ... test body that relies on trim_max == 1000 ...
+ *   }  // original value is restored here regardless of how the block exits
+ *
+ * The guard reads the current live value from g_ceph_context->_conf at
+ * construction time, so it is correct even when the ceph default differs
+ * from the value this test file previously hardcoded as the "default".
+ */
+class ScopedConfig {
+public:
+  ScopedConfig(const std::string& key, const std::string& value)
+    : key_(key)
+  {
+    // Save the current value before we overwrite it.
+    g_ceph_context->_conf.get_val(key, &saved_);
+    g_ceph_context->_conf.set_val(key, value);
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+
+  ~ScopedConfig() {
+    g_ceph_context->_conf.set_val(key_, saved_);
+    g_ceph_context->_conf.apply_changes(nullptr);
+  }
+
+  // Non-copyable, non-movable.
+  ScopedConfig(const ScopedConfig&) = delete;
+  ScopedConfig& operator=(const ScopedConfig&) = delete;
+
+private:
+  std::string key_;
+  std::string saved_;
+};
 
 // Unified test fixture for EC and Replicated backend tests with ObjectStore.
 // Uses PoolType to branch between EC (ECSwitch) and Replicated (ReplicatedBackend).
@@ -269,8 +311,21 @@ public:
     return nullptr;
   }
   
+  // Default hash 0 (all objects map to PG seed 0).  Override to steer an
+  // object into a specific child PG after a split.
+  std::map<std::string, uint32_t> object_hash_overrides;
+
+  void set_object_hash(const std::string& name, uint32_t hash) {
+    object_hash_overrides[name] = hash;
+  }
+
   hobject_t make_test_object(const std::string& name) const {
-    return hobject_t(object_t(name), "", CEPH_NOSNAP, 0, pool_id, "");
+    uint32_t hash = 0;
+    auto it = object_hash_overrides.find(name);
+    if (it != object_hash_overrides.end()) {
+      hash = it->second;
+    }
+    return hobject_t(object_t(name), "", CEPH_NOSNAP, hash, pool_id, "");
   }
   
   ObjectContextRef make_object_context(
@@ -286,51 +341,21 @@ public:
     return obc;
   }
     
-  /**
-   * Set the next version number for auto-generation.
-   * This can be used by tests after rollback to set the version to a specific value.
-   * The epoch will still come from the osdmap.
-   */
   void set_next_version(uint64_t version) {
     next_version = version;
   }
   
-  /**
-   * Get the next version as an eversion_t with epoch from osdmap.
-   * This auto-increments the version counter.
-   */
   eversion_t get_next_version() {
     epoch_t epoch = osdmap->get_epoch();
     return eversion_t(epoch, next_version++);
   }
   
-  /**
-   * Set an object context for the given object.
-   * This encapsulates access to the per-OSD object_contexts map.
-   * Must be called within event loop context.
-   *
-   * @param hoid The object to set context for
-   * @param obc The object context to cache
-   */
   void set_object_context(
     const hobject_t& hoid,
     ObjectContextRef obc);
 
-  /**
-   * Clear all object contexts for the current OSD.
-   * This encapsulates access to the per-OSD object_contexts map.
-   * Must be called within event loop context.
-   */
   void clear_object_contexts();
 
-  /**
-   * Get or create an object context for the given object.
-   * This matches PrimaryLogPG::get_object_context behavior.
-   *
-   * @param hoid The object to get context for
-   * @param can_create If true, create a new OBC if object doesn't exist
-   * @param attrs Optional attributes to use instead of reading from disk
-   */
   ObjectContextRef get_object_context(
     const hobject_t& hoid,
     bool can_create,
@@ -343,9 +368,14 @@ public:
     const eversion_t& at_version,
     std::vector<pg_log_entry_t> log_entries,
     std::function<void(int)> on_write_complete = nullptr);
-  
-  // Helper functions that perform the actual write logic
-  // Must be called within event loop context on the primary OSD
+
+  // Opt-in log trimming.  Default hooks return (0,0) so existing tests are
+  // unaffected.  ECPeeringTestFixture overrides these to mirror PrimaryLogPG.
+  bool enable_log_trimming = false;
+  virtual eversion_t compute_submit_trim_to() { return eversion_t(0, 0); }
+  virtual eversion_t compute_submit_pg_committed_to() { return eversion_t(0, 0); }
+  virtual void on_primary_write_committed(const eversion_t& at_version) {}
+
   int do_create_and_write_impl(
     const std::string& obj_name,
     const std::string& data);
