@@ -822,10 +822,16 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
   int ret = -EINVAL;
   ldpp_dout(this, 10) << "cache override headers" << dendl;
   RGWEnv* rgw_env = const_cast<RGWEnv *>(s->info.env);
-  const char* backup_range = rgw_env->get("HTTP_RANGE");
+  // own a copy: get() returns a pointer into env_map's own string, and the
+  // loop below can free or overwrite it via a matching override
+  const char* range_hdr = rgw_env->get("HTTP_RANGE");
+  const bool had_range = range_hdr != nullptr;
+  const std::string backup_range = had_range ? range_hdr : "";
   const char hdrs_split[2] = {(char)178,'\0'};
   const char kv_split[2] = {(char)177,'\0'};
-  const char* cache_hdr = rgw_env->get("HTTP_X_AMZ_CACHE");
+  // own a copy: ceph::split keeps a view into this buffer across iterations,
+  // and an override keyed x-amz-cache would free it mid-loop
+  const std::string cache_hdr = rgw_env->get("HTTP_X_AMZ_CACHE", "");
   for (std::string_view hdr : ceph::split(cache_hdr, hdrs_split)) {
     auto kv = ceph::split(hdr, kv_split);
     auto k = kv.begin();
@@ -840,7 +846,7 @@ int RGWGetObj_ObjStore_S3::override_range_hdr(const rgw::auth::StrategyRegistry&
     rgw_env->set(std::move(key), std::string(*v));
   }
   ret = RGWOp::verify_requester(auth_registry, y);
-  if(!ret && backup_range) {
+  if(!ret && had_range) {
     rgw_env->set("HTTP_RANGE",backup_range);
   } else {
     rgw_env->remove("HTTP_RANGE");
