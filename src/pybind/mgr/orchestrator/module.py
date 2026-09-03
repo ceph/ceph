@@ -1,3 +1,4 @@
+from copy import deepcopy
 import enum
 import errno
 import json
@@ -2232,14 +2233,40 @@ Usage:
             nvmeof_pool_helper.create_pool_if_needed()
 
         cleanpool = pool.lstrip('.')
-        spec = NvmeofServiceSpec(
-            service_id=f'{cleanpool}.{group}' if group else cleanpool,
-            pool=pool,
-            group=group,
-            placement=PlacementSpec.from_string(placement),
-            unmanaged=unmanaged,
-            preview_only=dry_run
+        service_id = f'{cleanpool}.{group}' if group else cleanpool
+        service_name = f'nvmeof.{service_id}'
+        completion = self.describe_service(
+            service_type='nvmeof',
+            service_name=service_name,
+            refresh=False,
         )
+        raise_if_exception(completion)
+
+        if completion.result:
+            existing_spec = cast(
+                NvmeofServiceSpec,
+                completion.result[0].spec,
+            )
+            # This command scales an existing NVMe-oF service. Preserve the
+            # existing service configuration and only update fields controlled
+            # by this CLI path.
+            spec = deepcopy(existing_spec)
+            spec.placement = PlacementSpec.from_string(placement)
+            spec.unmanaged = unmanaged
+            spec.preview_only = dry_run
+        else:
+            spec = NvmeofServiceSpec(
+                service_id=f'{cleanpool}.{group}' if group else cleanpool,
+                pool=pool,
+                group=group,
+                placement=PlacementSpec.from_string(placement),
+                unmanaged=unmanaged,
+                preview_only=dry_run
+            )
+            self.log.debug(
+                'NVMeOF apply debug: newly generated CLI spec=%s',
+                spec.to_json(),
+            )
 
         spec.validate()  # force any validation exceptions to be caught correctly
 
