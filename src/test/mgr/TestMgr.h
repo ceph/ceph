@@ -6,11 +6,18 @@
 #include <cassert>
 
 #include "common/async/context_pool.h"
+#include "common/Finisher.h"
+#include "common/LogClient.h"
 #include "global/global_context.h"
+#include "global/global_init.h"
 #include "gtest/gtest.h"
 #include "messages/MPGStats.h"
+#include "messages/MMgrReport.h"
 #include "mgr/ClusterState.h"
+#include "mgr/DaemonServer.h"
 #include "mgr/DaemonState.h"
+#include "mgr/PyModuleRegistry.h"
+#include "mgr/ThreadMonitor.h"
 #include "mon/MgrMap.h"
 #include "mon/MonClient.h"
 #include "msg/Messenger.h"
@@ -188,3 +195,213 @@ struct PythonEnv : public ::testing::Environment {
     Py_Finalize();
   }
 };
+
+// Mgr itself requires full daemon init (monc, objecter, etc.) before it is
+// usable; this helper only scaffolds construction/teardown.
+class MgrTestHelper : public TestMgr {
+public:
+  LogChannelRef clog;
+  LogChannelRef audit_clog;
+  std::unique_ptr<PyModuleRegistry> py_registry;
+
+  void SetUp() override {
+    TestMgr::SetUp();
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    audit_clog = std::make_shared<LogChannel>(cct.get(), nullptr, "audit");
+    py_registry = std::make_unique<PyModuleRegistry>(clog);
+  }
+
+  void TearDown() override {
+    py_registry.reset();
+    audit_clog.reset();
+    clog.reset();
+    TestMgr::TearDown();
+  }
+};
+
+class DaemonServerTestHelper : public TestMgr {
+public:
+  LogChannelRef clog;
+  LogChannelRef audit_clog;
+  std::unique_ptr<PyModuleRegistry> py_registry;
+  std::unique_ptr<DaemonStateIndex> daemon_state_index;
+  std::unique_ptr<Finisher> finisher;
+  std::unique_ptr<DaemonServer> daemon_server;
+
+  void SetUp() override {
+    TestMgr::SetUp();
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    audit_clog = std::make_shared<LogChannel>(cct.get(), nullptr, "audit");
+    daemon_state_index = std::make_unique<DaemonStateIndex>();
+    py_registry = std::make_unique<PyModuleRegistry>(clog);
+    finisher = std::make_unique<Finisher>(cct.get(), "test_finisher", "test_fin");
+    finisher->start();
+    daemon_server = std::make_unique<DaemonServer>(
+        mc.get(),
+        *finisher,
+        *daemon_state_index,
+        *cs,
+        *py_registry,
+        clog,
+        audit_clog);
+  }
+
+  void TearDown() override {
+    daemon_server.reset();
+    py_registry.reset();
+    if (finisher) {
+      finisher->stop();
+      finisher.reset();
+    }
+    daemon_state_index.reset();
+    audit_clog.reset();
+    clog.reset();
+    TestMgr::TearDown();
+  }
+};
+
+class DaemonPerfCountersTestHelper : public ::testing::Test {
+public:
+  PerfCounterTypes types;
+  std::unique_ptr<DaemonPerfCounters> perf_counters;
+  
+  void SetUp() override {
+    perf_counters = std::make_unique<DaemonPerfCounters>(types);
+  }
+
+  void TearDown() override {
+    perf_counters.reset();
+    types.clear();
+  }
+};
+
+class MockMetricListener : public MetricListener {
+public:
+  int update_count = 0;
+  
+  void handle_query_updated() override {
+    update_count++;
+  }
+};
+
+class MetricCollectorTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_metriccollector"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+};
+
+class ThreadMonitorTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<ThreadMonitor> thread_monitor;
+  
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_threadmonitor"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+  
+  void SetUp() override {
+    thread_monitor = std::make_unique<ThreadMonitor>(cct.get());
+  }
+  
+  void TearDown() override {
+    thread_monitor.reset();
+  }
+};
+
+class PyModuleRegistryTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  LogChannelRef clog;
+  std::unique_ptr<PyModuleRegistry> registry;
+  
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_pymoduleregistry"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+  
+  void SetUp() override {
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    registry = std::make_unique<PyModuleRegistry>(clog);
+  }
+  
+  void TearDown() override {
+    registry.reset();
+    clog.reset();
+  }
+};
+
+class PyOSDMapTest : public ::testing::Test {
+public:
+  OSDMap osd_map;
+  
+  void SetUp() override {
+    osd_map.set_epoch(1);
+  }
+};
+
+class MgrStandbyTestHelper : public TestMgr {
+public:
+  LogChannelRef clog;
+  std::unique_ptr<PyModuleRegistry> py_registry;
+  
+  void SetUp() override {
+    TestMgr::SetUp();
+    clog = std::make_shared<LogChannel>(cct.get(), nullptr, "cluster");
+    py_registry = std::make_unique<PyModuleRegistry>(clog);
+  }
+  
+  void TearDown() override {
+    py_registry.reset();
+    clog.reset();
+    TestMgr::TearDown();
+  }
+};
+
+// StandbyPyModules tests share the same fixture as MgrStandby.
+using StandbyPyModulesTestHelper = MgrStandbyTestHelper;
+
+class MgrOpRequestTestHelper : public ::testing::Test {
+public:
+  static inline boost::intrusive_ptr<CephContext> cct;
+  std::unique_ptr<OpTracker> tracker;
+  
+  static void SetUpTestSuite() {
+    if (!cct) {
+      std::vector<const char*> args = {"unittest_mgr_mgroprequest"};
+      cct = global_init(
+          nullptr, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+          CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+      common_init_finish(cct.get());
+    }
+  }
+  
+  void SetUp() override {
+    tracker = std::make_unique<OpTracker>(cct.get(), true, 1);
+  }
+  
+  void TearDown() override {
+    tracker.reset();
+  }
+};
+
+
