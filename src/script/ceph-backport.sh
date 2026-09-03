@@ -1739,7 +1739,12 @@ if [ "$PR_PHASE" ] ; then
     
     debug "Generating backport PR title"
     if [ "$original_pr" ] ; then
-        backport_pr_title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+        remote_api_output=$(curl -u ${github_user}:${github_token} --silent "https://api.github.com/repos/ceph/ceph/pulls/${original_pr}")
+        original_pr_title=$(echo "$remote_api_output" | jq -r '.title')
+        if [ -z "$original_pr_title" ] || [ "$original_pr_title" = "null" ] ; then
+            warning "could not determine title of ${original_pr_url}: check the backport PR title"
+        fi
+        backport_pr_title="${milestone}: ${original_pr_title}"
     else
         if [[ $tracker_title =~ ^${milestone}: ]] ; then
             backport_pr_title="${tracker_title}"
