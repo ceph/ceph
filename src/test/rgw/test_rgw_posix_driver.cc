@@ -25,7 +25,7 @@ using namespace rgw::sal;
 const std::string ATTR1{"attr1"};
 const std::string ATTR2{"attr2"};
 const std::string ATTR3{"attr3"};
-const std::string ATTR_OBJECT_TYPE{"POSIX-Object-Type"};
+const std::string ATTR_OBJECT_TYPE{"object-type"};
 
 namespace sf = std::filesystem;
 class Environment* env;
@@ -68,7 +68,29 @@ public:
   }
 };
 
+static std::string to_base36(uint64_t v)
+{
+  if (v == 0) return "0";
+  const char digits[] = "0123456789abcdefghijklmnopqrstuvwxyz";
+  std::string result;
+  while (v > 0) {
+    result.insert(result.begin(), digits[v % 36]);
+    v /= 36;
+  }
+  return result;
+}
 
+static uint64_t statx_mtime_ns(const struct statx& stx)
+{
+  return (uint64_t)stx.stx_mtime.tv_sec * 1000000000ULL
+       + stx.stx_mtime.tv_nsec;
+}
+
+static std::string posix_version_id_from_statx(const struct statx& stx)
+{
+  return "mtime-" + to_base36(statx_mtime_ns(stx))
+       + "-ino-" + to_base36(stx.stx_ino);
+}
 static inline void add_attr(Attrs& attrs, const std::string& name, const std::string& value)
 {
   bufferlist bl;
@@ -831,8 +853,22 @@ TEST(FSEnt, VerDirBase)
   EXPECT_EQ(ret, 0);
   EXPECT_EQ(ent->get_type(), posix::ObjectType::VERSIONED);
 
-  ret = testdir->remove(env->dpp, null_yield, false, nullptr);
+  // This will create a delete marker
+  struct rgw::sal::Object::DeleteOp::Result result;
+  ret = testdir->remove(env->dpp, null_yield, false, &result);
   EXPECT_EQ(ret, 0);
+
+  std::unique_ptr<posix::VersionedDirectory> testdir2 = std::make_unique<posix::VersionedDirectory>(dirname, root.get(),
+                                                 result.version_id, env->cct.get());
+
+  ret = testdir2->open(env->dpp);
+  EXPECT_EQ(ret, 0);
+  EXPECT_GT(testdir2->get_fd(), 0);
+
+  // remove the delete marker
+  ret = testdir2->remove(env->dpp, null_yield, false, nullptr);
+  EXPECT_EQ(ret, 0);
+
   EXPECT_FALSE(sf::exists(tp));
 }
 
@@ -844,7 +880,6 @@ TEST(FSEnt, VerDirReadWrite)
   std::string instance_id{verdir->get_new_instance()};
   std::string vfname{"_%3A" + instance_id + "_" + fname};
   sf::path tp{base_path / fname};
-  sf::path fp{tp / vfname};
   sf::path lp{tp / fname};
 
   int ret = verdir->create(env->dpp, /*existed=*/nullptr, /*temp_file=*/false);
@@ -856,13 +891,20 @@ TEST(FSEnt, VerDirReadWrite)
 
   std::string temp_fname{fname + "-blargh"};
   ret = verdir->link_temp_file(env->dpp, null_yield, temp_fname);
+
+  posix::FSEnt* cur = verdir->get_cur_version_ent();
+  ret = cur->stat(env->dpp, true);
+  std::string ver_id = posix_version_id_from_statx(cur->get_stx());
+  std::string vfname2{"_%3A" + ver_id + "_" + fname};
+  sf::path fp{tp / vfname2};
+
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
   EXPECT_TRUE(sf::exists(fp));
   EXPECT_TRUE(sf::is_regular_file(fp));
   EXPECT_TRUE(sf::exists(lp));
   EXPECT_TRUE(sf::is_symlink(lp));
-  EXPECT_EQ(sf::read_symlink(lp), vfname);
+  EXPECT_EQ(sf::read_symlink(lp), vfname2);
 
   bufferlist bl;
   encode(fname, bl);
@@ -950,6 +992,7 @@ TEST(FSEnt, MPVerDirReadWrite)
 
   std::string temp_fname{testname + "-blargh"};
   ret = verdir->link_temp_file(env->dpp, null_yield, temp_fname);
+
   EXPECT_TRUE(sf::exists(vp));
   EXPECT_TRUE(sf::is_directory(vp));
   EXPECT_TRUE(sf::exists(mp));
@@ -1904,7 +1947,12 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 
-  std::string vfname{"_%3A" + inst_id + "_" + testname};
+  POSIXObject* px_obj = static_cast<POSIXObject *>(object.get());
+  ret = px_obj->stat(env->dpp);
+  posix::VersionedDirectory *vdir = static_cast<posix::VersionedDirectory*>(px_obj->get_fsent());
+
+  std::string ver_id = vdir->get_cur_version();
+  std::string vfname{"_%3A" + ver_id + "_" + testname};
   sf::path op{tp / vfname};
   EXPECT_TRUE(sf::exists(op));
   EXPECT_TRUE(sf::is_regular_file(op));
@@ -1960,7 +2008,12 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   EXPECT_TRUE(sf::exists(tp));
   EXPECT_TRUE(sf::is_directory(tp));
 
-  vfname = "_%3A" + inst_id + "_" + testname;
+  px_obj = static_cast<POSIXObject *>(obj2.get());
+  ret = px_obj->stat(env->dpp);
+  posix::VersionedDirectory *vdir2 = static_cast<posix::VersionedDirectory*>(px_obj->get_fsent());
+  ver_id = vdir2->get_cur_version();
+
+  vfname = "_%3A" + ver_id + "_" + testname;
   sf::path o2p{tp / vfname};
   EXPECT_TRUE(sf::exists(o2p));
   EXPECT_TRUE(sf::is_regular_file(o2p));
@@ -1975,7 +2028,7 @@ TEST_F(POSIXBucketTest, VersionedObjectWrite)
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(robj->get_read_op());
   ret = read_op->prepare(null_yield, env->dpp);
   EXPECT_EQ(ret, 0);
-  EXPECT_EQ(robj->get_key().instance, inst_id);
+  EXPECT_EQ(robj->get_key().instance, ver_id);
 }
 
 class POSIXVerObjectTest : public POSIXBucketTest {
@@ -2441,8 +2494,6 @@ public:
     owner.id = bucket->get_owner();
     mp_obj->gen_rand_obj_instance_name();
     std::string inst_id = mp_obj->get_instance();
-    std::string vfname{"_%3A" + inst_id + "_" + objname};
-    sf::path op{bp / "root" / testname / objname / vfname };
 
     int ret = upload->complete(env->dpp, null_yield, get_pointer(env->cct), parts,
                                remove_objs, accounted_size, compressed, cs_info,
@@ -2450,6 +2501,12 @@ public:
     EXPECT_EQ(ret, 0);
     EXPECT_EQ(write_size, ofs);
     EXPECT_EQ(write_size, accounted_size);
+
+    rgw_obj_key key;
+    auto posix_mp_obj = static_cast<POSIXObject*>(mp_obj.get());
+    posix::FSEnt *fs = posix_mp_obj->get_fsent();
+    std::string vfname{"_%3A" + fs->get_cur_version() + "_" + objname};
+    sf::path op{bp / "root" / testname / objname / vfname };
     EXPECT_TRUE(sf::exists(op));
     EXPECT_TRUE(sf::is_directory(op));
 
