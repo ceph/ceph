@@ -105,7 +105,7 @@ get_canon_resource(const DoutPrefixProvider *dpp, const char* const request_uri,
     if (iter == std::end(sub_resources)) {
       continue;
     }
-    
+
     if (initial) {
       dest.append("?");
       initial = false;
@@ -146,7 +146,7 @@ void rgw_create_s3_canonical_header(
     dest = method;
   }
   dest.append("\n");
-  
+
   if (content_md5) {
     dest.append(content_md5);
   }
@@ -771,12 +771,28 @@ get_v4_canonical_headers(CephContext* cct,
         dout(5) << "Signature rejected: CanonicalHeaders must contain `host`." << dendl;
         return boost::none;
     }
-    // If `content-type` is present, it must be in CanonicalHeaders
-    if (info.env->exists("CONTENT_TYPE") &&
-        !canonical_hdrs_map.contains("content-type")) {
-        dout(5) << "Signature rejected: 'content-type' supplied but not in CanonicalHeaders." << dendl;
-        return boost::none;
-    }
+    // Content-type is deliberately NOT required here. That page has a bullet
+    // saying that a content-type present in the request "must" be added to
+    // CanonicalHeaders, but the same page contradicts it twice:
+    //
+    //   "You must include the host header (HTTP/1.1) or the :authority
+    //    header (HTTP/2), and any `x-amz-*` headers in the signature. You
+    //    can optionally include other standard headers in the signature,
+    //    such as content-type."
+    //
+    //   "For the purpose of calculating an authorization signature, only
+    //    the host and any `x-amz-*` headers are required[.]"
+    //
+    // Real S3 accepts requests where content-type wasnt signed, and SDKs rely
+    // on that. minio-go's streaming signer straight up drops content-type from
+    // SignedHeaders every time (see pkg/signer/request-signature-streaming.go,
+    // `ignoredStreamingHeaders`), and thats the path every minio-go PutObject
+    // over plain HTTP takes. Rejecting these requests broke Mimir, Loki,
+    // Thanos and basically everything else built on thanos-io/objstore.
+    //
+    // The privilege escalation that CVE-2026-54330 describes comes from
+    // unsigned `x-amz-*` headers, and those are still rejected below.
+
     // Any header starting with `x-amz-` must be in CanonicalHeaders
     const auto& emap = info.env->get_map();
     static const std::string xamz{"HTTP_X_AMZ_"};
@@ -788,6 +804,12 @@ get_v4_canonical_headers(CephContext* cct,
         boost::container::small_vector<char, 64> buf(env_key.size());
         lowercase_dash_transform(env_key, buf.begin(), true);
         std::string_view lower_key{buf.data(), buf.size()};
+        // S3 has an exception for x-amz-content-sha256 because it's already
+        // signed as part of the HashedPayload
+        // TODO: make this specific to CredentialScope:service == s3
+        if (lower_key == "x-amz-content-sha256") {
+          continue;
+        }
         if (!canonical_hdrs_map.contains(lower_key)) {
         dout(5) << "Signature rejected: '" << lower_key
         << "' supplied, but not in CanonicalHeaders." << dendl;
@@ -1317,7 +1339,7 @@ AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
   size_t to_extract = \
     std::min(chunk_meta.get_data_size(stream_pos_was), buf_max);
   dout(30) << "AWSv4ComplMulti: stream_pos_was=" << stream_pos_was << ", to_extract=" << to_extract << dendl;
-  
+
   /* It's quite probable we have a couple of real data bytes stored together
    * with meta-data in the parsing_buf. We need to extract them and move to
    * the final buffer. This is a trade-off between frontend's read overhead
