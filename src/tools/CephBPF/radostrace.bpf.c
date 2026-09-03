@@ -17,7 +17,6 @@
 #include <bpf/bpf_helpers.h>
 #include <bpf/bpf_tracing.h>
 #include <stdbool.h>
-#include <string.h>
 #include "bpf_ceph_types.h"
 #include "bpf_utils.h"
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
@@ -66,7 +65,7 @@ int uprobe_send_op(struct pt_regs *ctx) {
   debug_printk("Entered uprobe_send_op\n");
   int varid = 0;
   struct client_op_k key;
-  memset(&key, 0, sizeof(key));
+  __builtin_memset(&key, 0, sizeof(key));
   // read tid
   struct VarField *vf = bpf_map_lookup_elem(&hprobes, &varid);
   if (NULL != vf) {
@@ -97,7 +96,7 @@ int uprobe_send_op(struct pt_regs *ctx) {
   if (val == NULL) {
     return 0;
   }
-  memset(val, 0, sizeof(struct client_op_v));
+  __builtin_memset(val, 0, sizeof(struct client_op_v));
   val->sent_stamp = bpf_ktime_get_boot_ns();
   val->tid = key.tid;
   val->cid = key.cid;
@@ -304,7 +303,7 @@ int uprobe_finish_op(struct pt_regs *ctx) {
   debug_printk("Entered uprobe_finish_op\n");
   int varid = 20;
   struct client_op_k key;
-  memset(&key, 0, sizeof(key));
+  __builtin_memset(&key, 0, sizeof(key));
   // read tid
   struct VarField *vf = bpf_map_lookup_elem(&hprobes, &varid);
   if (NULL != vf) {
