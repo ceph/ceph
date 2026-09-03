@@ -1008,3 +1008,13 @@ add_ceph_unittest(unittest_weighted_shuffle)
 add_executable(unittest_intarith test_intarith.cc)
 add_ceph_unittest(unittest_intarith)
 #make check ends here
+
+find_package(benchmark QUIET)
+if (benchmark_FOUND)
+  add_executable(bench_lrus
+  bench_lrus.cc
+  )
+  target_link_libraries(bench_lrus ceph-common global-static benchmark::benchmark Boost::context)
+else()
+  message(STATUS "The google/benchmark library was not found. Skipping micro benchmark tests")
+endif(benchmark_FOUND)
