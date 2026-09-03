@@ -2403,15 +2403,33 @@ public:
     uint64_t onode_shard_hits;
     uint64_t onode_shard_misses;
     uint64_t onode_shard_miss_latency_sum;
-    uint64_t buffer_hits;
-    uint64_t buffer_misses;
+    uint64_t buffer_hit_bytes;
+    uint64_t buffer_miss_bytes;
     uint64_t buffer_miss_latency_sum;
-    
+    uint64_t buffer_miss_lat_count;
+
     CacheStatsSnapshot()
       : timestamp(ceph::mono_clock::zero()),
         onode_hits(0), onode_misses(0), onode_miss_latency_sum(0),
         onode_shard_hits(0), onode_shard_misses(0), onode_shard_miss_latency_sum(0),
-        buffer_hits(0), buffer_misses(0), buffer_miss_latency_sum(0) {}
+        buffer_hit_bytes(0), buffer_miss_bytes(0), buffer_miss_latency_sum(0), buffer_miss_lat_count(0) {}
+
+    CacheStatsSnapshot delta(const CacheStatsSnapshot& older) const {
+      auto sub = [](uint64_t a, uint64_t b) { return a >= b ? a - b : 0; };
+      CacheStatsSnapshot d;
+      d.timestamp = timestamp;
+      d.onode_hits = sub(onode_hits, older.onode_hits);
+      d.onode_misses = sub(onode_misses, older.onode_misses);
+      d.onode_miss_latency_sum = sub(onode_miss_latency_sum, older.onode_miss_latency_sum);
+      d.onode_shard_hits = sub(onode_shard_hits, older.onode_shard_hits);
+      d.onode_shard_misses = sub(onode_shard_misses, older.onode_shard_misses);
+      d.onode_shard_miss_latency_sum = sub(onode_shard_miss_latency_sum, older.onode_shard_miss_latency_sum);
+      d.buffer_hit_bytes = sub(buffer_hit_bytes, older.buffer_hit_bytes);
+      d.buffer_miss_bytes = sub(buffer_miss_bytes, older.buffer_miss_bytes);
+      d.buffer_miss_latency_sum = sub(buffer_miss_latency_sum, older.buffer_miss_latency_sum);
+      d.buffer_miss_lat_count = sub(buffer_miss_lat_count, older.buffer_miss_lat_count);
+      return d;
+    }
   };
 
   ceph::mutex cache_stats_lock = ceph::make_mutex("BlueStore::cache_stats_lock");

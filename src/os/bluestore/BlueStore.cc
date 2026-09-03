@@ -13643,7 +13643,7 @@ int BlueStore::_do_readv(
       ceph_assert(r == -EIO); // no other errors allowed
       return -EIO;
     }
-  } 
+  }
   if (op_flags & CEPH_OSD_OP_FLAG_SCRUB) {
     log_latency_fn_scrub(__func__,
       l_bluestore_read_wait_aio_lat,
