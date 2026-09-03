@@ -27,6 +27,7 @@
 #include "tools/rbd_mirror/image_replayer/Utils.h"
 #include "tools/rbd_mirror/image_replayer/journal/Replayer.h"
 #include "tools/rbd_mirror/image_replayer/journal/StateBuilder.h"
+#include "tools/rbd_mirror/image_replayer/snapshot/Replayer.h"
 #include <map>
 #include <shared_mutex> // for std::shared_lock
 
@@ -294,6 +295,73 @@ void ImageReplayer<I>::set_remote_snap_id_end_limit(uint64_t snap_id) {
   if (m_replayer != nullptr) {
     m_replayer->set_remote_snap_id_end_limit(snap_id);
   }
+}
+
+template <typename I>
+void ImageReplayer<I>::prepare_snapshot(uint64_t remote_snap_id,
+                                        uint64_t* local_snap_id,
+                                        Context* on_finish,
+                                        uint64_t updated_local_snap_id) {
+  std::unique_lock locker(m_lock);
+  if (m_replayer == nullptr) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EAGAIN);
+    return;
+  }
+
+  // group snapshot operations are only supported by the snapshot replayer
+  auto replayer = dynamic_cast<image_replayer::snapshot::Replayer<I>*>(
+      m_replayer);
+  if (replayer == nullptr) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EINVAL);
+    return;
+  }
+
+  replayer->prepare_snapshot(remote_snap_id, local_snap_id, on_finish,
+                             updated_local_snap_id);
+}
+
+template <typename I>
+void ImageReplayer<I>::start_sync(Context* on_finish) {
+  std::unique_lock locker(m_lock);
+  if (m_replayer == nullptr) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EAGAIN);
+    return;
+  }
+
+  // group snapshot operations are only supported by the snapshot replayer
+  auto replayer = dynamic_cast<image_replayer::snapshot::Replayer<I>*>(
+      m_replayer);
+  if (replayer == nullptr) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EINVAL);
+    return;
+  }
+
+  replayer->start_sync(on_finish);
+}
+
+template <typename I>
+void ImageReplayer<I>::complete_snapshot(Context* on_finish) {
+  std::unique_lock locker(m_lock);
+  if (m_replayer == nullptr) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EAGAIN);
+    return;
+  }
+
+  // group snapshot operations are only supported by the snapshot replayer
+  auto replayer = dynamic_cast<image_replayer::snapshot::Replayer<I>*>(
+      m_replayer);
+  if (replayer == nullptr) {
+    locker.unlock();
+    m_threads->work_queue->queue(on_finish, -EINVAL);
+    return;
+  }
+
+  replayer->complete_snapshot(on_finish);
 }
 
 template <typename I>

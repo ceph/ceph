@@ -124,6 +124,17 @@ public:
     handle_image_update_notify();
   }
 
+  // prepare the local mirror snapshot without synchronizing image data
+  void prepare_snapshot(uint64_t remote_snap_id, uint64_t* local_snap_id,
+                        Context* on_finish,
+                        uint64_t updated_local_snap_id = CEPH_NOSNAP);
+
+  // synchronize the prepared snapshot
+  void start_sync(Context* on_finish);
+
+  // mark the prepared snapshot complete
+  void complete_snapshot(Context* on_finish);
+
   uint64_t get_remote_snap_id_end_limit() {
     std::unique_lock locker(m_lock);
     return m_remote_group_image_snap_id;
@@ -237,6 +248,15 @@ private:
     STATE_COMPLETE
   };
 
+  enum SnapshotReplayPhase {
+    SNAPSHOT_REPLAY_PHASE_NONE,
+    SNAPSHOT_REPLAY_PHASE_PREPARING,
+    SNAPSHOT_REPLAY_PHASE_PREPARED,
+    SNAPSHOT_REPLAY_PHASE_SYNCING,
+    SNAPSHOT_REPLAY_PHASE_SYNCED,
+    SNAPSHOT_REPLAY_PHASE_COMPLETING
+  };
+
   struct C_UpdateWatchCtx;
   struct DeepCopyHandler;
 
@@ -304,6 +324,15 @@ private:
   bool m_updating_sync_point = false;
   bool m_sync_in_progress = false;
 
+  SnapshotReplayPhase m_snapshot_replay_phase = SNAPSHOT_REPLAY_PHASE_NONE;
+  uint64_t* m_prepared_local_snap_id = nullptr;
+  uint64_t m_updated_local_snap_id = CEPH_NOSNAP;
+  Context* m_on_prepare_snapshot = nullptr;
+  Context* m_on_snapshot_sync = nullptr;
+  Context* m_on_complete_snapshot = nullptr;
+  bool m_snapshot_sync_complete_pending = false;
+  bool m_snapshot_sync_final_update = false;
+
   PerfCounters *m_perf_counters = nullptr;
 
   bool is_remote_primary();
@@ -331,6 +360,8 @@ private:
 
   void get_local_image_state();
   void handle_get_local_image_state(int r);
+
+  void finish_prepare_snapshot(int r);
 
   void create_non_primary_snapshot();
   void handle_create_non_primary_snapshot(int r);
@@ -381,6 +412,7 @@ private:
   void handle_replay_complete(int r, const std::string& description);
   void handle_replay_complete(std::unique_lock<ceph::mutex>* locker,
                               int r, const std::string& description);
+  Context* cancel_coordinated_replay();
   void notify_status_updated();
 
   bool is_replay_interrupted();
