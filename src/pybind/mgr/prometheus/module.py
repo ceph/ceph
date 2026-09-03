@@ -2331,6 +2331,16 @@ class Module(MgrModule, OrchestratorClientMixin):
             self.set_store('key', inbuf)
         return 0, 'SSL certificate key updated', ''
 
+    @PrometheusCLICommand.Write('prometheus clear-ssl-certificate')
+    def clear_ssl_certificate(self, mgr_id: Optional[str] = None) -> Tuple[int, str, str]:
+        if mgr_id is not None:
+            self.set_store(_get_localized_key(mgr_id, 'crt'), None)
+            self.set_store(_get_localized_key(mgr_id, 'key'), None)
+        else:
+            self.set_store('crt', None)
+            self.set_store('key', None)
+        return 0, 'SSL certificate and key cleared', ''
+
     def self_test(self) -> None:
         self.collect()
         self.get_file_sd_config()
@@ -2377,22 +2387,33 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     def setup_direct_tls_config(self) -> Tuple[Dict[str, Dict[str, Any]], Dict[str, Any], str]:
         cert = self.get_localized_store("crt")
+        pkey = self.get_localized_store("key")
+        crt_file = cast(str, self.get_localized_module_option('crt_file'))
+        key_file = cast(str, self.get_localized_module_option('key_file'))
+
+        if (cert is not None or pkey is not None) and (crt_file or key_file):
+            self.log.warning(
+                'Prometheus TLS certificate/key stored with the '
+                '`prometheus set-ssl-certificate` commands take precedence '
+                'over crt_file/key_file. Run `ceph prometheus '
+                'clear-ssl-certificate` before using file-based TLS configuration.'
+            )
+
         if cert is not None:
             self.cert_tmp = NamedTemporaryFile()
             self.cert_tmp.write(cert.encode('utf-8'))
             self.cert_tmp.flush()
             cert_fname = self.cert_tmp.name
         else:
-            cert_fname = cast(str, self.get_localized_module_option('crt_file'))
+            cert_fname = crt_file
 
-        pkey = self.get_localized_store("key")
         if pkey is not None:
             self.pkey_tmp = NamedTemporaryFile()
             self.pkey_tmp.write(pkey.encode('utf-8'))
             self.pkey_tmp.flush()
             pkey_fname = self.pkey_tmp.name
         else:
-            pkey_fname = cast(str, self.get_localized_module_option('key_file'))
+            pkey_fname = key_file
 
         verify_tls_files(cert_fname, pkey_fname)
 
@@ -2674,22 +2695,33 @@ class StandbyModule(MgrStandbyModule):
         ssl_info = None
         if use_ssl:
             cert = self.get_localized_store("crt")
+            pkey = self.get_localized_store("key")
+            crt_file = cast(str, self.get_localized_module_option('crt_file'))
+            key_file = cast(str, self.get_localized_module_option('key_file'))
+
+            if (cert is not None or pkey is not None) and (crt_file or key_file):
+                self.log.warning(
+                    'Prometheus TLS certificate/key stored with the '
+                    '`prometheus set-ssl-certificate` commands take precedence '
+                    'over crt_file/key_file. Run `ceph prometheus '
+                    'clear-ssl-certificate` before using file-based TLS configuration.'
+                )
+
             if cert is not None:
                 self.cert_tmp = NamedTemporaryFile()
                 self.cert_tmp.write(cert.encode('utf-8'))
                 self.cert_tmp.flush()
                 cert_fname = self.cert_tmp.name
             else:
-                cert_fname = cast(str, self.get_localized_module_option('crt_file'))
+                cert_fname = crt_file
 
-            pkey = self.get_localized_store("key")
             if pkey is not None:
                 self.pkey_tmp = NamedTemporaryFile()
                 self.pkey_tmp.write(pkey.encode('utf-8'))
                 self.pkey_tmp.flush()
                 pkey_fname = self.pkey_tmp.name
             else:
-                pkey_fname = cast(str, self.get_localized_module_option('key_file'))
+                pkey_fname = key_file
 
             verify_tls_files(cert_fname, pkey_fname)
 
