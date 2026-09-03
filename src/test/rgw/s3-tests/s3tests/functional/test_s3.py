@@ -3141,8 +3141,8 @@ def test_put_object_ifmatch_nonexisted_failed():
     client.meta.events.register('before-call.s3.PutObject', lf)
     e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key='foo', Body='bar')
     status, error_code = _get_status_and_error_code(e.response)
-    assert status == 412
-    assert error_code == 'PreconditionFailed'
+    assert status == 404
+    assert error_code == 'NoSuchKey'
 
     e = assert_raises(ClientError, client.get_object, Bucket=bucket_name, Key='foo')
     status, error_code = _get_status_and_error_code(e.response)
@@ -11595,7 +11595,7 @@ def test_bucket_policy_put_obj_grant():
 @pytest.mark.encryption
 def test_put_obj_enc_conflict_c_s3():
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     # boto3.set_stream_logger(name='botocore')
 
@@ -11621,7 +11621,7 @@ def test_put_obj_enc_conflict_c_kms():
     if kms_keyid is None:
         kms_keyid = 'fool-me-once'
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     # boto3.set_stream_logger(name='botocore')
 
@@ -11648,7 +11648,7 @@ def test_put_obj_enc_conflict_s3_kms():
     if kms_keyid is None:
         kms_keyid = 'fool-me-once'
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     # boto3.set_stream_logger(name='botocore')
 
@@ -11672,7 +11672,7 @@ def test_put_obj_enc_conflict_bad_enc_kms():
     if kms_keyid is None:
         kms_keyid = 'fool-me-once'
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     # boto3.set_stream_logger(name='botocore')
 
@@ -11695,7 +11695,7 @@ def test_put_obj_enc_conflict_bad_enc_kms():
 @pytest.mark.fails_on_dbstore
 def test_bucket_policy_put_obj_s3_noenc():
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     deny_incorrect_algo = {
         "StringNotEquals": {
@@ -11751,7 +11751,7 @@ def test_bucket_policy_put_obj_s3_kms():
     if kms_keyid is None:
         kms_keyid = 'fool-me-twice'
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     deny_incorrect_algo = {
         "StringNotEquals": {
@@ -11797,7 +11797,7 @@ def test_bucket_policy_put_obj_kms_noenc():
     if kms_keyid is None:
         pytest.skip('[s3 main] section missing kms_keyid')
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     deny_incorrect_algo = {
         "StringNotEquals": {
@@ -11840,7 +11840,7 @@ def test_bucket_policy_put_obj_kms_noenc():
 @pytest.mark.bucket_policy
 def test_bucket_policy_put_obj_kms_s3():
     bucket_name = get_new_bucket()
-    client = get_v2_client()
+    client = get_client()
 
     deny_incorrect_algo = {
         "StringNotEquals": {
@@ -13552,3 +13552,556 @@ def test_upload_part_copy_percent_encoded_key():
     final_obj = s3_client.get_object(Bucket=bucket_name, Key=key)
     content = final_obj['Body'].read()
     assert content == b"foo"
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_put_object_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    client.delete_object(Bucket=bucket, Key=key)
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    response = client.put_object(Bucket=bucket, Key=key, IfMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    response = client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_put_current_object_if_none_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+    data1 = 'data1'
+    data2 = 'data2'
+
+    response = client.put_object(Bucket=bucket, Key=key, Body=data1, IfNoneMatch='*')
+    etag = response['ETag']
+
+    response = client.put_object(Bucket=bucket, Key=key, Body=data2)
+    etag2 = response['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch=etag2)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    # we can't specify a version, so we only check against current object
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='badetag')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+    client.delete_object(Bucket=bucket, Key=key)
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_put_current_object_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+    data1 = 'data1'
+    data2 = 'data2'
+    etag = 'deadbeef'
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    response = client.put_object(Bucket=bucket, Key=key, Body=data1, IfNoneMatch=etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    etag = response['ETag']
+    versionId = response['VersionId']
+    response = client.put_object(Bucket=bucket, Key=key, Body=data2, IfMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    etag2 = response['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch=etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    response = client.put_object(Bucket=bucket, Key=key, IfMatch=etag2)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_put_object_current_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='*')['ETag']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfNoneMatch=etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    response = client.put_object(Bucket=bucket, Key=key, IfNoneMatch='badetag')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+    client.put_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    response = client.delete_object(Bucket=bucket, Key=key)
+    assert response['DeleteMarker']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    client.put_object(Bucket=bucket, Key=key, IfNoneMatch=etag)
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key)['ETag']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.delete_object(Bucket=bucket, Key=key, IfMatch=etag)
+
+    # -ENOENT doesn't raise error in delete op
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatch='*')
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatch='badetag')
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+
+    # recreate to test IfMatch='*'
+    client.put_object(Bucket=bucket, Key=key)
+    client.delete_object(Bucket=bucket, Key=key, IfMatch='*')
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_current_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    # -ENOENT doesn't raise error in delete op
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatch='*')
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatch='badetag')
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+
+    response = client.put_object(Bucket=bucket, Key=key)
+    version = response['VersionId']
+    etag = response['ETag']
+
+    # on current version
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatch=etag)
+    assert response['DeleteMarker']
+
+    # -ENOENT doesn't raise error in delete op
+    client.delete_object(Bucket=bucket, Key=key, IfMatch='*')
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    # remove delete marker to retest IfMatch='*'
+    client.delete_object(Bucket=bucket, Key=key, VersionId=version)
+    client.delete_object(Bucket=bucket, Key=key, IfMatch='*')
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_version_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    response = client.put_object(Bucket=bucket, Key=key)
+    version = response['VersionId']
+    etag = response['ETag']
+
+    # on specific version
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatch=etag)
+    assert 'DeleteMarker' not in response
+
+    # -ENOENT doesn't raise error in delete op
+    client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatch='*')
+    client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatch='badetag')
+
+    # recreate to test IfMatch='*'
+    response = client.put_object(Bucket=bucket, Key=key)
+    version = response['VersionId']
+    client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatch='*')
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    client.put_object(Bucket=bucket, Key=key)
+    mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchLastModifiedTime=badmtime)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.delete_object(Bucket=bucket, Key=key, IfMatchLastModifiedTime=mtime)
+
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatchLastModifiedTime=badmtime)
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_current_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    client.put_object(Bucket=bucket, Key=key)
+    mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchLastModifiedTime=badmtime)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatchLastModifiedTime=mtime)
+    assert response['DeleteMarker']
+
+    # object is marked as deleted but still exists
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchLastModifiedTime=badmtime)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_version_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    version = client.put_object(Bucket=bucket, Key=key)['VersionId']
+    mtime = client.head_object(Bucket=bucket, Key=key, VersionId=version)['LastModified']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatchLastModifiedTime=badmtime)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatchLastModifiedTime=mtime)
+    assert 'DeleteMarker' not in response
+
+    response = client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatchLastModifiedTime=badmtime)
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    client.delete_object(Bucket=bucket, Key=key, IfMatchSize=size)
+
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_current_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, IfMatchSize=size)
+    assert 'DeleteMarker' in response
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, IfMatchSize=badsize)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_object_version_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    version = client.put_object(Bucket=bucket, Key=key)['VersionId']
+
+    e = assert_raises(ClientError, client.delete_object, Bucket=bucket, Key=key, VersionId=version, IfMatchSize=badsize)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    response = client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatchSize=size)
+    assert 'DeleteMarker' not in response
+
+    response = client.delete_object(Bucket=bucket, Key=key, VersionId=version, IfMatchSize=badsize)
+    assert 204 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key)['ETag']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'ETag': 'badetag'}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'ETag': etag}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    # -ENOENT doesn't raise error in delete op
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'ETag': 'badetag'}]})
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_current_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    etag = client.put_object(Bucket=bucket, Key=key)['ETag']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'ETag': 'badetag'}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'ETag': etag}]})
+    assert key == response['Deleted'][0]['Key'] # success
+    assert response['Deleted'][0]['DeleteMarker']
+
+    # object is marked as deleted but still exists
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'ETag': 'badetag'}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_version_if_match():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    response = client.put_object(Bucket=bucket, Key=key)
+    etag = response['ETag']
+    version = response['VersionId']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'ETag': 'badetag'}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'ETag': etag}]})
+    assert key == response['Deleted'][0]['Key'] # success
+    assert 'DeleteMarker' not in response['Deleted'][0]
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'ETag': 'badetag'}]})
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    client.put_object(Bucket=bucket, Key=key)
+    mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': mtime}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_current_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    client.put_object(Bucket=bucket, Key=key)
+    mtime = client.head_object(Bucket=bucket, Key=key)['LastModified']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': mtime}]})
+    assert key == response['Deleted'][0]['Key'] # success
+    assert response['Deleted'][0]['DeleteMarker']
+
+    # object exists, but marked as deleted
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'LastModifiedTime': badmtime}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_version_if_match_last_modified_time():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    badmtime = datetime.datetime(2015, 1, 1)
+
+    version = client.put_object(Bucket=bucket, Key=key)['VersionId']
+    mtime = client.head_object(Bucket=bucket, Key=key, VersionId=version)['LastModified']
+
+    # create a different version as current
+    client.put_object(Bucket=bucket, Key=key)
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'LastModifiedTime': badmtime}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'LastModifiedTime': mtime}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'LastModifiedTime': badmtime}]})
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': size}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_current_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    client.put_object(Bucket=bucket, Key=key)
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': size}]})
+    assert key == response['Deleted'][0]['Key'] # success
+    assert response['Deleted'][0]['DeleteMarker']
+
+    # object exists, but marked as deleted
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'Size': badsize}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+@pytest.mark.fails_on_aws # only supported for directory buckets
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+def test_delete_objects_version_if_match_size():
+    client = get_client()
+    bucket = get_new_bucket(client)
+    check_configure_versioning_retry(bucket, "Enabled", "Enabled")
+    key = 'obj'
+
+    size = 0
+    badsize = 9999
+
+    version = client.put_object(Bucket=bucket, Key=key)['VersionId']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'Size': badsize}]})
+    assert 'PreconditionFailed' == response['Errors'][0]['Code']
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'Size': size}]})
+    assert key == response['Deleted'][0]['Key'] # success
+
+    response = client.delete_objects(Bucket=bucket, Delete={'Objects': [{'Key': key, 'VersionId': version, 'Size': badsize}]})
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']

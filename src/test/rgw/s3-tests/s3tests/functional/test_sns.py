@@ -41,13 +41,15 @@ def sns_alt(iam_alt_root):
 
 @pytest.fixture
 def s3(iam_root):
-    client = get_iam_root_client(service_name='s3')
+    # clear region_name to work around Invalid region: region was not a valid DNS name.
+    client = get_iam_root_client(service_name='s3', region_name=None)
     yield client
     nuke_prefixed_buckets(get_prefix(), client)
 
 @pytest.fixture
 def s3_alt(iam_alt_root):
-    client = get_iam_alt_root_client(service_name='s3')
+    # clear region_name to work around Invalid region: region was not a valid DNS name.
+    client = get_iam_alt_root_client(service_name='s3', region_name=None)
     yield client
     nuke_prefixed_buckets(get_prefix(), client)
 
