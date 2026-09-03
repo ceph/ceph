@@ -9531,10 +9531,19 @@ next:
   }
 
   if (opt_cmd == OPT::SYNC_STATUS) {
+    if (opt_bucket || opt_bucket_name) {
+       cerr << "ERROR: 'sync status' command does not support --bucket option." << std::endl;
+       cerr << "Use 'radosgw-admin bucket sync status --bucket=<bucketname>' instead." << std::endl;
+       return EINVAL;
+    }
     sync_status(formatter.get());
   }
 
   if (opt_cmd == OPT::METADATA_SYNC_STATUS) {
+    if (opt_bucket || opt_bucket_name) {
+      cerr << "ERROR: 'metadata sync status' command does not support --bucket option." << std::endl;
+      return EINVAL;
+    }
     RGWMetaSyncStatusManager sync(static_cast<rgw::sal::RadosStore*>(driver), static_cast<rgw::sal::RadosStore*>(driver)->svc()->async_processor);
 
     int ret = sync.init(dpp());
