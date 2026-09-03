@@ -54,6 +54,12 @@
 #include "include/interval_set.h"
 #include "include/stringify.h"
 #include "osd/osd_types.h"
+#ifdef HAVE_LIBCRYPTSETUP
+#include "librbd/ImageCtx.h"
+#include "librbd/crypto/EncryptionFormat.h"
+#include "librbd/crypto/CryptoInterface.h"
+#include "common/json/OSDStructures.h"
+#endif
 
 #include <boost/assign/list_of.hpp>
 #include <boost/scope_exit.hpp>
@@ -2458,6 +2464,407 @@ TEST_F(TestLibRBD, TestEncryptionLUKS2ECPool)
 
   ASSERT_EQ(0, rbd_close(image));
   rados_ioctx_destroy(meta_ioctx);
+}
+
+TEST_F(TestLibRBD, TestEncryptionECZeroCiphertextRecovery)
+{
+  // This test verifies that when an RBD-encrypted image on an EC pool contains
+  // a 4 KiB-aligned region whose ciphertext is entirely zero, EC recovery
+  // reconstructs the object with that region allocated (not hole-punched), and
+  // the decrypted read returns the correct plaintext.
+
+  REQUIRE(!is_feature_enabled(RBD_FEATURE_JOURNALING));
+  REQUIRE(!is_librados_test_stub(_rados));
+
+#ifndef HAVE_LIBCRYPTSETUP
+  std::cout << "Skipping: HAVE_LIBCRYPTSETUP not set" << std::endl;
+  return;
+#else
+
+  // -----------------------------------------------------------------------
+  // Step 1: Create a FastEC pool (k=2, m=1) with all required flags.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 1: creating EC pool" << std::endl;
+  std::string ec_pool_name = get_temp_pool_name("test-librbd-ec-zerocrypt-");
+  std::string ec_profile = "testprofile-" + ec_pool_name;
+  destroy_ec_pool_pp(ec_pool_name, _rados);
+  ASSERT_EQ(0, _rados.mon_command(
+    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"" + ec_profile +
+    "\", \"profile\": [\"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
+    {}, nullptr, nullptr));
+  ASSERT_EQ(0, _rados.mon_command(
+    "{\"prefix\": \"osd pool create\", \"pool\": \"" + ec_pool_name +
+    "\", \"pool_type\": \"erasure\", \"pg_num\": 8, \"pgp_num\": 8"
+    ", \"erasure_code_profile\": \"" + ec_profile + "\"}",
+    {}, nullptr, nullptr));
+  ASSERT_EQ("", set_allow_ec_overwrites_pp(ec_pool_name, _rados, true));
+  ASSERT_EQ(0, _rados.mon_command(
+    "{\"prefix\": \"osd pool set\", \"pool\": \"" + ec_pool_name +
+    "\", \"var\": \"allow_ec_optimizations\", \"val\": \"true\"}",
+    {}, nullptr, nullptr));
+  ASSERT_EQ("", set_pool_flags_pp(
+    ec_pool_name, _rados, pg_pool_t::FLAG_PRESERVE_ALLOCATION, true));
+  _rados.wait_for_latest_osdmap();
+  ASSERT_EQ(0, rados_wait_for_latest_osdmap(_cluster));
+  _unique_pool_names.push_back(ec_pool_name);
+  std::cout << "[EC-ZeroCrypt] Step 1: EC pool created: " << ec_pool_name << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 2: Create a 32 MiB RBD image using the EC pool as data pool.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 2: creating RBD image" << std::endl;
+  rados_ioctx_t meta_ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &meta_ioctx));
+  BOOST_SCOPE_EXIT(meta_ioctx) {
+    rados_ioctx_destroy(meta_ioctx);
+  } BOOST_SCOPE_EXIT_END;
+
+  std::string name = get_temp_image_name();
+  uint64_t size = 32 << 20;
+  rbd_image_options_t opts;
+  rbd_image_options_create(&opts);
+  BOOST_SCOPE_EXIT(opts) { rbd_image_options_destroy(opts); } BOOST_SCOPE_EXIT_END;
+  ASSERT_EQ(0, rbd_image_options_set_string(
+    opts, RBD_IMAGE_OPTION_DATA_POOL, ec_pool_name.c_str()));
+  ASSERT_EQ(0, rbd_create4(meta_ioctx, name.c_str(), size, opts));
+  std::cout << "[EC-ZeroCrypt] Step 2: image created: " << name << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 3: Format with LUKS2 and load encryption.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 3: formatting with LUKS2" << std::endl;
+  rbd_image_t image;
+  ASSERT_EQ(0, rbd_open(meta_ioctx, name.c_str(), &image, NULL));
+
+  rbd_encryption_luks2_format_options_t luks2_opts = {
+    .alg = RBD_ENCRYPTION_ALGORITHM_AES256,
+    .passphrase = "testpass",
+    .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_format(
+    image, RBD_ENCRYPTION_FORMAT_LUKS2, &luks2_opts, sizeof(luks2_opts)));
+  ASSERT_EQ(0, rbd_close(image));
+  std::cout << "[EC-ZeroCrypt] Step 3: LUKS2 format done, loading encryption" << std::endl;
+
+  // Re-open and load encryption so the live CryptoInterface is available.
+  ASSERT_EQ(0, rbd_open(meta_ioctx, name.c_str(), &image, NULL));
+  rbd_encryption_luks2_format_options_t load_opts = {
+    .alg = RBD_ENCRYPTION_ALGORITHM_AES256,
+    .passphrase = "testpass",
+    .passphrase_size = 8,
+  };
+  ASSERT_EQ(0, rbd_encryption_load(
+    image, RBD_ENCRYPTION_FORMAT_LUKS2, &load_opts, sizeof(load_opts)));
+  std::cout << "[EC-ZeroCrypt] Step 3: encryption loaded" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 4: Obtain CryptoInterface* and data_offset.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 4: obtaining CryptoInterface and data_offset" << std::endl;
+  auto* image_ctx = reinterpret_cast<librbd::ImageCtx*>(image);
+  librbd::crypto::CryptoInterface* crypto =
+    image_ctx->encryption_format->get_crypto();
+  ASSERT_NE(nullptr, crypto);
+  // data_offset is the raw image offset at which user data starts (i.e. the
+  // LUKS header occupies raw image bytes [0, data_offset)).  A user write at
+  // image offset 0 therefore lands at raw image offset data_offset, which in
+  // turn maps to EC object (data_offset / object_size) at object offset
+  // (data_offset % object_size).
+  uint64_t data_offset = crypto->get_data_offset();
+  uint64_t object_size = image_ctx->layout.object_size;
+  uint64_t ec_object_no  = data_offset / object_size;
+  uint64_t ec_object_off = data_offset % object_size;
+  std::cout << "[EC-ZeroCrypt] Step 4: data_offset=" << data_offset
+            << " object_size=" << object_size
+            << " ec_object_no=" << ec_object_no
+            << " ec_object_off=" << ec_object_off << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 5: Compute the plaintext that encrypts to all-zero ciphertext.
+  //
+  // AES-XTS-Decrypt(key, iv=sector_number(0), ciphertext=zeros) yields
+  // plaintext P such that AES-XTS-Encrypt(key, iv=sector_number(0), P) = zeros.
+  // crypto->decrypt() modifies the bufferlist in-place (clears and replaces).
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 5: computing plaintext that encrypts to zero ciphertext" << std::endl;
+  ceph::bufferlist plaintext_bl;
+  plaintext_bl.append_zero(4096);
+  ASSERT_EQ(0, crypto->decrypt(&plaintext_bl, /*image_offset=*/0));
+  ASSERT_EQ(4096u, plaintext_bl.length())
+    << "decrypt() did not produce a 4096-byte result — crypto setup error";
+  std::cout << "[EC-ZeroCrypt] Step 5: plaintext computed" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 6: Write the plaintext. RBD adds data_offset internally; the
+  // resulting ciphertext at object offset data_offset will be all zeros.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 6: writing plaintext (ciphertext will be all-zero)" << std::endl;
+  ASSERT_EQ(4096, rbd_write(image, 0, 4096, plaintext_bl.c_str()));
+  std::cout << "[EC-ZeroCrypt] Step 6: write complete" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 7: Identify the backing EC object and open a RADOS IoCtx on it.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 7: identifying backing EC object" << std::endl;
+  char prefix_buf[RBD_MAX_BLOCK_NAME_SIZE + 1] = {};
+  ASSERT_EQ(0, rbd_get_block_name_prefix(image, prefix_buf, sizeof(prefix_buf)));
+  // A user write at image offset 0 maps to raw image offset data_offset, which
+  // lands at ec_object_no (ec_object_off within that object).  The object name
+  // is "<prefix>.<object_no_hex_16>".
+  char obj_suffix[17];
+  snprintf(obj_suffix, sizeof(obj_suffix), "%016llx",
+           static_cast<unsigned long long>(ec_object_no));
+  std::string oid = std::string(prefix_buf) + "." + obj_suffix;
+  std::cout << "[EC-ZeroCrypt] Step 7: EC object oid=" << oid << std::endl;
+
+  librados::IoCtx ec_ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(ec_pool_name.c_str(), ec_ioctx));
+  BOOST_SCOPE_EXIT(&ec_ioctx) { ec_ioctx.close(); } BOOST_SCOPE_EXIT_END;
+
+  // -----------------------------------------------------------------------
+  // Step 8: Verify the ciphertext on the OSD is actually zero.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 8: [self-check] reading raw ciphertext from OSD" << std::endl;
+  ceph::bufferlist raw_bl;
+  ASSERT_EQ(4096, ec_ioctx.read(oid, raw_bl, 4096, ec_object_off))
+    << "[self-check] RADOS read of backing EC object failed";
+  {
+    ceph::bufferlist expected_zeros;
+    expected_zeros.append_zero(4096);
+    ASSERT_TRUE(raw_bl.contents_equal(expected_zeros))
+      << "[self-check] Ciphertext at object offset " << ec_object_off
+      << " is NOT all zeros — plaintext was computed incorrectly."
+      << " The encryption test infrastructure is broken, not the feature.";
+  }
+  std::cout << "[EC-ZeroCrypt] Step 8: [self-check] ciphertext confirmed all-zero" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 9: [PRE-RECOVERY] Verify FAE entry is set and block is allocated.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 9: [pre-recovery] checking FAE xattr" << std::endl;
+  {
+    ceph::bufferlist xattr_bl;
+    static_assert(OI_ATTR[0] == '_', "OI_ATTR must start with '_'");
+    ASSERT_GE(ec_ioctx.getxattr(oid, &OI_ATTR[1], xattr_bl), 0)
+      << "[pre-recovery] Failed to read OI xattr — object may not exist";
+    object_info_t oi(xattr_bl);
+    ASSERT_TRUE(oi.force_allocated_extents.contains(ec_object_off, 4096))
+      << "[pre-recovery] FAE entry NOT set for [" << ec_object_off << ", "
+      << ec_object_off + 4096 << ")."
+      << " Zero-block detection did not fire — check preserve_allocation flag"
+      << " or OSD zero-detection logic. This is NOT a recovery bug.";
+  }
+  std::cout << "[EC-ZeroCrypt] Step 9: [pre-recovery] FAE xattr ok, checking sparse_read" << std::endl;
+  {
+    std::map<uint64_t, uint64_t> extents;
+    ceph::bufferlist sr_bl;
+    int n = ec_ioctx.sparse_read(oid, extents, sr_bl, 4096, ec_object_off);
+    std::cout << "[EC-ZeroCrypt] Step 9: [pre-recovery] sparse_read n=" << n
+              << " extents.size()=" << extents.size() << std::endl;
+    ASSERT_GT(n, 0)
+      << "[pre-recovery] sparse_read returned no extents at offset " << ec_object_off
+      << " — block is already a hole before recovery."
+      << " FAE tracking is broken. This is NOT a recovery bug.";
+    ASSERT_NE(extents.end(), extents.find(ec_object_off))
+      << "[pre-recovery] sparse_read extent map does not cover offset " << ec_object_off;
+  }
+  std::cout << "[EC-ZeroCrypt] Step 9: [pre-recovery] sparse_read ok" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 10: Trigger EC recovery by changing the PG primary via OSD upmap.
+  //
+  // We inline the recovery logic here (equivalent to
+  // PoolTypeTestFixture::setup_and_trigger_recovery) using _rados and
+  // ec_pool_name / empty nspace, avoiding a CMake dependency on
+  // test_pool_types.cc from the librbd test binary.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 10: triggering EC recovery via OSD upmap" << std::endl;
+  {
+    // Query current OSD placement for the backing EC object.
+    ceph::bufferlist inbl, outbl;
+    auto formatter = std::make_unique<JSONFormatter>(false);
+    ceph::messaging::osd::OSDMapRequest req{ec_pool_name, oid, /*nspace=*/""};
+    encode_json("OSDMapRequest", req, formatter.get());
+    std::ostringstream req_oss;
+    formatter->flush(req_oss);
+    ASSERT_EQ(0, _rados.mon_command(req_oss.str(), std::move(inbl), &outbl, nullptr))
+      << "Failed to query OSD map for object " << oid;
+
+    JSONParser p;
+    ASSERT_TRUE(p.parse(outbl.c_str(), outbl.length()))
+      << "Failed to parse OSDMapReply JSON";
+    ceph::messaging::osd::OSDMapReply reply;
+    reply.decode_json(&p);
+
+    ASSERT_GE(reply.up.size(), 2u)
+      << "EC pool needs at least 2 OSDs in the up set to trigger recovery"
+         " (k=2, m=1 requires 3 OSDs total)";
+
+    // Swap first and last OSD in the up list to force a primary change.
+    std::vector<int> new_up = reply.up;
+    std::swap(new_up[0], new_up[new_up.size() - 1]);
+    int new_primary = new_up[0];
+
+    // Print original and target placement.
+    {
+      std::ostringstream oss;
+      oss << "[EC-ZeroCrypt] Step 10: pgid=" << reply.pgid << " original up=[";
+      for (size_t i = 0; i < reply.up.size(); ++i) {
+        if (i) oss << ",";
+        oss << reply.up[i];
+      }
+      oss << "] acting=[";
+      for (size_t i = 0; i < reply.acting.size(); ++i) {
+        if (i) oss << ",";
+        oss << reply.acting[i];
+      }
+      oss << "] new_primary=" << new_primary;
+      std::cout << oss.str() << std::endl;
+    }
+
+    // Issue the pg-upmap command.
+    std::ostringstream upmap_cmd;
+    upmap_cmd << "{\"prefix\": \"osd pg-upmap\", \"pgid\": \"" << reply.pgid
+              << "\", \"id\": [";
+    for (size_t i = 0; i < new_up.size(); ++i) {
+      upmap_cmd << new_up[i];
+      if (i + 1 < new_up.size()) upmap_cmd << ", ";
+    }
+    upmap_cmd << "]}";
+    ceph::bufferlist upmap_inbl, upmap_outbl;
+    std::cout << "[EC-ZeroCrypt] Step 10: issuing pg-upmap command" << std::endl;
+    ASSERT_EQ(0, _rados.mon_command(upmap_cmd.str(), std::move(upmap_inbl),
+                                    &upmap_outbl, nullptr))
+      << "osd pg-upmap command failed";
+    std::cout << "[EC-ZeroCrypt] Step 10: pg-upmap issued, polling for new primary" << std::endl;
+
+    // Wait up to 120 s for the new primary to take over.
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(120);
+    bool done = false;
+    int poll_count = 0;
+    while (!done && std::chrono::steady_clock::now() < deadline) {
+      ceph::bufferlist poll_inbl, poll_outbl;
+      auto poll_fmt = std::make_unique<JSONFormatter>(false);
+      ceph::messaging::osd::OSDMapRequest poll_req{ec_pool_name, oid, ""};
+      encode_json("OSDMapRequest", poll_req, poll_fmt.get());
+      std::ostringstream poll_oss;
+      poll_fmt->flush(poll_oss);
+      if (_rados.mon_command(poll_oss.str(), std::move(poll_inbl), &poll_outbl, nullptr) == 0) {
+        JSONParser pp;
+        if (pp.parse(poll_outbl.c_str(), poll_outbl.length())) {
+          ceph::messaging::osd::OSDMapReply poll_reply;
+          poll_reply.decode_json(&pp);
+          std::ostringstream poll_dbg;
+          poll_dbg << "[EC-ZeroCrypt] Step 10: poll " << ++poll_count << " acting=[";
+          for (size_t i = 0; i < poll_reply.acting.size(); ++i) {
+            if (i) poll_dbg << ",";
+            poll_dbg << poll_reply.acting[i];
+          }
+          poll_dbg << "] up=[";
+          for (size_t i = 0; i < poll_reply.up.size(); ++i) {
+            if (i) poll_dbg << ",";
+            poll_dbg << poll_reply.up[i];
+          }
+          poll_dbg << "] want_primary=" << new_primary;
+          std::cout << poll_dbg.str() << std::endl;
+          if (!poll_reply.acting.empty() && poll_reply.acting[0] == new_primary) {
+            done = true;
+          }
+        }
+      }
+      if (!done) {
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+      }
+    }
+    ASSERT_TRUE(done)
+      << "Timed out waiting for EC recovery: new primary " << new_primary
+      << " did not become acting primary within 30 s";
+    std::cout << "[EC-ZeroCrypt] Step 10: new primary " << new_primary
+              << " is now acting primary" << std::endl;
+  }
+
+  // -----------------------------------------------------------------------
+  // Step 11: [POST-RECOVERY] Verify FAE entry survived recovery.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 11: [post-recovery] reading FAE xattr" << std::endl;
+  {
+    ceph::bufferlist xattr_bl;
+    ASSERT_GE(ec_ioctx.getxattr(oid, &OI_ATTR[1], xattr_bl), 0)
+      << "[post-recovery] Failed to read OI xattr after recovery";
+    object_info_t oi(xattr_bl);
+    ASSERT_TRUE(oi.force_allocated_extents.contains(ec_object_off, 4096))
+      << "[post-recovery] FAE entry was LOST after recovery for ["
+      << ec_object_off << ", " << ec_object_off + 4096 << ")."
+      << " Recovery dropped the force-allocated-extents metadata.";
+  }
+  std::cout << "[EC-ZeroCrypt] Step 11: [post-recovery] FAE xattr survived recovery" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 12: [POST-RECOVERY] Verify raw ciphertext on OSD is still all-zero.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 12: [post-recovery] reading raw ciphertext from OSD" << std::endl;
+  {
+    ceph::bufferlist post_bl;
+    ASSERT_EQ(4096, ec_ioctx.read(oid, post_bl, 4096, ec_object_off))
+      << "[post-recovery] RADOS read of backing EC object failed after recovery";
+    ceph::bufferlist expected_zeros;
+    expected_zeros.append_zero(4096);
+    ASSERT_TRUE(post_bl.contents_equal(expected_zeros))
+      << "[post-recovery] Ciphertext at object offset " << ec_object_off
+      << " is no longer all zeros after recovery — EC repair corrupted the data.";
+  }
+  std::cout << "[EC-ZeroCrypt] Step 12: [post-recovery] ciphertext still all-zero" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 13: [POST-RECOVERY] Verify block is still allocated (sparse_read).
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 13: [post-recovery] issuing sparse_read" << std::endl;
+  {
+    std::map<uint64_t, uint64_t> extents;
+    ceph::bufferlist sr_bl;
+    int n = ec_ioctx.sparse_read(oid, extents, sr_bl, 4096, ec_object_off);
+    std::cout << "[EC-ZeroCrypt] Step 13: [post-recovery] sparse_read returned n=" << n
+              << " extents.size()=" << extents.size() << std::endl;
+    ASSERT_GT(n, 0)
+      << "[post-recovery] sparse_read returned no extents at offset "
+      << ec_object_off << " after recovery."
+      << " Recovery HOLE-PUNCHED the zero-ciphertext block."
+      << " This is the primary regression this test exists to catch.";
+    ASSERT_NE(extents.end(), extents.find(ec_object_off))
+      << "[post-recovery] sparse_read extent map does not cover offset "
+      << ec_object_off << " after recovery.";
+  }
+  std::cout << "[EC-ZeroCrypt] Step 13: [post-recovery] sparse_read ok" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 14: [POST-RECOVERY] Verify rbd_read returns the correct plaintext.
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 14: [post-recovery] issuing rbd_read" << std::endl;
+  {
+    std::vector<char> buf(4096, '\xff');
+    ASSERT_EQ(4096, rbd_read(image, 0, 4096, buf.data()))
+      << "[post-recovery] rbd_read failed";
+    // plaintext_bl holds the plaintext computed in Step 5 — the value that
+    // encrypts to all-zero ciphertext.  rbd_read must return exactly that.
+    std::vector<char> expected(plaintext_bl.c_str(),
+                               plaintext_bl.c_str() + plaintext_bl.length());
+    ASSERT_EQ(expected, buf)
+      << "[post-recovery] rbd_read did not return the expected plaintext."
+      << " If sparse_read also failed (step 13), the root cause is a"
+      << " hole-punch during recovery. If sparse_read passed, the root"
+      << " cause is incorrect ciphertext reconstruction during EC repair.";
+  }
+  std::cout << "[EC-ZeroCrypt] Step 14: [post-recovery] rbd_read ok" << std::endl;
+
+  // -----------------------------------------------------------------------
+  // Step 15: Teardown
+  // -----------------------------------------------------------------------
+  std::cout << "[EC-ZeroCrypt] Step 15: teardown" << std::endl;
+  ASSERT_EQ(0, rbd_close(image));
+  ASSERT_EQ(0, rbd_remove(meta_ioctx, name.c_str()));
+  std::cout << "[EC-ZeroCrypt] Step 15: done" << std::endl;
+
+#endif // HAVE_LIBCRYPTSETUP
 }
 
 TEST_F(TestLibRBD, TestEncryptionLUKS2)
