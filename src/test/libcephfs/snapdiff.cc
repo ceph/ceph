@@ -1963,7 +1963,12 @@ TEST(LibCephFS, HugeSnapDiffSmallDelta)
 {
   TestMount test_mount;
 
+#ifdef _WIN32
+  // Windows client is ~8x slower per file op; 10000 exceeds the test timeout
+  long int file_count = 10000 / 8;
+#else
   long int file_count = 10000;
+#endif
   printf("Seeding %ld files...\n", file_count);
 
   // Create simple directory tree with a couple of snapshots
@@ -2019,16 +2024,37 @@ TEST(LibCephFS, HugeSnapDiffLargeDelta)
 
   // Calculate amount of files required to have multiple directory fragments
   // using relevant config parameters.
-  // file_count = mds_bal_spli_size * mds_bal_fragment_fast_factor + 100
+  // file_count = mds_bal_split_size * mds_bal_fragment_fast_factor + 100
   char buf[256];
+  long int file_count;
+  double factor;
+#ifdef _WIN32
+  // Windows client is ~8x slower per file op; use a smaller split size so we
+  // still trigger directory fragmentation within the CI timeout.
+  struct Cleanup
+  {
+    TestMount &test_mount;
+    ~Cleanup()
+    {
+      test_mount.tell_rank0_config("mds_bal_split_size");
+      test_mount.tell_rank0_config("mds_bal_fragment_fast_factor");
+    }
+  } cleanup{test_mount};
+
+  ASSERT_TRUE(test_mount.tell_rank0_config("mds_bal_split_size", "800"));
+  ASSERT_TRUE(test_mount.tell_rank0_config("mds_bal_fragment_fast_factor", "1.5"));
+  factor = 1.5;
+  file_count = 800 * factor + 100;
+#else
   int r = test_mount.conf_get("mds_bal_split_size", buf, sizeof(buf));
   ASSERT_TRUE(r >= 0);
-  long int file_count = strtol(buf, nullptr, 10);
+  file_count = strtol(buf, nullptr, 10);
   r = test_mount.conf_get("mds_bal_fragment_fast_factor ", buf, sizeof(buf));
   ASSERT_TRUE(r >= 0);
-  double factor = strtod(buf, nullptr);
+  factor = strtod(buf, nullptr);
   file_count *= factor;
   file_count += 100;
+#endif
   printf("Seeding %ld files...\n", file_count);
 
   // Create simple directory tree with a couple of snapshots
