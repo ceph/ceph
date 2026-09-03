@@ -261,6 +261,16 @@ exercise for the reader.
    scheme has different performance and security characteristics.
 
 
+The CephFS Proxy Sidecar
+========================
+
+When at least one CephFS-backed share uses a proxied provider, the
+smb manager module includes the ``cephfs-proxy`` feature in the
+``features`` parameter of the smb service specification, and cephadm
+deploys a ``cephfs-proxy`` sidecar container alongside each Samba
+instance. See :ref:`smb-cephfs-proxy` for a description of the
+sidecar and troubleshooting pointers.
+
 Limitations
 ===========
 
