@@ -818,7 +818,36 @@ if(WITH_RADOSGW_STANDALONE)
 endif()
 
 set(radosgw_admin_srcs
-  radosgw-admin/radosgw-admin.cc)
+  radosgw-admin/radosgw-admin.cc
+  radosgw-admin/account.cc
+  radosgw-admin/bucket.cc
+  radosgw-admin/user.cc
+  radosgw-admin/usage.cc
+  radosgw-admin/quota_ratelimit.cc
+  radosgw-admin/script.cc
+  radosgw-admin/pubsub.cc
+  radosgw-admin/admin_remote.cc
+  radosgw-admin/realm.cc
+  radosgw-admin/zonegroup.cc
+  radosgw-admin/zone.cc
+  radosgw-admin/period.cc
+  radosgw-admin/bucket_logging.cc
+  radosgw-admin/object.cc
+  radosgw-admin/bi.cc
+  radosgw-admin/olh.cc
+  radosgw-admin/dedup.cc
+  radosgw-admin/gc.cc
+  radosgw-admin/lc.cc
+  radosgw-admin/bucket_sync.cc
+  radosgw-admin/bilog.cc
+  radosgw-admin/role.cc
+  radosgw-admin/oidc.cc
+  radosgw-admin/reshard.cc
+  radosgw-admin/cors.cc
+  radosgw-admin/metadata.cc
+  radosgw-admin/sync.cc
+  radosgw-admin/mfa.cc
+  radosgw-admin/restore.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
@@ -829,7 +858,10 @@ endif(WITH_RADOSGW_ARROW_FLIGHT)
 if(WITH_RADOSGW_RADOS)
   list(APPEND radosgw_admin_rados_srcs
     radosgw-admin/sync_checkpoint.cc
-    radosgw-admin/orphan.cc)
+    radosgw-admin/orphan.cc
+    radosgw-admin/log.cc
+    radosgw-admin/datalog.cc
+    radosgw-admin/bucket_resync_encrypted_multipart.cc)
 
   add_executable(radosgw-admin ${radosgw_admin_srcs} ${radosgw_admin_rados_srcs})
   target_link_libraries(radosgw-admin

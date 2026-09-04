@@ -1,0 +1,6 @@
+  LC_LIST,
+  LC_GET,
+#ifdef WITH_RADOSGW_RADOS
+  LC_PROCESS,
+#endif
+  LC_RESHARD_FIX,
