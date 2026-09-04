@@ -121,8 +121,10 @@ void BtreeAllocator::_add_to_tree(uint64_t start, uint64_t size)
   num_free += size;
 }
 
-void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
-  BtreeAllocator::range_tree_t::iterator& rs)
+BtreeAllocator::range_tree_t::iterator
+BtreeAllocator::_process_range_removal(
+  uint64_t start, uint64_t end,
+  BtreeAllocator::range_tree_t::iterator rs)
 {
   bool left_over = (rs->first != start);
   bool right_over = (rs->second != end);
@@ -160,7 +162,10 @@ void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
   } else {
     range_tree.erase(rs);
   }
-  num_free -= (end - start);
+  auto length = end - start;
+  ceph_assert(num_free >= length);
+  num_free -= length;
+  return range_tree.lower_bound(end);
 }
 
 void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size)
@@ -189,7 +194,17 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
   ceph_assert(size != 0);
 
-  auto rs = range_tree.find(start);
+  // lower_bound() returns the first range starting at or past 'start', hence
+  // it skips a range which begins before 'start' but reaches into
+  // [start, end). Step back to the preceding range only if it actually does
+  // so - otherwise lower_bound()'s result is already the one we want.
+  auto rs = range_tree.lower_bound(start);
+  if (rs != range_tree.begin()) {
+    auto prev_rs = std::prev(rs);
+    if (prev_rs->second > start) {
+      rs = prev_rs;
+    }
+  }
 
   if (rs == range_tree.end() || rs->first >= end) {
     cb(start, size, false);
@@ -197,29 +212,68 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
   }
 
   do {
-
-    //FIXME: this is apparently wrong since _process_range_removal might
-    // invalidate existing iterators.
-    // Not a big deal so far since this method is not in use - it's called
-    // when making Hybrid allocator from a regular one. Which isn't an option
-    // for BtreeAllocator for now.
-    auto next_rs = rs;
-    ++next_rs;
-
     if (start < rs->first) {
       cb(start, rs->first - start, false);
       start = rs->first;
     }
     auto range_end = std::min(rs->second, end);
-    _process_range_removal(start, range_end, rs);
+    rs = _process_range_removal(start, range_end, rs);
     cb(start, range_end - start, true);
     start = range_end;
-
-    rs = next_rs;
   } while (rs != range_tree.end() && rs->first < end && start < end);
   if (start < end) {
     cb(start, end - start, false);
   }
+}
+
+int64_t BtreeAllocator::claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  std::lock_guard l(lock);
+  return _claim_range(offset, length, extents);
+}
+
+int64_t BtreeAllocator::_claim_range(
+  uint64_t offset,
+  uint64_t length,
+  PExtentVector *extents)
+{
+  if (length == 0) {
+    return 0;
+  }
+  ceph_assert(p2aligned(offset, (uint64_t)block_size));
+  ceph_assert(p2aligned(length, (uint64_t)block_size));
+  ceph_assert(offset <= uint64_t(device_size));
+  ceph_assert(length <= uint64_t(device_size) - offset);
+
+  ldout(cct, 10) << __func__ << std::hex
+                 << " offset 0x" << offset
+                 << " length 0x" << length
+                 << std::dec << dendl;
+
+  // bluestore_pextent_t::length is 32 bit, so a longer run has to be reported
+  // as several extents. Round down and align - the cap itself is not a
+  // multiple of block_size.
+  constexpr auto cap =
+    std::numeric_limits<decltype(bluestore_pextent_t::length)>::max();
+  const uint64_t max_extent_len = p2align(uint64_t(cap), (uint64_t)block_size);
+
+  uint64_t sum = 0;
+  _try_remove_from_tree(offset, length,
+    [&](uint64_t o, uint64_t l, bool found){
+      if (found) {
+        sum += l;
+        while (l > max_extent_len) {
+          extents->emplace_back(o, max_extent_len);
+          o += max_extent_len;
+          l -= max_extent_len;
+        }
+        extents->emplace_back(o, l);
+      }
+  });
+  return sum;
 }
 
 int64_t BtreeAllocator::_allocate(

@@ -80,6 +80,10 @@ public:
     int64_t  hint,
     PExtentVector *extents) override;
   void release(const interval_set<uint64_t>& release_set) override;
+
+  int64_t claim_range(uint64_t offset, uint64_t length,
+                      PExtentVector *extents) override;
+
   uint64_t get_free() override;
   double get_fragmentation() override;
 
@@ -198,10 +202,16 @@ private:
 
   // called when extent to be released/marked free
   void _add_to_tree(uint64_t start, uint64_t size);
-  void _process_range_removal(uint64_t start, uint64_t end, range_tree_t::iterator& rs);
+  // removes [start, end) out of the range pointed to by 'rs', which must
+  // fully contain it. Returns an iterator to the first range starting at or
+  // past 'end', valid despite the tree modifications just made.
+  range_tree_t::iterator _process_range_removal(uint64_t start, uint64_t end,
+    range_tree_t::iterator rs);
   void _remove_from_tree(uint64_t start, uint64_t size);
   void _try_remove_from_tree(uint64_t start, uint64_t size,
     std::function<void(uint64_t offset, uint64_t length, bool found)> cb);
+  int64_t _claim_range(uint64_t offset, uint64_t length,
+    PExtentVector *extents);
 
   uint64_t _get_free() const {
     return num_free;
