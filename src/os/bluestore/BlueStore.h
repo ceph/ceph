@@ -347,10 +347,10 @@ public:
       FLAG_NOCACHE = 1,  ///< trim when done WRITING (do not become CLEAN)
       // NOTE: fix operator<< when you define a second flag
     };
-    static const char *get_flag_name(int s) {
+    static std::string get_flag_name(const char* prefix, int s) {
       switch (s) {
-      case FLAG_NOCACHE: return "nocache";
-      default: return "???";
+      case FLAG_NOCACHE: return std::string(prefix) + "nocache";
+      default: return "";
       }
     }
 
@@ -3404,7 +3404,8 @@ private:
     OnodeRef& o,
     uint32_t offset,
     uint32_t length,
-    ceph::buffer::list& bl);
+    ceph::buffer::list& bl,
+    uint32_t op_flags = 0);
 
   int _do_readv(
     Collection *c,
@@ -3781,7 +3782,7 @@ private:
   // write ops
   public:
   struct WriteContext {
-    bool buffered = false;          ///< buffered write
+    unsigned fadv_flags = 0;        ///< requested write mode
     bool compress = false;          ///< compressed write
     CompressorRef compressor;       ///< effective compression engine
     double crr = 0.0;               ///< compression required ratio
@@ -3795,45 +3796,52 @@ private:
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
       BlobRef b;
-      uint64_t blob_length;
-      uint64_t b_off;
-      ceph::buffer::list bl;
-      uint64_t b_off0; ///< original offset in a blob prior to padding
-      uint64_t length0; ///< original data length prior to padding
+      uint64_t b_off_orig;    ///< original offset in a blob
+      uint64_t b_off;         ///< offset in a blob with padding applied
+      ceph::buffer::list orig_bl;
+      ceph::buffer::list ondisk_bl;
 
       bool mark_unused;
       bool new_blob; ///< whether new blob was created
 
       bool compressed = false;
-      ceph::buffer::list compressed_bl;
-      size_t compressed_len = 0;
+      size_t compressed_len = 0; ///< the size of the compressed data without padding
 
       write_item(
 	uint64_t logical_offs,
         BlobRef b,
-        uint64_t blob_len,
-        uint64_t o,
+        uint64_t blob_offs,
         ceph::buffer::list& bl,
-        uint64_t o0,
-        uint64_t l0,
         bool _mark_unused,
 	bool _new_blob)
        :
          logical_offset(logical_offs),
          b(b),
-         blob_length(blob_len),
-         b_off(o),
-         bl(bl),
-         b_off0(o0),
-         length0(l0),
+         b_off_orig(blob_offs),
+         b_off(blob_offs),
+         orig_bl(bl),
          mark_unused(_mark_unused),
 	 new_blob(_new_blob) {}
+      size_t get_original_length() { return orig_bl.length(); }
+      ceph::bufferlist& get_original_data() { return orig_bl;}
+      size_t get_ondisk_length() { return get_ondisk_data().length(); }
+      ceph::bufferlist& get_ondisk_data() { return ondisk_bl.size() ? ondisk_bl : orig_bl; }
+
+      void set_compressed_data(size_t _compressed_len, ceph::bufferlist&& bl) {
+        compressed = true;
+        compressed_len = _compressed_len;
+        ondisk_bl.swap(bl);
+      }
+      void set_padded_data(uint64_t _b_off, ceph::bufferlist&& bl) {
+        b_off = _b_off;
+        ondisk_bl.swap(bl);
+      }
     };
     std::vector<write_item> writes;                 ///< blobs we're writing
 
     /// partial clone of the context
     void fork(const WriteContext& other) {
-      buffered = other.buffered;
+      fadv_flags = other.fadv_flags;
       compress = other.compress;
       target_blob_size = other.target_blob_size;
       csum_type = other.csum_type;
@@ -3842,20 +3850,14 @@ private:
     void write(
       uint64_t loffs,
       BlobRef b,
-      uint64_t blob_len,
-      uint64_t o,
+      uint64_t blob_off,
       ceph::buffer::list& bl,
-      uint64_t o0,
-      uint64_t len0,
       bool _mark_unused,
       bool _new_blob) {
       writes.emplace_back(loffs,
                           b,
-                          blob_len,
-                          o,
+                          blob_off,
                           bl,
-                          o0,
-                          len0,
                           _mark_unused,
                           _new_blob);
     }
@@ -3915,13 +3917,17 @@ private:
 	     uint64_t offset, size_t len,
 	     ceph::buffer::list& bl,
 	     uint32_t fadvise_flags);
-  void _pad_zeros(ceph::buffer::list *bl, uint64_t *offset,
-		  uint64_t chunk_size);
+  size_t _pad_zeros(ceph::buffer::list *bl, uint64_t *offset,
+		    uint64_t chunk_size);
 
   void _choose_write_options(CollectionRef& c,
                              OnodeRef& o,
                              uint32_t fadvise_flags,
                              WriteContext *wctx);
+
+  unsigned _get_write_caching(OnodeRef& o,
+	                      uint64_t offset, size_t len,
+                              uint32_t fadvise_flags);
 
   int _do_gc(TransContext *txc,
              CollectionRef& c,

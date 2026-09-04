@@ -2773,6 +2773,8 @@ TEST_P(StoreTest, SmallSkipFront) {
 }
 
 TEST_P(StoreTest, AppendDeferredVsTailCache) {
+  if(string(GetParam()) != "bluestore")
+    return;
   int r;
   coll_t cid;
   ghobject_t a(hobject_t(sobject_t("fooo", CEPH_NOSNAP)));
@@ -2784,12 +2786,11 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
     r = store->queue_transaction(ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf()->bluestore_min_alloc_size;
+  unsigned min_alloc = 4096;
   unsigned size = min_alloc / 3;
-  bufferptr bpa(size);
-  memset(bpa.c_str(), 1, bpa.length());
   bufferlist bla;
-  bla.append(bpa);
+  bla.append(std::string(size, 'a'));
+
   {
     ObjectStore::Transaction t;
     t.write(cid, a, 0, bla.length(), bla, 0);
@@ -2806,21 +2807,19 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
     ASSERT_EQ(0, r);
     ch = store->open_collection(cid);
   }
+  const PerfCounters* logger = store->get_perf_counters();
 
-  bufferptr bpb(size);
-  memset(bpb.c_str(), 2, bpb.length());
   bufferlist blb;
-  blb.append(bpb);
+  blb.append(std::string(size, 'b'));
+
   {
     ObjectStore::Transaction t;
     t.write(cid, a, bla.length(), blb.length(), blb, 0);
     r = store->queue_transaction(ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  bufferptr bpc(size);
-  memset(bpc.c_str(), 3, bpc.length());
   bufferlist blc;
-  blc.append(bpc);
+  blc.append(std::string(size, 'c'));
   {
     ObjectStore::Transaction t;
     t.write(cid, a, bla.length() + blb.length(), blc.length(), blc, 0);
@@ -2837,6 +2836,7 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
 	      store->read(ch, a, 0, final.length(), actual));
     ASSERT_TRUE(bl_eq(final, actual));
   }
+  ASSERT_EQ(logger->get(l_bluestore_write_small), 3u);
   {
     ObjectStore::Transaction t;
     t.remove(cid, a);
@@ -2847,7 +2847,152 @@ TEST_P(StoreTest, AppendDeferredVsTailCache) {
   }
 }
 
+void doAppendCaching(ObjectStore* store,
+  uint64_t off0, size_t size, unsigned fadv_flags,
+  uint64_t expected_writes_small, uint64_t expected_hit_bytes)
+{
+  int r;
+  coll_t cid;
+  ghobject_t a(hobject_t(sobject_t("fooo", CEPH_NOSNAP)));
+
+  cerr << "Starting  4*writes at " << off0 << " bs=" << size
+       << std::hex << " fadv = 0x" << fadv_flags << std::dec
+       << " expecting wsmall = " << expected_writes_small
+       << ", hit_bytes = " << expected_hit_bytes
+       << std::endl;
+
+  auto ch = store->create_new_collection(cid);
+  const PerfCounters* logger = store->get_perf_counters();
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = store->queue_transaction(ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  uint64_t off = off0;
+
+  bufferlist bla;
+  bla.append(std::string(size, 'a'));
+  {
+    // Appending half AU (offs = 0)
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.register_on_commit(&c);
+    t.write(cid, a, off, bla.length(), bla, fadv_flags);
+    r = store->queue_transaction(ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    off += size;
+  }
+  bufferlist blb;
+  blb.append(std::string(size, 'b'));
+  {
+    // Appending half AU (offs = AU/2)
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.register_on_commit(&c);
+    t.write(cid, a, off, blb.length(), blb, fadv_flags);
+    r = store->queue_transaction(ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    off += size;
+  }
+  bufferlist blc;
+  blc.append(std::string(size, 'c'));
+  {
+    // Appending half AU (offs = AU)
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.register_on_commit(&c);
+    t.write(cid, a, off, blc.length(), blc, fadv_flags);
+    r = store->queue_transaction(ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    off += size;
+  }
+  bufferlist bld;
+  bld.append(std::string(size, 'd'));
+  {
+    // Appending half AU (offs = AU/2)
+    C_SaferCond c;
+    ObjectStore::Transaction t;
+    t.register_on_commit(&c);
+    t.write(cid, a, off, bld.length(), bld, fadv_flags);
+    r = store->queue_transaction(ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    c.wait();
+    off += size;
+  }
+  // do not show by default
+  if (0) {
+    cout <<" Perf counters:\n";
+    JSONFormatter f(true);
+    store->dump_perf_counters(&f);
+    f.flush(cout);
+    cout << std::endl;
+  }
+  ASSERT_EQ(logger->get(l_bluestore_write_small), expected_writes_small);
+  ASSERT_EQ(logger->get(l_bluestore_buffer_hit_bytes), expected_hit_bytes);
+
+  bufferlist final;
+  final.append(bla);
+  final.append(blb);
+  final.append(blc);
+  final.append(bld);
+  bufferlist actual;
+  {
+    ASSERT_EQ((int)final.length(),
+	      store->read(ch, a, off0, final.length(), actual));
+    ASSERT_TRUE(bl_eq(final, actual));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, a);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = store->queue_transaction(ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  const_cast<PerfCounters*>(logger)->reset();
+}
+
+TEST_P(StoreTestSpecificAUSize, AppendCaching) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  SetVal(g_conf(), "bluestore_write_v2", "false");
+  g_conf().apply_changes(nullptr);
+
+  size_t min_alloc = 4096;
+  StartDeferred(min_alloc);
+
+  size_t write_size = min_alloc / 2;
+  doAppendCaching(store.get(), 0, write_size,
+    0,
+    4, write_size * 2);
+  doAppendCaching(store.get(), write_size, write_size,
+    0,
+    4, write_size);
+  doAppendCaching(store.get(), 0, write_size,
+    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED,
+    4, write_size * 2);
+  doAppendCaching(store.get(), write_size, write_size,
+    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED,
+    4, write_size);
+
+  write_size = min_alloc /4;
+  doAppendCaching(store.get(), 0, write_size,
+    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED,
+    4, write_size * 6);
+  doAppendCaching(store.get(), write_size, write_size,
+    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED,
+    4, write_size * 3);
+}
+
 TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
+  if(string(GetParam()) != "bluestore")
+    return;
   int r;
   coll_t cid;
   ghobject_t a(hobject_t(sobject_t("fooo", CEPH_NOSNAP)));
@@ -2861,12 +3006,10 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
     r = store->queue_transaction(ch, std::move(t));
     ASSERT_EQ(r, 0);
   }
-  unsigned min_alloc = g_conf()->bluestore_min_alloc_size;
+  unsigned min_alloc = 4096;
   unsigned size = min_alloc / 3;
-  bufferptr bpa(size);
-  memset(bpa.c_str(), 1, bpa.length());
   bufferlist bla;
-  bla.append(bpa);
+  bla.append(std::string(size, 'a'));
   // make sure there is some trailing gunk in the last block
   {
     bufferlist bt;
@@ -2893,10 +3036,8 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
   }
 
   // append with implicit zeroing
-  bufferptr bpb(size);
-  memset(bpb.c_str(), 2, bpb.length());
   bufferlist blb;
-  blb.append(bpb);
+  blb.append(std::string(size, 'b'));
   {
     ObjectStore::Transaction t;
     t.write(cid, a, min_alloc * 3, blb.length(), blb, 0);
@@ -2913,10 +3054,10 @@ TEST_P(StoreTest, AppendZeroTrailingSharedBlock) {
   {
     ASSERT_EQ((int)final.length(),
 	      store->read(ch, a, 0, final.length(), actual));
-    final.hexdump(cout);
-    actual.hexdump(cout);
     ASSERT_TRUE(bl_eq(final, actual));
   }
+  const PerfCounters* logger = store->get_perf_counters();
+  ASSERT_EQ(logger->get(l_bluestore_write_small), 2u);
   {
     ObjectStore::Transaction t;
     t.remove(cid, a);
