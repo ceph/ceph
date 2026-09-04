@@ -95,6 +95,11 @@ set(common_srcs
   perf_histogram.cc
   pick_address.cc
   prime.cc
+  madler/crc32iscsi.c
+  madler/crc32iso_hdlc.c
+  madler/crc64nvme.c
+  spdk/crc64.c
+  crc64nvme.cc
   random_string.cc
   reverse.c
   run_cmd.cc
@@ -195,6 +200,13 @@ endif()
 
 if(WITH_EVENTTRACE)
   list(APPEND common_srcs EventTrace.cc)
+endif()
+
+if(WITH_EC_ISA_PLUGIN)
+  # isa-l's crc64_rocksoft_refl is CRC-64/NVME with runtime SIMD dispatch;
+  # ISAL::ISAL is linked into ceph-common by src/CMakeLists.txt
+  set_source_files_properties(crc64nvme.cc PROPERTIES
+    COMPILE_DEFINITIONS HAVE_ISAL_CRC64)
 endif()
 
 add_library(common-common-objs OBJECT

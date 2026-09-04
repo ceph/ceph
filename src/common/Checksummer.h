@@ -8,6 +8,7 @@
 #include "include/byteorder.h"
 #include "include/ceph_assert.h"
 
+#include "common/crc64nvme.h"
 #include "xxHash/xxhash.h"
 
 class Checksummer {
@@ -19,6 +20,7 @@ public:
     CSUM_CRC32C = 4,
     CSUM_CRC32C_16 = 5, // low 16 bits of crc32c
     CSUM_CRC32C_8 = 6,  // low 8 bits of crc32c
+    CSUM_CRC64NVME = 7, // canonical CRC-64/NVME, combinable across blocks
     CSUM_MAX,
   };
   static const char *get_csum_type_string(unsigned t) {
@@ -29,6 +31,7 @@ public:
     case CSUM_CRC32C: return "crc32c";
     case CSUM_CRC32C_16: return "crc32c_16";
     case CSUM_CRC32C_8: return "crc32c_8";
+    case CSUM_CRC64NVME: return "crc64nvme";
     default: return "???";
     }
   }
@@ -45,6 +48,8 @@ public:
       return CSUM_CRC32C_16;
     if (s == "crc32c_8")
       return CSUM_CRC32C_8;
+    if (s == "crc64nvme")
+      return CSUM_CRC64NVME;
     return -EINVAL;
   }
 
@@ -56,6 +61,7 @@ public:
     case CSUM_CRC32C: return sizeof(crc32c::init_value_t);
     case CSUM_CRC32C_16: return sizeof(crc32c_16::init_value_t);
     case CSUM_CRC32C_8: return sizeof(crc32c_8::init_value_t);
+    case CSUM_CRC64NVME: return sizeof(crc64nvme::init_value_t);
     default: return 0;
     }
   }
@@ -67,6 +73,7 @@ public:
     case CSUM_CRC32C: return 4;
     case CSUM_CRC32C_16: return 2;
     case CSUM_CRC32C_8: return 1;
+    case CSUM_CRC64NVME: return 8;
     default: return 0;
     }
   }
@@ -74,6 +81,7 @@ public:
   struct crc32c {
     typedef uint32_t init_value_t;
     typedef ceph_le32 value_t;
+    static constexpr init_value_t default_init = init_value_t(-1);
 
     // we have no execution context/state.
     typedef int state_t;
@@ -95,6 +103,7 @@ public:
   struct crc32c_16 {
     typedef uint32_t init_value_t;
     typedef ceph_le16 value_t;
+    static constexpr init_value_t default_init = init_value_t(-1);
 
     // we have no execution context/state.
     typedef int state_t;
@@ -116,6 +125,7 @@ public:
   struct crc32c_8 {
     typedef uint32_t init_value_t;
     typedef __u8 value_t;
+    static constexpr init_value_t default_init = init_value_t(-1);
 
     // we have no execution context/state.
     typedef int state_t;
@@ -137,6 +147,7 @@ public:
   struct xxhash32 {
     typedef uint32_t init_value_t;
     typedef ceph_le32 value_t;
+    static constexpr init_value_t default_init = init_value_t(-1);
 
     typedef XXH32_state_t *state_t;
     static void init(state_t *s) {
@@ -166,6 +177,7 @@ public:
   struct xxhash64 {
     typedef uint64_t init_value_t;
     typedef ceph_le64 value_t;
+    static constexpr init_value_t default_init = init_value_t(-1);
 
     typedef XXH64_state_t *state_t;
     static void init(state_t *s) {
@@ -192,6 +204,37 @@ public:
     }
   };
 
+  struct crc64nvme {
+    typedef uint64_t init_value_t;
+    typedef ceph_le64 value_t;
+    // canonical CRC-64/NVME seed, so stored block values equal the
+    // standard checksum of the block and combine across blocks
+    static constexpr init_value_t default_init = 0;
+
+    // we have no execution context/state.
+    typedef int state_t;
+    static void init(state_t *state) {
+    }
+    static void fini(state_t *state) {
+    }
+
+    static init_value_t calc(
+      state_t state,
+      init_value_t init_value,
+      size_t len,
+      ceph::buffer::list::const_iterator& p
+      ) {
+      init_value_t crc = init_value;
+      while (len > 0) {
+	const char *data;
+	size_t l = p.get_ptr_and_advance(len, &data);
+	crc = ceph::crc64nvme(crc, data, l);
+	len -= l;
+      }
+      return crc;
+    }
+  };
+
   template<class Alg>
   static int calculate(
     size_t csum_block_size,
@@ -200,7 +243,8 @@ public:
     const ceph::buffer::list &bl,
     ceph::buffer::ptr* csum_data
     ) {
-    return calculate<Alg>(-1, csum_block_size, offset, length, bl, csum_data);
+    return calculate<Alg>(Alg::default_init, csum_block_size, offset, length,
+			  bl, csum_data);
   }
 
   template<class Alg>
@@ -254,7 +298,8 @@ public:
     pv += offset / csum_block_size;
     size_t pos = offset;
     while (length > 0) {
-      typename Alg::init_value_t v = Alg::calc(state, -1, csum_block_size, p);
+      typename Alg::init_value_t v = Alg::calc(state, Alg::default_init,
+					       csum_block_size, p);
       if (*pv != v) {
 	if (bad_csum) {
 	  *bad_csum = v;

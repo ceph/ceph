@@ -258,8 +258,8 @@ Checksums
 
 BlueStore checksums all metadata and all data written to disk. Metadata
 checksumming is handled by RocksDB and uses the `crc32c` algorithm. By
-contrast, data checksumming is handled by BlueStore and can use either
-`crc32c`, `xxhash32`, or `xxhash64`. Nonetheless, `crc32c` is the default
+contrast, data checksumming is handled by BlueStore and can use `crc32c`,
+`xxhash32`, `xxhash64`, or `crc64nvme`. Nonetheless, `crc32c` is the default
 checksum algorithm and it is suitable for most purposes.
 
 Full data checksumming increases the amount of metadata that BlueStore must
@@ -275,6 +275,22 @@ undetected: about one in four billion given a 32-bit (4 byte) checksum, 1 in
 65,536 given a 16-bit (2 byte) checksum, and 1 in 256 given an 8-bit (1 byte)
 checksum. To use the smaller checksum values, select `crc32c_16` or `crc32c_8`
 as the checksum algorithm.
+
+Conversely, `crc64nvme` stores a larger 8-byte value per block: the canonical
+CRC-64/NVME checksum, the same algorithm used by S3 full-object checksums
+(``x-amz-checksum-crc64nvme``) and by NVMe 64-bit protection-information guard
+tags. Its values combine linearly, so the checksum of a range of blocks can be
+derived from the stored per-block values without rereading the data, which
+lets higher layers reuse BlueStore's checksums end to end. Checksumming is
+hardware-accelerated (carry-less multiply) on x86-64 and aarch64.
+
+The larger value has a metadata cost: checksums account for roughly half of
+the onode metadata BlueStore keeps per object, so doubling the per-block
+checksum grows onodes by about one third, and checksum bytes do not
+compress. A pool that wants the 64-bit checksum but is sensitive to metadata
+size can raise its ``csum_min_block`` to checksum in larger chunks, at the
+cost of coarser range derivation and of larger verification units for small
+reads.
 
 The *checksum algorithm* can be specified either via a per-pool ``csum_type``
 configuration option or via the global configuration option. For example:

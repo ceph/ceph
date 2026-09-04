@@ -4669,8 +4669,11 @@ options:
   type: str
   level: advanced
   desc: Default checksum algorithm to use
-  long_desc: Algorithms crc32c, xxhash32, and xxhash64 are available.  The _16 and _8 variants
+  long_desc: Algorithms crc32c, xxhash32, xxhash64, and crc64nvme are available.  The _16 and _8 variants
     use only a subset of the bits for more compact (but less reliable) checksumming.
+    crc64nvme stores the canonical CRC-64/NVME value of each block (8 bytes), the
+    checksum family used by S3 full-object checksums and NVMe protection
+    information; adjacent block values can be combined without rereading data.
   fmt_desc: The default checksum algorithm to use.
   default: crc32c
   enum_values:
@@ -4680,6 +4683,7 @@ options:
   - crc32c_8
   - xxhash32
   - xxhash64
+  - crc64nvme
   flags:
   - runtime
   with_legacy: true
