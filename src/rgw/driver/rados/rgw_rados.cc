@@ -6102,7 +6102,7 @@ int RGWRados::bucket_suspended(const DoutPrefixProvider *dpp, rgw_bucket& bucket
     return ret;
   }
 
-  *suspended = ((bucket_info.flags & BUCKET_SUSPENDED) != 0);
+  *suspended = bucket_info.bucket_suspended();
   return 0;
 }
 
