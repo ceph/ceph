@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include "driver/rados/rgw_datalog.h"
 #include "driver/rados/rgw_service.h"
 #include "driver/rados/rgw_tools.h"
@@ -131,6 +133,31 @@ public:
                  const RGWBucketInfo& bucket_info,
                  RGWBucketEnt *stats,
                  optional_yield y) override;
+
+  static std::string bucket_stats_summary_oid(std::string_view bucket_id);
+
+  int read_bucket_stats_summary(const DoutPrefixProvider *dpp,
+                                const RGWBucketInfo& bucket_info,
+                                rgw_bucket_stats_summary* summary,
+                                optional_yield y);
+  int whole_update_bucket_stats_summary(const DoutPrefixProvider *dpp,
+                                        const RGWBucketInfo& bucket_info,
+                                        rgw_bucket_stats_summary* summary,
+                                        optional_yield y);
+  int apply_bucket_stats_summary_delta(
+      const DoutPrefixProvider *dpp,
+      const RGWBucketInfo& bucket_info,
+      const rgw_bucket_dir_stats& stats,
+      const rgw_bucket_dir_stats& dec_stats,
+      rgw_bucket_stats_summary* summary,
+      optional_yield y);
+  int set_bucket_stats_summary_generation(
+      const DoutPrefixProvider *dpp,
+      const RGWBucketInfo& bucket_info,
+      optional_yield y);
+  int remove_bucket_stats_summary(const DoutPrefixProvider *dpp,
+                                  const RGWBucketInfo& bucket_info,
+                                  optional_yield y);
 
   int get_reshard_status(const DoutPrefixProvider *dpp, optional_yield y,
                          const RGWBucketInfo& bucket_info,

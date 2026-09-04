@@ -137,6 +137,17 @@ void cls_rgw_bucket_update_stats(librados::ObjectWriteOperation& o,
                                  const std::map<RGWObjCategory, rgw_bucket_category_stats>& stats,
                                  const std::map<RGWObjCategory, rgw_bucket_category_stats>* dec_stats = nullptr);
 
+void cls_rgw_bucket_stats_summary_set(
+    librados::ObjectWriteOperation& op,
+    const rgw_bucket_stats_summary& summary);
+void cls_rgw_bucket_stats_summary_apply_delta(
+    librados::ObjectWriteOperation& op,
+    const rgw_cls_bucket_stats_summary_apply_delta_op& delta,
+    bufferlist* out, int* prval);
+void cls_rgw_bucket_stats_summary_set_generation(
+    librados::ObjectWriteOperation& op,
+    const rgw_cls_bucket_stats_summary_set_generation_op& generation);
+
 void cls_rgw_bucket_prepare_op(librados::ObjectWriteOperation& o, RGWModifyOp op, const std::string& tag,
                                const cls_rgw_obj_key& key, const std::string& locator);
 

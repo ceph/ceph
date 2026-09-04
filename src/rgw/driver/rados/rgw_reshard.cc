@@ -885,6 +885,14 @@ static int commit_reshard(rgw::sal::RadosStore* store,
     return ret;
   }
 
+  const int summary_ret = store->getRados()->set_bucket_stats_summary_generation(
+      dpp, bucket_info, y);
+  if (summary_ret < 0 && summary_ret != -ENOENT) {
+    ldpp_dout(dpp, 10) << "could not update bucket stats summary generation "
+                        << "for bucket=" << bucket_info.bucket << ": "
+                        << cpp_strerror(-summary_ret) << dendl;
+  }
+
   if (store->svc()->zone->need_to_log_data() && !prev.logs.empty() &&
       prev.current_index.layout.type == rgw::BucketIndexType::Normal) {
     // write a datalog entry for each shard of the previous generation's bilog.
