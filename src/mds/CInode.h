@@ -882,6 +882,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
       return -1;
   }
 
+  // Set when a max_size request makes its requester the loner: keep
+  // that client the loner over the ideal computation, so that the
+  // filelock bumps to EXCL and the grant carries Fx, serializing
+  // writers (e.g. O_APPEND), one grant at a time.  Cleared by
+  // choose_ideal_loner() once the pinned client stops wanting Fx.
+  bool file_excl_pin = false;
+
   client_t calc_ideal_loner();
   void set_loner_cap(client_t l);
   bool choose_ideal_loner();

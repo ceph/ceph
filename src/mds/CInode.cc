@@ -3400,7 +3400,7 @@ client_t CInode::calc_ideal_loner()
     return -1;
   if (!get_mds_caps_wanted().empty())
     return -1;
-  
+
   int n = 0;
   client_t loner = -1;
   for (const auto &p : client_caps) {
@@ -3419,7 +3419,26 @@ client_t CInode::calc_ideal_loner()
 
 bool CInode::choose_ideal_loner()
 {
-  want_loner_cap = calc_ideal_loner();
+  client_t ideal = calc_ideal_loner();
+  // A writer that asked for more max_size was explicitly made the
+  // loner (set_loner_cap() + file_excl_pin): keep it over the ideal
+  // computation, so that the filelock bumps to EXCL and the grant
+  // carries Fx plus the up-to-date size gathered from the other
+  // writers, serializing them - one grant at a time.  The other
+  // writer's wanted caps then tear the filelock back down to MIX,
+  // whose gather defers the grantee's release (and with it the size
+  // flush) until its in-flight write completes, and the next
+  // max_size request re-pins its requester.  The pin is released
+  // only when the pinned client stops wanting Fx (e.g. its O_APPEND
+  // fd closed), so that the ideal computation takes over again.
+  if (file_excl_pin && ideal != loner_cap && loner_cap >= 0) {
+    Capability *cap = get_client_cap(loner_cap);
+    if (cap && (cap->wanted() & CEPH_CAP_FILE_EXCL))
+      ideal = loner_cap;
+    else
+      file_excl_pin = false;
+  }
+  want_loner_cap = ideal;
   int changed = false;
   if (loner_cap >= 0 && loner_cap != want_loner_cap) {
     if (!try_drop_loner())
@@ -3449,6 +3468,7 @@ bool CInode::try_set_loner()
 void CInode::set_loner_cap(client_t l)
 {
   loner_cap = l;
+  want_loner_cap = l;
   authlock.set_excl_client(loner_cap);
   filelock.set_excl_client(loner_cap);
   linklock.set_excl_client(loner_cap);
@@ -4376,13 +4396,20 @@ void CInode::encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap)
  
   const mempool_inode *oi = get_inode().get();
   const mempool_inode *pi = get_projected_inode().get();
-  const mempool_inode *i = (pfile|pauth|plink|pxattr) ? pi : oi;
+  const mempool_inode *i =
+    (pfile|pauth|plink|pxattr) ||
+    ((cap->issued() | cap->pending() | cap->wanted()) &
+     CEPH_CAP_FILE_WR) ? pi : oi;
 
   dout(20) << __func__ << " pfile " << pfile
 	   << " pauth " << pauth << " plink " << plink << " pxattr " << pxattr
 	   << " mtime " << i->mtime << " ctime " << i->ctime << " change_attr " << i->change_attr << dendl;
 
-  i = pfile ? pi:oi;
+  // A client that holds or wants WR caps (e.g. an O_APPEND writer)
+  // should see the projected size, which may include the previous
+  // writer's size flush that has not been committed yet.
+  i = (pfile || ((cap->issued() | cap->pending() | cap->wanted()) &
+		 CEPH_CAP_FILE_WR)) ? pi : oi;
   m->set_layout(i->layout);
   m->size = i->size;
   m->truncate_seq = i->truncate_seq;
