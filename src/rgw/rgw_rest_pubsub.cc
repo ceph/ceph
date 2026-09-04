@@ -174,30 +174,33 @@ bool verify_topic_permission(const DoutPrefixProvider* dpp, req_state* s,
     if (!s->auth.identity->is_owner_of(owner)) {
       ldpp_dout(dpp, 4) << "cross-account request for resource owner "
           << owner << " != " << s->owner.id << dendl;
+      constexpr bool cross_account = true;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
       const auto identity_res = evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn,
-          {}, s->iam_identity_policies, s->session_policies);
+          dpp, s->env, *s->auth.identity, account_root, op, arn, {},
+          s->iam_identity_policies, s->session_policies, cross_account);
       if (identity_res == Effect::Deny) {
         return false;
       }
       const auto resource_res = evaluate_iam_policies(
           dpp, s->env, *s->auth.identity, false, op, arn,
-          policy, {}, {});
+          policy, {}, {}, cross_account);
       return identity_res == Effect::Allow && resource_res == Effect::Allow;
     } else {
       // require an Allow from either identity- or resource-based policy
+      constexpr bool cross_account = false;
       return Effect::Allow == evaluate_iam_policies(
-          dpp, s->env, *s->auth.identity, account_root, op, arn,
-          policy, s->iam_identity_policies, s->session_policies);
+          dpp, s->env, *s->auth.identity, account_root, op, arn, policy,
+          s->iam_identity_policies, s->session_policies, cross_account);
     }
   }
 
   constexpr bool account_root = false;
+  constexpr bool cross_account = false;
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->auth.identity, account_root, op, arn,
-      policy, s->iam_identity_policies, s->session_policies);
+      dpp, s->env, *s->auth.identity, account_root, op, arn, policy,
+      s->iam_identity_policies, s->session_policies, cross_account);
   if (effect == Effect::Deny) {
     return false;
   }
