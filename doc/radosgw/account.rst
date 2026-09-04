@@ -163,6 +163,18 @@ To enable a bucket quota for the account::
     radosgw-admin quota set --quota-scope=bucket --account-id={accountid} --max-objects=1000000
     radosgw-admin quota enable --quota-scope=bucket --account-id={accountid}
 
+Account Suspend
+---------------
+
+To suspend an account (block its users and roles, and mark account-owned
+buckets as suspended)::
+
+    radosgw-admin account suspend --account-id={accountid}
+
+To re-enable the account::
+
+    radosgw-admin account enable --account-id={accountid}
+
 Migrate an Existing User into an Account
 ----------------------------------------
 
