@@ -119,6 +119,8 @@ struct ECSubRead {
   std::map<hobject_t, std::vector<std::pair<int, int>>> subchunks;
   std::set<hobject_t> omap_headers_to_read;
   std::map<hobject_t, std::pair<std::string, uint64_t>> omap_read_from;
+  std::set<hobject_t> want_sparse_read;
+  std::set<hobject_t> drop_data;
   /**
     * Calculate the cost of the SubOp read operation for mClock scheduler.
     *
@@ -143,6 +145,7 @@ struct ECSubReadReply {
   std::map<hobject_t, ceph::buffer::list> omap_headers_read;
   std::map<hobject_t, std::map<std::string, ceph::buffer::list>> omap_entries_read;
   std::map<hobject_t, bool> omaps_complete;
+  std::map<hobject_t, std::map<uint64_t, uint64_t>> sparse_extents_read;
   void encode(ceph::buffer::list &bl) const;
   void encode(ceph::buffer::list &p_bl,
 	      ceph::buffer::list &d_pl,

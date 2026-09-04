@@ -129,6 +129,8 @@ struct ECCommon {
     std::string omap_read_from;
     uint64_t omap_max_bytes = 0;
     uint64_t object_size;
+    bool want_sparse_read = false;
+    bool drop_data = false;
 
     read_request_t(
         const std::list<ec_align_t> &to_read,
@@ -213,10 +215,12 @@ struct ECCommon {
     ECUtil::shard_extent_map_t buffers_read;
     ECUtil::shard_extent_set_t processed_read_requests;
     shard_id_set zero_length_reads;
+    shard_id_map<std::map<uint64_t, uint64_t>> sparse_extents_read;
 
     read_result_t(const ECUtil::stripe_info_t *sinfo) :
       r(0), buffers_read(sinfo),
-      processed_read_requests(sinfo->get_k_plus_m()) {}
+      processed_read_requests(sinfo->get_k_plus_m()),
+      sparse_extents_read(sinfo->get_k_plus_m()) {}
 
     void print(std::ostream &os) const {
       os << "read_result_t(r=" << r << ", errors=" << errors;
@@ -238,7 +242,8 @@ struct ECCommon {
       os << ", omap_complete=" << omap_complete;
       os << ", buffers_read=" << buffers_read;
       os << ", processed_read_requests=" << processed_read_requests;
-      os << ", zero_length_reads=" << zero_length_reads << ")";
+      os << ", zero_length_reads=" << zero_length_reads;
+      os << ", sparse_extents_read=" << sparse_extents_read << ")";
     }
   };
 
@@ -1042,3 +1047,97 @@ void ECCommon::ReadPipeline::filter_read_op(
     on_schedule_recovery(op);
   }
 }
+
+// ---------------------------------------------------------------------------
+// EC sparse-read / mapext helper functions
+// ---------------------------------------------------------------------------
+namespace ECUtil {
+
+/**
+ * ec_sparse_decode - zero-pad and EC-decode a shard_extent_map_t.
+ */
+int ec_sparse_decode(
+    shard_extent_map_t &buffers_read,
+    const shard_extent_set_t &shard_want_to_read,
+    shard_extent_set_t &zeros_for_decode,
+    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
+    const ceph::ErasureCodeInterfaceRef &ec_impl,
+    uint64_t object_size,
+    DoutPrefixProvider *dpp);
+
+/**
+ * ec_sparse_scan_shard_extents - scan a single reconstructed shard's decoded
+ * buffer data and return a map of allocated extents for the shard.
+ */
+std::map<uint64_t, uint64_t> ec_sparse_scan_shard_extents(
+    const shard_extent_map_t &buffers_read,
+    shard_id_t shard,
+    const interval_set<uint64_t> &shard_fae,
+    const interval_set<uint64_t> &shard_scan_window,
+    DoutPrefixProvider *dpp);
+
+/**
+ * ec_sparse_clip_to_map - clip an interval_set or std::map of extents to
+ * [offset, req_end) and return as std::map<uint64_t, uint64_t>.
+ * Templated so both containers can be used without conversion overhead.
+ */
+template <typename ExtentContainer>
+std::map<uint64_t, uint64_t> ec_sparse_clip_to_map(
+    const ExtentContainer &extents,
+    uint64_t offset,
+    uint64_t req_end)
+{
+  std::map<uint64_t, uint64_t> out;
+  for (auto [ext_off, ext_len] : extents) {
+    const uint64_t ext_end = ext_off + ext_len;
+    if (ext_off >= req_end || ext_end <= offset) continue;
+    const uint64_t clamp_off = std::max(ext_off, offset);
+    const uint64_t clamp_end = std::min(ext_end, req_end);
+    out.emplace(clamp_off, clamp_end - clamp_off);
+  }
+  return out;
+}
+
+/**
+ * prepare_sparse_read_request - build a read_request_t and determine whether
+ * EC reconstruction will be needed.
+ */
+std::optional<ECCommon::read_request_t> prepare_sparse_read_request(
+    const hobject_t &hoid,
+    const std::list<ec_align_t> &to_read,
+    uint64_t object_size,
+    bool for_mapext,
+    ECCommon::ReadPipeline &pipeline,
+    bool &out_needs_reconstruct,
+    int &out_r);
+
+/**
+ * ec_sparse_finish_read - produce the final RO extent map (and optional data)
+ * for a sparse read or mapext operation.
+ * Pass out_bl=nullptr for mapext.
+ */
+int ec_sparse_finish_read(
+    const stripe_info_t &sinfo,
+    ECCommon::read_result_t &res,
+    ECCommon::read_request_t &req,
+    uint64_t offset,
+    uint64_t length,
+    bool needs_reconstruct,
+    const ceph::ErasureCodeInterfaceRef &ec_impl,
+    const interval_set<uint64_t> &force_allocated_extents,
+    std::map<uint64_t, uint64_t> &out_map,
+    ceph::bufferlist *out_bl,
+    DoutPrefixProvider *dpp);
+
+/**
+ * Compute the data and interval set to push to a recovering shard.
+ */
+void ec_recovery_compute_shard_push(
+    shard_extent_map_t &returned_data,
+    shard_id_t shard,
+    uint64_t chunk_size,
+    const interval_set<uint64_t> *shard_fae,
+    ceph::bufferlist &out_data,
+    interval_set<uint64_t> &out_data_included);
+
+} // namespace ECUtil

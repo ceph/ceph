@@ -30,9 +30,15 @@ enum class OpType {
   TruncateWrite,         // Truncate + single write in a single op
   TruncateWrite2,        // Truncate + two writes in a single op
   TruncateWrite3,        // Truncate + three writes in a single op
+  Zero,                  // Zero a range
+  Zero2,                 // Two zero ops in a single op
+  WriteAndZero,          // One write + one zero in a single op
+  ZeroAndTruncate,       // One zero + truncate in a single op
+  WriteZeroData,         // Write of an all-zero payload (not a hole punch)
   FailedWrite,           // A write which should fail
   FailedWrite2,          // Two writes in one op which should fail
   FailedWrite3,          // Three writes in one op which should fail
+  Mapext,                // Query allocated extent map
   Copy,                  // Copy from primary to secondary object
   InjectReadError,       // Op to tell OSD to inject read errors
   InjectWriteError,      // Op to tell OSD to inject write errors
@@ -69,6 +75,8 @@ struct fmt::formatter<ceph::io_exerciser::OpType> {
         return fmt::format_to(ctx.out(), "Consistency");
       case ceph::io_exerciser::OpType::Swap:
         return fmt::format_to(ctx.out(), "Swap");
+      case ceph::io_exerciser::OpType::Mapext:
+        return fmt::format_to(ctx.out(), "Mapext");
       case ceph::io_exerciser::OpType::Copy:
         return fmt::format_to(ctx.out(), "Copy");
       case ceph::io_exerciser::OpType::Read:
@@ -93,6 +101,16 @@ struct fmt::formatter<ceph::io_exerciser::OpType> {
         return fmt::format_to(ctx.out(), "TruncateWrite2");
       case ceph::io_exerciser::OpType::TruncateWrite3:
         return fmt::format_to(ctx.out(), "TruncateWrite3");
+      case ceph::io_exerciser::OpType::Zero:
+        return fmt::format_to(ctx.out(), "Zero");
+      case ceph::io_exerciser::OpType::Zero2:
+        return fmt::format_to(ctx.out(), "Zero2");
+      case ceph::io_exerciser::OpType::WriteAndZero:
+        return fmt::format_to(ctx.out(), "WriteAndZero");
+      case ceph::io_exerciser::OpType::ZeroAndTruncate:
+        return fmt::format_to(ctx.out(), "ZeroAndTruncate");
+      case ceph::io_exerciser::OpType::WriteZeroData:
+        return fmt::format_to(ctx.out(), "WriteZeroData");
       case ceph::io_exerciser::OpType::FailedWrite:
         return fmt::format_to(ctx.out(), "FailedWrite");
       case ceph::io_exerciser::OpType::FailedWrite2:

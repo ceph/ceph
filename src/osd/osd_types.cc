@@ -34,6 +34,7 @@
 
 #include "include/ceph_features.h"
 #include "include/encoding.h"
+#include "include/intarith.h"
 #include "include/stringify.h"
 
 #include "crush/CrushWrapper.h"
@@ -5667,7 +5668,7 @@ list<object_copy_cursor_t> object_copy_cursor_t::generate_test_instances()
 
 void object_copy_data_t::encode(ceph::buffer::list& bl, uint64_t features) const
 {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   encode(size, bl);
   encode(mtime, bl);
   encode(attrs, bl);
@@ -5684,12 +5685,13 @@ void object_copy_data_t::encode(ceph::buffer::list& bl, uint64_t features) const
   encode(truncate_seq, bl);
   encode(truncate_size, bl);
   encode(reqid_return_codes, bl);
+  encode(extent_map, bl);
   ENCODE_FINISH(bl);
 }
 
 void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(8, bl);
+  DECODE_START(9, bl);
   if (struct_v < 5) {
     // old
     decode(size, bl);
@@ -5749,6 +5751,9 @@ void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 8) {
       decode(reqid_return_codes, bl);
+    }
+    if (struct_v >= 9) {
+      decode(extent_map, bl);
     }
   }
   DECODE_FINISH(bl);
@@ -6614,16 +6619,25 @@ void object_info_t::copy_user_bits(const object_info_t& other)
   user_version = other.user_version;
   data_digest = other.data_digest;
   omap_digest = other.omap_digest;
+  force_allocated_extents = other.force_allocated_extents;
 }
 
-void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
+void object_info_t::encode(ceph::buffer::list& bl, uint64_t features,
+                            ceph_release_t min_peer_release) const
 {
+  // [temp]: Umbrella needs to replaced with Vampire here once it is available
+  const bool encode_fae =
+    min_peer_release >= ceph_release_t::umbrella;
+
   object_locator_t myoloc(soid);
   map<entity_name_t, watch_info_t> old_watchers;
   for (auto i = watchers.cbegin(); i != watchers.cend(); ++i) {
     old_watchers.insert(make_pair(i->first.second, i->second));
   }
-  ENCODE_START(18, 8, bl);
+
+  int encode_version = 19;
+  if (!encode_fae) encode_version = std::min(encode_version, 18);
+  ENCODE_START(encode_version, 8, bl);
   encode(soid, bl);
   encode(myoloc, bl);	//Retained for compatibility
   encode((__u32)0, bl); // was category, no longer used
@@ -6658,13 +6672,16 @@ void object_info_t::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(manifest, bl);
   }
   encode(shard_versions, bl);
+  if (encode_fae) {
+    encode(force_allocated_extents, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
 {
   object_locator_t myoloc;
-  DECODE_START_LEGACY_COMPAT_LEN(18, 8, 8, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(19, 8, 8, bl);
   map<entity_name_t, watch_info_t> old_watchers;
   decode(soid, bl);
   decode(myoloc, bl);
@@ -6753,6 +6770,9 @@ void object_info_t::decode(ceph::buffer::list::const_iterator& bl)
   if (struct_v >= 18) {
     decode(shard_versions, bl);
   }
+  if (struct_v >= 19) {
+    decode(force_allocated_extents, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -6800,6 +6820,7 @@ void object_info_t::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->dump_object("force_allocated_extents", force_allocated_extents);
 }
 
 list<object_info_t> object_info_t::generate_test_instances()
@@ -6831,6 +6852,8 @@ ostream& operator<<(ostream& out, const object_info_t& oi)
     out << " " << oi.manifest;
   if (!oi.shard_versions.empty())
     out << " shard_versions=" << oi.shard_versions;
+  if (!oi.force_allocated_extents.empty())
+    out << " fae=" << oi.force_allocated_extents;
   out << ")";
   return out;
 }
@@ -7768,4 +7791,678 @@ std::optional<op_queue_type_t> get_op_queue_type_by_name(
   } else {
     return std::nullopt;
   }
+}
+
+uint32_t fae_bitmap_t::popcount() const
+{
+  if (words.empty()) {
+    return 1;   // single-block fast-path
+  }
+  uint32_t n = 0;
+  for (uint64_t w : words) {
+    n += static_cast<uint32_t>(__builtin_popcountll(w));
+  }
+  return n;
+}
+
+bool fae_bitmap_t::range_empty(const uint64_t bit_start, const uint64_t bit_len) const
+{
+  if (bit_len == 0) return true;
+  if (words.empty()) {
+    // Single-block bitmap: bit 0 is set; any query that includes bit 0 is
+    // non-empty, everything else is empty.
+    return (bit_start > 0);
+  }
+  for (uint64_t b = bit_start; b < bit_start + bit_len; ++b) {
+    if (b >= span_blocks) break;
+    const uint64_t wi = b / 64, bi = b % 64;
+    if (wi < words.size() && (words[wi] >> bi & 1)) return false;
+  }
+  return true;
+}
+
+uint32_t force_allocated_extents_t::bitmap_cost(const fae_bitmap_t& c)
+{
+  return FAE_MAP_NODE_BYTES + static_cast<uint32_t>(c.words.size()) * 8;
+}
+
+// Return the minimal word-count needed to span `span_blocks` blocks.
+static uint32_t words_for_blocks(uint64_t span_blocks)
+{
+  return static_cast<uint32_t>(div_round_up(span_blocks, uint64_t{64}));
+}
+
+// Merge bitmap at `it` with the one immediately to its right, if doing so
+// reduces total cost.  Returns iterator to the surviving (left) entry.
+std::map<uint64_t, fae_bitmap_t>::iterator
+force_allocated_extents_t::try_merge_with_right(
+    const std::map<uint64_t, fae_bitmap_t>::iterator it)
+{
+  auto next = std::next(it);
+  if (next == bitmaps_.end()) return it;
+
+  const uint64_t left_key  = it->first;
+  const fae_bitmap_t&   left      = it->second;
+  const uint64_t right_key = next->first;
+  const fae_bitmap_t&   right     = next->second;
+
+  // Compute the span of the merged bitmap.
+  const uint64_t left_end_block  = left_key / FAE_BLOCK_SIZE + left.span_blocks;
+  const uint64_t right_end_block = right_key / FAE_BLOCK_SIZE + right.span_blocks;
+  const uint64_t merged_start    = left_key / FAE_BLOCK_SIZE;
+  const uint64_t merged_span     = std::max(left_end_block, right_end_block)
+                                   - merged_start;
+  const uint32_t merged_words    = words_for_blocks(merged_span);
+
+  const uint32_t cost_before = bitmap_cost(left) + bitmap_cost(right);
+  const uint32_t cost_after  = FAE_MAP_NODE_BYTES + merged_words * 8;
+
+  if (cost_after >= cost_before) return it;
+
+  // Build merged bitmap.
+  fae_bitmap_t merged;
+  merged.span_blocks = merged_span;
+  merged.words.assign(merged_words, 0);
+
+  // Copy left bits.
+  if (left.words.empty()) {
+    merged.words[0] |= uint64_t{1};
+  } else {
+    for (size_t wi = 0; wi < left.words.size(); ++wi) {
+      if (wi < merged.words.size()) merged.words[wi] |= left.words[wi];
+    }
+  }
+  // Copy right bits (offset by gap between keys).
+  const uint64_t right_bit_off = (right_key - left_key) / FAE_BLOCK_SIZE;
+  if (right.words.empty()) {
+    uint64_t wi = right_bit_off / 64, bi = right_bit_off % 64;
+    if (wi < merged.words.size()) merged.words[wi] |= uint64_t{1} << bi;
+  } else {
+    for (uint64_t src_wi = 0; src_wi < right.words.size(); ++src_wi) {
+      uint64_t word = right.words[src_wi];
+      if (!word) continue;
+      for (int bi = 0; bi < 64; ++bi) {
+        if (!(word >> bi & 1)) continue;
+        uint64_t dst_bit = right_bit_off + src_wi * 64 + bi;
+        uint64_t dst_wi  = dst_bit / 64;
+        if (dst_wi < merged.words.size())
+          merged.words[dst_wi] |= uint64_t{1} << (dst_bit % 64);
+      }
+    }
+  }
+
+  it->second = std::move(merged);
+  bitmaps_.erase(next);
+  return it;
+}
+
+// Attempt to split bitmap `it` at a gap wide enough that two map nodes cost
+// less than the zero-words spanning the gap.  Returns iterator past the last
+// entry written (may be bitmaps_.end()).
+std::map<uint64_t, fae_bitmap_t>::iterator
+force_allocated_extents_t::try_split_at(
+  std::map<uint64_t, fae_bitmap_t>::iterator it)
+{
+  if (it == bitmaps_.end()) return it;
+  fae_bitmap_t& c = it->second;
+  if (c.words.empty()) return std::next(it);  // single-block bitmap, never split
+
+  // Find the first and last set bit to detect leading/trailing zero words.
+  // More importantly, find gap runs where the split saves a map node.
+  // Strategy: walk words, collect contiguous non-zero "runs", build new
+  // bitmaps for each run; only actually split if the savings exceed a node.
+
+  // Collect runs of set bits (in block units).
+  struct Run { uint64_t start_bit; uint64_t end_bit; }; // [start, end)
+  std::vector<Run> runs;
+  uint64_t run_start = 0;
+  bool in_run = false;
+  for (uint64_t wi = 0; wi < c.words.size(); ++wi) {
+    uint64_t word = c.words[wi];
+    for (int bi = 0; bi < 64; ++bi) {
+      uint64_t bit = wi * 64 + bi;
+      if (bit >= c.span_blocks) goto done_scan;
+      if (word >> bi & 1) {
+        if (!in_run) { run_start = bit; in_run = true; }
+      } else {
+        if (in_run) { runs.push_back({run_start, bit}); in_run = false; }
+      }
+    }
+  }
+done_scan:
+  if (in_run) runs.push_back({run_start, c.span_blocks});
+
+  if (runs.empty()) {
+    // Bitmap is entirely empty — caller should drop it.
+    return std::next(it);
+  }
+  if (runs.size() == 1) return std::next(it);  // no gap, nothing to split
+
+  // Check if splitting at any gap pays off.  We split the whole bitmap if at
+  // least one gap justifies it; produce one new entry per run.
+  bool should_split = false;
+  for (size_t ri = 1; ri < runs.size(); ++ri) {
+    const uint64_t gap_bits  = runs[ri].start_bit - runs[ri-1].end_bit;
+    const uint32_t gap_words = words_for_blocks(gap_bits);
+    // Splitting at this gap removes gap_words*8 bytes and adds one map node.
+    if (gap_words * 8 > FAE_MAP_NODE_BYTES) { should_split = true; break; }
+  }
+  if (!should_split) return std::next(it);
+
+  const uint64_t base_byte = it->first;
+  auto insert_pos = it;
+  ++insert_pos;  // insert new bitmaps after current position
+  bitmaps_.erase(it);
+
+  for (auto& run : runs) {
+    const uint64_t key = base_byte + run.start_bit * FAE_BLOCK_SIZE;
+    const uint64_t span = run.end_bit - run.start_bit;
+    fae_bitmap_t nc;
+    nc.span_blocks = span;
+    if (span == 1) {
+      // single-block fast-path: empty words
+    } else {
+      nc.words.assign(words_for_blocks(span), 0);
+      for (uint64_t b = run.start_bit; b < run.end_bit; ++b) {
+        const uint64_t src_wi = b / 64, src_bi = b % 64;
+        if (src_wi < c.words.size() && (c.words[src_wi] >> src_bi & 1)) {
+          const uint64_t dst_bit = b - run.start_bit;
+          nc.words[dst_bit / 64] |= uint64_t{1} << (dst_bit % 64);
+        }
+      }
+    }
+    insert_pos = bitmaps_.emplace_hint(insert_pos, key, std::move(nc));
+    ++insert_pos;
+  }
+  return insert_pos;
+}
+
+static void bitmap_set_bit(fae_bitmap_t& c, uint64_t bit)
+{
+  if (c.words.empty()) return;  // single-block fast-path; already set
+  if (bit >= c.words.size() * 64) {
+    c.words.resize(words_for_blocks(c.span_blocks), 0);
+  }
+  c.words[bit / 64] |= uint64_t{1} << (bit % 64);
+}
+
+static void bitmap_clear_bit(fae_bitmap_t& c, uint64_t bit)
+{
+  if (c.words.empty()) {
+    // Single-block fast-path — caller must handle the empty-bitmap case.
+    return;
+  }
+  if (bit < c.words.size() * 64) {
+    c.words[bit / 64] &= ~(uint64_t{1} << (bit % 64));
+  }
+}
+
+void force_allocated_extents_t::add(const uint64_t offset, const uint64_t length)
+{
+  if (length == 0) return;
+  materialise(); dirty_ = true; raw_.clear();
+  const uint64_t first_block =
+    round_down_to(offset, FAE_BLOCK_SIZE) / FAE_BLOCK_SIZE;
+  const uint64_t last_block =
+    div_round_up(offset + length, FAE_BLOCK_SIZE);  // exclusive
+
+  for (uint64_t block = first_block; block < last_block; ) {
+    const uint64_t key = block * FAE_BLOCK_SIZE;
+
+    // Find the bitmap that could own this block.
+    auto it = bitmaps_.upper_bound(key);
+    if (it != bitmaps_.begin()) {
+      --it;
+      // Check if `block` falls inside this existing bitmap.
+      const uint64_t bitmap_first = it->first / FAE_BLOCK_SIZE;
+      const uint64_t bitmap_last  = bitmap_first + it->second.span_blocks;
+      if (block >= bitmap_first && block < bitmap_last) {
+        // Block is inside an existing bitmap — set the bit.
+        bitmap_set_bit(it->second, block - bitmap_first);
+        ++block;
+        continue;
+      }
+    }
+
+    // No existing bitmap owns this block; create a new single-block entry.
+    fae_bitmap_t nc;
+    nc.span_blocks = 1;
+    // words stays empty (single-block fast-path)
+    auto [new_it, ok] = bitmaps_.emplace(key, std::move(nc));
+    (void)ok;
+
+    // Try to merge with the right neighbour, then with the left neighbour.
+    new_it = try_merge_with_right(new_it);
+    if (new_it != bitmaps_.begin()) {
+      auto left = std::prev(new_it);
+      try_merge_with_right(left);
+    }
+    ++block;
+  }
+}
+
+void force_allocated_extents_t::remove(const uint64_t offset, const uint64_t length)
+{
+  materialise(); dirty_ = true; raw_.clear();
+  if (length == 0 || bitmaps_.empty()) return;
+  const uint64_t first_block =
+    round_down_to(offset, FAE_BLOCK_SIZE) / FAE_BLOCK_SIZE;
+  const uint64_t last_block =
+    div_round_up(offset + length, FAE_BLOCK_SIZE);  // exclusive
+
+  // Collect iterators whose bitmaps overlap the removal range.
+  std::vector<std::map<uint64_t, fae_bitmap_t>::iterator> affected;
+  {
+    auto it = bitmaps_.upper_bound(last_block * FAE_BLOCK_SIZE - 1);
+    const auto beg = bitmaps_.begin();
+    if (it != beg) {
+      --it;
+      while (true) {
+        const uint64_t bitmap_first = it->first / FAE_BLOCK_SIZE;
+        const uint64_t bitmap_last  = bitmap_first + it->second.span_blocks;
+        if (bitmap_last > first_block && bitmap_first < last_block) {
+          affected.push_back(it);
+        }
+        if (it == beg) break;
+        --it;
+      }
+    }
+  }
+
+  for (auto& it : affected) {
+    fae_bitmap_t& c = it->second;
+    const uint64_t bitmap_first = it->first / FAE_BLOCK_SIZE;
+    const uint64_t bitmap_last  = bitmap_first + c.span_blocks;
+
+    // Which bits within this bitmap to clear?
+    const uint64_t clr_start = (first_block > bitmap_first)
+                               ? first_block - bitmap_first : 0;
+    const uint64_t clr_end   = std::min(last_block, bitmap_last) - bitmap_first;
+
+    if (c.words.empty()) {
+      // Single-block: bit 0 is being cleared.
+      bitmaps_.erase(it);
+      continue;
+    }
+    // Expand to full bitmap if needed.
+    c.words.resize(words_for_blocks(c.span_blocks), 0);
+    for (uint64_t b = clr_start; b < clr_end; ++b) {
+      bitmap_clear_bit(c, b);
+    }
+    // Drop entirely if now empty.
+    if (c.popcount() == 0) {
+      bitmaps_.erase(it);
+      continue;
+    }
+    // Otherwise try to split.
+    try_split_at(it);
+  }
+}
+
+void force_allocated_extents_t::truncate(const uint64_t new_size)
+{
+  materialise(); dirty_ = true; raw_.clear();
+  if (bitmaps_.empty()) return;
+  const uint64_t aligned = round_up_to(new_size, FAE_BLOCK_SIZE);
+  const uint64_t cut_block = aligned / FAE_BLOCK_SIZE;
+
+  // Erase all bitmaps that start at or beyond the cut point.
+  auto it = bitmaps_.lower_bound(aligned);
+  bitmaps_.erase(it, bitmaps_.end());
+
+  // Trim any bitmap that straddles the cut point.
+  if (bitmaps_.empty()) return;
+  auto last = std::prev(bitmaps_.end());
+  const uint64_t bitmap_first = last->first / FAE_BLOCK_SIZE;
+  const uint64_t bitmap_last  = bitmap_first + last->second.span_blocks;
+  if (bitmap_last <= cut_block) return;  // entirely before cut
+
+  fae_bitmap_t& c = last->second;
+  const uint64_t new_span = cut_block - bitmap_first;
+  if (new_span == 0) {
+    bitmaps_.erase(last);
+    return;
+  }
+
+  if (c.words.empty()) {
+    // Single-block entry at bitmap_first, which is < cut_block → keep it.
+    c.span_blocks = 1;
+    return;
+  }
+
+  // Trim the bitmap.
+  c.span_blocks = new_span;
+  const uint32_t needed = words_for_blocks(new_span);
+  c.words.resize(needed);
+  // Clear any bits beyond new_span in the last word.
+  const uint64_t bits_in_last = new_span % 64;
+  if (bits_in_last) {
+    c.words.back() &= (uint64_t{1} << bits_in_last) - 1;
+  }
+  if (c.popcount() == 0) {
+    bitmaps_.erase(last);
+  }
+}
+
+void force_allocated_extents_t::insert_exact(const uint64_t offset, const uint64_t length)
+{
+  if (length == 0) return;
+  materialise(); dirty_ = true; raw_.clear();
+  // Walk block by block so merge/split heuristics apply naturally.
+  const uint64_t first_block = offset / FAE_BLOCK_SIZE;
+  const uint64_t last_block  = div_round_up(offset + length, FAE_BLOCK_SIZE);
+  for (uint64_t block = first_block; block < last_block; ) {
+    const uint64_t key = block * FAE_BLOCK_SIZE;
+    auto it = bitmaps_.upper_bound(key);
+    if (it != bitmaps_.begin()) {
+      auto prev = std::prev(it);
+      const uint64_t pf = prev->first / FAE_BLOCK_SIZE;
+      const uint64_t pl = pf + prev->second.span_blocks;
+      if (block >= pf && block < pl) {
+        bitmap_set_bit(prev->second, block - pf);
+        ++block;
+        continue;
+      }
+    }
+    fae_bitmap_t nc;
+    nc.span_blocks = 1;
+    auto [new_it, ok] = bitmaps_.emplace(key, std::move(nc));
+    (void)ok;
+    new_it = try_merge_with_right(new_it);
+    if (new_it != bitmaps_.begin()) {
+      try_merge_with_right(std::prev(new_it));
+    }
+    ++block;
+  }
+}
+
+void force_allocated_extents_t::union_of(const force_allocated_extents_t& o)
+{
+  materialise(); dirty_ = true; raw_.clear();
+  o.materialise();
+  for (auto& [key, bitmap] : o.bitmaps_) {
+    const uint64_t base = key / FAE_BLOCK_SIZE;
+    if (bitmap.words.empty()) {
+      insert_exact(key, FAE_BLOCK_SIZE);
+    } else {
+      for (uint64_t wi = 0; wi < bitmap.words.size(); ++wi) {
+        uint64_t word = bitmap.words[wi];
+        while (word) {
+          const int bi = __builtin_ctzll(word);
+          const uint64_t bit = wi * 64 + bi;
+          if (bit < bitmap.span_blocks) {
+            insert_exact((base + bit) * FAE_BLOCK_SIZE, FAE_BLOCK_SIZE);
+          }
+          word &= word - 1;
+        }
+      }
+    }
+  }
+}
+
+bool force_allocated_extents_t::operator==(
+  const force_allocated_extents_t& o) const
+{
+  return get_intervals() == o.get_intervals();
+}
+
+bool force_allocated_extents_t::intersects(
+  const uint64_t offset, const uint64_t length) const
+{
+  materialise();
+  if (bitmaps_.empty() || length == 0) return false;
+  const uint64_t first_block = offset / FAE_BLOCK_SIZE;
+  const uint64_t last_block  = div_round_up(offset + length, FAE_BLOCK_SIZE);
+
+  auto it = bitmaps_.upper_bound(offset);
+  if (it != bitmaps_.begin()) --it;
+  for (; it != bitmaps_.end(); ++it) {
+    const uint64_t cf = it->first / FAE_BLOCK_SIZE;
+    if (cf >= last_block) break;
+    const uint64_t cl = cf + it->second.span_blocks;
+    if (cl <= first_block) continue;
+    // Overlap exists; check actual bits.
+    const uint64_t chk_start = (first_block > cf) ? first_block - cf : 0;
+    const uint64_t chk_end   = std::min(last_block, cl) - cf;
+    if (!it->second.range_empty(chk_start, chk_end - chk_start)) return true;
+  }
+  return false;
+}
+
+uint32_t force_allocated_extents_t::num_intervals() const
+{
+  uint32_t count = 0;
+  for (auto it = begin(); it != end(); ++it) ++count;
+  return count;
+}
+
+uint64_t force_allocated_extents_t::size() const
+{
+  materialise();
+  uint64_t total = 0;
+  for (const auto& [key, c] : bitmaps_) {
+    total += uint64_t{c.popcount()} * FAE_BLOCK_SIZE;
+  }
+  return total;
+}
+
+bool force_allocated_extents_t::contains(const uint64_t pos) const
+{
+  materialise();
+  if (bitmaps_.empty()) return false;
+  auto it = bitmaps_.upper_bound(pos);
+  if (it == bitmaps_.begin()) return false;
+  --it;
+  const uint64_t cf = it->first / FAE_BLOCK_SIZE;
+  const uint64_t block = pos / FAE_BLOCK_SIZE;
+  const uint64_t cl = cf + it->second.span_blocks;
+  if (block >= cl) return false;
+  const fae_bitmap_t& c = it->second;
+  if (c.words.empty()) return true;  // single-block, bit 0 is set
+  const uint64_t bit = block - cf;
+  return (c.words[bit / 64] >> (bit % 64)) & 1;
+}
+
+bool force_allocated_extents_t::contains(const uint64_t offset, const uint64_t length) const
+{
+  if (length == 0) return true;
+  const uint64_t first_block = offset / FAE_BLOCK_SIZE;
+  const uint64_t last_block  = div_round_up(offset + length, FAE_BLOCK_SIZE);
+  for (uint64_t block = first_block; block < last_block; ++block) {
+    if (!contains(block * FAE_BLOCK_SIZE)) return false;
+  }
+  return true;
+}
+
+static bool bitmap_bit_set(const fae_bitmap_t& c, uint64_t bit)
+{
+  if (c.words.empty()) return (bit == 0);
+  if (bit >= c.span_blocks) return false;
+  return (c.words[bit / 64] >> (bit % 64)) & 1;
+}
+
+force_allocated_extents_t::const_iterator::const_iterator(
+  std::map<uint64_t, fae_bitmap_t>::const_iterator map_it,
+  std::map<uint64_t, fae_bitmap_t>::const_iterator map_end)
+  : map_it_(map_it), map_end_(map_end), bit_(0)
+{
+  if (map_it_ != map_end_) advance_to_set_bit();
+}
+
+void force_allocated_extents_t::const_iterator::advance_to_set_bit()
+{
+  while (map_it_ != map_end_) {
+    const fae_bitmap_t& c = map_it_->second;
+    const uint64_t span = c.span_blocks;
+    while (bit_ < span) {
+      if (bitmap_bit_set(c, bit_)) {
+        // Found the start of a run — compute the run length.
+        const uint64_t run_start = map_it_->first + bit_ * FAE_BLOCK_SIZE;
+        uint64_t run_end         = bit_ + 1;
+        while (run_end < span && bitmap_bit_set(c, run_end)) ++run_end;
+        current_ = { run_start, (run_end - bit_) * FAE_BLOCK_SIZE };
+        // Leave bit_ pointing at run_end so operator++ starts after this run.
+        bit_ = run_end;
+        return;
+      }
+      ++bit_;
+    }
+    ++map_it_;
+    bit_ = 0;
+  }
+}
+
+force_allocated_extents_t::const_iterator&
+force_allocated_extents_t::const_iterator::operator++()
+{
+  // bit_ is already positioned past the current run; find the next set bit.
+  advance_to_set_bit();
+  return *this;
+}
+
+force_allocated_extents_t::const_iterator
+force_allocated_extents_t::begin() const
+{
+  materialise();
+  return const_iterator(bitmaps_.begin(), bitmaps_.end());
+}
+
+force_allocated_extents_t::const_iterator
+force_allocated_extents_t::end() const
+{
+  materialise();
+  return const_iterator(bitmaps_.end(), bitmaps_.end());
+}
+
+interval_set<uint64_t> force_allocated_extents_t::get_intervals() const
+{
+  materialise();
+  interval_set<uint64_t> result;
+  for (auto [start, len] : *this) {
+    result.union_insert(start, len);
+  }
+  return result;
+}
+
+void force_allocated_extents_t::materialise() const
+{
+  if (dirty_ || raw_.length() == 0) return;
+  // Parse raw_ into bitmaps_.
+  auto p = raw_.cbegin();
+  DECODE_START(2, p);
+  uint32_t bitmap_count = 0;
+  ::decode(bitmap_count, p);
+  for (uint32_t i = 0; i < bitmap_count; ++i) {
+    uint64_t key = 0;
+    ::decode(key, p);
+    fae_bitmap_t c;
+    ::decode(c.span_blocks, p);
+    uint32_t word_count = 0;
+    ::decode(word_count, p);
+    c.words.resize(word_count);
+    for (uint32_t wi = 0; wi < word_count; ++wi) {
+      ::decode(c.words[wi], p);
+    }
+    bitmaps_.emplace_hint(bitmaps_.end(), key, std::move(c));
+  }
+  DECODE_FINISH(p);
+  raw_.clear();
+  dirty_ = true;  // bitmaps_ is now authoritative
+}
+
+void force_allocated_extents_t::encode(ceph::buffer::list& bl) const
+{
+  // Fast path: if bitmaps_ has not been modified since the last decode, reuse
+  // the cached raw bytes verbatim.
+  if (!dirty_ && raw_.length() > 0) {
+    bl.append(raw_);
+    return;
+  }
+  ceph::buffer::list tmp;
+  ENCODE_START(2, 2, tmp);
+  const uint32_t bitmap_count = static_cast<uint32_t>(bitmaps_.size());
+  ::encode(bitmap_count, tmp);
+  for (const auto& [key, c] : bitmaps_) {
+    ::encode(key, tmp);
+    ::encode(c.span_blocks, tmp);
+    const uint32_t word_count = static_cast<uint32_t>(c.words.size());
+    ::encode(word_count, tmp);
+    for (uint64_t w : c.words) {
+      ::encode(w, tmp);
+    }
+  }
+  ENCODE_FINISH(tmp);
+  raw_ = tmp;
+  dirty_ = false;
+  bl.append(tmp);
+}
+
+void force_allocated_extents_t::decode(ceph::buffer::list::const_iterator& p)
+{
+  bitmaps_.clear();
+  raw_.clear();
+  dirty_ = false;
+  if (p.end()) {
+    dirty_ = true;  // empty, bitmaps_ is authoritative
+    return;
+  }
+  // Capture the bytes we are about to consume so we can re-encode them
+  // without reparsing (deferred decode / lazy materialise).
+  size_t start_off = p.get_off();
+  DECODE_START(2, p);
+  // Skip over the bitmap data without parsing — just advance p.
+  uint32_t bitmap_count = 0;
+  ::decode(bitmap_count, p);
+  for (uint32_t i = 0; i < bitmap_count; ++i) {
+    uint64_t key = 0;
+    ::decode(key, p);
+    uint64_t span_blocks = 0;
+    ::decode(span_blocks, p);
+    uint32_t word_count = 0;
+    ::decode(word_count, p);
+    for (uint32_t wi = 0; wi < word_count; ++wi) {
+      uint64_t w = 0;
+      ::decode(w, p);
+    }
+  }
+  DECODE_FINISH(p);
+  // Copy the consumed bytes into raw_ for the fast-path encode.
+  raw_.substr_of(p.get_bl(), start_off, p.get_off() - start_off);
+}
+
+void force_allocated_extents_t::dump(Formatter *f) const
+{
+  f->open_array_section("intervals");
+  for (auto [start, len] : *this) {
+    f->open_object_section("extent");
+    f->dump_unsigned("offset", start);
+    f->dump_unsigned("length", len);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+std::list<force_allocated_extents_t>
+force_allocated_extents_t::generate_test_instances()
+{
+  std::list<force_allocated_extents_t> o;
+  o.push_back(force_allocated_extents_t());
+  force_allocated_extents_t fae;
+  fae.add(0, FAE_BLOCK_SIZE);
+  fae.add(FAE_BLOCK_SIZE * 4, FAE_BLOCK_SIZE * 2);
+  o.push_back(fae);
+  return o;
+}
+
+std::ostream& operator<<(std::ostream& out,
+                         const force_allocated_extents_t& fae)
+{
+  out << "[";
+  bool first = true;
+  for (auto [start, len] : fae) {
+    if (!first) out << ",";
+    out << std::hex << "0x" << start << "~" << len << std::dec;
+    first = false;
+  }
+  return out << "]";
 }

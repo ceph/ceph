@@ -1502,6 +1502,8 @@ public:
       }, consigned);
   }
 
+  bool pool_has_flag(std::int64_t pool_id, uint64_t flag) const;
+
   bool get_self_managed_snaps_mode(std::int64_t pool) const;
   bool get_self_managed_snaps_mode(std::string_view pool) const;
   bool get_self_managed_snaps_mode(const IOContext& pool) const {

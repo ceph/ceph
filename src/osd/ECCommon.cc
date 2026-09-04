@@ -561,6 +561,12 @@ void ECCommon::ReadPipeline::do_read_op(ReadOp &rop) {
         need_omap_header = false;
         need_omap_keys = false;
       }
+      if (read_request.want_sparse_read) {
+        messages[shard_read.pg_shard].want_sparse_read.insert(hoid);
+        if (read_request.drop_data) {
+          messages[shard_read.pg_shard].drop_data.insert(hoid);
+        }
+      }
       if (shard_read.subchunk) {
         messages[shard_read.pg_shard].subchunks[hoid] = *shard_read.subchunk;
         reads_sent = true;
@@ -1721,8 +1727,26 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
         pop.soid = op.hoid;
         pop.version = op.recovery_info.oi.get_version_for_shard(pg_shard.shard);
 
-        op.returned_data->get_sparse_buffer(pg_shard.shard, pop.data, pop.data_included);
-        ceph_assert(pop.data.length() == pop.data_included.size());
+        const interval_set<uint64_t> *force_alloc_ptr = nullptr;
+        interval_set<uint64_t> shard_fae;
+        // [temp]: Umbrella needs to replaced with Vampire here once it is available
+        if (get_osdmap()->require_osd_release >= ceph_release_t::umbrella &&
+            op.obc && !sinfo.get_parity_shards().contains(pg_shard.shard)) {
+          const interval_set<uint64_t> ro_fae =
+            op.obc->obs.oi.force_allocated_extents.get_intervals();
+          if (!ro_fae.empty()) {
+            shard_fae = sinfo.ro_intervals_to_shard_intervals(ro_fae,
+                                                              pg_shard.shard);
+            force_alloc_ptr = &shard_fae;
+            dout(20) << __func__ << ": shard=" << pg_shard.shard
+                     << " force_alloc_shard=" << shard_fae << dendl;
+          }
+        }
+
+        ECUtil::ec_recovery_compute_shard_push(*op.returned_data, pg_shard.shard,
+                                               sinfo.get_chunk_size(),
+                                               force_alloc_ptr,
+                                               pop.data, pop.data_included);
 
         dout(10) << __func__ << ": pop shard=" << pg_shard
                  << ", oid=" << pop.soid
@@ -1746,7 +1770,8 @@ void ECCommon::RecoveryBackend::continue_recovery_op(
               dout(10) << __func__ << ": partial write OI attr: oi=" << oi << dendl;
               bufferlist bl;
               oi.encode(bl, get_osdmap()->get_features(
-                CEPH_ENTITY_TYPE_OSD, nullptr));
+                CEPH_ENTITY_TYPE_OSD, nullptr),
+                get_osdmap()->require_osd_release);
               pop.attrset[OI_ATTR] = bl;
             }
           } else {
@@ -1966,3 +1991,145 @@ ECTransaction::WritePlan ECCommon::get_write_plan(
 
 
 END_IGNORE_DEPRECATED
+
+// ---------------------------------------------------------------------------
+// EC sparse-read / mapext helper functions that depend on ECCommon types.
+// ---------------------------------------------------------------------------
+namespace ECUtil {
+
+std::optional<ECCommon::read_request_t> prepare_sparse_read_request(
+    const hobject_t &hoid,
+    const std::list<ec_align_t> &to_read,
+    uint64_t object_size,
+    bool for_mapext,
+    ECCommon::ReadPipeline &pipeline,
+    bool &out_needs_reconstruct,
+    int &out_r)
+{
+  const stripe_info_t &sinfo = pipeline.sinfo;
+
+  shard_extent_set_t want_shard_reads(sinfo.get_k_plus_m());
+  pipeline.get_want_to_read_shards(to_read, want_shard_reads);
+
+  ECCommon::read_request_t req(
+      to_read, want_shard_reads,
+      ECCommon::WantAttrs::No, ECCommon::WantOmapHeader::No,
+      ECCommon::WantOmapKeys::No, "", 0, object_size);
+  req.want_sparse_read = true;
+
+  if (for_mapext) {
+    req.drop_data = true;
+  }
+
+  out_r = pipeline.get_min_avail_to_read_shards(hoid, false, false, req);
+  if (out_r < 0) {
+    out_needs_reconstruct = false;
+    return std::nullopt;
+  }
+
+  out_needs_reconstruct = false;
+  for (auto &&[shard, want_extents] : req.shard_want_to_read) {
+    if ((int)shard >= (int)sinfo.get_k()) {
+      continue;
+    }
+    if (!req.shard_reads.contains(shard) &&
+        !req.zeros_for_decode.contains(shard)) {
+      out_needs_reconstruct = true;
+      break;
+    }
+  }
+
+  if (out_needs_reconstruct) {
+    req.drop_data = false;
+
+    // When reconstruction is needed, ensure all healthy shards are asked to read 
+    // the same region from disk, making it safe to zero-pad any sparse holes 
+    // uniformly during decode.
+    shard_extent_set_t uniform_want(sinfo.get_k_plus_m());
+    for (const shard_id_t shard : sinfo.get_data_shards()) {
+      for (const auto &read : to_read) {
+        auto &&[off, len] = sinfo.chunk_aligned_ro_range_to_shard_ro_range(
+            read.offset, read.size);
+        uniform_want[shard].union_insert(off, len);
+      }
+    }
+    req.shard_want_to_read = std::move(uniform_want);
+    req.shard_reads.clear();
+    req.zeros_for_decode.clear();
+
+    out_r = pipeline.get_min_avail_to_read_shards(hoid, false, false, req);
+    if (out_r < 0) {
+      return std::nullopt;
+    }
+  }
+
+  out_r = 0;
+  return req;
+}
+
+int ec_sparse_finish_read(
+    const stripe_info_t &sinfo,
+    ECCommon::read_result_t &res,
+    ECCommon::read_request_t &req,
+    uint64_t offset,
+    uint64_t length,
+    bool needs_reconstruct,
+    const ceph::ErasureCodeInterfaceRef &ec_impl,
+    const interval_set<uint64_t> &force_allocated_extents,
+    std::map<uint64_t, uint64_t> &out_map,
+    ceph::bufferlist *out_bl,
+    DoutPrefixProvider *dpp)
+{
+  const uint64_t req_end = std::min(offset + length, req.object_size);
+  if (needs_reconstruct) {
+    // Stage 1: decode missing shards.
+    int r = ec_sparse_decode(res.buffers_read, req.shard_want_to_read,
+                             req.zeros_for_decode, res.sparse_extents_read,
+                             ec_impl, req.object_size, dpp);
+    if (r < 0) {
+      return r;
+    }
+
+    // Stage 2: for each data shard that was reconstructed, populate sparse_extents_read.
+    for (shard_id_t shard : sinfo.get_data_shards()) {
+      // Skip shards outside the requested read range
+      if (!res.buffers_read.extent_maps.contains(shard)) {
+        continue;
+      }
+      // Skip shards that were read directly from disk
+      if (res.sparse_extents_read.contains(shard) &&
+          !res.sparse_extents_read.at(shard).empty()) {
+        continue;
+      }
+      const interval_set<uint64_t> shard_fae =
+          sinfo.ro_intervals_to_shard_intervals(force_allocated_extents, shard);
+      const uint64_t scan_stride =
+          std::min(sinfo.get_chunk_size(), FAE_BLOCK_SIZE);
+      interval_set<uint64_t> shard_scan;
+      if (req.shard_want_to_read.contains(shard)) {
+        for (auto [off, len] : req.shard_want_to_read.at(shard)) {
+          const uint64_t aligned_off = p2align(off, scan_stride);
+          const uint64_t aligned_end = p2roundup(off + len, scan_stride);
+          shard_scan.union_insert(aligned_off, aligned_end - aligned_off);
+        }
+      }
+      res.sparse_extents_read[shard] =
+          ec_sparse_scan_shard_extents(res.buffers_read, shard,
+                                       shard_fae, shard_scan, dpp);
+    }
+  }
+
+  // Stage 3: merge all shard fiemaps and clip to the requested range.
+  auto merged = merge_shard_extent_maps(res.sparse_extents_read, sinfo);
+  out_map = ec_sparse_clip_to_map(merged, offset, req_end);
+
+  if (out_bl != nullptr) {
+    for (auto &&[ext_off, ext_len] : out_map) {
+      out_bl->append(res.buffers_read.get_ro_buffer(ext_off, ext_len));
+    }
+  }
+
+  return 0;
+}
+
+} // namespace ECUtil

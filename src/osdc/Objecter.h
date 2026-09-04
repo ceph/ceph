@@ -553,6 +553,33 @@ struct ObjectOperation {
       }
     }
   };
+
+  struct CB_ObjectOperation_mapext {
+    std::map<uint64_t,uint64_t>* extents;
+    int* prval;
+    CB_ObjectOperation_mapext(std::map<uint64_t,uint64_t>* extents, int* prval)
+      : extents(extents), prval(prval) {}
+    void operator()(boost::system::error_code ec, int r,
+                    const ceph::buffer::list& bl) {
+      auto iter = bl.cbegin();
+      if (r >= 0) {
+        // NOTE: it's possible the sub-op has not been executed but the result
+        // code remains zeroed. Avoid the costly exception handling on a
+        // potential IO path.
+        if (bl.length() > 0) {
+          try {
+            decode(*extents, iter);
+          } catch (const ceph::buffer::error& e) {
+            if (prval)
+              *prval = -EIO;
+          }
+        } else if (prval) {
+          *prval = -EIO;
+        }
+      }
+    }
+  };
+
   void sparse_read(uint64_t off, uint64_t len, std::map<uint64_t, uint64_t>* m,
 		   ceph::buffer::list* data_bl, int* prval,
 		   uint64_t truncate_size = 0, uint32_t truncate_seq = 0) {
@@ -620,6 +647,13 @@ struct ObjectOperation {
   void mapext(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
     add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+  }
+  void mapext(uint64_t off, uint64_t len,
+              std::map<uint64_t,uint64_t>* m, int* prval) {
+    ceph::buffer::list bl;
+    add_data(CEPH_OSD_OP_MAPEXT, off, len, bl);
+    set_handler(CB_ObjectOperation_mapext(m, prval));
+    out_rval.back() = prval;
   }
   void sparse_read(uint64_t off, uint64_t len) {
     ceph::buffer::list bl;
@@ -1108,33 +1142,36 @@ struct ObjectOperation {
     mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
+    std::map<uint64_t, uint64_t> *out_extent_map;
     int *prval;
     C_ObjectOperation_copyget(object_copy_cursor_t *c,
-			      uint64_t *s,
-			      ceph::real_time *m,
-			      std::map<std::string,ceph::buffer::list,std::less<>> *a,
-			      ceph::buffer::list *d, ceph::buffer::list *oh,
-			      ceph::buffer::list *o,
-			      std::vector<snapid_t> *osnaps,
-			      snapid_t *osnap_seq,
-			      uint32_t *flags,
-			      uint32_t *dd,
-			      uint32_t *od,
-			      mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > *oreqids,
-			      mempool::osd_pglog::map<uint32_t, int> *oreqid_return_codes,
-			      uint64_t *otseq,
-			      uint64_t *otsize,
-			      int *r)
+         uint64_t *s,
+         ceph::real_time *m,
+         std::map<std::string,ceph::buffer::list,std::less<>> *a,
+         ceph::buffer::list *d, ceph::buffer::list *oh,
+         ceph::buffer::list *o,
+         std::vector<snapid_t> *osnaps,
+         snapid_t *osnap_seq,
+         uint32_t *flags,
+         uint32_t *dd,
+         uint32_t *od,
+         mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > *oreqids,
+         mempool::osd_pglog::map<uint32_t, int> *oreqid_return_codes,
+         uint64_t *otseq,
+         uint64_t *otsize,
+         std::map<uint64_t, uint64_t> *oextent_map,
+         int *r)
       : cursor(c),
-	out_size(s), out_mtime(m),
-	out_attrs(a), out_data(d), out_omap_header(oh),
-	out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
-	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
-	out_reqids(oreqids),
-	out_reqid_return_codes(oreqid_return_codes),
-	out_truncate_seq(otseq),
-	out_truncate_size(otsize),
-	prval(r) {}
+        out_size(s), out_mtime(m),
+        out_attrs(a), out_data(d), out_omap_header(oh),
+        out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
+        out_flags(flags), out_data_digest(dd), out_omap_digest(od),
+        out_reqids(oreqids),
+        out_reqid_return_codes(oreqid_return_codes),
+        out_truncate_seq(otseq),
+        out_truncate_size(otsize),
+        out_extent_map(oextent_map),
+        prval(r) {}
     void finish(int r) override {
       using ceph::decode;
       // reqids are copied on ENOENT
@@ -1179,6 +1216,9 @@ struct ObjectOperation {
 	  *out_truncate_seq = copy_reply.truncate_seq;
 	if (out_truncate_size)
 	  *out_truncate_size = copy_reply.truncate_size;
+	if (out_extent_map)
+	  out_extent_map->insert(copy_reply.extent_map.begin(),
+				 copy_reply.extent_map.end());
 	*cursor = copy_reply.cursor;
       } catch (const ceph::buffer::error& e) {
 	if (prval)
@@ -1188,23 +1228,24 @@ struct ObjectOperation {
   };
 
   void copy_get(object_copy_cursor_t *cursor,
-		uint64_t max,
-		uint64_t *out_size,
-		ceph::real_time *out_mtime,
-		std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs,
-		ceph::buffer::list *out_data,
-		ceph::buffer::list *out_omap_header,
-		ceph::buffer::list *out_omap_data,
-		std::vector<snapid_t> *out_snaps,
-		snapid_t *out_snap_seq,
-		uint32_t *out_flags,
-		uint32_t *out_data_digest,
-		uint32_t *out_omap_digest,
-		mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > *out_reqids,
-		mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes,
-		uint64_t *truncate_seq,
-		uint64_t *truncate_size,
-		int *prval) {
+  uint64_t max,
+  uint64_t *out_size,
+  ceph::real_time *out_mtime,
+  std::map<std::string,ceph::buffer::list,std::less<>> *out_attrs,
+  ceph::buffer::list *out_data,
+  ceph::buffer::list *out_omap_header,
+  ceph::buffer::list *out_omap_data,
+  std::vector<snapid_t> *out_snaps,
+  snapid_t *out_snap_seq,
+  uint32_t *out_flags,
+  uint32_t *out_data_digest,
+  uint32_t *out_omap_digest,
+  mempool::osd_pglog::vector<std::pair<osd_reqid_t, version_t> > *out_reqids,
+  mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes,
+  uint64_t *truncate_seq,
+  uint64_t *truncate_size,
+  std::map<uint64_t, uint64_t> *out_extent_map,
+  int *prval) {
     using ceph::encode;
     OSDOp& osd_op = add_op(CEPH_OSD_OP_COPY_GET);
     osd_op.op.copy_get.max = max;
@@ -1214,12 +1255,13 @@ struct ObjectOperation {
     out_rval[p] = prval;
     C_ObjectOperation_copyget *h =
       new C_ObjectOperation_copyget(cursor, out_size, out_mtime,
-				    out_attrs, out_data, out_omap_header,
-				    out_omap_data, out_snaps, out_snap_seq,
-				    out_flags, out_data_digest,
-				    out_omap_digest, out_reqids,
-				    out_reqid_return_codes, truncate_seq,
-				    truncate_size, prval);
+                                    out_attrs, out_data, out_omap_header,
+                                    out_omap_data, out_snaps, out_snap_seq,
+                                    out_flags, out_data_digest,
+                                    out_omap_digest, out_reqids,
+                                    out_reqid_return_codes, truncate_seq,
+                                    truncate_size, out_extent_map,
+                                    prval);
     out_bl[p] = &h->bl;
     set_handler(h);
   }

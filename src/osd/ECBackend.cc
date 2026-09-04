@@ -523,61 +523,133 @@ void ECBackend::handle_sub_read(
   shard_id_t shard = get_parent()->whoami_shard().shard;
   for (auto &&[hoid, to_read]: op.to_read) {
     int r = 0;
-    for (auto &&[offset, len, flags]: to_read) {
-      bufferlist bl;
-      auto &subchunks = op.subchunks.at(hoid);
-      if ((subchunks.size() == 1) &&
-        (subchunks.front().second == ec_impl->get_sub_chunk_count())) {
-        dout(20) << __func__ << " case1: reading the complete chunk/shard." << dendl;
-        r = switcher->store->read(
+    if (op.want_sparse_read.count(hoid)) {
+      // sparse read path: fiemap then (optionally) readv
+      for (auto &&[offset, len, flags]: to_read) {
+        dout(20) << __func__ << ": sparse fiemap hoid=" << hoid
+                 << " shard=" << shard
+                 << " shard_range=[" << offset << "~" << len << "]"
+                 << dendl;
+        std::map<uint64_t, uint64_t> shard_map;
+        r = switcher->store->fiemap(
           switcher->ch,
           ghobject_t(hoid, ghobject_t::NO_GEN, shard),
-          offset, len, bl, flags); // Allow EIO return
-      } else {
-        int subchunk_size =
-          sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
-        dout(20) << __func__ << " case2: going to do fragmented read;"
-		 << " subchunk_size=" << subchunk_size
-		 << " chunk_size=" << sinfo.get_chunk_size() << dendl;
-        bool error = false;
-        for (int m = 0; m < (int)len && !error;
-             m += sinfo.get_chunk_size()) {
-          for (auto &&k: subchunks) {
-            bufferlist bl0;
-            r = switcher->store->read(
-              switcher->ch,
-              ghobject_t(hoid, ghobject_t::NO_GEN, shard),
-              offset + m + (k.first) * subchunk_size,
-              (k.second) * subchunk_size,
-              bl0, flags);
-            if (r < 0) {
-              error = true;
-              break;
-            }
-            bl.claim_append(bl0);
+          offset, len, shard_map);
+        if (r < 0) {
+          if (r == -ENOENT && get_parent()->get_pool().fast_read) {
+            dout(5) << __func__ << ": Error " << r
+                    << " fiemapping " << hoid << ", fast read, probably ok"
+                    << dendl;
+          } else {
+            get_parent()->clog_error() << "Error " << r
+              << " fiemapping object " << hoid;
+            dout(5) << __func__ << ": Error " << r
+                    << " fiemapping " << hoid << dendl;
           }
+          goto error;
+        }
+        dout(20) << __func__ << ": sparse fiemap result hoid=" << hoid
+                 << " shard=" << shard
+                 << " shard_extents=" << shard_map << dendl;
+        for (auto &&[ext_off, ext_len]: shard_map) {
+          reply->sparse_extents_read[hoid][ext_off] = ext_len;
+        }
+        // Ensure the hoid key always exists in sparse_extents_read, even when
+        // fiemap returned no extents (sparse hole). This allows the reply
+        // handler to distinguish a healthy shard with an empty fiemap from a
+        // shard that did not reply at all.
+        reply->sparse_extents_read.try_emplace(hoid);
+      }
+      if (!op.drop_data.count(hoid)) {
+        interval_set<uint64_t> fiemap_intervals;
+        for (auto &&[ext_off, ext_len]: reply->sparse_extents_read[hoid]) {
+          fiemap_intervals.insert(ext_off, ext_len);
+        }
+        bufferlist bl;
+        r = switcher->store->readv(
+          switcher->ch,
+          ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+          fiemap_intervals, bl);
+        if (r < 0) {
+          if (r == -ENOENT && get_parent()->get_pool().fast_read) {
+            dout(5) << __func__ << ": Error " << r
+                    << " readving " << hoid << ", fast read, probably ok"
+                    << dendl;
+          } else {
+            get_parent()->clog_error() << "Error " << r
+              << " readving object " << hoid;
+            dout(5) << __func__ << ": Error " << r
+                    << " readving " << hoid << dendl;
+          }
+          goto error;
+        }
+        // slice the contiguous bl into per-extent (offset, data) pairs
+        uint64_t bl_off = 0;
+        for (auto &&[ext_off, ext_len]: reply->sparse_extents_read[hoid]) {
+          bufferlist ext_bl;
+          ext_bl.substr_of(bl, bl_off, ext_len);
+          reply->buffers_read[hoid].push_back(make_pair(ext_off, std::move(ext_bl)));
+          bl_off += ext_len;
         }
       }
-
-      if (r < 0) {
-        // if we are doing fast reads, it's possible for one of the shard
-        // reads to cross paths with another update and get a (harmless)
-        // ENOENT.  Suppress the message to the cluster log in that case.
-        if (r == -ENOENT && get_parent()->get_pool().fast_read) {
-          dout(5) << __func__ << ": Error " << r
-		  << " reading " << hoid << ", fast read, probably ok"
-		  << dendl;
+    } else {
+      // normal (non-sparse) read path
+      for (auto &&[offset, len, flags]: to_read) {
+        bufferlist bl;
+        auto &subchunks = op.subchunks.at(hoid);
+        if ((subchunks.size() == 1) &&
+          (subchunks.front().second == ec_impl->get_sub_chunk_count())) {
+          dout(20) << __func__ << " case1: reading the complete chunk/shard." << dendl;
+          r = switcher->store->read(
+            switcher->ch,
+            ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+            offset, len, bl, flags); // Allow EIO return
         } else {
-          get_parent()->clog_error() << "Error " << r
-            << " reading object " << hoid;
-          dout(5) << __func__ << ": Error " << r
-		  << " reading " << hoid << dendl;
+          int subchunk_size =
+            sinfo.get_chunk_size() / ec_impl->get_sub_chunk_count();
+          dout(20) << __func__ << " case2: going to do fragmented read;"
+                   << " subchunk_size=" << subchunk_size
+                   << " chunk_size=" << sinfo.get_chunk_size() << dendl;
+          bool error = false;
+          for (int m = 0; m < (int)len && !error;
+               m += sinfo.get_chunk_size()) {
+            for (auto &&k: subchunks) {
+              bufferlist bl0;
+              r = switcher->store->read(
+                switcher->ch,
+                ghobject_t(hoid, ghobject_t::NO_GEN, shard),
+                offset + m + (k.first) * subchunk_size,
+                (k.second) * subchunk_size,
+                bl0, flags);
+              if (r < 0) {
+                error = true;
+                break;
+              }
+              bl.claim_append(bl0);
+            }
+          }
         }
-        goto error;
-      } else {
-        dout(20) << __func__ << " read request=" << len << " r=" << r << " len="
-          << bl.length() << dendl;
-        reply->buffers_read[hoid].push_back(make_pair(offset, bl));
+
+        if (r < 0) {
+          // if we are doing fast reads, it's possible for one of the shard
+          // reads to cross paths with another update and get a (harmless)
+          // ENOENT.  Suppress the message to the cluster log in that case.
+          if (r == -ENOENT && get_parent()->get_pool().fast_read) {
+            dout(5) << __func__ << ": Error " << r
+                    << " reading " << hoid << ", fast read, probably ok"
+                    << dendl;
+          } else {
+            get_parent()->clog_error() << "Error " << r
+              << " reading object " << hoid;
+            dout(5) << __func__ << ": Error " << r
+                    << " reading " << hoid << dendl;
+          }
+          goto error;
+        } else {
+          dout(20) << __func__ << " read request=" << len << " r=" << r << " len="
+            << bl.length() << dendl;
+          reply->buffers_read[hoid].push_back(make_pair(offset, bl));
+        }
       }
     }
     continue;
@@ -585,6 +657,7 @@ void ECBackend::handle_sub_read(
     // Do NOT check osd_read_eio_on_bad_digest here.  We need to report
     // the state of our chunk in case other chunks could substitute.
     reply->buffers_read.erase(hoid);
+    reply->sparse_extents_read.erase(hoid);
     reply->errors[hoid] = r;
   }
   for (set<hobject_t>::iterator i = op.attrs_to_read.begin();
@@ -903,6 +976,16 @@ void ECBackend::handle_sub_read_reply(
       rop.complete.at(hoid).omap_complete = omap_complete;
     }
   }
+  for (auto &&[hoid, extents]: op.sparse_extents_read) {
+    if (!rop.to_read.contains(hoid)) {
+      dout(20) << __func__ << " to_read skipping" << dendl;
+      continue;
+    }
+    if (!rop.complete.contains(hoid)) {
+      rop.complete.emplace(hoid, &sinfo);
+    }
+    rop.complete.at(hoid).sparse_extents_read[from.shard] = extents;
+  }
   for (auto &&[hoid, err]: op.errors) {
     if (!rop.complete.contains(hoid)) {
       rop.complete.emplace(hoid, &sinfo);
@@ -912,6 +995,7 @@ void ECBackend::handle_sub_read_reply(
     rop.debug_log.emplace_back(ECUtil::ERROR, op.from, complete.buffers_read);
     complete.buffers_read.erase_shard(from.shard);
     complete.processed_read_requests.erase(from.shard);
+    complete.sparse_extents_read.erase(from.shard);
     // If there was an error for non-zero data on this shard, then we must also
     // ignore all zeros, or minimum_to_decode may conclude that it has enough
     // shards available.
@@ -1524,6 +1608,212 @@ shard_id_map<bufferlist> ECBackend::ec_decode_acting_set(
 }
 
 ECUtil::stripe_info_t ECBackend::ec_get_sinfo() const { return sinfo; }
+
+namespace {
+struct SparseReadCompleter final : ECCommon::ReadCompleter {
+  SparseReadCompleter(ECCommon::ReadPipeline &read_pipeline,
+                      const ECUtil::stripe_info_t &sinfo,
+                      uint64_t offset,
+                      uint64_t length,
+                      std::map<uint64_t, uint64_t> *out_map,
+                      ceph::buffer::list *out_bl,
+                      Context *on_complete,
+                      interval_set<uint64_t> force_allocated_extents,
+                      bool needs_reconstruct)
+    : read_pipeline(read_pipeline),
+      sinfo(sinfo),
+      offset(offset),
+      length(length),
+      out_map(out_map),
+      out_bl(out_bl),
+      on_complete(on_complete),
+      force_allocated_extents(std::move(force_allocated_extents)),
+      needs_reconstruct(needs_reconstruct) {}
+
+  void finish_single_request(
+      const hobject_t &hoid,
+      ECCommon::read_result_t &&res,
+      ECCommon::read_request_t &req) override {
+    auto *dpp = read_pipeline.get_parent()->get_dpp();
+    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
+      << " ro_read=[" << offset << "~" << length << "]"
+      << " needs_reconstruct=" << needs_reconstruct
+      << " sparse_extents_read (per shard, shard-space)="
+      << res.sparse_extents_read << dendl;
+    if (res.r < 0) {
+      result = res.r;
+      return;
+    }
+    result = ECUtil::ec_sparse_finish_read(
+        sinfo, res, req, offset, length, needs_reconstruct,
+        read_pipeline.ec_impl, force_allocated_extents,
+        *out_map, out_bl, dpp);
+    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
+      << " final RO extent map=" << *out_map << dendl;
+  }
+
+  void finish(int priority) && override {
+    on_complete->complete(result);
+  }
+
+  ECCommon::ReadPipeline &read_pipeline;
+  const ECUtil::stripe_info_t &sinfo;
+  uint64_t offset;
+  uint64_t length;
+  std::map<uint64_t, uint64_t> *out_map;
+  ceph::buffer::list *out_bl;
+  Context *on_complete;
+  interval_set<uint64_t> force_allocated_extents;
+  bool needs_reconstruct;
+  int result = 0;
+};
+
+struct ECMapextCompleter final : ECCommon::ReadCompleter {
+  ECMapextCompleter(ECCommon::ReadPipeline &read_pipeline,
+                    const ECUtil::stripe_info_t &sinfo,
+                    uint64_t offset,
+                    uint64_t length,
+                    std::map<uint64_t, uint64_t> *out_map,
+                    Context *on_complete,
+                    interval_set<uint64_t> force_allocated_extents,
+                    bool needs_reconstruct)
+    : read_pipeline(read_pipeline),
+      sinfo(sinfo),
+      offset(offset),
+      length(length),
+      out_map(out_map),
+      on_complete(on_complete),
+      force_allocated_extents(std::move(force_allocated_extents)),
+      needs_reconstruct(needs_reconstruct) {}
+
+  void finish_single_request(
+      const hobject_t &hoid,
+      ECCommon::read_result_t &&res,
+      ECCommon::read_request_t &req) override {
+    auto *dpp = read_pipeline.get_parent()->get_dpp();
+    if (res.r < 0) {
+      result = res.r;
+      return;
+    }
+    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
+      << " ro_range=[" << offset << "~" << length << "]"
+      << " needs_reconstruct=" << needs_reconstruct
+      << " sparse_extents_read (per shard, shard-space)="
+      << res.sparse_extents_read << dendl;
+    result = ECUtil::ec_sparse_finish_read(
+        sinfo, res, req, offset, length, needs_reconstruct,
+        read_pipeline.ec_impl, force_allocated_extents,
+        *out_map, nullptr, dpp);
+    ldpp_dout(dpp, 20) << __func__ << ": hoid=" << hoid
+      << " final RO extent map=" << *out_map << dendl;
+  }
+
+  void finish(int priority) && override {
+    on_complete->complete(result);
+  }
+
+  ECCommon::ReadPipeline &read_pipeline;
+  const ECUtil::stripe_info_t &sinfo;
+  uint64_t offset;
+  uint64_t length;
+  std::map<uint64_t, uint64_t> *out_map;
+  Context *on_complete;
+  interval_set<uint64_t> force_allocated_extents;
+  bool needs_reconstruct;
+  int result = 0;
+};
+} // anonymous namespace
+
+int ECBackend::objects_sparse_read_async(
+  const hobject_t &hoid,
+  uint64_t offset,
+  uint64_t length,
+  uint64_t object_size,
+  uint32_t op_flags,
+  std::map<uint64_t, uint64_t> *out_map,
+  ceph::buffer::list *out_bl,
+  Context *on_complete,
+  const interval_set<uint64_t> &force_allocated_extents)
+{
+  if (!sinfo.supports_direct_reads()) {
+    return -EOPNOTSUPP;
+  }
+
+  dout(20) << __func__ << ": hoid=" << hoid
+           << " ro_range=[" << offset << "~" << length << "]"
+           << " object_size=" << object_size << dendl;
+
+  std::list<ec_align_t> to_read = {{offset, length, op_flags}};
+  bool needs_reconstruct = false;
+  int r = 0;
+  auto req_opt = ECUtil::prepare_sparse_read_request(
+      hoid, to_read, object_size, /*for_mapext=*/false,
+      read_pipeline, needs_reconstruct, r);
+  if (!req_opt) {
+    return r;
+  }
+
+  dout(20) << __func__ << ": needs_reconstruct=" << needs_reconstruct
+           << " shard_reads=" << req_opt->shard_reads << dendl;
+
+  map<hobject_t, read_request_t> for_read_op;
+  for_read_op.emplace(hoid, std::move(*req_opt));
+
+  read_pipeline.start_read_op(
+    CEPH_MSG_PRIO_DEFAULT,
+    for_read_op,
+    false,
+    false,
+    std::make_unique<SparseReadCompleter>(
+      read_pipeline, sinfo, offset, length, out_map, out_bl, on_complete,
+      force_allocated_extents, needs_reconstruct));
+
+  return 0;
+}
+
+int ECBackend::objects_mapext_async(
+  const hobject_t &hoid,
+  uint64_t offset,
+  uint64_t length,
+  uint64_t object_size,
+  uint32_t op_flags,
+  std::map<uint64_t, uint64_t> *out_map,
+  Context *on_complete,
+  const interval_set<uint64_t> &force_allocated_extents)
+{
+  if (!sinfo.supports_direct_reads()) {
+    return -EOPNOTSUPP;
+  }
+
+  std::list<ec_align_t> to_read = {{offset, length, op_flags}};
+  bool needs_reconstruct = false;
+  int r = 0;
+  auto req_opt = ECUtil::prepare_sparse_read_request(
+      hoid, to_read, object_size, /*for_mapext=*/true,
+      read_pipeline, needs_reconstruct, r);
+  if (!req_opt) {
+    return r;
+  }
+
+  dout(20) << __func__ << ": hoid=" << hoid
+           << " ro_range=[" << offset << "~" << length << "]"
+           << " needs_reconstruct=" << needs_reconstruct
+           << " shard_reads=" << req_opt->shard_reads << dendl;
+
+  map<hobject_t, read_request_t> for_read_op;
+  for_read_op.emplace(hoid, std::move(*req_opt));
+
+  read_pipeline.start_read_op(
+    CEPH_MSG_PRIO_DEFAULT,
+    for_read_op,
+    false,
+    false,
+    std::make_unique<ECMapextCompleter>(
+      read_pipeline, sinfo, offset, length, out_map, on_complete,
+      force_allocated_extents, needs_reconstruct));
+
+  return 0;
+}
 
 void ECBackend::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ec_align_t>> &reads,

@@ -47,6 +47,7 @@ enum TestOpType {
   TEST_OP_WRITE,
   TEST_OP_WRITE_EXCL,
   TEST_OP_WRITESAME,
+  TEST_OP_ZERO,
   TEST_OP_DELETE,
   TEST_OP_SNAP_CREATE,
   TEST_OP_SNAP_REMOVE,
@@ -69,7 +70,8 @@ enum TestOpType {
   TEST_OP_TIER_PROMOTE,
   TEST_OP_TIER_FLUSH,
   TEST_OP_SET_CHUNK,
-  TEST_OP_TIER_EVICT
+  TEST_OP_TIER_EVICT,
+  TEST_OP_MAPEXT
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -203,6 +205,7 @@ public:
   std::string chunk_algo;
   std::string chunk_size;
   bool timestamp;
+  uint64_t mapext_alignment = 1;
 
   RadosTestContext(const std::string &pool_name,
 		   int max_in_flight,
@@ -313,6 +316,13 @@ public:
       }
     }
 
+    {
+      uint64_t alignment = 0;
+      r = io_ctx.pool_required_alignment2(&alignment);
+      if (r == 0 && alignment != 0)
+        mapext_alignment = alignment;
+    }
+
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
     std::stringstream hostpid;
@@ -321,6 +331,115 @@ public:
     ceph_assert(!initialized);
     initialized = true;
     return 0;
+  }
+
+  // Validate that a sparse-read or mapext extent map returned by the OSD is
+  // within the acceptable range [min_expected, max_expected] for the given
+  // object model and query range [q_offset, q_offset+q_length).
+  //
+  // Returns true if valid.  On failure prints a diagnostic and returns false;
+  // the caller is responsible for incrementing errors and aborting.
+  //
+  // Rules (see allocated_extents_model_plan.md):
+  //   max_expected = get_written_extents() rounded outward to alignment.
+  //                  The OSD must not return extents outside this.
+  //   min_expected = get_min_written_extents() clipped to query range (no
+  //                  rounding).  The OSD must return at least these extents.
+  //
+  // All-zero byte ranges are excluded from min because after shard recovery
+  // the OSD may drop them — this applies to full alignment-sized blocks and
+  // to sub-aligned head/tail fragments alike: a fragment written into a
+  // pre-existing hole is all-zero and the OSD may leave it as a hole.
+  // Outward rounding of max allows for partial writes being rounded to full
+  // alignment blocks after recovery.
+  bool check_sparse_extent_map(
+      int op_num,
+      const std::string& oid_str,
+      uint64_t q_offset,
+      uint64_t q_length,
+      const std::map<uint64_t, uint64_t>& actual_map,
+      ObjectDesc& obj) const
+  {
+    const uint64_t align   = mapext_alignment;
+    const uint64_t q_end   = q_offset + q_length;
+    const uint64_t obj_size =
+      obj.most_recent_gen()->get_length(obj.most_recent());
+
+    auto clamp_to_obj = [&](interval_set<uint64_t>& iset) {
+      if (obj_size > 0) {
+        interval_set<uint64_t> obj_range;
+        obj_range.insert(0, obj_size);
+        iset.intersection_of(obj_range);
+      } else {
+        iset.clear();
+      }
+    };
+
+    // max_expected: outward-rounded full written set, clipped to query range.
+    interval_set<uint64_t> written_max = obj.get_written_extents(align);
+    clamp_to_obj(written_max);
+    interval_set<uint64_t> max_expected_set;
+    for (auto it = written_max.begin(); it != written_max.end(); ++it) {
+      uint64_t ext_off = it.get_start();
+      uint64_t ext_end = ext_off + it.get_len();
+      if (align > 1) {
+        ext_off = (ext_off / align) * align;
+        ext_end = ((ext_end + align - 1) / align) * align;
+      }
+      if (ext_off >= q_end || ext_end <= q_offset)
+        continue;
+      uint64_t clamp_off = std::max(ext_off, q_offset);
+      uint64_t clamp_end = std::min(ext_end, q_end);
+      if (clamp_off < clamp_end)
+        max_expected_set.union_insert(clamp_off, clamp_end - clamp_off);
+    }
+
+    // min_expected: non-zero-only written set, no rounding, clipped to query range.
+    interval_set<uint64_t> written_min = obj.get_min_written_extents(align);
+    clamp_to_obj(written_min);
+    interval_set<uint64_t> min_expected_set;
+    for (auto it = written_min.begin(); it != written_min.end(); ++it) {
+      uint64_t ext_off = it.get_start();
+      uint64_t ext_end = ext_off + it.get_len();
+      if (ext_off >= q_end || ext_end <= q_offset)
+        continue;
+      uint64_t clamp_off = std::max(ext_off, q_offset);
+      uint64_t clamp_end = std::min(ext_end, q_end);
+      if (clamp_off < clamp_end)
+        min_expected_set.union_insert(clamp_off, clamp_end - clamp_off);
+    }
+
+    // Build actual as an interval_set for subset tests.
+    interval_set<uint64_t> actual_set;
+    for (auto& [o, l] : actual_map)
+      actual_set.union_insert(o, l);
+
+    bool actual_exceeds_max = !actual_set.subset_of(max_expected_set);
+    bool actual_missing_min = !min_expected_set.subset_of(actual_set);
+
+    if (actual_exceeds_max || actual_missing_min) {
+      auto fmt_iset = [](const interval_set<uint64_t>& s) {
+        if (s.empty()) return std::string("{}");
+        std::string out = "{";
+        for (auto it = s.begin(); it != s.end(); ++it)
+          out += std::to_string(it.get_start()) + "+" +
+                 std::to_string(it.get_len()) + " ";
+        out.back() = '}';
+        return out;
+      };
+      std::cerr << op_num << ": Error: oid " << oid_str
+                << " extent map [" << q_offset << "," << q_end << ")"
+                << " actual=" << fmt_iset(actual_set)
+                << " min_expected=" << fmt_iset(min_expected_set)
+                << " max_expected=" << fmt_iset(max_expected_set);
+      if (actual_exceeds_max)
+        std::cerr << " [actual has extents outside max]";
+      if (actual_missing_min)
+        std::cerr << " [actual is missing required extents from min]";
+      std::cerr << std::endl;
+      return false;
+    }
+    return true;
   }
 
   void shutdown()
@@ -1323,6 +1442,98 @@ public:
   }
 };
 
+class ZeroOp : public TestOp {
+public:
+  std::string oid;
+  librados::AioCompletion *comp = nullptr;
+  uint64_t offset = 0;
+  uint64_t length = 0;
+
+  ZeroOp(int n,
+         RadosTestContext *context,
+         const std::string &oid,
+         TestOpStat *stat = 0)
+    : TestOp(n, context, stat), oid(oid)
+  {}
+
+  void _begin() override
+  {
+    std::lock_guard state_locker{context->state_lock};
+
+    ObjectDesc obj;
+    context->find_object(oid, &obj);
+    if (obj.deleted() || !obj.has_contents()) {
+      // nothing to zero on a non-existent object; skip silently
+      done = true;
+      context->kick();
+      return;
+    }
+
+    uint64_t obj_size = obj.most_recent_gen()->get_length(obj.most_recent());
+    if (obj_size == 0) {
+      done = true;
+      context->kick();
+      return;
+    }
+
+    offset = rand() % obj_size;
+    length = (rand() % (obj_size - offset)) + 1;
+
+    std::stringstream acc;
+    acc << context->prefix << "OID: " << oid << " snap " << context->current_snap << std::endl;
+    ContDesc cont(context->seq_num, context->current_snap, context->seq_num, acc.str());
+    context->update_object(new ZeroGenerator(offset, length, obj_size), oid, cont);
+    context->seq_num++;
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    context->cout_prefix() << num << ":  zero oid " << oid
+      << " [" << offset << ", " << offset + length << ")" << std::endl;
+
+    auto *cb_arg = new std::pair<TestOp*, TestOp::CallbackInfo*>(
+      this, new TestOp::CallbackInfo(0));
+    comp = context->rados.aio_create_completion(
+      (void*) cb_arg, &write_callback);
+
+    librados::ObjectWriteOperation op;
+    op.zero(offset, length);
+    bufferlist contbl;
+    encode(cont, contbl);
+    op.setxattr("_header", contbl);
+    context->io_ctx.aio_operate(context->prefix + oid, comp, &op);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    std::lock_guard state_locker{context->state_lock};
+    ceph_assert(!done);
+    int r = comp->get_return_value();
+    if (r) {
+      std::cerr << "Error: oid " << oid << " zero returned error code "
+                << r << std::endl;
+      ceph_abort();
+    }
+    context->update_object_version(oid, comp->get_version64());
+    comp->release();
+    comp = nullptr;
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  std::string getType() override
+  {
+    return "ZeroOp";
+  }
+};
+
 class DeleteOp : public TestOp {
 public:
   std::string oid;
@@ -1636,16 +1847,29 @@ public:
 	  context->errors++;
 	}
         for (unsigned i = 0; i < results.size(); i++) {
-	  if (is_sparse_read[i]) {
-	    if (!old_value.check_sparse(extent_results[i], results[i], offlens[i])) {
-	      std::cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
-	      context->errors++;
-	    }
-	  } else {
-	    if (!old_value.check(results[i], offlens[i])) {
-	      std::cerr << num << ": oid " << oid << " contents " << to_check << " corrupt" << std::endl;
-	      context->errors++;
-	    }
+          if (is_sparse_read[i]) {
+            bool ok = old_value.check_sparse(extent_results[i], results[i], offlens[i]);
+            if (!ok) {
+              std::cerr << num << ": CORRUPTION: oid " << oid
+                        << " header claims " << to_check
+                        << " but byte content does not match" << std::endl;
+              context->errors++;
+            }
+            // Check allocation: the returned extent map must satisfy
+            // min_expected ⊆ actual ⊆ max_expected
+            const auto [sr_offset, sr_length] = offlens[i];
+            if (!context->check_sparse_extent_map(num, oid, sr_offset, sr_length,
+                                                  extent_results[i], old_value)) {
+              context->errors++;
+            }
+          } else {
+            bool ok = old_value.check(results[i], offlens[i]);
+            if (!ok) {
+              std::cerr << num << ": CORRUPTION: oid " << oid
+                        << " header claims " << to_check
+                        << " but byte content does not match" << std::endl;
+              context->errors++;
+            }
 
 	    uint32_t checksum = 0;
 	    if (checksum_retvals[i] == 0) {
@@ -3582,6 +3806,106 @@ public:
   std::string getType() override
   {
     return "CacheEvictOp";
+  }
+};
+
+
+class MapextOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectReadOperation op;
+  std::string oid;
+  ObjectDesc old_value;
+  uint64_t offset;
+  uint64_t length;
+  std::map<uint64_t, uint64_t> result;
+  bufferlist result_bl;
+  int retval;
+
+  MapextOp(int n,
+           RadosTestContext *context,
+           const std::string &oid,
+           TestOpStat *stat = 0)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid),
+      offset(0),
+      length(0),
+      retval(0)
+  {}
+
+  void _begin() override
+  {
+    std::lock_guard state_locker{context->state_lock};
+
+    context->find_object(oid, &old_value);
+    if (old_value.deleted() || !old_value.has_contents()) {
+      done = true;
+      context->kick();
+      return;
+    }
+
+    uint64_t obj_size =
+      old_value.most_recent_gen()->get_length(old_value.most_recent());
+    if (obj_size == 0) {
+      done = true;
+      context->kick();
+      return;
+    }
+
+    offset = rand() % obj_size;
+    length = (rand() % (obj_size - offset)) + 1;
+
+    context->cout_prefix() << num << ": mapext oid " << oid
+      << " [" << offset << ", " << offset + length << ")" << std::endl;
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    completion = context->rados.aio_create_completion(
+      (void*) this, &read_callback);
+
+    op.mapext(offset, length, &result, &retval);
+    context->io_ctx.aio_operate(context->prefix + oid, completion, &op, &result_bl);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    std::lock_guard state_locker{context->state_lock};
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
+
+    int r = completion->get_return_value();
+    if (r < 0) {
+      if (!(r == -ENOENT && old_value.deleted())) {
+        std::cerr << num << ": Error: oid " << oid
+                  << " mapext returned error code " << r << std::endl;
+        ceph_abort();
+      }
+    } else {
+      if (!context->check_sparse_extent_map(num, oid, offset, length,
+                                            result, old_value)) {
+        context->errors++;
+        ceph_abort();
+      }
+    }
+
+    completion->release();
+    completion = nullptr;
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  std::string getType() override
+  {
+    return "MapextOp";
   }
 };
 

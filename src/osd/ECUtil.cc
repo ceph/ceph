@@ -1,13 +1,16 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
 
 #include "ECUtil.h"
+#include "ECCommon.h"
 
 #include <sstream>
+#include <optional>
 
 #include <errno.h>
 #include "common/ceph_context.h"
 #include "global/global_context.h"
 #include "include/encoding.h"
+#include "include/intarith.h"
 
 using namespace std;
 using ceph::bufferlist;
@@ -192,6 +195,28 @@ void ECUtil::stripe_info_t::ro_size_to_zero_mask(
                                align_next(ro_size),
                                shard_extent_set);
   trim_shard_extent_set_for_ro_offset(ro_size, shard_extent_set);
+}
+
+interval_set<uint64_t>
+ECUtil::stripe_info_t::ro_intervals_to_shard_intervals(
+    const interval_set<uint64_t> &ro_intervals,
+    shard_id_t shard) const {
+  interval_set<uint64_t> result;
+
+  raw_shard_id_t raw_shard = get_raw_shard(shard);
+  if (int(raw_shard) >= int(k)) {
+    return result;
+  }
+
+  for (auto [ro_off, ro_len] : ro_intervals) {
+    uint64_t shard_start = ro_offset_to_shard_offset(ro_off, raw_shard);
+    uint64_t shard_end   = ro_offset_to_shard_offset(ro_off + ro_len, raw_shard);
+    if (shard_end > shard_start) {
+      result.union_insert(shard_start, shard_end - shard_start);
+    }
+  }
+
+  return result;
 }
 
 namespace ECUtil {
@@ -1158,4 +1183,224 @@ bool is_hinfo_key_string(const string &key) {
 const string &get_hinfo_key() {
   return HINFO_KEY;
 }
+
+std::map<uint64_t, uint64_t> merge_shard_extent_maps(
+    const shard_id_map<std::map<uint64_t, uint64_t>> &shard_extents,
+    const stripe_info_t &sinfo)
+{
+  std::map<uint64_t, uint64_t> result;
+  uint64_t chunk_size = sinfo.get_chunk_size();
+
+  for (shard_id_t shard(0); (unsigned)shard < sinfo.get_k(); ++shard) {
+    auto it = shard_extents.find(shard);
+    if (it == shard_extents.end()) {
+      continue;
+    }
+    for (auto [off, len] : it->second) {
+      uint64_t ro_offset = sinfo.shard_offset_to_ro_offset(shard, off);
+      uint64_t to_next_chunk = ((off / chunk_size) + 1) * chunk_size - off;
+      uint64_t ro_len = std::min(to_next_chunk, len);
+      while (len > 0) {
+        // Insert and then merge with any contiguous neighbours.
+        auto ins = result.emplace(ro_offset, ro_len);
+        if (!ins.second) {
+          // Key already present; extend if the existing extent ends here.
+          ins.first->second = std::max(ins.first->second, ro_len);
+        }
+        auto cur = ins.first;
+        // Merge with preceding extent if contiguous.
+        if (cur != result.begin()) {
+          auto prev = std::prev(cur);
+          if (prev->first + prev->second >= cur->first) {
+            prev->second = std::max(prev->second,
+                                    cur->first - prev->first + cur->second);
+            cur = result.erase(cur);
+            cur = std::prev(cur);  // cur now points to the merged entry
+          }
+        }
+        // Merge with following extent if contiguous.
+        auto next = std::next(cur);
+        if (next != result.end() && cur->first + cur->second >= next->first) {
+          cur->second = std::max(cur->second,
+                                 next->first - cur->first + next->second);
+          result.erase(next);
+        }
+        len -= ro_len;
+        ro_offset += ro_len + sinfo.get_stripe_width() - chunk_size;
+        ro_len = std::min(len, chunk_size);
+      }
+    }
+  }
+  return result;
 }
+
+// ---------------------------------------------------------------------------
+// EC sparse-read / mapext helper functions
+// ---------------------------------------------------------------------------
+int ec_sparse_decode(
+    shard_extent_map_t &buffers_read,
+    const shard_extent_set_t &shard_want_to_read,
+    shard_extent_set_t &zeros_for_decode,
+    const shard_id_map<std::map<uint64_t, uint64_t>> &sparse_extents_read,
+    const ErasureCodeInterfaceRef &ec_impl,
+    uint64_t object_size,
+    DoutPrefixProvider *dpp)
+{
+  extent_set decode_range;
+  for (auto &&[shard, eset] : shard_want_to_read) {
+    decode_range.union_of(eset);
+  }
+  shard_extent_set_t present_want(shard_want_to_read.get_max_shards());
+  for (auto &&[shard, extents] : sparse_extents_read) {
+    if (!decode_range.empty()) {
+      present_want[shard].union_of(decode_range);
+    }
+  }
+  buffers_read.zero_pad(present_want);
+  buffers_read.add_zero_padding_for_decode(zeros_for_decode);
+  int r = buffers_read.decode(ec_impl, shard_want_to_read, object_size, dpp);
+  return r;
+}
+
+std::map<uint64_t, uint64_t> ec_sparse_scan_shard_extents(
+    const shard_extent_map_t &buffers_read,
+    shard_id_t shard,
+    const interval_set<uint64_t> &shard_fae,
+    const interval_set<uint64_t> &shard_scan_window,
+    DoutPrefixProvider *dpp)
+{
+  const uint64_t chunk_size = buffers_read.sinfo->get_chunk_size();
+  const uint64_t scan_stride = std::min(chunk_size, FAE_BLOCK_SIZE);
+
+  std::map<uint64_t, uint64_t> result;
+
+  if (!buffers_read.extent_maps.contains(shard)) {
+    return result;
+  }
+
+  for (auto iter = buffers_read.extent_maps.at(shard).begin();
+       iter != buffers_read.extent_maps.at(shard).end(); ++iter) {
+    const uint64_t ext_off = iter.get_off();
+    const uint64_t ext_len = iter.get_len();
+    const bufferlist &ext_bl = iter.get_val();
+    const uint64_t ext_end = ext_off + ext_len;
+
+    uint64_t block = ext_off;
+    while (block < ext_end) {
+      const uint64_t block_len = std::min(scan_stride, ext_end - block);
+
+      if (!shard_scan_window.intersects(block, block_len)) {
+        block += block_len;
+        continue;
+      }
+
+      bool allocated;
+      if (shard_fae.intersects(block, block_len)) {
+        allocated = true;
+      } else {
+        const uint64_t in_ext = block - ext_off;
+        bufferlist block_bl;
+        block_bl.substr_of(ext_bl, in_ext, block_len);
+        const auto &first_ptr = block_bl.front();
+        if (first_ptr.length() >= sizeof(uint64_t) &&
+            !mem_is_zero(first_ptr.c_str(), sizeof(uint64_t))) {
+          // Stage 1: first word non-zero.
+          allocated = true;
+        } else {
+          // Stage 2: full scan.
+          allocated = !block_bl.is_zero();
+        }
+      }
+
+      if (allocated) {
+        // Merge with the immediately preceding entry if contiguous.
+        auto it = result.end();
+        if (it != result.begin()) {
+          --it;
+          if (it->first + it->second == block) {
+            it->second += block_len;
+            block += block_len;
+            continue;
+          }
+        }
+        result.emplace(block, block_len);
+      }
+      block += block_len;
+    }
+  }
+
+  return result;
+}
+
+void ec_recovery_compute_shard_push(
+    shard_extent_map_t &returned_data,
+    shard_id_t shard,
+    uint64_t chunk_size,
+    const interval_set<uint64_t> *shard_fae,
+    bufferlist &out_data,
+    interval_set<uint64_t> &out_data_included)
+{
+  ceph_assert(chunk_size > 0);
+  const uint64_t scan_stride = std::min(chunk_size, FAE_BLOCK_SIZE);
+  if (returned_data.extent_maps.contains(shard)) {
+    for (auto iter = returned_data.extent_maps.at(shard).begin();
+         iter != returned_data.extent_maps.at(shard).end(); ++iter) {
+      const uint64_t ext_off = iter.get_off();
+      const uint64_t ext_len = iter.get_len();
+      bufferlist &ext_bl = iter.get_val();
+
+      uint64_t block = ext_off;
+      const uint64_t ext_end = ext_off + ext_len;
+
+      while (block < ext_end) {
+        const uint64_t block_len = std::min(scan_stride, ext_end - block);
+        const uint64_t in_ext = block - ext_off;
+
+        bool allocated;
+        if (shard_fae && shard_fae->intersects(block, block_len)) {
+          allocated = true;
+        } else {
+          // Stage 1: test first word.
+          bufferlist block_bl;
+          block_bl.substr_of(ext_bl, in_ext, block_len);
+          const auto &first_ptr = block_bl.front();
+          if (first_ptr.length() >= sizeof(uint64_t) &&
+              !mem_is_zero(first_ptr.c_str(), sizeof(uint64_t))) {
+            allocated = true;
+          } else {
+            // Stage 2: full scan.
+            allocated = !block_bl.is_zero();
+          }
+        }
+
+        if (allocated) {
+          out_data_included.insert(block, block_len);
+          bufferlist tmp;
+          tmp.substr_of(ext_bl, in_ext, block_len);
+          out_data.append(tmp);
+        }
+        block += block_len;
+      }
+    }
+  }
+
+  // Synthesise explicit zeros for any FAE intervals that were not covered by
+  // a decoded extent (the shard was absent for those regions entirely).
+  if (shard_fae) {
+    for (auto [fae_off, fae_len] : *shard_fae) {
+      interval_set<uint64_t> fae_interval;
+      fae_interval.insert(fae_off, fae_len);
+      interval_set<uint64_t> covered;
+      covered.intersection_of(fae_interval, out_data_included);
+      fae_interval.subtract(covered);
+      for (auto [off, len] : fae_interval) {
+        out_data_included.insert(off, len);
+        out_data.append_zero(len);
+      }
+    }
+  }
+
+  ceph_assert(out_data.length() == out_data_included.size());
+}
+
+} // namespace ECUtil
