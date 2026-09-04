@@ -41,7 +41,7 @@ segment_nonce_t calc_new_nonce(
 {
   crc &= std::numeric_limits<uint32_t>::max() >> 1;
   crc |= static_cast<uint32_t>(type) << 31;
-  return ceph_crc32c(crc, data, length);
+  return (ceph_crc32c(crc, data, length) | SEGMENT_NONCE_MASK);
 }
 
 SegmentAllocator::open_ret
