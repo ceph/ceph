@@ -13,6 +13,7 @@
  *
  */
 
+#include <algorithm>
 #include <cerrno>
 #include <limits>
 #include <unistd.h>
@@ -72,6 +73,11 @@ using ceph::make_timespan;
 using ceph::mono_clock;
 using ceph::operator <<;
 
+// the device whose externally-completed (outer) queue this thread
+// reaps; such a thread must never submit write aio to THAT device.
+// Compared only, never dereferenced.
+static thread_local const void *tl_outer_reaper_dev = nullptr;
+
 KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv, const char* dev_name)
   : BlockDevice(cct, cb, cbpriv),
     aio(false), dio(false),
@@ -91,7 +97,7 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
   if (use_ioring && ioring_queue_t::supported()) {
     bool use_ioring_hipri = cct->_conf.get_val<bool>("bdev_ioring_hipri");
     bool use_ioring_sqthread_poll = cct->_conf.get_val<bool>("bdev_ioring_sqthread_poll");
-    io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
+    inner_io_queue = std::make_unique<ioring_queue_t>(iodepth, use_ioring_hipri, use_ioring_sqthread_poll);
   } else {
     static bool once;
     if (use_ioring && !once) {
@@ -99,7 +105,8 @@ KernelDevice::KernelDevice(CephContext* cct, aio_callback_t cb, void *cbpriv, ai
            << dendl;
       once = true;
     }
-    io_queue = std::make_unique<aio_queue_t>(iodepth);
+    inner_io_queue = std::make_unique<aio_queue_t>(iodepth);
+    inner_is_libaio = true;
   }
 
   char name[128];
@@ -278,7 +285,8 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
-  if (size >= block_size) {
+  // the completion thread's stop wakeup reads two distinct blocks
+  if (size >= 2 * block_size) {
     r = _aio_start();
     if (r < 0) {
       goto out_fail;
@@ -390,6 +398,10 @@ void KernelDevice::close()
     VOID_TEMP_FAILURE_RETRY(::close(fd_buffereds[i]));
     fd_buffereds[i] = -1;
   }
+  // the eventfd is borrowed, not owned; dropping the outer queue also
+  // drops our reference to it, and a re-opened device is back in
+  // normal mode unless the owner installs an eventfd again
+  outer_io_queue.reset();
   path.clear();
 }
 
@@ -564,17 +576,27 @@ int KernelDevice::_aio_start()
 {
   if (aio) {
     dout(10) << __func__ << dendl;
-    int r = io_queue->init(fd_directs);
-    if (r < 0) {
-      if (r == -EAGAIN) {
-	derr << __func__ << " io_setup(2) failed with EAGAIN; "
-	     << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
-      } else {
-	derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+    for (auto q : {inner_io_queue.get(), outer_io_queue.get()}) {
+      if (!q) {
+	continue;
       }
-      return r;
+      int r = q->init(fd_directs);
+      if (r < 0) {
+	if (r == -EAGAIN) {
+	  derr << __func__ << " io_setup(2) failed with EAGAIN; "
+	       << "try increasing /proc/sys/fs/aio-max-nr" << dendl;
+	} else {
+	  derr << __func__ << " io_setup(2) failed: " << cpp_strerror(r) << dendl;
+	}
+	if (q != inner_io_queue.get()) {
+	  inner_io_queue->shutdown();
+	}
+	return r;
+      }
     }
-    aio_thread.create("bstore_aio");
+    // inner queue processes reads only if external completions are enabled
+    aio_thread.create(outer_io_queue ? "bstore_aio_rd" : "bstore_aio",
+      inner_io_queue.get());
   }
   return 0;
 }
@@ -584,22 +606,44 @@ void KernelDevice::_aio_stop()
   if (aio) {
     dout(10) << __func__ << dendl;
     aio_stop = true;
-
-    IOContext wakeup_ctx(cct, nullptr, false);
-    bufferlist bl;
-    aio_read(0, block_size, &bl, &wakeup_ctx);
-    aio_submit(&wakeup_ctx);
-
-    aio_thread.join();
-
-    if (cct->_conf->bdev_debug_aio) {
-      for (auto& i: wakeup_ctx.running_aios) {
-	debug_aio_unlink(i);
-      }
+    if (outer_io_queue) {
+      // the owner must have stopped submitting by now, but
+      // completions may still sit unreaped in the write ring - drain
+      // them here rather than letting io_destroy discard them (their
+      // callbacks would never run)
+      while (_reap_completions(outer_io_queue.get(), 0,
+			       cct->_conf->bdev_aio_reap_max) > 0) {}
     }
-
+    _aio_thread_wake(inner_io_queue.get(), aio_thread);
     aio_stop = false;
-    io_queue->shutdown();
+    if (outer_io_queue) {
+      outer_io_queue->shutdown();
+    }
+    inner_io_queue->shutdown();
+  }
+}
+
+// Stop one completion thread: unblock it from get_next_completed() by
+// submitting harmless reads, then join it.  Two reads, on distinct
+// blocks, so the batch neither takes the single-aio sync fast path
+// nor overlaps itself in the bdev_debug_inflight_ios tracking;
+// aio_submit() routes them to the ring this thread serves.  The
+// thread can exit on its poll timeout without ever reaping the
+// wakeup, so drain the queue afterwards until it is accounted for -
+// only then may the buffers go out of scope, and no stale interval is
+// left to trip the inflight tracking on a later stop cycle.
+void KernelDevice::_aio_thread_wake(io_queue_t *q, AioCompletionThread &thread)
+{
+  IOContext ioc(cct, nullptr, false);
+  bufferlist bl;
+  aio_read(0, block_size, &bl, &ioc);
+  aio_read(block_size, block_size, &bl, &ioc);
+  aio_submit(&ioc);
+
+  thread.join();
+
+  while (ioc.num_running.load() > 0) {
+    _reap_completions(q, cct->_conf->bdev_aio_poll_ms, 1);
   }
 }
 
@@ -686,92 +730,155 @@ static bool is_expected_ioerr(const int r)
 	  );
 }
 
-void KernelDevice::_aio_thread()
+// Common error taxonomy for one finished aio: pass EIO through when the
+// caller allows it, record and abort on any other device error, abort on
+// short I/O.  Returns only if the result is fully accounted for.  Log
+// lines carry the caller's name so the error's origin stays visible.
+void KernelDevice::_aio_check_completion(const char *caller, aio_t *aio,
+					 IOContext *ioc, long r)
+{
+  if (r < 0) {
+    derr << caller << " got r=" << r << " (" << cpp_strerror(r) << ")"
+	 << dendl;
+    if (ioc->allow_eio && is_expected_ioerr(r)) {
+      derr << caller << " translating the error to EIO for upper layer"
+	   << dendl;
+      ioc->set_return_value(-EIO);
+      return;
+    }
+    if (is_expected_ioerr(r)) {
+      note_io_error_event(
+	devname.c_str(),
+	path.c_str(),
+	r,
+#if defined(HAVE_POSIXAIO)
+	aio->aio.aiocb.aio_lio_opcode,
+#else
+	aio->iocb.aio_lio_opcode,
+#endif
+	aio->offset,
+	aio->length);
+    }
+    ceph_abort_msg(
+      "Unexpected IO error. "
+      "This may suggest a hardware issue. "
+      "Please check your kernel log!");
+  } else if (aio->length != (uint64_t)r) {
+    derr << caller << " aio to 0x" << std::hex << aio->offset
+	 << "~" << aio->length << std::dec
+	 << " but returned: " << r << dendl;
+    ceph_abort_msg("unexpected aio return value: does not match length");
+  }
+}
+
+int KernelDevice::_reap_completions(io_queue_t *q, int timeout_ms, int max)
+{
+  // max sizes the VLA below (and an io_event array of the same length
+  // inside get_next_completed), so bound it regardless of what the
+  // caller derived from configuration; the surplus is picked up by
+  // the caller's next pass
+  max = std::clamp(max, 1, REAP_BATCH_MAX);
+  aio_t *aio[max];
+  int r = q->get_next_completed(timeout_ms, aio, max);
+  if (r < 0) {
+    derr << __func__ << " got " << cpp_strerror(r) << dendl;
+    ceph_abort_msg("got unexpected error from io_getevents");
+  }
+  if (r > 0) {
+    dout(30) << __func__ << " got " << r << " completed aios" << dendl;
+    for (int i = 0; i < r; ++i) {
+      IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
+      _aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
+      if (aio[i]->queue_item.is_linked()) {
+	std::lock_guard l(debug_queue_lock);
+	debug_aio_unlink(*aio[i]);
+      }
+
+      // set flag indicating new ios have completed.  we do this *before*
+      // any completion or notifications so that any user flush() that
+      // follows the observed io completion will include this io.  Note
+      // that an earlier, racing flush() could observe and clear this
+      // flag, but that also ensures that the IO will be stable before the
+      // later flush() occurs.
+      io_since_flush.store(true);
+
+      long res = aio[i]->get_return_value();
+      _aio_check_completion(__func__, aio[i], ioc, res);
+
+      dout(10) << __func__ << " finished aio " << aio[i] << " r " << res
+	       << " ioc " << ioc
+	       << " with " << (ioc->num_running.load() - 1)
+	       << " aios left" << dendl;
+
+      // NOTE: once num_running and we either call the callback or
+      // call aio_wake we cannot touch ioc or aio[] as the caller
+      // may free it.
+      if (ioc->priv) {
+	if (--ioc->num_running == 0) {
+	  aio_callback(aio_callback_priv, ioc->priv);
+	}
+      } else {
+	ioc->try_aio_wake();
+      }
+    }
+  }
+  return r;
+}
+
+// Must be called before open(); the fd is borrowed from the caller
+// (never closed here) and stays installed for the device's whole open
+// lifetime - there is no mode switching on an open device.  Writes
+// only: reads move to a dedicated ring whose completion thread this
+// device keeps, so read completion latency never couples to the
+// owner's schedule.
+int KernelDevice::set_completion_eventfd(int fd)
+{
+#if defined(HAVE_LIBAIO)
+  ceph_assert(!aio_thread.is_started());
+  ceph_assert(fd >= 0);
+  ceph_assert(!outer_io_queue);
+  if (!inner_is_libaio) {
+    // bdev_ioring: keep the whole device on io_uring rather than
+    // silently moving writes to a libaio ring - the mode is libaio only
+    return -EOPNOTSUPP;
+  }
+  // eventfd support implies libaio, so the outer ring is plain aio
+  outer_io_queue = std::make_unique<aio_queue_t>(
+    cct->_conf->bdev_aio_max_queue_depth);
+
+  int r = outer_io_queue->set_notify_eventfd(fd);
+  if (r < 0) {
+    outer_io_queue.reset();
+    return r;
+  }
+  dout(5) << __func__ << " efd " << fd << dendl;
+  return 0;
+#else
+  return -EOPNOTSUPP;
+#endif
+}
+
+// drain the WRITE ring; a no-op unless in external-completion mode
+int KernelDevice::reap_completions(int max)
+{
+  if (!aio || !outer_io_queue) {
+    return 0;
+  }
+  // the calling thread is this device's outer-queue owner and only
+  // drain, for good; internal teardown drains do not mark their
+  // caller, so a thread that merely closed a device stays free
+  tl_outer_reaper_dev = this;
+  return _reap_completions(outer_io_queue.get(), 0, max);
+}
+
+void KernelDevice::_aio_thread(io_queue_t *q)
 {
   dout(10) << __func__ << " start" << dendl;
   int inject_crash_count = 0;
   while (!aio_stop) {
     dout(40) << __func__ << " polling" << dendl;
-    int max = cct->_conf->bdev_aio_reap_max;
-    aio_t *aio[max];
-    int r = io_queue->get_next_completed(cct->_conf->bdev_aio_poll_ms,
-					 aio, max);
-    if (r < 0) {
-      derr << __func__ << " got " << cpp_strerror(r) << dendl;
-      ceph_abort_msg("got unexpected error from io_getevents");
-    }
-    if (r > 0) {
-      dout(30) << __func__ << " got " << r << " completed aios" << dendl;
-      for (int i = 0; i < r; ++i) {
-	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
-	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
-	if (aio[i]->queue_item.is_linked()) {
-	  std::lock_guard l(debug_queue_lock);
-	  debug_aio_unlink(*aio[i]);
-	}
-
-	// set flag indicating new ios have completed.  we do this *before*
-	// any completion or notifications so that any user flush() that
-	// follows the observed io completion will include this io.  Note
-	// that an earlier, racing flush() could observe and clear this
-	// flag, but that also ensures that the IO will be stable before the
-	// later flush() occurs.
-	io_since_flush.store(true);
-
-	long r = aio[i]->get_return_value();
-        if (r < 0) {
-          derr << __func__ << " got r=" << r << " (" << cpp_strerror(r) << ")"
-	       << dendl;
-          if (ioc->allow_eio && is_expected_ioerr(r)) {
-            derr << __func__ << " translating the error to EIO for upper layer"
-		 << dendl;
-            ioc->set_return_value(-EIO);
-          } else {
-	    if (is_expected_ioerr(r)) {
-	      note_io_error_event(
-		devname.c_str(),
-		path.c_str(),
-		r,
-#if defined(HAVE_POSIXAIO)
-                aio[i]->aio.aiocb.aio_lio_opcode,
-#else
-                aio[i]->iocb.aio_lio_opcode,
-#endif
-		aio[i]->offset,
-		aio[i]->length);
-	      ceph_abort_msg(
-		"Unexpected IO error. "
-		"This may suggest a hardware issue. "
-		"Please check your kernel log!");
-	    }
-	    ceph_abort_msg(
-	      "Unexpected IO error. "
-	      "This may suggest HW issue. Please check your dmesg!");
-          }
-        } else if (aio[i]->length != (uint64_t)r) {
-          derr << "aio to 0x" << std::hex << aio[i]->offset
-	       << "~" << aio[i]->length << std::dec
-               << " but returned: " << r << dendl;
-          ceph_abort_msg("unexpected aio return value: does not match length");
-        }
-
-        dout(10) << __func__ << " finished aio " << aio[i] << " r " << r
-                 << " ioc " << ioc
-                 << " with " << (ioc->num_running.load() - 1)
-                 << " aios left" << dendl;
-
-	// NOTE: once num_running and we either call the callback or
-	// call aio_wake we cannot touch ioc or aio[] as the caller
-	// may free it.
-	if (ioc->priv) {
-	  if (--ioc->num_running == 0) {
-	    aio_callback(aio_callback_priv, ioc->priv);
-	  }
-	} else {
-          ioc->try_aio_wake();
-	}
-      }
-    }
+    _reap_completions(q, cct->_conf->bdev_aio_poll_ms,
+		      cct->_conf->bdev_aio_reap_max);
     if (cct->_conf->bdev_debug_aio) {
       utime_t now = ceph_clock_now();
       std::lock_guard l(debug_queue_lock);
@@ -1014,8 +1121,71 @@ void KernelDevice::_aio_log_finish(
   }
 }
 
+// Fast path: a lone aio on a waiter-style IOContext (priv == NULL,
+// i.e. the caller blocks in aio_wait() rather than consuming a
+// completion callback) is one contiguous preadv/pwritev whose
+// submitter is about to wait for it - asynchrony buys nothing, so
+// execute it synchronously in the caller and skip the whole aio
+// completion round trip (ring, completion-thread wakeup, waiter
+// wakeup); aio_wait() then falls straight through.  This covers the
+// common single-extent read from _do_read and every single-segment
+// BlueFS flush (the WAL append on the commit path most importantly).
+// Callback-style IOContexts (txc data writes, deferred batches) are
+// not eligible: their callers do not wait, the pipeline consumes
+// their completions asynchronously.  Returns true if the io was
+// executed here.
+bool KernelDevice::_aio_lone_waiter_sync(IOContext *ioc)
+{
+#if defined(HAVE_LIBAIO)
+  if (!aio || ioc->priv != nullptr ||
+      ioc->num_pending.load() != 1) {
+    return false;
+  }
+  const bool is_read = !ioc->reads.pending.empty();
+  aio_t& a = is_read ? ioc->reads.pending.back()
+		     : ioc->writes.pending.back();
+  dout(20) << __func__ << " sync " << (is_read ? "read" : "write")
+	   << " 0x" << std::hex << a.offset << "~"
+	   << a.length << std::dec << dendl;
+  ssize_t r;
+  if (is_read) {
+    r = ::preadv(a.fd, a.iov.data(), a.iov.size(), a.offset);
+  } else {
+    r = ::pwritev(a.fd, a.iov.data(), a.iov.size(), a.offset);
+    // as in _sync_write/reap: arm the next flush() BEFORE anything
+    // can observe the write as complete
+    io_since_flush.store(true);
+  }
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " sync " << (is_read ? "preadv" : "pwritev")
+	 << " 0x" << std::hex << a.offset << "~" << a.length
+	 << std::dec << " got " << cpp_strerror(r) << dendl;
+  }
+  // same rules as the completion thread's
+  _aio_check_completion(__func__, &a, ioc, r);
+  _aio_log_finish(ioc, a.offset, a.length);
+  ioc->num_pending--;
+  if (is_read) {
+    ioc->reads.pending.clear();
+  } else {
+    ioc->writes.pending.clear();
+  }
+  return true;
+#else
+  return false;
+#endif
+}
+
 void KernelDevice::aio_submit(IOContext *ioc)
 {
+  // A thread that reaps this device's outer queue is that queue's
+  // only drain: if it submitted write aio here and slept in the
+  // submit EAGAIN retry, nobody would free the ring slots it is
+  // waiting for.  Reads are exempt (the device's own thread serves
+  // them), as are its submissions to other devices (BlueFS flushes
+  // from the kv sync thread land on BlueFS's own devices).
+  ceph_assert(tl_outer_reaper_dev != this || ioc->writes.pending.empty());
   dout(20) << __func__ << " ioc " << ioc
 	   << " pending " << ioc->num_pending.load()
 	   << " running " << ioc->num_running.load()
@@ -1025,24 +1195,35 @@ void KernelDevice::aio_submit(IOContext *ioc)
     return;
   }
 
-  // move these aside, and get our end iterator position now, as the
+  if (_aio_lone_waiter_sync(ioc)) {
+    return;
+  }
+
+  // move these aside, and get our end iterator positions now, as the
   // aios might complete as soon as they are submitted and queue more
   // wal aio's.
-  list<aio_t>::iterator e = ioc->running_aios.begin();
-  ioc->running_aios.splice(e, ioc->pending_aios);
+  list<aio_t>::iterator we = ioc->writes.running.begin();
+  ioc->writes.running.splice(we, ioc->writes.pending);
+  list<aio_t>::iterator re = ioc->reads.running.begin();
+  ioc->reads.running.splice(re, ioc->reads.pending);
 
   int pending = ioc->num_pending.load();
   ioc->num_running += pending;
   ioc->num_pending -= pending;
   ceph_assert(ioc->num_pending.load() == 0);  // we should be only thread doing this
-  ceph_assert(ioc->pending_aios.size() == 0);
+  ceph_assert(ioc->writes.pending.empty());
+  ceph_assert(ioc->reads.pending.empty());
 
   if (cct->_conf->bdev_debug_aio) {
-    list<aio_t>::iterator p = ioc->running_aios.begin();
-    while (p != e) {
+    for (auto p = ioc->writes.running.begin(); p != we; ++p) {
       dout(30) << __func__ << " " << *p << dendl;
       std::lock_guard l(debug_queue_lock);
-      debug_aio_link(*p++);
+      debug_aio_link(*p);
+    }
+    for (auto p = ioc->reads.running.begin(); p != re; ++p) {
+      dout(30) << __func__ << " " << *p << dendl;
+      std::lock_guard l(debug_queue_lock);
+      debug_aio_link(*p);
     }
   }
 
@@ -1053,9 +1234,20 @@ void KernelDevice::aio_submit(IOContext *ioc)
 	   << " bdev_aio_submit_retry_max " << retry_max
 	   << " bdev_aio_submit_retry_initial_delay_us " << initial_delay_us
 	   << dendl;
-  int r, retries = 0;
-  r = io_queue->submit_batch(ioc->running_aios.begin(), e,
-			     priv, &retries, retry_max, initial_delay_us);
+  // reads ride the inner queue unless this device runs in
+  // external-completion mode, where they have their own ring
+  io_queue_t *wq = outer_io_queue ? outer_io_queue.get()
+				  : inner_io_queue.get();
+  int r = 0, retries = 0;
+  if (ioc->writes.running.begin() != we) {
+    r = wq->submit_batch(ioc->writes.running.begin(), we,
+				     priv, &retries, retry_max,
+				     initial_delay_us);
+  }
+  if (r >= 0 && ioc->reads.running.begin() != re) {
+    r = inner_io_queue->submit_batch(ioc->reads.running.begin(), re,
+      priv, &retries, retry_max, initial_delay_us);
+  }
 
   if (retries)
     derr << __func__ << " retries " << retries << dendl;
@@ -1193,9 +1385,9 @@ int KernelDevice::aio_write(
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
-      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+      ioc->reads.pending.push_back(aio_t(ioc, choose_fd(false, write_hint)));
       ++ioc->num_pending;
-      auto& aio = ioc->pending_aios.back();
+      auto& aio = ioc->reads.pending.back();
       aio.bl.push_back(
         ceph::buffer::ptr_node::create(ceph::buffer::create_small_page_aligned(len)));
       aio.bl.prepare_iov(&aio.iov);
@@ -1204,9 +1396,9 @@ int KernelDevice::aio_write(
     } else {
       if (bl.length() <= RW_IO_MAX) {
 	// fast path (non-huge write)
-	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	ioc->writes.pending.push_back(aio_t(ioc, choose_fd(false, write_hint)));
 	++ioc->num_pending;
-	auto& aio = ioc->pending_aios.back();
+	auto& aio = ioc->writes.pending.back();
 	bl.prepare_iov(&aio.iov);
 	aio.bl.claim_append(bl);
 	aio.pwritev(off, len);
@@ -1224,9 +1416,9 @@ int KernelDevice::aio_write(
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }
 	  auto len = tmp.length();
-	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	  ioc->writes.pending.push_back(aio_t(ioc, choose_fd(false, write_hint)));
 	  ++ioc->num_pending;
-	  auto& aio = ioc->pending_aios.back();
+	  auto& aio = ioc->writes.pending.back();
 	  tmp.prepare_iov(&aio.iov);
 	  aio.bl.claim_append(tmp);
 	  aio.pwritev(off + prev_len, len);
@@ -1503,9 +1695,9 @@ int KernelDevice::aio_read(
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
+    ioc->reads.pending.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
     ++ioc->num_pending;
-    aio_t& aio = ioc->pending_aios.back();
+    aio_t& aio = ioc->reads.pending.back();
     aio.bl.push_back(
       ceph::buffer::ptr_node::create(create_custom_aligned(len, ioc)));
     aio.bl.prepare_iov(&aio.iov);
