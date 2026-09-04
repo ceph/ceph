@@ -115,6 +115,31 @@ class TestVolumesHelper(CephFSTestCase):
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
 
+    def _wait_for_clone_to_finish_if_exists(self, clone, clone_group=None, timo=120):
+        """
+        Wait for a clone to reach a terminal state before filesystem teardown.
+        Ensures mgr cloner threads release their cephfs connections.
+        """
+        args = ["clone", "status", self.volname, clone]
+        if clone_group:
+            args.append(clone_group)
+        args = tuple(args)
+
+        terminal_states = ('complete', 'failed', 'canceled')
+        msg = (f'Executed cmd "{args}" {timo} times; clone did not reach a '
+               f'terminal state.')
+
+        with safe_while(tries=timo, sleep=1, action=msg) as proceed:
+            while proceed():
+                try:
+                    result = json.loads(self._fs_cmd(*args))
+                except CommandFailedError as ce:
+                    if ce.exitstatus == errno.ENOENT:
+                        return
+                    raise
+                if result["status"]["state"] in terminal_states:
+                    return
+
     def _get_subvolume_snapshot_path(self, subvol_name, snap_name, group_name):
         cmd = (f'fs subvolume snapshot getpath {self.volname} {subvol_name} '
                f'{snap_name}')
@@ -5327,6 +5352,10 @@ class TestPauseCloning(TestVolumesHelper):
         # tearDown() so that there's zero chance that it interferes with next
         # test.
         self.config_set('mgr', self.CONF_OPT, False)
+
+        # ensure cloner threads finish any in-flight work before the
+        # filesystem is destroyed in CephFSTestCase.tearDown().
+        self._wait_for_clone_to_finish_if_exists('ss1c1')
 
         # ensure purge threads have no jobs left from previous test so that
         # next test doesn't have to face unnecessary complications.
