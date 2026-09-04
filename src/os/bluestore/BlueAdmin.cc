@@ -12,6 +12,7 @@
 #include <sstream>
 #include <vector>
 #include <limits>
+#include <optional>
 
 #define dout_subsys ceph_subsys_bluestore
 #define dout_context store.cct
@@ -19,6 +20,96 @@
 using ceph::bufferlist;
 using ceph::Formatter;
 using ceph::common::cmd_getval;
+
+static void dump_avg_latency(Formatter *f, const char *name, uint64_t sum_ns, uint64_t count) {
+  f->open_object_section(name);
+  f->dump_unsigned("avgcount", count);
+  f->dump_float("sum", sum_ns / 1000000000.0);
+  if (count) {
+    f->dump_float("avgtime", (sum_ns / (double)count) / 1000000000.0);
+  } else {
+    f->dump_float("avgtime", 0.0);
+  }
+  f->close_section();
+}
+
+static void dump_cache_section(Formatter *f, const char *name,
+                               uint64_t hits, uint64_t misses,
+                               uint64_t lat_sum, uint64_t lat_count,
+                               bool is_byte_cache,
+                               std::optional<double> duration = std::nullopt) {
+  f->open_object_section(name);
+  dump_avg_latency(f, is_byte_cache ? "buffer_miss_latency" : "miss_latency", lat_sum, lat_count);
+
+  f->dump_unsigned(is_byte_cache ? "hit_bytes" : "hits", hits);
+  f->dump_unsigned(is_byte_cache ? "miss_bytes" : "misses", misses);
+  uint64_t total = hits + misses;
+  f->dump_unsigned(is_byte_cache ? "total_byte_accesses" : "total", total);
+  if (total > 0) {
+    f->dump_float(is_byte_cache ? "byte_hit_ratio" : "hit_ratio", (double)hits / (double)total);
+  } else {
+    f->dump_float(is_byte_cache ? "byte_hit_ratio" : "hit_ratio", 0.0);
+  }
+
+  if (duration && *duration > 0) {
+    f->dump_float("accesses_per_second", (double)total / *duration);
+  }
+
+  f->close_section();
+}
+
+static void dump_snapshot_section(Formatter *f, const char *name,
+                                  const BlueStore::CacheStatsSnapshot& snap,
+                                  std::optional<double> duration = std::nullopt) {
+  f->open_object_section(name);
+  if (duration) {
+    f->dump_float("seconds elapsed", *duration);
+  }
+  dump_cache_section(f, "onode_cache", snap.onode_hits, snap.onode_misses,
+                     snap.onode_miss_latency_sum, snap.onode_misses,
+                     false, duration);
+  dump_cache_section(f, "onode_shard", snap.onode_shard_hits, snap.onode_shard_misses,
+                     snap.onode_shard_miss_latency_sum, snap.onode_shard_misses,
+                     false, duration);
+  dump_cache_section(f, "object_data_cache", snap.buffer_hit_bytes, snap.buffer_miss_bytes,
+                     snap.buffer_miss_latency_sum, snap.buffer_miss_lat_count,
+                     true, duration);
+  f->close_section();
+}
+
+static void get_snapshot_windows(BlueStore& store,
+                                 BlueStore::CacheStatsSnapshot& current,
+                                 BlueStore::CacheStatsSnapshot& most_recent,
+                                 BlueStore::CacheStatsSnapshot& oldest) {
+  std::lock_guard l(store.cache_stats_lock);
+
+  // Get current values
+  current.timestamp = ceph::mono_clock::now();
+  current.onode_hits = store.logger->get(l_bluestore_onode_hits);
+  current.onode_misses = store.logger->get(l_bluestore_onode_misses);
+  current.onode_miss_latency_sum = store.logger->get_tavg_ns(l_bluestore_onode_miss_lat).first;
+  current.onode_shard_hits = store.logger->get(l_bluestore_onode_shard_hits);
+  current.onode_shard_misses = store.logger->get(l_bluestore_onode_shard_misses);
+  current.onode_shard_miss_latency_sum = store.logger->get_tavg_ns(l_bluestore_onode_shard_miss_lat).first;
+  current.buffer_hit_bytes = store.logger->get(l_bluestore_buffer_hit_bytes);
+  current.buffer_miss_bytes = store.logger->get(l_bluestore_buffer_miss_bytes);
+  auto buffer_miss_tavg = store.logger->get_tavg_ns(l_bluestore_buffer_miss_lat);
+  current.buffer_miss_latency_sum = buffer_miss_tavg.first;
+  current.buffer_miss_lat_count = buffer_miss_tavg.second;
+
+  store.cache_stats_snapshots.push_back(current);
+  while (store.cache_stats_snapshots.size() > BlueStore::MAX_CACHE_SNAPSHOTS) {
+    store.cache_stats_snapshots.pop_front();
+  }
+
+  if (store.cache_stats_snapshots.size() >= 2) {
+    most_recent = store.cache_stats_snapshots[store.cache_stats_snapshots.size() - 2];
+  } else {
+    most_recent = store.cache_stats_snapshots.back();
+  }
+  oldest = store.cache_stats_snapshots.front();
+}
+
 
 BlueStore::SocketHook::SocketHook(BlueStore& store)
   : store(store)
@@ -76,6 +167,11 @@ BlueStore::SocketHook::SocketHook(BlueStore& store)
       "name=collection,type=CephString,req=false",
       this,
       "clear static fragmentation score, per collection");
+    ceph_assert(r == 0);
+    r = admin_socket->register_command(
+      "bluestore cache stats",
+      this,
+      "print cache performance stats");
     ceph_assert(r == 0);
     r = admin_socket->register_command(
       "bluestore show sharding ",
@@ -282,6 +378,43 @@ int BlueStore::SocketHook::call(
       }
     }
     f->close_section();
+    return 0;
+  } else if (command == "bluestore cache stats") {
+    f->open_object_section("cache_stats");
+
+    BlueStore::CacheStatsSnapshot current, most_recent, oldest;
+    get_snapshot_windows(store, current, most_recent, oldest);
+    dump_snapshot_section(f, "since_startup", current);
+
+    double recent_duration = std::chrono::duration<double>(
+      current.timestamp - most_recent.timestamp).count();
+    if (recent_duration > 0) {
+      dump_snapshot_section(f, "since_most_recent_snapshot",
+                            current.delta(most_recent), recent_duration);
+    }
+
+    double oldest_duration = std::chrono::duration<double>(
+      current.timestamp - oldest.timestamp).count();
+    if (oldest_duration > 0) {
+      dump_snapshot_section(f, "since_oldest_snapshot",
+                            current.delta(oldest), oldest_duration);
+    }
+
+    // RocksDB performance statistics (I think the hits and misses is useful, latency is not, commented out for now)
+    //f->open_object_section("rocksdb_perf_stats");
+    
+    //auto collection = store.cct->get_perfcounters_collection();
+    
+    //if (collection) {
+    //  collection->dump_formatted(f, false, static_cast<select_labeled_t>(0), "rocksdb", "");
+    //} else {
+    //  f->dump_string("status", "perf counters collection not available");
+    //}
+    
+    //f->close_section(); // rocksdb_perf_stats
+    
+    f->close_section(); // cache_stats
+    
     return 0;
   } else if (command == "bluestore clear static frag") {
     std::shared_lock l(store.coll_lock);
