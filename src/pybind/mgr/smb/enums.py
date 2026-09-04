@@ -191,3 +191,15 @@ class KeyBridgePeerPolicy(_StrEnum):
 
     RESTRICTED = 'restricted'
     UNRESTRICTED = 'unrestricted'
+
+
+class CaseInsensitiveCheckPolicy(_StrEnum):
+    """Specify how we should check for the underlying CephFS subvolumes having
+    (or not having) case sensitivity disabled.
+    """
+
+    WARN = 'warn'
+    IGNORE = 'ignore'
+    REQUIRE = 'require'
+    # REJECT - possible future addition
+    # inverse of require (reject case INsentiive volumes, require case sens)
