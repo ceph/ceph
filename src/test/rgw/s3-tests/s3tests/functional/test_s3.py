@@ -7125,15 +7125,15 @@ def test_cors_origin_response():
 
     _cors_request_and_check(requests.get, url, None, 200, None, None)
     _cors_request_and_check(requests.get, url, {'Origin': 'foo.suffix'}, 200, 'foo.suffix', 'GET')
-    _cors_request_and_check(requests.get, url, {'Origin': 'foo.bar'}, 200, None, None)
-    _cors_request_and_check(requests.get, url, {'Origin': 'foo.suffix.get'}, 200, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': 'foo.bar'}, 403, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': 'foo.get.suffix'}, 200, 'foo.get.suffix', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'startend'}, 200, 'startend', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'start1end'}, 200, 'start1end', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'start12end'}, 200, 'start12end', 'GET')
-    _cors_request_and_check(requests.get, url, {'Origin': '0start12end'}, 200, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': '0start12end'}, 403, None, None)
     _cors_request_and_check(requests.get, url, {'Origin': 'prefix'}, 200, 'prefix', 'GET')
     _cors_request_and_check(requests.get, url, {'Origin': 'prefix.suffix'}, 200, 'prefix.suffix', 'GET')
-    _cors_request_and_check(requests.get, url, {'Origin': 'bla.prefix'}, 200, None, None)
+    _cors_request_and_check(requests.get, url, {'Origin': 'bla.prefix'}, 403, None, None)
 
     obj_url = '{u}/{o}'.format(u=url, o='bar')
     _cors_request_and_check(requests.get, obj_url, {'Origin': 'foo.suffix'}, 404, 'foo.suffix', 'GET')
@@ -21529,3 +21529,42 @@ def test_lifecycle_transition_encrypted(source_mode_key, source_storage_class, d
         f"Testing lifecycle transition of {source_mode_key} with storage class {source_storage_class} -> {dest_storage_class}"
     )
     _test_lifecycle_transition(source_mode_key, source_storage_class, dest_storage_class)
+
+
+def test_cors_presigned_url_non_preflight():
+    client = get_client()
+    bucket_name = _setup_bucket_acl(bucket_acl='public-read')
+    key = 'foo'
+    response = client.put_object(Bucket=bucket_name, Key=key, Body='str')
+    assert response['ResponseMetadata']['HTTPStatusCode'] == 200
+
+    # Generate the presigned URL
+    presigned_url = client.generate_presigned_url(
+        ClientMethod='get_object',
+        HttpMethod='GET',
+        Params={'Bucket': bucket_name, 'Key': key},
+    )
+
+    _cors_request_and_check(requests.get, presigned_url,
+                            {'Origin':'example1.com'},
+                            200, None, None)
+
+    cors_config ={
+        'CORSRules': [
+            {'AllowedMethods': ['GET'],
+             'AllowedOrigins': ['*'],
+            },
+        ]
+    }
+    client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration=cors_config)
+
+    # Generate the presigned URL
+    presigned_url = client.generate_presigned_url(
+        ClientMethod='create_multipart_upload',
+        HttpMethod='POST',
+        Params={'Bucket': bucket_name, 'Key': key},
+    )
+
+    _cors_request_and_check(requests.post, presigned_url,
+                            {'Origin':'example1.com'},
+                            403, None, None)
