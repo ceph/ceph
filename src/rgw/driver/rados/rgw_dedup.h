@@ -199,7 +199,8 @@ namespace rgw::dedup {
 
     int add_obj_attrs_to_record(disk_record_t         *p_rec,
                                 const rgw::sal::Attrs &attrs,
-                                md5_stats_t           *p_stats); /* IN-OUT */
+                                md5_stats_t           *p_stats,
+                                const ceph::real_time& mtime); /* IN-OUT */
 
     int read_object_attribute(dedup_table_t    *p_table,
                               disk_record_t    *p_rec,
