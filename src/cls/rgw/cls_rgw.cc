@@ -853,7 +853,7 @@ int rgw_bucket_update_stats(cls_method_context_t hctx, bufferlist *in, bufferlis
     }
   }
 
-  if (header.storage_class_stats.has_value()) {
+  if (header.storage_class_stats.has_value() && op.storage_class_stats.has_value()) {
     for (auto& s : op.storage_class_stats.value()) {
       auto& dest = header.storage_class_stats.value()[s.first];
       if (op.absolute) {
@@ -3624,6 +3624,7 @@ static int check_index(cls_method_context_t hctx,
   calc_header->tag_timeout = existing_header.tag_timeout;
   calc_header->ver = existing_header.ver;
   calc_header->syncstopped = existing_header.syncstopped;
+  calc_header->storage_class_stats.emplace();
 
   std::list<rgw_cls_bi_entry> entries;
   string start_obj;

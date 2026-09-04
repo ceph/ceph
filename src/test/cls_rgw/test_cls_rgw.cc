@@ -1644,9 +1644,9 @@ static int write_header(librados::IoCtx& ioctx, const string& oid,
   return ioctx.operate(oid, &op);
 }
 
-TEST_F(TestClsRgw, StorageClassStats_LegacyToConverted) {
+TEST_P(TestClsRgw, StorageClassStats_LegacyToConverted) {
   string oid = str_int("bucket-sc", 100);
-
+  const string loc = str_int("loc", 0);
   ObjectWriteOperation init_op;
   cls_rgw_bucket_init_index(init_op);
   ASSERT_EQ(0, ioctx.operate(oid, &init_op));
@@ -1654,6 +1654,7 @@ TEST_F(TestClsRgw, StorageClassStats_LegacyToConverted) {
   // Simulate legacy bucket: clear storage_class_stats to nullopt
   rgw_bucket_dir_header header;
   ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
   header.storage_class_stats = std::nullopt;
   ASSERT_EQ(0, write_header(ioctx, oid, header));
 
@@ -1665,6 +1666,8 @@ TEST_F(TestClsRgw, StorageClassStats_LegacyToConverted) {
   meta.size = 5120;
   meta.storage_class = "STANDARD";
   meta.category = RGWObjCategory::Main;
+  index_prepare(ioctx, oid, CLS_RGW_OP_ADD, "tag1",
+                cls_rgw_obj_key("obj1"), loc);
   index_complete(ioctx, oid, CLS_RGW_OP_ADD, "tag1", 1,
                  cls_rgw_obj_key("obj1"), meta);
 
@@ -1677,9 +1680,9 @@ TEST_F(TestClsRgw, StorageClassStats_LegacyToConverted) {
 
 // nonzero stats + uninitialized storage_class_stats,
 // delete to zero, write with SC, verify storage_class_stats initialized
-TEST_F(TestClsRgw, StorageClassStats_LegacyBucketConversion) {
+TEST_P(TestClsRgw, StorageClassStats_LegacyBucketConversion) {
   string oid = str_int("bucket-sc", 101);
-
+  const string loc = str_int("loc", 0);
   ObjectWriteOperation init_op;
   cls_rgw_bucket_init_index(init_op);
   ASSERT_EQ(0, ioctx.operate(oid, &init_op));
@@ -1690,6 +1693,9 @@ TEST_F(TestClsRgw, StorageClassStats_LegacyBucketConversion) {
     meta.size = 1024;
     meta.storage_class = "STANDARD";
     meta.category = RGWObjCategory::Main;
+    index_prepare(ioctx, oid, CLS_RGW_OP_ADD,
+                  str_int("tag", i),
+                  cls_rgw_obj_key(str_int("obj", i)), loc);
     index_complete(ioctx, oid, CLS_RGW_OP_ADD,
                    str_int("tag", i), i + 1,
                    cls_rgw_obj_key(str_int("obj", i)), meta);
@@ -1713,6 +1719,9 @@ TEST_F(TestClsRgw, StorageClassStats_LegacyBucketConversion) {
     meta.size = 1024;
     meta.storage_class = "STANDARD";
     meta.category = RGWObjCategory::Main;
+    index_prepare(ioctx, oid, CLS_RGW_OP_DEL,
+                  str_int("tag-del", i),
+                  cls_rgw_obj_key(str_int("obj", i)), loc);
     index_complete(ioctx, oid, CLS_RGW_OP_DEL,
                    str_int("tag-del", i), i + 4,
                    cls_rgw_obj_key(str_int("obj", i)), meta);
@@ -1723,6 +1732,8 @@ TEST_F(TestClsRgw, StorageClassStats_LegacyBucketConversion) {
   new_meta.size = 2048;
   new_meta.storage_class = "HDD";
   new_meta.category = RGWObjCategory::Main;
+  index_prepare(ioctx, oid, CLS_RGW_OP_ADD, "tag-new",
+                cls_rgw_obj_key("new-obj"), loc);
   index_complete(ioctx, oid, CLS_RGW_OP_ADD,
                  "tag-new", 10, cls_rgw_obj_key("new-obj"), new_meta);
 
@@ -1731,4 +1742,92 @@ TEST_F(TestClsRgw, StorageClassStats_LegacyBucketConversion) {
   ASSERT_TRUE(header.storage_class_stats.has_value());
   EXPECT_EQ((*header.storage_class_stats)["HDD"].num_entries, 1u);
   EXPECT_EQ((*header.storage_class_stats)["HDD"].total_size, 2048u);
+}
+
+TEST_P(TestClsRgw, StorageClassStats_BucketCheckFix) {
+  string oid = str_int("bucket-sc", 103);
+  const string loc = str_int("loc", 0);
+  ObjectWriteOperation init_op;
+  cls_rgw_bucket_init_index(init_op);
+  ASSERT_EQ(0, ioctx.operate(oid, &init_op));
+
+  constexpr int num_objs = 3;
+  uint64_t total_size = 0;
+
+  // Add objects in the bucket
+  for (int i = 0; i < num_objs; i++) {
+    rgw_bucket_dir_entry_meta meta;
+    meta.size = 1024 * (i + 1);
+    meta.storage_class = "STANDARD";
+    meta.category = RGWObjCategory::Main;
+    index_prepare(ioctx, oid, CLS_RGW_OP_ADD,
+                  str_int("tag", i),
+                  cls_rgw_obj_key(str_int("obj", i)), loc);
+    index_complete(ioctx, oid, CLS_RGW_OP_ADD,
+                   str_int("tag", i), i + 1,
+                   cls_rgw_obj_key(str_int("obj", i)), meta);
+    total_size += meta.size;
+  }
+
+  // clear the storage class stats in the bucket
+  rgw_bucket_dir_header header;
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  header.storage_class_stats = std::nullopt;
+  ASSERT_EQ(0, write_header(ioctx, oid, header));
+
+  // simulate 'bucket check' without --fix and checks if the current has no storage classes
+  // while the calculated has
+  {
+    librados::ObjectReadOperation op;
+    bufferlist out_bl;
+    cls_rgw_bucket_check_index(op, out_bl);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, nullptr));
+
+    rgw_cls_check_index_ret ret;
+    ASSERT_NO_THROW(cls_rgw_bucket_check_index_decode(out_bl, ret));
+    ASSERT_FALSE(ret.existing_header.storage_class_stats.has_value());
+    ASSERT_TRUE(ret.calculated_header.storage_class_stats.has_value());
+    const auto &sc_stats = *ret.calculated_header.storage_class_stats;
+    ASSERT_EQ(sc_stats.count("STANDARD"), 1u);
+    EXPECT_EQ(sc_stats.at("STANDARD").num_entries, num_objs);
+    EXPECT_EQ(sc_stats.at("STANDARD").total_size, total_size);
+  }
+
+  // simulate 'bucket check --fix'
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_rebuild_index(op);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+
+  // ensure the bucket stats now has the storage classes after the fix
+  ASSERT_EQ(0, read_header(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  const auto &sc_stats = *header.storage_class_stats;
+  ASSERT_EQ(sc_stats.size(), 1u);
+  EXPECT_EQ(sc_stats.at("STANDARD").num_entries, num_objs);
+  EXPECT_EQ(sc_stats.at("STANDARD").total_size, total_size);
+  // the rebuild must not disturb the per-category stats
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].num_entries, num_objs);
+  EXPECT_EQ(header.stats[RGWObjCategory::Main].total_size, total_size);
+}
+
+TEST_P(TestClsRgw, StorageClassStats_UpdateStatsNullopt) {
+  string oid = str_int("bucket-sc", 104);
+  const string loc = str_int("loc", 0);
+  ObjectWriteOperation init_op;
+  cls_rgw_bucket_init_index(init_op);
+  rgw_cls_bucket_update_stats_op call;
+  call.absolute = false;
+  // For mixed versions compatibility, it should also handle operations with nullopt storage class stats
+  call.storage_class_stats = std::nullopt;
+  auto& delta = call.stats[RGWObjCategory::Main];
+  delta.num_entries = 1;
+  delta.total_size = 512;
+  bufferlist in;
+  encode(call, in);
+  ObjectWriteOperation op;
+  op.exec(cls::rgw::method::bucket_update_stats, in);
+  ASSERT_EQ(0, ioctx.operate(oid, &op));
 }

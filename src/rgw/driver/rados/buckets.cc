@@ -258,6 +258,7 @@ int reset_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
   cls_user_reset_stats2_op call;
   cls_user_reset_stats2_ret ret;
+  ret.storage_class_stats.emplace();
 
   do {
     buffer::list in, out;
