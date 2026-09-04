@@ -427,6 +427,11 @@ bool SessionMap::validate_and_encode_session(MDSRank *mds, Session *session, buf
 void SessionMap::save(MDSContext *onsave, version_t needv)
 {
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
+
+  if (g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at") == INO_PREALLOC_SESSION_SAVE_BEFORE) {
+    g_conf().set_val("mds_kill_ino_prealloc_at", "0");
+    ceph_abort_msg("killpoint INO_PREALLOC_SESSION_SAVE_BEFORE");
+  }
  
   if (needv && committing >= needv) {
     ceph_assert(committing > committed);

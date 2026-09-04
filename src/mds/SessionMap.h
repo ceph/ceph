@@ -204,6 +204,11 @@ public:
   }
 
   void delegate_inos(int want, interval_set<inodeno_t>& inos) {
+    if (g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at") == INO_PREALLOC_DELEGATE_BEFORE) {
+      g_conf().set_val("mds_kill_ino_prealloc_at", "0");
+      ceph_abort_msg("killpoint INO_PREALLOC_DELEGATE_BEFORE");
+    }
+
     want -= (int)delegated_inos.size();
     if (want <= 0)
       return;
@@ -221,6 +226,11 @@ public:
       free_prealloc_inos.erase(it++);
       if (want <= 0)
 	break;
+    }
+
+    if (g_conf().get_val<int64_t>("mds_kill_ino_prealloc_at") == INO_PREALLOC_DELEGATE_AFTER) {
+      g_conf().set_val("mds_kill_ino_prealloc_at", "0");
+      ceph_abort_msg("killpoint INO_PREALLOC_DELEGATE_AFTER");
     }
   }
 
