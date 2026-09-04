@@ -60,6 +60,15 @@ public:
 	state = RWState::RWEXCL;
       }
 
+      bool try_lock_for_read() {
+        assert(state == RWState::RWNONE);
+        if (obc->lock.try_lock_for_read()) {
+          state = RWState::RWREAD;
+          return true;
+        }
+        return false;
+      }
+
       void demote_excl_to(RWState::State lock_type) {
 	assert(state == RWState::RWEXCL);
 	switch (lock_type) {
@@ -259,6 +268,23 @@ public:
     Manager ret = get_obc_manager(obc->obs.oi.soid, false);
     ret.set_state_obc(ret.target_state, obc);
     return ret;
+  }
+
+  // Try a non-blocking read lock on an already-cached obc, without
+  // loading it. Returns nullopt if the obc isn't cached or can't be
+  // locked right now.
+  std::optional<Manager> try_lock_cached_obc_for_read(const hobject_t &oid) {
+    auto obc = obc_registry.maybe_get_cached_obc(oid);
+    if (!obc) {
+      return std::nullopt;
+    }
+    Manager manager(*this, oid);
+    manager.options.resolve_clone = false;
+    manager.set_state_obc(manager.target_state, obc);
+    if (!manager.target_state.try_lock_for_read()) {
+      return std::nullopt;
+    }
+    return manager;
   }
 
   Manager get_obc_manager(
