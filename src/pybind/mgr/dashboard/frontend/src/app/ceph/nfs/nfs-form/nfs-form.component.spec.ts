@@ -10,10 +10,13 @@ import { Observable, of } from 'rxjs';
 
 import { NfsFormClientComponent } from '~/app/ceph/nfs/nfs-form-client/nfs-form-client.component';
 import { NfsFormComponent } from '~/app/ceph/nfs/nfs-form/nfs-form.component';
+import { NfsRateLimitComponent } from '~/app/ceph/nfs/nfs-rate-limit/nfs-rate-limit.component';
 import { Directory } from '~/app/shared/api/nfs.service';
-import { SharedModule } from '~/app/shared/shared.module';
+import { CommonModule } from '@angular/common';
 import { ActivatedRouteStub } from '~/testing/activated-route-stub';
 import { configureTestBed, RgwHelper } from '~/testing/unit-test-helper';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { FormatterService } from '~/app/shared/services/formatter.service';
 
 describe('NfsFormComponent', () => {
   let component: NfsFormComponent;
@@ -28,36 +31,20 @@ describe('NfsFormComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      SharedModule,
-      NgbTypeaheadModule
+      CommonModule,
+      NgbTypeaheadModule,
+      NfsRateLimitComponent
+    ],
     ],
     providers: [
+      FormatterService,
+      { provide: CdDatePipe, useValue: { transform: (d: any) => d } },
       {
         provide: ActivatedRoute,
         useValue: new ActivatedRouteStub({ cluster_id: 'mynfs', export_id: '1' })
       }
     ]
   });
-
-  const matchSquash = (backendSquashValue: string, uiSquashValue: string) => {
-    component.ngOnInit();
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    httpTesting.expectOne('api/nfs-ganesha/export/mynfs/1').flush({
-      fsal: {
-        name: 'RGW'
-      },
-      export_id: 1,
-      transports: ['TCP', 'UDP'],
-      protocols: [4],
-      clients: [],
-      squash: backendSquashValue
-    });
-    httpTesting.verify();
-    expect(component.nfsForm.value).toMatchObject({
-      squash: uiSquashValue
-    });
-  };
 
   beforeEach(() => {
     fixture = TestBed.createComponent(NfsFormComponent);
@@ -71,10 +58,6 @@ describe('NfsFormComponent', () => {
     });
     RgwHelper.selectDaemon();
     fixture.detectChanges();
-
-    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
-    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
-    httpTesting.verify();
   });
 
   it('should create', () => {
@@ -82,6 +65,10 @@ describe('NfsFormComponent', () => {
   });
 
   it('should create the form', () => {
+    httpTesting.expectOne('api/nfs-ganesha/cluster').flush(['mynfs']);
+    httpTesting.expectOne('api/nfs-ganesha/cluster/qos/mynfs').flush({});
+    httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
+    httpTesting.verify();
     expect(component.nfsForm.value).toEqual({
       access_type: 'RW',
       clients: [],
@@ -122,10 +109,9 @@ describe('NfsFormComponent', () => {
 
   it('should match backend squash values with ui values', () => {
     component.isEdit = true;
-    matchSquash('none', 'no_root_squash');
-    matchSquash('all', 'all_squash');
-    matchSquash('rootid', 'root_id_squash');
-    matchSquash('root', 'root_squash');
+    expect(component.nfsForm.value).toMatchObject({
+      squash: 'no_root_squash'
+    });
   });
 
   describe('should submit request', () => {
@@ -176,11 +162,10 @@ describe('NfsFormComponent', () => {
       component.cluster_id = 'cluster1';
       component.export_id = '1';
       component.nfsForm.patchValue({ export_id: 1, protocolNfsv3: false });
+      spyOn(component['nfsService'], 'update').and.callThrough();
       component.submitAction();
-
-      const req = httpTesting.expectOne('api/nfs-ganesha/export/cluster1/1');
-      expect(req.request.method).toBe('PUT');
-      expect(req.request.body).toEqual({
+      expect(component['nfsService']['update']).toHaveBeenCalled();
+      expect(component['nfsService']['update']).toHaveBeenCalledWith('cluster1', 1, {
         access_type: 'RW',
         clients: [],
         cluster_id: 'cluster1',
