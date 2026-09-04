@@ -1157,4 +1157,104 @@ bool is_hinfo_key_string(const string &key) {
 const string &get_hinfo_key() {
   return HINFO_KEY;
 }
+
+uint64_t compute_shard_size_from_transaction(
+  ceph::os::Transaction txn,
+  const ghobject_t &target,
+  uint64_t orig_size)
+{
+  ceph::os::Transaction::iterator it = txn.begin();
+  uint64_t size = orig_size;
+
+  while (it.have_op()) {
+    ceph::os::Transaction::Op *o = it.decode_op();
+
+    switch (o->op) {
+      case ceph::os::Transaction::OP_WRITE: {
+        bufferlist bl;
+        it.decode_bl(bl);
+        if (it.get_oid(o->oid) == target) {
+          uint64_t end = o->off + o->len;
+          if (end > size) size = end;
+        }
+        break;
+      }
+      case ceph::os::Transaction::OP_ZERO: {
+        // No data payload — off+len may extend the file.
+        if (it.get_oid(o->oid) == target) {
+          uint64_t end = o->off + o->len;
+          if (end > size) size = end;
+        }
+        break;
+      }
+      case ceph::os::Transaction::OP_TRUNCATE: {
+        // OP_TRUNCATE stores the target size in op->off.
+        // It is "set size" — can grow or shrink.
+        if (it.get_oid(o->oid) == target) {
+          size = o->off;
+        }
+        break;
+      }
+      // -------- ops with inline data payloads that must be consumed --------
+      case ceph::os::Transaction::OP_SETATTR: {
+        it.decode_string();       // attr name
+        bufferlist bl;
+        it.decode_bl(bl);
+        break;
+      }
+      case ceph::os::Transaction::OP_SETATTRS: {
+        map<string, bufferptr> aset;
+        it.decode_attrset(aset);
+        break;
+      }
+      case ceph::os::Transaction::OP_RMATTR: {
+        it.decode_string();       // attr name
+        break;
+      }
+      case ceph::os::Transaction::OP_OMAP_SETKEYS: {
+        map<string, bufferlist> aset;
+        it.decode_attrset(aset);
+        break;
+      }
+      case ceph::os::Transaction::OP_OMAP_RMKEYS: {
+        set<string> keys;
+        it.decode_keyset(keys);
+        break;
+      }
+      case ceph::os::Transaction::OP_OMAP_SETHEADER: {
+        bufferlist bl;
+        it.decode_bl(bl);
+        break;
+      }
+      case ceph::os::Transaction::OP_OMAP_RMKEYRANGE: {
+        it.decode_string();       // first key
+        it.decode_string();       // last key
+        break;
+      }
+      case ceph::os::Transaction::OP_COLL_HINT: {
+        bufferlist bl;
+        it.decode_bl(bl);
+        break;
+      }
+      case ceph::os::Transaction::OP_COLL_SETATTR: {
+        it.decode_string();       // attr name
+        bufferlist bl;
+        it.decode_bl(bl);
+        break;
+      }
+      case ceph::os::Transaction::OP_COLL_RMATTR: {
+        it.decode_string();       // attr name
+        break;
+      }
+      // All remaining ops carry no inline data payload and do not affect
+      // the target shard file size (NOP, CREATE, TOUCH, CLONE,
+      // CLONERANGE*, MKCOLL, RMCOLL, COLL_ADD/REMOVE/MOVE/RENAME/
+      // SET_BITS, SPLIT_COLLECTION*, MERGE_COLLECTION, COLL_MOVE_RENAME,
+      // TRY_RENAME, SETALLOCHINT, OMAP_CLEAR, REMOVE, RMATTRS).
+      default:
+        break;
+    }
+  }
+  return size;
+}
 }
