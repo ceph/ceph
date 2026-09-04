@@ -75,6 +75,7 @@ connection_id_t::connection_id_t(
     const std::string& _user,
     const std::string& _password,
     const boost::optional<const std::string&>& _ca_location,
+    const boost::optional<const std::string&>& _ca_cert,
     const boost::optional<const std::string&>& _mechanism,
     bool _ssl,
     bool _verify_ssl,
@@ -90,6 +91,9 @@ connection_id_t::connection_id_t(
 
   if (_ca_location.has_value()) {
     ca_location = _ca_location.get();
+  }
+  if (_ca_cert.has_value()) {
+    ca_cert = _ca_cert.get();
   }
   if (_mechanism.has_value()) {
     mechanism = _mechanism.get();
@@ -119,6 +123,7 @@ connection_id_t::connection_id_t(
 bool operator==(const connection_id_t& lhs, const connection_id_t& rhs) {
   return lhs.broker == rhs.broker && lhs.user == rhs.user &&
          lhs.password == rhs.password && lhs.ca_location == rhs.ca_location &&
+         lhs.ca_cert == rhs.ca_cert &&
          lhs.mechanism == rhs.mechanism && lhs.ssl == rhs.ssl &&
          lhs.verify_ssl == rhs.verify_ssl &&
          lhs.ssl_certificate == rhs.ssl_certificate &&
@@ -136,6 +141,7 @@ struct connection_id_hasher {
     boost::hash_combine(h, k.user);
     boost::hash_combine(h, k.password);
     boost::hash_combine(h, k.ca_location);
+    boost::hash_combine(h, k.ca_cert);
     boost::hash_combine(h, k.mechanism);
     boost::hash_combine(h, k.ssl);
     boost::hash_combine(h, k.verify_ssl);
@@ -220,6 +226,7 @@ struct connection_t {
   const bool use_ssl;
   const bool verify_ssl;
   const boost::optional<std::string> ca_location;
+  const boost::optional<std::string> ca_cert;
   const std::string user;
   const std::string password;
   const boost::optional<std::string> mechanism;
@@ -259,8 +266,9 @@ struct connection_t {
   }
 
   // ctor for setting immutable values
-  connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl, 
+  connection_t(CephContext* _cct, const std::string& _broker, bool _use_ssl, bool _verify_ssl,
           const boost::optional<const std::string&>& _ca_location,
+          const boost::optional<const std::string&>& _ca_cert,
           const std::string& _user, const std::string& _password, const boost::optional<const std::string&>& _mechanism,
           const boost::optional<const std::string&>& _ssl_certificate,
           const boost::optional<const std::string&>& _ssl_key,
@@ -268,7 +276,8 @@ struct connection_t {
           const boost::optional<const std::string&>& _kerberos_service_name,
           const boost::optional<const std::string&>& _kerberos_principal,
           const boost::optional<const std::string&>& _kerberos_keytab) :
-      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), user(_user), password(_password), mechanism(_mechanism),
+      cct(_cct), broker(_broker), use_ssl(_use_ssl), verify_ssl(_verify_ssl), ca_location(_ca_location), ca_cert(_ca_cert),
+      user(_user), password(_password), mechanism(_mechanism),
       ssl_certificate(_ssl_certificate), ssl_key(_ssl_key), ssl_key_password(_ssl_key_password),
       kerberos_service_name(_kerberos_service_name), kerberos_principal(_kerberos_principal), kerberos_keytab(_kerberos_keytab) {}                                                                                                                                                        
 
@@ -421,7 +430,10 @@ bool new_producer(connection_t* conn) {
       if (rd_kafka_conf_set(conf.get(), "security.protocol", "SSL", errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
       ldout(conn->cct, 20) << "Kafka connect: successfully configured SSL security" << dendl;
     }
-    if (conn->ca_location) {
+    if (conn->ca_cert) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.ca.pem", conn->ca_cert->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured CA cert (PEM)" << dendl;
+    } else if (conn->ca_location) {
       if (rd_kafka_conf_set(conf.get(), "ssl.ca.location", conn->ca_location->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
       ldout(conn->cct, 20) << "Kafka connect: successfully configured CA location" << dendl;
     } else {
@@ -465,13 +477,16 @@ bool new_producer(connection_t* conn) {
   }
 
   if (is_gssapi && conn->use_ssl) {
-    if (conn->ca_location) {
+    if (conn->ca_cert) {
+      if (rd_kafka_conf_set(conf.get(), "ssl.ca.pem", conn->ca_cert->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
+      ldout(conn->cct, 20) << "Kafka connect: successfully configured CA cert (PEM)" << dendl;
+    } else if (conn->ca_location) {
       if (rd_kafka_conf_set(conf.get(), "ssl.ca.location", conn->ca_location->c_str(), errstr, sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
       ldout(conn->cct, 20) << "Kafka connect: successfully configured CA location" << dendl;
     } else {
       ldout(conn->cct, 20) << "Kafka connect: using default CA location" << dendl;
     }
-    if (rd_kafka_conf_set(conf.get(), "enable.ssl.certificate.verification", conn->verify_ssl ? "true" : "false", errstr, 
+    if (rd_kafka_conf_set(conf.get(), "enable.ssl.certificate.verification", conn->verify_ssl ? "true" : "false", errstr,
                           sizeof(errstr)) != RD_KAFKA_CONF_OK) goto conf_error;
   }
 
@@ -733,6 +748,7 @@ public:
                bool use_ssl,
                bool verify_ssl,
                boost::optional<const std::string&> ca_location,
+               boost::optional<const std::string&> ca_cert,
                boost::optional<const std::string&> mechanism,
                boost::optional<const std::string&> topic_user_name,
                boost::optional<const std::string&> topic_password,
@@ -821,7 +837,7 @@ public:
       broker_list.append(brokers.get());
     }
 
-    connection_id_t tmp_id(broker_list, user, password, ca_location, mechanism,
+    connection_id_t tmp_id(broker_list, user, password, ca_location, ca_cert, mechanism,
                            use_ssl, verify_ssl, ssl_certificate, ssl_key, ssl_key_password,
                            kerberos_service_name, kerberos_principal, kerberos_keytab);
     std::lock_guard lock(connections_lock);
@@ -842,7 +858,7 @@ public:
       return false;
     }
 
-    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, user, password,
+    auto conn = std::make_unique<connection_t>(cct, broker_list, use_ssl, verify_ssl, ca_location, ca_cert, user, password,
                                                mechanism, ssl_certificate, ssl_key, ssl_key_password,
                                                kerberos_service_name, kerberos_principal, kerberos_keytab);
     if (!new_producer(conn.get())) {
@@ -960,6 +976,7 @@ bool connect(connection_id_t& conn_id,
              bool use_ssl,
              bool verify_ssl,
              boost::optional<const std::string&> ca_location,
+             boost::optional<const std::string&> ca_cert,
              boost::optional<const std::string&> mechanism,
              boost::optional<const std::string&> user_name,
              boost::optional<const std::string&> password,
@@ -972,7 +989,7 @@ bool connect(connection_id_t& conn_id,
              boost::optional<const std::string&> kerberos_keytab) {
   std::shared_lock lock(s_manager_mutex);
   if (!s_manager) return false;
-  return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location,
+  return s_manager->connect(conn_id, url, use_ssl, verify_ssl, ca_location, ca_cert,
                             mechanism, user_name, password, brokers,
                             ssl_certificate, ssl_key, ssl_key_password,
                             kerberos_service_name, kerberos_principal, kerberos_keytab);
