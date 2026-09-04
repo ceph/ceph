@@ -433,15 +433,32 @@ SnapTrimObjSubEvent::start()
     *obc_orderer,
     coid, false /* resolve_oid */);
 
+  bool load_failed = false;
   co_await pg->obc_loader.load_and_lock(
     obc_manager, RWState::RWWRITE
   ).handle_error_interruptible(
     remove_or_update_iertr::pass_further{},
+    crimson::ct_error::object_corrupted::handle([this, &load_failed] {
+      logger().error("{}: object corrupted during snap trim - repair needed", *this);
+      load_failed = true;
+      return seastar::now();
+    }),
     crimson::ct_error::assert_all(
       "{} error SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t with {}",
       std::cref(*this), coid)
   );
+  if (load_failed) {
+    // Object is corrupted - following classic OSD behavior:
+    // Set error state and stop snap trimming (do not remove from snap_mapper)
+    // This requires manual repair intervention
+    pg->get_peering_state().state_set(PG_STATE_SNAPTRIM_ERROR);
+    pg->publish_stats_to_osd();
+    logger().error("{}: snap trim encountered corrupted object {}, stopping snap trim",
+                   *this, coid);
+    co_return;
+  }
 
+  // If we got here, the object was loaded successfully
   logger().debug("{}: got obc={}", *this, obc_manager.get_obc()->get_oid());
 
   auto all_completed = interruptor::now();

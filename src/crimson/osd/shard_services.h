@@ -24,6 +24,7 @@
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/state.h"
+#include "crimson/osd/scrub/scrub_scheduler.h"
 #include "common/AsyncReserver.h"
 #include "crimson/net/Connection.h"
 #include "mgr/OSDPerfMetricTypes.h"
@@ -348,6 +349,7 @@ private:
   AsyncReserver<spg_t, DirectFinisher> local_reserver;
   AsyncReserver<spg_t, DirectFinisher> remote_reserver;
   AsyncReserver<spg_t, DirectFinisher> snap_reserver;
+  AsyncReserver<spg_t, DirectFinisher> scrub_reserver;
 
   epoch_t up_thru_wanted = 0;
   seastar::future<> send_alive(epoch_t want);
@@ -408,7 +410,8 @@ class ShardServices : public OSDMapService,
   seastar::sharded<OSDSingletonState> &osd_singleton_state;
   PGShardMapping& pg_to_shard_mapping;
   uint32_t store_shard_nums = 0;
-
+  seastar::timer<seastar::lowres_clock> scrub_timer;
+  ScrubScheduler scrub_scheduler;
   template <typename F, typename... Args>
   auto with_singleton(F &&f, Args&&... args) {
     return osd_singleton_state.invoke_on(
@@ -417,6 +420,7 @@ class ShardServices : public OSDMapService,
       std::forward<Args>(args)...
     );
   }
+  seastar::future<> prepare_scrub();
 
 public:
   /**
@@ -523,8 +527,29 @@ public:
     : local_state(std::forward<PSSArgs>(args)...),
       osd_singleton_state(osd_singleton_state),
       pg_to_shard_mapping(pg_to_shard_mapping),
-      store_shard_nums(store_shard_nums) {}
-
+      store_shard_nums(store_shard_nums),
+      scrub_timer{[this] {
+        std::ignore = prepare_scrub();
+        scrub_timer.arm(std::chrono::seconds(SCRUB_TICK_INTERVAL));
+      }},
+      scrub_scheduler(*this) {
+        scrub_timer.arm(std::chrono::seconds(SCRUB_TICK_INTERVAL));
+      }
+  ~ShardServices() {
+    scrub_timer.cancel();
+  }
+  ScrubScheduler &get_scrub_scheduler() {
+    return scrub_scheduler;
+  }
+  seastar::future<int> get_scrubs_total() const {
+    return container().map_reduce0(
+      [] (auto &s) {
+        return s.scrub_scheduler.get_scrubs_local();
+      },
+      0,
+      [](auto a, auto b) { return a + b; }
+    );
+  }
   FORWARD_TO_OSD_SINGLETON(send_to_osd)
 
   crimson::os::BackendStore get_store(store_index_t store_index) {
@@ -741,6 +766,18 @@ public:
     return local_state.throttler.available();
   }
 
+  auto is_recovery_active() {
+    LOG_PREFIX(ShardServices::is_recovery_active);
+    SUBDEBUG(osd, "sending to singleton");
+    if (crimson::common::local_conf()->osd_debug_pretend_recovery_active) {
+      return seastar::make_ready_future<bool>(true);
+    }
+    return with_singleton(
+      [FNAME](auto &singleton) {
+      SUBDEBUG(osd, "on singleton");
+      return singleton.local_reserver.has_reservation() || singleton.remote_reserver.has_reservation();
+    });
+  }
   auto local_update_priority(
     singleton_orderer_t &orderer,
     spg_t pgid, unsigned newprio) {
@@ -870,6 +907,52 @@ public:
       invoke_context_on_core(seastar::this_shard_id(), on_reserved));
   }
 
+  seastar::future<> scrub_local_request_reservation(
+    spg_t item,
+    Context *on_reserved,
+    unsigned prio,
+    Context *on_preempt) {
+    LOG_PREFIX(ShardServices::scrub_local_request_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {} prio {}", item, prio);
+    return with_singleton(
+      [FNAME, item, prio](
+        OSDSingletonState &singleton,
+        Context *wrapped_on_reserved,
+        Context *wrapped_on_preempt) {
+        SUBDEBUG(osd, "on singleton pgid {} prio {}", item, prio);
+        singleton.scrub_reserver.request_reservation(
+          item,
+          wrapped_on_reserved,
+          prio,
+          wrapped_on_preempt);
+        return seastar::now();
+      },
+      invoke_context_on_core(seastar::this_shard_id(), on_reserved),
+      invoke_context_on_core(seastar::this_shard_id(), on_preempt));
+  }
+
+  seastar::future<bool> scrub_local_request_reservation_or_fail(spg_t item) {
+    LOG_PREFIX(ShardServices::scrub_local_request_reservation_or_fail);
+    SUBDEBUG(osd, "sending to singleton pgid {}", item);
+    return with_singleton(
+      [FNAME, item](OSDSingletonState &singleton) {
+        SUBDEBUG(osd, "on singleton pgid {}", item);
+        return seastar::make_ready_future<bool>(
+          singleton.scrub_reserver.request_reservation_or_fail(item));
+      });
+  }
+
+  seastar::future<> scrub_local_cancel_reservation(spg_t item) {
+    LOG_PREFIX(ShardServices::scrub_local_cancel_reservation);
+    SUBDEBUG(osd, "sending to singleton pgid {}", item);
+    return with_singleton(
+      [FNAME, item](OSDSingletonState &singleton) {
+        SUBDEBUG(osd, "on singleton pgid {}", item);
+        singleton.scrub_reserver.cancel_reservation(item);
+        return seastar::now();
+      });
+  }
+
 private:
   seastar::future<> reset_target_merge_rendezvous(spg_t target);
   seastar::future<> send_stop_pool_merge(pg_t source_pgid);
@@ -885,8 +968,7 @@ private:
 #undef FORWARD_TO_LOCAL
 #undef FORWARD_TO_LOCAL_CONST
 };
-
-}
+} // namespace crimson::osd
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::osd::OSDSingletonState::pg_temp_t> : fmt::ostream_formatter {};

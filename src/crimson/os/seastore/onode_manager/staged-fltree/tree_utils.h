@@ -327,7 +327,7 @@ class TreeBuilder {
       return eagain_iertr::make_ready_future<BtreeCursor>(cursor);
 #endif
     }).handle_error_interruptible(
-      crimson::ct_error::value_too_large::assert_failure{"impossible path"},
+      crimson::ct_error::value_too_large::assert_failure("impossible path"),
       crimson::ct_error::pass_further_all{}
     );
   }

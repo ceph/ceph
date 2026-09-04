@@ -272,7 +272,11 @@ OSDSingletonState::OSDSingletonState(
     snap_reserver(
       &cct,
       &finisher,
-      crimson::common::local_conf()->osd_max_trimming_pgs)
+      crimson::common::local_conf()->osd_max_trimming_pgs),
+    scrub_reserver(
+      &cct,
+      &finisher,
+      crimson::common::local_conf()->osd_max_scrubs)
 {
   crimson::common::local_conf().add_observer(this);
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -640,7 +644,8 @@ std::vector<std::string> OSDSingletonState::get_tracked_keys() const noexcept
   return {
     "osd_max_backfills"s,
     "osd_min_recovery_priority"s,
-    "osd_max_trimming_pgs"s
+    "osd_max_trimming_pgs"s,
+    "osd_max_scrubs"s
   };
 }
 
@@ -658,6 +663,9 @@ void OSDSingletonState::handle_conf_change(
   }
   if (changed.count("osd_max_trimming_pgs")) {
     snap_reserver.set_max(conf->osd_max_trimming_pgs);
+  }
+  if (changed.count("osd_max_scrubs")) {
+    scrub_reserver.set_max(conf->osd_max_scrubs);
   }
 }
 
@@ -859,6 +867,19 @@ void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
   // we should not trim past osdmaps.cached_key_lower_bound()
   // as there may still be PGs with those map epochs recorded.
   ceph_assert(min <= osdmaps.cached_key_lower_bound());
+}
+
+seastar::future<> ShardServices::prepare_scrub()
+{
+  LOG_PREFIX(ShardServices::prepare_scrub);
+  DEBUG("scrub timer is expired. Checking if we can start scrub...");
+  if (!local_state.osd_state.is_active()) {
+    DEBUG("shard not active, skipping scrub preparation");
+    co_return;
+  }
+  auto active = co_await is_recovery_active();
+  DEBUG("is recovery active? {}", active);
+  co_return co_await scrub_scheduler.initiate_scrub(active);
 }
 
 seastar::future<Ref<PG>> ShardServices::make_pg(

@@ -501,6 +501,27 @@ PGBackend::write_iertr::future<> PGBackend::_writefull(
       os.oi.size - bl.length());
   }
   if (bl.length()) {
+    // Set dirty flag if not already set
+    if (!os.oi.is_dirty()) {
+      logger().info("{} setting FLAG_DIRTY for {}", __func__, os.oi.soid);
+      os.oi.set_flag(object_info_t::FLAG_DIRTY);
+      delta_stats.num_objects_dirty++;
+    }
+
+    // Compute data digest for writefull (always writes whole object from start)
+    bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+    logger().info("{} length={} os.oi.size={} skip_data_digest={}",
+                  __func__, bl.length(), (uint64_t)os.oi.size, skip_data_digest);
+    if (!skip_data_digest) {
+      uint32_t crc = bl.crc32c(-1);
+      logger().info("{} setting data_digest=0x{:x} for {}", __func__, crc, os.oi.soid);
+      os.oi.set_data_digest(crc);
+      logger().info("{} after set_data_digest: is_data_digest={} data_digest=0x{:x} flags=0x{:x}",
+                    __func__, os.oi.is_data_digest(), os.oi.data_digest, (uint32_t)os.oi.flags);
+    } else {
+      os.oi.clear_data_digest();
+    }
+
     txn.write(
       coll->get_cid(), ghobject_t{os.oi.soid}, 0, bl.length(),
       bl, flags);
@@ -718,13 +739,45 @@ PGBackend::write_iertr::future<> PGBackend::write(
       txn.nop();
     }
   } else {
+    // Set dirty flag if not already set
+    if (!os.oi.is_dirty()) {
+      logger().info("{} setting FLAG_DIRTY for {}", __func__, os.oi.soid);
+      os.oi.set_flag(object_info_t::FLAG_DIRTY);
+      delta_stats.num_objects_dirty++;
+    }
+
+    // Compute data digest if not skipped (must be done before write consumes buf)
+    bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+    logger().info("{} offset={} length={} os.oi.size={} skip_data_digest={} is_data_digest={}",
+                  __func__, offset, length, (uint64_t)os.oi.size, skip_data_digest, os.oi.is_data_digest());
+    if (offset == 0 && length >= os.oi.size && !skip_data_digest) {
+      // Writing whole object from start - compute fresh digest
+      uint32_t crc = buf.crc32c(-1);
+      logger().info("{} setting data_digest=0x{:x} for {}", __func__, crc, os.oi.soid);
+      os.oi.set_data_digest(crc);
+    } else if (offset == os.oi.size && os.oi.is_data_digest()) {
+      // Appending to end with existing digest
+      if (skip_data_digest) {
+        os.oi.clear_data_digest();
+      } else {
+        // Update digest incrementally
+        uint32_t crc = buf.crc32c(os.oi.data_digest);
+        logger().info("{} updating data_digest=0x{:x} for {}", __func__, crc, os.oi.soid);
+        os.oi.set_data_digest(crc);
+      }
+    } else {
+      // Partial write or overwrite - clear digest
+      logger().info("{} clearing data_digest for {}", __func__, os.oi.soid);
+      os.oi.clear_data_digest();
+    }
+
     txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
-	      offset, length, std::move(buf), op.flags);
+       offset, length, std::move(buf), op.flags);
     update_size_and_usage(delta_stats, osd_op_params.modified_ranges,
                           os.oi, offset, length);
   }
   osd_op_params.clean_regions.mark_data_region_dirty(op.extent.offset,
-						     op.extent.length);
+                                                     op.extent.length);
   logger().debug("{} clean_regions modified", __func__);
 
   return seastar::now();
@@ -752,6 +805,39 @@ PGBackend::interruptible_future<> PGBackend::write_same(
     repeated_indata.append(osd_op.indata);
   }
   maybe_create_new_object(os, txn, delta_stats);
+
+  // Set dirty flag if not already set
+  if (!os.oi.is_dirty()) {
+    logger().info("{} setting FLAG_DIRTY for {}", __func__, os.oi.soid);
+    os.oi.set_flag(object_info_t::FLAG_DIRTY);
+    delta_stats.num_objects_dirty++;
+  }
+
+  // Handle data digest for write_same
+  bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+  uint64_t offset = op.writesame.offset;
+  logger().info("{} offset={} length={} os.oi.size={} skip_data_digest={}",
+                __func__, offset, len, (uint64_t)os.oi.size, skip_data_digest);
+  if (offset == 0 && len >= os.oi.size && !skip_data_digest) {
+    // Writing whole object from start
+    uint32_t crc = repeated_indata.crc32c(-1);
+    logger().info("{} setting data_digest=0x{:x} for {}", __func__, crc, os.oi.soid);
+    os.oi.set_data_digest(crc);
+  } else if (offset == os.oi.size && os.oi.is_data_digest()) {
+    // Appending to end with existing digest
+    if (skip_data_digest) {
+      os.oi.clear_data_digest();
+    } else {
+      uint32_t crc = repeated_indata.crc32c(os.oi.data_digest);
+      logger().info("{} updating data_digest=0x{:x} for {}", __func__, crc, os.oi.soid);
+      os.oi.set_data_digest(crc);
+    }
+  } else {
+    // Partial write or overwrite - clear digest
+    logger().info("{} clearing data_digest for {}", __func__, os.oi.soid);
+    os.oi.clear_data_digest();
+  }
+
   txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
             op.writesame.offset, len,
             std::move(repeated_indata), op.flags);
@@ -901,6 +987,28 @@ PGBackend::append_ierrorator::future<> PGBackend::append(
   }
   maybe_create_new_object(os, txn, delta_stats);
   if (op.extent.length) {
+    // Set dirty flag if not already set
+    if (!os.oi.is_dirty()) {
+      logger().info("{} setting FLAG_DIRTY for {}", __func__, os.oi.soid);
+      os.oi.set_flag(object_info_t::FLAG_DIRTY);
+      delta_stats.num_objects_dirty++;
+    }
+
+    // Handle data digest for append (always appending to end)
+    bool skip_data_digest = local_conf().get_val<bool>("osd_skip_data_digest");
+    logger().info("{} length={} os.oi.size={} skip_data_digest={} is_data_digest={}",
+                  __func__, (uint64_t)op.extent.length, (uint64_t)os.oi.size, skip_data_digest, os.oi.is_data_digest());
+    if (os.oi.is_data_digest() && !skip_data_digest) {
+      // Update digest incrementally
+      uint32_t crc = osd_op.indata.crc32c(os.oi.data_digest);
+      logger().info("{} updating data_digest=0x{:x} for {}", __func__, crc, os.oi.soid);
+      os.oi.set_data_digest(crc);
+    } else {
+      // Clear digest if skipped or no existing digest
+      logger().info("{} clearing data_digest for {}", __func__, os.oi.soid);
+      os.oi.clear_data_digest();
+    }
+
     txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
               os.oi.size /* offset */, op.extent.length,
               std::move(osd_op.indata), op.flags);
@@ -1089,23 +1197,19 @@ PGBackend::list_objects(
       store, coll, gstart, gend, limit, 0));
 
   std::vector<hobject_t> objects;
-  boost::copy(
-    gobjects |
-    boost::adaptors::filtered([](const ghobject_t& o) {
-      if (o.is_pgmeta()) {
-	return false;
-      } else if (o.hobj.is_temp()) {
-	return false;
-      } else if (o.is_internal_pg_local()) {
-	return false;
-      } else {
-	return o.is_no_gen();
-      }
-    }) |
-    boost::adaptors::transformed([](const ghobject_t& o) {
-      return o.hobj;
-    }),
-    std::back_inserter(objects));
+  objects.reserve(gobjects.size());
+  for (const auto& o : gobjects) {
+    if (o.is_pgmeta()) {
+      continue;
+    } else if (o.hobj.is_temp()) {
+      continue;
+    } else if (o.is_internal_pg_local()) {
+      continue;
+    } else if (!o.is_no_gen()) {
+      continue;
+    }
+    objects.push_back(o.hobj);
+  }
   co_return std::make_tuple(objects, next.hobj);
 }
 
@@ -1799,7 +1903,7 @@ PGBackend::omap_clear(
   return omap_clear_ertr::now();
 }
 
-PGBackend::interruptible_future<struct stat>
+PGBackend::store_stat_iertr::future<struct stat>
 PGBackend::stat(
   CollectionRef c,
   const ghobject_t& oid) const
@@ -1935,6 +2039,8 @@ void PGBackend::set_metadata(
 {
   ceph_assert((obj.is_head() && ss) || (!obj.is_head() && !ss));
   {
+    logger().info("{} encoding object_info for {}: is_data_digest={} data_digest=0x{:x} flags=0x{:x}",
+                  __func__, obj, oi.is_data_digest(), oi.data_digest, (uint32_t)oi.flags);
     ceph::bufferlist bv;
     oi.encode(bv, CEPH_FEATURES_ALL);
     txn.setattr(coll->get_cid(), ghobject_t{obj}, OI_ATTR, bv);

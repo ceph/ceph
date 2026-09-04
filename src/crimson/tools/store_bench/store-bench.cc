@@ -906,17 +906,15 @@ int main(int argc, char **argv) {
          */
         co_await store->mkfs(uuid).handle_error(
             crimson::stateful_ec::assert_failure(
-                std::format("error creating empty object store type {} in {}",
-                            store_type, store_path)
-                    .c_str()));
+                "error creating empty object store type {} in {}",
+                store_type, store_path));
         co_await store->stop();
 
         co_await store->start();
         co_await store->mount().handle_error(
             crimson::stateful_ec::assert_failure(
-                std::format("error mounting object store type {} in {}",
-                            store_type, store_path)
-                    .c_str()));
+                "error mounting object store type {} in {}",
+                store_type, store_path));
         std::vector<seastar::future<results_t>> per_shard_futures;
 
         auto named_lambda = [&, &store_ref = *store]()

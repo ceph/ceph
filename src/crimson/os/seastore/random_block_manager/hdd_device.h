@@ -43,6 +43,7 @@ public:
 
   /// RBMDevice interface
 
+  using RBMDevice::read;
   read_ertr::future<> read(
     uint64_t offset,
     bufferptr &bptr) final;

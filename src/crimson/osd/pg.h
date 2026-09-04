@@ -754,6 +754,10 @@ public:
     // not needed yet: replace with not a stub (needs to be wired up to monc)
     return OstreamTemp(CLOG_DEBUG, nullptr);
   }
+  OstreamTemp get_clog_warn() {
+    // not needed yet: replace with not a stub (needs to be wired up to monc)
+    return OstreamTemp(CLOG_WARN, nullptr);
+  }
   OstreamTemp get_clog_error() final {
     // not needed yet: replace with not a stub (needs to be wired up to monc)
     return OstreamTemp(CLOG_ERROR, nullptr);
@@ -765,6 +769,18 @@ public:
 
 
   // Utility
+  bool state_test(uint64_t m) const {
+    return peering_state.state_test(m);
+  }
+  void state_clear(uint64_t m) {
+    peering_state.state_clear(m);
+  }
+  void state_set(uint64_t m) {
+    peering_state.state_set(m);
+  }
+  bool is_clean() const {
+    return peering_state.is_clean();
+  }
   bool is_active() const {
     return peering_state.is_active();
   }
@@ -835,6 +851,7 @@ public:
     peering_state.update_peer_last_complete_ondisk(fromosd, lcod);
   }
 
+  unsigned get_scrub_priority();
   /// initialize created PG
   seastar::future<> init(
     int role,
@@ -1004,6 +1021,7 @@ private:
   interruptible_future<MURef<MOSDOpReply>> do_pg_ops(Ref<MOSDOp> m);
 
 public:
+  int do_scrub_ls(const MOSDOp *m, OSDOp *osd_op) const;
   using rep_op_fut_t = std::tuple<interruptible_future<>,
                                   interruptible_future<>>;
   interruptible_future<rep_op_fut_t>
@@ -1072,16 +1090,22 @@ public:
     const osd_reqid_t& reqid);
 
   // scrub state
-
   friend class ScrubScan;
   friend class ScrubFindRange;
   friend class ScrubReserveRange;
+  friend class ScrubSleep;
+  friend class ScrubDigestUpdate;
+  friend class ScrubSnapMapperRepair;
   friend class scrub::PGScrubber;
   template <typename T> friend class RemoteScrubEventBaseT;
 
   scrub::PGScrubber scrubber;
 
+  seastar::future<scrub::schedule_result_t> start_scrubbing(
+    const scrub::SchedEntry& candidate,
+    scrub::OSDRestrictions osd_restrictions);
   void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
+  void on_scrub_schedule_input_change();
 
   ObjectContextRegistry obc_registry;
   ObjectContextLoader obc_loader;
@@ -1130,6 +1154,9 @@ public:
   }
   PGRecovery* get_recovery_handler() final {
     return recovery_handler.get();
+  }
+  scrub::PGScrubber* get_scrubber() final {
+    return &scrubber;
   }
   PeeringState& get_peering_state() final {
     return peering_state;
