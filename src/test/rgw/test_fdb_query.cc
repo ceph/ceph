@@ -274,7 +274,14 @@ using configured_difference =
  decltype(lq::with_options(lq::difference(lq::empty(), lq::universal()),
                            lq::query_options {}));
 
+template <typename T>
+concept exposes_rvalue_boundaries = requires(T value) {
+ std::move(value).lower();
+ std::move(value).upper();
+};
+
 static_assert(lq::expression<lq::interval>);
+static_assert(not exposes_rvalue_boundaries<lq::interval>);
 static_assert(lq::expression<decltype(lq::difference(lq::empty(), lq::universal()))>);
 static_assert(lq::expression<decltype(lq::set_union(lq::empty(), lq::universal()))>);
 static_assert(lq::expression<decltype(lq::after("m"))>);
