@@ -21,6 +21,7 @@
 #include <iterator>
 #include <vector>
 #include <cstdlib>
+#include "common/Cond.h"
 #include "common/DecayCounter.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -32,6 +33,7 @@
 #include "common/cmdparse.h"
 #include "log/Log.h"
 
+#include "msg/Messenger.h"
 #include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
