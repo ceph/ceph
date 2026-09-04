@@ -2308,6 +2308,216 @@ class TestMirroring(CephFSTestCase):
 
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
 
+    def test_cephfs_mirror_hardlink_snapdiff_visibility(self):
+        """Verify snapdiff reports every path of a multiversion hardlink.
+
+        The shared inode is multiversion because nlink is greater than one.
+        Updating it COWs the inode without necessarily COWing either
+        hardlink dentry. Snapdiff must therefore report both paths by
+        considering the inode version as well as the dentry version. Keep
+        blockdiff disabled so this test isolates dentry visibility from
+        changed-block calculation.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.config_set(
+            'client.mirror',
+            'cephfs_mirror_blockdiff_min_file_size', 134217728)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+        file_names = ('file', 'link')
+
+        def snapshot_file_state(mount, snap_name, file_name):
+            path = f'{dir_name}/.snap/{snap_name}/{file_name}'
+            stat = mount.run_shell(
+                ['stat', '-c', '%F:%s:%i:%h', path]
+            ).stdout.getvalue().strip()
+            file_type, size, inode, nlink = stat.rsplit(':', 3)
+            digest = mount.run_shell(
+                ['sha256sum', path]
+            ).stdout.getvalue().split()[0]
+            return file_type, int(size), digest, int(inode), int(nlink)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      peer_spec, self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', dir_name])
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/zero', f'of={dir_name}/{file_names[0]}',
+            'bs=1M', 'count=64', 'conv=fsync'
+        ])
+        self.mount_a.run_shell([
+            'ln', f'{dir_name}/{file_names[0]}',
+            f'{dir_name}/{file_names[1]}'
+        ])
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:00 UTC',
+            f'{dir_name}/{file_names[0]}'
+        ])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_a'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_a', 1)
+        self.verify_snapshot(dir_name, 'snap_a')
+        initial_states = {
+            name: snapshot_file_state(self.mount_a, 'snap_a', name)
+            for name in file_names
+        }
+        self.assertEqual(initial_states['file'][3],
+                         initial_states['link'][3])
+        self.assertEqual(2, initial_states['file'][4])
+
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/urandom', f'of={dir_name}/{file_names[0]}',
+            'bs=1M', 'count=1', 'seek=32', 'conv=notrunc,fsync'
+        ])
+        # Pin distinct mtimes so this test isolates the unchanged-hardlink
+        # dentry bug rather than the separate pending-snapflush/mtime issue.
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:02 UTC',
+            f'{dir_name}/{file_names[0]}'
+        ])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_b'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_b', 2)
+        self.assertIn('snap_b', self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        source_states = {
+            name: snapshot_file_state(self.mount_a, 'snap_b', name)
+            for name in file_names
+        }
+        destination_states = {
+            name: snapshot_file_state(self.mount_b, 'snap_b', name)
+            for name in file_names
+        }
+        log.info('hardlink snapdiff visibility: source=%s destination=%s',
+                 source_states, destination_states)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+        self.assertNotEqual(initial_states['file'][2],
+                            source_states['file'][2])
+        self.assertEqual(source_states['file'][:3],
+                         source_states['link'][:3])
+        self.assertEqual(source_states['file'][3],
+                         source_states['link'][3])
+        self.assertEqual(2, source_states['file'][4])
+        for name in file_names:
+            self.assertEqual(source_states[name][:3],
+                             destination_states[name][:3])
+
+    def test_cephfs_mirror_hardlink_snapdiff_replica_inode(self):
+        """Verify snapdiff reports a hardlink through an inode replica.
+
+        Pin the hardlink's primary dentry and remote dentry to different
+        active MDS ranks. The rank serving the remote dentry has only an
+        inode replica, whose snap range is not authoritative. Snapdiff must
+        report the remote dentry conservatively even if the replica's
+        ``first`` value appears to span both snapshots.
+        """
+        self.setup_mount_b(mds_perm='rw')
+        self.fs.set_max_mds(2)
+        status = self.fs.wait_for_daemons()
+        self.config_set(
+            'client.mirror',
+            'cephfs_mirror_blockdiff_min_file_size', 134217728)
+        peer_spec = "client.mirror_remote@ceph"
+        dir_name = 'd0'
+        file_paths = ('file', 'replica/link')
+
+        def snapshot_file_state(mount, snap_name, file_path):
+            path = f'{dir_name}/.snap/{snap_name}/{file_path}'
+            stat = mount.run_shell(
+                ['stat', '-c', '%F:%s:%i:%h', path]
+            ).stdout.getvalue().strip()
+            file_type, size, inode, nlink = stat.rsplit(':', 3)
+            digest = mount.run_shell(
+                ['sha256sum', path]
+            ).stdout.getvalue().split()[0]
+            return file_type, int(size), digest, int(inode), int(nlink)
+
+        self.enable_mirroring(self.primary_fs_name, self.primary_fs_id)
+        self.peer_add(self.primary_fs_name, self.primary_fs_id,
+                      peer_spec, self.secondary_fs_name)
+        self.mount_a.run_shell(['mkdir', '-p', f'{dir_name}/replica/empty'])
+        self.mount_a.setfattr(dir_name, 'ceph.dir.pin', '0')
+        self.mount_a.setfattr(f'{dir_name}/replica', 'ceph.dir.pin', '1')
+        self._wait_subtrees(
+            [(f'/{dir_name}', 0), (f'/{dir_name}/replica', 1)],
+            rank='all', status=status, path=f'/{dir_name}')
+
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/zero', f'of={dir_name}/{file_paths[0]}',
+            'bs=1M', 'count=64', 'conv=fsync'
+        ])
+        self.mount_a.run_shell([
+            'ln', f'{dir_name}/{file_paths[0]}',
+            f'{dir_name}/{file_paths[1]}'
+        ])
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:00 UTC',
+            f'{dir_name}/{file_paths[0]}'
+        ])
+        # Populate rank 1's remote-dentry linkage and inode replica before
+        # the first snapshot.
+        self.mount_a.run_shell(['stat', f'{dir_name}/{file_paths[1]}'])
+        self.add_directory(self.primary_fs_name, self.primary_fs_id,
+                           f'/{dir_name}')
+
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_a'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_a', 1)
+        self.verify_snapshot(dir_name, 'snap_a')
+        initial_states = {
+            path: snapshot_file_state(self.mount_a, 'snap_a', path)
+            for path in file_paths
+        }
+        self.assertEqual(initial_states[file_paths[0]][3],
+                         initial_states[file_paths[1]][3])
+        self.assertEqual(2, initial_states[file_paths[0]][4])
+
+        self.mount_a.run_shell([
+            'dd', 'if=/dev/urandom', f'of={dir_name}/{file_paths[0]}',
+            'bs=1M', 'count=1', 'seek=32', 'conv=notrunc,fsync'
+        ])
+        self.mount_a.run_shell([
+            'touch', '-m', '-d', '2020-01-01 00:00:02 UTC',
+            f'{dir_name}/{file_paths[0]}'
+        ])
+        self.mount_a.run_shell(['mkdir', f'{dir_name}/.snap/snap_b'])
+        self.check_peer_status(self.primary_fs_name, self.primary_fs_id,
+                               peer_spec, f'/{dir_name}', 'snap_b', 2)
+        self.assertIn('snap_b', self.mount_b.ls(path=f'{dir_name}/.snap'))
+
+        source_states = {
+            path: snapshot_file_state(self.mount_a, 'snap_b', path)
+            for path in file_paths
+        }
+        destination_states = {
+            path: snapshot_file_state(self.mount_b, 'snap_b', path)
+            for path in file_paths
+        }
+        log.info('replica inode hardlink snapdiff: source=%s destination=%s',
+                 source_states, destination_states)
+
+        self.remove_directory(self.primary_fs_name, self.primary_fs_id,
+                              f'/{dir_name}')
+        self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
+
+        self.assertNotEqual(initial_states[file_paths[0]][2],
+                            source_states[file_paths[0]][2])
+        self.assertEqual(source_states[file_paths[0]][:3],
+                         source_states[file_paths[1]][:3])
+        self.assertEqual(source_states[file_paths[0]][3],
+                         source_states[file_paths[1]][3])
+        self.assertEqual(2, source_states[file_paths[0]][4])
+        for path in file_paths:
+            self.assertEqual(source_states[path][:3],
+                             destination_states[path][:3])
+
     def test_cephfs_mirror_incremental_sync_with_type_mixup(self):
         """ Test incremental snapshot synchronization with file type changes.
 
