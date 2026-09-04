@@ -1,7 +1,7 @@
 import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import expand from 'brace-expansion';
+import { expand } from 'brace-expansion';
 
 import { HostService } from '~/app/shared/api/host.service';
 import { SelectMessages } from '~/app/shared/components/select/select-messages.model';
