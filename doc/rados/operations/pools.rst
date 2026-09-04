@@ -605,11 +605,27 @@ You may set values for the following keys:
 .. _recovery_op_priority:
 
 .. describe:: recovery_op_priority
-   
+
    :Description: Sets the recovery operation priority for a specific pool's PGs. This overrides the general priority determined by :confval:`osd_recovery_op_priority`.
 
    :Type: Integer
    :Default: ``0``
+
+.. _qos_group:
+
+.. describe:: qos_group
+
+   :Description: Names the QoS group whose proportional share the pool's
+                 client I/O is charged against by OSD op schedulers that
+                 support pool-level QoS (currently ``osd_op_queue = bfq``).
+                 The group must have been defined with ``ceph osd qos-group
+                 set``. When unset, such schedulers fall back to the traffic
+                 class derived from the pool's application metadata. Requires
+                 ``require_osd_release`` of ``umbrella`` or later. Set to
+                 ``unset`` to clear.
+
+   :Type: String
+   :Default: none
 
 
 Getting Pool Values

@@ -5586,7 +5586,7 @@ namespace {
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
     DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, READ_RATIO,
     EC_OPTIMIZATIONS, EC_DATA_SHARD_COUNT, EC_CODING_SHARD_COUNT,
-    SUPPORTS_OMAP };
+    SUPPORTS_OMAP, QOS_GROUP };
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6396,6 +6396,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"ec_data_shard_count", EC_DATA_SHARD_COUNT},
       {"ec_coding_shard_count", EC_CODING_SHARD_COUNT},
       {"supports_omap", SUPPORTS_OMAP},
+      {"qos_group", QOS_GROUP},
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6643,6 +6644,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+          case QOS_GROUP:
 	    {
 	      pool_opts_t::key_t key = pool_opts_t::get_opt_desc(i->first).key;
 	      if (p->opts.is_set(key)) {
@@ -6824,6 +6826,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case DEDUP_CHUNK_ALGORITHM:
 	  case DEDUP_CDC_CHUNK_SIZE:
           case READ_RATIO:
+          case QOS_GROUP:
 	    for (i = ALL_CHOICES.begin(); i != ALL_CHOICES.end(); ++i) {
 	      if (i->second == *it)
 		break;
@@ -7212,6 +7215,43 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rs << "\n";
       rdata.append(rs.str());
     }
+  } else if (prefix == "osd qos-group ls") {
+    const auto &groups = osdmap.get_qos_groups();
+    if (f)
+      f->open_array_section("qos-groups");
+    for (auto i = groups.begin(); i != groups.end(); ++i) {
+      if (f)
+        f->dump_string("group", i->first.c_str());
+      else
+	rdata.append(i->first + "\n");
+    }
+    if (f) {
+      f->close_section();
+      ostringstream rs;
+      f->flush(rs);
+      rs << "\n";
+      rdata.append(rs.str());
+    }
+  } else if (prefix == "osd qos-group get") {
+    string name;
+    cmd_getval(cmdmap, "name", name);
+    if (!osdmap.has_qos_group(name)) {
+      ss << "unknown qos group '" << name << "'";
+      r = -ENOENT;
+      goto reply;
+    }
+    const qos_group_t &group = osdmap.get_qos_group(name);
+    ostringstream rs;
+    if (f) {
+      f->open_object_section("group");
+      group.dump(f.get());
+      f->close_section();
+      f->flush(rs);
+    } else {
+      rs << group;
+    }
+    rs << "\n";
+    rdata.append(rs.str());
   } else if (prefix == "osd pool application get") {
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
                                                      "json-pretty"));
@@ -7901,6 +7941,26 @@ bool OSDMonitor::erasure_code_profile_in_use(
   }
   if (found) {
     *ss << "pool(s) are using the erasure code profile '" << profile << "'";
+  }
+  return found;
+}
+
+bool OSDMonitor::qos_group_in_use(
+  const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
+  const string &group,
+  ostream *ss)
+{
+  bool found = false;
+  for (auto p = pools.begin(); p != pools.end(); ++p) {
+    string pool_group;
+    if (p->second.opts.get(pool_opts_t::QOS_GROUP, &pool_group) &&
+	pool_group == group) {
+      *ss << osdmap.pool_name[p->first] << " ";
+      found = true;
+    }
+  }
+  if (found) {
+    *ss << "pool(s) are using the qos group '" << group << "'";
   }
   return found;
 }
@@ -9525,6 +9585,26 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       if (n < 0 || n > 100) {
         ss << "read_ratio must be between 0 and 100";
         return -ERANGE;
+      }
+    } else if (var == "qos_group") {
+      if (!unset) {
+        if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+          ss << "must set require_osd_release to umbrella or "
+             << "later before setting qos_group";
+          return -EINVAL;
+        }
+        if (pending_inc.has_qos_group_change(val)) {
+          // the group is being created, updated or removed in the
+          // pending proposal: decide against the committed map, so a
+          // removal and an assignment can never land together
+          dout(20) << "qos group " << val << " has a pending change, "
+                   << "try again" << dendl;
+          return -EAGAIN;
+        }
+        if (!osdmap.has_qos_group(val)) {
+          ss << "qos group '" << val << "' does not exist";
+          return -ENOENT;
+        }
       }
     }
 
@@ -12086,6 +12166,115 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	       << profile_map << dendl;
       pending_inc.set_erasure_code_profile(name, profile_map);
     }
+
+    getline(ss, rs);
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+                                                      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd qos-group rm") {
+    string name;
+    cmd_getval(cmdmap, "name", name);
+
+    if (qos_group_in_use(pending_inc.new_pools, name, &ss))
+      goto wait;
+
+    if (qos_group_in_use(osdmap.pools, name, &ss)) {
+      err = -EBUSY;
+      goto reply_no_propose;
+    }
+
+    if (pending_inc.has_qos_group_change(name)) {
+      // decide against the committed map once the pending creation,
+      // update or removal of this name has landed
+      dout(20) << "qos group " << name << " has a pending change, try again"
+	       << dendl;
+      goto wait;
+    }
+
+    if (osdmap.has_qos_group(name)) {
+      pending_inc.old_qos_groups.push_back(name);
+
+      getline(ss, rs);
+      wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
+							get_last_committed() + 1));
+      return true;
+    } else {
+      ss << "qos-group " << name << " does not exist";
+      err = 0;
+      goto reply_no_propose;
+    }
+
+  } else if (prefix == "osd qos-group set") {
+    if (osdmap.require_osd_release < ceph_release_t::umbrella) {
+      ss << "all OSDs must be running umbrella or later before qos groups "
+	 << "can be defined";
+      err = -EPERM;
+      goto reply_no_propose;
+    }
+
+    string name;
+    cmd_getval(cmdmap, "name", name);
+    if (OSDMap::is_reserved_qos_group_name(name)) {
+      ss << "'" << name << "' names a built-in traffic class and cannot be "
+	 << "used for a qos group";
+      err = -EINVAL;
+      goto reply_no_propose;
+    }
+
+    vector<string> group;
+    cmd_getval(cmdmap, "group", group);
+    map<string,string> group_map;
+    for (const auto &pair_str : group) {
+      auto eq = pair_str.find('=');
+      if (eq == string::npos || eq == 0) {
+	ss << "qos group setting '" << pair_str
+	   << "' must be in key=value form";
+	err = -EINVAL;
+	goto reply_no_propose;
+      }
+      group_map[pair_str.substr(0, eq)] = pair_str.substr(eq + 1);
+    }
+    for (const auto &[key, value] : group_map) {
+      if (key != "weight") {
+	ss << "unrecognized qos group setting '" << key
+	   << "'; only 'weight' is supported";
+	err = -EINVAL;
+	goto reply_no_propose;
+      }
+    }
+    // validated at the command boundary and stored as an integer, so
+    // consumers never parse and spellings such as 0500 normalize
+    qos_group_t settings;
+    if (auto found = group_map.find("weight");
+	found != group_map.end()) {
+      string interr;
+      int64_t weight = strict_strtoll(found->second.c_str(), 10, &interr);
+      if (interr.length() ||
+	  weight < qos_group_t::MIN_WEIGHT || weight > qos_group_t::MAX_WEIGHT) {
+	ss << "qos group weight must be an integer between "
+	   << qos_group_t::MIN_WEIGHT << " and " << qos_group_t::MAX_WEIGHT;
+	err = -EINVAL;
+	goto reply_no_propose;
+      }
+      settings.weight = static_cast<uint32_t>(weight);
+    }
+
+    if (pending_inc.has_qos_group_change(name)) {
+      dout(20) << "qos group " << name << " has a pending change, try again"
+	       << dendl;
+      goto wait;
+    }
+    if (osdmap.has_qos_group(name) &&
+	osdmap.get_qos_group(name) == settings) {
+      err = 0;
+      goto reply_no_propose;
+    }
+    // unlike erasure code profiles a qos group in use may be updated
+    // freely: nothing durable depends on it, and schedulers pick up
+    // new weights at the next (re)activation of the group's queue
+    dout(20) << "qos group set " << name << " " << settings << dendl;
+    pending_inc.set_qos_group(name, settings);
 
     getline(ss, rs);
     wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,

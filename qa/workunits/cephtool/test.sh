@@ -2579,6 +2579,45 @@ function test_mon_osd_erasure_code()
   ceph osd erasure-code-profile rm good
 }
 
+function test_mon_osd_qos_group()
+{
+  ceph osd qos-group set gold weight=500
+  # re-set with identical settings is idempotent
+  ceph osd qos-group set gold weight=500
+  ceph osd qos-group ls | grep gold
+  ceph osd qos-group get gold | grep 'weight=500'
+  # unlike erasure code profiles, updating in place needs no --force
+  ceph osd qos-group set gold weight=800
+  ceph osd qos-group get gold | grep 'weight=800'
+  # weight defaults to 100
+  ceph osd qos-group set silver
+  ceph osd qos-group get silver | grep 'weight=100'
+  # weights are stored as integers, so spellings normalize
+  ceph osd qos-group set silver weight=0250
+  ceph osd qos-group get silver | grep 'weight=250'
+  # only weight is recognized, and it must be an integer in 1..1000
+  expect_false ceph osd qos-group set bad foo=bar
+  expect_false ceph osd qos-group set bad weight=0
+  expect_false ceph osd qos-group set bad weight=1001
+  expect_false ceph osd qos-group set bad weight=fast
+  # built-in traffic class names are reserved
+  expect_false ceph osd qos-group set block weight=200
+  # steering a pool requires the group to exist
+  ceph osd pool create qos_pool 8
+  expect_false ceph osd pool set qos_pool qos_group tin
+  ceph osd pool set qos_pool qos_group gold
+  ceph osd pool get qos_pool qos_group | grep 'qos_group: gold'
+  # a group referenced by a pool cannot be removed
+  expect_false ceph osd qos-group rm gold
+  ceph osd pool set qos_pool qos_group unset
+  expect_false ceph osd pool get qos_pool qos_group
+  ceph osd qos-group rm gold
+  ceph osd qos-group rm silver
+  # rm of a nonexistent group is not an error (matches erasure-code-profile)
+  ceph osd qos-group rm gold
+  ceph osd pool delete qos_pool qos_pool --yes-i-really-really-mean-it
+}
+
 function test_mon_osd_misc()
 {
   set +e
@@ -2982,6 +3021,7 @@ MON_TESTS+=" mon_pg"
 MON_TESTS+=" mon_osd_pool_set"
 MON_TESTS+=" mon_osd_tiered_pool_set"
 MON_TESTS+=" mon_osd_erasure_code"
+MON_TESTS+=" mon_osd_qos_group"
 MON_TESTS+=" mon_osd_misc"
 MON_TESTS+=" mon_tell"
 MON_TESTS+=" mon_ping"

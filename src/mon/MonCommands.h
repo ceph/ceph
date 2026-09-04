@@ -884,6 +884,22 @@ COMMAND("osd erasure-code-profile rm "
 COMMAND("osd erasure-code-profile ls",
 	"list all erasure code profiles",
 	"osd", "r")
+COMMAND("osd qos-group set "
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.] "
+	"name=group,type=CephString,n=N,req=false",
+	"create or update qos group <name> with [<key[=value]> ...] pairs (e.g. weight=100)",
+	"osd", "rw")
+COMMAND("osd qos-group get "
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]",
+	"get qos group <name>",
+	"osd", "r")
+COMMAND("osd qos-group rm "
+	"name=name,type=CephString,goodchars=[A-Za-z0-9-_.]",
+	"remove qos group <name>",
+	"osd", "rw")
+COMMAND("osd qos-group ls",
+	"list all qos groups",
+	"osd", "r")
 COMMAND("osd set "
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"
 	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|"
@@ -1221,6 +1237,7 @@ COMMAND("osd pool get "
           "|pg_num_max"
           "|pg_num_min"
           "|pgp_num"
+          "|qos_group"
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"
@@ -1286,6 +1303,7 @@ COMMAND("osd pool set "
           "|pg_num_min"
           "|pgp_num"
           "|pgp_num_actual"
+          "|qos_group"
           "|read_ratio"
           "|recovery_op_priority"
           "|recovery_priority"

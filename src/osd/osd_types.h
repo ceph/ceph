@@ -1145,6 +1145,16 @@ public:
      * completion if there are no other in progress writes.
      */
     PCT_UPDATE_DELAY,
+    /**
+     * QOS_GROUP
+     *
+     * Name of the OSDMap qos group (`osd qos-group set`) whose
+     * proportional share op schedulers supporting pool-level QoS
+     * charge this pool's client IO against.  Unset means the
+     * scheduler falls back to the traffic class derived from the
+     * pool's application metadata.
+     */
+    QOS_GROUP,
   };
 
   enum type_t {
@@ -1274,6 +1284,52 @@ struct pg_merge_meta_t {
   }
 };
 WRITE_CLASS_ENCODER(pg_merge_meta_t)
+
+/**
+ * qos_group_t
+ *
+ * Settings of a user-defined qos group (`osd qos-group set`): an entry
+ * of the OSDMap qos_groups table that op schedulers supporting
+ * pool-level proportional-share QoS consume.  A versioned struct, so
+ * that settings can grow without touching the OSDMap section that
+ * carries the table.
+ */
+struct qos_group_t {
+  static constexpr uint32_t MIN_WEIGHT = 1;
+  static constexpr uint32_t MAX_WEIGHT = 1000;
+  static constexpr uint32_t DEFAULT_WEIGHT = 100;
+
+  /// relative share, in the cgroups v2 io.bfq.weight convention
+  uint32_t weight = DEFAULT_WEIGHT;
+
+  bool operator==(const qos_group_t &) const = default;
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(weight, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(weight, p);
+    DECODE_FINISH(p);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("weight", weight);
+  }
+  static std::list<qos_group_t> generate_test_instances() {
+    std::list<qos_group_t> o;
+    o.emplace_back();
+    o.emplace_back();
+    o.back().weight = 500;
+    return o;
+  }
+};
+WRITE_CLASS_ENCODER(qos_group_t)
+
+inline std::ostream& operator<<(std::ostream& out, const qos_group_t& g) {
+  return out << "weight=" << g.weight;
+}
 
 class OSDMap;
 

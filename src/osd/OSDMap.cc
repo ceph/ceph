@@ -666,7 +666,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 9; // if bumping this, be aware of allow_crimson 12
+    uint8_t target_v = 9; // if bumping this, be aware of qos_groups 13
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -681,6 +681,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (mutate_allow_crimson != mutate_allow_crimson_t::NONE) {
       target_v = std::max((uint8_t)12, target_v);
+    }
+    if (!new_qos_groups.empty() || !old_qos_groups.empty()) {
+      target_v = std::max((uint8_t)13, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -737,6 +740,10 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (target_v >= 12) {
       encode(mutate_allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(new_qos_groups, bl);
+      encode(old_qos_groups, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -951,7 +958,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -1022,6 +1029,13 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 12) {
       decode(mutate_allow_crimson, bl);
+    }
+    if (struct_v >= 13) {
+      decode(new_qos_groups, bl);
+      decode(old_qos_groups, bl);
+    } else {
+      new_qos_groups.clear();
+      old_qos_groups.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -1323,6 +1337,13 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->open_array_section("old_erasure_code_profiles");
   for (const auto &erasure_code_profile : old_erasure_code_profiles) {
     f->dump_string("old", erasure_code_profile);
+  }
+  f->close_section();
+
+  OSDMap::dump_qos_groups(new_qos_groups, f);
+  f->open_array_section("old_qos_groups");
+  for (const auto &qos_group : old_qos_groups) {
+    f->dump_string("old", qos_group);
   }
   f->close_section();
 
@@ -2483,11 +2504,19 @@ int OSDMap::apply_incremental(const Incremental &inc)
   // erasure_code_profiles
   for (const auto &profile : inc.old_erasure_code_profiles)
     erasure_code_profiles.erase(profile);
-  
+
   for (const auto &profile : inc.new_erasure_code_profiles) {
     set_erasure_code_profile(profile.first, profile.second);
   }
-  
+
+  // qos_groups
+  for (const auto &group : inc.old_qos_groups)
+    qos_groups.erase(group);
+
+  for (const auto &group : inc.new_qos_groups) {
+    set_qos_group(group.first, group.second);
+  }
+
   // up/down
   for (const auto &state : inc.new_state) {
     const auto osd = state.first;
@@ -3517,7 +3546,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 9; // when bumping this, be aware of allow_crimson
+    uint8_t target_v = 9; // when bumping this, be aware of qos_groups
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -3533,6 +3562,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (allow_crimson) {
       target_v = std::max((uint8_t)12, target_v);
+    }
+    if (!qos_groups.empty()) {
+      target_v = std::max((uint8_t)13, target_v);
     }
     ENCODE_START(target_v, 1, bl); // extended, osd-only data
     if (target_v < 7) {
@@ -3594,6 +3626,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 12) {
       ::encode(allow_crimson, bl);
+    }
+    if (target_v >= 13) {
+      encode(qos_groups, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3860,7 +3895,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(12, bl); // extended, osd-only data
+    DECODE_START(13, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blocklist, bl);
@@ -3949,6 +3984,11 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
     if (struct_v >= 12) {
       decode(allow_crimson, bl);
     }
+    if (struct_v >= 13) {
+      decode(qos_groups, bl);
+    } else {
+      qos_groups.clear();
+    }
     DECODE_FINISH(bl); // osd-only data
   }
 
@@ -4008,6 +4048,28 @@ void OSDMap::dump_erasure_code_profiles(
     f->close_section();
   }
   f->close_section();
+}
+
+void OSDMap::dump_qos_groups(
+  const mempool::osdmap::map<string,qos_group_t>& groups,
+  Formatter *f)
+{
+  f->open_object_section("qos_groups");
+  for (const auto &group : groups) {
+    f->open_object_section(group.first.c_str());
+    group.second.dump(f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+bool OSDMap::is_reserved_qos_group_name(const std::string &name)
+{
+  static const std::set<std::string> reserved = {
+    "block", "object", "object_meta", "file", "file_meta", "other",
+    "recovery", "best_effort"
+  };
+  return reserved.count(name);
 }
 
 void OSDMap::dump_osds(Formatter *f) const
@@ -4259,6 +4321,7 @@ void OSDMap::dump(Formatter *f, CephContext *cct) const
   f->close_section();
 
   dump_erasure_code_profiles(erasure_code_profiles, f);
+  dump_qos_groups(qos_groups, f);
 
   f->open_array_section("removed_snaps_queue");
   for (auto& p : removed_snaps_queue) {

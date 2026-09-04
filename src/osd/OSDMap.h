@@ -26,6 +26,7 @@
  *
  */
 #include <vector>
+#include <algorithm>
 #include <list>
 #include <set>
 #include <map>
@@ -402,6 +403,8 @@ public:
     mempool::osdmap::set<int64_t> old_pools;
     mempool::osdmap::map<std::string,std::map<std::string,std::string> > new_erasure_code_profiles;
     mempool::osdmap::vector<std::string> old_erasure_code_profiles;
+    mempool::osdmap::map<std::string,qos_group_t> new_qos_groups;
+    mempool::osdmap::vector<std::string> old_qos_groups;
     mempool::osdmap::map<int32_t,entity_addrvec_t> new_up_client;
     mempool::osdmap::map<int32_t,entity_addrvec_t> new_up_cluster;
     mempool::osdmap::map<int32_t,uint32_t> new_state;             // XORed onto previous state.
@@ -486,6 +489,21 @@ public:
     }
     mempool::osdmap::map<std::string,std::map<std::string,std::string>> get_erasure_code_profiles() const {
       return new_erasure_code_profiles;
+    }
+    bool has_qos_group(const std::string &name) const {
+      auto i = new_qos_groups.find(name);
+      return i != new_qos_groups.end();
+    }
+    /// true while a creation, update or removal of the group awaits
+    /// commit; commands then retry against the committed map rather
+    /// than reason about the pending state
+    bool has_qos_group_change(const std::string &name) const {
+      return has_qos_group(name) ||
+	std::find(old_qos_groups.begin(), old_qos_groups.end(), name) !=
+	old_qos_groups.end();
+    }
+    void set_qos_group(const std::string &name, const qos_group_t& group) {
+      new_qos_groups[name] = group;
     }
 
     /// propagate update pools' (snap and other) metadata to any of their tiers
@@ -607,6 +625,16 @@ private:
   mempool::osdmap::map<int64_t,pg_pool_t> pools;
   mempool::osdmap::map<int64_t,std::string> pool_name;
   mempool::osdmap::map<std::string, std::map<std::string,std::string>> erasure_code_profiles;
+  /**
+   * qos_groups
+   *
+   * User-defined QoS groups: named qos_group_t settings (currently
+   * just a weight) that op schedulers supporting proportional-share
+   * QoS consume.  Pools are steered into a group with the qos_group
+   * pool option; managed like erasure code profiles via
+   * `osd qos-group set/get/ls/rm`.
+   */
+  mempool::osdmap::map<std::string, qos_group_t> qos_groups;
   mempool::osdmap::map<std::string,int64_t, std::less<>> name_pool;
 
   std::shared_ptr< mempool::osdmap::vector<uuid_d> > osd_uuid;
@@ -891,6 +919,31 @@ public:
   const mempool::osdmap::map<std::string,std::map<std::string,std::string>> &get_erasure_code_profiles() const {
     return erasure_code_profiles;
   }
+
+  bool has_qos_group(const std::string &name) const {
+    auto i = qos_groups.find(name);
+    return i != qos_groups.end();
+  }
+  void set_qos_group(const std::string &name, const qos_group_t& group) {
+    qos_groups[name] = group;
+  }
+  const qos_group_t &get_qos_group(const std::string &name) const {
+    static const qos_group_t defaults;
+    auto i = qos_groups.find(name);
+    if (i == qos_groups.end())
+      return defaults;
+    else
+      return i->second;
+  }
+  const mempool::osdmap::map<std::string,qos_group_t> &get_qos_groups() const {
+    return qos_groups;
+  }
+  /**
+   * Names of the built-in traffic classes op schedulers derive from
+   * pool application metadata; reserved so a user-defined qos group
+   * can never shadow one.
+   */
+  static bool is_reserved_qos_group_name(const std::string &name);
 
   bool get_allow_crimson() const {
     return allow_crimson;
@@ -1857,6 +1910,9 @@ public:
   static std::string get_flag_string(unsigned flags);
   static void dump_erasure_code_profiles(
     const mempool::osdmap::map<std::string,std::map<std::string,std::string> > &profiles,
+    ceph::Formatter *f);
+  static void dump_qos_groups(
+    const mempool::osdmap::map<std::string,qos_group_t> &groups,
     ceph::Formatter *f);
   void dump(ceph::Formatter *f, CephContext *cct = nullptr) const;
   void dump_osd(int id, ceph::Formatter *f) const;

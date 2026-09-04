@@ -462,6 +462,45 @@ TEST_F(OSDMapTest, Create) {
   ASSERT_EQ(get_num_osds(), osdmap.get_num_in_osds());
 }
 
+TEST_F(OSDMapTest, QosGroups) {
+  set_up_map();
+  ASSERT_TRUE(osdmap.get_qos_groups().empty());
+
+  // define a group through an incremental
+  OSDMap::Incremental inc(osdmap.get_epoch() + 1);
+  inc.fsid = osdmap.get_fsid();
+  inc.set_qos_group("gold", {500});
+  osdmap.apply_incremental(inc);
+  ASSERT_TRUE(osdmap.has_qos_group("gold"));
+  ASSERT_EQ(500u, osdmap.get_qos_group("gold").weight);
+
+  // the table survives a full-map encode/decode round trip
+  bufferlist bl;
+  osdmap.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
+  OSDMap decoded;
+  decoded.decode(bl);
+  ASSERT_TRUE(decoded.has_qos_group("gold"));
+  ASSERT_EQ(500u, decoded.get_qos_group("gold").weight);
+
+  // and an incremental encode/decode round trip
+  OSDMap::Incremental rm(osdmap.get_epoch() + 1);
+  rm.fsid = osdmap.get_fsid();
+  rm.set_qos_group("silver", {100});
+  rm.old_qos_groups.push_back("gold");
+  bufferlist rmbl;
+  rm.encode(rmbl, CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
+  auto p = rmbl.cbegin();
+  OSDMap::Incremental decoded_rm(p);
+  osdmap.apply_incremental(decoded_rm);
+  ASSERT_FALSE(osdmap.has_qos_group("gold"));
+  ASSERT_TRUE(osdmap.has_qos_group("silver"));
+
+  // built-in traffic class names are reserved for the schedulers
+  ASSERT_TRUE(OSDMap::is_reserved_qos_group_name("block"));
+  ASSERT_TRUE(OSDMap::is_reserved_qos_group_name("best_effort"));
+  ASSERT_FALSE(OSDMap::is_reserved_qos_group_name("gold"));
+}
+
 TEST_F(OSDMapTest, Features) {
   // with EC pool
   set_up_map();

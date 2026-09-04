@@ -528,6 +528,10 @@ private:
     const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
     const std::string &profile,
     std::ostream *ss);
+  bool qos_group_in_use(
+    const mempool::osdmap::map<int64_t, pg_pool_t> &pools,
+    const std::string &group,
+    std::ostream *ss);
   int parse_erasure_code_profile(const std::vector<std::string> &erasure_code_profile,
 				 std::map<std::string,std::string> *erasure_code_profile_map,
 				 std::ostream *ss);
