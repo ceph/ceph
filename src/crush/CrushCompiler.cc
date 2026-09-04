@@ -328,6 +328,12 @@ int CrushCompiler::decompile(ostream &out)
 	<< crush.get_msr_collision_tries()
 	<< "\n";
   }
+  // not really a tunable -- it does not affect placement -- but the text
+  // format has nowhere else to put a map-wide scalar, and dropping it on a
+  // decompile/compile round trip would misstate how much capacity every
+  // weight below stands for
+  if (crush.get_weight_shift() != 0)
+    out << "tunable weight_shift " << crush.get_weight_shift() << "\n";
 
   out << "\n# devices\n";
   for (int i=0; i<crush.get_max_devices(); i++) {
@@ -565,6 +571,14 @@ int CrushCompiler::parse_tunable(iter_t const& i)
     crush.set_msr_descents(val);
   else if (name == "msr_collision_tries")
     crush.set_msr_collision_tries(val);
+  else if (name == "weight_shift") {
+    if (val < 0 || (unsigned)val > CRUSH_MAX_WEIGHT_SHIFT) {
+      err << "weight_shift must be between 0 and " << CRUSH_MAX_WEIGHT_SHIFT
+	  << std::endl;
+      return -1;
+    }
+    crush.set_weight_shift(val);
+  }
   else {
     err << "tunable " << name << " not recognized" << std::endl;
     return -1;
@@ -713,12 +727,34 @@ int CrushCompiler::parse_bucket(iter_t const& i)
 	string tag = string_node(sub->children[q++]);
 	if (tag == "weight") {
 	  weight = float_node(sub->children[q]) * (float)0x10000;
-	  if (weight > CRUSH_MAX_DEVICE_WEIGHT && itemid >= 0) {
-	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000 << std::endl;
+	  // CRUSH_MAX_DEVICE_WEIGHT is a plausibility check on a single device,
+	  // so it is a limit on the capacity the weight stands for and not on
+	  // the number itself: a map at weight_shift N writes that same device
+	  // as a raw weight 2^N smaller.  Scale the limit to match, so that the
+	  // shift neither tightens it nor turns it into an escape hatch.  (The
+	  // nested bucket limit below is the opposite: it is a property of the
+	  // 32-bit field the weight is read out of, so it stays raw.)
+	  //
+	  // The grammar puts tunables ahead of buckets, so the shift is known
+	  // by the time any weight is parsed.
+	  if (weight > (CRUSH_MAX_DEVICE_WEIGHT >> crush.get_weight_shift()) &&
+	      itemid >= 0) {
+	    err << "device weight limited to " << CRUSH_MAX_DEVICE_WEIGHT / 0x10000;
+	    if (crush.get_weight_shift())
+	      err << " TiB, which at weight_shift " << crush.get_weight_shift()
+		  << " is a raw weight of "
+		  << (double)(CRUSH_MAX_DEVICE_WEIGHT >> crush.get_weight_shift())
+		     / (double)0x10000;
+	    err << std::endl;
 	    return -ERANGE;
 	  }
-	  else if (weight > CRUSH_MAX_BUCKET_WEIGHT && itemid < 0) {
-	    err << "bucket weight limited to " << CRUSH_MAX_BUCKET_WEIGHT / 0x10000
+	  else if (weight > CRUSH_MAX_ITEM_WEIGHT && itemid < 0) {
+	    // the draw reads an item weight as a signed int, so a nested
+	    // bucket heavier than this would behave as if its weight were
+	    // negative.  scale the whole map down with "tunable
+	    // weight_shift" instead of growing individual weights.
+	    err << "nested bucket weight limited to "
+		<< CRUSH_MAX_ITEM_WEIGHT / 0x10000
 	        << " to prevent overflow" << std::endl;
 	    return -ERANGE;
 	  }
