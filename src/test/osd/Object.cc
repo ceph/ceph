@@ -260,77 +260,33 @@ bool ObjectDesc::check_sparse(const std::map<uint64_t, uint64_t>& extents,
 			      const std::pair<uint64_t, uint64_t>& offlen)
 {
   const auto [offset_to_skip, read_length] = offlen;
+  bufferlist padded;
   uint64_t pos = offset_to_skip;
-  uint64_t off = 0;
-  auto objiter = begin();
-  objiter.seek(pos);
+  uint64_t src_off = 0;
 
-  for (auto &&extiter : extents) {
-    // verify hole
-    {
-      bufferlist bl;
-      bl.append_zero(extiter.first - pos);
-      uint64_t error_at = 0;
-      if (!objiter.check_bl_advance(bl, &error_at)) {
-	std::cout << "sparse read omitted non-zero data at "
-		  << error_at << std::endl;
-	return false;
-      }
+  for (auto &&[ext_offset, ext_len] : extents) {
+    // Zero-fill any hole before this extent.
+    if (ext_offset > pos) {
+      padded.append_zero(ext_offset - pos);
+      pos = ext_offset;
     }
 
-    ceph_assert(off <= to_check.length());
-    pos = extiter.first;
-    objiter.seek(pos);
-
-    {
-      bufferlist bl;
-      bl.substr_of(
-	to_check,
-	off,
-	std::min(to_check.length() - off, extiter.second));
-      uint64_t error_at = 0;
-
-      if (!objiter.check_bl_advance(bl, &error_at)) {
-        std::cout << "incorrect buffer at pos " << error_at
-                  << " (object offset " << (pos + error_at) << ")"
-                  << " in extent [" << extiter.first
-                  << "+" << extiter.second << ")\n";
-
-        // regenerate expected bytes for this extent by seeking a fresh iterator
-        auto expected_iter = begin();
-        expected_iter.seek(pos);
-        bufferlist expected = expected_iter.gen_bl_advance(bl.length());
-
-        std::cout << "  extent object_offset=" << extiter.first
-                  << "  length=" << bl.length()
-                  << "  first_mismatch_in_extent=" << error_at << "\n";
-        dump_extent_diff(std::cout, pos, bl, expected);
-        std::cout << std::flush;
-        return false;
-      }
-      off += extiter.second;
-      pos += extiter.second;
-    }
-
-    if (pos < extiter.first + extiter.second) {
-      std::cout << "reached end of iterator first" << std::endl;
-      return false;
-    }
+    // Copy this extent's bytes from to_check into padded.
+    uint64_t copy_len = std::min(to_check.length() - src_off, ext_len);
+    bufferlist slice;
+    slice.substr_of(to_check, src_off, copy_len);
+    padded.append(slice);
+    src_off += copy_len;
+    pos += copy_len;
   }
 
-  // final hole: validate from end of last returned extent to end of requested range
-  bufferlist bl;
+  // Zero-fill any trailing hole after the last extent.
   uint64_t end = offset_to_skip + read_length;
   if (end > pos) {
-    bl.append_zero(end - pos);
-    uint64_t error_at;
-    if (!objiter.check_bl_advance(bl, &error_at)) {
-      std::cout << "sparse read omitted non-zero data at "
-                << error_at << std::endl;
-      return false;
-    }
+    padded.append_zero(end - pos);
   }
-  return true;
+
+  return check(padded, offlen);
 }
 
 interval_set<uint64_t> ObjectDesc::get_min_written_extents(uint64_t alignment) const
@@ -342,7 +298,31 @@ interval_set<uint64_t> ObjectDesc::get_min_written_extents(uint64_t alignment) c
     return written;
   }
 
+  if (written.empty()) {
+    return written;
+  }
+
   interval_set<uint64_t> min_written;
+  ObjectDesc *mutable_this = const_cast<ObjectDesc *>(this);
+  iterator objiter = mutable_this->begin();
+  objiter.seek(written.begin().get_start());
+
+  // Scan [scan_start, scan_end) using the shared iterator and return true if
+  // all bytes are '\0'.  On return, objiter is positioned at scan_end
+  // regardless of whether a non-zero byte was found.
+  auto is_all_zero = [&](uint64_t scan_start, uint64_t scan_end) -> bool {
+    objiter.seek(scan_start);
+    bool all_zero = true;
+    for (uint64_t i = scan_start; i < scan_end && !objiter.end(); ++i, ++objiter) {
+      if (*objiter != '\0') {
+        all_zero = false;
+        break;
+      }
+    }
+    // Ensure the iterator is at scan_end for the next call.
+    objiter.seek(scan_end);
+    return all_zero;
+  };
 
   for (auto it = written.begin(); it != written.end(); ++it) {
     const uint64_t ext_start = it.get_start();
@@ -354,22 +334,8 @@ interval_set<uint64_t> ObjectDesc::get_min_written_extents(uint64_t alignment) c
     // Last aligned block boundary at or before ext_end.
     const uint64_t last_full_block = ext_end / alignment * alignment;
 
-    // Scan [scan_start, scan_end) in the object model and return true
-    // if every byte is '\0'.
-    auto is_all_zero = [&](uint64_t scan_start, uint64_t scan_end) -> bool {
-      ObjectDesc *mutable_this = const_cast<ObjectDesc *>(this);
-      iterator objiter = mutable_this->begin();
-      objiter.seek(scan_start);
-      for (uint64_t i = 0; i < (scan_end - scan_start) && !objiter.end();
-           ++i, ++objiter) {
-        if (*objiter != '\0')
-          return false;
-      }
-      return true;
-    };
-
-    // A head fragment that falls inside a prior zero-op hole is all-zero. 
-    // The OSD may leave it as a hole rather than allocating an extent, 
+    // A head fragment that falls inside a prior zero-op hole is all-zero.
+    // The OSD may leave it as a hole rather than allocating an extent,
     // so it must not be required in min.
     if (ext_start < first_full_block && first_full_block <= ext_end) {
       if (!is_all_zero(ext_start, first_full_block)) {
@@ -391,7 +357,7 @@ interval_set<uint64_t> ObjectDesc::get_min_written_extents(uint64_t alignment) c
       }
     }
 
-    // Keep the tail's partial fragment only if it contains at least 
+    // Keep the tail's partial fragment only if it contains at least
     // one non-zero byte, for the same reason as the head.
     if (last_full_block < ext_end) {
       if (!is_all_zero(last_full_block, ext_end)) {

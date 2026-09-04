@@ -1898,6 +1898,10 @@ public:
 
     context->oid_in_use.erase(oid);
     context->oid_not_in_use.insert(oid);
+
+    int local_errors = 0;
+    state_locker.unlock();
+
     int retval = completions[0]->get_return_value();
     for (auto it = completions.begin();
          it != completions.end(); ++it) {
@@ -1948,32 +1952,32 @@ public:
 	if (to_check != old_value.most_recent()) {
 	  std::cerr << num << ": oid " << oid << " found incorrect object contents " << to_check
 	       << ", expected " << old_value.most_recent() << std::endl;
-	  context->errors++;
+	  local_errors++;
 	}
-        for (unsigned i = 0; i < results.size(); i++) {
-          if (is_sparse_read[i]) {
-            bool ok = old_value.check_sparse(extent_results[i], results[i], offlens[i]);
-            if (!ok) {
-              std::cerr << num << ": CORRUPTION: oid " << oid
-                        << " header claims " << to_check
-                        << " but byte content does not match" << std::endl;
-              context->errors++;
-            }
-            // Check allocation: the returned extent map must satisfy
-            // min_expected ⊆ actual ⊆ max_expected
-            const auto [sr_offset, sr_length] = offlens[i];
-            if (!context->check_sparse_extent_map(num, oid, sr_offset, sr_length,
-                                                  extent_results[i], old_value)) {
-              context->errors++;
-            }
-          } else {
-            bool ok = old_value.check(results[i], offlens[i]);
-            if (!ok) {
-              std::cerr << num << ": CORRUPTION: oid " << oid
-                        << " header claims " << to_check
-                        << " but byte content does not match" << std::endl;
-              context->errors++;
-            }
+	       for (unsigned i = 0; i < results.size(); i++) {
+	         if (is_sparse_read[i]) {
+	           bool ok = old_value.check_sparse(extent_results[i], results[i], offlens[i]);
+	           if (!ok) {
+	             std::cerr << num << ": CORRUPTION: oid " << oid
+	                       << " header claims " << to_check
+	                       << " but byte content does not match" << std::endl;
+	             local_errors++;
+	           }
+	           // Check allocation: the returned extent map must satisfy
+	           // min_expected ⊆ actual ⊆ max_expected
+	           const auto [sr_offset, sr_length] = offlens[i];
+	           if (!context->check_sparse_extent_map(num, oid, sr_offset, sr_length,
+	                                                 extent_results[i], old_value)) {
+	             local_errors++;
+	           }
+	         } else {
+	           bool ok = old_value.check(results[i], offlens[i]);
+	           if (!ok) {
+	             std::cerr << num << ": CORRUPTION: oid " << oid
+	                       << " header claims " << to_check
+	                       << " but byte content does not match" << std::endl;
+	             local_errors++;
+	           }
 
 	    uint32_t checksum = 0;
 	    if (checksum_retvals[i] == 0) {
@@ -1989,12 +1993,12 @@ public:
 	    if (checksum_retvals[i] != 0 || checksum != results[i].crc32c(-1)) {
 	      std::cerr << num << ": oid " << oid << " checksum " << checksums[i]
 	           << " incorrect, expecting " << results[i].crc32c(-1)
-                   << std::endl;
-	      context->errors++;
+	                  << std::endl;
+	      local_errors++;
 	    }
 	  }
 	}
-	if (context->errors) ceph_abort();
+	if (local_errors) ceph_abort();
       }
 
       // Attributes
@@ -2066,6 +2070,9 @@ public:
 	}
       }
     }
+
+    state_locker.lock();
+    context->errors += local_errors;
     for (auto it = completions.begin(); it != completions.end(); ++it) {
       (*it)->release();
     }
