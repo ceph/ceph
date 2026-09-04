@@ -542,9 +542,12 @@ TransactionManager::relocate_logical_extent(
   } else {
     auto extent = co_await v.get_child_fut_as<LogicalChildNode>();
 
-    if (extent->is_stable()) {
+    if (extent->is_stable_clean()) {
       cache->retire_extent(t, extent);
     } else {
+      // A stable-dirty extent may hold un-flushed deltas -- callers must
+      // relocate it via move_region()'s alloc-and-copy path instead.
+      assert(!extent->is_stable_dirty());
       //TODO: relocating logical extents doesn't support
       //      mutation pending extents yet.
       assert(extent->is_initial_pending() || extent->is_exist_clean());
@@ -1171,6 +1174,29 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
   });
 }
 
+TransactionManager::move_region_iertr::future<>
+TransactionManager::alloc_and_copy_data_extents(
+  Transaction &t,
+  laddr_t dst_key,
+  extent_len_t length,
+  LBAMapping &dst,
+  ceph::bufferlist bl)
+{
+  auto extents = co_await alloc_data_extents<ObjectDataBlock>(
+    t, laddr_hint_t::create_as_fixed(dst_key), length, dst
+  ).handle_error_interruptible(
+    move_region_iertr::pass_further(),
+    crimson::ct_error::assert_all("invalid error"));
+  auto iter = bl.begin();
+  extent_len_t off = 0;
+  for (auto &extent : extents) {
+    auto &ext = *extent;
+    assert(off + ext.get_length() <= length);
+    iter.copy(ext.get_length(), ext.get_bptr().c_str());
+    off += ext.get_length();
+  }
+}
+
 TransactionManager::move_region_ret
 TransactionManager::move_region(
   Transaction &t,
@@ -1204,58 +1230,35 @@ TransactionManager::move_region(
         dst = co_await resolve_cursor_to_mapping(t, std::move(ret.dest));
       } else {
         using namespace crimson::os::seastore::omap_manager;
+        auto this_dst_key = calc_dst_key();
         switch (src.get_extent_type()) {
         case extent_types_t::OBJECT_DATA_BLOCK:
           {
             auto maybe_indirect_extent = co_await read_pin<ObjectDataBlock>(
-              t, src, src.get_intermediate_offset(), src.get_length());
-            auto extents = co_await alloc_data_extents<ObjectDataBlock>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length(),
-              dst
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            [[maybe_unused]] auto off = 0;
-            auto bl = maybe_indirect_extent.get_range(
-              src.get_intermediate_offset(),
-              src.get_length());
-            auto iter = bl.begin();
-            for (auto &extent : extents) {
-              auto &ext = *extent;
-              assert(off + ext.get_length() <= src.get_length());
-              iter.copy(ext.get_length(), ext.get_bptr().c_str());
-              off += ext.get_length();
-            }
+              t, src);
+            co_await alloc_and_copy_data_extents(
+              t, this_dst_key, src.get_length(), dst,
+              maybe_indirect_extent.get_bl());
+            // alloc_and_copy_data_extents() above inserted a new mapping
+            src = co_await src.refresh();
           }
           break;
         case extent_types_t::OMAP_LEAF:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapLeafNode>(
-              t, src, src.get_intermediate_offset(), src.get_length());
-            auto extent = co_await alloc_non_data_extent<OMapLeafNode>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length()
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            extent->set_bptr(maybe_indirect_extent.extent->get_bptr());
+              t, src);
+            co_await alloc_and_copy_non_data_extent<OMapLeafNode>(
+              t, this_dst_key, src.get_length(),
+              *maybe_indirect_extent.extent);
           }
           break;
         case extent_types_t::OMAP_INNER:
           {
             auto maybe_indirect_extent = co_await read_pin<OMapInnerNode>(
-              t, src, src.get_intermediate_offset(), src.get_length());
-            auto extent = co_await alloc_non_data_extent<OMapInnerNode>(
-              t,
-              laddr_hint_t::create_as_fixed(calc_dst_key()),
-              src.get_length()
-            ).handle_error_interruptible(
-              move_region_iertr::pass_further(),
-              crimson::ct_error::assert_all("invalid error"));
-            extent->set_bptr(maybe_indirect_extent.extent->get_bptr());
+              t, src);
+            co_await alloc_and_copy_non_data_extent<OMapInnerNode>(
+              t, this_dst_key, src.get_length(),
+              *maybe_indirect_extent.extent);
           }
           break;
         default:
@@ -1267,18 +1270,86 @@ TransactionManager::move_region(
         ).handle_error_interruptible(
           move_region_iertr::pass_further(),
           crimson::ct_error::assert_all("invalid error"));
+        // Mirror _remove: decrement the target direct's refcount too,
+        // undoing the increment that clone_mapping did when creating this indirect.
+        co_await src.direct_cursor->refresh();
+        co_await remove(t, src.direct_cursor->get_laddr()
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
         src = co_await resolve_cursor_to_mapping(t, std::move(cursor));
-        dst = co_await dst.refresh();
+        // dst can alias src's own entry (just erased above via the
+        // update_mapping_refcount() call) whenever src and dst are the
+        // only two related mappings in the tree.
+        auto fresh_dst = co_await get_pin(t, this_dst_key
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
+        dst = co_await fresh_dst.next();
       }
     } else if (!src.is_zero_reserved()) {
-      auto laddr = calc_dst_key();
-      auto extent = co_await relocate_logical_extent(t, src, laddr);
-      assert(extent->get_laddr() == laddr);
-      auto ret = co_await lba_manager->move_direct_mapping(
-        t, src.get_effective_cursor_ref(),
-        laddr, dst.get_effective_cursor_ref(), *extent);
-      src = co_await resolve_cursor_to_mapping(t, std::move(ret.src));
-      dst = co_await resolve_cursor_to_mapping(t, std::move(ret.dest));
+      // A loaded, stable-dirty extent may hold un-flushed deltas -- copy
+      // its current content into a fresh extent rather than relocate paddr.
+      auto v = get_extent_if_linked(t, *(src.direct_cursor));
+      LogicalChildNodeRef loaded_extent;
+      if (v.has_child()) {
+        loaded_extent = co_await v.get_child_fut_as<LogicalChildNode>();
+      }
+      if (loaded_extent && loaded_extent->is_stable_dirty()) {
+        using namespace crimson::os::seastore::omap_manager;
+        ceph_assert(!src.has_shadow_val());
+        auto this_dst_key = calc_dst_key();
+        auto category = get_extent_category(src.get_extent_type());
+        if (!loaded_extent->is_fully_loaded()) {
+          ceph_assert(category == data_category_t::DATA);
+          auto data_ext = co_await cache->read_extent_maybe_partial(
+            t, loaded_extent->cast<ObjectDataBlock>(), 0,
+            loaded_extent->get_length());
+          loaded_extent = data_ext->cast<LogicalChildNode>();
+        }
+        switch (src.get_extent_type()) {
+        case extent_types_t::OBJECT_DATA_BLOCK:
+          {
+            ceph::bufferlist bl;
+            bl.append(loaded_extent->get_bptr());
+            co_await alloc_and_copy_data_extents(
+              t, this_dst_key, src.get_length(), dst, bl);
+          }
+          break;
+        case extent_types_t::OMAP_LEAF:
+          co_await alloc_and_copy_non_data_extent<OMapLeafNode>(
+            t, this_dst_key, src.get_length(),
+            *loaded_extent->cast<OMapLeafNode>());
+          break;
+        case extent_types_t::OMAP_INNER:
+          co_await alloc_and_copy_non_data_extent<OMapInnerNode>(
+            t, this_dst_key, src.get_length(),
+            *loaded_extent->cast<OMapInnerNode>());
+          break;
+        default:
+          ceph_abort("unexpected extent type");
+          break;
+        }
+        src = co_await src.refresh();
+        src = co_await remove(t, std::move(src)
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
+        auto fresh_dst = co_await get_pin(t, this_dst_key
+        ).handle_error_interruptible(
+          move_region_iertr::pass_further(),
+          crimson::ct_error::assert_all("invalid error"));
+        dst = co_await fresh_dst.next();
+      } else {
+        auto laddr = calc_dst_key();
+        auto extent = co_await relocate_logical_extent(t, src, laddr);
+        assert(extent->get_laddr() == laddr);
+        auto ret = co_await lba_manager->move_direct_mapping(
+          t, src.get_effective_cursor_ref(),
+          laddr, dst.get_effective_cursor_ref(), *extent);
+        src = co_await resolve_cursor_to_mapping(t, std::move(ret.src));
+        dst = co_await resolve_cursor_to_mapping(t, std::move(ret.dest));
+      }
     } else { // src is direct mapping
       auto len = src.get_length();
       auto dst_key = calc_dst_key();

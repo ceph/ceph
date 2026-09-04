@@ -2547,11 +2547,11 @@ using backref_root_t = phy_tree_root_t;
  * TODO: generalize this to permit more than one lba_manager implementation
  */
 struct __attribute__((packed)) root_t {
-  backref_root_t backref_root;
-  lba_root_t lba_root;
-  laddr_le_t onode_root;
-  coll_root_le_t collection_root;
-  laddr_le_t meta;
+  backref_root_t backref_root;          // Backref tree root
+  lba_root_t lba_root;                  // LBA tree root
+  laddr_le_t meta_onode_root;           // Meta Collection root
+  coll_root_le_t collection_root;       // Collection map extent
+  laddr_le_t meta;                      // RootMetaBlock root
 
   root_t() = default;
 
