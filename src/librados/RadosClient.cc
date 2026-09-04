@@ -260,7 +260,8 @@ int librados::RadosClient::connect()
 
   ldout(cct, 1) << "starting objecter" << dendl;
 
-  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient, poolctx);
+  objecter = new (std::nothrow) Objecter(cct, messenger, &monclient, poolctx,
+					 objecter_admin_socket_name);
   if (!objecter)
     goto out;
   objecter->set_balanced_budget();
