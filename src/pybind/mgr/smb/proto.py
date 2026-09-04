@@ -181,6 +181,18 @@ class PathResolver(Protocol):
         ...  # pragma: no cover
 
 
+class PathCaseSensitivityResolver(PathResolver, Protocol):
+    def resolve_case_sensitivity(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> Tuple[bool, bool]:
+        """Resolve the state of case sensitivity settings from a directory
+        in a subvolume. Returns (bool, bool) where the first bool is true
+        iff case sensitive metadata (xattr) is found. The second bool
+        indicates case sensitive is set if True.
+        """
+        ...  # pragma: no cover
+
+
 class OrchSubmitter(Protocol):
     """A protocol describing a type that can submit a SMBSpec to ceph's
     orchestration system.
