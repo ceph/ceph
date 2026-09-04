@@ -996,7 +996,40 @@ options:
 - name: rgw_keystone_accepted_reader_roles
   type: str
   level: advanced
-  desc: List of roles that can only be used for reads (Keystone).
+  desc: Keystone roles granting system-scoped read access.
+  long_desc: >-
+    Keystone roles granting system-scoped read access (Swift
+    system_reader_roles equivalent). The role must also be listed in
+    rgw_keystone_accepted_admin_roles.
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_accepted_project_reader_roles
+  type: str
+  level: advanced
+  desc: Keystone roles granting project-scoped read-only access.
+  long_desc: >-
+    Keystone roles granting project-scoped read-only access (Swift
+    project_reader_roles equivalent). A role here admits the user on its own
+    and caps it to read-only. This is a floor, not a hard cap: a bucket
+    policy naming the user can grant more. All members of a project map to
+    the same RGW account (the project), so the reader sees every bucket that
+    account owns; this scoping is by ownership and holds regardless of
+    rgw_keystone_implicit_tenants, which only controls the bucket-name
+    namespace.
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_implicit_deny_roles
+  type: str
+  level: advanced
+  desc: Keystone roles granting no implicit permissions.
+  long_desc: >-
+    Keystone roles that authenticate a user without granting any implicit
+    permissions. A role here admits the user on its own; a user whose only
+    access-granting role is such a role is authenticated but denied every
+    operation by default, so access must be granted explicitly through a
+    bucket policy or IAM policy.
   services:
   - rgw
   with_legacy: true
