@@ -12,6 +12,7 @@ import distutils.version as version
 import re
 import string
 import os
+import unittest
 
 from teuthology import contextutil
 from teuthology.orchestra import run
@@ -770,6 +771,10 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.umount_wait(force=True)
 
 
+@unittest.skip("Feature is not maintained and requires a full overhaul (see: "
+                "https://tracker.ceph.com/issues/64563). Testing it further "
+                "serves no purpose, so the entire class is disabled until "
+                "the code is either removed or reworked.")
 class TestClientOnLaggyOSD(CephFSTestCase):
     CLIENTS_REQUIRED = 2
 
