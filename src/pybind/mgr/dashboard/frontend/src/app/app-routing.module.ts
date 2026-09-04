@@ -26,6 +26,9 @@ import { MgrModuleResourceSidebarComponent } from './ceph/cluster/mgr-modules/mg
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdFormComponent } from './ceph/cluster/osd/osd-form/osd-form.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
+import { OsdResourceBreadcrumbResolver } from './ceph/cluster/osd/osd-resource-page/osd-resource-breadcrumb.resolver';
+import { OsdResourcePageComponent } from './ceph/cluster/osd/osd-resource-page/osd-resource-page.component';
+import { OsdResourceSidebarComponent } from './ceph/cluster/osd/osd-resource-sidebar/osd-resource-sidebar.component';
 import { ActiveAlertListComponent } from './ceph/cluster/prometheus/active-alert-list/active-alert-list.component';
 import { RulesListComponent } from './ceph/cluster/prometheus/rules-list/rules-list.component';
 import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
@@ -366,6 +369,42 @@ const routes: Routes = [
           },
           breadcrumbs: 'Cluster/Physical Disks'
         }
+      },
+      {
+        path: 'osd/view/:id',
+        component: OsdResourceSidebarComponent,
+        data: {
+          breadcrumbs: OsdResourceBreadcrumbResolver,
+          showBreadcrumbsLayout: false
+        },
+        children: [
+          { path: '', redirectTo: 'overview', pathMatch: 'full' },
+          {
+            path: 'overview',
+            component: OsdResourcePageComponent,
+            data: { breadcrumbs: 'Overview', section: 'overview' }
+          },
+          {
+            path: 'storage-devices',
+            component: OsdResourcePageComponent,
+            data: { breadcrumbs: 'Storage Devices', section: 'storage-devices' }
+          },
+          {
+            path: 'attributes',
+            component: OsdResourcePageComponent,
+            data: { breadcrumbs: 'Attributes', section: 'attributes' }
+          },
+          {
+            path: 'performance-counters',
+            component: OsdResourcePageComponent,
+            data: { breadcrumbs: 'Performance Counters', section: 'performance-counters' }
+          },
+          {
+            path: 'performance',
+            component: OsdResourcePageComponent,
+            data: { breadcrumbs: 'Performance', section: 'performance' }
+          }
+        ]
       },
       {
         path: 'osd',
