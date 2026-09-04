@@ -3000,6 +3000,14 @@ def command_bootstrap(ctx):
     else:
         logger.info('Skip prepare_host')
 
+    # Ensure the container engine is ready and, for podman, that its
+    # version has been fetched. command_bootstrap is excluded from the
+    # check_container_engine() call in main() so that a missing engine can
+    # be installed by prepare_host, but with --skip-prepare-host nothing
+    # else populates Podman._version and daemon creation later fails with
+    # "Please call `get_version` first".
+    check_container_engine(ctx)
+
     logger.info('Cluster fsid: %s' % fsid)
     hostname = get_hostname()
     if '.' in hostname and not ctx.allow_fqdn_hostname:
