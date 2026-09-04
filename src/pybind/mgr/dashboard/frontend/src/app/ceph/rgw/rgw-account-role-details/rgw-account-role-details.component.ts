@@ -14,6 +14,7 @@ import { Observable, Subscriber, of } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { RgwRole } from '../models/rgw-role';
 
 @Component({
@@ -100,6 +101,56 @@ export class RgwAccountRoleDetailsComponent implements OnInit, OnChanges {
     );
   }
 
+  get roleArn(): string {
+    return this.selection?.Arn || '';
+  }
+
+  get rolePath(): string {
+    return this.selection?.Path || '/';
+  }
+
+  get maxSessionDuration(): string {
+    return this.selection?.MaxSessionDuration
+      ? `${this.selection.MaxSessionDuration / 3600} hours`
+      : '1 hour';
+  }
+
+  get overviewFields(): OverviewField[] {
+    return [
+      {
+        label: $localize`Role name`,
+        value: this.roleName
+      },
+      {
+        label: $localize`Role ARN`,
+        value: this.roleArn || '-'
+      },
+      {
+        label: $localize`Path`,
+        value: this.rolePath
+      },
+      {
+        label: $localize`Max session duration`,
+        value: this.maxSessionDuration
+      }
+    ];
+  }
+
+  get trustPolicyJson(): string {
+    const doc = (this.selection as any)?.AssumeRolePolicyDocument;
+    if (!doc) {
+      return '';
+    }
+    if (typeof doc === 'object') {
+      return JSON.stringify(doc, null, 2);
+    }
+    try {
+      return JSON.stringify(JSON.parse(doc), null, 2);
+    } catch {
+      return String(doc);
+    }
+  }
+
   loadPolicies(): void {
     const roleName = this.roleName;
     if (!roleName || !this.accountId) {
@@ -126,32 +177,42 @@ export class RgwAccountRoleDetailsComponent implements OnInit, OnChanges {
     modalRef?.close?.subscribe(() => this.loadPolicies());
   }
 
-  openEditPolicyModal(): void {
-    const policyName = this.policySelection.first().name;
+  icons = Icons;
+
+  openEditPolicyModal(policyName?: string): void {
+    const name =
+      policyName || (this.policySelection.hasSelection ? this.policySelection.first().name : '');
+    if (!name) {
+      return;
+    }
     const modalRef = this.modalService.show(RgwAccountRolePolicyFormComponent, {
       accountId: this.accountId,
       roleName: this.roleName,
-      policyName: policyName,
+      policyName: name,
       isEdit: true
     });
     modalRef?.close?.subscribe(() => this.loadPolicies());
   }
 
-  deletePolicy(): void {
-    const policyName = this.policySelection.first().name;
+  deletePolicy(policyName?: string): void {
+    const name =
+      policyName || (this.policySelection.hasSelection ? this.policySelection.first().name : '');
+    if (!name) {
+      return;
+    }
     const roleName = this.roleName;
 
     this.modalService.show(DeleteConfirmationModalComponent, {
       itemDescription: $localize`Permission policy`,
-      itemNames: [policyName],
+      itemNames: [name],
       submitActionObservable: () => {
         return new Observable((observer: Subscriber<any>) => {
-          this.rgwRoleService.deletePolicy(roleName, policyName, this.accountId).subscribe({
+          this.rgwRoleService.deletePolicy(roleName, name, this.accountId).subscribe({
             next: () => {
               this.notificationService.show(
                 NotificationType.success,
                 $localize`Policy detached successfully`,
-                $localize`Policy "${policyName}" detached from role "${roleName}".`
+                $localize`Policy "${name}" detached from role "${roleName}".`
               );
               this.loadPolicies();
               observer.next();

@@ -1,10 +1,14 @@
 import { Component, Inject, OnInit, Optional } from '@angular/core';
 import { Validators } from '@angular/forms';
 import { BaseModal } from 'carbon-components-angular';
+import { Observable, Subscriber } from 'rxjs';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { RgwRoleService } from '~/app/shared/api/rgw-role.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
@@ -18,6 +22,7 @@ import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 export class RgwAccountRolePolicyFormComponent extends BaseModal implements OnInit {
   form: CdFormGroup;
   action: string;
+  icons = Icons;
 
   constructor(
     @Optional() @Inject('accountId') public accountId: string,
@@ -27,6 +32,7 @@ export class RgwAccountRolePolicyFormComponent extends BaseModal implements OnIn
     public actionLabels: ActionLabelsI18n,
     private formBuilder: CdFormBuilder,
     private rgwRoleService: RgwRoleService,
+    private modalService: ModalCdsService,
     private notificationService: NotificationService
   ) {
     super();
@@ -112,5 +118,38 @@ export class RgwAccountRolePolicyFormComponent extends BaseModal implements OnIn
           this.form.setErrors({ cdSubmitButton: true });
         }
       });
+  }
+
+  deletePolicy(): void {
+    const policyName = this.policyName || this.form.get('policy_name')?.value;
+    const roleName = this.roleName;
+
+    if (!policyName || !roleName) {
+      return;
+    }
+
+    this.modalService.show(DeleteConfirmationModalComponent, {
+      itemDescription: $localize`Permission policy`,
+      itemNames: [policyName],
+      submitActionObservable: () => {
+        return new Observable((observer: Subscriber<any>) => {
+          this.rgwRoleService.deletePolicy(roleName, policyName, this.accountId).subscribe({
+            next: () => {
+              this.notificationService.show(
+                NotificationType.success,
+                $localize`Policy detached successfully`,
+                $localize`Policy "${policyName}" detached from role "${roleName}".`
+              );
+              observer.next();
+              observer.complete();
+              this.closeModal();
+            },
+            error: (err) => {
+              observer.error(err);
+            }
+          });
+        });
+      }
+    });
   }
 }

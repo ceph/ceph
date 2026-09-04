@@ -10,29 +10,27 @@
       class="cds--type-label-01"
       i18n
     >
-      Role Policy
+      {{ roleName || 'Role' }}
     </h4>
     <h3
+      *ngIf="!isEdit"
       cdsModalHeaderHeading
       i18n
     >
-      {{ action }} permission policy
+      Attach permission policy
+    </h3>
+    <h3
+      *ngIf="isEdit"
+      cdsModalHeaderHeading
+      i18n
+    >
+      Edit ‘{{ policyName }}’ permission
     </h3>
     <p
       class="cds--modal-header__description cds--type-body-01 cds-mt-3"
-      *ngIf="!isEdit"
       i18n
     >
-      Attach an IAM permission policy specifying allowed or denied S3 actions to role "{{
-        roleName
-      }}".
-    </p>
-    <p
-      class="cds--modal-header__description cds--type-body-01 cds-mt-3"
-      *ngIf="isEdit"
-      i18n
-    >
-      Edit permission policy "{{ policyName }}" for role "{{ roleName }}".
+      Description
     </p>
   </cds-modal-header>
 
@@ -45,7 +43,6 @@
       <!-- Policy Name -->
       <div class="form-item">
         <cds-text-label
-          label="Policy name"
           for="policy_name"
           [invalid]="policyNameRef.isInvalid"
           [invalidText]="policyNameError"
@@ -76,16 +73,16 @@
         </ng-template>
       </div>
 
-      <!-- Policy Document -->
+      <!-- Policy Document (JSON) -->
       <div class="form-item">
         <cds-textarea-label
-          for="policy_doc"
+          labelInputID="policy_doc"
           [invalid]="policyDoc.isInvalid"
           [invalidText]="policyError"
           helperText="JSON document defining the permissions policy statement."
           i18n-helperText
         >
-          Policy document
+          JSON
           <textarea
             cdsTextArea
             cdValidate
@@ -93,8 +90,8 @@
             id="policy_doc"
             name="policy_doc"
             formControlName="policy_doc"
-            placeholder='{"Statement":[{"Effect":"Allow","Action":"s3:*","Resource":"arn:aws:s3:::*"}]}'
-            rows="8"
+            placeholder='{\n  "Version": "2012-10-17",\n  "Statement": [\n    {\n      "Effect": "Allow",\n      "Action": ["s3:GetObject"],\n      "Resource": ["arn:aws:s3:::*"]\n    }\n  ]\n}'
+            rows="12"
             cols="200"
             cdRequiredField="Policy Document"
           ></textarea>
@@ -116,11 +113,38 @@
       </div>
     </div>
 
-    <cd-form-button-panel
-      (submitActionEvent)="onSubmit()"
-      [form]="form"
-      [submitText]="action"
-      [modalForm]="true"
-    ></cd-form-button-panel>
+    <cds-modal-footer>
+      <button
+        cdsButton="secondary"
+        (click)="closeModal()"
+        type="button"
+        i18n
+      >
+        Cancel
+      </button>
+      <button
+        *ngIf="isEdit"
+        cdsButton="danger"
+        (click)="deletePolicy()"
+        type="button"
+        i18n
+      >
+        Delete
+        <svg
+          [cdsIcon]="icons.trash"
+          [size]="icons.size16"
+          class="cds--btn__icon"
+        ></svg>
+      </button>
+      <button
+        cdsButton="primary"
+        (click)="onSubmit()"
+        type="submit"
+        [disabled]="form.invalid"
+        i18n
+      >
+        {{ isEdit ? 'Update' : 'Attach' }}
+      </button>
+    </cds-modal-footer>
   </form>
 </cds-modal>

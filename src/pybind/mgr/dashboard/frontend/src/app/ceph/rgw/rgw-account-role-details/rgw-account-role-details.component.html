@@ -1,33 +1,90 @@
-<div class="role-details-container cds-p-4">
-  <h4
-    i18n
-    class="cds--type-heading-02 cds-mb-3"
+<div
+  cdsGrid
+  [useCssGrid]="true"
+  [narrow]="true"
+  [fullWidth]="true"
+  class="cds-py-4"
+>
+  <!-- Left Column: Role ARN & Path -->
+  <div
+    cdsCol
+    [columnNumbers]="{ sm: 2, md: 3, lg: 7 }"
   >
-    Permission Policies
-  </h4>
-  <p
-    i18n
-    class="cds--type-body-compact-01 cds-mb-4"
-  >
-    List of IAM permission policies attached to role "{{ selection?.RoleName }}".
-  </p>
+    <div class="cds-mb-4">
+      <div
+        class="cds--type-heading-01 cds-mb-1"
+        i18n
+      >
+        Role ARN
+      </div>
+      <div class="cds--type-body-compact-01">
+        {{ roleArn || '-' }}
+      </div>
+    </div>
+    <div>
+      <div
+        class="cds--type-heading-01 cds-mb-1"
+        i18n
+      >
+        Path
+      </div>
+      <div class="cds--type-body-compact-01">
+        {{ rolePath || '/' }}
+      </div>
+    </div>
+  </div>
 
-  <cd-table
-    #table
-    [autoReload]="false"
-    [data]="policies$ | async"
-    [columns]="columns"
-    selectionType="single"
-    columnMode="flex"
-    (updateSelection)="updateSelection($event)"
-    identifier="name"
+  <!-- Right Column: Permission policies -->
+  <div
+    cdsCol
+    [columnNumbers]="{ sm: 2, md: 5, lg: 9 }"
   >
-    <cd-table-actions
-      class="table-actions"
-      [permission]="permission"
-      [selection]="policySelection"
-      [tableActions]="tableActions"
-    >
-    </cd-table-actions>
-  </cd-table>
+    <div class="cds-mb-2">
+      <span
+        class="cds--type-heading-01"
+        i18n
+      >
+        Permission policies
+      </span>
+    </div>
+
+    <ng-container *ngIf="policies$ | async as policies">
+      <div
+        *ngIf="policies.length === 0"
+        class="cds--type-body-compact-01 text-muted"
+        i18n
+      >
+        There are no permission policies attached.
+      </div>
+
+      <div
+        *ngFor="let policy of policies"
+        class="d-flex align-items-center cds-mb-2"
+        style="flex-wrap: nowrap"
+      >
+        <a
+          cdsLink
+          tabindex="0"
+          class="cds-mr-1"
+          (click)="openEditPolicyModal(policy.name); $event.stopPropagation()"
+          (keydown.enter)="openEditPolicyModal(policy.name); $event.stopPropagation()"
+        >
+          {{ policy.name }}
+        </a>
+        <cds-icon-button
+          kind="ghost"
+          size="sm"
+          title="Edit or delete the permission policy."
+          i18n-title
+          (click)="openEditPolicyModal(policy.name); $event.stopPropagation()"
+        >
+          <svg
+            [cdsIcon]="icons.edit"
+            [size]="icons.size16"
+            class="cds--btn__icon"
+          ></svg>
+        </cds-icon-button>
+      </div>
+    </ng-container>
+  </div>
 </div>

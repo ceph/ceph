@@ -10,10 +10,12 @@ import { RgwRoleService } from '~/app/shared/api/rgw-role.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
 import { RgwAccountRoleFormComponent } from '../rgw-account-role-form/rgw-account-role-form.component';
 import { Observable, Subscriber, of } from 'rxjs';
+import { map } from 'rxjs/operators';
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { RgwAccountRolePolicyFormComponent } from '../rgw-account-role-policy-form/rgw-account-role-policy-form.component';
 
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 import { DurationPipe } from '~/app/shared/pipes/duration.pipe';
@@ -57,31 +59,26 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
     this.loadRoles();
     this.columns = [
       {
-        name: $localize`Role name`,
+        name: $localize`Name`,
         prop: 'RoleName',
         flexGrow: 2
       },
       {
-        name: $localize`Path`,
-        prop: 'Path',
-        flexGrow: 2
-      },
-      {
-        name: $localize`Arn`,
-        prop: 'Arn',
-        flexGrow: 3
-      },
-      {
-        name: $localize`Created at`,
-        prop: 'CreateDate',
-        flexGrow: 2,
-        pipe: this.cdDatePipe
+        name: $localize`Policies`,
+        prop: 'policies_count',
+        flexGrow: 1
       },
       {
         name: $localize`Max session duration`,
         prop: 'MaxSessionDuration',
         flexGrow: 2,
         pipe: this.durationPipe
+      },
+      {
+        name: $localize`Created`,
+        prop: 'CreateDate',
+        flexGrow: 2,
+        pipe: this.cdDatePipe
       }
     ];
 
@@ -97,7 +94,15 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
         permission: 'update',
         icon: Icons.edit,
         click: () => this.openRoleForm(true),
-        name: this.actionLabels.EDIT
+        name: $localize`Edit role`,
+        disable: () => !this.selection.hasSelection
+      },
+      {
+        permission: 'update',
+        icon: Icons.add,
+        click: () => this.openAttachPolicyModal(),
+        name: $localize`Attach permission`,
+        disable: () => !this.selection.hasSelection
       },
       {
         permission: 'delete',
@@ -120,7 +125,20 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
       this.data$ = of([]);
       return;
     }
-    this.data$ = this.rgwRoleService.list(this.accountId);
+    this.data$ = this.rgwRoleService.list(this.accountId).pipe(
+      map((roles: RgwRole[]) => {
+        return (roles || []).map((role) => {
+          let count = (role as any).policies_count;
+          if (count === undefined && (role as any).PermissionPolicies) {
+            count = (role as any).PermissionPolicies.length;
+          }
+          return {
+            ...role,
+            policies_count: count ?? 0
+          };
+        });
+      })
+    );
   }
 
   expandedRow: RgwRole;
@@ -141,6 +159,18 @@ export class RgwAccountRolesListComponent implements OnInit, OnChanges {
       roleName: role ? role.RoleName : '',
       isEdit: isEdit,
       role: role
+    });
+    modalRef?.close?.subscribe(() => this.loadRoles());
+  }
+
+  openAttachPolicyModal(): void {
+    const role = this.selection.first();
+    if (!role) {
+      return;
+    }
+    const modalRef = this.modalService.show(RgwAccountRolePolicyFormComponent, {
+      accountId: this.accountId,
+      roleName: role.RoleName
     });
     modalRef?.close?.subscribe(() => this.loadRoles());
   }
