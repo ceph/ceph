@@ -5910,6 +5910,7 @@ std::vector<std::string> BlueStore::get_tracked_keys() const noexcept
     "bluestore_warn_on_legacy_statfs"s,
     "bluestore_warn_on_no_per_pool_omap"s,
     "bluestore_warn_on_no_per_pg_omap"s,
+    "bluestore_warn_on_no_db_sharding"s,
     "bluestore_max_defer_interval"s,
     "bluestore_onode_segment_size"s,
     "bluestore_allocator_lookup_policy"s,
@@ -5928,6 +5929,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_warn_on_no_per_pool_omap") ||
       changed.count("bluestore_warn_on_no_per_pg_omap")) {
     _check_no_per_pg_or_pool_omap_alert();
+  }
+  if (changed.count("bluestore_warn_on_no_db_sharding")) {
+    _check_no_db_sharding_alert();
   }
 
   if (changed.count("bluestore_csum_type")) {
@@ -9245,7 +9249,7 @@ bool BlueStore::get_db_sharding(std::string& res_sharding)
 {
   bool ret = false;
   RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
-  if (db) {
+  if (rdb) {
     ret = rdb->get_sharding(res_sharding);
   }
   return ret;
@@ -12627,6 +12631,21 @@ void BlueStore::_check_no_per_pg_or_pool_omap_alert()
   no_per_pool_omap_alert = per_pool;
 }
 
+void BlueStore::_check_no_db_sharding_alert()
+{
+  string s;
+  if (db && cct->_conf->bluestore_warn_on_no_db_sharding) {
+    std::string sharding;
+    if (!get_db_sharding(sharding)) {
+      s = "no RocksDB column family sharding detected, "
+	"suggest to run 'ceph-bluestore-tool reshard' to benefit from "
+	"a sharded RocksDB layout";
+    }
+  }
+  std::lock_guard l(qlock);
+  no_db_sharding_alert = s;
+}
+
 // ---------------
 // cache
 
@@ -14580,6 +14599,8 @@ int BlueStore::_open_super_meta()
 	     << std::dec << dendl;
     logger->set(l_bluestore_alloc_unit, min_alloc_size);
   }
+
+  _check_no_db_sharding_alert();
 
   _set_per_pool_omap();
 
@@ -19900,6 +19921,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUESTORE_NO_PER_POOL_OMAP",
       no_per_pool_omap_alert);
+  }
+  if (!no_db_sharding_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_NO_DB_SHARDING",
+      no_db_sharding_alert);
   }
   string s0(failed_cmode);
 

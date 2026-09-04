@@ -5888,6 +5888,17 @@ options:
   desc: Raise a health warning on lack of per-pg omap
   default: false
   with_legacy: true
+- name: bluestore_warn_on_no_db_sharding
+  type: bool
+  level: advanced
+  desc: Raise a health warning if a BlueStore OSD does not use RocksDB column
+    family sharding
+  long_desc: OSDs created prior to the Pacific release do not shard their RocksDB
+    database into multiple column families, which impacts caching and compaction
+    efficiency. Such OSDs can be migrated to a sharded layout offline using
+    'ceph-bluestore-tool reshard'.
+  default: true
+  with_legacy: true
 - name: bluestore_log_op_age
   type: float
   level: advanced
