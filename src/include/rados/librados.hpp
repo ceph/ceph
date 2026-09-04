@@ -1043,7 +1043,11 @@ inline namespace v14_2_0 {
 
     int snap_list(std::vector<snap_t> *snaps);
 
+    // Rollback an object to a previous snapshot
     int snap_rollback(const std::string& oid, const char *snapname);
+
+    // Rollback an entire snapshot
+    int snap_rollback(const std::string& snapname, uint64_t *rollback_id);
 
     // Deprecated name kept for backward compatibility - same as snap_rollback()
     int rollback(const std::string& oid, const char *snapname)
@@ -1055,24 +1059,10 @@ inline namespace v14_2_0 {
     int selfmanaged_snap_remove(uint64_t snapid);
     void aio_selfmanaged_snap_remove(uint64_t snapid, AioCompletion *c);
 
+    // Rollback an object to a previous snapshot
     int selfmanaged_snap_rollback(const std::string& oid, uint64_t snapid);
 
-    /// Initiate a pool-level snapshot rollback (pool-managed snaps).
-    /// Completes in O(1); background work is performed by OSDs.
-    /// @param snapname  name of the existing pool snapshot to restore
-    /// @param rollback_id  [out] allocated rollback ID (for completion polling)
-    /// @returns 0 on success, negative error code on failure
-    int snap_rollback(const std::string& snapname, uint64_t *rollback_id);
-
-    /// Initiate a pool-level snapshot rollback (selfmanaged snaps).
-    /// @param snap_id       the selfmanaged snap ID to restore from
-    /// @param snapc_seq     current SnapContext sequence (highest live snap ID)
-    /// @param snapc_snaps   ordered list of all live snap IDs (descending)
-    /// @param rollback_id  [out] allocated rollback ID (for completion polling)
-    /// @returns 0 on success, negative error code on failure
-    ///   -EPERM   cluster require_osd_release < umbrella
-    ///   -ENOENT  snap ID has been deleted
-    ///   -EINVAL  pool is in pool-managed-snap mode or SnapContext is invalid
+    // Rollback an entire snapshot
     int selfmanaged_snap_rollback(uint64_t snap_id,
                                   snap_t snapc_seq,
                                   const std::vector<snap_t>& snapc_snaps,
