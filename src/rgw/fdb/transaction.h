@@ -40,29 +40,55 @@ namespace detail {
 template <typename T>
 inline constexpr bool is_staged_proxy = false;
 
+enum struct staged_initialization { copy_target, in_place };
+
 struct staged_access;
 
 } // namespace detail
 
 namespace concepts {
 
-// Staged values use attempt-local storage and move into place only after a
-// confirmed commit. Publication must not fail after the database commits:
+// Publication must not fail after the database commits:
 template <typename T>
 concept stageable =
- std::copy_constructible<T> and std::is_nothrow_move_assignable_v<T>;
+ std::copy_constructible<T> and
+ std::is_nothrow_move_assignable_v<T>;
+
+template <typename T>
+concept in_place_stageable =
+ std::move_constructible<T> and std::default_initializable<T> and
+ std::is_nothrow_move_assignable_v<T>;
 
 } // namespace concepts
 
-template <concepts::stageable T>
+namespace detail {
+
+template <typename T, staged_initialization Initialization>
+concept stageable_with =
+ (staged_initialization::copy_target == Initialization and
+  concepts::stageable<T>) or
+ (staged_initialization::in_place == Initialization and
+  concepts::in_place_stageable<T>);
+
+} // namespace detail
+
+template <typename T,
+          detail::staged_initialization Initialization =
+            detail::staged_initialization::copy_target>
+requires detail::stageable_with<T, Initialization>
 class staged_proxy;
 
 template <concepts::stageable T>
 [[nodiscard]] staged_proxy<T> staged(T& target);
 
+template <concepts::in_place_stageable T>
+[[nodiscard]] auto staged(T& target, std::in_place_t)
+ -> staged_proxy<T, detail::staged_initialization::in_place>;
+
 // A transaction-attempt-local view of a value supplied through staged(). It is
 // also the compile-time binding stored by a transactor invocation.
-template <concepts::stageable T>
+template <typename T, detail::staged_initialization Initialization>
+requires detail::stageable_with<T, Initialization>
 class staged_proxy final
 {
  std::reference_wrapper<T> target;
@@ -71,19 +97,36 @@ class staged_proxy final
  T& materialize()
  {
   if (not attempt_value) {
-   attempt_value.emplace(target.get());
+   if constexpr (detail::staged_initialization::copy_target == Initialization) {
+    attempt_value.emplace(target.get());
+   }
+
+   if constexpr (detail::staged_initialization::in_place == Initialization) {
+    attempt_value.emplace();
+   }
   }
 
   return *attempt_value;
  }
 
- explicit staged_proxy(T& target_)
-  : target(target_)
+ void prepare_attempt()
+ noexcept(detail::staged_initialization::copy_target == Initialization or
+          std::is_nothrow_default_constructible_v<T>)
+ {
+  attempt_value.reset();
+
+  if constexpr (detail::staged_initialization::in_place == Initialization) {
+   attempt_value.emplace();
+  }
+ }
+
+ explicit staged_proxy(T& value)
+  : target(value)
  {}
 
  public:
  staged_proxy(const staged_proxy&) = delete;
- staged_proxy(staged_proxy&&) noexcept = default;
+ staged_proxy(staged_proxy&&) noexcept(std::is_nothrow_move_constructible_v<T>) = default;
 
  staged_proxy& operator=(const staged_proxy&) = delete;
  staged_proxy& operator=(staged_proxy&&) = delete;
@@ -116,18 +159,18 @@ class staged_proxy final
  requires requires(T& active_target, U&& value) {
   active_target.push_back(std::forward<U>(value));
  }
- decltype(auto) push_back(U&& value)
+ void push_back(U&& value)
  {
-  return materialize().push_back(std::forward<U>(value));
+  materialize().push_back(std::forward<U>(value));
  }
 
  template <typename ...ArgTs>
  requires requires(T& active_target, ArgTs&& ...args) {
   active_target.emplace_back(std::forward<ArgTs>(args)...);
  }
- decltype(auto) emplace_back(ArgTs&& ...args)
+ void emplace_back(ArgTs&& ...args)
  {
-  return materialize().emplace_back(std::forward<ArgTs>(args)...);
+  materialize().emplace_back(std::forward<ArgTs>(args)...);
  }
 
  template <typename KeyT, typename ValueT>
@@ -135,10 +178,10 @@ class staged_proxy final
   active_target.insert_or_assign(std::forward<KeyT>(key),
                                  std::forward<ValueT>(value));
  }
- decltype(auto) insert_or_assign(KeyT&& key, ValueT&& value)
+ void insert_or_assign(KeyT&& key, ValueT&& value)
  {
-  return materialize().insert_or_assign(std::forward<KeyT>(key),
-                                        std::forward<ValueT>(value));
+  materialize().insert_or_assign(std::forward<KeyT>(key),
+                                 std::forward<ValueT>(value));
  }
 
  // Escape hatch for an operation outside the intentionally small proxy API;
@@ -152,24 +195,35 @@ class staged_proxy final
 
  private:
  friend struct detail::staged_access;
- friend staged_proxy<T> staged<T>(T& target);
+
+ template <concepts::stageable U>
+ friend staged_proxy<U> staged(U& target);
+
+ template <concepts::in_place_stageable U>
+ friend auto staged(U& target, std::in_place_t)
+  -> staged_proxy<U, detail::staged_initialization::in_place>;
 };
 
 namespace detail {
 
-template <concepts::stageable T>
-inline constexpr bool is_staged_proxy<staged_proxy<T>> = true;
+template <typename T, staged_initialization Initialization>
+requires stageable_with<T, Initialization>
+inline constexpr bool is_staged_proxy<staged_proxy<T, Initialization>> = true;
+
+template <typename T>
+concept staged_argument = is_staged_proxy<std::remove_cvref_t<T>>;
 
 struct staged_access final
 {
- template <concepts::stageable T>
- static void prepare_attempt(staged_proxy<T>& proxy) noexcept
+ template <staged_argument ProxyT>
+ static void prepare_attempt(ProxyT& proxy)
+ noexcept(noexcept(proxy.prepare_attempt()))
  {
-  proxy.attempt_value.reset();
+  proxy.prepare_attempt();
  }
 
- template <concepts::stageable T>
- static void publish(staged_proxy<T>& proxy) noexcept
+ template <staged_argument ProxyT>
+ static void publish(ProxyT& proxy) noexcept
  {
   if (not proxy.attempt_value) {
    return;
@@ -179,9 +233,9 @@ struct staged_access final
   proxy.attempt_value.reset();
  }
 
- template <concepts::stageable T>
+ template <staged_argument ProxyT>
  [[nodiscard]] static const void *target_address(
-   const staged_proxy<T>& proxy) noexcept
+   const ProxyT& proxy) noexcept
  {
   return std::addressof(proxy.target.get());
  }
@@ -199,6 +253,10 @@ concept supported_invocation_result =
   std::constructible_from<std::remove_cvref_t<T>, T> and
   std::move_constructible<std::remove_cvref_t<T>>);
 
+template <typename T>
+concept storable_invocation_result =
+ not std::is_void_v<T> and supported_invocation_result<T>;
+
 } // namespace concepts
 
 namespace detail {
@@ -208,8 +266,8 @@ inline const void *staged_target_address(const auto&) noexcept
  return nullptr;
 }
 
-template <concepts::stageable T>
-const void *staged_target_address(const staged_proxy<T>& proxy) noexcept
+template <staged_argument ProxyT>
+const void *staged_target_address(const ProxyT& proxy) noexcept
 {
  return staged_access::target_address(proxy);
 }
@@ -218,22 +276,24 @@ template <typename ...ArgTs>
 void validate_staged_arguments(const ArgTs& ...arguments)
 {
  if constexpr ((is_staged_proxy<std::remove_cvref_t<ArgTs>> or ...)) {
-  const std::array addresses {staged_target_address(arguments)...};
-  const auto is_repeated = [&addresses](const void *address) {
-   return nullptr != address && 1 < std::ranges::count(addresses, address);
+  std::array addresses {staged_target_address(arguments)...};
+  std::ranges::sort(addresses);
+  const auto same_target = [](const void *lhs, const void *rhs) {
+   return nullptr != lhs and lhs == rhs;
   };
 
-  if (std::ranges::any_of(addresses, is_repeated)) {
+  if (std::ranges::adjacent_find(addresses, same_target) != addresses.end()) {
    throw std::invalid_argument("cannot stage one target more than once");
   }
  }
 }
 
-inline void prepare_bound_argument(auto&)
+inline void prepare_bound_argument(auto&) noexcept
 {}
 
-template <concepts::stageable T>
-void prepare_bound_argument(staged_proxy<T>& proxy) noexcept
+template <staged_argument ProxyT>
+void prepare_bound_argument(ProxyT& proxy)
+noexcept(noexcept(staged_access::prepare_attempt(proxy)))
 {
  staged_access::prepare_attempt(proxy);
 }
@@ -241,8 +301,8 @@ void prepare_bound_argument(staged_proxy<T>& proxy) noexcept
 inline void publish_bound_argument(auto&) noexcept
 {}
 
-template <concepts::stageable T>
-void publish_bound_argument(staged_proxy<T>& proxy) noexcept
+template <staged_argument ProxyT>
+void publish_bound_argument(ProxyT& proxy) noexcept
 {
  staged_access::publish(proxy);
 }
@@ -253,7 +313,8 @@ struct bound_invocation final
  FnT fn;
  std::tuple<ArgTs...> arguments;
 
- void prepare_attempt() noexcept
+ void prepare_attempt()
+ noexcept((noexcept(prepare_bound_argument(std::declval<ArgTs&>())) and ...))
  {
   std::apply([](auto& ...argument) {
     (prepare_bound_argument(argument), ...);
@@ -280,7 +341,8 @@ void prepare_invocation(FnT&) noexcept
 {}
 
 template <typename FnT, typename ...ArgTs>
-void prepare_invocation(bound_invocation<FnT, ArgTs...>& invocation) noexcept
+void prepare_invocation(bound_invocation<FnT, ArgTs...>& invocation)
+noexcept(noexcept(invocation.prepare_attempt()))
 {
  invocation.prepare_attempt();
 }
@@ -314,6 +376,14 @@ template <concepts::stageable T>
  return staged_proxy<T> {target};
 }
 
+// Construct fresh attempt-local state instead of copying the target:
+template <concepts::in_place_stageable T>
+[[nodiscard]] auto staged(T& target, std::in_place_t)
+ -> staged_proxy<T, detail::staged_initialization::in_place>
+{
+ return staged_proxy<T, detail::staged_initialization::in_place> {target};
+}
+
 // Overload tag for transactors that should report replay/commit metadata:
 struct with_result_t final {};
 inline constexpr with_result_t with_result;
@@ -339,19 +409,11 @@ struct commit_result final
 
 inline transaction_handle make_transaction(database_handle dbh)
 {
- if (not dbh) {
-  throw std::invalid_argument("make_transaction() requires database handle");
- }
-
  return std::make_shared<transaction>(std::move(dbh));
 }
 
 inline transaction_handle make_transaction(database_handle dbh, const transaction_options& opts)
 {
- if (not dbh) {
-  throw std::invalid_argument("make_transaction() requires database handle");
- }
-
  return std::make_shared<transaction>(std::move(dbh), opts);
 }
 
@@ -378,17 +440,46 @@ inline transaction_handle make_transaction(database_handle dbh, const transactio
  return commit(txn);
 }
 
-// Prepare a transaction to replay after a retryable operation-body error:
-inline void prepare_replay(transaction_handle& txn, fdb_error_t error);
+[[nodiscard]] inline std::string get_key(
+  transaction_handle txn,
+  const key_selector& selector,
+  const read_mode mode = read_mode::serializable)
+{
+ return detail::extract_byte_string(
+          detail::block_until_ready(
+           detail::transaction_get_key(txn, selector, mode)));
+}
+
+[[nodiscard]] inline std::int64_t committed_version(const transaction_handle& txn)
+{
+ return txn->committed_version();
+}
+
+[[nodiscard]] inline std::int64_t read_version(const transaction_handle& txn)
+{
+ return txn->read_version();
+}
+
+[[nodiscard]] inline std::int64_t approximate_commit_bytes(const transaction_handle& txn)
+{
+ return txn->approximate_commit_bytes();
+}
+
+inline void set_read_version(const transaction_handle& txn,
+                             const std::int64_t version)
+{
+ txn->set_read_version(version);
+}
+
+// Reset a transaction after a retryable operation-body error:
+inline void reset_for_replay(transaction_handle& txn, fdb_error_t error);
 
 [[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key)
 {
- return txn->make_watch(detail::as_fdb_span(key));
+ return txn->make_watch(detail::as_byte_view(key));
 }
 
-} // namespace ceph::libfdb
-
-namespace ceph::libfdb::detail {
+namespace detail {
 
 template <typename FnT, typename ...ArgTs>
 using transaction_invocation_result_t =
@@ -439,9 +530,7 @@ auto commit_noreplay(transaction_handle txn,
 template <transaction_op FnT>
 auto in_transaction(database_handle dbh, FnT&& fn) -> operation_result_t<FnT>;
 
-} // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb {
+} // namespace detail
 
 /* A "transactor" is a function-like wrapper for running replayable transactions.
  * It defers transaction creation until called, commits after the user function
@@ -455,13 +544,13 @@ class transactor final
  std::optional<transaction_options> opts;
 
  private:
- explicit transactor(database_handle dbh_)
-  : dbh(std::move(dbh_))
+ explicit transactor(database_handle database)
+  : dbh(std::move(database))
  {}
 
- transactor(database_handle dbh_, const transaction_options& opts_)
-  : dbh(std::move(dbh_)),
-    opts(opts_)
+ transactor(database_handle database, const transaction_options& options)
+  : dbh(std::move(database)),
+    opts(options)
  {}
 
  // Bind the callable and arguments once so replays see stable state:
@@ -537,16 +626,14 @@ inline transactor make_transactor(database_handle dbh, const transaction_options
  return transactor(std::move(dbh), opts);
 }
 
-} // namespace ceph::libfdb
+namespace detail {
 
-namespace ceph::libfdb::detail {
-
-inline bool commit_or_throw(transaction_handle& txn)
+inline commit_result commit_or_throw(transaction_handle& txn)
 {
  const auto result = ceph::libfdb::commit(with_result, txn);
 
  if (result.committed) {
-  return true;
+  return result;
  }
 
  if (0 == result.replay_error) {
@@ -556,41 +643,17 @@ inline bool commit_or_throw(transaction_handle& txn)
  throw libfdb_exception(result.replay_error);
 }
 
-inline bool retry_after_error(transaction_handle& txn, const fdb_error_t error)
+} // namespace detail
+
+inline void reset_for_replay(transaction_handle& txn, const fdb_error_t error)
 {
- if (0 == error) {
-  return false;
- }
-
- if (not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, error)) {
-  // Non-retryable errors cannot be repaired by on_error():
-  throw libfdb_exception(error);
- }
-
- const auto on_error_result =
-  get_future_error(wait_for_on_error(txn->raw_handle(), error));
-
- if (0 != on_error_result) {
-  throw libfdb_exception(error);
- }
-
- return true;
-}
-
-} // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb {
-
-inline void prepare_replay(transaction_handle& txn, const fdb_error_t error)
-{
- if (not detail::retry_after_error(txn, error)) {
-  throw libfdb_exception(error);
+ if (not detail::reset_for_replay_if_needed(txn, error)) {
+  throw std::invalid_argument(
+    "reset_for_replay() requires a nonzero FoundationDB error");
  }
 }
 
-} // namespace ceph::libfdb
-
-namespace ceph::libfdb::detail {
+namespace detail {
 
 enum struct invocation_failure_policy { no_retry, retry };
 
@@ -598,17 +661,6 @@ struct no_invocation_result final {};
 
 // Keep the existing transactor retry behavior in one place:
 inline constexpr std::size_t transaction_retry_attempts = 10;
-
-inline void record_transaction_replay(transaction_result& result,
-                                      const fdb_error_t r,
-                                      const bool can_replay)
-{
- result.last_error = r;
-
- if (can_replay) {
-  ++result.replay_count;
- }
-}
 
 template <typename ResultT>
 struct invocation_result_traits final
@@ -648,6 +700,22 @@ template <typename ResultT>
 using stored_invocation_result_t =
  typename invocation_result_traits<ResultT>::stored_t;
 
+template <typename ResultT>
+struct invocation_attempt final
+{
+ std::optional<stored_invocation_result_t<ResultT>> value;
+ fdb_error_t replay_error = 0;
+};
+
+template <typename ResultT>
+struct invocation_outcome final
+{
+ std::optional<stored_invocation_result_t<ResultT>> value;
+ std::size_t attempts = 0;
+ std::size_t replay_count = 0;
+ fdb_error_t last_error = 0;
+};
+
 template <invocation_failure_policy FailurePolicy,
           typename FnT,
           typename CommitFnT,
@@ -655,7 +723,7 @@ template <invocation_failure_policy FailurePolicy,
 auto attempt_invocation(transaction_handle& txn,
                         FnT&& fn,
                         CommitFnT&& commit_fn)
- -> std::optional<stored_invocation_result_t<ResultT>>
+ -> invocation_attempt<ResultT>
 {
  using stored_result_t = stored_invocation_result_t<ResultT>;
 
@@ -672,91 +740,116 @@ auto attempt_invocation(transaction_handle& txn,
    throw;
   }
 
-  prepare_replay(txn, e.fdb_error_value);
-  return std::nullopt;
+  reset_for_replay(txn, e.fdb_error_value);
+  return invocation_attempt<ResultT> {
+   .value = std::nullopt,
+   .replay_error = e.fdb_error_value
+  };
  }
 
- if (not std::invoke(commit_fn, txn)) {
-  return std::nullopt;
+ const auto commit_state = std::invoke(commit_fn, txn);
+
+ if (not commit_state.committed) {
+  if (0 == commit_state.replay_error) {
+   throw libfdb_exception("transactor commit did not start");
+  }
+
+  return invocation_attempt<ResultT> {
+   .value = std::nullopt,
+   .replay_error = commit_state.replay_error
+  };
  }
 
- return result;
+ return {.value = std::move(result)};
 }
 
 template <invocation_failure_policy FailurePolicy,
           typename FnT,
           typename CommitFnT,
           typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-decltype(auto) invoke_with_retry(transaction_handle& txn,
-                                 FnT&& fn,
-                                 CommitFnT&& commit_fn)
+auto invoke_with_retry(transaction_handle& txn,
+                       FnT&& fn,
+                       CommitFnT&& commit_fn) -> invocation_outcome<ResultT>
 {
+ invocation_outcome<ResultT> outcome;
+
  for (auto tries = transaction_retry_attempts; tries; --tries) {
+  ++outcome.attempts;
   prepare_invocation(fn);
 
-  if (auto result = attempt_invocation<FailurePolicy>(txn, fn, commit_fn)) {
-   publish_invocation(fn);
+  auto attempt = attempt_invocation<FailurePolicy>(txn, fn, commit_fn);
 
-   return invocation_result_traits<ResultT>::take(std::move(result));
+  if (attempt.value) {
+   publish_invocation(fn);
+   outcome.value = std::move(attempt.value);
+
+   return outcome;
+  }
+
+  outcome.last_error = attempt.replay_error;
+
+  if (1 < tries) {
+   ++outcome.replay_count;
   }
  }
 
- throw libfdb_exception("transaction retry limit exceeded");
+ return outcome;
+}
+
+template <typename ResultT>
+decltype(auto) take_invocation_outcome(invocation_outcome<ResultT>&& outcome)
+{
+ if (not outcome.value) {
+  throw libfdb_exception("transaction retry limit exceeded");
+ }
+
+ return invocation_result_traits<ResultT>::take(std::move(outcome.value));
 }
 
 template <transaction_op FnT>
 auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
 {
- return invoke_with_retry<invocation_failure_policy::retry>(
+ using result_t = transaction_invocation_result_t<FnT>;
+
+ auto outcome = invoke_with_retry<invocation_failure_policy::retry>(
    txn, std::forward<FnT>(fn),
    [](transaction_handle& active_txn) {
-     return ceph::libfdb::commit(active_txn);
+     return ceph::libfdb::commit(with_result, active_txn);
    });
+
+ return take_invocation_outcome<result_t>(std::move(outcome));
+}
+
+template <transaction_op FnT>
+auto retry_without_commit(transaction_handle txn,
+                          FnT&& fn) -> operation_result_t<FnT>
+{
+ using result_t = transaction_invocation_result_t<FnT>;
+
+ auto outcome = invoke_with_retry<invocation_failure_policy::retry>(
+   txn, std::forward<FnT>(fn),
+   [](transaction_handle&) {
+     return commit_result {.committed = true};
+   });
+
+ return take_invocation_outcome<result_t>(std::move(outcome));
 }
 
 template <result_reporting_transaction_op FnT>
 transaction_result maybe_retry_with_result(transaction_handle txn, FnT&& fn)
 {
- transaction_result result;
+ auto outcome = invoke_with_retry<invocation_failure_policy::retry>(
+   txn, std::forward<FnT>(fn),
+   [](transaction_handle& active_txn) {
+     return ceph::libfdb::commit(with_result, active_txn);
+   });
 
- for (auto attempts_left = transaction_retry_attempts;
-      attempts_left;
-      --attempts_left) {
-  ++result.attempts;
-  prepare_invocation(fn);
-
-  try {
-   std::invoke(fn, txn);
-  } catch (const libfdb_exception& e) {
-   if (not e.retryable()) {
-    throw;
-   }
-
-   prepare_replay(txn, e.fdb_error_value);
-   record_transaction_replay(result, e.fdb_error_value,
-                             1 < attempts_left);
-   continue;
-  }
-
-  const auto commit_state = commit(with_result, txn);
-
-  if (not commit_state.committed && 0 == commit_state.replay_error) {
-   throw libfdb_exception("transactor commit did not start");
-  }
-
-  if (not commit_state.committed) {
-   record_transaction_replay(result, commit_state.replay_error,
-                             1 < attempts_left);
-   continue;
-  }
-
-  result.committed = true;
-  publish_invocation(fn);
-
-  return result;
- }
-
- return result;
+ return {
+  .committed = outcome.value.has_value(),
+  .attempts = outcome.attempts,
+  .replay_count = outcome.replay_count,
+  .last_error = outcome.last_error
+ };
 }
 
 template <transaction_op FnT>
@@ -776,10 +869,16 @@ auto commit_noreplay(transaction_handle txn,
   return std::invoke(fn, txn);
  }
 
- return invoke_with_retry<invocation_failure_policy::no_retry>(
+ using result_t = transaction_invocation_result_t<FnT>;
+
+ auto outcome = invoke_with_retry<invocation_failure_policy::no_retry>(
    txn, std::forward<FnT>(fn), commit_or_throw);
+
+ return take_invocation_outcome<result_t>(std::move(outcome));
 }
 
-} // namespace ceph::libfdb::detail
+} // namespace detail
+
+} // namespace ceph::libfdb
 
 #endif
