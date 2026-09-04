@@ -261,8 +261,12 @@ int Snapshot<I>::get_name(I *ictx, uint64_t snap_id, std::string *snap_name)
     return r;
   }
 
-template <typename I>
-int Snapshot<I>::get_id(I *ictx, const std::string& snap_name, uint64_t *snap_id)
+  template <typename I>
+  int Snapshot<I>::get_id(
+    I *ictx,
+    const std::string& snap_name,
+    uint64_t *snap_id,
+    bool all_snaps)
   {
     ldout(ictx->cct, 20) << "snap_get_id " << ictx << " " << snap_name << dendl;
 
@@ -271,10 +275,26 @@ int Snapshot<I>::get_id(I *ictx, const std::string& snap_name, uint64_t *snap_id
       return r;
 
     std::shared_lock image_locker{ictx->image_lock};
-    *snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), snap_name);
-    if (*snap_id == CEPH_NOSNAP)
+    if (all_snaps) {
+      cls::rbd::for_each_snapshot_namespace(
+        [ictx, &snap_name, &snap_id, &r]
+        (const cls::rbd::SnapshotNamespace &snap_namespace) {
+          *snap_id = ictx->get_snap_id(snap_namespace, snap_name);
+          if (*snap_id == CEPH_NOSNAP) {
+            r = -ENOENT;
+            return true;
+          }
+          r = 0;
+          return false;
+        }
+      );
+      return r;
+    }
+    *snap_id = ictx->get_snap_id(
+      cls::rbd::UserSnapshotNamespace(), snap_name);
+    if (*snap_id == CEPH_NOSNAP) {
       return -ENOENT;
-
+    }
     return 0;
   }
 
