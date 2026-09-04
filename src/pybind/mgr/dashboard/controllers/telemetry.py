@@ -3,7 +3,9 @@
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
-from . import APIDoc, APIRouter, EndpointDoc, RESTController
+from ..services.telemetry import DashboardTelemetryService, \
+    TelemetryMetricsResponse, UserPersonaDistribution
+from . import APIDoc, APIRouter, Endpoint, EndpointDoc, RESTController
 
 REPORT_SCHEMA = {
     "report": ({
@@ -214,6 +216,16 @@ class Telemetry(RESTController):
         :rtype: dict
         """
         return mgr.remote('telemetry', 'get_report_locked', 'all')
+
+    @Endpoint('GET', path='metrics')
+    @EndpointDoc('Get all Dashboard telemetry metrics (anonymous, aggregated)')
+    def metrics(self) -> TelemetryMetricsResponse:
+        return DashboardTelemetryService.get_metrics()
+
+    @Endpoint('GET', path='metrics/user_personas')
+    @EndpointDoc('Get user persona distribution derived from RBAC roles')
+    def user_personas(self) -> UserPersonaDistribution:
+        return DashboardTelemetryService.get_user_persona_distribution()
 
     def singleton_set(self, enable=True, license_name=None):
         """
