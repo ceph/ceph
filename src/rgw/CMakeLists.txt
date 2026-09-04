@@ -128,6 +128,7 @@ set(librgw_common_srcs
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
   rgw_iam_managed_policy.cc
+  rgw_rest_customer_managed_policy.cc
   rgw_rest_user_policy.cc
   rgw_zone.cc
   rgw_sts.cc
@@ -246,6 +247,7 @@ list(APPEND librgw_rados_srcs
   driver/rados/oidcs.cc
   driver/rados/role.cc
   driver/rados/roles.cc
+  driver/rados/policy.cc
   driver/rados/sync_fairness.cc
   driver/rados/topic.cc
   driver/rados/topic_migration.cc
