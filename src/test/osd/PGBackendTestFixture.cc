@@ -352,8 +352,8 @@ int PGBackendTestFixture::do_transaction_and_complete(
   std::vector<pg_log_entry_t> log_entries,
   std::function<void(int)> on_write_complete)
 {
-  eversion_t trim_to(0, 0);
-  eversion_t pg_committed_to(0, 0);
+  eversion_t trim_to = compute_submit_trim_to();
+  eversion_t pg_committed_to = compute_submit_pg_committed_to();
   std::optional<pg_hit_set_history_t> hset_history;
 
   bool completed = false;
@@ -391,6 +391,8 @@ int PGBackendTestFixture::do_transaction_and_complete(
 
   if (!completed) {
     completion_result = -EINPROGRESS;
+  } else if (completion_result >= 0) {
+    on_primary_write_committed(at_version);
   }
 
   return completion_result;
