@@ -49,66 +49,80 @@ Complete the following steps to install the Ceph NVME-oF gateway:
 Configuration
 =============
 
-Download the ``nvmeof-cli`` container before first use.
-To download it use the following command:
+Use the ``ceph nvmeof`` command to configure NVMe-oF gateways.
 
-.. prompt:: bash #
-   
-   podman pull quay.io/ceph/nvmeof-cli:latest
+.. note:: As an alternative to ``ceph nvmeof``, you can use the
+   ``nvmeof-cli`` container image. Note that the container CLI
+   uses different option names (for example, ``--rbd-image``
+   instead of ``--rbd-image-name``). Pull it with
+   ``podman pull quay.io/ceph/nvmeof-cli:latest`` and run commands
+   in this form::
+
+      podman run -it --rm quay.io/ceph/nvmeof-cli:latest \
+        --server-address GATEWAY_IP --server-port 5500 <command>
 
 #. Create an NVMe subsystem:
 
    .. prompt:: bash #
-   
-      podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem add --subsystem SUSYSTEM_NQN
 
-   The subsystem NQN is a user defined string, for example ``nqn.2016-06.io.spdk:cnode1``.
+      ceph nvmeof subsystem add --nqn SUBSYSTEM_NQN
 
-#. Define the IP port on the gateway that will process the NVME/TCP commands and I/O:
+   The subsystem NQN is a user-defined string, for example
+   ``nqn.2016-06.io.spdk:cnode1``.
 
-    a. On the install node, get the NVME-oF Gateway name:
+#. Define the IP port on the gateway that will process the NVMe/TCP
+   commands and I/O:
+
+    a. On the install node, get the NVMe-oF gateway name:
 
        .. prompt:: bash #
-       
+
           ceph orch ps | grep nvme
 
     b. Define the IP port for the gateway:
 
        .. prompt:: bash #
-    
-          podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 listener add --subsystem SUBSYSTEM_NQN --host-name HOST_NAME --traddr GATEWAY_IP --trsvcid 4420
 
-#. Get the host NQN (NVME Qualified Name) for each host:
+          ceph nvmeof listener add --nqn SUBSYSTEM_NQN --host-name HOST_NAME --traddr GATEWAY_IP --trsvcid 4420
+
+#. Get the host NQN (NVMe Qualified Name) for each host:
 
    .. prompt:: bash #
 
       cat /etc/nvme/hostnqn
 
    .. prompt:: bash #
-    
+
       esxcli nvme info get
 
-#. Allow the initiator host to connect to the newly-created NVMe subsystem:
+#. Allow the initiator host to connect to the newly-created NVMe
+   subsystem:
 
    .. prompt:: bash #
-    
-      podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 host add --subsystem SUBSYSTEM_NQN --host "HOST_NQN1 HOST_NQN2"
+
+      ceph nvmeof host add --nqn SUBSYSTEM_NQN --host-nqn HOST_NQN
+
+   To allow any host to connect, use ``*`` as the host NQN:
+
+   .. prompt:: bash #
+
+      ceph nvmeof host add --nqn SUBSYSTEM_NQN --host-nqn "*"
 
 #. List all subsystems configured in the gateway:
 
    .. prompt:: bash #
-    
-      podman run -it --rm quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 subsystem list
+
+      ceph nvmeof subsystem list
 
 #. Create a new NVMe namespace:
 
    .. prompt:: bash #
-    
-      podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 namespace add --subsystem SUBSYSTEM_NQN --rbd-pool POOL_NAME --rbd-image IMAGE_NAME
+
+      ceph nvmeof namespace add --nqn SUBSYSTEM_NQN --rbd-pool POOL_NAME --rbd-image-name IMAGE_NAME
 
 #. List all namespaces in the subsystem:
 
    .. prompt:: bash #
-    
-      podman run -it quay.io/ceph/nvmeof-cli:latest --server-address GATEWAY_IP --server-port GATEWAY_PORT 5500 namespace list --subsystem SUBSYSTEM_NQN
+
+      ceph nvmeof namespace list --nqn SUBSYSTEM_NQN
 
