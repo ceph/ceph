@@ -5274,8 +5274,51 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 }
 #endif
 
-// Collection
+// OpSequencer
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.OpSequencer "
+#undef dout_context
+#define dout_context store->cct
 
+inline void BlueStore::OpSequencer::flush()
+{
+  bool res;
+  std::unique_lock l(qlock);
+  ++kv_submitted_waiters;
+  do {
+    res = qcond.wait_for(l, std::chrono::seconds(1), [&]() {
+      return q.empty() || _is_all_kv_submitted();
+    });
+    if (!res) {
+      dout(1) << "flush() timeouted after 1s" << dendl;
+    }
+  } while (!res);
+  --kv_submitted_waiters;
+}
+
+inline void BlueStore::OpSequencer::flush_all_but_last()
+{
+  bool res;
+  std::unique_lock l(qlock);
+  ceph_assert(q.size() >= 1);
+  ++kv_submitted_waiters;
+  do {
+    res = qcond.wait_for(l, std::chrono::seconds(1), [&]() {
+      if (q.size() <= 1) {
+        return true;
+      }
+      auto it = q.rbegin();
+      it++;
+      return it->get_state() >= TransContext::STATE_KV_SUBMITTED;
+    });
+    if (!res) {
+      dout(1) << "flush_all_but_last() timeouted after 1s" << dendl;
+    }
+  } while (!res);
+  --kv_submitted_waiters;
+}
+
+// Collection
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 
@@ -15049,8 +15092,14 @@ void BlueStore::_txc_apply_kv(TransContext *txc, bool sync_submit_transaction)
     ceph_assert(r == 0);
     txc->set_state(TransContext::STATE_KV_SUBMITTED);
     if (txc->osr->kv_submitted_waiters) {
-      std::lock_guard l(txc->osr->qlock);
-      txc->osr->qcond.notify_all();
+      if (sync_submit_transaction) {
+        // We already have the lock
+        txc->osr->qcond.notify_all();
+      } else {
+        // We need to take a lock.
+        std::lock_guard l(txc->osr->qlock);
+        txc->osr->qcond.notify_all();
+      }
     }
 
 #if defined(WITH_LTTNG)
