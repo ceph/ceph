@@ -29,7 +29,7 @@
 #include "common/config.h"
 #include "common/version.h"
 #include "mon/MonClient.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/stringify.h"
 #include "include/object.h"
 #include "log/Log.h"

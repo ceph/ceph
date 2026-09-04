@@ -20,7 +20,7 @@
 
 #include "common/debug.h"
 #include "global/global_context.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "include/scope_guard.h"
 
 using std::string;

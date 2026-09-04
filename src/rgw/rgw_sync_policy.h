@@ -710,5 +710,3 @@ struct rgw_sync_policy_info {
                                      std::set<rgw_bucket> *dests) const;
 };
 WRITE_CLASS_ENCODER(rgw_sync_policy_info)
-
-

@@ -94,7 +94,7 @@ using namespace std::literals::string_view_literals;
 #include "common/perf_counters.h"
 #include "common/admin_socket.h"
 #include "common/errno.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #define dout_subsys ceph_subsys_client
 
@@ -2593,8 +2593,7 @@ void Client::populate_metadata(const std::string &mount_root)
   metadata["ceph_sha1"] = git_version_to_str();
 
   // Apply any metadata from the user's configured overrides
-  std::vector<std::string> tokens;
-  get_str_vec(cct->_conf->client_metadata, ",", tokens);
+  const auto tokens = ceph::split(cct->_conf->client_metadata, ",");
   for (const auto &i : tokens) {
     auto eqpos = i.find("=");
     // Throw out anything that isn't of the form "<str>=<str>"
@@ -2602,7 +2601,8 @@ void Client::populate_metadata(const std::string &mount_root)
       lderr(cct) << "Invalid metadata keyval pair: '" << i << "'" << dendl;
       continue;
     }
-    metadata[i.substr(0, eqpos)] = i.substr(eqpos + 1);
+    metadata.insert_or_assign(std::string { i.substr(0, eqpos) },
+                              std::string { i.substr(eqpos + 1) });
   }
 }
 

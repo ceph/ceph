@@ -16,7 +16,7 @@
 #include "AuthMethodList.h"
 #include "common/debug.h"
 #include "include/ceph_fs.h" // for CEPH_AUTH_*
-#include "include/str_list.h"
+#include "include/str_lib.h"
 
 #include <algorithm> // for std::find()
 
@@ -25,22 +25,22 @@ const static int dout_subsys = ceph_subsys_auth;
 
 AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
 {
-  std::list<std::string> sup_list;
-  get_str_list(str, sup_list);
+  const auto sup_list = ceph::split(str);
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
-  for (auto iter = sup_list.begin(); iter != sup_list.end(); ++iter) {
-    ldout(cct, 5) << "adding auth protocol: " << *iter << dendl;
-    if (iter->compare("cephx") == 0) {
+  for (const auto auth_protocol_name : sup_list) {
+    ldout(cct, 5) << "adding auth protocol: " << auth_protocol_name << dendl;
+    if (auth_protocol_name == "cephx") {
       auth_supported.push_back(CEPH_AUTH_CEPHX);
-    } else if (iter->compare("none") == 0) {
+    } else if (auth_protocol_name == "none") {
       auth_supported.push_back(CEPH_AUTH_NONE);
-    } else if (iter->compare("gss") == 0) {
+    } else if (auth_protocol_name == "gss") {
       auth_supported.push_back(CEPH_AUTH_GSS);
     } else {
       auth_supported.push_back(CEPH_AUTH_UNKNOWN);
-      lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;
+      lderr(cct) << "WARNING: unknown auth protocol defined: "
+                 << auth_protocol_name << dendl;
     }
   }
   if (auth_supported.empty()) {

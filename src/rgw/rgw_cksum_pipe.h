@@ -19,7 +19,7 @@
 #include <utility>
 #include <tuple>
 #include <cstring>
-#include "common/split.h"
+#include "include/str_lib.h"
 #include "rgw_cksum.h"
 #include "rgw_cksum_digest.h"
 #include "rgw_common.h"
@@ -81,11 +81,10 @@ namespace rgw::putobj {
     /* look for a trailing checksum */
     auto hv = env.get("HTTP_X_AMZ_TRAILER");
     if (hv) {
-      auto kv = ceph::split(hv, ",");
-      for (auto k = kv.begin(); k != kv.end(); k = std::next(k)) {
+      for (const auto checksum : ceph::split(hv, ",")) {
 	/* a checksum trailer resembles "x-amz-checksum-crc32" and
 	 * we need "CRC32", for known checksum types */
-	auto type = cksum::parse_cksum_type_hdr(*k);
+	auto type = cksum::parse_cksum_type_hdr(checksum);
 	if (type != cksum::Type::none) {
 	  return cksum_hdr_t("HTTP_X_AMZ_CHECKSUM_ALGORITHM",
 			     cksum::to_uc_string(type).data());

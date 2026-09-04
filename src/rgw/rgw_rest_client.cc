@@ -8,7 +8,7 @@
 #include "rgw_http_errors.h"
 
 #include "common/strtol.h"
-#include "include/str_list.h"
+#include "include/str_lib.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context
@@ -274,15 +274,15 @@ static int sign_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key,
   return sign_request_v4(dpp, key, region, service, env, info, opt_content);
 }
 
-static string extract_region_name(string&& s)
+static string extract_region_name(std::string_view s)
 {
   if (s == "s3") {
       return "us-east-1";
   }
   if (boost::algorithm::starts_with(s, "s3-")) {
-    return s.substr(3);
+    return std::string { s.substr(3) };
   }
-  return std::move(s);
+  return std::string { s };
 }
 
 
@@ -297,17 +297,15 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
     return false;
   }
 
-  vector<string> vec;
-
-  get_str_vec(host, ".", vec);
+  const auto parts = ceph::split(host, ".");
 
   string ser = service;
   if (service.empty()) {
     service = "s3"; /* default */
   }
 
-  for (auto iter = vec.begin(); iter != vec.end(); ++iter) {
-    auto& s = *iter;
+  for (auto iter = parts.begin(); iter != parts.end(); ++iter) {
+    const auto s = *iter;
     if (s == "s3" ||
         s == "execute-api" ||
         s == "iam") {
@@ -315,11 +313,11 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
         service = s;
       }
       ++iter;
-      if (iter == vec.end()) {
+      if (iter == parts.end()) {
         ldpp_dout(dpp, 0) << "WARNING: cannot identify region name from host name: " << host << dendl;
         return false;
       }
-      auto& next = *iter;
+      const auto next = *iter;
       if (next == "amazonaws") {
         *region = "us-east-1";
         return true;
@@ -327,7 +325,7 @@ static bool identify_scope(const DoutPrefixProvider *dpp,
       *region = next;
       return true;
     } else if (boost::algorithm::starts_with(s, "s3-")) {
-      *region = extract_region_name(std::move(s));
+      *region = extract_region_name(s);
       return true;
     }
   }
@@ -759,9 +757,7 @@ void set_str_from_headers(map<string, string>& out_headers, const string& header
 static int parse_rgwx_mtime(const DoutPrefixProvider *dpp, CephContext *cct, const string& s, ceph::real_time *rt)
 {
   string err;
-  vector<string> vec;
-
-  get_str_vec(s, ".", vec);
+  const auto vec = ceph::split_strings(s, ".");
 
   if (vec.empty()) {
     return -EINVAL;
