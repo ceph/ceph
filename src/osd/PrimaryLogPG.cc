@@ -9197,7 +9197,11 @@ void PrimaryLogPG::emit_rollback_log_entries(
   OpContext *ctx,
   const std::vector<pending_op_t>& ops)
 {
-  const hobject_t& soid = ctx->obs->oi.soid;
+  // Use new_obs (the head object) rather than obs, because in the trimmer
+  // path ctx->obc is the clone being trimmed while ctx->new_obs is always
+  // initialised to the head object.  In the write I/O path both point to
+  // the head, so this change is a no-op there.
+  const hobject_t& soid = ctx->new_obs.oi.soid;
   SnapSet& ss = ctx->new_snapset;
 
   // Emit CLONE entries for each new clone (SNAP ops only)
@@ -9214,8 +9218,8 @@ void PrimaryLogPG::emit_rollback_log_entries(
 
     ctx->log.push_back(pg_log_entry_t(
       pg_log_entry_t::CLONE, coid, ctx->at_version,
-      ctx->obs->oi.version,
-      ctx->obs->oi.user_version,
+      ctx->new_obs.oi.version,
+      ctx->new_obs.oi.user_version,
       osd_reqid_t(), ctx->new_obs.oi.mtime, 0));
     encode(it->second, ctx->log.back().snaps);
     ctx->at_version.version++;
@@ -9227,8 +9231,8 @@ void PrimaryLogPG::emit_rollback_log_entries(
   // Emit MODIFY entry for the head (SnapSet + OI updated to snapc.seq)
   ctx->log.push_back(pg_log_entry_t(
     pg_log_entry_t::MODIFY, soid, ctx->at_version,
-    ctx->obs->oi.version,
-    ctx->obs->oi.user_version,
+    ctx->new_obs.oi.version,
+    ctx->new_obs.oi.user_version,
     ctx->reqid, ctx->mtime, 0));
 
   dout(10) << __func__ << " MODIFY head " << soid
