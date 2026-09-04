@@ -721,6 +721,13 @@ void Replayer<I>::scan_remote_mirror_snapshots(
     split_brain = true;
   }
 
+  if (!m_local_mirror_snap_ns.complete &&
+      m_remote_snap_id_end == CEPH_NOSNAP) {
+    derr << "failed to locate corresponding remote snapshot for incomplete"
+         << " local snapshot, snap_id=" << m_local_snap_id_end << dendl;
+    split_brain = true;
+  }
+
   image_locker.unlock();
 
   if (!split_brain) {
