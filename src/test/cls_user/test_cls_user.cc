@@ -262,6 +262,7 @@ TEST_F(ClsUserStorageClass, LegacyToConverted) {
   ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
   ASSERT_FALSE(read_hdr.storage_class_stats.has_value());
 
+  // add data in user header
   cls_user_bucket_entry entry;
   entry.bucket.name = "test-bucket";
   entry.size = 5120;
@@ -276,9 +277,27 @@ TEST_F(ClsUserStorageClass, LegacyToConverted) {
 
   set_bucket(ioctx, oid, entry, true);
 
-  // storage_class_stats must now be initialized by cls_user_set_buckets_info()
+  // ensure storage class still nullopt
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
+  ASSERT_FALSE(read_hdr.storage_class_stats.has_value());
+  EXPECT_EQ(read_hdr.stats.total_entries, 1u);
+
+  // removes data from user header and check its storage class initialized
+  cls_user_bucket_entry remove_entry;
+  remove_entry.bucket.name = "test-bucket";
+  remove_entry.size = 0;
+  remove_entry.size_rounded = 0;
+  remove_entry.count = 0;
+  set_bucket(ioctx, oid, remove_entry, false);
   ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
   ASSERT_TRUE(read_hdr.storage_class_stats.has_value());
+  EXPECT_EQ(read_hdr.stats.total_entries, 0u);
+
+  // re-sync the bucket; its storage-class stats now accumulate
+  set_bucket(ioctx, oid, entry, false);
+
+  // storage_class_stats must now be consistent with stats
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, read_hdr));
   EXPECT_TRUE(read_hdr.storage_class_stats->count("STANDARD") > 0);
   EXPECT_EQ((*read_hdr.storage_class_stats)["STANDARD"].total_entries, 1u);
   EXPECT_EQ((*read_hdr.storage_class_stats)["STANDARD"].total_bytes, 5120u);
@@ -318,15 +337,18 @@ TEST_F(ClsUserStorageClass, LegacyBucketConversion) {
   ASSERT_FALSE(header.storage_class_stats.has_value());
   ASSERT_EQ(header.stats.total_entries, 3u);
 
-  // Remove all buckets (decrement stats toward zero)
+  // remove data
   for (int i = 0; i < 3; i++) {
     cls_user_bucket_entry entry;
     entry.bucket.name = "bucket" + std::to_string(i);
-    entry.size = 1024;
-    entry.size_rounded = 1024;
-    entry.count = 1;
-    set_bucket(ioctx, oid, entry, false); // add=false means remove
+    entry.size = 0;
+    entry.size_rounded = 0;
+    entry.count = 0;
+    set_bucket(ioctx, oid, entry, false);
   }
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 0u);
+  ASSERT_TRUE(header.storage_class_stats.has_value());
 
   // Now add a new bucket with a different storage class
   cls_user_bucket_entry new_entry;
@@ -353,6 +375,10 @@ TEST_F(ClsUserStorageClass, LegacyBucketConversion) {
 TEST_F(ClsUserStorageClass, MultipleClasses) {
   std::string oid = "user.multi-sc";
 
+  cls_user_header header;
+  header.storage_class_stats.emplace();
+  ASSERT_EQ(0, write_user_header_test(ioctx, oid, header));
+
   // Add buckets with different storage classes via cls_user_set_buckets()
   struct { const char* sc; const char* bucket; uint64_t size; } data[] = {
     {"STANDARD", "bucket-std", 1024},
@@ -374,7 +400,7 @@ TEST_F(ClsUserStorageClass, MultipleClasses) {
     set_bucket(ioctx, oid, entry, true);
   }
 
-  cls_user_header header;
+
   ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
   ASSERT_TRUE(header.storage_class_stats.has_value());
   EXPECT_EQ(header.storage_class_stats->size(), 2u);
@@ -382,4 +408,108 @@ TEST_F(ClsUserStorageClass, MultipleClasses) {
   EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_bytes, 1024u);
   EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 1u);
   EXPECT_EQ((*header.storage_class_stats)["HDD"].total_bytes, 2048u);
+}
+
+static void add_buckets_with_sc(librados::IoCtx& ioctx, const std::string& oid,
+                                int num_buckets, int legacy_index)
+{
+  int chunk = 250;
+  std::string classes[] = {"STANDARD", "HDD"};
+  for (int base = 0; base < num_buckets; base += chunk) {
+    std::list<cls_user_bucket_entry> entries;
+    for (int i = base; i < base + chunk && i < num_buckets; i++) {
+      cls_user_bucket_entry entry;
+      entry.bucket.name = "bucket-" + std::to_string(i);
+      entry.size = 1024;
+      entry.size_rounded = 1024;
+      entry.count = 1;
+      if (i == legacy_index) {
+        entry.storage_class_stats = std::nullopt;
+      } else {
+        entry.storage_class_stats.emplace();
+        cls_user_bucket_entry sc_entry;
+        sc_entry.size = 1024;
+        sc_entry.size_rounded = 1024;
+        sc_entry.count = 1;
+        (*entry.storage_class_stats)[classes[i%2]] = sc_entry;
+      }
+      entries.push_back(entry);
+    }
+    librados::ObjectWriteOperation op;
+    cls_user_set_buckets(op, entries, true);
+    ASSERT_EQ(0, ioctx.operate(oid, &op));
+  }
+}
+
+// emulate the reset_stats method in src/rgw/driver/rados/buckets.cc,
+static void reset_user_stats_test(librados::IoCtx& ioctx, const std::string& oid)
+{
+  cls_user_reset_stats2_op call;
+  cls_user_reset_stats2_ret ret;
+  ret.storage_class_stats.emplace();
+  do {
+    call.time = ceph::real_clock::now();
+    ret.update_call(call);
+    bufferlist in, out;
+    encode(call, in);
+    librados::ObjectWriteOperation op;
+    int rval;
+    op.exec(cls::user::method::reset_user_stats2, in, &out, &rval);
+    ASSERT_EQ(0, ioctx.operate(oid, &op, librados::OPERATION_RETURNVEC));
+    try {
+      auto bliter = out.cbegin();
+      decode(ret, bliter);
+    } catch (ceph::buffer::error& err) {
+      FAIL() << "failed to decode cls_user_reset_stats2_ret";
+    }
+  } while (ret.truncated);
+}
+
+TEST_F(ClsUserStorageClass, ResetStatsPagination) {
+  std::string oid = "user.reset-sc-pagination";
+
+  int num_buckets = 1005;
+  add_buckets_with_sc(ioctx, oid, num_buckets, -1); // no legacy buckets
+  reset_user_stats_test(ioctx, oid);
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  ASSERT_TRUE(header.storage_class_stats.has_value());
+  EXPECT_EQ(header.storage_class_stats->size(), 2u);
+  // 503 even-indexed buckets in STANDARD, 502 odd-indexed in HDD
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_entries, 503u);
+  EXPECT_EQ((*header.storage_class_stats)["STANDARD"].total_bytes, 503u * 1024u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_entries, 502u);
+  EXPECT_EQ((*header.storage_class_stats)["HDD"].total_bytes, 502u * 1024u);
+  EXPECT_EQ(header.stats.total_entries, 1005u);
+}
+
+TEST_F(ClsUserStorageClass, ResetStatsPaginationLegacyFirstPage) {
+  std::string oid = "user.reset-sc-legacy-first";
+
+  int num_buckets = 1003;
+  add_buckets_with_sc(ioctx, oid, num_buckets, 0); // legacy is on the first page
+
+  reset_user_stats_test(ioctx, oid);
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 1003u);
+  // should be empty as a legacy bucket exists
+  ASSERT_FALSE(header.storage_class_stats.has_value());
+}
+
+
+TEST_F(ClsUserStorageClass, ResetStatsPaginationLegacyLastPage) {
+  std::string oid = "user.reset-sc-legacy-last";
+
+  int num_buckets = 1002;
+  add_buckets_with_sc(ioctx, oid, num_buckets, num_buckets - 1); // legacy on last page
+  reset_user_stats_test(ioctx, oid);
+
+  cls_user_header header;
+  ASSERT_EQ(0, read_user_header_test(ioctx, oid, header));
+  EXPECT_EQ(header.stats.total_entries, 1002u);
+  // should be empty as a legacy bucket exists
+  ASSERT_FALSE(header.storage_class_stats.has_value());
 }
