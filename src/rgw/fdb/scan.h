@@ -14,7 +14,7 @@
  */
 
 #ifndef CEPH_FDB_SCAN_H
- #define CEPH_FDB_SCAN_H
+#define CEPH_FDB_SCAN_H
 
 #include "conversion.h"
 #include "transaction.h"
@@ -86,7 +86,7 @@ struct split_point_result final
 
 inline query_window extract_result_pairs(future_value result_owner)
 {
- int more_available = 0;
+ fdb_bool_t more_available = false;
  int out_count = 0;
  const FDBKeyValue *out_kvs = nullptr;
 
@@ -101,7 +101,8 @@ inline query_window extract_result_pairs(future_value result_owner)
 
  return query_window {
   .result_owner = std::move(result_owner),
-  .result_pairs = std::span<const FDBKeyValue>(out_kvs, out_count),
+  .result_pairs = std::span<const FDBKeyValue>(
+    out_kvs, checked_result_size(out_count)),
   .more_available = 0 != more_available
  };
 }
@@ -117,7 +118,7 @@ inline split_point_result extract_split_points(future_value result_owner)
  return split_point_result {
   .result_owner = std::move(result_owner),
   .result_keys = 0 == error
-    ? std::span<const FDBKey>(result_keys, result_count)
+    ? std::span<const FDBKey>(result_keys, checked_result_size(result_count))
     : std::span<const FDBKey>(),
   .error = error
  };
@@ -132,35 +133,36 @@ inline future_value get_range_future_from_transaction(
   const select& selection,
   const int iteration)
 {
- const auto& begin_key = selection.begin_key;
- const auto& end_key = selection.end_key;
  const auto& options = selection.options;
+ const auto begin = as_fdb_bytes(selection.begin_key);
+ const auto end = as_fdb_bytes(selection.end_key);
 
  const bool continuing_forward = !options.reverse_order && 1 < iteration;
  const bool continuing_reverse = options.reverse_order && 1 < iteration;
 
- const int begin_or_eq = continuing_forward || !selection.begin_inclusive ? 1 : 0;
+ const fdb_bool_t begin_or_eq = continuing_forward || !selection.begin_inclusive;
  const int begin_offset = 1;
- const int end_or_eq = !continuing_reverse && selection.end_inclusive ? 1 : 0;
+ const fdb_bool_t end_or_eq = !continuing_reverse && selection.end_inclusive;
  const int end_offset = 1;
+ const fdb_bool_t is_snapshot = false;
 
  // Hold your breath-- this call is a bit of a Swiss army knife!
  // It really helps to see the fdb_c reference, some of these are gnarly.
  return future_value(fdb_transaction_get_range(
    txn.raw_handle(),
-   reinterpret_cast<const std::uint8_t *>(begin_key.data()),
-   static_cast<int>(begin_key.size()),
+   begin.data,
+   begin.length,
    begin_or_eq,
    begin_offset,
-   reinterpret_cast<const std::uint8_t *>(end_key.data()),
-   static_cast<int>(end_key.size()),
+   end.data,
+   end.length,
    end_or_eq,
    end_offset,
    options.result_limit,
    options.target_bytes,
    options.streaming_mode,
    iteration,
-   0,   // this is not a snapshot read
+   is_snapshot,
    options.reverse_order));
 }
 
@@ -181,8 +183,7 @@ inline std::optional<select> next_range_after(select key_range,
  }
 
  const auto& last_key = window.result_pairs.back();
- auto cursor = std::string_view(
-                reinterpret_cast<const char *>(last_key.key), last_key.key_length);
+ const auto cursor = key_view(last_key);
 
  if (key_range.options.reverse_order) {
   key_range.end_key = cursor;
@@ -307,13 +308,8 @@ inline std::vector<select> select_ranges_from_split_points(
        const auto& first = keys[i];
        const auto& second = keys[1 + i];
 
-       const auto first_key = std::string_view(
-         reinterpret_cast<const char *>(first.key),
-         static_cast<std::string::size_type>(first.key_length));
-
-       const auto second_key = std::string_view(
-         reinterpret_cast<const char *>(second.key),
-         static_cast<std::string::size_type>(second.key_length));
+       const auto first_key = key_view(first);
+       const auto second_key = key_view(second);
 
        select split(first_key, second_key);
 
@@ -333,25 +329,33 @@ inline std::vector<select> plan_split_ranges(
   select selector,
   const std::int64_t remote_chunk_size)
 {
- auto txn = make_transaction(std::move(dbh));
  auto split_selector = as_half_open_select(selector);
 
- for (;;) {
-  auto result_owner = wait_until_ready(future_value(
-    fdb_transaction_get_range_split_points(
+ return retry_without_commit(
+  make_transaction(std::move(dbh)),
+  [split_selector = std::move(split_selector), remote_chunk_size](
+    transaction_handle& txn) {
+    const auto begin = as_fdb_bytes(split_selector.begin_key);
+    const auto end = as_fdb_bytes(split_selector.end_key);
+
+    auto result_owner = wait_until_ready(future_value(
+     fdb_transaction_get_range_split_points(
       txn->raw_handle(),
-      reinterpret_cast<const std::uint8_t *>(split_selector.begin_key.data()),
-      static_cast<int>(split_selector.begin_key.length()),
-      reinterpret_cast<const std::uint8_t *>(split_selector.end_key.data()),
-      static_cast<int>(split_selector.end_key.length()),
+      begin.data,
+      begin.length,
+      end.data,
+      end.length,
       remote_chunk_size)));
 
-  auto split_points = extract_split_points(std::move(result_owner));
+    auto split_points = extract_split_points(std::move(result_owner));
 
-  if (not retry_after_error(txn, split_points.error)) {
-   return select_ranges_from_split_points(split_points.result_keys, split_selector);
-  }
- }
+    if (0 != split_points.error) {
+     throw libfdb_exception(split_points.error);
+    }
+
+    return select_ranges_from_split_points(
+      split_points.result_keys, split_selector);
+  });
 }
 
 inline select select_from_initializer_list(
@@ -554,13 +558,7 @@ inline auto intervals(select selection)
 template <query::non_interval_expression QueryT>
 inline auto intervals(const QueryT& query)
 {
- std::vector<select> out;
-
- query::for_each_interval(query, [&out](select interval) {
-  out.push_back(std::move(interval));
- });
-
- return out;
+ return query::compile_intervals(query);
 }
 
 template <typename AssocT, typename RangeT>
@@ -609,38 +607,31 @@ auto blocks_selector(database_handle dbh, select selector)
  constexpr auto chunk_size = 4 * 1024 * 1024;
 
  auto split_ranges = plan_split_ranges(dbh, selector, chunk_size);
+ auto txr = make_transactor(dbh);
 
- auto read_blocks =
-  [txr = make_transactor(dbh)](this auto& self,
-                               select range,
-                               const int iteration) -> std::generator<AssocT> {
+ for (auto split_range : split_ranges) {
+  for (int page = 1;; ++page) {
    auto read_result = txr(
-     [](auto& txn, select range, const int iteration) {
-       return materialize_query_window<ValueT, AssocT>(
-         *txn, std::move(range), iteration);
-     }, std::move(range), iteration);
+    [](auto& txn, select range, const int iteration) {
+      return materialize_query_window<ValueT, AssocT>(
+        *txn, std::move(range), iteration);
+    }, std::move(split_range), page);
 
    auto next_range = std::move(read_result.next_range);
 
    if (read_result.result_block.empty()) {
-    co_return;
+    break;
    }
 
    co_yield std::move(read_result.result_block);
 
-   if (next_range) {
-    co_yield std::ranges::elements_of(
-      self(std::move(*next_range), 1 + iteration));
+   if (not next_range) {
+    break;
    }
-  };
 
- auto expand_range = [&read_blocks](select range) {
-  return read_blocks(std::move(range), 1);
- };
-
- co_yield std::ranges::elements_of(split_ranges
-                                 | std::views::transform(expand_range)
-                                 | std::views::join);
+   split_range = std::move(*next_range);
+  }
+ }
 }
 
 } // namespace detail

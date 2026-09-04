@@ -14,7 +14,7 @@
 */
 
 #ifndef CEPH_FDB_INTERVAL_H
- #define CEPH_FDB_INTERVAL_H
+#define CEPH_FDB_INTERVAL_H
 
 #include "common/container_concepts.h"
 
@@ -158,6 +158,12 @@ class boundary final : public detail::boundary_view_ops
  using domain_type = DomainT;
  using value_type = typename DomainT::value_type;
 
+ private:
+ boundary_kind bound_kind = boundary_kind::finite;
+ std::optional<value_type> key;
+ bool includes_key = false;
+
+ public:
  static constexpr boundary negative_infinity() noexcept
  {
   return boundary(boundary_kind::negative_infinity, std::nullopt, false);
@@ -180,33 +186,29 @@ class boundary final : public detail::boundary_view_ops
 
  constexpr boundary_kind kind() const noexcept
  {
-  return kind_;
+  return bound_kind;
  }
 
  constexpr const value_type& finite_key() const noexcept
  {
-  return *key_;
+  return *key;
  }
 
  constexpr bool inclusive() const noexcept
  {
-  return inclusive_;
+  return includes_key;
  }
 
  constexpr bool operator==(const boundary&) const = default;
 
  private:
  constexpr boundary(const boundary_kind kind,
-                    std::optional<value_type> key,
+                    std::optional<value_type> key_value,
                     const bool inclusive)
-  : kind_(kind),
-    key_(std::move(key)),
-    inclusive_(inclusive)
+  : bound_kind(kind),
+    key(std::move(key_value)),
+    includes_key(inclusive)
  {}
-
- boundary_kind kind_ = boundary_kind::finite;
- std::optional<value_type> key_;
- bool inclusive_ = false;
 };
 
 template <ordered_domain DomainT>
@@ -216,6 +218,15 @@ class boundary_ref final : public detail::boundary_view_ops
  using domain_type = DomainT;
  using value_type = typename DomainT::value_type;
 
+ private:
+ boundary_kind bound_kind = boundary_kind::finite;
+
+ // Infinities cannot be keys, so the non-owning pointer is NULL for them.
+ const value_type *key = nullptr;
+
+ bool includes_key = false;
+
+ public:
  static constexpr boundary_ref negative_infinity() noexcept
  {
   return boundary_ref(boundary_kind::negative_infinity, nullptr, false);
@@ -241,34 +252,27 @@ class boundary_ref final : public detail::boundary_view_ops
 
  constexpr boundary_kind kind() const noexcept
  {
-  return kind_;
+  return bound_kind;
  }
 
  constexpr const value_type& finite_key() const noexcept
  {
-  return *key_;
+  return *key;
  }
 
  constexpr bool inclusive() const noexcept
  {
-  return inclusive_;
+  return includes_key;
  }
 
  private:
  constexpr boundary_ref(const boundary_kind kind,
-                        const value_type* key,
+                        const value_type *key_value,
                         const bool inclusive) noexcept
-  : kind_(kind),
-    key_(key),
-    inclusive_(boundary_kind::finite == kind && inclusive)
+  : bound_kind(kind),
+    key(key_value),
+    includes_key(boundary_kind::finite == kind and inclusive)
  {}
-
- boundary_kind kind_ = boundary_kind::finite;
-
- // Infinities cannot be keys, so the non-owning pointer uses null for that state.
- const value_type *key_ = nullptr;
-
- bool inclusive_ = false;
 };
 
 template <typename BoundT, typename DomainT>
@@ -339,17 +343,23 @@ class query final : public detail::expression_tag
  using value_type = typename DomainT::value_type;
  using boundary_type = boundary<DomainT>;
 
+ private:
+ boundary_type begin_bound = boundary_type::negative_infinity();
+ boundary_type end_bound = boundary_type::positive_infinity();
+ bool is_empty = false;
+
+ public:
  constexpr query() = default;
 
  constexpr query(boundary_type begin, boundary_type end)
-  : begin_(std::move(begin)),
-    end_(std::move(end))
+  : begin_bound(std::move(begin)),
+    end_bound(std::move(end))
  {}
 
  static constexpr query empty() noexcept
  {
   query out;
-  out.empty_ = true;
+  out.is_empty = true;
 
   return out;
  }
@@ -411,30 +421,25 @@ class query final : public detail::expression_tag
 
  constexpr const boundary_type& lower() const noexcept
  {
-  return begin_;
+  return begin_bound;
  }
 
  constexpr const boundary_type& upper() const noexcept
  {
-  return end_;
+  return end_bound;
  }
 
  constexpr bool explicitly_empty() const noexcept
  {
-  return empty_;
+  return is_empty;
  }
 
  constexpr bool operator==(const query& rhs) const
  {
-  return begin_ == rhs.begin_ &&
-         end_ == rhs.end_ &&
-         empty_ == rhs.empty_;
+  return begin_bound == rhs.begin_bound and
+         end_bound == rhs.end_bound and
+         is_empty == rhs.is_empty;
  }
-
- private:
- boundary_type begin_ = boundary_type::negative_infinity();
- boundary_type end_ = boundary_type::positive_infinity();
- bool empty_ = false;
 };
 
 template <ordered_domain DomainT, std::size_t Capacity>
@@ -444,39 +449,44 @@ class static_interval_set final
  using value_type = query<DomainT>;
  using const_iterator = typename std::array<value_type, Capacity>::const_iterator;
 
+ private:
+ std::array<value_type, Capacity> intervals {};
+ std::size_t interval_count = 0;
+
+ public:
  constexpr void push_back(value_type value)
  {
-  if (Capacity == size_) {
+  if (Capacity == interval_count) {
    throw std::length_error { "static interval set capacity exceeded" };
   }
 
-  intervals_[size_++] = std::move(value);
+  intervals[interval_count++] = std::move(value);
  }
 
  constexpr bool empty() const noexcept
  {
-  return 0 == size_;
+  return 0 == interval_count;
  }
 
  constexpr std::size_t size() const noexcept
  {
-  return size_;
+  return interval_count;
  }
 
  constexpr const value_type& operator[](const std::size_t index) const noexcept
  {
-  return intervals_[index];
+  return intervals[index];
  }
 
  constexpr const_iterator begin() const noexcept
  {
-  return std::begin(intervals_);
+  return std::begin(intervals);
  }
 
  constexpr const_iterator end() const noexcept
  {
-  return std::next(std::begin(intervals_),
-                   static_cast<std::ptrdiff_t>(size_));
+  return std::next(std::begin(intervals),
+                   static_cast<std::ptrdiff_t>(interval_count));
  }
 
  constexpr bool operator==(const static_interval_set& rhs) const
@@ -484,9 +494,6 @@ class static_interval_set final
   return std::ranges::equal(*this, rhs);
  }
 
- private:
- std::array<value_type, Capacity> intervals_ {};
- std::size_t size_ = 0;
 };
 
 namespace detail {
@@ -514,24 +521,25 @@ struct interval_bounds final
  using lower_result = decltype(std::declval<const IntervalT&>().lower());
  using upper_result = decltype(std::declval<const IntervalT&>().upper());
 
+ private:
+ boundary_storage<lower_result> lower_bound;
+ boundary_storage<upper_result> upper_bound;
+
+ public:
  constexpr explicit interval_bounds(const IntervalT& interval)
-  : lower_(interval.lower()),
-    upper_(interval.upper())
+  : lower_bound(interval.lower()),
+    upper_bound(interval.upper())
  {}
 
  constexpr const auto& lower() const noexcept
  {
-  return lower_;
+  return lower_bound;
  }
 
  constexpr const auto& upper() const noexcept
  {
-  return upper_;
+  return upper_bound;
  }
-
- private:
- boundary_storage<lower_result> lower_;
- boundary_storage<upper_result> upper_;
 };
 
 template <typename IntervalT>
@@ -698,10 +706,11 @@ constexpr void emit_bounds(SinkT&& sink, const LowerT& lower, const UpperT& uppe
                 std::forward<SinkT>(s).emit_interval(lower, upper);
                }) {
   std::forward<SinkT>(sink).emit_interval(lower, upper);
- } else {
-  std::invoke(std::forward<SinkT>(sink),
-              query<domain_type>::between(lower, upper));
+  return;
  }
+
+ std::invoke(std::forward<SinkT>(sink),
+             query<domain_type>::between(lower, upper));
 }
 
 template <boundary_view LhsT, boundary_view RhsT>
@@ -1083,35 +1092,39 @@ template <expression LhsT, expression RhsT, typename SinkT>
 constexpr void for_each_interval(const detail::intersection_expr<LhsT, RhsT>& expression,
                                  SinkT&& sink)
 {
- if constexpr (interval_view<RhsT> && !canonical_interval<RhsT>) {
+ if constexpr (interval_view<RhsT>) {
+  if constexpr (canonical_interval<RhsT>) {
+   ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&sink, &expression](const auto& lhs) {
+    detail::emit_intersection(lhs, expression.rhs, sink);
+   });
+
+   return;
+  }
+
   ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&sink, &expression](const auto& rhs) {
    ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&sink, &rhs](const auto& lhs) {
     detail::emit_intersection(lhs, rhs, sink);
    });
   });
+
   return;
  }
 
- if constexpr (interval_view<RhsT>) {
-  ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&sink, &expression](const auto& lhs) {
-   detail::emit_intersection(lhs, expression.rhs, sink);
-  });
-  return;
- }
+ if constexpr (interval_view<LhsT>) {
+  if constexpr (canonical_interval<LhsT>) {
+   ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&sink, &expression](const auto& rhs) {
+    detail::emit_intersection(expression.lhs, rhs, sink);
+   });
 
- if constexpr (interval_view<LhsT> && !canonical_interval<LhsT>) {
+   return;
+  }
+
   ::ceph::libfdb::interval::for_each_interval(expression.lhs, [&sink, &expression](const auto& lhs) {
    ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&sink, &lhs](const auto& rhs) {
     detail::emit_intersection(lhs, rhs, sink);
    });
   });
-  return;
- }
 
- if constexpr (interval_view<LhsT>) {
-  ::ceph::libfdb::interval::for_each_interval(expression.rhs, [&sink, &expression](const auto& rhs) {
-   detail::emit_intersection(expression.lhs, rhs, sink);
-  });
   return;
  }
 

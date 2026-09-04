@@ -961,13 +961,31 @@ txr([](auto& txn) {
 ### Staged Proxies
 
 A transactor may run its body more than once. Mutating a captured output
-variable directly can therefore append or count the same result several times. 
-Staged Proxies talk with the transaction mechanisms to be sure that only attempts
-whos commits are confirmed get published to the `output`.
+variable directly can therefore append or count the same result several times.
+Staged Proxies give each attempt a private value and publish only the attempt
+whose commit is confirmed.
+
+Choose the parameter form according to its role:
+
+| Parameter | Use it for | Replay behavior |
+| --- | --- | --- |
+| `input` | An input that the transaction reads but does not modify. | The transactor copies it once and presents the same value to every attempt. |
+| `lfdb::staged(output)` | An output that modifies or extends its existing value. | Each attempt lazily copies the existing value before its first mutation. |
+| `lfdb::staged(output, std::in_place)` | An output rebuilt entirely from transaction results. | Each attempt starts with a fresh value; the previous contents are never copied. |
+
+Treat ordinary bound parameters as read-only. Mutating one changes only the
+transactor's private argument and that mutation carries into later attempts;
+it does not update the caller's object.
+
+In-place construction happens before each attempt, so a successful query that
+finds no values still replaces stale output with an empty value.
+
+Prefer an ordinary return value when the callback produces one new value.
+Staging is useful for output parameters or several existing local values.
 
 ```cpp
 // Recompute a D4N bucket's cached-byte count without counting a replay twice.
-std::uint64_t cached_bytes = 0; // <-- this is what we will pass by Staged Proxy
+std::uint64_t cached_bytes = 0;
 auto txr = lfdb::make_transactor(dbh);
 
 txr([](auto& txn, auto& bytes, std::string_view bucket_id) {
@@ -981,42 +999,46 @@ txr([](auto& txn, auto& bytes, std::string_view bucket_id) {
 }, lfdb::staged(cached_bytes), bucket_id);
 ```
 
-If you want to declare a proxy ahead of time, you should be sure to move() it into
-the Transactor becuse it represents exactly one invocation's staging state:
+If you declare a proxy ahead of time, move it into the transactor because it
+represents exactly one invocation's staging state:
 
 ```cpp
-// Replace a D4N block listing only after the transaction commits successfully.
+// Rebuild a D4N block listing without copying its previous contents.
 std::vector<CacheBlock> blocks;
-auto blocks_prx = lfdb::staged(blocks);
+auto blocks_prx = lfdb::staged(blocks, std::in_place);
 auto txr = lfdb::make_transactor(dbh);
 
 txr([](auto& txn, auto& blocks, std::string_view bucket_id) {
-    /* do some operations */
+  for (auto block : read_blocks(txn, bucket_id)) {
+    blocks.push_back(std::move(block));
+  }
 }, std::move(blocks_prx), bucket_id);
 ```
 
-Prefer an ordinary return value when the callback produces one new value;
-staging is for output parameters or several existing local values.
 The proxy covers assignment, `+=`, common sequence updates, and
-`insert_or_assign()`; use `get_target()` for an uncommon operation.
+`insert_or_assign()`; use `get_target()` for an uncommon operation. Mutating
+operations deliberately return no iterator or reference into attempt-local
+storage.
 
 Gotchas:
 
-- The target must be copy-constructible, nothrow move-assignable, alive for the
-  call, and not accessed concurrently. Binding it twice is rejected with an exception;
-  overlapping targets are also invalid.
+- An ordinarily staged target must be copy-constructible; an in-place target
+  must be default-initializable. Both must be nothrow move-assignable, alive for
+  the call, and not accessed concurrently. Binding the same target more than
+  once is rejected with an exception; overlapping targets are also invalid.
 
 - Accept the proxy by lvalue reference (`auto& output`, as above). Do not
-  capture and mutate the original target, or retain the proxy—or any
-  pointer, reference, or iterator obtained from it—after the callback.
-  Anything obtained through `get_target()` is still attempt-local.
+  capture and mutate the original target or retain the proxy after the callback.
+  Any pointer, reference, or iterator obtained through `get_target()` is
+  attempt-local and must not escape the callback.
 
 - Staging protects only the bound C++ value. Logging, I/O, other captured state,
   and non-idempotent database writes after `commit_unknown_result` still need
   their own replay-safe design.
 
-Any uncommitted outcome leaves the target unchanged. An ordinary transactor
-throws on retry exhaustion; `with_result` reports it with `committed == false`.
+Any outcome without a confirmed commit leaves the target unchanged. An ordinary
+transactor throws on retry exhaustion; `with_result` reports it with
+`committed == false`.
 
 ### Reporting replay results
 
