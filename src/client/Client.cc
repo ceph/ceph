@@ -4103,7 +4103,15 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
 {
   int held = cap->issued | cap->implemented;
   int revoking = cap->implemented & ~cap->issued;
-  retain &= ~revoking;
+  // Caps that the MDS is revoking but that are still in use by an
+  // in-flight write are retained until the references are dropped, so
+  // that the release, and the size flush it carries, reflects the
+  // completed write.  Only FILE_WR/FILE_BUFFER count: Fx and Fc must
+  // be released promptly, or the filelock gather (e.g. the EXCL->MIX
+  // teardown for the next writer's max_size grant) would wait for
+  // them forever.
+  retain &= ~(revoking &
+	      ~(used & (CEPH_CAP_FILE_WR | CEPH_CAP_FILE_BUFFER)));
   int dropping = cap->issued & ~retain;
   int op = CEPH_CAP_OP_UPDATE;
 
@@ -6177,7 +6185,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 
   // max_size
   if (cap == in->auth_cap &&
-      (new_caps & CEPH_CAP_ANY_FILE_WR) &&
+      ((new_caps | issued) & CEPH_CAP_ANY_FILE_WR) &&
       (m->get_max_size() != in->max_size)) {
     ldout(cct, 10) << "max_size " << in->max_size << " -> " << m->get_max_size() << dendl;
     in->max_size = m->get_max_size();
