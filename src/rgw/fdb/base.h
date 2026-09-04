@@ -13,13 +13,13 @@
 */
 
 #ifndef CEPH_FDB_BASE_H
- #define CEPH_FDB_BASE_H
+#define CEPH_FDB_BASE_H
 
 // The API version we're writing against, which can (and probably does) differ
 // from the installed version. This must be defined before the FoundationDB header
 // is included (see fdb_c_apiversion.g.h):
 #define FDB_API_VERSION 730
-#include <foundationdb/fdb_c.h> 
+#include <foundationdb/fdb_c.h>
 
 // Ceph uses libfmt rather than <format>:
 #include <fmt/format.h>
@@ -35,11 +35,8 @@
 #include <ranges>
 #include <iterator>
 #include <algorithm>
-#include <generator>
 
-#include <mutex>
-#include <thread>
-
+#include <bit>
 #include <memory>
 #include <cstdint>
 #include <utility>
@@ -51,9 +48,9 @@
 #include <stop_token>
 #include <filesystem>
 #include <type_traits>
-#include <initializer_list>
 
-#include "common/container_concepts.h"
+#include <mutex>
+#include <thread>
 
 #ifdef __cpp_lib_flat_map
  #include <flat_map>
@@ -75,8 +72,10 @@ struct interval;
 } // namespace query
 
 using select = query::interval;
+struct with_result_t;
 struct versionstamp;
 struct watch_handle;
+struct commit_result;
 
 class database;
 class transaction;
@@ -84,7 +83,6 @@ class transaction;
 using database_handle = std::shared_ptr<database>;
 using transaction_handle = std::shared_ptr<transaction>;
 
-extern transaction_handle make_transaction(database_handle dbh);
 [[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key);
 
 } // namespace ceph::libfdb
@@ -96,37 +94,25 @@ inline void convert(const std::span<const std::uint8_t>& from,
 
 } // namespace ceph::libfdb::from
 
-// MOAR forward declarations-- "pay no attention to that man behind the curtain":
+// Helpers used by the mostly opaque transaction type:
 namespace ceph::libfdb::detail {
+
+using byte_view = std::span<const std::uint8_t>;
 
 struct future_value;
 
-template <typename ValueT = std::string>
-std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv);
-
-inline fdb_error_t do_commit(transaction_handle& txn);
-
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
-                                     std::span<const std::uint8_t> k,
-                                     std::span<const std::uint8_t> v);
+                                     byte_view key,
+                                     byte_view value);
 inline void transaction_clear_key_bytes(const transaction_handle& txn,
-                                        std::span<const std::uint8_t> k);
+                                        byte_view key);
 inline void transaction_clear_range(const transaction_handle& txn,
                                     const ceph::libfdb::select& key_range);
 
 inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
-inline future_value wait_for_on_error(FDBTransaction* txn, fdb_error_t original_error);
-inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& selection, int iteration);
-
-// A generator that produces successive spans for a range:
-inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn, ceph::libfdb::select key_range);
-
-// Stores generated key/value pair results to an iterator and returns the
-// number of pairs emitted:
-template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline std::size_t get_value_range_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& key_range, OutIterT& out_iter);
+inline future_value wait_for_on_error(FDBTransaction *txn,
+                                      fdb_error_t original_error);
 
 } // namespace ceph::libfdb::detail
 
@@ -135,7 +121,8 @@ namespace ceph::libfdb::concepts {
 // Note that "stringlikes" are not all "stringview-likes", such as when they can be
 // written to:
 template <typename StringViewLikeT>
-concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
+concept stringview_convertible =
+ std::convertible_to<std::remove_reference_t<StringViewLikeT> const&, std::string_view>;
 
 template <typename KeyViewT>
 concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::string_view>;
@@ -168,63 +155,21 @@ namespace ceph::libfdb::concepts {
 template <typename KeyT>
 concept libfdb_key = ceph::libfdb::detail::libfdb_key_like<KeyT>;
 
-template <typename IteratorT>
-concept key_value_iterator =
- std::input_iterator<IteratorT> and
- requires(std::iter_reference_t<IteratorT> kv) {
-  requires libfdb_key<decltype(kv.first)>;
-  requires std::is_object_v<std::remove_reference_t<decltype(kv.second)>>;
- };
-
-template <typename RangeT>
-concept key_value_range =
- std::ranges::input_range<RangeT> and
- key_value_iterator<std::ranges::iterator_t<RangeT>>;
-
-template <typename RangeT>
-concept key_value_forward_range =
- std::ranges::forward_range<RangeT> and
- key_value_iterator<std::ranges::iterator_t<RangeT>>;
-
-template <typename IteratorT>
-concept string_pair_output_iterator =
- std::output_iterator<IteratorT, std::pair<std::string, std::string>>;
-
-template <typename RangeT>
-concept string_pair_output_range =
- not std::is_array_v<std::remove_reference_t<RangeT>> and
- std::ranges::range<RangeT> and
- ceph::concepts::can_append<RangeT, std::pair<std::string, std::string>>;
-
-template <typename RangeT>
-concept materializable_string_pair_output_range =
- string_pair_output_range<RangeT> and
- std::default_initializable<std::remove_cvref_t<RangeT>>;
-
-template <typename ContainerT>
-concept has_merge =
- requires(ContainerT& out, ContainerT& in) {
-  out.merge(in);
- };
+template <typename FnT>
+concept value_invocable =
+ std::invocable<FnT&, std::span<const std::uint8_t>>;
 
 template <typename FnT>
 concept value_callback =
- std::invocable<FnT&, std::span<const std::uint8_t>>;
+ value_invocable<FnT> &&
+ std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>>;
 
 template <typename T>
 concept decoded_value_sink =
- not value_callback<std::remove_reference_t<T>> and
+ not value_invocable<std::remove_reference_t<T>> and
  std::is_lvalue_reference_v<T> and
  not std::is_const_v<std::remove_reference_t<T>> and
  std::is_object_v<std::remove_reference_t<T>>;
-
-template <typename T>
-concept storable_invocation_result =
- not std::is_void_v<T> and not std::is_reference_v<T>;
-
-template <typename T>
-concept supported_invocation_result =
- not std::is_reference_v<T>;
 
 } // namespace ceph::libfdb::concepts
 
@@ -284,6 +229,7 @@ inline constexpr fdb_error_t operation_cancelled_error = 1101;
 
 struct future_value final
 {
+ private:
  std::unique_ptr<FDBFuture, decltype(&fdb_future_destroy)> future_ptr;
 
  public:
@@ -291,7 +237,6 @@ struct future_value final
   : future_ptr(future_handle, &fdb_future_destroy)
  {}
 
- public:
  FDBFuture *raw_handle() const noexcept { return future_ptr.get(); }
 
  FDBFuture *raw_ptr_or_throw() const
@@ -305,14 +250,14 @@ struct future_value final
 
  private:
  void destroy() noexcept { future_ptr.reset(nullptr); }
- 
- private:
+
  friend class ceph::libfdb::transaction;
 };
 
-inline auto as_fdb_span(concepts::libfdb_key_view auto key)
+inline byte_view as_byte_view(concepts::libfdb_key_view auto key)
 {
- return std::span<const std::uint8_t>((const std::uint8_t *)key.data(), key.size());
+ return byte_view(
+  reinterpret_cast<const std::uint8_t *>(key.data()), key.size());
 }
 
 } // namespace detail
@@ -320,6 +265,9 @@ inline auto as_fdb_span(concepts::libfdb_key_view auto key)
 // watch_handle can only be constructed by calling make_watch():
 struct watch_handle final
 {
+ private:
+ detail::future_value watch_future;
+
  public:
  watch_handle(watch_handle&&) noexcept = default;
  watch_handle& operator=(watch_handle&&) noexcept = default;
@@ -386,28 +334,24 @@ struct watch_handle final
  }
 
  private:
- detail::future_value watch_future;
-
- private:
- explicit watch_handle(detail::future_value watch_future_)
-  : watch_future(std::move(watch_future_))
+ explicit watch_handle(detail::future_value future)
+  : watch_future(std::move(future))
  {}
 
  watch_handle() = delete;
  watch_handle(const watch_handle&) = delete;
  watch_handle& operator=(const watch_handle&) = delete;
 
- private:
  friend watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend class transaction;
 };
 
 namespace detail {
 
-inline auto as_fdb_span(const concepts::libfdb_key auto& key)
+inline byte_view as_byte_view(const concepts::libfdb_key auto& key)
 requires (!concepts::libfdb_key_view<decltype(key)>)
 {
- return as_fdb_span(as_libfdb_key_view(key));
+ return as_byte_view(as_libfdb_key_view(key));
 }
 
 } // namespace ceph::libfdb::detail
@@ -418,6 +362,17 @@ struct versionstamp final
  // database version followed by 2 bytes of transaction batch order.
  using versionstamp_data_t = std::array<std::uint8_t, 10>;
 
+ private:
+ std::shared_ptr<std::optional<versionstamp_data_t>> result =
+  std::make_shared<std::optional<versionstamp_data_t>>();
+
+ void store_result(const std::span<const std::uint8_t> versionstamp_result);
+
+ friend class transaction;
+ friend void ceph::libfdb::from::convert(const std::span<const std::uint8_t>&,
+                                         ceph::libfdb::versionstamp&);
+
+ public:
  bool is_resolved() const noexcept
  {
   return result->has_value();
@@ -442,41 +397,21 @@ struct versionstamp final
  {
   return resolved_bytes() <=> rhs.resolved_bytes();
  }
-
- private:
- std::shared_ptr<std::optional<versionstamp_data_t>> result =
-  std::make_shared<std::optional<versionstamp_data_t>>();
-
- void store_result(const std::span<const std::uint8_t> versionstamp_result);
-
- private:
- friend class transaction;
- friend void ceph::libfdb::from::convert(const std::span<const std::uint8_t>&,
-                                         ceph::libfdb::versionstamp&);
 };
 
 // versioned_bytes can only be constructed by calling versioned():
 // It carries data in transaction-correct version stamp encoding:
 struct versioned_bytes final
 {
- public:
- versioned_bytes() = delete;
-
- versioned_bytes(const versioned_bytes&) = default;
- versioned_bytes(versioned_bytes&&) noexcept = default;
- versioned_bytes& operator=(const versioned_bytes&) = default;
- versioned_bytes& operator=(versioned_bytes&&) noexcept = default;
-
  private:
  std::vector<std::uint8_t> encoding_buffer;
  versionstamp stamp;
 
- versioned_bytes(std::vector<std::uint8_t> encoding_buffer_, versionstamp stamp_)
-  : encoding_buffer(std::move(encoding_buffer_)),
-    stamp(std::move(stamp_))
+ versioned_bytes(std::vector<std::uint8_t> buffer, versionstamp version)
+  : encoding_buffer(std::move(buffer)),
+    stamp(std::move(version))
  {}
 
- private:
  friend class transaction;
 
  template <concepts::stringview_convertible PrefixT>
@@ -484,17 +419,29 @@ struct versioned_bytes final
 
  template <concepts::stringview_convertible PrefixT, concepts::stringview_convertible SuffixT>
  friend versioned_bytes versioned(const PrefixT& prefix, const SuffixT& suffix, versionstamp stamp);
+
+ public:
+ versioned_bytes() = delete;
+
+ versioned_bytes(const versioned_bytes&) = default;
+ versioned_bytes(versioned_bytes&&) noexcept = default;
+
+ versioned_bytes& operator=(const versioned_bytes&) = default;
+ versioned_bytes& operator=(versioned_bytes&&) noexcept = default;
 };
 
 namespace detail {
 
-// FDB version stamp mutations expect the final four bytes to be a little-endian uint32_t offset pointing at the 10-byte placeholder:
-inline void append_little_endian_u32(std::vector<std::uint8_t>& out, const std::uint32_t x)
+constexpr auto little_endian_bytes(std::integral auto value) noexcept
 {
- out.push_back(static_cast<std::uint8_t>(x));
- out.push_back(static_cast<std::uint8_t>(x >> 8));
- out.push_back(static_cast<std::uint8_t>(x >> 16));
- out.push_back(static_cast<std::uint8_t>(x >> 24));
+ static_assert(std::endian::little == std::endian::native or
+               std::endian::big == std::endian::native);
+
+ if constexpr (std::endian::big == std::endian::native) {
+  value = std::byteswap(value);
+ }
+
+ return std::bit_cast<std::array<std::uint8_t, sizeof value>>(value);
 }
 
 inline std::vector<std::uint8_t> make_versioned_encoding(std::string_view prefix, std::string_view suffix)
@@ -506,11 +453,18 @@ inline std::vector<std::uint8_t> make_versioned_encoding(std::string_view prefix
 
  std::ranges::copy(prefix, std::back_inserter(out));
 
+ if (not std::in_range<std::uint32_t>(out.size())) {
+  throw std::invalid_argument("version-stamped prefix is too large");
+ }
+
  const auto versionstamp_offset = static_cast<std::uint32_t>(out.size());
  out.resize(out.size() + versionstamp_byte_count);
 
  std::ranges::copy(suffix, std::back_inserter(out));
- detail::append_little_endian_u32(out, versionstamp_offset);
+
+ // FDB expects a little-endian uint32 offset to the 10-byte placeholder:
+ std::ranges::copy(little_endian_bytes(versionstamp_offset),
+                   std::back_inserter(out));
 
  return out;
 }
@@ -542,7 +496,7 @@ inline void versionstamp::store_result(const std::span<const std::uint8_t> versi
  std::ranges::copy(versionstamp_result, std::begin(result_value));
 
  if (not result->has_value()) {
-  result->emplace(std::move(result_value));
+  result->emplace(result_value);
   return;
  }
 
@@ -596,69 +550,152 @@ using transaction_options = option_map<FDBTransactionOption>;
 
 namespace detail {
 
-// Note that these are specific to FDB's needs (see return type, casts):
-inline const std::uint8_t *data_of(const std::vector<std::uint8_t>& xs) { return (const std::uint8_t *)xs.data(); }
-inline const std::uint8_t *data_of(const std::string& xs) { return (const std::uint8_t *)xs.data(); }
-inline const std::uint8_t *data_of(const std::int64_t& x) { return reinterpret_cast<const std::uint8_t *>(&x); }
-inline const std::uint8_t *data_of(const option_flag_t&) { return nullptr; }
-
-// Note that these are specific to FDB's needs (see return type, casts):
-constexpr int size_of(const std::vector<std::uint8_t>& xs) { return static_cast<int>(xs.size()); }
-constexpr int size_of(const std::string& xs) { return static_cast<int>(xs.size()); }
-constexpr int size_of(const std::int64_t) { return sizeof(std::int64_t); }
-constexpr int size_of(const option_flag_t&) { return 0; }
-
-// ...also used:
-inline const std::uint8_t *data_of(std::string_view xs) { return (const std::uint8_t *)xs.data(); }
-constexpr int size_of(std::string_view xs) { return static_cast<int>(xs.size()); }
-
-inline auto as_fdb_option_args(const auto& option)
+constexpr int checked_fdb_size(const std::size_t size)
 {
- auto [data, size] = std::visit([](const auto& x) {
-                         return std::tuple { data_of(x), size_of(x) };
-                       },
-                       option.second);
+ if (not std::in_range<int>(size)) {
+  throw libfdb_exception("value is too large for the FoundationDB C API");
+ }
 
- return std::tuple { option.first, data, size };
+ return static_cast<int>(size);
+}
+
+constexpr std::size_t checked_result_size(const int size)
+{
+ if (0 > size) {
+  throw libfdb_exception("FoundationDB returned a negative result size");
+ }
+
+ return static_cast<std::size_t>(size);
+}
+
+// FoundationDB's C interface represents every byte range as a pointer and a
+// checked int length:
+struct fdb_bytes final
+{
+ const std::uint8_t *data;
+ int length;
+};
+
+constexpr fdb_bytes as_fdb_bytes(const byte_view bytes)
+{
+ return {
+  .data = bytes.data(),
+  .length = checked_fdb_size(bytes.size())
+ };
+}
+
+inline fdb_bytes as_fdb_bytes(const concepts::libfdb_key auto& key)
+{
+ return as_fdb_bytes(as_byte_view(key));
+}
+
+constexpr byte_view result_bytes(const std::uint8_t *data, const int length)
+{
+ return byte_view(data, checked_result_size(length));
+}
+
+inline std::string_view as_string_view(const byte_view bytes) noexcept
+{
+ if (bytes.empty()) {
+  return {};
+ }
+
+ return std::string_view(
+  reinterpret_cast<const char *>(bytes.data()), bytes.size());
+}
+
+inline std::string_view key_view(const auto& result)
+{
+ return as_string_view(result_bytes(result.key, result.key_length));
+}
+
+inline byte_view value_view(const FDBKeyValue& pair)
+{
+ return result_bytes(pair.value, pair.value_length);
+}
+
+inline byte_view option_bytes(const std::vector<std::uint8_t>& value) noexcept
+{
+ return value;
+}
+
+inline byte_view option_bytes(const std::string& value) noexcept
+{
+ return as_byte_view(std::string_view(value));
+}
+
+inline byte_view option_bytes(const option_flag_t&) noexcept
+{
+ return {};
+}
+
+inline auto apply_option_value(auto& set_option,
+                               const auto code,
+                               const std::int64_t value)
+{
+ const auto bytes = little_endian_bytes(value);
+ const auto input = as_fdb_bytes(byte_view(bytes));
+
+ return std::invoke(set_option, code, input.data, input.length);
+}
+
+template <typename ValueT>
+requires (not std::same_as<std::int64_t, std::remove_cvref_t<ValueT>>)
+inline auto apply_option_value(auto& set_option,
+                               const auto code,
+                               const ValueT& value)
+{
+ const auto input = as_fdb_bytes(option_bytes(value));
+
+ return std::invoke(set_option, code, input.data, input.length);
 }
 
 inline void apply_options(const auto& option_map, auto&& set_option)
 {
  std::ranges::for_each(option_map, [&set_option](const auto& option) {
-    if (auto r = std::apply(set_option, as_fdb_option_args(option)); 0 != r) {
-      throw libfdb_exception(fmt::format("while setting option {}; {}",
-                             static_cast<int>(option.first),
-                             libfdb_exception::make_fdb_error_string(r)));
+    const auto apply = [&set_option, code = option.first](const auto& value) {
+      return apply_option_value(set_option, code, value);
+    };
+
+    if (const auto ec = std::visit(apply, option.second); 0 != ec) {
+      throw libfdb_exception(fmt::format(
+        "while setting option {}; {}", std::to_underlying(option.first),
+        libfdb_exception::make_fdb_error_string(ec)));
     }
   });
 }
 
 // The global DB state and management thread:
 // JFW: more user hooks that go into FDB system possible here
-namespace database_system
-{
+namespace database_system {
 inline bool was_initialized = false;
 inline bool was_shutdown = false;
 
 inline std::once_flag fdb_was_initialized;
 inline std::jthread fdb_network_thread;
+inline fdb_error_t fdb_network_error = 0;
 
 inline void initialize_fdb(const network_options& options)
 {
  // This must be called before ANY other API function-- the structure
  // of fdb_database_system accomplishes this:
- if (fdb_error_t r = fdb_select_api_version(FDB_API_VERSION); 0 != r)
-  throw libfdb_exception(r);
+ if (const auto ec = fdb_select_api_version(FDB_API_VERSION); 0 != ec) {
+  throw libfdb_exception(ec);
+ }
  
  // Zero or more calls to this may now be made:
  apply_options(options, fdb_network_set_option);
  
  // This must be called before any other API function (besides >= 0 calls to fdb_network_set_option()):
- if (fdb_error_t r = fdb_setup_network(); 0 != r)
-  throw libfdb_exception(r);
+ if (const auto ec = fdb_setup_network(); 0 != ec) {
+  throw libfdb_exception(ec);
+ }
  
  // Launch network thread:
- fdb_network_thread = std::jthread { &fdb_run_network };
+ fdb_network_error = 0;
+ fdb_network_thread = std::jthread {[] {
+  fdb_network_error = fdb_run_network();
+ }};
  
  // Okie-dokie, we're all set (distinct from fdb_was_initialized):
  was_initialized = true;
@@ -669,23 +706,11 @@ inline bool initialized() noexcept { return was_initialized; }
 
 inline void shutdown_fdb()
 {
- using namespace std::chrono_literals;
- 
  if (not initialized() or was_shutdown) {
    return;
  }
 
- // shut down network and database:
- if (int r = fdb_stop_network(); 0 != r)
-  {
-    // In this case, we likely don't want to throw from our dtor, but we may
-    // have something to log. As there's no higher-level hook for that, we
-    // have nothing to do right now.
-    // fmt::println("database::shutdown_fdb() error {}", r);
-  }
-
- // This may not actually be needed, but it's a traditional courtesy:
- std::this_thread::sleep_for(7ms);
+ const auto stop_error = fdb_stop_network();
  
  if (fdb_network_thread.joinable()) {
   fdb_network_thread.join();
@@ -693,6 +718,14 @@ inline void shutdown_fdb()
 
  was_shutdown = true;
  was_initialized = false;
+
+ if (0 != stop_error) {
+  throw libfdb_exception(stop_error);
+ }
+
+ if (0 != fdb_network_error) {
+  throw libfdb_exception(fdb_network_error);
+ }
 }
 
 } // namespace database_system
@@ -701,7 +734,6 @@ inline void shutdown_fdb()
 
 class database final
 {
- private:
  struct database_deleter final
  {
   void operator()(FDBDatabase *db) const noexcept
@@ -713,45 +745,53 @@ class database final
  std::unique_ptr<FDBDatabase, database_deleter> db_handle;
 
  static FDBDatabase *create_database_ptr(const std::filesystem::path& cluster_file_path,
-                                         const network_options& network_opts) {
-    std::call_once(detail::database_system::fdb_was_initialized,
-                   detail::database_system::initialize_fdb,
-                   network_opts);
+                                         const network_options& network_opts)
+ {
+  std::call_once(detail::database_system::fdb_was_initialized,
+                 detail::database_system::initialize_fdb,
+                 network_opts);
 
-    if (detail::database_system::was_shutdown) {
-      throw libfdb_exception("FoundationDB already shut down");
-    }
+  if (detail::database_system::was_shutdown) {
+   throw libfdb_exception("FoundationDB already shut down");
+  }
 
-    FDBDatabase *fdbp = nullptr;
+  FDBDatabase *database = nullptr;
 
-    if (fdb_error_t r = fdb_create_database(cluster_file_path.c_str(), &fdbp); 0 != r) {
-      throw libfdb_exception(r);
-    }
-    
-    return fdbp;
+  if (const auto ec = fdb_create_database(cluster_file_path.c_str(), &database);
+      0 != ec) {
+   throw libfdb_exception(ec);
+  }
+
+  return database;
  }
 
- FDBTransaction *create_transaction() {
-    FDBTransaction *txn_p = nullptr;
-    
-    if (fdb_error_t r = fdb_database_create_transaction(raw_handle(), &txn_p); 0 != r) {
-     throw libfdb_exception(r);
-    }
+ FDBTransaction *create_transaction()
+ {
+  FDBTransaction *txn = nullptr;
 
-    return txn_p;
+  if (const auto ec = fdb_database_create_transaction(raw_handle(), &txn);
+      0 != ec) {
+   throw libfdb_exception(ec);
+  }
+
+  return txn;
  }
 
  public:
- database(const std::filesystem::path cluster_file_path, const ceph::libfdb::database_options& db_opts, const network_options& network_opts)
+ database(const std::filesystem::path& cluster_file_path,
+          const ceph::libfdb::database_options& db_opts,
+          const network_options& network_opts)
   : db_handle(create_database_ptr(cluster_file_path, network_opts))
  {
-  detail::apply_options(db_opts,
-             [handle = raw_handle()](auto option_code, auto data, auto size) {
-               return fdb_database_set_option(handle, option_code, data, size);
-             });
+  detail::apply_options(
+    db_opts,
+    [handle = raw_handle()](auto option_code, auto data, auto size) {
+      return fdb_database_set_option(handle, option_code, data, size);
+    });
  }
 
- database(const std::filesystem::path cluster_file_path, const ceph::libfdb::database_options& db_opts)
+ database(const std::filesystem::path& cluster_file_path,
+          const ceph::libfdb::database_options& db_opts)
   : database(cluster_file_path, db_opts, {})
  {}
 
@@ -763,7 +803,7 @@ class database final
   : database("", db_opts, {})
  {}
 
- database(const std::filesystem::path cluster_file_path)
+ database(const std::filesystem::path& cluster_file_path)
   : database(cluster_file_path, {}, {})
  {}
 
@@ -771,55 +811,65 @@ class database final
   : database(std::filesystem::path {}, {}, {})
  {}
 
- public:
  explicit operator bool() const noexcept { return nullptr != raw_handle(); }
 
- public:
  FDBDatabase *raw_handle() const noexcept { return db_handle.get(); }
 
  private:
  friend transaction;
-
 };
 
 class transaction final
 {
  database_handle dbh;
-
  std::unique_ptr<FDBTransaction, decltype(&fdb_transaction_destroy)> txn_handle;
-
  std::vector<versionstamp> version_stamps;
 
- private:
- bool get_single_value_from_transaction(const std::span<const std::uint8_t>& key,
-                                        std::invocable<std::span<const std::uint8_t>> auto&& write_output_fn);
-
- public:
- transaction(database_handle dbh_)
- : dbh(dbh_),
-   txn_handle(dbh->create_transaction(), &fdb_transaction_destroy)
- {}
-
- transaction(database_handle dbh_, const transaction_options& opts) 
-  : transaction(dbh_)
+ static database_handle require_database(database_handle dbh)
  {
-  detail::apply_options(opts,
-             [handle = raw_handle()](auto opt, auto val, auto sz) {
-               return fdb_transaction_set_option(handle, opt, val, sz);
-             });
+  if (not dbh) {
+   throw std::invalid_argument("transaction requires a database handle");
+  }
+
+  return dbh;
  }
 
- public:
- explicit operator bool() const noexcept { return dbh and nullptr != raw_handle(); }
+ bool get_single_value_from_transaction(detail::byte_view key,
+                                        std::invocable<std::span<const std::uint8_t>> auto&& write_output_fn);
+ void recover_from_commit_error(detail::future_value& commit_future,
+                                fdb_error_t error,
+                                fdb_error_t *replay_error);
+ void resolve_versionstamps(std::optional<detail::future_value>& versionstamp_future);
 
  public:
+ transaction(database_handle database)
+  : dbh(require_database(std::move(database))),
+    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy)
+ {}
+
+ transaction(database_handle database, const transaction_options& opts)
+  : transaction(std::move(database))
+ {
+  detail::apply_options(
+    opts,
+    [handle = raw_handle()](auto option, auto data, auto size) {
+      return fdb_transaction_set_option(handle, option, data, size);
+    });
+ }
+
+ explicit operator bool() const noexcept { return dbh and nullptr != raw_handle(); }
+
  FDBTransaction *raw_handle() const noexcept { return txn_handle.get(); }
 
  private:
- void set(std::span<const std::uint8_t> k, std::span<const std::uint8_t> v) {
-    fdb_transaction_set(raw_handle(),
-                        (const uint8_t*)k.data(), k.size(),
-                        (const uint8_t*)v.data(), v.size());
+ void set(detail::byte_view key, detail::byte_view value)
+ {
+  const auto key_bytes = detail::as_fdb_bytes(key);
+  const auto value_bytes = detail::as_fdb_bytes(value);
+
+  fdb_transaction_set(raw_handle(),
+                      key_bytes.data, key_bytes.length,
+                      value_bytes.data, value_bytes.length);
  }
 
  void mark_version(const versionstamp& stamp)
@@ -832,69 +882,80 @@ class transaction final
  }
 
  template <FDBMutationType MutationKind>
- void set_versioned_data(std::span<const std::uint8_t> k,
-                         std::span<const std::uint8_t> v,
+ void set_versioned_data(detail::byte_view key,
+                         detail::byte_view value,
                          const versionstamp& stamp)
  {
+  const auto key_bytes = detail::as_fdb_bytes(key);
+  const auto value_bytes = detail::as_fdb_bytes(value);
+
   fdb_transaction_atomic_op(raw_handle(),
-                            (const std::uint8_t*)k.data(), k.size(),
-                            (const std::uint8_t*)v.data(), v.size(),
+                            key_bytes.data, key_bytes.length,
+                            value_bytes.data, value_bytes.length,
                             MutationKind);
 
   mark_version(stamp);
  }
 
- void set(const versioned_bytes& k, std::span<const std::uint8_t> v)
+ void set(const versioned_bytes& key, detail::byte_view value)
  {
   set_versioned_data<FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_KEY>(
-    std::span<const std::uint8_t>(k.encoding_buffer), v, k.stamp);
+    detail::byte_view(key.encoding_buffer), value, key.stamp);
  }
 
- void set(std::span<const std::uint8_t> k, const versioned_bytes& v)
+ void set(detail::byte_view key, const versioned_bytes& value)
  {
   set_versioned_data<FDB_MUTATION_TYPE_SET_VERSIONSTAMPED_VALUE>(
-    k, std::span<const std::uint8_t>(v.encoding_buffer), v.stamp);
+    key, detail::byte_view(value.encoding_buffer), value.stamp);
  }
 
- bool get(const std::span<const std::uint8_t> k, concepts::value_callback auto&& val_collector) {
-    return get_single_value_from_transaction(k, val_collector);
- }
-
- void erase(std::span<const std::uint8_t> k) {
-    fdb_transaction_clear(raw_handle(),
-                          (const std::uint8_t *)k.data(), k.size());
- }
-
- void erase(const ceph::libfdb::select& key_range) {
-    const auto half_open_range = detail::as_half_open_select(key_range);
-
-    fdb_transaction_clear_range(raw_handle(),
-        (const uint8_t *)half_open_range.begin_key.data(), half_open_range.begin_key.size(),
-        (const uint8_t *)half_open_range.end_key.data(), half_open_range.end_key.size());
- }
-
- [[nodiscard]] watch_handle make_watch(std::span<const std::uint8_t> key)
+ bool get(const detail::byte_view key,
+          concepts::value_callback auto&& value_collector)
  {
+  return get_single_value_from_transaction(key, value_collector);
+ }
+
+ void erase(detail::byte_view key)
+ {
+  const auto key_bytes = detail::as_fdb_bytes(key);
+
+  fdb_transaction_clear(raw_handle(), key_bytes.data, key_bytes.length);
+ }
+
+ void erase(const ceph::libfdb::select& key_range)
+ {
+  const auto half_open_range = detail::as_half_open_select(key_range);
+  const auto begin = detail::as_fdb_bytes(half_open_range.begin_key);
+  const auto end = detail::as_fdb_bytes(half_open_range.end_key);
+
+  fdb_transaction_clear_range(
+    raw_handle(),
+    begin.data, begin.length,
+    end.data, end.length);
+ }
+
+ [[nodiscard]] watch_handle make_watch(detail::byte_view key)
+ {
+  const auto key_bytes = detail::as_fdb_bytes(key);
+
   return watch_handle {
    detail::future_value {
-    fdb_transaction_watch(raw_handle(), key.data(), key.size())
+    fdb_transaction_watch(raw_handle(), key_bytes.data, key_bytes.length)
    }
   };
  }
 
- bool key_exists(std::string_view k) {
-    return get_single_value_from_transaction(detail::as_fdb_span(k), [](auto) {});
+ bool key_exists(detail::byte_view key)
+ {
+  return get_single_value_from_transaction(key, [](auto) {});
  }
 
  bool commit();
  bool commit(fdb_error_t *replay_error);
  void destroy() noexcept { txn_handle.reset(); }
 
- // As you can see, friends are used extensively to implement the public interface; it would be nice to come up
- // with a strategy for making these "lists" a bit more managable, but for now it's what we have and it allows me ot
- // keep these handles mostly-opaque (this has proven to be a good idea as I've a few times shuffled internal details
- // with no disruption to the user interface surface):
- private:
+ // Friends implement the public free-function interface while keeping the
+ // transaction handle opaque:
  friend inline void set(transaction_handle,
                         const concepts::libfdb_key auto&,
                         const auto&,
@@ -925,14 +986,14 @@ class transaction final
                                const commit_after_op commit_after);
 
  friend inline bool commit(transaction_handle& txn);
+ friend inline commit_result commit(with_result_t, transaction_handle& txn);
  friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
- friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
-                                                                   std::span<const std::uint8_t>,
-                                                                   std::span<const std::uint8_t>);
+                                                                   detail::byte_view,
+                                                                   detail::byte_view);
  friend inline void ceph::libfdb::detail::transaction_clear_key_bytes(const transaction_handle&,
-                                                                      std::span<const std::uint8_t>);
+                                                                      detail::byte_view);
  friend inline void ceph::libfdb::detail::transaction_clear_range(const transaction_handle&,
                                                                  const ceph::libfdb::select&);
 
@@ -942,16 +1003,16 @@ namespace detail {
 
 // Since lambdas cannot be friend-functions, we use a named helper:
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
-                                     std::span<const std::uint8_t> k,
-                                     std::span<const std::uint8_t> v)
+                                     byte_view key,
+                                     byte_view value)
 {
- txn->set(k, v);
+ txn->set(key, value);
 }
 
 inline void transaction_clear_key_bytes(const transaction_handle& txn,
-                                        std::span<const std::uint8_t> k)
+                                        byte_view key)
 {
- txn->erase(k);
+ txn->erase(key);
 }
 
 inline void transaction_clear_range(const transaction_handle& txn,
@@ -962,33 +1023,96 @@ inline void transaction_clear_range(const transaction_handle& txn,
 
 } // namespace detail
 
-inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const std::span<const std::uint8_t>& key, std::invocable<std::span<const std::uint8_t>> auto&& write_output)
+inline bool ceph::libfdb::transaction::get_single_value_from_transaction(
+  const detail::byte_view key,
+  std::invocable<std::span<const std::uint8_t>> auto&& write_output)
 {
- const fdb_bool_t is_snapshot = false; 
+ const fdb_bool_t is_snapshot = false;
+ const auto key_bytes = detail::as_fdb_bytes(key);
 
- auto fv = detail::block_until_ready(detail::future_value(fdb_transaction_get(
-                                    raw_handle(),
-                                    (const uint8_t *)key.data(), key.size(),
-                                    is_snapshot)));
+ auto fv = detail::block_until_ready(detail::future_value(
+  fdb_transaction_get(raw_handle(),
+                      key_bytes.data,
+                      key_bytes.length,
+                      is_snapshot)));
  auto *future = fv.raw_ptr_or_throw();
- 
-  fdb_bool_t key_was_found = false;
-  const uint8_t *out_buffer = nullptr;
-  int out_len = 0;
 
-  if (fdb_error_t r = fdb_future_get_value(future, &key_was_found, &out_buffer, &out_len); 0 != r) {
-    throw libfdb_exception(r);
-  }
+ fdb_bool_t key_was_found = false;
+ const std::uint8_t *out_buffer = nullptr;
+ int out_len = 0;
 
-  // No errors, but no value was found:
-  if (0 == key_was_found) {
-    return false;
-  }
- 
-  write_output(std::span<const std::uint8_t>(out_buffer, out_len));
- 
-  // The happy path is the simple path:
-  return true; 
+ if (const auto ec = fdb_future_get_value(
+       future, &key_was_found, &out_buffer, &out_len);
+     0 != ec) {
+  throw libfdb_exception(ec);
+ }
+
+ if (0 == key_was_found) {
+  return false;
+ }
+
+ write_output(detail::result_bytes(out_buffer, out_len));
+
+ return true;
+}
+
+inline void ceph::libfdb::transaction::recover_from_commit_error(
+  detail::future_value& commit_result_future,
+  const fdb_error_t error,
+  fdb_error_t *replay_error)
+{
+ detail::future_value on_error_future =
+  detail::wait_for_on_error(raw_handle(), error);
+
+ if (0 != detail::get_future_error(on_error_future)) {
+  // These cleanup operations are one ordered action:
+  commit_result_future.destroy(), on_error_future.destroy(), destroy();
+
+  throw libfdb_exception(error);
+ }
+
+ if (nullptr != replay_error) {
+  *replay_error = error;
+ }
+
+ version_stamps.clear();
+}
+
+inline void ceph::libfdb::transaction::resolve_versionstamps(
+  std::optional<detail::future_value>& versionstamp_future)
+{
+ if (not versionstamp_future) {
+  return;
+ }
+
+ auto ready = detail::block_until_ready(std::move(*versionstamp_future));
+
+ const std::uint8_t *data = nullptr;
+ int size = 0;
+
+ if (const auto ec = fdb_future_get_key(ready.raw_handle(), &data, &size);
+     0 != ec) {
+  throw libfdb_exception(ec);
+ }
+
+ constexpr auto expected_size =
+  std::tuple_size_v<versionstamp::versionstamp_data_t>;
+
+ if (nullptr == data) {
+  throw libfdb_exception("invalid version stamp result");
+ }
+
+ const auto result = detail::result_bytes(data, size);
+
+ if (expected_size != result.size()) {
+  throw libfdb_exception("invalid version stamp result");
+ }
+
+ for (auto& stamp : version_stamps) {
+  stamp.store_result(result);
+ }
+
+ version_stamps.clear();
 }
 
 [[nodiscard]] inline bool ceph::libfdb::transaction::commit()
@@ -1003,8 +1127,9 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
  }
 
  // We don't want to try to vivify for an "empty" commit:
- if (!*this)
+ if (not *this) {
   return false;
+ }
 
  std::optional<detail::future_value> versionstamp_future;
 
@@ -1012,64 +1137,22 @@ inline bool ceph::libfdb::transaction::get_single_value_from_transaction(const s
   versionstamp_future.emplace(fdb_transaction_get_versionstamp(raw_handle()));
  }
 
- detail::future_value fv(fdb_transaction_commit(raw_handle()));
- auto *commit_future = fv.raw_ptr_or_throw();
+ detail::future_value commit_result_future(
+  fdb_transaction_commit(raw_handle()));
+ auto *commit_future = commit_result_future.raw_ptr_or_throw();
 
- if (fdb_error_t r = fdb_future_block_until_ready(commit_future); 0 != r) {
-  throw libfdb_exception(r);
+ if (const auto ec = fdb_future_block_until_ready(commit_future); 0 != ec) {
+  throw libfdb_exception(ec);
  }
 
- if (fdb_error_t r = fdb_future_get_error(commit_future); 0 != r) {
-  detail::future_value ferror_result = detail::wait_for_on_error(raw_handle(), r);
+ if (const auto ec = fdb_future_get_error(commit_future); 0 != ec) {
+  recover_from_commit_error(commit_result_future, ec, replay_error);
 
-  if (0 != detail::get_future_error(ferror_result)) {
-    // Destroy the futures AND be sure to invalidate the transaction-- according to the documentation,
-    // this must happen in the specified order (which /should/ currently match the dtor order, but I am
-    // not going to touch this any more right now):
-    fv.destroy(), ferror_result.destroy(), destroy();
-
-    // Again, use the original error:
-    throw libfdb_exception(r);
-  }
-
-  // A false result means on_error() succeeded; the caller should replay the transaction:
-  if (nullptr != replay_error) {
-   *replay_error = r;
-  }
-
-  version_stamps.clear();
   return false;
  }
 
- if (versionstamp_future) {
-  auto ready = detail::block_until_ready(std::move(*versionstamp_future));
+ resolve_versionstamps(versionstamp_future);
 
-  const uint8_t *out_versionstamp_data = nullptr;
-  int out_versionstamp_size = 0;
-
-  if (fdb_error_t r = fdb_future_get_key(ready.raw_handle(), &out_versionstamp_data, &out_versionstamp_size); 0 != r) {
-   throw libfdb_exception(r);
-  }
-
-  constexpr auto expected_versionstamp_size =
-   std::tuple_size_v<versionstamp::versionstamp_data_t>;
-
-  if (expected_versionstamp_size != static_cast<std::size_t>(out_versionstamp_size) ||
-      nullptr == out_versionstamp_data) {
-   throw libfdb_exception("invalid version stamp result");
-  }
-
-  const auto versionstamp_result =
-   std::span(out_versionstamp_data, expected_versionstamp_size);
-
-  for (auto& stamp : version_stamps) {
-   stamp.store_result(versionstamp_result);
-  }
-
-  version_stamps.clear();
- }
-
- // Ok:
  return true;
 }
 
@@ -1111,7 +1194,8 @@ inline fdb_error_t get_future_error(const future_value& fv)
  return fdb_future_get_error(fv.raw_ptr_or_throw());
 }
 
-inline future_value wait_for_on_error(FDBTransaction* txn, const fdb_error_t original_error)
+inline future_value wait_for_on_error(FDBTransaction *txn,
+                                      const fdb_error_t original_error)
 {
  future_value on_error_future(fdb_transaction_on_error(txn, original_error));
 
@@ -1130,292 +1214,6 @@ inline future_value await_future_of(FnT&& fn, XS&& ...params)
           std::invoke(std::forward<FnT>(fn), std::forward<XS>(params)...));
 }
 
-// Tracks a set of results and their corresponding Future:
-struct query_window final
-{
- future_value result_owner;
- std::span<const FDBKeyValue> result_pairs;
- bool more_available = false;
-};
-
-struct split_point_result final
-{
- future_value result_owner;
- std::span<const FDBKey> result_keys;
- fdb_error_t error = 0;
-};
-
-inline query_window extract_result_pairs(future_value result_owner)
-{
- int more_available = 0;
- int out_count = 0;
- const FDBKeyValue *out_kvs = nullptr;
-
- if (fdb_error_t r = fdb_future_get_keyvalue_array(result_owner.raw_ptr_or_throw(),
-                                                   &out_kvs,
-                                                   &out_count,
-                                                   &more_available); 0 != r) {
-  throw libfdb_exception(r);
- }
-
- return query_window {
-  .result_owner = std::move(result_owner),
-  .result_pairs = std::span<const FDBKeyValue>(out_kvs, out_count),
-  .more_available = 0 != more_available
- };
-}
-
-inline split_point_result extract_split_points(future_value result_owner)
-{
- const FDBKey *result_keys = nullptr;
- int result_count = 0;
-
- const auto error = fdb_future_get_key_array(result_owner.raw_ptr_or_throw(), &result_keys, &result_count);
-
- return split_point_result {
-  .result_owner = std::move(result_owner),
-  .result_keys = 0 == error ? std::span<const FDBKey>(result_keys, result_count)
-                            : std::span<const FDBKey>(),
-  .error = error
- };
-}
-
-inline query_window read_query_window(transaction& txn, const select& key_range, const int iteration)
-{
- return extract_result_pairs(await_future_of([&]() {
-  return get_range_future_from_transaction(txn, key_range, iteration);
- }));
-}
-
-inline std::optional<select> next_range_after(select key_range, const query_window& window)
-{
- if (not window.more_available or window.result_pairs.empty()) {
-  return std::nullopt;
- }
-
- const auto& last_key = window.result_pairs.back();
- auto cursor = std::string_view((const char *)last_key.key, last_key.key_length);
-
- if (key_range.options.reverse_order) {
-  key_range.end_key = cursor;
-  key_range.end_inclusive = false;
-  return key_range;
- }
-
- key_range.begin_key = cursor;
- key_range.begin_inclusive = false;
-
- return key_range;
-}
-
-template <typename ValueT = std::string>
-inline auto decode_pairs(std::span<const FDBKeyValue> pairs)
-{
- return pairs | std::views::transform(to_decoded_kv_pair<ValueT>);
-}
-
-template <typename ValueT, typename AssocT>
-inline AssocT collect_pairs(std::span<const FDBKeyValue> pairs)
-{
- return ceph::util::collect_as<AssocT>(decode_pairs<ValueT>(pairs));
-}
-
-template <typename AssocT>
-struct query_window_result final
-{
- AssocT result_block;
- std::optional<select> next_range;
-};
-
-template <typename ValueT, typename AssocT>
-inline query_window_result<AssocT> materialize_query_window(transaction& txn, select key_range, const int iteration = 1)
-{
- auto window = read_query_window(txn, key_range, iteration);
-
- return {
-  .result_block = collect_pairs<ValueT, AssocT>(window.result_pairs),
-  .next_range = next_range_after(std::move(key_range), window)
- };
-}
-
-inline std::size_t for_each_decoded_kv_pair(transaction& txn,
-                                            const select& key_range,
-                                            auto&& fn)
-{
- std::size_t nread = 0;
-
- for (const auto& kv : detail::generate_FDB_pairs(txn, key_range) | std::views::join) {
-  std::invoke(fn, to_decoded_kv_pair<std::string>(kv));
-  ++nread;
- }
-
- return nread;
-}
-
-template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline std::size_t get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT& out_iter)
-{
- return for_each_decoded_kv_pair(txn, key_range,
-          [&out_iter](auto&& kv) {
-            *out_iter++ = std::forward<decltype(kv)>(kv);
-          });
-}
-
-inline std::size_t get_value_range_from_transaction(transaction& txn,
-                                                    const select& key_range,
-                                                    concepts::string_pair_output_range auto& out)
-{
- return for_each_decoded_kv_pair(txn, key_range,
-          [&out](auto&& kv) {
-            ceph::util::push_back(out, std::forward<decltype(kv)>(kv));
-          });
-}
-
-inline bool retry_after_error(ceph::libfdb::transaction_handle& txn, const fdb_error_t r)
-{
- if (0 == r) {
-  return false;
- }
-
- if (not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, r)) {
-  // Non-retryable errors cannot be repaired by on_error():
-  throw ceph::libfdb::libfdb_exception(r);
- }
-
- if (fdb_error_t on_error_r = get_future_error(wait_for_on_error(txn->raw_handle(), r)); 0 != on_error_r) {
-  throw ceph::libfdb::libfdb_exception(r);
- }
-
- return true;
-}
-
-// Convert FDBKey array into something useful:
-inline std::vector<ceph::libfdb::select> as_select_seq(std::span<const FDBKey> xs,
-                                                       const ceph::libfdb::select& parent)
-{
- if (2 > xs.size()) {
-  return {};
- }
-
- // Gather the flattened list into *overlapping* libfdb::select pairs:
- return ceph::util::collect_as<std::vector<ceph::libfdb::select>>(
-          std::views::iota(std::size_t{0}, xs.size() - 1)
-        | std::views::transform([&parent, xs](const auto i) {
-           const auto& fst = xs[i];
-           const auto& snd = xs[i + 1];
-           const auto first_key = std::string_view((const char *)fst.key,
-                                                    static_cast<std::string::size_type>(fst.key_length));
-           const auto second_key = std::string_view((const char *)snd.key,
-                                                     static_cast<std::string::size_type>(snd.key_length));
-
-           ceph::libfdb::select split(first_key, second_key);
-
-           split.options = parent.options;
-           split.begin_inclusive = (0 == i) ? parent.begin_inclusive : true;
-           split.end_inclusive = (i + 2 == xs.size()) ? parent.end_inclusive : false;
-           return split;
-          }));
-}
-// Finding a clear example both in the samples and in the documentation is not very easy. The
-// statelessness of FDB requests bleeds into here with basically no hand-holding, but note for instance
-// that the call parameters have to change for subsequent reads.
-inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& selection, int iteration)
-{
-  const auto& begin_key  = selection.begin_key;
-  const auto& end_key    = selection.end_key;
-
-  const auto& options    = selection.options;
-
-  // The documentation makes this stuff about as clear as mud... read VERY carefully
-  // when you fiddle with these:
-  const bool continuing_forward = not options.reverse_order and 1 < iteration;
-  const bool continuing_reverse = options.reverse_order and 1 < iteration;
-
-  const int begin_or_eq = (continuing_forward or not selection.begin_inclusive) ? 1 : 0;
-  const int begin_offset = 1;
-  const int end_or_eq = (not continuing_reverse and selection.end_inclusive) ? 1 : 0;
-  const int end_offset = 1;
-
-  // See validate_and_update_parameters() in fdb_c.cpp (FDB source) if greater clarity is needed on
-  // the meaning of some of these, it can be hard to deduce from the documentation; Returns an
-  // FDBKeyValueArray in the future:
-  return future_value(fdb_transaction_get_range(txn.raw_handle(),
-                      (const uint8_t *)begin_key.data(), begin_key.size(),      // the reference-point key
-                      begin_or_eq,                                              // begin or eq
-                      begin_offset,                                             // begin offset
-
-                      (const uint8_t *)end_key.data(), end_key.size(),          // the end selector key
-                      end_or_eq,                                                // end or eq
-                      end_offset,                                               // end offset (a shift AFTER end is matched)
-
-                      // How should results be grouped/chunked:
-                      options.result_limit,                                     // FDB range-read limit (0 == unlimited)
-                      options.target_bytes,                                     // FDB range-read target bytes (0 == unlimited)
-                      options.streaming_mode,                                   // streaming mode (e.g.: FDB_STREAMING_MODE_WANT_ALL)
-                      iteration,                                                // iteration # (produced side effect)
-
-                      // Other options:
-                      0,                                                        // 0 unless this IS a snapshot read
-                      options.reverse_order                                     // should items come in reverse order?
-                    ));
-}
-
-inline std::vector<ceph::libfdb::select> plan_split_ranges(
-          ceph::libfdb::database_handle dbh, 
-          ceph::libfdb::select selector, 
-          const std::int64_t remote_chunk_size)
-{
- using ceph::libfdb::detail::wait_until_ready;
-
- auto txn = ceph::libfdb::make_transaction(dbh);
- auto split_selector = ceph::libfdb::detail::as_half_open_select(selector);
-
- for (bool should_retry = true; should_retry;) {
-  auto result_owner = wait_until_ready(future_value(fdb_transaction_get_range_split_points(
-                       txn->raw_handle(),
-                       (const std::uint8_t *)split_selector.begin_key.data(), static_cast<int>(split_selector.begin_key.length()),
-                       (const std::uint8_t *)split_selector.end_key.data(), static_cast<int>(split_selector.end_key.length()),
-                       remote_chunk_size)));
-
-  auto split_points = extract_split_points(std::move(result_owner));
-
-  should_retry = retry_after_error(txn, split_points.error);
-
-  if (not should_retry) {
-   return as_select_seq(split_points.result_keys, split_selector);
-  }
- }
-
- return {};
-}
-
-// Generators (internal guts):
-// The returned memory should be copied immediately as its lifetime will end once the Future is destroyed:
-// (This is pretty much why this is in the "detail" namespace-- we use this to implement the user-facing
-// stuff, it shouldn't really be touched outside.)
-inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(transaction& txn, select key_range)
-{
- // FDB uses iteration for FDB_STREAMING_MODE_ITERATOR (but, other streaming modes
- // just ignore it, per fdb_c's documentation. We do have to keep this state somewhere,
- // though. See: "https://apple.github.io/foundationdb/api-c.html".
- int iteration = 1;
-
- for (auto more_available = true; more_available; iteration++) {
-  auto window = read_query_window(txn, key_range, iteration);
-  auto next_range = next_range_after(key_range, window);
-
-  more_available = next_range.has_value();
-
-  co_yield window.result_pairs;
-
-  if (next_range) {
-   key_range = std::move(*next_range);
-  }
- }
-}
-
 } // namespace ceph::libfdb::detail
-
 
 #endif

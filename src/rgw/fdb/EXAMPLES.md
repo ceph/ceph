@@ -61,6 +61,20 @@ if (!lfdb::commit(txn)) {
 }
 ```
 
+```cpp
+// Ask commit() to report whether the transaction should be replayed:
+auto txn = lfdb::make_transaction(dbh);
+
+lfdb::set(txn, "person/frances-allen/name", "Frances Allen");
+
+const auto result = lfdb::commit(lfdb::with_result, txn);
+
+if (not result.committed and 0 != result.replay_error) {
+  // A non-zero replay_error means FoundationDB prepared txn for replay.
+  retry_transaction_body(txn, result.replay_error);
+}
+```
+
 ## Version Stamps
 
 ```cpp
@@ -164,7 +178,7 @@ if (lfdb::get(dbh, "person/konrad-zuse/name", name)) {
 ```
 
 ```cpp
-// Use a callback when the raw serialized bytes must be copied or decoded
+// Use a void callback when the raw serialized bytes must be copied or decoded
 // immediately. The span is only valid during the callback.
 lfdb::get(dbh, "person/konrad-zuse/name",
           [](std::span<const std::uint8_t> bytes) {
@@ -243,6 +257,7 @@ explicit open/closed boundaries.
 | Select an explicit half-open key interval | `q::between(begin, end)` | `lfdb::select` | Matches the usual FoundationDB `[begin, end)` range shape. |
 | Combine or subtract selections | `q::intersection()`, `q::set_union()`, `q::difference()` | query expression or selector | Lets the query compiler normalize intervals before execution. |
 | Run several dependent operations atomically | `lfdb::make_transactor(dbh)` | callable transaction runner | Replays retryable transactions while keeping user code explicit. |
+| Publish local output after a replayable transaction | `lfdb::staged(output)` | callback proxy | Prevents retries from applying the same local mutation more than once. |
 
 ### Managed Range Reads
 
@@ -943,6 +958,109 @@ txr([](auto& txn) {
 });
 ```
 
+### Staged Proxies
+
+A transactor may run its body more than once. Mutating a captured output
+variable directly can therefore append or count the same result several times.
+Staged Proxies give each attempt a private value and publish only the attempt
+whose commit is confirmed.
+
+Choose the parameter form according to its role:
+
+| Parameter | Use it for | Replay behavior |
+| --- | --- | --- |
+| `input` | An input that the transaction reads but does not modify. | The transactor copies it once and presents the same value to every attempt. |
+| `lfdb::staged(output)` | An output that modifies or extends its existing value. | Each attempt lazily copies the existing value before its first mutation. |
+| `lfdb::staged(output, std::in_place)` | An output rebuilt entirely from transaction results. | Each attempt starts with a fresh value; the previous contents are never copied. |
+
+Treat ordinary bound parameters as read-only. Mutating one changes only the
+transactor's private argument and that mutation carries into later attempts;
+it does not update the caller's object.
+
+In-place construction happens before each attempt, so a successful query that
+finds no values still replaces stale output with an empty value.
+
+Prefer an ordinary return value when the callback produces one new value.
+Staging is useful for output parameters or several existing local values.
+
+```cpp
+// Recompute a D4N bucket's cached-byte count without counting a replay twice.
+std::uint64_t cached_bytes = 0;
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& bytes, std::string_view bucket_id) {
+  bytes = 0;
+
+  for (const auto& block :
+       lfdb::scan<CacheBlock>(txn, object_range(bucket_id)) |
+         std::views::values) {
+    bytes += block.size;
+  }
+}, lfdb::staged(cached_bytes), bucket_id);
+```
+
+If you declare a proxy ahead of time, move it into the transactor because it
+represents exactly one invocation's staging state:
+
+```cpp
+// Rebuild a D4N block listing without copying its previous contents.
+std::vector<CacheBlock> blocks;
+auto blocks_prx = lfdb::staged(blocks, std::in_place);
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& blocks, std::string_view bucket_id) {
+  for (auto block : read_blocks(txn, bucket_id)) {
+    blocks.push_back(std::move(block));
+  }
+}, std::move(blocks_prx), bucket_id);
+```
+
+The proxy covers assignment, `+=`, common sequence updates, and
+`insert_or_assign()`; use `get_target()` for an uncommon operation. Mutating
+operations deliberately return no iterator or reference into attempt-local
+storage.
+
+Gotchas:
+
+- An ordinarily staged target must be copy-constructible; an in-place target
+  must be default-initializable. Both must be nothrow move-assignable, alive for
+  the call, and not accessed concurrently. Binding the same target more than
+  once is rejected with an exception; overlapping targets are also invalid.
+
+- Accept the proxy by lvalue reference (`auto& output`, as above). Do not
+  capture and mutate the original target or retain the proxy after the callback.
+  Any pointer, reference, or iterator obtained through `get_target()` is
+  attempt-local and must not escape the callback.
+
+- Staging protects only the bound C++ value. Logging, I/O, other captured state,
+  and non-idempotent database writes after `commit_unknown_result` still need
+  their own replay-safe design.
+
+Any outcome without a confirmed commit leaves the target unchanged. An ordinary
+transactor throws on retry exhaustion; `with_result` reports it with
+`committed == false`.
+
+### Reporting replay results
+
+Use `with_result` when application code needs to stop, resume, or report retry
+progress instead of treating retry exhaustion as an exception. The returned
+`transaction_result` describes the transaction machinery, not the user
+operation's value. `last_error == 0` means there was no FoundationDB replay
+error to report. Use an ordinary transactor when the transaction body should
+return an application value.
+
+```cpp
+auto txr = lfdb::make_transactor(dbh);
+
+auto result = txr(lfdb::with_result, [](auto& txn, std::string_view key, std::string_view title) {
+  lfdb::set(txn, key, title);
+}, "person/murasaki-shikibu/title", "Novelist");
+
+if (!result.committed) {
+  record_retry_exhaustion(result.attempts, result.replay_count, result.last_error);
+}
+```
+
 ### Transactor options
 
 ```cpp
@@ -1202,8 +1320,9 @@ watch_thread.request_stop();
 ```
 
 `watched_loop()` is a gadget for repeated watch handling. Its callback takes
-the watched key as a `std::string_view`. The helper blocks; applications should
-own any thread, executor, shutdown, or callback error policy around it:
+the watched key as a `std::string_view` and returns `void`. The helper blocks;
+applications should own any thread, executor, shutdown, or callback error
+policy around it:
 
 ```cpp
 std::jthread watch_thread {
