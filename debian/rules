@@ -39,6 +39,8 @@ else
   extraopts += -DWITH_RBD_RWL=OFF
 endif
 extraopts += -DWITH_RBD_SSD_CACHE=ON
+# Debian still targets the x86-64 baseline, so give up the hardware CRC32C.
+extraopts += -DROCKSDB_PORTABLE=ON
 # assumes that ceph is exmpt from multiarch support, so we override the libdir.
 extraopts += -DCMAKE_INSTALL_LIBDIR=/usr/lib
 extraopts += -DCMAKE_INSTALL_LIBEXECDIR=/usr/libexec
