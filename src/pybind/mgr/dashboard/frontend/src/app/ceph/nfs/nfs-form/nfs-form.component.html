@@ -725,6 +725,14 @@
           i18n
           >TCP</cds-checkbox
         >
+        <cds-checkbox
+          *ngIf="clusterRdmaEnabled"
+          formControlName="transportRDMA"
+          name="transportRDMA"
+          id="transportRDMA"
+          i18n
+          >RDMA</cds-checkbox
+        >
         <ng-template #transportError>
           <span
             class="invalid-feedback"
