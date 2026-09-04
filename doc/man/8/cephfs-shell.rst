@@ -21,14 +21,14 @@ CephFS Shell provides shell-like commands that directly interact with the
 Ceph File System.
 
 This tool can be used in interactive mode as well as in non-interactive mode.
-In former mode, cephfs-shell opens a shell session and after the given command
+In the former mode, cephfs-shell opens a shell session and after the given command
 is finished, it prints the prompt string and waits indefinitely. When the
-shell session is finished, cephfs-shell quits with the return value of last
+shell session is finished, cephfs-shell quits with the return value of the last
 executed command. In non-interactive mode, cephfs-shell issues a command and
 exits right after the command's execution is complete with the command's
 return value.
 
-Behaviour of CephFS Shell can be tweaked using ``cephfs-shell.conf``. Refer to
+Behavior of CephFS Shell can be tweaked using ``cephfs-shell.conf``. Refer to
 `CephFS Shell Configuration File`_ for details.
 
 Options
@@ -54,12 +54,12 @@ Options
 
     Latest version of the cmd2 module is required for running cephfs-shell.
     If CephFS is installed through source, execute cephfs-shell in the build
-    directory. It can also be executed as following using virtualenv:
+    directory. It can also be executed as follows using virtualenv:
 
-.. code:: bash
+    .. code:: bash
 
-    [build]$ python3 -m venv venv && source venv/bin/activate && pip3 install cmd2 colorama
-    [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/shell/cephfs-shell
+        [build]$ python3 -m venv venv && source venv/bin/activate && pip3 install cmd2 colorama
+        [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/shell/cephfs-shell
 
 Commands
 ========
@@ -105,12 +105,14 @@ Usage :
     
         put [options] <source_path> <target_path>
 
-* source_path - local file/directory path to be copied to cephfs.
-    * if `.` copies all the file/directories in the local working directory.
-    * if `-`  Reads the input from stdin. 
+* source_path - local file/directory path to be copied to CephFS.
+
+    * If ``.``, copies all the file/directories in the local working directory.
+    * If ``-``, reads the input from stdin.
 
 * target_path - remote directory path where the files/directories are to be copied to.
-    * if `.` files/directories are copied to the remote working directory.
+
+    * If ``.``, files/directories are copied to the remote working directory.
 
 Options :
    -f, --force        Overwrites the destination if it already exists.
@@ -126,11 +128,13 @@ Usage :
     get [options] <source_path> <target_path>
 
 * source_path - remote file/directory path which is to be copied to local file system.
-    * if `.` copies all the file/directories in the remote working directory.
+
+    * If ``.``, copies all the file/directories in the remote working directory.
                     
 * target_path - local directory path where the files/directories are to be copied to.
-    * if `.` files/directories are copied to the local working directory. 
-    * if `-` Writes output to stdout.
+
+    * If ``.``, files/directories are copied to the local working directory.
+    * If ``-``, writes output to stdout.
 
 Options:
   -f, --force        Overwrites the destination if it already exists.
@@ -145,6 +149,7 @@ Usage :
     ls [option] [directory]...
 
 * directory - name of directory whose files/directories are to be listed. 
+
     * By default current working directory's files/directories are listed.
 
 Options:
@@ -194,7 +199,8 @@ Usage :
     cd [directory]
         
 * directory - path/directory name. If no directory is mentioned it is changed to the root directory.
-    * If '.' moves to the parent directory of the current directory.
+
+    * If ``.``, moves to the parent directory of the current directory.
 
 cwd
 ---
@@ -223,7 +229,7 @@ Usage :
 mv
 --
 
-Moves files/Directory from source to destination.
+Moves files/directory from source to destination.
 
 Usage : 
     
@@ -232,16 +238,16 @@ Usage :
 rmdir
 -----
 
-Delete a directory(ies).
+Delete directories.
 
 Usage : 
     
-    rmdir <directory_name>.....
+    rmdir <directory_name>...
 
 rm
 --
 
-Remove a file(es).
+Remove files.
 
 Usage : 
     
@@ -251,7 +257,7 @@ Usage :
 write
 -----
 
-Create and Write a file.
+Create and write a file.
 
 Usage : 
         
@@ -262,11 +268,11 @@ Usage :
 lls
 ---
 
-Lists all files and directories in the specified directory.Current local directory files and directories are listed if no     path is mentioned
+Lists all files and directories in the specified directory. Current local directory files and directories are listed if no path is mentioned
 
 Usage: 
     
-    lls <path>.....
+    lls <path>...
 
 lcd
 ---
@@ -311,7 +317,7 @@ Usage:
 run_pyscript
 ------------
 
-Runs a python script file inside the console
+Runs a Python script file inside the console
 
 Usage: 
     
@@ -327,12 +333,13 @@ Usage:
 py
 --
 
-Invoke python command, shell, or script
+Invoke Python command, shell, or script
 
-Usage : 
+Usage: 
 
-        py <command>: Executes a Python command.
-        py: Enters interactive Python mode.
+    py <command>: Executes a Python command.
+
+    py: Enters interactive Python mode.
 
 shortcuts
 ---------
@@ -429,7 +436,7 @@ Usage:
 locate
 ------
 
-Find an item in File System
+Find an item in file system
 
 Usage:
 
@@ -454,7 +461,7 @@ Options :
 snap
 ----
 
-Create or Delete Snapshot
+Create or delete a snapshot
 
 Usage:
 
@@ -546,7 +553,7 @@ Options:
 quota
 -----
 
-Quota management for a Directory
+Quota management for a directory
 
 Usage :
 
@@ -596,7 +603,7 @@ Following is a sample ``cephfs-shell.conf``
 Exit Code
 =========
 
-Following exit codes are returned by cephfs shell
+Following exit codes are returned by cephfs-shell
 
 +-----------------------------------------------+-----------+
 | Error Type                                    | Exit Code |

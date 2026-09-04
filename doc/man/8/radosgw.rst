@@ -1,7 +1,7 @@
 :orphan:
 
 ===============================
- radosgw -- rados REST gateway
+ radosgw -- RADOS REST gateway
 ===============================
 
 .. program:: radosgw
@@ -27,19 +27,19 @@ Options
 .. option:: -c ceph.conf, --conf=ceph.conf
 
    Use ``ceph.conf`` configuration file instead of the default
-   ``/etc/ceph/ceph.conf`` to determine monitor addresses during startup.
+   ``/etc/ceph/ceph.conf`` to determine Monitor addresses during startup.
 
 .. option:: -m monaddress[:port]
 
-   Connect to specified monitor (instead of looking through ``ceph.conf``).
+   Connect to specified Monitor (instead of looking through ``ceph.conf``).
 
 .. option:: -i ID, --id ID
 
-   Set the ID portion of name for radosgw
+   Set the ID portion of the name for radosgw
 
 .. option:: -n TYPE.ID, --name TYPE.ID
 
-   Set the rados user name for the gateway (eg. client.radosgw.gateway)
+   Set the RADOS user name for the gateway (e.g. client.radosgw.gateway)
 
 .. option:: --cluster NAME
 
@@ -77,13 +77,13 @@ or process management may be available in the FastCGI application framework
 in use.
 
 ``Apache`` must be configured in a way that enables ``mod_proxy_fcgi`` to be
-used with localhost tcp.
+used with localhost TCP.
 
-The following steps show the configuration in Ceph's configuration file i.e,
+The following steps show the configuration in Ceph's configuration file i.e.,
 ``/etc/ceph/ceph.conf`` and the gateway configuration file i.e,
 ``/etc/httpd/conf.d/rgw.conf`` (RPM-based distros) or
 ``/etc/apache2/conf-available/rgw.conf`` (Debian-based distros) with localhost
-tcp:
+TCP:
 
 #. For distros with Apache 2.2 and early versions of Apache 2.4 that use
    localhost TCP, append the following contents to ``/etc/ceph/ceph.conf``::
@@ -139,29 +139,6 @@ tcp:
 
 		</VirtualHost>
 
-#. Add the following content in the gateway configuration file:
-
-   For CentOS/RHEL add in ``/etc/httpd/conf.d/rgw.conf``::
-
-		<VirtualHost *:80>
-		ServerName localhost
-		DocumentRoot /var/www/html
-
-		ErrorLog /var/log/httpd/rgw_error.log
-		CustomLog /var/log/httpd/rgw_access.log combined
-
-		# LogLevel debug
-
-		RewriteEngine On
-
-		RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization},L]
-
-		SetEnv proxy-nokeepalive 1
-
-		ProxyPass / unix:///var/run/ceph/ceph.radosgw.gateway.fastcgi.sock|fcgi://localhost:9000/
-
-		</VirtualHost>
-
 #. Generate a key for radosgw to use for authentication with the cluster. ::
 
 	ceph-authtool -C -n client.radosgw.gateway --gen-key /etc/ceph/keyring.radosgw.gateway
@@ -207,10 +184,10 @@ Following is an example configuration::
 
 
 The total number of shards determines how many total objects hold the
-usage log information. The per-user number of shards specify how many
+usage log information. The per-user number of shards specifies how many
 objects hold usage information for a single user. The tick interval
 configures the number of seconds between log flushes, and the flush
-threshold specify how many entries can be kept before resorting to
+threshold specifies how many entries can be kept before resorting to
 synchronous flush.
 
 .. warning:: All RGW instances and ``radosgw-admin`` commands must use the
@@ -234,5 +211,5 @@ more information.
 See also
 ========
 
-:doc:`ceph <ceph>`\(8)
+:doc:`ceph <ceph>`\(8),
 :doc:`radosgw-admin <radosgw-admin>`\(8)
