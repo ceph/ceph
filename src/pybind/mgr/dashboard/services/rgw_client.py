@@ -561,6 +561,23 @@ class RgwClient(RestClient):
     def get_user_keys(self, userid):
         return self._admin_get_user_keys(self.admin_path, userid)
 
+    @classmethod
+    def rename_user(cls, uid: str, new_uid: str, daemon_name: Optional[str] = None):
+        try:
+            instance = cls.admin_instance(daemon_name=daemon_name)
+            if instance and instance.userid == uid:
+                raise DashboardException(
+                    msg='The RGW system user used by the Dashboard API cannot be renamed.',
+                    component='rgw')
+        except (DashboardException, RequestException) as e:
+            raise DashboardException(e, component='rgw')
+
+        code, _, err = mgr.send_rgwadmin_command(['user', 'rename', '--uid', uid,
+                                                  '--new-uid', new_uid])
+        if code != 0:
+            raise DashboardException(msg=f'Error renaming user with code {code}: {err}',
+                                     component='rgw')
+
     @RestClient.api('/{admin_path}/{path}')
     def _proxy_request(
             self,  # pylint: disable=too-many-arguments
