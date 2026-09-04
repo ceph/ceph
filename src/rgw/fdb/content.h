@@ -18,12 +18,14 @@
 
 #include "base.h"
 
-#include <algorithm>
-#include <compare>
-#include <cstddef>
 #include <string>
 #include <string_view>
+
+#include <algorithm>
+
+#include <cstddef>
 #include <utility>
+#include <compare>
 
 namespace ceph::libfdb::layer::content {
 
