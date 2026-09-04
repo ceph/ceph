@@ -6695,9 +6695,18 @@ void BlueStore::_init_logger()
   b.add_time_avg(l_bluestore_collection_lat, "collection_lat",
     "Average collection metadata query latency (list/exists/bits)",
     "coll", PerfCountersBuilder::PRIO_USEFUL);
-  b.add_time_avg(l_bluestore_other_write_lat, "other_write_lat",
-    "Average latency of other/rare write ops (set_alloc_hint, set_collection_opts, collection create/remove/split/merge)",
-    "othw", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_other_ops_lat, "other_ops_lat",
+    "Average latency of other/rare write ops (set_alloc_hint, set_collection_opts, collection create)",
+    "otho", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_split_collection_lat, "split_collection_lat",
+    "Average split_collection latency",
+    "spcl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_merge_collection_lat, "merge_collection_lat",
+    "Average merge_collection latency",
+    "mgcl", PerfCountersBuilder::PRIO_USEFUL);
+  b.add_time_avg(l_bluestore_remove_collection_lat, "remove_collection_lat",
+    "Average remove_collection latency",
+    "rmcl", PerfCountersBuilder::PRIO_USEFUL);
   //****************************************
 
   // slow op count
@@ -12844,7 +12853,7 @@ int BlueStore::set_collection_opts(
   if (c->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &dval)) {
     c->compression_req_ratio = dval;
   }
-  logger->tinc_with_max(l_bluestore_other_write_lat, mono_clock::now() - start);
+  logger->tinc_with_max(l_bluestore_other_ops_lat, mono_clock::now() - start);
   return 0;
 }
 
@@ -18819,7 +18828,7 @@ int BlueStore::_set_alloc_hint(
   o->onode.expected_write_size = expected_write_size;
   o->onode.alloc_hint_flags = flags;
   txc->write_onode(o);
-  logger->tinc_with_max(l_bluestore_other_write_lat, mono_clock::now() - start);
+  logger->tinc_with_max(l_bluestore_other_ops_lat, mono_clock::now() - start);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " object_size " << expected_object_size
 	   << " write_size " << expected_write_size
@@ -19083,7 +19092,7 @@ int BlueStore::_create_collection(
   r = 0;
 
  out:
-  logger->tinc_with_max(l_bluestore_other_write_lat, mono_clock::now() - start);
+  logger->tinc_with_max(l_bluestore_other_ops_lat, mono_clock::now() - start);
   dout(10) << __func__ << " " << cid << " bits " << bits << " = " << r << dendl;
   return r;
 }
@@ -19149,7 +19158,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     }
   }
 out:
-  logger->tinc_with_max(l_bluestore_other_write_lat, mono_clock::now() - start);
+  logger->tinc_with_max(l_bluestore_remove_collection_lat, mono_clock::now() - start);
   dout(10) << __func__ << " " << cid << " = " << r << dendl;
   return r;
 }
@@ -19213,7 +19222,7 @@ int BlueStore::_split_collection(TransContext *txc,
   encode(c->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
-  logger->tinc_with_max(l_bluestore_other_write_lat, mono_clock::now() - start);
+  logger->tinc_with_max(l_bluestore_split_collection_lat, mono_clock::now() - start);
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
   return r;
@@ -19271,7 +19280,7 @@ int BlueStore::_merge_collection(
   encode(d->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(d->cid), bl);
 
-  logger->tinc_with_max(l_bluestore_other_write_lat, mono_clock::now() - start);
+  logger->tinc_with_max(l_bluestore_merge_collection_lat, mono_clock::now() - start);
   dout(10) << __func__ << " " << cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
   return r;

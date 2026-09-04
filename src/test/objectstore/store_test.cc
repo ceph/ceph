@@ -1886,8 +1886,28 @@ TEST_P(StoreTest, InterfacePerfCounters) {
   check("rename_lat", l_bluestore_rename_lat, 1, [&]{
     submit([&](auto& t){ t.collection_move_rename(cid, coid, cid, roid); }); });
 
-  check("other_write_lat (set_alloc_hint)", l_bluestore_other_write_lat, 1, [&]{
+  check("other_ops_lat (set_alloc_hint)", l_bluestore_other_ops_lat, 1, [&]{
     submit([&](auto& t){ t.set_alloc_hint(cid, oid, 4096, 4096, 0); }); });
+
+  // ---- collection ops ----
+  // split/merge ceph_assert(is_pg) on both src and dest; hence cid is a pg
+  // coll above. pb is the split destination: must be fresh, empty, at bits+1.
+  coll_t pb(spg_t(pg_t(1 << bits, 4373), shard_id_t::NO_SHARD));
+  store->create_new_collection(pb);
+
+  check("split_collection_lat", l_bluestore_split_collection_lat, 1, [&]{
+    submit([&](auto& t){
+      t.create_collection(pb, bits + 1);
+      t.split_collection(cid, bits + 1, 1 << bits, pb); }); });
+
+  check("merge_collection_lat", l_bluestore_merge_collection_lat, 1, [&]{
+    submit([&](auto& t){ t.merge_collection(pb, cid, bits); }); });
+
+  // merge folded pb away, so stand it back up empty just to remove it
+  check("remove_collection_lat", l_bluestore_remove_collection_lat, 1, [&]{
+    store->create_new_collection(pb);
+    submit([&](auto& t){ t.create_collection(pb, bits); });
+    submit([&](auto& t){ t.remove_collection(pb); }); });
 }
 
 TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
