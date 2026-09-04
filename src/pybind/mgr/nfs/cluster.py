@@ -60,6 +60,9 @@ def _is_log_only_config(nfs_config: str) -> bool:
 
 
 def resolve_ip(hostname: str) -> str:
+    # Tolerate the legacy mgr/rook get_hosts() format ("<ip>/<hostname>"),
+    # which older Rook backends may still produce; take just the address.
+    hostname = hostname.split("/")[0]
     try:
         r = socket.getaddrinfo(hostname, None, flags=socket.AI_CANONNAME,
                                type=socket.SOCK_STREAM)
