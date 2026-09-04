@@ -192,6 +192,29 @@ There are multiple ways to create new OSDs:
 
     ceph orch daemon add osd host1:data_devices=/dev/sda,/dev/sdb,db_devices=/dev/sdc,osds_per_device=2
 
+* Advanced OSD creation with custom container arguments:
+
+  Pass extra arguments to the OSD container using ``extra_container_args``.
+  Arguments with spaces must be quoted using double quotes. The parser respects
+  shell-style quoting, so you can include values with spaces:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add osd "host1:data_devices=/dev/sdb,extra_container_args=--label \"app=OSD storage daemon\" --memory 32g"
+
+  Example with multiple labels and environment variables:
+
+  .. prompt:: bash #
+
+    ceph orch daemon add osd "host1:data_devices=/dev/sdb,extra_container_args=--memory 32g --cpus 4"
+
+  .. note::
+
+     Use ``extra_container_args`` to pass additional ``podman run`` options to customize
+     OSD container behavior. Common use cases include setting memory limits, CPU
+     restrictions, labels, environment variables, and volume mounts. Ensure that
+     arguments containing spaces are properly quoted.
+
 * Create an OSD on a specific LVM logical volume on a specific host:
 
   .. prompt:: bash #
