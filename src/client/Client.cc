@@ -3956,7 +3956,8 @@ void Client::put_cap_ref(Inode *in, int cap)
 // issued by the mds and @want caps not revoked (or not under revocation).
 // this routine blocks till the cap requirement is satisfied. also account
 // (track) for capability hit when required (when cap requirement succeedes).
-int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
+int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff,
+                     int allow_implemented)
 {
   Inode *in = fh->inode.get();
 
@@ -3981,6 +3982,13 @@ int Client::get_caps(Fh *fh, int need, int want, int *phave, loff_t endoff)
 
     int implemented;
     int have = in->caps_issued(&implemented);
+    // An O_APPEND writer may proceed with caps that the MDS is
+    // revoking but that are still implemented and in use (e.g. a Fw
+    // revoked by the next writer's gather while our write is about
+    // to start): the release is deferred by our cap ref and will
+    // carry the size flush once the write completes.
+    if (allow_implemented)
+      have |= implemented & allow_implemented;
 
     bool waitfor_caps = false;
     bool waitfor_commit = false;
@@ -6143,6 +6151,17 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
 
   if (new_caps & (CEPH_CAP_ANY_FILE_RD | CEPH_CAP_ANY_FILE_WR)) {
     in->layout = m->get_layout();
+    update_inode_file_size(in, issued, m->effective_size(),
+			   m->get_truncate_seq(), m->get_truncate_size());
+  } else if (cap == in->auth_cap &&
+             (m->get_max_size() != in->max_size)) {
+    /*
+     * A max_size grant that carries no new caps (e.g. a
+     * share_inode_max_size grant after another writer's flush):
+     * apply the fresh size too, so that an O_APPEND revalidation
+     * after such a grant sees the true EOF.
+     * update_inode_file_size() ignores it unless it is newer.
+     */
     update_inode_file_size(in, issued, m->effective_size(),
 			   m->get_truncate_seq(), m->get_truncate_size());
   }
@@ -10993,6 +11012,10 @@ int Client::_release_fh(Fh *f)
       }
     }
 #endif
+    if (f->flags & O_APPEND) {
+      ceph_assert(in->append_open_refs > 0);
+      in->append_open_refs--;
+    }
     if (in->put_open_ref(f->mode)) {
       _flush(in, new C_Client_FlushComplete(this, in));
       check_caps(in, 0);
@@ -11126,6 +11149,8 @@ int Client::_open(const InodeRef& in, int flags, mode_t mode, Fh **fhp,
   if (result >= 0) {
     if (fhp) {
       *fhp = _create_fh(in.get(), flags, cmode, perms);
+      if (flags & O_APPEND)
+        in->append_open_refs++;
       // ceph_flags_sys2wire/ceph_flags_to_mode() calls above transforms O_DIRECTORY flag
       // into CEPH_FILE_MODE_PIN mode. Although this mode is used at server size
       // we [ab]use it here to determine whether we should pin inode to prevent from
@@ -12757,19 +12782,17 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
+  bool is_append = false;
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
-    /*
-     * FIXME: this is racy in that we may block _after_ this point waiting for caps, and size may
-     * change out from under us.
-     */
     if (f->flags & O_APPEND) {
       auto r = _lseek(f, 0, SEEK_END);
       if (r < 0) {
         unlock_fh_pos(f);
         return r;
       }
+      is_append = true;
     }
     offset = f->pos;
     fpos = offset+size;
@@ -12802,9 +12825,106 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
     want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO;
   else
     want = CEPH_CAP_FILE_BUFFER;
-  int r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want, &have, endoff);
-  if (r < 0)
-    return r;
+  int need = CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED;
+  int r;
+  if (is_append) {
+    /*
+     * An O_APPEND write must land at the EOF that is current when
+     * the write actually occurs.  Serialize appends through the MDS:
+     * every append asks for a max_size bump, and the MDS gathers the
+     * other writers' caps before granting it - their releases are
+     * deferred until their in-flight writes complete and carry the
+     * size of the completed writes.  The grant is therefore the
+     * serialization ticket: it only arrives after all other writers
+     * have flushed, and it carries the up-to-date size, which the
+     * write revalidates against below.  The +1 guarantees a request
+     * even when max_size already covers endoff, and the wait below
+     * guarantees the write does not proceed on stale caps that we
+     * may already hold.  No cap refs are held while waiting, so the
+     * revokes of the gather are answered promptly.
+     *
+     * get_caps() below accepts implemented (revoking) FILE_WR: the
+     * next writer's gather may revoke our Fw right after the grant,
+     * but as long as it is still implemented we hold its ref and can
+     * proceed to write, deferring the release - and with it the size
+     * flush - until the write completed.  That is what makes the
+     * next writer's grant wait for our write.
+     */
+    in->wanted_max_size = std::max(in->wanted_max_size,
+				   std::max((uint64_t)endoff,
+					    in->max_size + 1));
+    if (in->wanted_max_size > in->max_size &&
+        in->wanted_max_size > in->requested_max_size)
+      check_caps(in, 0);
+    while (in->requested_max_size > 0 &&
+	   in->max_size <= in->requested_max_size) {
+      wait_on_context_list(in->waitfor_caps);
+    }
+    r = get_caps(f, need, want, &have, endoff, CEPH_CAP_FILE_WR);
+    if (r < 0)
+      return r;
+
+    /*
+     * We may have waited for caps while the previous writer
+     * (another client) extended the file.  in->effective_size()
+     * has been updated via the cap grant message from the MDS,
+     * but offset is still the old EOF.  Re-read
+     * in->effective_size() here (no extra MDS round-trip needed)
+     * and adjust offset to the true EOF.
+     *
+     * Note that for fscrypt enabled files in->size and in->max_size
+     * are in encrypted (physical) size, which is the logical size
+     * rounded up to the fscrypt block size, while offset is logical.
+     * So compare against in->effective_size() and convert the write
+     * extent to the physical size before re-checking max_size.
+     */
+    uint64_t eof = in->effective_size();
+    if (eof != (uint64_t)offset) {
+      ldout(cct, 10) << "O_APPEND: adjusting offset " << offset
+                     << " -> " << eof << dendl;
+      offset = eof;
+      fpos = offset + size;
+      endoff = offset + size;
+
+      /*
+       * get_caps() above validated the old endoff against
+       * max_size; adjusting offset forward may have shifted the
+       * write range beyond the granted max_size.  Ask for a
+       * big enough max_size and wait for the grant.
+       */
+      uint64_t extent_end = endoff;
+#if defined(__linux__)
+      if (in->is_fscrypt_enabled())
+        extent_end = fscrypt_next_block_start(endoff);
+#endif
+      if (extent_end > in->max_size) {
+        /*
+         * Drop the FILE_WR ref before waiting: nothing has been
+         * written yet, and while we wait the MDS may revoke our caps
+         * as part of another writer's gather.  Holding the ref would
+         * defer that release, and the grant we are waiting for needs
+         * the gather to complete - a deadlock.
+         */
+        put_cap_ref(in, CEPH_CAP_FILE_WR);
+        in->wanted_max_size = std::max(in->wanted_max_size, extent_end);
+        if (in->wanted_max_size > in->max_size &&
+            in->wanted_max_size > in->requested_max_size)
+          check_caps(in, 0);
+        r = get_caps(f, CEPH_CAP_FILE_WR|CEPH_CAP_AUTH_SHARED, want,
+                     &have, endoff, CEPH_CAP_FILE_WR);
+        if (r < 0) {
+          put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
+          return r;
+        }
+        // drop the extra cap refs taken by the get_caps() call above
+        put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
+      }
+    }
+  } else {
+    r = get_caps(f, need, want, &have, endoff);
+    if (r < 0)
+      return r;
+  }
 
   put_cap_ref(in, CEPH_CAP_AUTH_SHARED);
   if (size > 0) {
@@ -16167,6 +16287,8 @@ int Client::_create(const walk_dentry_result& wdr, int flags, mode_t mode,
 
     (*inp)->get_open_ref(cmode);
     *fhp = _create_fh(inp->get(), flags, cmode, perms);
+    if (flags & O_APPEND)
+      (*inp)->append_open_refs++;
   }
 
  reply_error:
