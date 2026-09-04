@@ -9,6 +9,7 @@ from typing import (
     Type,
 )
 
+import dataclasses
 import functools
 import logging
 import operator
@@ -324,13 +325,19 @@ def _get_or_create_rgw_credential(
     return candidate_credential_id
 
 
+@dataclasses.dataclass
+class CrossCheckToolbox:
+    """Batch interface for common utility types needed by cross_check_resource
+    implementations. Allows for extensibility across layers.
+    """
+
+    path_resolver: PathResolver
+    earmark_resolver: EarmarkResolver
+
+
 @functools.singledispatch
 def cross_check_resource(
-    resource: SMBResource,
-    staging: Staging,
-    *,
-    path_resolver: PathResolver,
-    earmark_resolver: EarmarkResolver,
+    resource: SMBResource, staging: Staging, *, toolbox: CrossCheckToolbox
 ) -> None:
     """Check a given resource for consistency across the set of other resources
     in the virtual transaction represented by the staging store and
@@ -472,8 +479,7 @@ def _check_removed_share_resource(
 def _check_share_resource(
     share: resources.Share,
     staging: Staging,
-    path_resolver: PathResolver,
-    earmark_resolver: EarmarkResolver,
+    toolbox: CrossCheckToolbox,
 ) -> None:
     """Check that the share resource can be updated."""
     assert share.intent == Intent.PRESENT
@@ -492,7 +498,7 @@ def _check_share_resource(
         return
     # Handle CephFS shares
     if share.cephfs is not None:
-        _check_share_cephfs(share, staging, path_resolver, earmark_resolver)
+        _check_share_cephfs(share, staging, toolbox)
         return
     raise ValueError(f"invalid share: missing rgw and cephfs config: {share}")
 
@@ -604,10 +610,11 @@ def _check_share_rgw(share: resources.Share, staging: Staging) -> None:
 def _check_share_cephfs(
     share: resources.Share,
     staging: Staging,
-    path_resolver: PathResolver,
-    earmark_resolver: EarmarkResolver,
+    toolbox: CrossCheckToolbox,
 ) -> None:
     assert share.cephfs is not None
+    path_resolver = toolbox.path_resolver
+    earmark_resolver = toolbox.earmark_resolver
     try:
         volpath = path_resolver.resolve_exists(
             share.cephfs.volume,
