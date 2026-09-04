@@ -1,20 +1,30 @@
+import { HttpParams } from '@angular/common/http';
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { UntypedFormControl, Validators } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
+import { of } from 'rxjs';
+import { catchError, switchMap, tap } from 'rxjs/operators';
+
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 
 import { Permission } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import { PoolService } from '~/app/shared/api/pool.service';
-import { Pool } from '../../pool/pool';
 import { NvmeofGatewayNodeComponent } from '../nvmeof-gateway-node/nvmeof-gateway-node.component';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { CephServiceService } from '~/app/shared/api/ceph-service.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
-import { Router } from '@angular/router';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import {
+  CephServiceAdditionalSpec,
+  CephServiceCertificate,
+  CephServiceSpec,
+  CertificateType
+} from '~/app/shared/models/service.interface';
 
 @Component({
   selector: 'cd-nvmeof-group-form',
@@ -23,26 +33,35 @@ import { NvmeofService } from '~/app/shared/api/nvmeof.service';
   standalone: false
 })
 export class NvmeofGroupFormComponent extends CdForm implements OnInit {
-  @ViewChild(NvmeofGatewayNodeComponent) gatewayNodeComponent: NvmeofGatewayNodeComponent;
+  @ViewChild(NvmeofGatewayNodeComponent) gatewayNodeComponent!: NvmeofGatewayNodeComponent;
 
+  readonly CertificateType = CertificateType;
   permission: Permission;
-  groupForm: CdFormGroup;
-  action: string;
+  groupForm!: CdFormGroup;
+  action!: string;
   resource: string;
-  group: string;
-  pools: Pool[] = [];
-  poolsLoading = false;
-  pageURL: string;
+  group = '';
+  pageURL = '';
   hasAvailableNodes = true;
+  editing = false;
+  gatewayGroupName = '';
+  existingServiceData: CephServiceSpec | null = null;
+  preSelectedHostnames: string[] = [];
+  currentCertificate: CephServiceCertificate = null;
+  currentSpecCertificateSource = '';
+  showCertSourceChangeWarning = false;
+  showEncryptionDisableWarning = false;
+  showMtlsDisableWarning = false;
 
   constructor(
     private authStorageService: AuthStorageService,
     public actionLabels: ActionLabelsI18n,
-    private poolService: PoolService,
     private taskWrapperService: TaskWrapperService,
     private cephServiceService: CephServiceService,
     private nvmeofService: NvmeofService,
-    private router: Router
+    private notificationService: NotificationService,
+    private router: Router,
+    private route: ActivatedRoute
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().nvmeof;
@@ -50,41 +69,208 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.action = this.actionLabels.CREATE;
-    this.createForm();
-    this.loadPools();
+    // Resolve create vs edit before building the form so validators/readonly state are correct.
+    this.route.params.subscribe((params) => {
+      if (params['name']) {
+        this.editing = true;
+        this.gatewayGroupName = params['name'];
+        this.action = this.actionLabels.EDIT;
+        this.createForm();
+        this.loadGatewayGroupData(params['name']);
+      } else {
+        this.editing = false;
+        this.gatewayGroupName = '';
+        this.action = this.actionLabels.CREATE;
+        this.createForm();
+      }
+    });
   }
 
   createForm() {
+    const groupNameValidators = [
+      Validators.required,
+      (control: any) => {
+        const value = control.value;
+        return value && /[^a-zA-Z0-9_-]/.test(value) ? { invalidChars: true } : null;
+      }
+    ];
+
+    const groupNameAsyncValidators = this.editing
+      ? []
+      : [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)];
+
+    // Each control needs its own requiredIf instance (validator closes over watch state).
+    const requiredIfExternalMtls = () =>
+      CdValidators.requiredIf({
+        enableMtls: true,
+        certificateType: CertificateType.external
+      });
+
     this.groupForm = new CdFormGroup({
-      groupName: new UntypedFormControl(
-        null,
-        [
-          Validators.required,
-          (control) => {
-            const value = control.value;
-            return value && /[^a-zA-Z0-9_-]/.test(value) ? { invalidChars: true } : null;
-          }
-        ],
-        [CdValidators.unique(this.nvmeofService.exists, this.nvmeofService)]
-      ),
-      pool: new UntypedFormControl('rbd', {
-        validators: [Validators.required]
-      }),
+      groupName: new UntypedFormControl(null, groupNameValidators, groupNameAsyncValidators),
       unmanaged: new UntypedFormControl(false),
+      enable_auth: new UntypedFormControl(false),
       enableEncryption: new UntypedFormControl(false),
-      encryptionConfig: new UntypedFormControl(null)
+      encryptionConfig: new UntypedFormControl(null),
+      encryptionKey: new UntypedFormControl(null),
+      enableMtls: new UntypedFormControl(false),
+      certificateType: new UntypedFormControl(CertificateType.internal),
+      pool: new UntypedFormControl('rbd'),
+      custom_sans: new UntypedFormControl([]),
+      rootCACert: new UntypedFormControl(null, requiredIfExternalMtls()),
+      clientCert: new UntypedFormControl(null, requiredIfExternalMtls()),
+      clientKey: new UntypedFormControl(null, requiredIfExternalMtls()),
+      serverCert: new UntypedFormControl(null, requiredIfExternalMtls()),
+      serverKey: new UntypedFormControl(null, requiredIfExternalMtls())
     });
 
     this.groupForm.get('enableEncryption')?.valueChanges.subscribe((enabled) => {
-      const encryptionControl = this.groupForm.get('encryptionConfig');
-      if (enabled) {
-        encryptionControl?.setValidators([Validators.required]);
-      } else {
-        encryptionControl?.clearValidators();
+      const encryptionConfigControl = this.groupForm.get('encryptionConfig');
+      const encryptionKeyControl = this.groupForm.get('encryptionKey');
+
+      if (!enabled) {
+        // Encryption disabled — clear values and validators so the form stays valid
+        encryptionKeyControl?.setValue(null, { emitEvent: false });
+        encryptionConfigControl?.setValue(null, { emitEvent: false });
+        encryptionKeyControl?.setValidators(null);
+        encryptionConfigControl?.setValidators(null);
+        encryptionKeyControl?.updateValueAndValidity({ emitEvent: false });
+        encryptionConfigControl?.updateValueAndValidity({ emitEvent: false });
+        this.showEncryptionDisableWarning = this.editing;
+        return;
       }
-      encryptionControl?.updateValueAndValidity();
+
+      this.showEncryptionDisableWarning = false;
+
+      // Encryption enabled — the key is required (backend rejects empty encryption_key).
+      // Both fields mirror each other; only encryptionKey is surfaced in the template,
+      // so only that control needs the required validator on the user-visible form path.
+      encryptionKeyControl?.setValidators([Validators.required]);
+      encryptionKeyControl?.updateValueAndValidity({ emitEvent: false });
+      // Keep encryptionConfig in sync but do NOT add required to it;
+      // it is an internal mirror and never shown to the user.
+      if (!encryptionKeyControl?.value && encryptionConfigControl?.value) {
+        encryptionKeyControl.setValue(encryptionConfigControl.value, { emitEvent: false });
+      }
+      if (!encryptionConfigControl?.value && encryptionKeyControl?.value) {
+        encryptionConfigControl.setValue(encryptionKeyControl.value, { emitEvent: false });
+      }
     });
+
+    this.groupForm.get('enableMtls')?.valueChanges.subscribe((enabled) => {
+      this.showMtlsDisableWarning = !enabled && this.editing;
+    });
+  }
+
+  private updateExternalCertValidity(): void {
+    ['rootCACert', 'clientCert', 'clientKey', 'serverCert', 'serverKey'].forEach((name) => {
+      this.groupForm.get(name)?.updateValueAndValidity({ emitEvent: false });
+    });
+  }
+
+  loadGatewayGroupData(groupName: string) {
+    // Resolve by spec.group — service_name may be nvmeof.<group> or nvmeof.<pool>.<group>
+    this.nvmeofService
+      .listGatewayGroups()
+      .pipe(
+        switchMap((gatewayGroups: CephServiceSpec[][]) => {
+          const groups = gatewayGroups?.[0] ?? [];
+          const group = groups.find((g: CephServiceSpec) => g.spec?.group === groupName);
+          if (!group) {
+            return of(null);
+          }
+
+          const serviceName = group.service_name;
+          if (!serviceName) {
+            return of(group);
+          }
+
+          return this.cephServiceService
+            .list(new HttpParams({ fromObject: { limit: -1, offset: 0 } }), serviceName)
+            .observable.pipe(
+              catchError(() => of(group)),
+              switchMap((response: CephServiceSpec[] | CephServiceSpec) => {
+                if (Array.isArray(response) && response[0]) {
+                  const svcSpec: Partial<CephServiceAdditionalSpec> = response[0].spec || {};
+                  return of({
+                    ...group,
+                    ...response[0],
+
+                    placement: group.placement || response[0].placement,
+                    spec: {
+                      ...svcSpec,
+
+                      ssl: group.spec?.ssl,
+                      enable_auth: group.spec?.enable_auth,
+                      encryption_key: group.spec?.encryption_key,
+                      certificate_source:
+                        group.spec?.certificate_source ?? svcSpec.certificate_source,
+                      custom_sans: group.spec?.custom_sans ?? svcSpec.custom_sans,
+                      pool: group.spec?.pool ?? svcSpec.pool
+                    }
+                  } as CephServiceSpec);
+                }
+                return of(group);
+              })
+            );
+        })
+      )
+      .subscribe((group: CephServiceSpec | null) => {
+        if (!group) {
+          return;
+        }
+        this.populateFormFromService(group, groupName);
+      });
+  }
+
+  private populateFormFromService(group: CephServiceSpec, groupName: string) {
+    this.existingServiceData = group;
+    const spec: Partial<CephServiceAdditionalSpec> = group.spec || {};
+    const encryptionKey = spec.encryption_key || '';
+    const enableMtls = spec.enable_auth === true;
+
+    this.preSelectedHostnames = group.placement?.hosts || [];
+
+    if (group.certificate) {
+      this.currentCertificate = group.certificate;
+    }
+    if (spec.certificate_source) {
+      this.currentSpecCertificateSource = spec.certificate_source;
+    }
+
+    this.groupForm.patchValue(
+      {
+        groupName: groupName,
+        unmanaged: group.unmanaged || false,
+        encryptionKey: encryptionKey,
+        encryptionConfig: encryptionKey,
+        enableMtls: enableMtls,
+        certificateType:
+          enableMtls && spec.certificate_source !== 'cephadm-signed'
+            ? CertificateType.external
+            : CertificateType.internal,
+        pool: spec.pool || 'rbd',
+        custom_sans: spec.custom_sans || []
+      },
+      { emitEvent: false }
+    );
+
+    // Cert PEM fields are required when mTLS + external is selected; prepopulate when present.
+    if (enableMtls) {
+      this.groupForm.patchValue(
+        {
+          rootCACert: spec.root_ca_cert || null,
+          clientCert: spec.client_cert || null,
+          clientKey: spec.client_key || null,
+          serverCert: spec.server_cert || null,
+          serverKey: spec.server_key || null
+        },
+        { emitEvent: false }
+      );
+    }
+
+    this.updateExternalCertValidity();
+    this.groupForm.get('enableEncryption')?.setValue(!!encryptionKey, { emitEvent: true });
   }
 
   onHostsLoaded(count: number): void {
@@ -92,7 +278,8 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
   }
 
   get isCreateDisabled(): boolean {
-    if (!this.hasAvailableNodes) {
+    // Create requires free nodes; edit can proceed with the group's current hosts.
+    if (!this.editing && !this.hasAvailableNodes) {
       return true;
     }
     if (!this.groupForm) {
@@ -108,35 +295,20 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
     if (errors && errors.cdSubmitButton) {
       return true;
     }
-    if (this.gatewayNodeComponent) {
-      const selected = this.gatewayNodeComponent.getSelectedHostnames?.() || [];
-      if (selected.length === 0) {
-        return true;
-      }
+    if (this.getSelectedOrPreselectedHosts().length === 0) {
+      return true;
     }
 
     return false;
   }
 
-  loadPools() {
-    this.poolsLoading = true;
-    this.poolService.list().then(
-      (pools: Pool[]) => {
-        this.pools = (pools || []).filter(
-          (pool: Pool) => pool.application_metadata && pool.application_metadata.includes('rbd')
-        );
-        this.poolsLoading = false;
-        if (this.pools.length >= 1) {
-          const allPoolNames = this.pools.map((pool) => pool.pool_name);
-          const poolName = allPoolNames.includes('rbd') ? 'rbd' : this.pools[0].pool_name;
-          this.groupForm.patchValue({ pool: poolName });
-        }
-      },
-      () => {
-        this.pools = [];
-        this.poolsLoading = false;
-      }
-    );
+  private getSelectedOrPreselectedHosts(): string[] {
+    const selected = this.gatewayNodeComponent?.getSelectedHostnames?.() || [];
+    if (selected.length > 0) {
+      return selected;
+    }
+    // Edit: fall back to loaded placement while table selection syncs
+    return this.editing ? this.preSelectedHostnames : [];
   }
 
   onSubmit() {
@@ -149,48 +321,184 @@ export class NvmeofGroupFormComponent extends CdForm implements OnInit {
       return;
     }
 
-    const formValues = this.groupForm.value;
-    const selectedHostnames = this.gatewayNodeComponent?.getSelectedHostnames() || [];
+    const formValues = this.groupForm.getRawValue();
+    const selectedHostnames = this.getSelectedOrPreselectedHosts();
     if (selectedHostnames.length === 0) {
       this.groupForm.setErrors({ cdSubmitButton: true });
       return;
     }
-    let taskUrl = `service/${URLVerbs.CREATE}`;
-    const serviceName = `${formValues.pool}.${formValues.groupName}`;
+
+    const groupName = this.editing ? this.gatewayGroupName : formValues.groupName;
+    const serviceId = this.resolveServiceId(groupName, formValues);
+    const serviceName =
+      this.editing && this.existingServiceData?.service_name
+        ? this.existingServiceData.service_name
+        : `nvmeof.${serviceId}`;
+    const taskUrl = this.editing ? `service/${URLVerbs.EDIT}` : `service/${URLVerbs.CREATE}`;
 
     const serviceSpec: Record<string, any> = {
       service_type: 'nvmeof',
-      service_id: serviceName,
-      pool: formValues.pool,
-      group: formValues.groupName,
+      service_id: serviceId,
+      group: groupName,
       placement: {
         hosts: selectedHostnames
       },
       unmanaged: formValues.unmanaged
     };
 
-    if (formValues.enableEncryption && formValues.encryptionConfig) {
-      serviceSpec['encryption_key'] = formValues.encryptionConfig;
+    // Preserve the existing pool on edit. Omitting it lets the orchestrator
+    // default to .nvmeof and silently move a non-default pool (e.g. rbd).
+    if (this.editing) {
+      const pool = this.existingServiceData?.spec?.pool;
+      if (pool) {
+        serviceSpec['pool'] = pool;
+      }
     }
 
-    this.taskWrapperService
-      .wrapTaskAroundCall({
-        task: new FinishedTask(taskUrl, {
-          service_name: `nvmeof.${serviceName}`
-        }),
-        call: this.cephServiceService.create(serviceSpec)
-      })
-      .subscribe({
-        complete: () => {
-          this.goToListView();
-        },
-        error: () => {
-          this.groupForm.setErrors({ cdSubmitButton: true });
+    if (formValues.enableEncryption || formValues.enable_auth) {
+      const encryptionKey = formValues.encryptionKey || formValues.encryptionConfig;
+      if (encryptionKey) {
+        serviceSpec['encryption_key'] = encryptionKey;
+      }
+    } else if (this.editing) {
+      // Explicitly clear the encryption key when the user disables encryption on an edit.
+      // Omitting the field from the update payload leaves the existing key in place
+      // because the orchestrator performs a merge, not a replace.
+      serviceSpec['encryption_key'] = null;
+    }
+
+    if (formValues.enableMtls) {
+      serviceSpec['ssl'] = true;
+      serviceSpec['enable_auth'] = true;
+      serviceSpec['certificate_source'] =
+        formValues.certificateType === CertificateType.internal ? 'cephadm-signed' : 'inline';
+
+      if (formValues.pool) {
+        serviceSpec['pool'] = formValues.pool;
+      }
+
+      if (
+        formValues.certificateType === CertificateType.internal &&
+        formValues.custom_sans?.length > 0
+      ) {
+        serviceSpec['custom_sans'] = formValues.custom_sans;
+      }
+
+      if (formValues.certificateType === CertificateType.external) {
+        if (formValues.rootCACert) {
+          serviceSpec['root_ca_cert'] = formValues.rootCACert;
         }
-      });
+        if (formValues.clientCert) {
+          serviceSpec['client_cert'] = formValues.clientCert;
+        }
+        if (formValues.clientKey) {
+          serviceSpec['client_key'] = formValues.clientKey;
+        }
+        if (formValues.serverCert) {
+          serviceSpec['server_cert'] = formValues.serverCert;
+        }
+        if (formValues.serverKey) {
+          serviceSpec['server_key'] = formValues.serverKey;
+        }
+      }
+    }
+
+    if (this.editing) {
+      // Bypass the task poller on edit: daemon restart can race and surface a spurious error toast.
+      this.cephServiceService
+        .update(serviceSpec)
+        .pipe(
+          tap(() => {
+            this.notificationService.show(
+              NotificationType.success,
+              $localize`Gateway group '${serviceName}' updated successfully.`
+            );
+          })
+        )
+        .subscribe({
+          next: () => {
+            this.goToListView();
+          },
+          error: () => {
+            this.groupForm.setErrors({ cdSubmitButton: true });
+          }
+        });
+    } else {
+      this.taskWrapperService
+        .wrapTaskAroundCall({
+          task: new FinishedTask(taskUrl, {
+            service_name: serviceName
+          }),
+          call: this.cephServiceService.create(serviceSpec)
+        })
+        .subscribe({
+          complete: () => {
+            this.goToListView();
+          },
+          error: () => {
+            this.groupForm.setErrors({ cdSubmitButton: true });
+          }
+        });
+    }
+  }
+
+  /**
+   * CephServiceService prefixes service_type to service_id.
+   * Never pass `nvmeof.<name>` as service_id or the API name becomes `nvmeof.nvmeof.<name>`.
+   */
+  private resolveServiceId(groupName: string, formValues: any): string {
+    if (this.editing && this.existingServiceData?.service_id) {
+      const existing = this.existingServiceData.service_id as string;
+      return existing.startsWith('nvmeof.') ? existing.slice('nvmeof.'.length) : existing;
+    }
+
+    if (formValues.enableMtls && formValues.pool) {
+      return `${formValues.pool}.${groupName}`;
+    }
+
+    return groupName;
   }
 
   private goToListView() {
     this.router.navigateByUrl('/block/nvmeof/gateways');
+  }
+
+  onFileUpload(event: Event, controlName: string): void {
+    const target = event.target as HTMLInputElement;
+    const file = target?.files?.[0];
+    const control = this.groupForm.get(controlName);
+    if (!file || !control) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => control.setValue(reader.result);
+    reader.readAsText(file, 'utf8');
+  }
+
+  onCertificateTypeChange(type: CertificateType): void {
+    this.groupForm.get('certificateType')?.setValue(type);
+
+    if (this.editing && this.currentCertificate?.has_certificate) {
+      const originalSource =
+        this.currentSpecCertificateSource === 'cephadm-signed'
+          ? CertificateType.internal
+          : CertificateType.external;
+      this.showCertSourceChangeWarning = type !== originalSource;
+    }
+
+    if (type === CertificateType.internal) {
+      this.groupForm.patchValue({
+        rootCACert: null,
+        clientCert: null,
+        clientKey: null,
+        serverCert: null,
+        serverKey: null
+      });
+    } else {
+      this.groupForm.patchValue({
+        custom_sans: []
+      });
+    }
   }
 }

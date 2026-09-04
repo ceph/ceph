@@ -1,11 +1,18 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { NvmeofGatewayGroupComponent } from './nvmeof-gateway-group.component';
-import { GridModule, TabsModule } from 'carbon-components-angular';
+import { GridModule, TabsModule, ModalModule } from 'carbon-components-angular';
 import { NvmeofService } from '~/app/shared/api/nvmeof.service';
-import { of } from 'rxjs';
+import { Observable, of, Subject } from 'rxjs';
 import { HttpClientModule } from '@angular/common/http';
 import { SharedModule } from '~/app/shared/shared.module';
 import { provideAnimations } from '@angular/platform-browser/animations';
+import { Router } from '@angular/router';
+import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
+import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
+import { DeleteGuardModalComponent } from '~/app/shared/components/delete-guard-modal/delete-guard-modal.component';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { NvmeofStateService } from '../nvmeof-state.service';
 
 describe('NvmeofGatewayGroupComponent', () => {
   let component: NvmeofGatewayGroupComponent;
@@ -17,11 +24,28 @@ describe('NvmeofGatewayGroupComponent', () => {
       listGatewayGroups: jest.fn().mockReturnValue(of([])),
       listSubsystems: jest.fn().mockReturnValue(of([]))
     };
+    const nvmeofStateServiceMock = {
+      refresh$: new Subject<void>(),
+      requestRefresh: jest.fn()
+    };
 
     await TestBed.configureTestingModule({
-      imports: [HttpClientModule, SharedModule, TabsModule, GridModule],
+      imports: [HttpClientModule, SharedModule, TabsModule, GridModule, ModalModule],
       declarations: [NvmeofGatewayGroupComponent],
-      providers: [provideAnimations(), { provide: NvmeofService, useValue: nvmeofServiceSpy }]
+      providers: [
+        provideAnimations(),
+        { provide: NvmeofService, useValue: nvmeofServiceSpy },
+        {
+          provide: Router,
+          useValue: { navigate: jest.fn() }
+        },
+        {
+          provide: ModalCdsService,
+          useValue: { show: jest.fn() }
+        },
+        { provide: NvmeofStateService, useValue: nvmeofStateServiceMock }
+      ],
+      schemas: [NO_ERRORS_SCHEMA]
     }).compileComponents();
 
     fixture = TestBed.createComponent(NvmeofGatewayGroupComponent);
@@ -242,5 +266,138 @@ describe('NvmeofGatewayGroupComponent', () => {
       expect(data).toEqual(mockData);
       done();
     });
+  });
+
+  describe('Edit action', () => {
+    it('should navigate to the edit page for the selected group', () => {
+      const router = TestBed.inject(Router);
+      component.selection.first = jest.fn().mockReturnValue({ name: 'Test1' });
+      const editAction = component.tableActions.find((a) => a.name === 'Edit');
+      expect(editAction).toBeTruthy();
+      expect(editAction!.routerLink).toBeUndefined();
+      expect(editAction!.click).toBeDefined();
+
+      (editAction!.click as Function)();
+
+      expect(router.navigate).toHaveBeenCalledWith(['/block/nvmeof/gateways/edit/Test1']);
+    });
+  });
+
+  describe('View details action', () => {
+    it('should navigate to the resource page for the selected group', () => {
+      const router = TestBed.inject(Router);
+      component.selection.first = jest.fn().mockReturnValue({ name: 'default' });
+      const viewAction = component.tableActions.find((a) => a.name === 'View details');
+      expect(viewAction).toBeTruthy();
+      expect(viewAction!.routerLink).toBeUndefined();
+      expect(viewAction!.click).toBeDefined();
+
+      (viewAction!.click as Function)();
+
+      expect(router.navigate).toHaveBeenCalledWith(['/block/nvmeof/gateways/view', 'default']);
+    });
+
+    it('should not navigate when no group is selected', () => {
+      const router = TestBed.inject(Router);
+      (router.navigate as jest.Mock).mockClear();
+      component.selection.first = jest.fn().mockReturnValue(undefined);
+      component.getViewDetails();
+      expect(router.navigate).not.toHaveBeenCalled();
+    });
+
+    it('should set canBePrimary true for single selection only', () => {
+      const viewAction = component.tableActions.find((a) => a.name === 'View details');
+      const single = { hasSingleSelection: true } as any;
+      const multi = { hasSingleSelection: false } as any;
+      expect((viewAction!.canBePrimary as Function)(single)).toBe(true);
+      expect((viewAction!.canBePrimary as Function)(multi)).toBe(false);
+    });
+  });
+
+  describe('Delete Flow with/without Subsystems', () => {
+    let mockGroup: any;
+
+    beforeEach(() => {
+      mockGroup = {
+        service_name: 'nvmeof.rbd.default',
+        spec: { group: 'default' },
+        subSystemCount: 0
+      };
+      component.selection.first = jest.fn().mockReturnValue(mockGroup);
+    });
+
+    it('should show can-not-delete modal if subsystems exist', () => {
+      const mockSubsystems = [{ nqn: 'subsystem-1' }, { nqn: 'subsystem-2' }];
+      nvmeofService.listSubsystems.mockReturnValue(of(mockSubsystems));
+      const modalService = TestBed.inject(ModalCdsService);
+
+      component.deleteGatewayGroupModal();
+
+      expect(nvmeofService.listSubsystems).toHaveBeenCalledWith('default');
+      expect(modalService.show).toHaveBeenCalledWith(DeleteGuardModalComponent, {
+        resourceName: 'default',
+        resourceType: 'gateway group',
+        connectedItems: [
+          {
+            name: 'subsystem-1',
+            route: ['/block/nvmeof/subsystems', 'subsystem-1', 'overview'],
+            queryParams: { group: 'default' }
+          },
+          {
+            name: 'subsystem-2',
+            route: ['/block/nvmeof/subsystems', 'subsystem-2', 'overview'],
+            queryParams: { group: 'default' }
+          }
+        ]
+      });
+    });
+
+    it('should show delete confirmation modal if no subsystems exist', () => {
+      nvmeofService.listSubsystems.mockReturnValue(of([]));
+      const modalService = TestBed.inject(ModalCdsService);
+
+      component.deleteGatewayGroupModal();
+
+      expect(nvmeofService.listSubsystems).toHaveBeenCalledWith('default');
+      expect(modalService.show).toHaveBeenCalledWith(
+        DeleteConfirmationModalComponent,
+        expect.any(Object)
+      );
+    });
+  });
+
+  it('should refresh table and setup state after gateway group delete completes', () => {
+    const modalService = TestBed.inject(ModalCdsService);
+    const taskWrapperService = TestBed.inject(TaskWrapperService);
+    const nvmeofStateService = TestBed.inject(NvmeofStateService);
+
+    jest.spyOn(modalService, 'show').mockImplementation(() => undefined);
+    jest.spyOn(taskWrapperService, 'wrapTaskAroundCall').mockReturnValue(
+      new Observable((observer) => {
+        observer.complete();
+      })
+    );
+
+    const refreshBtnSpy = jest.fn();
+    component.table = { refreshBtn: refreshBtnSpy } as any;
+    const requestRefreshSpy = jest.spyOn(nvmeofStateService, 'requestRefresh');
+
+    component.selection = {
+      first: () => ({
+        service_name: 'nvmeof.rbd.default',
+        spec: { group: 'default' },
+        subSystemCount: 0
+      }),
+      hasSelection: true
+    } as any;
+
+    component.deleteGatewayGroupModal();
+
+    const submitActionObservable = (modalService.show as jest.Mock).mock.calls[0][1]
+      .submitActionObservable;
+    submitActionObservable().subscribe();
+
+    expect(refreshBtnSpy).toHaveBeenCalled();
+    expect(requestRefreshSpy).toHaveBeenCalled();
   });
 });
