@@ -15664,6 +15664,116 @@ def test_object_checksum_sha256():
     assert error_code == 'BadDigest'
 
 @pytest.mark.checksum
+def test_object_checksum_sha512():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    sha512sum = 'bO7Eq5ubilg55mUGSAieJjtmRdS+PhkSv4Z8Dj4XT5dqOfVEbEvR1X2DfWMZsSMQP+L+4vWQOAqD/k0O2YCZ7w=='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='SHA512', ChecksumSHA512=sha512sum)
+    assert sha512sum == response['ChecksumSHA512']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumSHA512' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert sha512sum == response['ChecksumSHA512']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='SHA512', ChecksumSHA512='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_xxhash3():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    xxhash3sum = 'TTWtCOnXfA0='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH3', ChecksumXXHASH3=xxhash3sum)
+    assert xxhash3sum == response['ChecksumXXHASH3']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumXXHASH3' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert xxhash3sum == response['ChecksumXXHASH3']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH3', ChecksumXXHASH3='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_xxhash64():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    xxhash64sum = 'Np5GGlTsOCc='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH64', ChecksumXXHASH64=xxhash64sum)
+    assert xxhash64sum == response['ChecksumXXHASH64']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumXXHASH64' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert xxhash64sum == response['ChecksumXXHASH64']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH64', ChecksumXXHASH64='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_xxhash128():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    xxhash128sum = 'kZHSD0DXTkZNNa0I6dd8DQ=='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH128', ChecksumXXHASH128=xxhash128sum)
+    assert xxhash128sum == response['ChecksumXXHASH128']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumXXHASH128' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert xxhash128sum == response['ChecksumXXHASH128']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='XXHASH128', ChecksumXXHASH128='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
+def test_object_checksum_md5():
+    bucket = get_new_bucket()
+    client = get_client()
+
+    key = "myobj"
+    size = 1024
+    body = FakeWriteFile(size, 'A')
+    md5sum = '1HsSe8LeLWh93ILaw1TEFQ=='
+    response = client.put_object(Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='MD5', ChecksumMD5=md5sum)
+    assert md5sum == response['ChecksumMD5']
+
+    response = client.head_object(Bucket=bucket, Key=key)
+    assert 'ChecksumMD5' not in response
+    response = client.head_object(Bucket=bucket, Key=key, ChecksumMode='ENABLED')
+    assert md5sum == response['ChecksumMD5']
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket, Key=key, Body=body, ChecksumAlgorithm='MD5', ChecksumMD5='bad')
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'BadDigest'
+
+@pytest.mark.checksum
 def test_object_checksum_crc64nvme():
     bucket = get_new_bucket()
     client = get_client()
