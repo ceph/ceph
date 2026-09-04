@@ -48,4 +48,5 @@
    man/8/ceph-immutable-object-cache
    man/8/ceph-diff-sorted
    man/8/rgw-policy-check
+   man/8/rgw-policy-test
    man/8/rgw-restore-bucket-index
