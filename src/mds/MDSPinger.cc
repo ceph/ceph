@@ -4,6 +4,7 @@
 #include "mds/MDSPinger.h"
 #include "mds/MDSRank.h"
 #include "messages/MMDSPing.h"
+#include "msg/msg_types.h" // for entity_addrvec_t
 #include "common/debug.h"
 
 #define dout_context g_ceph_context

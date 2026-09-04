@@ -17,18 +17,20 @@
 #define SCRUBSTACK_H_
 
 #include "CInode.h"
+#include "MDSCacheObject.h"
 #include "ScrubHeader.h"
 
 #include "common/LogClient.h"
-#include "common/Cond.h"
 #include "common/ceph_time.h"
 #include "include/elist.h"
+#include "include/cephfs/types.h" // for mds_rank_t
 
 class MDCache;
 class MMDSScrub;
 class MMDSScrubStats;
 class Finisher;
 class CDir;
+class CDentry;
 
 class ScrubStack {
 public:
