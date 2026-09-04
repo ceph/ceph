@@ -24,6 +24,7 @@
    ./build/bin/crimson-store-bench --store-path store_bench_dir --smp 4 --duration 10 --work-load-type pg_log --seastore_device_size 10G
  */
 
+#include <fstream>
 #include <random>
 #include <vector>
 #include <unordered_map>
@@ -68,6 +69,9 @@ struct results_t {
   uint64_t ios_completed = 0;
   std::chrono::duration<double> total_latency = 0s;
   std::chrono::duration<double> duration = 0s;
+  // one summary snapshot of the requested --track-metrics values, taken
+  // once at the end of this shard's run (not a per-bucket breakdown).
+  std::map<std::string, double> tracked_metrics;
 
   results_t &operator += (const results_t &other_result) {
     ios_completed += other_result.ios_completed;
@@ -83,6 +87,13 @@ struct results_t {
     f->dump_float(
       "total_duration_s",
       duration.count());
+    if (!tracked_metrics.empty()) {
+      f->open_object_section("track_metrics");
+      for (const auto &[name, val] : tracked_metrics) {
+        f->dump_float(name, val);
+      }
+      f->close_section();
+    }
   }
 };
 
@@ -92,8 +103,21 @@ private:
 public:
   unsigned num_concurrent_io = 16;
   bool dump_metrics = false;
+  std::string track_metrics = "";
   std::chrono::duration<uint64_t> get_duration() const {
     return std::chrono::seconds(duration);
+  }
+
+  std::set<std::string> get_requested_metrics() const {
+    std::set<std::string> result;
+    if (!track_metrics.empty()) {
+      std::stringstream ss(track_metrics);
+      std::string name;
+      while (std::getline(ss, name, ',')) {
+        result.insert(name);
+      }
+    }
+    return result;
   }
 
   po::options_description get_options() {
@@ -106,10 +130,88 @@ public:
        "for")
       ("dump-metrics", po::bool_switch(&dump_metrics),
        "Dump JSON formatted metrics to stdout")
+      ("track-metrics", po::value<std::string>(&track_metrics),
+       "comma-separated metric names to snapshot into each shard's "
+       "result as track_metrics, filtered from the full metrics registry")
       ;
     return ret;
   }
 };
+
+// Builds a key like "cache_trans_invalidated_by_extent{ext=LADDR_LEAF,src=MUTATE}"
+// so that each label-instance of a metric (e.g. one per extent type / src)
+// shows up as its own row instead of being summed away.
+std::string format_metric_key(
+  const std::string &full_name,
+  const seastar::metrics::impl::labels_type &labels) {
+  std::ostringstream oss;
+  oss << full_name;
+  if (!labels.empty()) {
+    oss << "{";
+    bool first = true;
+    for (const auto &[k, v] : labels) {
+      if (!first) {
+        oss << ",";
+      }
+      oss << k << "=" << v.value();
+      first = false;
+    }
+    oss << "}";
+  }
+  return oss.str();
+}
+
+/**
+ * Reads the current values of the requested metrics out of the seastar
+ * metrics registry. An empty `requested` set means "no metrics requested"
+ * (not "all metrics") -- callers should only invoke this when track-metrics
+ * was actually set. Each distinct label-instance of a requested metric name
+ * (e.g. ext=LADDR_LEAF vs ext=LADDR_INTERNAL) is reported as its own entry
+ * rather than summed together, so specific label values can be isolated.
+ * Called from within a shard's own workload run(), so this reads that
+ * shard's local metrics registry -- no cross-shard hop needed.
+ */
+std::map<std::string, double> snapshot_metric_values(
+  const std::set<std::string> &requested) {
+  LOG_PREFIX(snapshot_metric_values);
+  std::map<std::string, double> read_map_metrics;
+  for (const auto &[full_name, metric_family] :
+       seastar::scollectd::get_value_map()) {
+    if (requested.count(full_name) == 0) {
+      continue;
+    }
+    for (const auto &[labels, metric] : metric_family) {
+      if (!metric || !metric->is_enabled()) {
+        continue;
+      }
+      std::string key = format_metric_key(full_name, labels.labels());
+      switch (auto v = (*metric)(); v.type()) {
+      case seastar::metrics::impl::data_type::GAUGE:
+      case seastar::metrics::impl::data_type::REAL_COUNTER:
+        read_map_metrics[key] = v.d();
+        break;
+      case seastar::metrics::impl::data_type::COUNTER: {
+        double val;
+        try {
+          val = v.ui();
+        } catch (std::range_error&) {
+          // seastar's cpu steal time may be negative
+          val = 0;
+        }
+        read_map_metrics[key] = val;
+        break;
+      }
+      case seastar::metrics::impl::data_type::HISTOGRAM:
+        WARN("skipping histogram metric {}, no scalar value to track", full_name);
+        break;
+      default:
+        std::abort();
+        break;
+      }
+    }
+  }
+  return read_map_metrics;
+}
 
 class StoreBenchWorkload {
 public:
@@ -251,6 +353,15 @@ run_concurrent_ios(
   co_return total_result_all_io;
 };
 
+// wip-shreya-lba-conflict-investigation has, at this point, a full
+// bucketing/track-metrics subsystem (format_metric_key(),
+// snapshot_metric_values(), the RawElapsedTimeIoWriter class, and
+// write_bucket_csv()) that 0dc4c3509dd's per-IO ever_lba_conflicted work was
+// built on top of. This branch deliberately doesn't carry that subsystem --
+// it's a separate feature tracked on its own branch -- so instead of
+// reintroducing all of it here, RandomWriteWorkload::run() below writes its
+// own minimal (elapsed_s, latency_s, ever_lba_conflicted) CSV directly,
+// with no bucketing/track-metrics dependency.
 /**
  * This function adds and removes log entries to a log object
  * It returns throughput(number of operations/nano sec)
@@ -352,8 +463,12 @@ seastar::future<results_t> PGLogWorkload::run(
     co_return results_t{num_ops, tot_latency, common.get_duration()};
   };
   co_await pre_fill_logs();
-  co_return co_await run_concurrent_ios(
+  auto result = co_await run_concurrent_ios(
     common.get_duration(), common.num_concurrent_io, add_remove_entry);
+  if (!common.track_metrics.empty()) {
+    result.tracked_metrics = snapshot_metric_values(common.get_requested_metrics());
+  }
+  co_return result;
 }
 
 // rgw start
@@ -571,8 +686,12 @@ seastar::future<results_t> RGWIndexWorkload::run(
   };
 
   co_await pre_fill_buckets();
-  co_return co_await run_concurrent_ios(
+  auto result = co_await run_concurrent_ios(
     common.get_duration(), common.num_concurrent_io, rgw_actual_test);
+  if (!common.track_metrics.empty()) {
+    result.tracked_metrics = snapshot_metric_values(common.get_requested_metrics());
+  }
+  co_return result;
 };
 
 
@@ -588,6 +707,7 @@ class RandomWriteWorkload final : public StoreBenchWorkload {
   uint64_t size_per_obj = 4<<20;
   uint64_t colls_per_shard = 16;
   uint64_t io_concurrency_per_shard = 16;
+  std::string raw_conflict_csv;
   uint64_t get_obj_per_shard() const {
     return size_per_shard / size_per_obj;
   }
@@ -607,6 +727,9 @@ public:
        "Collections per shard")
       ("io-concurrency-per-shard", po::value<uint64_t>(&io_concurrency_per_shard),
        "IO Concurrency Per Shard")
+      ("raw-conflict-csv", po::value<std::string>(&raw_conflict_csv),
+       "if set, write a per-shard CSV of (elapsed_s,latency_s,"
+       "ever_lba_conflicted) for every IO in the write loop")
       ;
     return ret;
   }
@@ -635,6 +758,13 @@ seastar::future<results_t> RandomWriteWorkload::run(
 {
   LOG_PREFIX(random_write);
   auto &local_store = global_store.get_sharded_store();
+
+  std::ofstream raw_conflict_file;
+  if (!raw_conflict_csv.empty()) {
+    raw_conflict_file.open(
+      raw_conflict_csv + ".shard" + std::to_string(seastar::this_shard_id()));
+    raw_conflict_file << "elapsed_s,latency_s,ever_lba_conflicted\n";
+  }
 
   auto random_buffer = co_await generate_random_bp(16<<20);
   auto get_random_buffer = [&random_buffer](uint64_t size) {
@@ -690,22 +820,36 @@ seastar::future<results_t> RandomWriteWorkload::run(
   static constexpr unsigned io_concurrency_per_shard = 16;
   seastar::semaphore sem{io_concurrency_per_shard};
   results_t results;
+  // Only true once the actual write loop (not prefill) has started; matches
+  // when loop_start is set below.
+  bool record_raw = false;
+  auto loop_start = ceph::mono_clock::now();
   auto submit_transaction = [&](
     crimson::os::CollectionRef &col_ref,
     ceph::os::Transaction &&t) -> seastar::future<> {
     ++running;
     co_await sem.wait(1);
+    auto exec_info = new crimson::os::transaction_exec_info_t();
     std::ignore = local_store.do_transaction(
       col_ref,
-      std::move(t)
-    ).finally([&, start = ceph::mono_clock::now()] {
+      std::move(t),
+      exec_info
+    ).finally([&, op_start = ceph::mono_clock::now(), exec_info] {
       --running;
       if (running == 0 && complete) {
         complete->set_value();
       }
       sem.signal(1);
       results.ios_completed++;
-      results.total_latency += ceph::mono_clock::now() - start;
+      auto now = ceph::mono_clock::now();
+      results.total_latency += now - op_start;
+      if (record_raw && raw_conflict_file.is_open()) {
+        std::chrono::duration<double> elapsed = now - loop_start;
+        std::chrono::duration<double> latency = now - op_start;
+        raw_conflict_file << elapsed.count() << "," << latency.count() << ","
+                           << (exec_info->lba_conflicted ? 1 : 0) << "\n";
+      }
+      delete exec_info;
     });
   };
 
@@ -730,6 +874,8 @@ seastar::future<results_t> RandomWriteWorkload::run(
   INFO("finished populating");
 
   auto start = ceph::mono_clock::now();
+  loop_start = start;
+  record_raw = true;
   uint64_t writes_started = 0;
   while (ceph::mono_clock::now() - start < common.get_duration()) {
     auto obj_id = std::experimental::randint<uint64_t>(0, get_obj_per_shard() - 1);
@@ -765,6 +911,9 @@ seastar::future<results_t> RandomWriteWorkload::run(
   }
 
   results.duration = ceph::mono_clock::now() - start;
+  if (!common.track_metrics.empty()) {
+    results.tracked_metrics = snapshot_metric_values(common.get_requested_metrics());
+  }
   co_return results;
 }
 
@@ -944,16 +1093,21 @@ int main(int argc, char **argv) {
             f.open_object_section("result");
             results.dump(&f);
             f.dump_string("shard", std::to_string(i));
+            if (common_options.dump_metrics) {
+              // scollectd::get_value_map() only sees the calling shard's
+              // local metrics registry, so this has to run on shard i
+              // itself rather than on the shard driving this loop.
+              co_await seastar::smp::submit_to(i, [&f]() {
+                f.open_array_section("metrics_values");
+                crimson::metrics::dump_metric_value_map(
+                  seastar::scollectd::get_value_map(),
+                  &f,
+                  [](const auto &) { return true; });
+                f.close_section();
+              });
+            }
             f.close_section();
           }
-          f.close_section();
-        }
-        if (common_options.dump_metrics) {
-          f.open_array_section("metrics_values");
-          crimson::metrics::dump_metric_value_map(
-            seastar::scollectd::get_value_map(),
-            &f,
-            [](const auto &) { return true; });
           f.close_section();
         }
         f.close_section();
