@@ -124,6 +124,8 @@ class ClusterChangeGroup:
 class _FakePathResolver:
     """A stub PathResolver for unit testing."""
 
+    _result_resolve_case_sensitivity = (False, False)
+
     def resolve(
         self, volume: str, subvolumegroup: str, subvolume: str, path: str
     ) -> str:
@@ -144,6 +146,11 @@ class _FakePathResolver:
         return f'/{path}'
 
     resolve_exists = resolve
+
+    def resolve_case_sensitivity(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> Tuple[bool, bool]:
+        return self._result_resolve_case_sensitivity
 
 
 class ExoResolver:
