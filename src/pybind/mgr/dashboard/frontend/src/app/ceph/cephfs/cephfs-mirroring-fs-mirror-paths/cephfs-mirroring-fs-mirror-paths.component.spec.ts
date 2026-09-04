@@ -779,7 +779,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
           '/path1',
           'test-fs',
-          false
+          true
         );
         expect(component.schedulePoliciesLoading).toBe(false);
         expect(component.schedulePolicies.length).toBeGreaterThan(0);
@@ -816,40 +816,16 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         expect(component.schedulePolicies).toEqual([]);
       });
 
-      it('should filter policies by path', () => {
-        const policies = [
-          ...mockSchedulePolicies,
-          {
-            path: '/path2',
-            schedule: '1h',
-            start: '2024-01-01T00:00:00Z',
-            retention: {},
-            active: true,
-            fs: 'test-fs'
-          }
-        ];
-        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(policies));
+      it('should display the schedules returned for the path', () => {
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(mockSchedulePolicies));
         component.fsName = 'test-fs';
         component.selectedPath = { path: '/path1' } as any;
 
         component.loadSchedulePolicies('/path1');
 
         expect(component.schedulePolicies.length).toBe(2);
-        expect(component.schedulePolicies.every((p) => p.path === '/path1')).toBe(true);
-      });
-
-      it('should remove duplicate policies', () => {
-        const duplicatePolicies = [
-          ...mockSchedulePolicies,
-          mockSchedulePolicies[0] // duplicate
-        ];
-        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of(duplicatePolicies));
-        component.fsName = 'test-fs';
-        component.selectedPath = { path: '/path1' } as any;
-
-        component.loadSchedulePolicies('/path1');
-
-        expect(component.schedulePolicies.length).toBe(2);
+        expect(component.schedulePolicies[0].scheduleCopy).toBeDefined();
+        expect(component.schedulePolicies[0].removeId).toBe('/path1@1h');
       });
 
       it('should not update policies if selected path changed', () => {
@@ -864,47 +840,100 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
     });
 
     describe('removeSchedulePolicy', () => {
-      it('should remove a schedule policy', () => {
-        snapshotScheduleService.delete.mockReturnValue(of({}));
-        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of([]));
-        component.fsName = 'test-fs';
-        component.selectedPath = { path: '/mirror/path1' } as any;
-        component.schedulePolicies = [
-          {
-            path: '/volumes/group/subvol/uuid/..',
-            schedule: '1h',
-            removeId: '/volumes/group/subvol/uuid/..@1h'
-          } as any
-        ];
+      const confirmRemove = () => {
+        const modalService = TestBed.inject(ModalCdsService) as any;
+        const config = modalService.show.mock.calls[0][1];
+        return config.submitActionObservable();
+      };
 
+      it('should open medium-impact confirmation modal', () => {
+        const modalService = TestBed.inject(ModalCdsService);
+        component.fsName = 'test-fs';
         const policy = {
           path: '/volumes/group/subvol/uuid/..',
           schedule: '1h',
           start: '2024-01-01T00:00:00Z',
-          fs: 'test-fs',
-          subvol: 'subvol',
-          group: 'group',
-          removeId: '/volumes/group/subvol/uuid/..@1h'
+          scheduleCopy: 'Every hour',
+          fs: 'test-fs'
         };
 
         component.removeSchedulePolicy(policy as any);
 
+        expect(modalService.show).toHaveBeenCalledWith(
+          DeleteConfirmationModalComponent,
+          expect.objectContaining({
+            impact: DeletionImpact.medium,
+            itemDescription: 'schedule',
+            itemNames: ['Every hour'],
+            actionDescription: 'remove'
+          })
+        );
+        expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
+      });
+
+      it('should remove a schedule policy after confirmation', () => {
+        snapshotScheduleService.delete.mockReturnValue(of({}));
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of([]));
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/path1' } as any;
+        component.schedulePolicies = [
+          {
+            path: '/path1',
+            schedule: '1h',
+            start: '2024-01-01T00:00:00Z',
+            fs: 'test-fs',
+            removeId: '/path1@1h'
+          }
+        ] as any;
+
+        const policy = component.schedulePolicies[0];
+
+        component.removeSchedulePolicy(policy);
+        confirmRemove().subscribe();
+
         expect(snapshotScheduleService.delete).toHaveBeenCalledWith({
-          path: '/volumes/group/subvol/uuid/..',
+          path: '/path1',
           schedule: '1h',
           start: '2024-01-01T00:00:00Z',
           fs: 'test-fs',
           retentionPolicy: undefined,
-          subvol: 'subvol',
-          group: 'group'
+          subvol: undefined,
+          group: undefined
         });
-        expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
-          '/mirror/path1',
-          'test-fs',
-          false
-        );
-        expect(component.schedulePolicies).toEqual([]);
         expect(component.removingSchedule).toBe('');
+        expect(component.schedulePolicies).toEqual([]);
+        expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
+          '/path1',
+          'test-fs',
+          true
+        );
+      });
+
+      it('should reload policies for the selected mirrored path after delete', () => {
+        snapshotScheduleService.delete.mockReturnValue(of({}));
+        snapshotScheduleService.getSnapshotSchedule.mockReturnValue(of([]));
+        component.fsName = 'test-fs';
+        component.selectedPath = { path: '/volumes/grp1/s1' } as any;
+        const policy = {
+          path: '/volumes/grp1/s1/b674ec1e-uuid/..',
+          schedule: '1h',
+          start: '2024-01-01T00:00:00Z',
+          fs: 'test-fs',
+          subvol: 's1',
+          group: 'grp1',
+          removeId: '/volumes/grp1/s1/b674ec1e-uuid/..@1h'
+        };
+        component.schedulePolicies = [policy] as any;
+
+        component.removeSchedulePolicy(policy as any);
+        confirmRemove().subscribe();
+
+        expect(component.schedulePolicies).toEqual([]);
+        expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
+          '/volumes/grp1/s1',
+          'test-fs',
+          true
+        );
       });
 
       it('should handle error when removing schedule policy', () => {
@@ -919,11 +948,13 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         };
 
         component.removeSchedulePolicy(policy as any);
+        confirmRemove().subscribe({ error: () => undefined });
 
         expect(component.removingSchedule).toBe('');
       });
 
       it('should not remove policy when path is missing', () => {
+        const modalService = TestBed.inject(ModalCdsService);
         component.fsName = 'test-fs';
 
         const policy = {
@@ -934,10 +965,12 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
         component.removeSchedulePolicy(policy as any);
 
+        expect(modalService.show).not.toHaveBeenCalled();
         expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
       });
 
       it('should not remove policy when schedule is missing', () => {
+        const modalService = TestBed.inject(ModalCdsService);
         component.fsName = 'test-fs';
 
         const policy = {
@@ -948,10 +981,12 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
         component.removeSchedulePolicy(policy as any);
 
+        expect(modalService.show).not.toHaveBeenCalled();
         expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
       });
 
       it('should not remove policy when fsName is empty', () => {
+        const modalService = TestBed.inject(ModalCdsService);
         component.fsName = '';
 
         const policy = {
@@ -962,6 +997,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
 
         component.removeSchedulePolicy(policy as any);
 
+        expect(modalService.show).not.toHaveBeenCalled();
         expect(snapshotScheduleService.delete).not.toHaveBeenCalled();
       });
     });
@@ -1302,7 +1338,7 @@ describe('CephfsMirroringFsMirrorPathsComponent', () => {
         expect(snapshotScheduleService.getSnapshotSchedule).toHaveBeenCalledWith(
           '/path1',
           'test-fs',
-          false
+          true
         );
       }));
     });

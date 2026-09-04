@@ -1247,20 +1247,22 @@ class CephFSSnapshotSchedule(RESTController):
 
         snapshot_schedule_list = out.split('\n')
         output: List[Any] = []
+        seen_paths = set()
 
         for snap in snapshot_schedule_list:
             current_path = snap.strip().split(' ')[0]
+            if not current_path or current_path in seen_paths:
+                continue
+            seen_paths.add(current_path)
             error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
                                                      current_path, fs, None, None, 'json')
             output = output + json.loads(status_out)
-
-        output_json = json.dumps(output)
 
         if error_code != 0:
             raise DashboardException(
                 f'Failed to get list of snapshot schedules for path {path}: {err}'
             )
-        return json.loads(output_json)
+        return output
 
     def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None,
                subvol=None, group=None):

@@ -9,7 +9,7 @@ import {
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { BehaviorSubject, forkJoin, Observable, of, Subscription } from 'rxjs';
-import { catchError, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
+import { catchError, finalize, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -830,31 +830,15 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
 
     this.schedulePoliciesLoading = true;
     this.subscriptions.add(
-      this.snapshotScheduleService.getSnapshotSchedule(path, this.fsName, false).subscribe(
+      this.snapshotScheduleService.getSnapshotSchedule(path, this.fsName, true).subscribe(
         (policies) => {
           if (this.selectedPath?.path !== path) {
             this.schedulePoliciesLoading = false;
             return;
           }
-
-          const normalizedPath = this.normalizePath(path);
-          this.schedulePolicies = policies
-            .filter((policy) => {
-              return (
-                this.normalizePath(policy.path) === normalizedPath ||
-                this.normalizePath(policy.rel_path) === normalizedPath
-              );
-            })
-            .filter(
-              (policy, index, filteredPolicies) =>
-                filteredPolicies.findIndex(
-                  (candidate) =>
-                    candidate.path === policy.path &&
-                    candidate.schedule === policy.schedule &&
-                    String(candidate.start) === String(policy.start)
-                ) === index
-            )
-            .map((policy) => this.buildSchedulePolicyViewModel(policy as MirrorPathSchedule));
+          this.schedulePolicies = policies.map((policy) =>
+            this.buildSchedulePolicyViewModel(policy as MirrorPathSchedule)
+          );
           this.schedulePoliciesLoading = false;
         },
         () => {
@@ -872,11 +856,25 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       return;
     }
 
+    const scheduleName = policy.scheduleCopy || policy.schedule;
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.medium,
+      itemDescription: $localize`schedule`,
+      itemNames: [scheduleName],
+      actionDescription: 'remove',
+      submitActionObservable: () => this.deleteSchedulePolicy(policy)
+    });
+  }
+
+  private deleteSchedulePolicy(policy: MirrorPathSchedule) {
     const retentionPolicy = this.buildRetentionPolicyString(policy.retention);
 
     this.removingSchedule = `${policy.path}@${policy.schedule}`;
-    this.subscriptions.add(
-      this.snapshotScheduleService
+    return this.taskWrapper.wrapTaskAroundCall({
+      task: new FinishedTask('cephfs/snapshot/schedule/delete', {
+        path: policy.path
+      }),
+      call: this.snapshotScheduleService
         .delete({
           path: policy.path,
           schedule: policy.schedule,
@@ -886,21 +884,18 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
           subvol: policy.subvol,
           group: policy.group
         })
-        .subscribe(
-          () => {
-            this.removingSchedule = '';
+        .pipe(
+          tap(() => {
             this.schedulePolicies = this.schedulePolicies.filter(
-              (entry) => entry.removeId !== policy.removeId
+              (item) => item.removeId !== policy.removeId
             );
-            if (this.selectedPath?.path) {
-              this.loadSchedulePolicies(this.selectedPath.path);
-            }
-          },
-          () => {
+            this.loadSchedulePolicies(this.selectedPath?.path || policy.path);
+          }),
+          finalize(() => {
             this.removingSchedule = '';
-          }
+          })
         )
-    );
+    });
   }
 
   getScheduleStatusIcon(active: boolean): keyof typeof ICON_TYPE {
