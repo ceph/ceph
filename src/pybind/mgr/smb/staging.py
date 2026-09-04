@@ -376,90 +376,60 @@ def _check_share_resource(
 
     # Handle RGW shares
     if share.rgw is not None:
-        # Check if cluster uses external Ceph cluster
-        cluster = staging.get_cluster(share.cluster_id)
-        is_external_cluster = (
-            cluster.external_ceph_cluster is not None
-            and cluster.external_ceph_cluster.ref
-        )
+        _check_share_rgw(share, staging)
+        return
+    # Handle CephFS shares
+    if share.cephfs is not None:
+        _check_share_cephfs(share, staging, path_resolver, earmark_resolver)
+        return
+    raise ValueError(f"invalid share: missing rgw and cephfs config: {share}")
 
-        # If credential_ref is not provided, auto-create credential
-        if not share.rgw.credential_ref:
-            # For external clusters, require explicit credential_ref
-            if is_external_cluster:
-                raise ErrorResult(
-                    share,
-                    msg=(
-                        "RGW shares with external clusters require explicit 'credential_ref'. "
-                        "Create an RGWCredential resource and reference it in the share."
-                    ),
-                )
 
-            # Fetch credentials from RGW (LOCAL cluster only)
-            try:
-                (
-                    fetched_user_id,
-                    access_key,
-                    secret_key,
-                ) = rgw.fetch_rgw_credentials(
-                    staging._tool_execer,
-                    share.rgw.bucket,
-                    share.rgw.user_id or '',
-                )
-            except ValueError as e:
-                raise ErrorResult(
-                    share,
-                    msg=f"Failed to fetch RGW credentials: {str(e)}",
-                )
+def _check_share_rgw(share: resources.Share, staging: Staging) -> None:
+    # Check if cluster uses external Ceph cluster
+    cluster = staging.get_cluster(share.cluster_id)
+    is_external_cluster = (
+        cluster.external_ceph_cluster is not None
+        and cluster.external_ceph_cluster.ref
+    )
 
-            # Create credential resource automatically
-            # Use user_id as credential_id (linked to cluster via linked_to_cluster field)
-            credential_id = fetched_user_id
-
-            # Check if credential already exists
-            try:
-                cred = staging.get_rgw_credential(credential_id)
-                # Credential exists, validate it's linked to correct cluster
-                if (
-                    cred.linked_to_cluster
-                    and cred.linked_to_cluster != share.cluster_id
-                ):
-                    raise ErrorResult(
-                        share,
-                        msg='RGW credential is linked to a different cluster',
-                        status={
-                            'credential_ref': credential_id,
-                            'other_cluster_id': cred.linked_to_cluster,
-                        },
-                    )
-            except KeyError:
-                # Credential doesn't exist, create it
-                cred = resources.RGWCredential(
-                    rgw_credential_id=credential_id,
-                    user_id=fetched_user_id,
-                    access_key_id=access_key,
-                    secret_access_key=secret_key,
-                    linked_to_cluster=share.cluster_id,
-                )
-                # Stage the credential
-                staging.stage(cred)
-
-            # Update share to use credential_ref
-            share.rgw = resources.RGWStorage(
-                bucket=share.rgw.bucket,
-                credential_ref=credential_id,
+    # If credential_ref is not provided, auto-create credential
+    if not share.rgw.credential_ref:
+        # For external clusters, require explicit credential_ref
+        if is_external_cluster:
+            raise ErrorResult(
+                share,
+                msg=(
+                    "RGW shares with external clusters require explicit 'credential_ref'. "
+                    "Create an RGWCredential resource and reference it in the share."
+                ),
             )
-        else:
-            # Validate existing credential_ref
-            try:
-                cred = staging.get_rgw_credential(share.rgw.credential_ref)
-            except KeyError:
-                raise ErrorResult(
-                    share,
-                    msg=f"RGW credential '{share.rgw.credential_ref}' not found",
-                    status={"credential_ref": share.rgw.credential_ref},
-                )
 
+        # Fetch credentials from RGW (LOCAL cluster only)
+        try:
+            (
+                fetched_user_id,
+                access_key,
+                secret_key,
+            ) = rgw.fetch_rgw_credentials(
+                staging._tool_execer,
+                share.rgw.bucket,
+                share.rgw.user_id or '',
+            )
+        except ValueError as e:
+            raise ErrorResult(
+                share,
+                msg=f"Failed to fetch RGW credentials: {str(e)}",
+            )
+
+        # Create credential resource automatically
+        # Use user_id as credential_id (linked to cluster via linked_to_cluster field)
+        credential_id = fetched_user_id
+
+        # Check if credential already exists
+        try:
+            cred = staging.get_rgw_credential(credential_id)
+            # Credential exists, validate it's linked to correct cluster
             if (
                 cred.linked_to_cluster
                 and cred.linked_to_cluster != share.cluster_id
@@ -468,32 +438,77 @@ def _check_share_resource(
                     share,
                     msg='RGW credential is linked to a different cluster',
                     status={
-                        'credential_ref': share.rgw.credential_ref,
+                        'credential_ref': credential_id,
                         'other_cluster_id': cred.linked_to_cluster,
                     },
                 )
-        # Validate bucket exists (skip for external clusters)
-        if not is_external_cluster:
-            if not rgw.validate_rgw_bucket(
-                staging._tool_execer, share.rgw.bucket
-            ):
-                raise ErrorResult(
-                    share,
-                    msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
-                )
-        # For external clusters, skip bucket validation
-        # User must ensure bucket exists on external cluster
+        except KeyError:
+            # Credential doesn't exist, create it
+            cred = resources.RGWCredential(
+                rgw_credential_id=credential_id,
+                user_id=fetched_user_id,
+                access_key_id=access_key,
+                secret_access_key=secret_key,
+                linked_to_cluster=share.cluster_id,
+            )
+            # Stage the credential
+            staging.stage(cred)
 
-        name_used_by = _share_name_in_use(staging, share)
-        if name_used_by:
+        # Update share to use credential_ref
+        share.rgw = resources.RGWStorage(
+            bucket=share.rgw.bucket,
+            credential_ref=credential_id,
+        )
+    else:
+        # Validate existing credential_ref
+        try:
+            cred = staging.get_rgw_credential(share.rgw.credential_ref)
+        except KeyError:
             raise ErrorResult(
                 share,
-                msg="share name already in use",
-                status={"conflicting_share_id": name_used_by},
+                msg=f"RGW credential '{share.rgw.credential_ref}' not found",
+                status={"credential_ref": share.rgw.credential_ref},
             )
-        return
 
-    # Handle CephFS shares
+        if (
+            cred.linked_to_cluster
+            and cred.linked_to_cluster != share.cluster_id
+        ):
+            raise ErrorResult(
+                share,
+                msg='RGW credential is linked to a different cluster',
+                status={
+                    'credential_ref': share.rgw.credential_ref,
+                    'other_cluster_id': cred.linked_to_cluster,
+                },
+            )
+    # Validate bucket exists (skip for external clusters)
+    if not is_external_cluster:
+        if not rgw.validate_rgw_bucket(
+            staging._tool_execer, share.rgw.bucket
+        ):
+            raise ErrorResult(
+                share,
+                msg=f"RGW bucket '{share.rgw.bucket}' does not exist or is not accessible",
+            )
+    # For external clusters, skip bucket validation
+    # User must ensure bucket exists on external cluster
+
+    name_used_by = _share_name_in_use(staging, share)
+    if name_used_by:
+        raise ErrorResult(
+            share,
+            msg="share name already in use",
+            status={"conflicting_share_id": name_used_by},
+        )
+
+
+def _check_share_cephfs(
+    share: resources.Share,
+    staging: Staging,
+    path_resolver: PathResolver,
+    earmark_resolver: EarmarkResolver,
+) -> None:
     assert share.cephfs is not None
     try:
         volpath = path_resolver.resolve_exists(
