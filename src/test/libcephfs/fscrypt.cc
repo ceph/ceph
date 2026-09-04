@@ -27,7 +27,11 @@
 #include <sys/stat.h>
 #include <dirent.h>
 #include <sys/uio.h>
+#include <atomic>
+#include <cstring>
 #include <iostream>
+#include <memory>
+#include <thread>
 #include <vector>
 #include "json_spirit/json_spirit.h"
 
@@ -1210,6 +1214,138 @@ TEST(FSCrypt, FSCryptDummyEncryptionNoExistingRegularPolicy) {
 
   ceph_shutdown(cmount);
 }
+
+static void fscrypt_append_worker(struct ceph_mount_info *cmount,
+				  const char *path, char tag,
+				  int64_t buf_size, int rounds,
+				  std::atomic<bool> *go,
+				  std::atomic<int> *errors)
+{
+  std::unique_ptr<char[]> buf(new char[buf_size]);
+  memset(buf.get(), tag, buf_size);
+
+  int fd = ceph_open(cmount, path, O_CREAT|O_WRONLY|O_APPEND, 0644);
+  if (fd < 0) {
+    errors->fetch_add(1);
+    std::clog << __func__ << "(): failed to open " << path << ": "
+	      << strerror(-fd) << std::endl;
+    return;
+  }
+
+  while (!go->load()) {
+    std::this_thread::yield();
+  }
+
+  for (int i = 0; i < rounds; i++) {
+    int r = ceph_write(cmount, fd, buf.get(), buf_size, -1);
+    if (r != buf_size) {
+      errors->fetch_add(1);
+      std::clog << __func__ << "(): write failed: " << r << " ("
+		<< (r < 0 ? strerror(-r) : "short write") << ")" << std::endl;
+      break;
+    }
+    // give the other writer a chance to acquire caps, so that the
+    // next _lseek(SEEK_END) sees a stale EOF while we wait for Fwx
+    usleep(rand() % 500);
+  }
+
+  ceph_close(cmount, fd);
+}
+
+/*
+ * Two clients appending to the same fscrypt enabled file.  The write
+ * size is deliberately not a multiple of the fscrypt block size, so
+ * that the logical (effective) size and the encrypted (physical) size
+ * of the file differ: every append then has to convert the write
+ * extent to the physical size before it is compared against, or fed
+ * into, max_size (tracker #7333).
+ */
+TEST(FSCrypt, MulticlientAppend) {
+  struct ceph_mount_info *ca, *cb;
+  ASSERT_EQ(0, init_mount(&ca));
+  ASSERT_EQ(0, init_mount(&cb));
+
+  string dir_path = string("append_dir.") + stringify(getpid());
+  ASSERT_EQ(0, ceph_mkdir(ca, dir_path.c_str(), 0777));
+
+  int dfd = ceph_open(ca, dir_path.c_str(), O_DIRECTORY, 0);
+  ASSERT_LE(0, dfd);
+
+  char keyid[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  ASSERT_EQ(0, ceph_add_fscrypt_key(ca, fscrypt_key, sizeof(fscrypt_key),
+				    keyid, 0));
+  struct fscrypt_policy_v2 policy;
+  populate_policy(keyid, &policy);
+  ASSERT_EQ(0, ceph_set_fscrypt_policy_v2(ca, dfd, &policy));
+  ceph_close(ca, dfd);
+
+  char keyid2[FSCRYPT_KEY_IDENTIFIER_SIZE];
+  ASSERT_EQ(0, ceph_add_fscrypt_key(cb, fscrypt_key, sizeof(fscrypt_key),
+				    keyid2, 0));
+
+  string file_path = dir_path + "/append";
+
+  // not a multiple of FSCRYPT_BLOCK_SIZE, on purpose
+  const int64_t buf_size = 5000;
+  const int rounds = 32;
+
+  std::atomic<bool> go{false};
+  std::atomic<int> errors{0};
+
+  std::thread thread_a(fscrypt_append_worker, ca, file_path.c_str(), 'A',
+		       buf_size, rounds, &go, &errors);
+  std::thread thread_b(fscrypt_append_worker, cb, file_path.c_str(), 'B',
+		       buf_size, rounds, &go, &errors);
+  go = true;
+
+  thread_a.join();
+  thread_b.join();
+
+  ASSERT_EQ(0, errors.load());
+
+  /*
+   * Both writers used O_APPEND, so every write must land at the EOF
+   * that was current when it acquired its caps.  Any write reusing a
+   * stale EOF would overwrite data and leave the file shorter than
+   * the total written.
+   */
+  int fdr = ceph_open(ca, file_path.c_str(), O_RDONLY, 0644);
+  ASSERT_LE(0, fdr);
+
+  struct stat st;
+  ASSERT_EQ(0, ceph_fstat(ca, fdr, &st));
+  ASSERT_EQ(2 * rounds * buf_size, st.st_size);
+
+  std::unique_ptr<char[]> buf(new char[buf_size]);
+  int64_t pos = 0;
+  int a_blocks = 0, b_blocks = 0;
+  while (pos < st.st_size) {
+    int64_t got = ceph_read(ca, fdr, buf.get(), buf_size, pos);
+    ASSERT_EQ(buf_size, got);
+
+    // every block is written entirely by one client
+    char tag = buf[0];
+    ASSERT_TRUE(tag == 'A' || tag == 'B');
+    for (int64_t i = 1; i < buf_size; i++) {
+      ASSERT_EQ(tag, buf[i]);
+    }
+    if (tag == 'A')
+      a_blocks++;
+    else
+      b_blocks++;
+    pos += got;
+  }
+  ASSERT_EQ(rounds, a_blocks);
+  ASSERT_EQ(rounds, b_blocks);
+
+  ceph_close(ca, fdr);
+  ASSERT_EQ(0, ceph_unlink(ca, file_path.c_str()));
+  ASSERT_EQ(0, ceph_rmdir(ca, dir_path.c_str()));
+
+  ceph_shutdown(ca);
+  ceph_shutdown(cb);
+}
+
 #endif
 
 int main(int argc, char **argv)
