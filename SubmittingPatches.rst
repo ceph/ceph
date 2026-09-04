@@ -81,6 +81,14 @@ following config options::
 Then just remember to use ``git commit -s``. Git will add the ``Signed-off-by``
 line automatically.
 
+AI Assistance Disclosure
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+If your contribution was produced with the assistance of an AI coding tool,
+your ``Signed-off-by`` also certifies that you have disclosed this. See
+:doc:`/dev/developer_guide/ai-coding-assistants` for the full policy,
+including the required ``Assisted-by`` attribution tag format.
+
 
 Separate your changes
 ---------------------
