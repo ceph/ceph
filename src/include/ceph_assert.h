@@ -50,14 +50,41 @@ struct assert_data {
   const char *function;
 };
 
-extern void __ceph_assert_fail(const char *assertion, const char *file, int line, const char *function);
-extern void __ceph_assert_fail(const assert_data &ctx);
+#ifndef CEPH_ASSERT_NORETURN
+#ifdef __clang_analyzer__
+#define CEPH_ASSERT_NORETURN 1
+#else
+#define CEPH_ASSERT_NORETURN 0
+#endif
+#endif
+
+#if CEPH_ASSERT_NORETURN
+[[noreturn]]
+#endif
+extern void __ceph_assert_fail(
+    const char* assertion,
+    const char* file,
+    int line,
+    const char* function);
+#if CEPH_ASSERT_NORETURN
+[[noreturn]]
+#endif
+extern void __ceph_assert_fail(const assert_data& ctx);
 template <const assert_data* AssertCtxV>
 [[gnu::noinline, gnu::cold]] static void __ceph_assert_fail()  {
   __ceph_assert_fail(*AssertCtxV);
 }
 
-extern void __ceph_assertf_fail(const char *assertion, const char *file, int line, const char *function, const char* msg, ...);
+#if CEPH_ASSERT_NORETURN
+[[noreturn]]
+#endif
+extern void __ceph_assertf_fail(
+    const char* assertion,
+    const char* file,
+    int line,
+    const char* function,
+    const char* msg,
+    ...);
 extern void __ceph_assert_warn(const char *assertion, const char *file, int line, const char *function);
 
 [[noreturn]] void __ceph_abort(const char *file, int line, const char *func,
