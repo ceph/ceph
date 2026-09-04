@@ -2018,6 +2018,119 @@ TEST_F(PeeringStateTest, PoolMigrationPrempt) {
 }
 #endif
 
+// Test that BackfillTooFull event won't crash the OSD when received
+// in RepNotRecovering state.
+// This is to test the fix for https://tracker.ceph.com/issues/76751
+TEST_F(PeeringStateTest, BackfillTooFullInRepNotRecovering) {
+  dout(0) << "== BackfillTooFullInRepNotRecovering ==" << dendl;
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 3 log entries to all shards - trim the log so that
+  // backfill occurs later on
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+
+  // Swap out OSD 1 for OSD 9
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  // Full peering cycle
+  test_peering();
+
+  // Verify OSD 9 is in RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+
+  // Inject BackfillTooFull event on OSD 9 while in RepNotRecovering
+  // This should NOT crash
+  auto evt = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::BackfillTooFull());
+  get_ps(acting[1])->handle_event(evt, get_ctx(acting[1]));
+  dispatch_all();
+
+  // Verify the OSD state machine didn't enter Crashed
+  // If the bug is present, the process_event above would have aborted
+  EXPECT_NE(get_listener(acting[1])->last_state_entered,
+            "Crashed");
+  // The event should have been discarded, replica stays in RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+}
+
+// Test that BackfillTooFull event in RepWaitBackfillReserved state causes
+// the replica to reject the reservation and transition to RepNotRecovering
+TEST_F(PeeringStateTest, BackfillTooFullInRepWaitBackfillReserved) {
+  dout(0) << "== BackfillTooFullInRepWaitBackfillReserved ==" << dendl;
+  // Init
+  test_create_peering_state();
+  test_init();
+  test_event_initialize();
+  // Append 3 log entries to all shards - trim the log so that
+  // backfill occurs later on
+  test_append_log_entry();
+  eversion_t expected_tail = test_append_log_entry();
+  eversion_t expected = test_append_log_entry(shard_id_set(), shard_id_set(), false, true);
+  // Full peering cycle
+  test_peering();
+  // Verify that we got to active+clean and that log entries were kept
+  verify_all_active_clean(expected, expected_tail);
+
+  // Swap out OSD 1 for OSD 9
+  modify_up_acting(1, 9);
+  test_create_peering_state(9, 1);
+  test_init(9);
+  test_event_initialize(9);
+  test_peering();
+
+  // Verify OSD 9 is in RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+
+  // Inject event RequestBackfillPrio to move the state to RepWaitBackfillReserved
+  // Don't dispatch_all() so the RemoteBackfillReserved stays unprocessed
+  // and the replica remains in RepWaitBackfillReserved
+  auto evt1 = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    RequestBackfillPrio(OSD_BACKFILL_PRIORITY_BASE, 0, 0));
+  get_ps(acting[1])->handle_event(evt1, get_ctx(acting[1]));
+
+  // Verify OSD 9 is in RepWaitBackfillReserved
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepWaitBackfillReserved");
+
+  // Inject BackfillTooFull event on OSD 9 while in RepWaitBackfillReserved
+  // This should NOT crash
+  auto evt2 = std::make_shared<PGPeeringEvent>(
+    osdmap->get_epoch(),
+    osdmap->get_epoch(),
+    PeeringState::BackfillTooFull());
+  get_ps(acting[1])->handle_event(evt2, get_ctx(acting[1]));
+  dispatch_all();
+
+  // Verify the OSD state machine didn't enter Crashed
+  // If the bug is present, the process_event above would have aborted
+  EXPECT_NE(get_listener(acting[1])->last_state_entered,
+            "Crashed");
+
+  // The reservation should have been rejected and the state goes to RepNotRecovering
+  EXPECT_EQ(get_listener(acting[1])->last_state_entered,
+            "Started/ReplicaActive/RepNotRecovering");
+  // Verify reservation was rejected (unreserve called)
+  EXPECT_TRUE(get_listener(acting[1])->recovery_space_unreserved);
+}
+
+
 // ============================================================================
 // Tests for bug fixes
 // ============================================================================
