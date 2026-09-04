@@ -1265,7 +1265,13 @@ Subcommand ``ls`` list pools
 
 Usage::
 
-    ceph osd pool ls {detail}
+    ceph osd pool ls {detail} {--show-rule-names}
+
+With ``detail``, ``--show-rule-names`` renders each pool's CRUSH rule by name
+instead of by numeric id in the text output. In the JSON output the numeric
+``crush_rule`` field is left as-is and a ``crush_rule_name`` field is added
+next to it. If the referenced rule no longer exists, the text output falls back
+to the numeric id and the JSON output omits ``crush_rule_name``.
 
 Subcommand ``mksnap`` makes snapshot <snap> in <pool>.
 
