@@ -26,18 +26,18 @@
 
 namespace rocksdb_cache {
 
-using DeleterFn = void (*)(const rocksdb::Slice& key, void* value);
-
 // Single cache shard interface.
 class CacheShard {
  public:
   CacheShard() = default;
   virtual ~CacheShard() = default;
 
-  virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash, void* value,
+  virtual rocksdb::Status Insert(const rocksdb::Slice& key, uint32_t hash,
+                                 rocksdb::Cache::ObjectPtr value,
+                                 const rocksdb::Cache::CacheItemHelper* helper,
                                  size_t charge,
-                                 DeleterFn deleter,
-                                 rocksdb::Cache::Handle** handle, rocksdb::Cache::Priority priority) = 0;
+                                 rocksdb::Cache::Handle** handle,
+                                 rocksdb::Cache::Priority priority) = 0;
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, uint32_t hash) = 0;
   virtual bool Ref(rocksdb::Cache::Handle* handle) = 0;
   virtual bool Release(rocksdb::Cache::Handle* handle, bool force_erase = false) = 0;
@@ -48,13 +48,14 @@ class CacheShard {
   virtual size_t GetPinnedUsage() const = 0;
   virtual void ApplyToAllCacheEntries(
     const std::function<void(const rocksdb::Slice& key,
-                             void* value,
+                             rocksdb::Cache::ObjectPtr value,
                              size_t charge,
-                             DeleterFn)>& callback,
+                             const rocksdb::Cache::CacheItemHelper* helper)>& callback,
     bool thread_safe) = 0;
   virtual void EraseUnRefEntries() = 0;
   virtual std::string GetPrintableOptions() const { return ""; }
-  virtual DeleterFn GetDeleter(rocksdb::Cache::Handle* handle) const = 0;
+  virtual const rocksdb::Cache::CacheItemHelper* GetCacheItemHelper(
+      rocksdb::Cache::Handle* handle) const = 0;
 };
 
 // Generic cache interface which shards cache by hash of keys. 2^num_shard_bits
@@ -67,15 +68,22 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   // rocksdb::Cache
   virtual const char* Name() const override = 0;
   using rocksdb::Cache::Insert;
-  virtual rocksdb::Status Insert(const rocksdb::Slice& key, void* value, size_t charge,
-                                 DeleterFn,
-                                 rocksdb::Cache::Handle** handle, Priority priority) override;
+  virtual rocksdb::Status Insert(const rocksdb::Slice& key,
+                                 rocksdb::Cache::ObjectPtr value,
+                                 const rocksdb::Cache::CacheItemHelper* helper,
+                                 size_t charge,
+                                 rocksdb::Cache::Handle** handle,
+                                 Priority priority) override;
   using rocksdb::Cache::Lookup;
-  virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, rocksdb::Statistics* stats) override;
+  virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key,
+                                         const rocksdb::Cache::CacheItemHelper* helper,
+                                         rocksdb::Cache::CreateContext* create_context,
+                                         Priority priority, bool wait,
+                                         rocksdb::Statistics* stats) override;
   virtual bool Ref(rocksdb::Cache::Handle* handle) override;
   using rocksdb::Cache::Release;
   virtual bool Release(rocksdb::Cache::Handle* handle, bool force_erase = false) override;
-  virtual void* Value(Handle* handle) override = 0;
+  virtual rocksdb::Cache::ObjectPtr Value(Handle* handle) override = 0;
   virtual void Erase(const rocksdb::Slice& key) override;
   virtual uint64_t NewId() override;
   virtual void SetCapacity(size_t capacity) override;
@@ -85,20 +93,16 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   virtual size_t GetUsage() const override;
   virtual size_t GetUsage(rocksdb::Cache::Handle* handle) const override;
   virtual size_t GetPinnedUsage() const override;
-  virtual size_t GetCharge(Handle* handle) const = 0;
-#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
-  virtual DeleterFn GetDeleter(Handle* handle) const override;
-#endif
+  virtual size_t GetCharge(Handle* handle) const override = 0;
+  virtual const rocksdb::Cache::CacheItemHelper* GetCacheItemHelper(
+      Handle* handle) const override;
   virtual void DisownData() override = 0;
-#if (ROCKSDB_MAJOR >= 7 || (ROCKSDB_MAJOR == 6 && ROCKSDB_MINOR >= 22))
   virtual void ApplyToAllEntries(
-      const std::function<void(const rocksdb::Slice& key, void* value, size_t charge,
-                               DeleterFn deleter)>& callback,
+      const std::function<void(const rocksdb::Slice& key,
+                               rocksdb::Cache::ObjectPtr value,
+                               size_t charge,
+                               const rocksdb::Cache::CacheItemHelper* helper)>& callback,
       const ApplyToAllEntriesOptions& opts) override;
-#else
-  virtual void ApplyToAllCacheEntries(void (*callback)(void*, size_t),
-                                      bool thread_safe) override;
-#endif
   virtual void EraseUnRefEntries() override;
   virtual std::string GetPrintableOptions() const override;
   virtual CacheShard* GetShard(int shard) = 0;
