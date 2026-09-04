@@ -713,6 +713,11 @@ private:
   uint64_t _flush_data(FileWriter *h, uint64_t end, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
   int _flush_envelope_F(FileWriter *h);
+  // Truncates file to 'offset', which must be expressed in on-disk units
+  // (that is, envelopes included for envelope mode files) and must not be
+  // larger than the amount of data already flushed. Releases the allocations
+  // that fall past the new end of file.
+  int _truncate_LDF(FileWriter *h, uint64_t offset);
   int _fsync(FileWriter *h, bool force_dirty);
   uint64_t _flush_special(FileWriter *h);
 
@@ -974,6 +979,9 @@ public:
   void invalidate_cache(FileRef f, uint64_t offset, uint64_t len);
   int preallocate(FileRef f, uint64_t offset, uint64_t len);
   int truncate(FileWriter *h, uint64_t offset);
+  // Releases the space that preallocate() has reserved for the file but that
+  // has not been written to. To be called when the file is done growing.
+  int truncate_unused(FileWriter *h);
 
   size_t probe_alloc_avail(int dev, uint64_t alloc_size);
 
