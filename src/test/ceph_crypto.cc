@@ -5,6 +5,15 @@
 #include "global/global_init.h"
 #include "global/global_context.h"
 
+#include <openssl/evp.h>
+
+#ifndef _WIN32
+#include <cerrno>
+#include <cstring>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 class CryptoEnvironment: public ::testing::Environment {
 public:
   void SetUp() override {
@@ -58,6 +67,114 @@ TEST(MD5, Restart) {
   };
   err = memcmp(digest, want_digest, CEPH_CRYPTO_MD5_DIGESTSIZE);
   ASSERT_EQ(0, err);
+}
+
+#if !defined(_WIN32) && OPENSSL_VERSION_NUMBER >= 0x30000000L
+namespace {
+
+// How the child of MD5NonCrypto.FipsDefaultProperty reports back.
+enum fips_md5_result {
+  FIPS_MD5_OK = 0,
+  FIPS_MD5_SET_FAILED = 2,    // could not turn on the fips default property
+  FIPS_MD5_VACUOUS = 3,       // plain MD5 still resolved; nothing was proven
+  FIPS_MD5_FETCH_FAILED = 4,  // the explicit "fips=no" query did not resolve
+  FIPS_MD5_WRONG_DIGEST = 5,  // what came out was not MD5
+};
+
+// Runs in the forked child and never returns.  Turning on the fips default
+// property is a one-way door: OpenSSL 3 offers no way to read the default
+// property query back out, and EVP_default_properties_enable_fips(ctx, 0)
+// clears the "fips" term rather than restoring an explicit "fips=no" that an
+// openssl.cnf may have set.  Nothing here can restore the query faithfully,
+// so confine the change to a process nothing else runs in.
+[[noreturn]] void check_md5_non_crypto_under_fips() {
+  if (EVP_default_properties_enable_fips(nullptr, 1) != 1) {
+    _exit(FIPS_MD5_SET_FAILED);
+  }
+
+  // Control.  Everything below passes trivially if MD5 is still reachable
+  // under "fips=yes" -- no provider that withholds it, a permissive build --
+  // so establish that the query really does bite before trusting the result.
+  if (EVP_MD * const plain = EVP_MD_fetch(nullptr, "MD5", nullptr)) {
+    EVP_MD_free(plain);
+    _exit(FIPS_MD5_VACUOUS);
+  }
+
+  // The mechanism MD5NonCrypto relies on: an explicit "fips=no" term overrides
+  // the same term in the default query.
+  EVP_MD * const non_fips = EVP_MD_fetch(nullptr, "MD5", "fips=no");
+  if (non_fips == nullptr) {
+    _exit(FIPS_MD5_FETCH_FAILED);
+  }
+  EVP_MD_free(non_fips);
+
+  // ...and what it produces is still MD5.  Vector from RFC 1321 appendix A.5.
+  ceph::crypto::MD5NonCrypto h;
+  h.Update((const unsigned char*)"abc", 3);
+  unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  h.Final(digest);
+  const unsigned char want_digest[CEPH_CRYPTO_MD5_DIGESTSIZE] = {
+    0x90, 0x01, 0x50, 0x98, 0x3c, 0xd2, 0x4f, 0xb0,
+    0xd6, 0x96, 0x3f, 0x7d, 0x28, 0xe1, 0x7f, 0x72,
+  };
+  _exit(memcmp(digest, want_digest, CEPH_CRYPTO_MD5_DIGESTSIZE) == 0
+        ? FIPS_MD5_OK : FIPS_MD5_WRONG_DIGEST);
+}
+
+} // anonymous namespace
+#endif
+
+// MD5NonCrypto exists so that the protocol-mandated MD5 uses in rgw (ETags,
+// object and cache keys) keep working when the default property query is
+// "fips=yes", where an unqualified MD5 fetch resolves to nothing.
+//
+// Keep this test first in the suite.  MD5NonCrypto fetches its EVP_MD once and
+// caches it for the lifetime of the process, and the child inherits that cache
+// across the fork, so if anything constructs one before this runs it checks a
+// digest that was fetched under the permissive default and proves nothing.
+// gtest runs a suite's tests in definition order, and nothing outside this
+// suite builds an MD5NonCrypto.
+TEST(MD5NonCrypto, FipsDefaultProperty) {
+#if defined(_WIN32) || OPENSSL_VERSION_NUMBER < 0x30000000L
+  GTEST_SKIP() << "needs fork() and OpenSSL 3 property queries";
+#else
+  const pid_t pid = fork();
+  ASSERT_NE(-1, pid) << "fork: " << strerror(errno);
+  if (pid == 0) {
+    check_md5_non_crypto_under_fips();
+  }
+  int status = 0;
+  ASSERT_EQ(pid, waitpid(pid, &status, 0)) << "waitpid: " << strerror(errno);
+  ASSERT_TRUE(WIFEXITED(status))
+    << "child killed by signal " << WTERMSIG(status);
+
+  switch (WEXITSTATUS(status)) {
+  case FIPS_MD5_OK:
+    break;
+  case FIPS_MD5_VACUOUS:
+    GTEST_SKIP() << "MD5 resolves even with fips=yes; test would be vacuous";
+  case FIPS_MD5_SET_FAILED:
+    FAIL() << "could not enable the fips default property";
+  case FIPS_MD5_FETCH_FAILED:
+    FAIL() << "MD5 with an explicit fips=no query did not resolve";
+  case FIPS_MD5_WRONG_DIGEST:
+    FAIL() << "MD5NonCrypto did not produce the MD5 of \"abc\"";
+  default:
+    FAIL() << "unexpected child exit status " << WEXITSTATUS(status);
+  }
+#endif
+}
+
+TEST(MD5NonCrypto, Simple) {
+  ceph::crypto::MD5NonCrypto h;
+  h.Update((const unsigned char*)"abc", 3);
+  unsigned char digest[CEPH_CRYPTO_MD5_DIGESTSIZE];
+  h.Final(digest);
+  unsigned char want_digest[CEPH_CRYPTO_MD5_DIGESTSIZE] = {
+    0x90, 0x01, 0x50, 0x98, 0x3c, 0xd2, 0x4f, 0xb0,
+    0xd6, 0x96, 0x3f, 0x7d, 0x28, 0xe1, 0x7f, 0x72,
+  };
+  ASSERT_EQ(0, memcmp(digest, want_digest, CEPH_CRYPTO_MD5_DIGESTSIZE));
 }
 
 TEST(HMACSHA1, Simple) {
