@@ -209,9 +209,10 @@ int FilterDriver::load_stats(const DoutPrefixProvider* dpp,
                              const rgw_owner& owner,
                              RGWStorageStats& stats,
                              ceph::real_time& last_synced,
-                             ceph::real_time& last_updated)
+                             ceph::real_time& last_updated,
+                             std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats)
 {
-  return next->load_stats(dpp, y, owner, stats, last_synced, last_updated);
+  return next->load_stats(dpp, y, owner, stats, last_synced, last_updated, sc_stats);
 }
 
 int FilterDriver::load_stats_async(const DoutPrefixProvider* dpp,
@@ -862,10 +863,11 @@ int FilterBucket::read_stats(const DoutPrefixProvider *dpp, optional_yield y,
 			     int shard_id, std::string* bucket_ver,
 			     std::string* master_ver,
 			     std::map<RGWObjCategory, RGWStorageStats>& stats,
+			     std::optional<std::map<std::string, RGWStorageStats>>& sc_stats,
 			     std::string* max_marker, bool* syncstopped)
 {
   return next->read_stats(dpp, y, idx_layout, shard_id, bucket_ver, master_ver,
-			  stats, max_marker, syncstopped);
+			  stats, sc_stats, max_marker, syncstopped);
 }
 
 int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,

@@ -10314,7 +10314,12 @@ next:
         }
       } else {
         int ret = rgw_sync_all_stats(dpp(), null_yield, driver,
-                                     user->get_id(), user->get_tenant());
+                                   user->get_id(), user->get_tenant());
+        if (ret < 0) {
+          cerr << "ERROR: could not sync user stats: " <<
+               cpp_strerror(-ret) << std::endl;
+          return -ret;
+        }
         if (ret < 0) {
           cerr << "ERROR: could not sync user stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -10338,10 +10343,11 @@ next:
 
     constexpr bool omit_utilized_stats = false;
     RGWStorageStats stats(omit_utilized_stats);
+    std::optional<std::unordered_map<std::string, RGWStorageStats>> sc_stats;
     ceph::real_time last_stats_sync;
     ceph::real_time last_stats_update;
     ret = driver->load_stats(dpp(), null_yield, owner, stats,
-                             last_stats_sync, last_stats_update);
+                             last_stats_sync, last_stats_update, &sc_stats);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
         cerr << "User has not been initialized or user does not exist" << std::endl;
@@ -10355,6 +10361,13 @@ next:
     {
       Formatter::ObjectSection os(*formatter, "result");
       encode_json("stats", stats, formatter.get());
+      if (sc_stats.has_value()) {
+        formatter->open_object_section("stats.storage-classes");
+        for (const auto& [storage_class, stats] : sc_stats.value()) {
+          encode_json(storage_class.c_str(), stats, formatter.get());
+        }
+        formatter->close_section();
+      }
       utime_t last_sync_ut(last_stats_sync);
       encode_json("last_stats_sync", last_sync_ut, formatter.get());
       utime_t last_update_ut(last_stats_update);

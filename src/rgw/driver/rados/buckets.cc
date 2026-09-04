@@ -26,7 +26,8 @@ namespace rgwrados::buckets {
 
 static int set(const DoutPrefixProvider* dpp, optional_yield y,
                librados::Rados& rados, const rgw_raw_obj& obj,
-               cls_user_bucket_entry&& entry, bool add)
+               cls_user_bucket_entry&& entry, bool add,
+               const RGWBucketEnt* ent)
 {
   std::list<cls_user_bucket_entry> entries;
   entries.push_back(std::move(entry));
@@ -56,7 +57,7 @@ int add(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   constexpr bool add = true; // create/update entry
-  return set(dpp, y, rados, obj, std::move(entry), add);
+  return set(dpp, y, rados, obj, std::move(entry), add, nullptr);
 }
 
 int remove(const DoutPrefixProvider* dpp, optional_yield y,
@@ -141,19 +142,32 @@ int list(const DoutPrefixProvider* dpp, optional_yield y,
 
 int write_stats(const DoutPrefixProvider* dpp, optional_yield y,
                 librados::Rados& rados, const rgw_raw_obj& obj,
-                const RGWBucketEnt& ent)
+                const RGWBucketEnt& ent,
+                const std::optional<std::unordered_map<std::string, RGWBucketEnt>>* storage_class_ents)
 {
   cls_user_bucket_entry entry;
   ent.convert(&entry);
+  if (storage_class_ents && storage_class_ents->has_value()) {
+    if (!entry.storage_class_stats.has_value()) {
+      entry.storage_class_stats.emplace();
+    }
+    for (const auto& [storage_class, bent] : storage_class_ents->value()) {
+      cls_user_bucket_entry& sc_entry = entry.storage_class_stats.value()[storage_class];
+      sc_entry.size = bent.size;
+      sc_entry.size_rounded = bent.size_rounded;
+      sc_entry.count = bent.count;
+    }
+  }
 
   constexpr bool add = false; // bucket entry must exist
-  return set(dpp, y, rados, obj, std::move(entry), add);
+  return set(dpp, y, rados, obj, std::move(entry), add, &ent);
 }
 
 int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
                librados::Rados& rados, const rgw_raw_obj& obj,
                RGWStorageStats& stats, ceph::real_time* last_synced,
-               ceph::real_time* last_updated)
+               ceph::real_time* last_updated,
+               std::optional<std::unordered_map<std::string, RGWStorageStats>>* sc_stats)
 {
   rgw_rados_ref ref;
   int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
@@ -174,6 +188,17 @@ int read_stats(const DoutPrefixProvider* dpp, optional_yield y,
   stats.size = header.stats.total_bytes;
   stats.size_rounded = header.stats.total_bytes_rounded;
   stats.num_objects = header.stats.total_entries;
+  if (sc_stats && header.storage_class_stats.has_value()) {
+    if (!sc_stats->has_value()) {
+      sc_stats->emplace();
+    }
+    for (const auto& [storage_class, sc] : *header.storage_class_stats) {
+      sc_stats->value()[storage_class].size = sc.total_bytes;
+      sc_stats->value()[storage_class].size_rounded = sc.total_bytes_rounded;
+      sc_stats->value()[storage_class].num_objects = sc.total_entries;
+    }
+  }
+
   if (last_synced) {
     *last_synced = header.last_stats_sync;
   }
@@ -233,6 +258,7 @@ int reset_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
   cls_user_reset_stats2_op call;
   cls_user_reset_stats2_ret ret;
+  ret.storage_class_stats.emplace();
 
   do {
     buffer::list in, out;
