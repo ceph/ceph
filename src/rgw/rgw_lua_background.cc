@@ -4,22 +4,25 @@
 #include "rgw_lua_utils.h"
 #include "rgw_perf_counters.h"
 #include "include/ceph_assert.h"
+#include <concepts>
 #include <lua.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::lua {
 
-const char* RGWTable::INCREMENT = "increment";
-const char* RGWTable::DECREMENT = "decrement";
+template <typename T>
+concept background_numeric_value =
+  std::same_as<T, double> ||
+  std::same_as<T, long long int>;
 
 int RGWTable::increment_by(lua_State* L) {
   const auto map = reinterpret_cast<BackgroundMap*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
   auto& mtx = *reinterpret_cast<std::mutex*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
-  auto decrement = lua_toboolean(L, lua_upvalueindex(THIRD_UPVAL));
+  const auto decrement = lua_toboolean(L, lua_upvalueindex(THIRD_UPVAL));
 
   const auto args = lua_gettop(L);
-  const auto index = luaL_checkstring(L, 1);
+  const auto index = lua_checkstring_view(L, 1);
 
   // by default we increment by 1/-1
   const long long int default_inc = (decrement ? -1 : 1);
@@ -36,24 +39,30 @@ int RGWTable::increment_by(lua_State* L) {
 
   std::unique_lock l(mtx);
 
-  const auto it = map->find(std::string(index));
-  if (it != map->end()) {
-    auto& value = it->second;
-    if (std::holds_alternative<double>(value) && std::holds_alternative<double>(inc_by)) {
-      value = std::get<double>(value) + std::get<double>(inc_by);
-    } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<long long int>(inc_by)) {
-      value = std::get<long long int>(value) + std::get<long long int>(inc_by);
-    } else if (std::holds_alternative<double>(value) && std::holds_alternative<long long int>(inc_by)) {
-      value = std::get<double>(value) + static_cast<double>(std::get<long long int>(inc_by));
-    } else if (std::holds_alternative<long long int>(value) && std::holds_alternative<double>(inc_by)) {
-      value = static_cast<double>(std::get<long long int>(value)) + std::get<double>(inc_by);
-    } else {
-      mtx.unlock();
-      return luaL_error(L, "can increment only numeric values");
-    }
+  const auto it = find_string_map_entry(*map, index);
+  if (it == map->end()) {
+    return 0;
   }
 
-  return 0;
+  auto& value = it->second;
+  const auto incremented = std::visit([&value]<typename ValueT, typename IncrementT>(
+      const ValueT& current,
+      const IncrementT& increment) {
+    if constexpr (background_numeric_value<ValueT> &&
+                  background_numeric_value<IncrementT>) {
+      value = current + increment;
+      return true;
+    }
+
+    return false;
+  }, value, inc_by);
+
+  if (incremented) {
+    return 0;
+  }
+
+  l.unlock();
+  return luaL_error(L, "can increment only numeric values");
 }
 
 static int bytecode_writer (lua_State *L, const void* p, size_t sz, void* ud) {
@@ -172,8 +181,8 @@ void Background::run() {
     if (!lguard) {
       return;
     }
-    const auto rc = read_script();
-    if (rc == -ENOENT || rc == -EAGAIN) {
+    if (const auto rc = read_script();
+        rc == -ENOENT || rc == -EAGAIN) {
       // either no script or paused, nothing to do
     } else if (rc < 0) {
       ldpp_dout(dpp, 1) << "WARNING: failed to read background script. error " << rc << dendl;
@@ -299,4 +308,3 @@ int Background::get_script_bytecode(std::string script, std::vector<char>& lua_b
 }
 
 } //namespace rgw::lua
-
