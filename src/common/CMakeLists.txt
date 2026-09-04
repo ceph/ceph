@@ -133,6 +133,10 @@ if(WITH_CEPH_DEBUG_MUTEX)
     shared_mutex_debug.cc)
 endif()
 
+if(WITH_CEPH_LOCKSTAT)
+list(APPEND common_srcs lockstat.cc)
+endif()
+
 if(WIN32)
   if(MINGW)
     set(CMAKE_MC_COMPILER x86_64-w64-mingw32-windmc)
