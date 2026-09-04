@@ -145,6 +145,11 @@ class _FakePathResolver:
 
     resolve_exists = resolve
 
+    def resolve_case_sensitivity(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> Tuple[bool, bool]:
+        return False, False
+
 
 class ExoResolver:
     def __init__(self, cluster: resources.Cluster) -> None:
