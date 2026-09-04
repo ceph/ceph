@@ -1900,6 +1900,40 @@ void PGScrubber::emit_scrub_result(
       return a.object.name < b.object.name;
     });
 
+  // Since we don't know which errors were fixed, we can only clear them
+  // when every one has been fixed.  Matches classic OSD scrub_finish()
+  // (pg_scrubber.cc:2012-2045):
+  //   - all fixed:  zero error counts so prepare_stats_for_publish()
+  //                 clears PG_STATE_INCONSISTENT.
+  //   - has_error:  recovery will be initiated; schedule a deep-scrub
+  //                 afterward to get the updated error counts.
+  //                 Classic "has_error" = authoritative_peers_count() > 0
+  //                 i.e. there were objects with a repairable auth copy.
+  //                 Crimson equivalent: m_total_missing_count or
+  //                 m_total_inconsistent_count is > 0.
+  if (m_is_repair) {
+    int total_errors = in_stats.num_shallow_scrub_errors +
+                       in_stats.num_deep_scrub_errors;
+    // has_error: there were objects scrub could attempt to repair
+    // (an authoritative shard was identified).
+    bool has_error = (m_total_missing_count > 0 || m_total_inconsistent_count > 0);
+    DEBUGDPP("repair: {} errors, {} fixed, has_error={}",
+             pg, total_errors, m_fixed_count, has_error);
+    if (m_fixed_count == total_errors) {
+      ceph_assert(deep);
+      in_stats.num_shallow_scrub_errors = 0;
+      in_stats.num_deep_scrub_errors = 0;
+      in_stats.num_scrub_errors = 0;
+      DEBUGDPP("All errors fixed, zeroing scrub error counts", pg);
+    } else if (has_error) {
+      // Recovery will be initiated below.  Arrange for a deep-scrub
+      // after recovery to get the updated error counts.
+      m_after_repair_scrub_required = true;
+      DEBUGDPP("{} errors, {} fixed — scheduling after_repair scrub",
+               pg, total_errors, m_fixed_count);
+    }
+  }
+
   // Log repair results if this was a repair scrub
   if (m_is_repair && m_fixed_count > 0) {
     INFODPP("Scrub repair completed: {} object copies fixed", pg, m_fixed_count);
@@ -1983,19 +2017,6 @@ void PGScrubber::emit_scrub_result(
          DEBUGDPP("shallow scrub cleared deep-error stats: num_shallow={} num_deep=0",
                   pg, pg_stats.stats.sum.num_shallow_scrub_errors);
        }
-
-      // If this was a repair, check if we need to schedule after_repair scrub
-      // This matches classic OSD behavior in scrub_finish()
-      if (m_is_repair && m_fixed_count > 0) {
-        int total_errors = pg_stats.stats.sum.num_shallow_scrub_errors +
-                          pg_stats.stats.sum.num_deep_scrub_errors;
-        if (total_errors > 0) {
-          // Errors remain after repair - schedule an after_repair scrub after recovery
-          m_after_repair_scrub_required = true;
-          DEBUGDPP("Repair completed but {} errors remain (fixed {}), will schedule after_repair scrub after recovery",
-                   pg, total_errors, m_fixed_count);
-        }
-      }
 
       // Recalculate total scrub errors (matches classic OSD)
       pg_stats.stats.sum.num_scrub_errors =
