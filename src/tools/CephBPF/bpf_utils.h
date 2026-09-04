@@ -42,7 +42,7 @@ __u32 get_tid() {
 // Fetch register value from pt_regs based on DWARF register number
 // Note: switch case is not supported well by eBPF, we'll run into
 // "unable to dereference modified ctx" error, so we use if-else chain
-__u64 fetch_register(const struct pt_regs *const ctx, int reg) {
+static __always_inline __u64 fetch_register(const struct pt_regs *const ctx, int reg) {
   __u64 v = 0;
 
 #if defined(__TARGET_ARCH_x86)
@@ -83,14 +83,13 @@ __u64 fetch_register(const struct pt_regs *const ctx, int reg) {
     bpf_printk("unexpected x86_64 register: %d\n", reg);
 
 #elif defined(__TARGET_ARCH_arm64)
-  // ARM64 DWARF register mapping
-  // x0-x30 are registers 0-30, sp is 31
-  // Use user_pt_regs which is properly defined in BPF uprobe context
-  const struct user_pt_regs *regs = (const struct user_pt_regs *)ctx;
-  if (reg >= 0 && reg <= 30)
-    v = regs->regs[reg];
-  else if (reg == 31)
-    v = regs->sp;
+  // DWARF numbers x0-x30 as 0-30 and sp as 31, which is exactly the
+  // layout of struct user_pt_regs, so the register lives at reg * 8.
+  // Read it through bpf_probe_read_kernel: the verifier rejects a
+  // direct ctx access with a variable offset. libbpf's usdt.bpf.h
+  // reads registers the same way.
+  if (reg >= 0 && reg <= 31)
+    bpf_probe_read_kernel(&v, sizeof(v), (const char *)ctx + reg * 8);
   else
     bpf_printk("unexpected arm64 register: %d\n", reg);
 
