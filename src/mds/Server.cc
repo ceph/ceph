@@ -5376,7 +5376,6 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
 
   dout(10) << " state prior to lock change: " << *lock_state << dendl;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
-    list<ceph_filelock> activated_locks;
     MDSContext::vec waiters;
     if (lock_state->is_waiting(set_lock)) {
       dout(10) << " unlock removing waiting lock " << set_lock << dendl;
@@ -5384,7 +5383,7 @@ void Server::handle_client_file_setlock(const MDRequestRef& mdr)
       cur->take_waiting(CInode::WAIT_FLOCK, waiters);
     } else if (!interrupt) {
       dout(10) << " unlock attempt on " << set_lock << dendl;
-      lock_state->remove_lock(set_lock, activated_locks);
+      lock_state->remove_lock(set_lock);
       cur->take_waiting(CInode::WAIT_FLOCK, waiters);
     }
     mds->queue_waiters(waiters);
