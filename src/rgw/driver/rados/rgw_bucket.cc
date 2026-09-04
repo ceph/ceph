@@ -3063,6 +3063,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
 				std::optional<rgw::BucketIndexType> type,
 				std::optional<uint32_t> shards) {
+
   layout.current_index.gen = 0;
   layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
 
@@ -3081,7 +3082,13 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   }
 
   if (layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    layout.logs.push_back(log_layout_from_index(0, layout.current_index));
+    const bool use_fifo =
+      (cct->_conf.get_val<std::string>("rgw_default_bucket_bilog_type") == "fifo");
+    if (use_fifo) {
+      layout.logs.push_back(fifo_log_layout_from_index(0, layout.current_index));
+    } else {
+      layout.logs.push_back(log_layout_from_index(0, layout.current_index));
+    }
   }
 }
 
@@ -3137,7 +3144,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     const auto& log = bci.info.layout.logs.back();
     if (bci.info.bucket_deleted() && log.layout.type != rgw::BucketLogType::Deleted) {
       const auto index_log = bci.info.layout.logs.back();
-      const int shards_num = rgw::num_shards(index_log.layout.in_index);
+      const int shards_num = rgw::num_shards(index_log);
       bci.info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
       ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
       for (int i = 0; i < shards_num; ++i) {

@@ -211,6 +211,11 @@
   This restriction does not apply to operator-initiated scrubs, nor to repair scrubs.
   It can be disabled by setting ``osd_scrub_queued_snaptrims_limit`` to 0.
 * RGW: Add SSE-KMS secrets cache
+* RGW: New buckets now default to the FIFO bilog backend instead of the
+  older InIndex (omap-based) backend, controlled by the new
+  ``rgw_default_bucket_bilog_type`` configuration option (default:
+  ``fifo``). Existing InIndex buckets are unaffected until their next
+  reshard, at which point they are automatically migrated to FIFO.
 
 >=21.0.0
 
