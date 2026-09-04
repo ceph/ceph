@@ -31,23 +31,26 @@
 
 #include <boost/container/flat_map.hpp>
 
-#include <algorithm>
+#include <map>
+#include <list>
 #include <array>
+#include <vector>
+#include <unordered_map>
+
+#include <ranges>
+#include <iterator>
+#include <algorithm>
+
 #include <atomic>
 #include <chrono>
+#include <thread>
+
+#include <cstdint>
+#include <utility>
 #include <compare>
 #include <concepts>
-#include <cstdint>
 #include <exception>
-#include <iterator>
-#include <list>
-#include <map>
-#include <ranges>
 #include <stdexcept>
-#include <thread>
-#include <unordered_map>
-#include <utility>
-#include <vector>
 
 using Catch::Matchers::AllMatch;
 
@@ -1851,10 +1854,42 @@ SCENARIO("implicit transactions", "[fdb][rgw]")
  }
 }
 
+TEST_CASE("transactors reject invalid database handles", "[fdb]")
+{
+ lfdb::database_handle dbh;
+
+ SECTION("default options") {
+  auto txr = lfdb::make_transactor(dbh);
+
+  CHECK_THROWS_WITH(txr(lfdb::with_result, [](auto) {}),
+                    "make_transaction() requires database handle");
+ }
+
+ SECTION("explicit options") {
+  lfdb::transaction_options opts;
+  auto txr = lfdb::make_transactor(dbh, opts);
+
+  CHECK_THROWS_WITH(txr([](auto) {}),
+                    "make_transaction() requires database handle");
+ }
+
+ SECTION("duplicate staged target") {
+  auto txr = lfdb::make_transactor(dbh);
+  int output = 0;
+
+  CHECK_THROWS_WITH(txr([](auto, auto&, auto&) {},
+                        lfdb::staged(output), lfdb::staged(output)),
+                    "cannot stage one target more than once");
+ }
+}
+
 SCENARIO("transactor", "[fdb]")
 {
  janitor j;
 
+ static_assert(lfdb::concepts::stageable<std::vector<int>>);
+ static_assert(not lfdb::concepts::supported_invocation_result<
+   lfdb::staged_proxy<int>>);
  static_assert(lfdb::detail::result_reporting_transaction_op<decltype([](auto) {})>);
  static_assert(!lfdb::detail::result_reporting_transaction_op<decltype([](auto) {
   return 7;
@@ -2010,6 +2045,100 @@ SCENARIO("transactor", "[fdb]")
   CHECK(value == out);
  }
 
+ SECTION("staged arguments publish one successful attempt") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("staged-conflict-key");
+
+  lfdb::set(j, key, "initial");
+
+  std::vector<std::string> values {"before"};
+  const auto result = txr(lfdb::with_result,
+    [&j, &key](auto txn, auto& staged_values) {
+      std::string value;
+      if (not lfdb::get(txn, key, value)) {
+       throw std::runtime_error("expected key does not exist");
+      }
+
+      staged_values.push_back(value);
+
+      // Force the first attempt to conflict:
+      if ("initial" == value) {
+       lfdb::set(j, key, "conflict");
+      }
+
+      lfdb::set(txn, key, "final");
+    }, lfdb::staged(values));
+
+  CHECK(result.committed);
+  CHECK(2 == result.attempts);
+  CHECK((std::vector<std::string> {"before", "conflict"} == values));
+ }
+
+ SECTION("staged arguments remain unchanged after retry exhaustion") {
+  auto txr = lfdb::make_transactor(j);
+  const auto key = test_key("staged-exhaustion-key");
+
+  lfdb::set(j, key, "initial");
+
+  std::vector<std::string> values {"before"};
+  const auto result = txr(lfdb::with_result,
+    [&j, &key](auto txn, auto& staged_values) {
+      std::string value;
+      if (not lfdb::get(txn, key, value)) {
+       throw std::runtime_error("expected key does not exist");
+      }
+
+      staged_values.push_back(value);
+
+      // Force every attempt to conflict:
+      lfdb::set(j, key, "conflict");
+      lfdb::set(txn, key, "final");
+    }, lfdb::staged(values));
+
+  CHECK_FALSE(result.committed);
+  CHECK(std::vector<std::string> {"before"} == values);
+ }
+
+ SECTION("ordinary transactors publish staged arguments") {
+  auto txr = lfdb::make_transactor(j);
+  std::uint64_t total = 5;
+  std::vector<int> values {0};
+  std::map<std::string, int> index;
+
+  const auto answer = txr([](auto,
+                             auto& staged_total,
+                             auto& staged_values,
+                             auto& staged_index) {
+    staged_total = 7;
+    staged_total += 5;
+
+    staged_values.clear();
+    staged_values.emplace_back(1);
+    staged_values.push_back(2);
+
+    staged_index.insert_or_assign("answer", 42);
+
+    return 42;
+  }, lfdb::staged(total), lfdb::staged(values), lfdb::staged(index));
+
+  CHECK(42 == answer);
+  CHECK(12 == total);
+  CHECK((std::vector {1, 2} == values));
+  CHECK(42 == index.at("answer"));
+ }
+
+ SECTION("staged arguments remain unchanged after a body exception") {
+  auto txr = lfdb::make_transactor(j);
+  int value = 5;
+
+  CHECK_THROWS_WITH(txr([](auto, auto& staged_value) {
+    staged_value += 7;
+    throw std::runtime_error("transaction body failed");
+  }, lfdb::staged(value)), "transaction body failed");
+
+  CHECK(5 == value);
+ }
+
  SECTION("result-reporting transactor replays after conflict") {
   auto txr = lfdb::make_transactor(j);
   const auto key = test_key("result-conflict-key");
@@ -2065,14 +2194,6 @@ SCENARIO("transactor", "[fdb]")
   CHECK(result.attempts == 10);
   CHECK(result.replay_count == 9);
   CHECK(0 != result.last_error);
- }
-
- SECTION("result-reporting transactor rejects invalid database handles") {
-  lfdb::database_handle dbh;
-  auto txr = lfdb::make_transactor(dbh);
-
-  CHECK_THROWS_WITH(txr(lfdb::with_result, [](auto) {}),
-                    "make_transaction() requires database handle");
  }
 
  SECTION("transactor propagates transaction body exceptions") {

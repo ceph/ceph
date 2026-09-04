@@ -35,7 +35,6 @@
 #include <ranges>
 #include <iterator>
 #include <algorithm>
-#include <generator>
 
 #include <mutex>
 #include <thread>
@@ -51,9 +50,6 @@
 #include <stop_token>
 #include <filesystem>
 #include <type_traits>
-#include <initializer_list>
-
-#include "common/container_concepts.h"
 
 #ifdef __cpp_lib_flat_map
  #include <flat_map>
@@ -86,7 +82,6 @@ class transaction;
 using database_handle = std::shared_ptr<database>;
 using transaction_handle = std::shared_ptr<transaction>;
 
-extern transaction_handle make_transaction(database_handle dbh);
 [[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key);
 
 } // namespace ceph::libfdb
@@ -98,15 +93,10 @@ inline void convert(const std::span<const std::uint8_t>& from,
 
 } // namespace ceph::libfdb::from
 
-// MOAR forward declarations-- "pay no attention to that man behind the curtain":
+// Helpers used by the mostly opaque transaction type:
 namespace ceph::libfdb::detail {
 
 struct future_value;
-
-template <typename ValueT = std::string>
-std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv);
-
-inline fdb_error_t do_commit(transaction_handle& txn);
 
 inline void transaction_set_kv_bytes(const transaction_handle& txn,
                                      std::span<const std::uint8_t> k,
@@ -119,16 +109,6 @@ inline void transaction_clear_range(const transaction_handle& txn,
 inline future_value block_until_ready(future_value&& fv);
 inline fdb_error_t get_future_error(const future_value& fv);
 inline future_value wait_for_on_error(FDBTransaction* txn, fdb_error_t original_error);
-inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& selection, int iteration);
-
-// A generator that produces successive spans for a range:
-inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(ceph::libfdb::transaction& txn, ceph::libfdb::select key_range);
-
-// Stores generated key/value pair results to an iterator and returns the
-// number of pairs emitted:
-template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline std::size_t get_value_range_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& key_range, OutIterT& out_iter);
 
 } // namespace ceph::libfdb::detail
 
@@ -171,40 +151,6 @@ namespace ceph::libfdb::concepts {
 template <typename KeyT>
 concept libfdb_key = ceph::libfdb::detail::libfdb_key_like<KeyT>;
 
-template <typename IteratorT>
-concept key_value_iterator =
- std::input_iterator<IteratorT> and
- requires(std::iter_reference_t<IteratorT> kv) {
-  requires libfdb_key<decltype(kv.first)>;
-  requires std::is_object_v<std::remove_reference_t<decltype(kv.second)>>;
- };
-
-template <typename RangeT>
-concept key_value_range =
- std::ranges::input_range<RangeT> and
- key_value_iterator<std::ranges::iterator_t<RangeT>>;
-
-template <typename RangeT>
-concept key_value_forward_range =
- std::ranges::forward_range<RangeT> and
- key_value_iterator<std::ranges::iterator_t<RangeT>>;
-
-template <typename IteratorT>
-concept string_pair_output_iterator =
- std::output_iterator<IteratorT, std::pair<std::string, std::string>>;
-
-template <typename RangeT>
-concept string_pair_output_range =
- not std::is_array_v<std::remove_reference_t<RangeT>> and
- std::ranges::range<RangeT> and
- ceph::concepts::can_append<RangeT, std::pair<std::string, std::string>>;
-
-template <typename RangeT>
-concept materializable_string_pair_output_range =
- string_pair_output_range<RangeT> and
- std::default_initializable<std::remove_cvref_t<RangeT>> and
- std::move_constructible<std::remove_cvref_t<RangeT>>;
-
 template <typename FnT>
 concept value_invocable =
  std::invocable<FnT&, std::span<const std::uint8_t>>;
@@ -220,13 +166,6 @@ concept decoded_value_sink =
  std::is_lvalue_reference_v<T> and
  not std::is_const_v<std::remove_reference_t<T>> and
  std::is_object_v<std::remove_reference_t<T>>;
-
-template <typename T>
-concept supported_invocation_result =
- std::is_void_v<T> or
- (not std::is_reference_v<T> and
-  std::constructible_from<std::remove_cvref_t<T>, T> and
-  std::move_constructible<std::remove_cvref_t<T>>);
 
 } // namespace ceph::libfdb::concepts
 
@@ -798,12 +737,12 @@ class transaction final
 
  public:
  transaction(database_handle dbh_)
- : dbh(dbh_),
+ : dbh(std::move(dbh_)),
    txn_handle(dbh->create_transaction(), &fdb_transaction_destroy)
  {}
 
  transaction(database_handle dbh_, const transaction_options& opts) 
-  : transaction(dbh_)
+  : transaction(std::move(dbh_))
  {
   detail::apply_options(opts,
              [handle = raw_handle()](auto opt, auto val, auto sz) {
@@ -930,7 +869,6 @@ class transaction final
  friend inline commit_result commit(with_result_t, transaction_handle& txn);
  friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
- friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
  friend inline void ceph::libfdb::detail::transaction_set_kv_bytes(const transaction_handle&,
                                                                    std::span<const std::uint8_t>,
                                                                    std::span<const std::uint8_t>);
@@ -1133,292 +1071,6 @@ inline future_value await_future_of(FnT&& fn, XS&& ...params)
           std::invoke(std::forward<FnT>(fn), std::forward<XS>(params)...));
 }
 
-// Tracks a set of results and their corresponding Future:
-struct query_window final
-{
- future_value result_owner;
- std::span<const FDBKeyValue> result_pairs;
- bool more_available = false;
-};
-
-struct split_point_result final
-{
- future_value result_owner;
- std::span<const FDBKey> result_keys;
- fdb_error_t error = 0;
-};
-
-inline query_window extract_result_pairs(future_value result_owner)
-{
- int more_available = 0;
- int out_count = 0;
- const FDBKeyValue *out_kvs = nullptr;
-
- if (fdb_error_t r = fdb_future_get_keyvalue_array(result_owner.raw_ptr_or_throw(),
-                                                   &out_kvs,
-                                                   &out_count,
-                                                   &more_available); 0 != r) {
-  throw libfdb_exception(r);
- }
-
- return query_window {
-  .result_owner = std::move(result_owner),
-  .result_pairs = std::span<const FDBKeyValue>(out_kvs, out_count),
-  .more_available = 0 != more_available
- };
-}
-
-inline split_point_result extract_split_points(future_value result_owner)
-{
- const FDBKey *result_keys = nullptr;
- int result_count = 0;
-
- const auto error = fdb_future_get_key_array(result_owner.raw_ptr_or_throw(), &result_keys, &result_count);
-
- return split_point_result {
-  .result_owner = std::move(result_owner),
-  .result_keys = 0 == error ? std::span<const FDBKey>(result_keys, result_count)
-                            : std::span<const FDBKey>(),
-  .error = error
- };
-}
-
-inline query_window read_query_window(transaction& txn, const select& key_range, const int iteration)
-{
- return extract_result_pairs(await_future_of([&]() {
-  return get_range_future_from_transaction(txn, key_range, iteration);
- }));
-}
-
-inline std::optional<select> next_range_after(select key_range, const query_window& window)
-{
- if (not window.more_available or window.result_pairs.empty()) {
-  return std::nullopt;
- }
-
- const auto& last_key = window.result_pairs.back();
- auto cursor = std::string_view((const char *)last_key.key, last_key.key_length);
-
- if (key_range.options.reverse_order) {
-  key_range.end_key = cursor;
-  key_range.end_inclusive = false;
-  return key_range;
- }
-
- key_range.begin_key = cursor;
- key_range.begin_inclusive = false;
-
- return key_range;
-}
-
-template <typename ValueT = std::string>
-inline auto decode_pairs(std::span<const FDBKeyValue> pairs)
-{
- return pairs | std::views::transform(to_decoded_kv_pair<ValueT>);
-}
-
-template <typename ValueT, typename AssocT>
-inline AssocT collect_pairs(std::span<const FDBKeyValue> pairs)
-{
- return ceph::util::collect_as<AssocT>(decode_pairs<ValueT>(pairs));
-}
-
-template <typename AssocT>
-struct query_window_result final
-{
- AssocT result_block;
- std::optional<select> next_range;
-};
-
-template <typename ValueT, typename AssocT>
-inline query_window_result<AssocT> materialize_query_window(transaction& txn, select key_range, const int iteration = 1)
-{
- auto window = read_query_window(txn, key_range, iteration);
-
- return {
-  .result_block = collect_pairs<ValueT, AssocT>(window.result_pairs),
-  .next_range = next_range_after(std::move(key_range), window)
- };
-}
-
-inline std::size_t for_each_decoded_kv_pair(transaction& txn,
-                                            const select& key_range,
-                                            auto&& fn)
-{
- std::size_t nread = 0;
-
- for (const auto& kv : detail::generate_FDB_pairs(txn, key_range) | std::views::join) {
-  std::invoke(fn, to_decoded_kv_pair<std::string>(kv));
-  ++nread;
- }
-
- return nread;
-}
-
-template <typename OutIterT>
-requires std::output_iterator<OutIterT, std::pair<std::string, std::string>>
-inline std::size_t get_value_range_from_transaction(transaction& txn, const select& key_range, OutIterT& out_iter)
-{
- return for_each_decoded_kv_pair(txn, key_range,
-          [&out_iter](auto&& kv) {
-            *out_iter++ = std::forward<decltype(kv)>(kv);
-          });
-}
-
-inline std::size_t get_value_range_from_transaction(transaction& txn,
-                                                    const select& key_range,
-                                                    concepts::string_pair_output_range auto& out)
-{
- return for_each_decoded_kv_pair(txn, key_range,
-          [&out](auto&& kv) {
-            ceph::util::push_back(out, std::forward<decltype(kv)>(kv));
-          });
-}
-
-inline bool retry_after_error(ceph::libfdb::transaction_handle& txn, const fdb_error_t r)
-{
- if (0 == r) {
-  return false;
- }
-
- if (not fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, r)) {
-  // Non-retryable errors cannot be repaired by on_error():
-  throw ceph::libfdb::libfdb_exception(r);
- }
-
- if (fdb_error_t on_error_r = get_future_error(wait_for_on_error(txn->raw_handle(), r)); 0 != on_error_r) {
-  throw ceph::libfdb::libfdb_exception(r);
- }
-
- return true;
-}
-
-// Convert FDBKey array into something useful:
-inline std::vector<ceph::libfdb::select> as_select_seq(std::span<const FDBKey> xs,
-                                                       const ceph::libfdb::select& parent)
-{
- if (2 > xs.size()) {
-  return {};
- }
-
- // Gather the flattened list into *overlapping* libfdb::select pairs:
- return ceph::util::collect_as<std::vector<ceph::libfdb::select>>(
-          std::views::iota(std::size_t{0}, xs.size() - 1)
-        | std::views::transform([&parent, xs](const auto i) {
-           const auto& fst = xs[i];
-           const auto& snd = xs[i + 1];
-           const auto first_key = std::string_view((const char *)fst.key,
-                                                    static_cast<std::string::size_type>(fst.key_length));
-           const auto second_key = std::string_view((const char *)snd.key,
-                                                     static_cast<std::string::size_type>(snd.key_length));
-
-           ceph::libfdb::select split(first_key, second_key);
-
-           split.options = parent.options;
-           split.begin_inclusive = (0 == i) ? parent.begin_inclusive : true;
-           split.end_inclusive = (i + 2 == xs.size()) ? parent.end_inclusive : false;
-           return split;
-          }));
-}
-// Finding a clear example both in the samples and in the documentation is not very easy. The
-// statelessness of FDB requests bleeds into here with basically no hand-holding, but note for instance
-// that the call parameters have to change for subsequent reads.
-inline future_value get_range_future_from_transaction(ceph::libfdb::transaction& txn, const ceph::libfdb::select& selection, int iteration)
-{
-  const auto& begin_key  = selection.begin_key;
-  const auto& end_key    = selection.end_key;
-
-  const auto& options    = selection.options;
-
-  // The documentation makes this stuff about as clear as mud... read VERY carefully
-  // when you fiddle with these:
-  const bool continuing_forward = not options.reverse_order and 1 < iteration;
-  const bool continuing_reverse = options.reverse_order and 1 < iteration;
-
-  const int begin_or_eq = (continuing_forward or not selection.begin_inclusive) ? 1 : 0;
-  const int begin_offset = 1;
-  const int end_or_eq = (not continuing_reverse and selection.end_inclusive) ? 1 : 0;
-  const int end_offset = 1;
-
-  // See validate_and_update_parameters() in fdb_c.cpp (FDB source) if greater clarity is needed on
-  // the meaning of some of these, it can be hard to deduce from the documentation; Returns an
-  // FDBKeyValueArray in the future:
-  return future_value(fdb_transaction_get_range(txn.raw_handle(),
-                      (const uint8_t *)begin_key.data(), begin_key.size(),      // the reference-point key
-                      begin_or_eq,                                              // begin or eq
-                      begin_offset,                                             // begin offset
-
-                      (const uint8_t *)end_key.data(), end_key.size(),          // the end selector key
-                      end_or_eq,                                                // end or eq
-                      end_offset,                                               // end offset (a shift AFTER end is matched)
-
-                      // How should results be grouped/chunked:
-                      options.result_limit,                                     // FDB range-read limit (0 == unlimited)
-                      options.target_bytes,                                     // FDB range-read target bytes (0 == unlimited)
-                      options.streaming_mode,                                   // streaming mode (e.g.: FDB_STREAMING_MODE_WANT_ALL)
-                      iteration,                                                // iteration # (produced side effect)
-
-                      // Other options:
-                      0,                                                        // 0 unless this IS a snapshot read
-                      options.reverse_order                                     // should items come in reverse order?
-                    ));
-}
-
-inline std::vector<ceph::libfdb::select> plan_split_ranges(
-          ceph::libfdb::database_handle dbh, 
-          ceph::libfdb::select selector, 
-          const std::int64_t remote_chunk_size)
-{
- using ceph::libfdb::detail::wait_until_ready;
-
- auto txn = ceph::libfdb::make_transaction(dbh);
- auto split_selector = ceph::libfdb::detail::as_half_open_select(selector);
-
- for (bool should_retry = true; should_retry;) {
-  auto result_owner = wait_until_ready(future_value(fdb_transaction_get_range_split_points(
-                       txn->raw_handle(),
-                       (const std::uint8_t *)split_selector.begin_key.data(), static_cast<int>(split_selector.begin_key.length()),
-                       (const std::uint8_t *)split_selector.end_key.data(), static_cast<int>(split_selector.end_key.length()),
-                       remote_chunk_size)));
-
-  auto split_points = extract_split_points(std::move(result_owner));
-
-  should_retry = retry_after_error(txn, split_points.error);
-
-  if (not should_retry) {
-   return as_select_seq(split_points.result_keys, split_selector);
-  }
- }
-
- return {};
-}
-
-// Generators (internal guts):
-// The returned memory should be copied immediately as its lifetime will end once the Future is destroyed:
-// (This is pretty much why this is in the "detail" namespace-- we use this to implement the user-facing
-// stuff, it shouldn't really be touched outside.)
-inline std::generator<std::span<const FDBKeyValue>> generate_FDB_pairs(transaction& txn, select key_range)
-{
- // FDB uses iteration for FDB_STREAMING_MODE_ITERATOR (but, other streaming modes
- // just ignore it, per fdb_c's documentation. We do have to keep this state somewhere,
- // though. See: "https://apple.github.io/foundationdb/api-c.html".
- int iteration = 1;
-
- for (auto more_available = true; more_available; iteration++) {
-  auto window = read_query_window(txn, key_range, iteration);
-  auto next_range = next_range_after(key_range, window);
-
-  more_available = next_range.has_value();
-
-  co_yield window.result_pairs;
-
-  if (next_range) {
-   key_range = std::move(*next_range);
-  }
- }
-}
-
 } // namespace ceph::libfdb::detail
-
 
 #endif

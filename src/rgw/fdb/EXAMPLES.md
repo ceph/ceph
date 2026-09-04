@@ -257,6 +257,7 @@ explicit open/closed boundaries.
 | Select an explicit half-open key interval | `q::between(begin, end)` | `lfdb::select` | Matches the usual FoundationDB `[begin, end)` range shape. |
 | Combine or subtract selections | `q::intersection()`, `q::set_union()`, `q::difference()` | query expression or selector | Lets the query compiler normalize intervals before execution. |
 | Run several dependent operations atomically | `lfdb::make_transactor(dbh)` | callable transaction runner | Replays retryable transactions while keeping user code explicit. |
+| Publish local output after a replayable transaction | `lfdb::staged(output)` | callback proxy | Prevents retries from applying the same local mutation more than once. |
 
 ### Managed Range Reads
 
@@ -956,6 +957,66 @@ txr([](auto& txn) {
   lfdb::set(txn, "person/eleanor-of-aquitaine/title", "Duchess of Aquitaine");
 });
 ```
+
+### Staged Proxies
+
+A transactor may run its body more than once. Mutating a captured output
+variable directly can therefore append or count the same result several times. 
+Staged Proxies talk with the transaction mechanisms to be sure that only attempts
+whos commits are confirmed get published to the `output`.
+
+```cpp
+// Recompute a D4N bucket's cached-byte count without counting a replay twice.
+std::uint64_t cached_bytes = 0; // <-- this is what we will pass by Staged Proxy
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& bytes, std::string_view bucket_id) {
+  bytes = 0;
+
+  for (const auto& block :
+       lfdb::scan<CacheBlock>(txn, object_range(bucket_id)) |
+         std::views::values) {
+    bytes += block.size;
+  }
+}, lfdb::staged(cached_bytes), bucket_id);
+```
+
+If you want to declare a proxy ahead of time, you should be sure to move() it into
+the Transactor becuse it represents exactly one invocation's staging state:
+
+```cpp
+// Replace a D4N block listing only after the transaction commits successfully.
+std::vector<CacheBlock> blocks;
+auto blocks_prx = lfdb::staged(blocks);
+auto txr = lfdb::make_transactor(dbh);
+
+txr([](auto& txn, auto& blocks, std::string_view bucket_id) {
+    /* do some operations */
+}, std::move(blocks_prx), bucket_id);
+```
+
+Prefer an ordinary return value when the callback produces one new value;
+staging is for output parameters or several existing local values.
+The proxy covers assignment, `+=`, common sequence updates, and
+`insert_or_assign()`; use `get_target()` for an uncommon operation.
+
+Gotchas:
+
+- The target must be copy-constructible, nothrow move-assignable, alive for the
+  call, and not accessed concurrently. Binding it twice is rejected with an exception;
+  overlapping targets are also invalid.
+
+- Accept the proxy by lvalue reference (`auto& output`, as above). Do not
+  capture and mutate the original target, or retain the proxy—or any
+  pointer, reference, or iterator obtained from it—after the callback.
+  Anything obtained through `get_target()` is still attempt-local.
+
+- Staging protects only the bound C++ value. Logging, I/O, other captured state,
+  and non-idempotent database writes after `commit_unknown_result` still need
+  their own replay-safe design.
+
+Any uncommitted outcome leaves the target unchanged. An ordinary transactor
+throws on retry exhaustion; `with_result` reports it with `committed == false`.
 
 ### Reporting replay results
 

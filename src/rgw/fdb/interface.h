@@ -11,36 +11,53 @@
  *
 */
 
-#ifndef CEPH_FDB_BINDINGS_H
- #define CEPH_FDB_BINDINGS_H
+#ifndef CEPH_FDB_INTERFACE_H
+ #define CEPH_FDB_INTERFACE_H
 
-#include "base.h"
 #include "conversion.h"
+#include "transaction.h"
 
-#include <tuple>
+#include <span>
+#include <string>
+#include <vector>
+#include <string_view>
+
+#include <ranges>
+#include <iterator>
+#include <algorithm>
+
+#include <memory>
+#include <cstdint>
+#include <utility>
+#include <concepts>
+#include <functional>
+#include <stop_token>
+#include <filesystem>
+#include <type_traits>
 
 namespace ceph::libfdb {
 
-// Overload tag for transactors that should report replay/commit metadata:
-struct with_result_t final {};
-inline constexpr with_result_t with_result;
+namespace concepts {
 
-// Describes replay/commit work performed by result-reporting transactors.
-struct transaction_result final {
- bool committed = false;
- std::size_t attempts = 0;
+template <typename IteratorT>
+concept key_value_iterator =
+ std::input_iterator<IteratorT> and
+ requires(std::iter_reference_t<IteratorT> kv) {
+  requires libfdb_key<decltype(kv.first)>;
+  requires std::is_object_v<std::remove_reference_t<decltype(kv.second)>>;
+ };
 
- // Replays prepared after retryable failures; excludes a final exhausted attempt:
- std::size_t replay_count = 0;
+template <typename RangeT>
+concept key_value_range =
+ std::ranges::input_range<RangeT> and
+ key_value_iterator<std::ranges::iterator_t<RangeT>>;
 
- fdb_error_t last_error = 0;
-};
+template <typename RangeT>
+concept key_value_forward_range =
+ std::ranges::forward_range<RangeT> and
+ key_value_iterator<std::ranges::iterator_t<RangeT>>;
 
-// Describes a commit attempt when the caller owns transaction replay.
-struct commit_result final {
- bool committed = false;
- fdb_error_t replay_error = 0;
-};
+} // namespace concepts
 
 /* This should be called when the application is all done with FoundationDB: */
 inline void shutdown_libfdb()
@@ -83,79 +100,9 @@ inline database_handle create_database(const std::filesystem::path dbfile,
  return create_database(dbfile, dbopts, network_options{});
 }
 
-inline transaction_handle make_transaction(database_handle dbh)
-{
- if (!dbh) {
-  throw std::invalid_argument("make_transaction() requires database handle");
- }
-
- return std::make_shared<transaction>(dbh);
-}
-
-inline transaction_handle make_transaction(database_handle dbh, const transaction_options& opts)
-{
- return std::make_shared<transaction>(dbh, opts);
-}
-
-// Note: only rarely is a direct call to this needed. You can use transactors or pass database_handles
-// to get automagic.
-// Note: after a transaction is committed, it cannot be used again.
-// On false, the client should retry the transaction:
-[[nodiscard]] inline bool commit(transaction_handle& txn)
-{
- return txn->commit();
-}
-
-// Prepare a transaction to replay after a retryable operation-body error:
-void prepare_replay(transaction_handle& txn, fdb_error_t error);
-
-[[nodiscard]] commit_result commit(with_result_t, transaction_handle& txn);
-
-[[nodiscard]] inline bool commit(transaction_handle& txn,
-                                 const versionstamp& stamp)
-{
- txn->mark_version(stamp);
- return commit(txn);
-}
-
-[[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key)
-{
- return txn->make_watch(detail::as_fdb_span(key));
-}
-
 } // namespace ceph::libfdb
 
 namespace ceph::libfdb::detail {
-
-// Forward declarations:
-template <typename FnT, typename ...ArgTs>
-using transaction_invocation_result_t =
- std::invoke_result_t<FnT&, transaction_handle&, ArgTs&...>;
-
-template <typename FnT, typename ...ArgTs>
-concept transaction_op =
- std::invocable<FnT&, transaction_handle&, ArgTs&...> &&
- concepts::supported_invocation_result<transaction_invocation_result_t<FnT, ArgTs...>>;
-
-template <typename FnT, typename ...ArgTs>
-concept result_reporting_transaction_op =
- transaction_op<FnT, ArgTs...> &&
- std::is_void_v<transaction_invocation_result_t<FnT, ArgTs...>>;
-
-template <typename FnT, typename ...ArgTs>
-concept bound_transaction_op =
- std::constructible_from<std::decay_t<FnT>, FnT> &&
- (std::constructible_from<std::decay_t<ArgTs>, ArgTs> && ...) &&
- transaction_op<std::decay_t<FnT>, std::decay_t<ArgTs>...>;
-
-template <typename FnT>
-using operation_result_t =
- std::conditional_t<std::is_void_v<transaction_invocation_result_t<FnT>>,
-                    void,
-                    std::remove_cvref_t<transaction_invocation_result_t<FnT>>>;
-
-template <result_reporting_transaction_op FnT>
-transaction_result maybe_retry_with_result(transaction_handle txn, FnT&& fn);
 
 template <typename OutValuesT>
 struct value_collector_t final
@@ -181,17 +128,6 @@ auto get_output_for(OutputTargetOrFnT&& output_target_or_fn)
 {
  return value_collector(output_target_or_fn);
 }
-
-template <transaction_op FnT>
-auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>;
-
-template <transaction_op FnT>
-auto commit_noreplay(transaction_handle txn, const commit_after_op commit_after, FnT&& fn)
- -> operation_result_t<FnT>;
-
-template <transaction_op FnT>
-auto in_transaction(database_handle dbh, FnT&& fn)
- -> operation_result_t<FnT>;
 
 } // namespace ceph::libfdb::detail
 
@@ -474,180 +410,6 @@ inline void erase(ceph::libfdb::database_handle dbh, const concepts::libfdb_key 
 
 namespace ceph::libfdb {
 
-namespace detail {
-
-inline select select_from_initializer_list(std::initializer_list<std::string_view> keys)
-{
- const auto first = std::begin(keys);
-
- if (1 == std::size(keys)) {
-  return select(*first);
- }
-
- if (2 == std::size(keys)) {
-  return select(*first, *std::next(first));
- }
-
- throw libfdb_exception("range selection initializer list requires one or two keys");
-}
-
-template <typename OutT>
-struct materialized_string_pair_output final
-{
- OutT values;
- std::size_t nread = 0;
-};
-
-template <typename RangeT>
-inline auto move_range(RangeT& range)
-{
- return std::ranges::subrange(std::make_move_iterator(std::begin(range)),
-                              std::make_move_iterator(std::end(range)));
-}
-
-template <typename ContainerT>
-inline void publish_string_pair_results(ContainerT& out, ContainerT&& tmp)
-{
- if constexpr (ceph::concepts::has_empty<ContainerT> &&
-               std::assignable_from<ContainerT&, ContainerT&&>) {
-  if (out.empty()) {
-   out = std::move(tmp);
-   return;
-  }
- }
-
- if constexpr (requires { out.merge(tmp); }) {
-  out.merge(tmp);
-  return;
- }
-
- ceph::util::append_range(out, move_range(tmp));
-}
-
-template <query::expression SelectionT, typename OutT>
-requires concepts::string_pair_output_iterator<OutT> ||
-         concepts::string_pair_output_range<OutT>
-inline std::size_t get_value_selection_from_transaction(transaction& txn,
-                                                        const SelectionT& selection,
-                                                        OutT& out)
-{
- std::size_t nread = 0;
-
- query::for_each_interval(selection, [&](const ceph::libfdb::select& interval) {
-  nread += detail::get_value_range_from_transaction(txn, interval, out);
- });
-
- return nread;
-}
-
-template <typename OutT, query::expression SelectionT>
-requires concepts::materializable_string_pair_output_range<OutT>
-inline auto materialize_string_pair_selection(transaction& txn,
-                                              const SelectionT& selection)
- -> materialized_string_pair_output<OutT>
-{
- OutT tmp;
- const auto nread = get_value_selection_from_transaction(txn, selection, tmp);
-
- return {
-  .values = std::move(tmp),
-  .nread = nread
- };
-}
-
-} // namespace detail
-
-// get() with a selector writes key/value pairs to out_iter and returns the
-// number of pairs emitted:
-// JFW: Satisfying output_iterator is not as straightforward as it appears, I need to look at this mechanism again; meanwhile, the template doesn't
-// /prevent/ future type narrowing, but I'm forcing it to std::string for now:
-inline std::size_t get(ceph::libfdb::transaction_handle txn,
-                       const query::expression auto& selection,
-                       concepts::string_pair_output_iterator auto out_iter,
-                       const ceph::libfdb::commit_after_op commit_after)
-{
- return detail::commit_noreplay(txn, commit_after,
-          [&selection, out_iter](const transaction_handle& active_txn) mutable {
-            return detail::get_value_selection_from_transaction(*active_txn, selection, out_iter);
-          });
-}
-
-inline std::size_t get(ceph::libfdb::transaction_handle txn,
-                       const query::expression auto& selection,
-                       concepts::string_pair_output_iterator auto out_iter)
-{
- return get(txn, selection, out_iter, commit_after_op::no_commit);
-}
-
-inline std::size_t get(ceph::libfdb::database_handle dbh,
-                       const query::expression auto& selection,
-                       concepts::string_pair_output_iterator auto out_iter)
-{
- auto result = detail::in_transaction(dbh,
-          [&selection](transaction_handle& txn) {
-            using out_t = std::vector<std::pair<std::string, std::string>>;
-            return detail::materialize_string_pair_selection<out_t>(*txn, selection);
-          });
-
- std::ranges::move(result.values, out_iter);
- return result.nread;
-}
-
-inline std::size_t get(ceph::libfdb::transaction_handle txn,
-                       const query::expression auto& selection,
-                       concepts::string_pair_output_range auto& out,
-                       const ceph::libfdb::commit_after_op commit_after)
-{
- return detail::commit_noreplay(txn, commit_after,
-          [&selection, &out](const transaction_handle& active_txn) {
-            return detail::get_value_selection_from_transaction(*active_txn, selection, out);
-          });
-}
-
-inline std::size_t get(ceph::libfdb::transaction_handle txn,
-                       const query::expression auto& selection,
-                       concepts::string_pair_output_range auto& out)
-{
- return get(txn, selection, out, commit_after_op::no_commit);
-}
-
-inline std::size_t get(ceph::libfdb::database_handle dbh,
-                       const query::expression auto& selection,
-                       concepts::materializable_string_pair_output_range auto& out)
-{
- using out_t = std::remove_cvref_t<decltype(out)>;
-
- auto result = detail::in_transaction(dbh,
-          [&selection](transaction_handle& txn) {
-            return detail::materialize_string_pair_selection<out_t>(*txn, selection);
-          });
-
- detail::publish_string_pair_results(out, std::move(result.values));
- return result.nread;
-}
-
-inline std::size_t get(ceph::libfdb::transaction_handle txn,
-                       std::initializer_list<std::string_view> keys,
-                       concepts::string_pair_output_range auto& out,
-                       const ceph::libfdb::commit_after_op commit_after)
-{
- return get(txn, detail::select_from_initializer_list(keys), out, commit_after);
-}
-
-inline std::size_t get(ceph::libfdb::transaction_handle txn,
-                       std::initializer_list<std::string_view> keys,
-                       concepts::string_pair_output_range auto& out)
-{
- return get(txn, keys, out, commit_after_op::no_commit);
-}
-
-inline std::size_t get(ceph::libfdb::database_handle dbh,
-                       std::initializer_list<std::string_view> keys,
-                       concepts::materializable_string_pair_output_range auto& out)
-{
- return get(dbh, detail::select_from_initializer_list(keys), out);
-}
-
 template <typename OutputTargetOrFnT>
 requires concepts::value_callback<std::remove_reference_t<OutputTargetOrFnT>> or
          concepts::decoded_value_sink<OutputTargetOrFnT&&>
@@ -716,340 +478,6 @@ inline bool key_exists(database_handle dbh, const concepts::libfdb_key auto& k)
 
 } // namespace ceph::libfdb
 
-namespace ceph::libfdb {
-
-/* A "transactor" is a function-like wrapper for running replayable transactions.
- * It defers transaction creation until called, commits after the user function
- * returns, replays when FoundationDB requests replay, and throws when recovery
- * fails or retry attempts are exhausted. Plus, the name is pretty cool. */
-class transactor final
-{
- database_handle dbh;
-
- std::optional<transaction_options> opts;
-
- private:
- explicit transactor(database_handle dbh_)
-  : dbh(dbh_)
- {}
-
- transactor(database_handle dbh_, const transaction_options& opts_)
-  : dbh(dbh_),
-    opts(opts_)
- {}
-
- // Bind the callable and arguments once so replays see stable state:
- template <typename FnT, typename ...ArgTs>
- static auto bind_invocation(FnT&& fn, ArgTs&& ...args)
- {
-  return [frame = std::tuple<std::decay_t<FnT>, std::decay_t<ArgTs>...> {
-            std::forward<FnT>(fn), std::forward<ArgTs>(args)...
-          }](transaction_handle& txn) mutable -> decltype(auto) {
-    return std::apply([&txn](auto& active_fn, auto& ...active_args) -> decltype(auto) {
-      return std::invoke(active_fn, txn, active_args...);
-    }, frame);
-  };
- }
-
- transaction_handle make_transaction_for_call() const
- {
-  return opts ? make_transaction(dbh, *opts) : make_transaction(dbh);
- }
-
- public:
- template <typename FnT>
- requires detail::transaction_op<FnT>
- decltype(auto) operator()(FnT&& fn) const
- {
-  return detail::maybe_retry(make_transaction_for_call(), std::forward<FnT>(fn));
- }
-
- template <typename FnT, typename ...ArgTs>
- requires (sizeof...(ArgTs) > 0 && detail::bound_transaction_op<FnT, ArgTs...>)
- decltype(auto) operator()(FnT&& fn, ArgTs&& ...args) const
- {
-  auto bound = bind_invocation(std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
-
-  return (*this)(bound);
- }
-
- template <typename FnT>
- requires detail::result_reporting_transaction_op<FnT>
- transaction_result operator()(with_result_t, FnT&& fn) const
- {
-  return detail::maybe_retry_with_result(make_transaction_for_call(), std::forward<FnT>(fn));
- }
-
- template <typename FnT, typename ...ArgTs>
- requires (sizeof...(ArgTs) > 0 &&
-           detail::bound_transaction_op<FnT, ArgTs...> &&
-           detail::result_reporting_transaction_op<
-             std::decay_t<FnT>, std::decay_t<ArgTs>...>)
- transaction_result operator()(with_result_t, FnT&& fn, ArgTs&& ...args) const
- {
-  auto bound = bind_invocation(std::forward<FnT>(fn), std::forward<ArgTs>(args)...);
-
-  return (*this)(with_result, bound);
- }
-
- private:
- friend inline transactor make_transactor(database_handle dbh);
- friend inline transactor make_transactor(database_handle dbh, const transaction_options& opts);
-};
-
-inline transactor make_transactor(database_handle dbh)
-{
- return transactor(dbh);
-}
-
-inline transactor make_transactor(database_handle dbh, const transaction_options& opts)
-{
- return transactor(dbh, opts);
-}
-
-} // namespace ceph::libfdb
-
-// Scan and block traversal:
-namespace ceph::libfdb {
-
-namespace detail {
-
-inline auto intervals(ceph::libfdb::select selection)
-{
- // Raw selectors keep select compatibility but still execute in ordinary FDB keyspace:
- return std::views::single(query::intersection(std::move(selection), query::universal()))
-      | std::views::filter([](const ceph::libfdb::select& range) {
-         return not query::is_empty(range);
-        });
-}
-
-template <query::non_interval_expression QueryT>
-inline auto intervals(const QueryT& query)
-{
- std::vector<ceph::libfdb::select> out;
-
- query::for_each_interval(query, [&out](ceph::libfdb::select interval) {
-  out.push_back(std::move(interval));
- });
-
- return out;
-}
-
-template <typename AssocT, typename RangeT>
-inline AssocT collect_range(RangeT&& range)
-{
- AssocT out;
- std::ranges::copy(std::forward<RangeT>(range),
-                   std::inserter(out, std::end(out)));
- return out;
-}
-
-template <typename ValueT = std::string>
-inline auto scan_selector(ceph::libfdb::transaction_handle txn, ceph::libfdb::select key_range)
-  -> std::generator<std::pair<std::string, ValueT>>
-{
- auto decoded_pairs = ceph::libfdb::detail::generate_FDB_pairs(*txn, key_range)
-                    | std::views::join
-                    | std::views::transform(ceph::libfdb::detail::to_decoded_kv_pair<ValueT>);
-
- co_yield std::ranges::elements_of(decoded_pairs);
-}
-
-template <typename ValueT, typename BlockRangeT>
-inline auto flatten_blocks(BlockRangeT block_range)
-  -> std::generator<std::pair<std::string, ValueT>>
-{
- for (auto block : block_range) {
-  for (auto& pair : block) {
-   co_yield std::move(pair);
-  }
- }
-}
-
-} // namespace detail
-
-// For ordinary range scans inside one explicit transaction, scan() is usually
-// the right default:
-template <typename ValueT = std::string,
-          query::expression SelectionT>
-inline auto scan(ceph::libfdb::transaction_handle txn, SelectionT selection)
-  -> std::generator<std::pair<std::string, ValueT>>
-{
- for (auto& interval : detail::intervals(selection)) {
-  co_yield std::ranges::elements_of(
-   detail::scan_selector<ValueT>(txn, std::move(interval)));
- }
-}
-
-// Legacy name retained for compatibility:
-template <typename ValueT = std::string,
-          query::expression SelectionT>
-inline auto pair_generator(ceph::libfdb::transaction_handle txn,
-                           SelectionT selection)
-  -> std::generator<std::pair<std::string, ValueT>>
-{
- return scan<ValueT>(txn, std::move(selection));
-}
-
-// Note: blocks() uses split planning to tackle large sets; use scan(txn, ...)
-// for direct scans in a caller-owned transaction.
-//
-// What blocks() gives you:
-// - avoids one huge transaction getting too old
-// - gives caller block-at-a-time processing
-// - can bound memory and transaction duration better than a monolithic scan
-//
-// Note: blocks() was originally parallel, and could be again, but preliminary
-// benchmarking showed it to be a significant performance impediment. The
-// database must be truly large to see benefits.
-//
-// Note: This is meant to be straightforward and easy-to-understand-- hence, there's not
-// a recovery strategy or other things (you can replay the entire query)-- as new needs arise, this
-// can be made more flexible via selector options, dynamic range-splitting, etc., but so far there
-// has been no need:
-namespace detail {
-
-template <typename ValueT = std::string,
-          typename AssocT = std::vector<std::pair<std::string, ValueT>>>
-auto blocks_selector(ceph::libfdb::database_handle dbh, ceph::libfdb::select selector)
- -> std::generator<AssocT>
-{
- if (0 == selector.options.result_limit) {
-  selector.options.result_limit = 4096;
- }
-
- // JFW: Although this is tunable, in my measurement it isn't a large factor so far-- likely 
- // these can move into the select instance itself (this is hard to measure in tests-- N
- // has to be pretty big; I've adjusted chunk_size to where I guesstimate it needs to be,
- // we need real-world experience to tweak this further):
- const auto chunk_size = 4 * 1024 * 1024;
-
- auto split_ranges = detail::plan_split_ranges(dbh, selector, chunk_size);
-
- auto read_blocks = [txr = make_transactor(dbh)](this auto& self, ceph::libfdb::select range, const int iteration)
- -> std::generator<AssocT> {
-  auto read_result = txr([](auto& txn, ceph::libfdb::select range, const int iteration) {
-   return detail::materialize_query_window<ValueT, AssocT>(*txn, std::move(range), iteration);
-  }, std::move(range), iteration);
-
-  auto next_range = std::move(read_result.next_range);
-
-  if (read_result.result_block.empty()) {
-   co_return;
-  }
-
-  co_yield std::move(read_result.result_block);
-
-  if (next_range) {
-   co_yield std::ranges::elements_of(self(std::move(*next_range), iteration + 1));
-  }
- };
-
- auto expand_range = [&read_blocks](ceph::libfdb::select range) {
-  return read_blocks(std::move(range), 1);
- };
-
- co_yield std::ranges::elements_of(split_ranges
-                                 | std::views::transform(expand_range)
-                                 | std::views::join);
-}
-
-} // namespace detail
-
-template <typename ValueT = std::string,
-          typename AssocT = std::vector<std::pair<std::string, ValueT>>,
-          query::expression SelectionT>
-auto blocks(ceph::libfdb::database_handle dbh, SelectionT selection)
- -> std::generator<AssocT>
-{
- for (auto& interval : detail::intervals(selection)) {
-  co_yield std::ranges::elements_of(
-   detail::blocks_selector<ValueT, AssocT>(dbh, std::move(interval)));
- }
-}
-
-// Legacy name retained for compatibility:
-template <typename ValueT = std::string,
-          typename AssocT = std::vector<std::pair<std::string, ValueT>>,
-          query::expression SelectionT>
-auto block_generator(ceph::libfdb::database_handle dbh, SelectionT selection)
- -> std::generator<AssocT>
-{
- return blocks<ValueT, AssocT>(dbh, std::move(selection));
-}
-
-// Managed scans flatten the blocks() stream into key/value pairs.
-template <typename ValueT = std::string,
-          query::expression SelectionT>
-inline auto scan(ceph::libfdb::database_handle dbh, SelectionT selection)
-  -> std::generator<std::pair<std::string, ValueT>>
-{
- return detail::flatten_blocks<ValueT>(blocks<ValueT>(dbh, std::move(selection)));
-}
-
-template <typename ValueT = std::string,
-          typename AssocT = std::vector<std::pair<std::string, ValueT>>,
-          query::expression SelectionT>
-inline AssocT collect(ceph::libfdb::transaction_handle txn, SelectionT selection)
-{
- return detail::collect_range<AssocT>(scan<ValueT>(txn, std::move(selection)));
-}
-
-template <typename ValueT = std::string,
-          typename AssocT = std::vector<std::pair<std::string, ValueT>>,
-          query::expression SelectionT>
-inline AssocT collect(ceph::libfdb::database_handle dbh, SelectionT selection)
-{
- return detail::collect_range<AssocT>(scan<ValueT>(dbh, std::move(selection)));
-}
-
-} // namespace ceph::libfdb
-
-namespace ceph::libfdb::detail {
-
-// Helper implementations:
-inline fdb_error_t do_commit(transaction_handle& txn)
-{
- if (fdb_error_t r = 0; !txn->commit(&r)) {
-  return r;
- }
-
- return 0;
-}
-
-inline bool commit_or_throw(transaction_handle& txn)
-{
- if (fdb_error_t r = do_commit(txn); 0 != r) {
-  throw ceph::libfdb::libfdb_exception(r);
- }
-
- return true;
-}
-
-} // namespace ceph::libfdb::detail
-
-namespace ceph::libfdb {
-
-inline void prepare_replay(transaction_handle& txn, const fdb_error_t error)
-{
- if (not detail::retry_after_error(txn, error)) {
-  throw libfdb_exception(error);
- }
-}
-
-[[nodiscard]] inline commit_result commit(with_result_t, transaction_handle& txn)
-{
- fdb_error_t replay_error = 0;
- const auto committed = txn->commit(&replay_error);
-
- return {
-  .committed = committed,
-  .replay_error = replay_error,
- };
-}
-
-} // namespace ceph::libfdb
-
 namespace ceph::libfdb::detail {
 
 template <typename OutValuesT>
@@ -1062,192 +490,6 @@ template <typename OutValuesT>
 auto value_collector(OutValuesT& out_values) -> value_collector_t<OutValuesT>
 {
  return { out_values };
-}
-
-enum struct invocation_failure_policy { no_retry, retry };
-
-struct no_invocation_result final {};
-
-// Keep the existing transactor retry behavior in one place.
-constexpr std::size_t transaction_retry_attempts = 10;
-
-inline void record_transaction_replay(transaction_result& result,
-                                      const fdb_error_t r,
-                                      const bool can_replay)
-{
- result.last_error = r;
-
- if (can_replay) {
-  ++result.replay_count;
- }
-}
-
-template <typename ResultT>
-struct invocation_result_traits final {
- using stored_t = std::remove_cvref_t<ResultT>;
-
- template <typename FnT>
- static stored_t store(transaction_handle& txn, FnT&& fn)
- {
-  return std::invoke(std::forward<FnT>(fn), txn);
- }
-
- static stored_t take(std::optional<stored_t>&& result)
- {
-  return *std::move(result);
- }
-};
-
-template <>
-struct invocation_result_traits<void> final {
- using stored_t = no_invocation_result;
-
- template <typename FnT>
- static stored_t store(transaction_handle& txn, FnT&& fn)
- {
-  std::invoke(std::forward<FnT>(fn), txn);
-
-  return {};
- }
-
- static void take(std::optional<stored_t>&&)
- {}
-};
-
-template <typename ResultT>
-using stored_invocation_result_t = typename invocation_result_traits<ResultT>::stored_t;
-
-template <typename ResultT, typename FnT>
-auto store_invocation_result(transaction_handle& txn, FnT&& fn)
- -> stored_invocation_result_t<ResultT>
-{
- return invocation_result_traits<ResultT>::store(txn, std::forward<FnT>(fn));
-}
-
-template <typename ResultT, typename StoredT>
-decltype(auto) invocation_value_from_result(std::optional<StoredT>&& result)
-{
- return invocation_result_traits<ResultT>::take(std::move(result));
-}
-
-template <invocation_failure_policy FailurePolicy,
-          typename FnT,
-          typename CommitFnT,
-          typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-auto attempt_invocation(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn)
- -> std::optional<stored_invocation_result_t<ResultT>>
-{
- using stored_result_t = stored_invocation_result_t<ResultT>;
-
- std::optional<stored_result_t> result;
-
- try {
-  result.emplace(store_invocation_result<ResultT>(txn, fn));
- }
- catch (const libfdb_exception& e) {
-  // Figure out how to recover from invocation failure:
-
-  if constexpr (invocation_failure_policy::no_retry == FailurePolicy) {
-   throw;
-  }
-
-  if (not e.retryable()) {
-   throw;
-  }
-
-  prepare_replay(txn, e.fdb_error_value);
-  return std::nullopt;
- }
-
- if (!std::invoke(commit_fn, txn)) {
-  return std::nullopt;
- }
-
- return result;
-}
-
-template <invocation_failure_policy FailurePolicy,
-          typename FnT,
-          typename CommitFnT,
-          typename ResultT = std::invoke_result_t<FnT&, transaction_handle&>>
-decltype(auto) invoke_with_retry(transaction_handle& txn, FnT&& fn, CommitFnT&& commit_fn)
-{
- for (auto tries = transaction_retry_attempts; tries; --tries) {
-  if (auto result = attempt_invocation<FailurePolicy>(txn, fn, commit_fn)) {
-   return invocation_value_from_result<ResultT>(std::move(result));
-  }
- }
-
- throw libfdb_exception("transaction retry limit exceeded");
-}
-
-template <transaction_op FnT>
-auto maybe_retry(transaction_handle txn, FnT&& fn) -> operation_result_t<FnT>
-{
- return invoke_with_retry<invocation_failure_policy::retry>(
-          txn, std::forward<FnT>(fn),
-          [](transaction_handle& active_txn) {
-            return ceph::libfdb::commit(active_txn);
-          });
-}
-
-template <result_reporting_transaction_op FnT>
-transaction_result maybe_retry_with_result(transaction_handle txn, FnT&& fn)
-{
- transaction_result result;
-
- for (auto attempts_left = transaction_retry_attempts; attempts_left; --attempts_left) {
-  ++result.attempts;
-
-  try {
-   std::invoke(fn, txn);
-  } catch (const libfdb_exception& e) {
-   if (not e.retryable()) {
-    throw;
-   }
-
-   prepare_replay(txn, e.fdb_error_value);
-   record_transaction_replay(result, e.fdb_error_value, 1 < attempts_left);
-
-   continue;
-  }
-
-  const auto commit_state = commit(with_result, txn);
-  if (not commit_state.committed and 0 == commit_state.replay_error) {
-   throw libfdb_exception("transactor commit did not start");
-  }
-
-  if (not commit_state.committed) {
-   record_transaction_replay(result, commit_state.replay_error, 1 < attempts_left);
-
-   continue;
-  }
-
-  result.committed = true;
-  return result;
- }
-
- return result;
-}
-
-template <transaction_op FnT>
-auto in_transaction(database_handle dbh, FnT&& fn)
- -> operation_result_t<FnT>
-{
- return maybe_retry(make_transaction(dbh), std::forward<FnT>(fn));
-}
-
-// Commit only once; the caller is responsible for transaction replay:
-template <transaction_op FnT>
-auto commit_noreplay(transaction_handle txn, const commit_after_op commit_after, FnT&& fn)
- -> operation_result_t<FnT>
-{
- if (commit_after_op::commit != commit_after) {
-  return std::invoke(fn, txn);
- }
-
- return invoke_with_retry<invocation_failure_policy::no_retry>(
-          txn, std::forward<FnT>(fn), commit_or_throw);
 }
 
 } // namespace ceph::libfdb::detail
