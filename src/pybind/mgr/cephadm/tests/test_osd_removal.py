@@ -274,6 +274,23 @@ class TestOSDRemovalQueue:
         q.osds.add(osd_obj)
         assert q.queue_size() == 1
 
+    def test_process_removal_queue_preserves_concurrent_enqueue(self, osd_obj):
+        q = OSDRemovalQueue(mock.Mock())
+        concurrently_added = OSD(1, mock.MagicMock())
+        q.osds.add(osd_obj)
+
+        def enqueue_while_processing(_):
+            q.osds.add(concurrently_added)
+            return 1
+
+        osd_obj.rm_util.get_pg_count.side_effect = enqueue_while_processing
+        with mock.patch.object(q, 'cleanup'), \
+                mock.patch.object(q, '_ready_to_drain_osds', return_value=[]), \
+                mock.patch.object(q, '_save_to_store'):
+            q.process_removal_queue()
+
+        assert q.osds == {osd_obj, concurrently_added}
+
     @mock.patch("cephadm.services.osd.OSD.start")
     @mock.patch("cephadm.services.osd.OSD.exists")
     def test_enqueue(self, exist, start, osd_obj):
