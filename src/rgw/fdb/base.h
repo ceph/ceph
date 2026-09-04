@@ -75,8 +75,10 @@ struct interval;
 } // namespace query
 
 using select = query::interval;
+struct with_result_t;
 struct versionstamp;
 struct watch_handle;
+struct commit_result;
 
 class database;
 class transaction;
@@ -135,7 +137,8 @@ namespace ceph::libfdb::concepts {
 // Note that "stringlikes" are not all "stringview-likes", such as when they can be
 // written to:
 template <typename StringViewLikeT>
-concept stringview_convertible = std::convertible_to<StringViewLikeT, std::string_view>;
+concept stringview_convertible =
+ std::convertible_to<std::remove_reference_t<StringViewLikeT> const&, std::string_view>;
 
 template <typename KeyViewT>
 concept libfdb_key_view = std::same_as<std::remove_cvref_t<KeyViewT>, std::string_view>;
@@ -199,32 +202,31 @@ concept string_pair_output_range =
 template <typename RangeT>
 concept materializable_string_pair_output_range =
  string_pair_output_range<RangeT> and
- std::default_initializable<std::remove_cvref_t<RangeT>>;
+ std::default_initializable<std::remove_cvref_t<RangeT>> and
+ std::move_constructible<std::remove_cvref_t<RangeT>>;
 
-template <typename ContainerT>
-concept has_merge =
- requires(ContainerT& out, ContainerT& in) {
-  out.merge(in);
- };
+template <typename FnT>
+concept value_invocable =
+ std::invocable<FnT&, std::span<const std::uint8_t>>;
 
 template <typename FnT>
 concept value_callback =
- std::invocable<FnT&, std::span<const std::uint8_t>>;
+ value_invocable<FnT> &&
+ std::is_void_v<std::invoke_result_t<FnT&, std::span<const std::uint8_t>>>;
 
 template <typename T>
 concept decoded_value_sink =
- not value_callback<std::remove_reference_t<T>> and
+ not value_invocable<std::remove_reference_t<T>> and
  std::is_lvalue_reference_v<T> and
  not std::is_const_v<std::remove_reference_t<T>> and
  std::is_object_v<std::remove_reference_t<T>>;
 
 template <typename T>
-concept storable_invocation_result =
- not std::is_void_v<T> and not std::is_reference_v<T>;
-
-template <typename T>
 concept supported_invocation_result =
- not std::is_reference_v<T>;
+ std::is_void_v<T> or
+ (not std::is_reference_v<T> and
+  std::constructible_from<std::remove_cvref_t<T>, T> and
+  std::move_constructible<std::remove_cvref_t<T>>);
 
 } // namespace ceph::libfdb::concepts
 
@@ -925,6 +927,7 @@ class transaction final
                                const commit_after_op commit_after);
 
  friend inline bool commit(transaction_handle& txn);
+ friend inline commit_result commit(with_result_t, transaction_handle& txn);
  friend inline bool commit(transaction_handle& txn, const versionstamp& stamp);
  friend inline watch_handle make_watch(transaction_handle txn, std::string_view key);
  friend inline fdb_error_t ceph::libfdb::detail::do_commit(transaction_handle& txn);
