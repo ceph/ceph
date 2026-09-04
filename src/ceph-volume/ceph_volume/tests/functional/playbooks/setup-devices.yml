@@ -1,0 +1,91 @@
+---
+- hosts: osds
+  become: true
+  tasks:
+    - name: Tell lvm to ignore loop devices
+      ansible.builtin.lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: "\tfilter = [ 'r|loop.*|' ]"
+        insertafter: 'devices {'
+
+    - name: Lvm allow changes despite duplicate PVIDs
+      ansible.builtin.lineinfile:
+        path: /etc/lvm/lvm.conf
+        line: '        allow_changes_with_duplicate_pvs = 1'
+        insertafter: '^devices {'
+        regexp: 'allow_changes_with_duplicate_pvs = 0'
+
+    - name: Create the nvme image systemd unit
+      ansible.builtin.copy:
+        content: |
+          [Unit]
+          Description=NVMe loop device
+          After=local-fs.target
+          Wants=local-fs.target
+
+          [Service]
+          Type=simple
+          ExecStart=/bin/bash /opt/ceph-nvme.sh
+          StandardOutput=journal
+          StandardError=journal
+
+          [Install]
+          WantedBy=multi-user.target
+        dest: "/etc/systemd/system/ceph-nvme.service"
+
+    - name: Create the ceph-nvme startup script
+      ansible.builtin.copy:
+        content: |
+          set -x
+          set -e
+          modprobe nvmet
+          modprobe nvme_loop
+          modprobe nvme_fabrics
+          modprobe loop
+          nvmetcli restore /opt/loop.json
+          {% for device in nvmeof_backing_devices %}
+          nvme connect -t loop -n testnqn{{ loop.index | string }} -q hostnqn
+          {% endfor %}
+          nvme list
+        dest: "/opt/ceph-nvme.sh"
+
+    - name: Ensure ceph-nvme is enabled
+      ansible.builtin.service:
+        name: ceph-nvme
+        state: stopped
+        enabled: yes
+
+    - name: Install nvme dependencies
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present
+      register: result
+      until: result is succeeded
+      loop:
+        - nvme-cli
+        - nvmetcli
+
+    - name: Enable nvme kernel modules
+      ansible.builtin.modprobe:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - nvmet
+        - nvme_loop
+        - nvme_fabrics
+
+    - name: Create the loop.json file for nvmetcli
+      ansible.builtin.copy:
+        content: |
+          {{ nvmeof }}
+        dest: /opt/loop.json
+
+    - name: Setup the nvme targets with nvmetcli
+      ansible.builtin.command: nvmetcli restore /opt/loop.json
+
+    - name: Connect the targets as a nvme devices
+      ansible.builtin.command: "nvme connect -t loop -n testnqn{{ item }} -q hostnqn"
+      loop: "{{ range(1, nvmeof_backing_devices | length + 1) }}"
+
+    - name: Debug output for nvme list
+      ansible.builtin.command: nvme list
