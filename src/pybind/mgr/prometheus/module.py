@@ -132,6 +132,33 @@ RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
 
 RBD_IMAGE_METADATA = ('pool_id', 'image_name')
 
+RBD_PROVISIONED_COUNT_METRICS = {
+    'rbd_image_count': (
+        'image_count',
+        'RBD image count per pool',
+    ),
+    'rbd_image_provisioned_bytes': (
+        'image_provisioned_bytes',
+        'RBD image total HEAD provisioned bytes per pool',
+    ),
+    'rbd_image_snap_count': (
+        'image_snap_count',
+        'RBD image snapshot count per pool',
+    ),
+    'rbd_trash_image_count': (
+        'trash_count',
+        'RBD trash image count per pool',
+    ),
+    'rbd_trash_image_provisioned_bytes': (
+        'trash_provisioned_bytes',
+        'RBD trash image total HEAD provisioned bytes per pool',
+    ),
+    'rbd_trash_image_snap_count': (
+        'trash_snap_count',
+        'RBD trash image snapshot count per pool',
+    ),
+}
+
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
                    'wal_device', 'instance', 'devices', 'device_ids')
 
@@ -721,6 +748,14 @@ class Module(MgrModule, OrchestratorClientMixin):
             default=300
         ),
         Option(
+            name='rbd_provisioned_counts_refresh_interval',
+            type='int',
+            default=3600,
+            min=0,
+            desc='interval in seconds between RBD provisioned counts refreshes',
+            runtime=True
+        ),
+        Option(
             name='standby_behaviour',
             type='str',
             default='default',
@@ -785,6 +820,10 @@ class Module(MgrModule, OrchestratorClientMixin):
                 'read_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
                                  'desc': 'RBD image reads latency (nsec)'},
             },
+        }  # type: Dict[str, Any]
+        self.rbd_provisioned_counts = {
+            'pools': {},
+            'pools_refresh_time': 0,
         }  # type: Dict[str, Any]
         global _global_instance
         _global_instance = self
@@ -910,6 +949,14 @@ class Module(MgrModule, OrchestratorClientMixin):
             'RBD Image Metadata',
             RBD_IMAGE_METADATA
         )
+
+        for metric_name, (_, metric_desc) in RBD_PROVISIONED_COUNT_METRICS.items():
+            metrics[metric_name] = Metric(
+                'gauge',
+                metric_name,
+                metric_desc,
+                ('pool_name',)
+            )
 
         metrics['pg_total'] = Metric(
             'gauge',
@@ -1409,6 +1456,49 @@ class Module(MgrModule, OrchestratorClientMixin):
                                                                service.get('name', ''))})
         return ret
 
+    def refresh_rbd_provisioned_counts(self, osd_map: Dict[str, Any]) -> None:
+        self.log.debug('refreshing RBD provisioned counts')
+        rbd = RBD()
+        provisioned_counts = {}
+        for pool in osd_map['pools']:
+            if 'rbd' not in pool.get('application_metadata', {}):
+                continue
+
+            pool_id = str(pool['pool'])
+            pool_name = pool['pool_name']
+            try:
+                with self.rados.open_ioctx(pool_name) as ioctx:
+                    provisioned_counts[pool_id] = rbd.pool_stats_get(ioctx)
+            except Exception as e:
+                self.log.error('failed refreshing RBD provisioned counts for pool %s: %s' %
+                               (pool_name, e))
+
+        self.rbd_provisioned_counts['pools'] = provisioned_counts
+        self.rbd_provisioned_counts['pools_refresh_time'] = time.time()
+
+    def get_rbd_provisioned_counts(self, osd_map: Dict[str, Any]) -> None:
+        refresh_interval = cast(int, self.get_localized_module_option(
+            'rbd_provisioned_counts_refresh_interval'))
+        if refresh_interval == 0:
+            self.rbd_provisioned_counts['pools'] = {}
+            self.rbd_provisioned_counts['pools_refresh_time'] = 0
+            return
+
+        next_refresh = self.rbd_provisioned_counts['pools_refresh_time'] + refresh_interval
+        if time.time() >= next_refresh:
+            self.refresh_rbd_provisioned_counts(osd_map)
+
+        rbd_pool_names = {str(pool['pool']): pool['pool_name']
+                          for pool in osd_map['pools']
+                          if 'rbd' in pool.get('application_metadata', {})}
+        for pool_id, provisioned_counts in self.rbd_provisioned_counts['pools'].items():
+            if pool_id not in rbd_pool_names:
+                continue
+            for metric_name, (stat_name, _) in RBD_PROVISIONED_COUNT_METRICS.items():
+                self.metrics[metric_name].set(
+                    provisioned_counts[stat_name], (rbd_pool_names[pool_id],)
+                )
+
     @profile_method()
     def get_metadata_and_osd_status(self) -> None:
         osd_map = self.get('osd_map')
@@ -1627,6 +1717,7 @@ class Module(MgrModule, OrchestratorClientMixin):
                 self.metrics['rbd_mirror_metadata'].set(
                     1, rbd_mirror_metadata
                 )
+        self.get_rbd_provisioned_counts(osd_map)
         try:
             rbd = RBD()
             for pool in osd_map['pools']:
