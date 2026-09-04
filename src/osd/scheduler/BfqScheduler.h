@@ -24,12 +24,16 @@
 #include <map>
 #include <optional>
 #include <ostream>
+#include <string>
+#include <string_view>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 #include "common/ceph_context.h"
 #include "common/ceph_time.h"
 #include "common/config.h"
+#include "osd/osd_types.h"
 #include "osd/scheduler/OpScheduler.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
@@ -82,12 +86,42 @@ constexpr unsigned bfq_index_in_group(bfq_stream_t s) {
       static_cast<unsigned>(bfq_stream_t::background_recovery);
 }
 
-constexpr bfq_stream_t bfq_stream_at(unsigned group, unsigned index_in_group) {
-  return static_cast<bfq_stream_t>(
-    group == static_cast<unsigned>(bfq_group_t::client) ?
+/**
+ * bfq_leaf_t
+ *
+ * Index of a leaf queue of the hierarchy.  Leaves
+ * [0, bfq_num_streams) are the built-in streams, numbered identically
+ * to bfq_stream_t; user-defined qos groups (`osd qos-group set`,
+ * consumed from the OSDMap) occupy indices from bfq_num_streams up
+ * and always belong to the client group.
+ */
+using bfq_leaf_t = uint32_t;
+
+constexpr bfq_leaf_t bfq_leaf_of(bfq_stream_t s) {
+  return static_cast<bfq_leaf_t>(s);
+}
+
+constexpr bfq_group_t bfq_group_of_leaf(bfq_leaf_t l) {
+  return l < bfq_num_streams ?
+    bfq_group_of(static_cast<bfq_stream_t>(l)) : bfq_group_t::client;
+}
+
+/// index of a leaf's entity within its group's service tree; qos
+/// group leaves follow the built-in streams on the client tree
+constexpr unsigned bfq_leaf_index_in_group(bfq_leaf_t l) {
+  return l < bfq_num_streams ?
+    bfq_index_in_group(static_cast<bfq_stream_t>(l)) :
+    bfq_num_client_streams + (l - bfq_num_streams);
+}
+
+constexpr bfq_leaf_t bfq_leaf_at(unsigned group, unsigned index_in_group) {
+  if (group == static_cast<unsigned>(bfq_group_t::client)) {
+    return index_in_group < bfq_num_client_streams ?
       index_in_group :
-      static_cast<unsigned>(bfq_stream_t::background_recovery) +
-        index_in_group);
+      bfq_num_streams + (index_in_group - bfq_num_client_streams);
+  }
+  return static_cast<unsigned>(bfq_stream_t::background_recovery) +
+    index_in_group;
 }
 
 std::string_view bfq_stream_name(bfq_stream_t s);
@@ -118,6 +152,20 @@ struct BfqEntity {
 class BfqServiceTree {
 public:
   explicit BfqServiceTree(unsigned num_entities) : entities(num_entities) {}
+
+  /// grow the entity set (qos group leaves appearing); never shrinks,
+  /// so indices of live entities remain stable
+  void resize_entities(unsigned n) {
+    ceph_assert(n >= entities.size());
+    entities.resize(n);
+  }
+
+  /// clear an idle entity's finish memory so a slot recycled for a
+  /// different qos group starts as a fresh arrival
+  void reset_entity(unsigned idx) {
+    ceph_assert(!entities[idx].active);
+    entities[idx] = BfqEntity{};
+  }
 
   /**
    * Make an idle entity backlogged.  S = max(V, previous F) -- the
@@ -178,10 +226,18 @@ private:
  *   |   |-- object_meta (rgw omap)    (osd_bfq_client_object_meta_weight)
  *   |   |-- file        (cephfs data) (osd_bfq_client_file_weight)
  *   |   |-- file_meta   (cephfs md)   (osd_bfq_client_file_meta_weight)
- *   |   `-- other                     (osd_bfq_client_other_weight)
+ *   |   |-- other                     (osd_bfq_client_other_weight)
+ *   |   `-- <qos groups>             (weight from `osd qos-group set`)
  *   `-- background group              (osd_bfq_background_group_weight)
  *       |-- recovery                  (osd_bfq_background_recovery_weight)
  *       `-- best_effort               (osd_bfq_background_best_effort_weight)
+ *
+ * The six client streams are built in and derive from pool
+ * application metadata; user-defined qos groups from the OSDMap
+ * (`osd qos-group set`) appear as additional client leaves, and a
+ * pool whose qos_group pool option names one is steered there instead
+ * of its derived stream.  A group removed from the OSDMap keeps its
+ * leaf until the queue drains, after which the slot is recycled.
  *
  * Unlike mclock, bfq is purely proportional-share: it needs no
  * estimate of the device's absolute capacity (IOPS or bandwidth).
@@ -231,7 +287,8 @@ public:
     return op_queue_type_t::BfqScheduler;
   }
 
-  /// rebuild the pool -> client stream map from pool application tags
+  /// refresh the qos group leaves and rebuild the pool -> leaf map
+  /// from the qos_group pool option and pool application tags
   void update_from_osdmap(const OSDMap &map) final;
 
   // md_config_obs_t
@@ -241,8 +298,13 @@ public:
 
   // exposed for unit tests
   uint64_t calc_scaled_cost(int item_cost) const;
-  bfq_stream_t classify(const OpSchedulerItem &item) const;
+  bfq_leaf_t classify(const OpSchedulerItem &item) const;
+  void set_pool_leaves(std::unordered_map<int64_t, bfq_leaf_t> &&map);
   void set_pool_streams(std::unordered_map<int64_t, bfq_stream_t> &&map);
+  /// test hook: group name -> weight, as if consumed from the OSDMap
+  /// table; returns the leaf now backing each defined group
+  std::map<std::string, bfq_leaf_t> set_qos_groups(
+    const std::map<std::string, uint32_t> &weights);
   uint64_t get_max_budget() const {
     return max_budget;
   }
@@ -263,9 +325,22 @@ private:
       refresh_config();
     }
   }
+  /**
+   * Reconcile the qos group leaves with the table of groups defined
+   * in the OSDMap.  A known group keeps its leaf (weight refreshed,
+   * felt at the next (re)activation); a new group lands on a recycled
+   * drained slot when one exists, else on a freshly grown leaf; a
+   * group no longer defined keeps scheduling with its last weight
+   * until its queue drains, whereupon its slot becomes recyclable.
+   * Recyclability is decided against the complete incoming table, so
+   * an idle slot of a group that is still defined is never displaced.
+   */
+  void update_qos_groups(
+    const mempool::osdmap::map<std::string, qos_group_t> &defined);
+  std::string_view leaf_name(bfq_leaf_t l) const;
   void enqueue_high(unsigned prio, OpSchedulerItem &&item, bool front = false);
-  void activate_stream(bfq_stream_t s);
-  void begin_round(bfq_stream_t s);
+  void activate_stream(bfq_leaf_t l);
+  void begin_round(bfq_leaf_t l);
   void end_round(expire_reason reason);
   OpSchedulerItem dequeue_fair();
 
@@ -283,7 +358,10 @@ private:
   uint64_t cost_per_seek = 0;
   uint64_t min_budget = 0;
   std::chrono::milliseconds budget_timeout{125};
-  std::array<uint32_t, bfq_num_streams> stream_weights;
+  /// leaf-indexed; [0, bfq_num_streams) refreshed from config, qos
+  /// group slots refreshed from the OSDMap table
+  std::vector<uint32_t> stream_weights =
+    std::vector<uint32_t>(bfq_num_streams, 1);
   std::array<uint32_t, bfq_num_groups> group_weights;
   std::atomic<bool> config_dirty = true;
 
@@ -294,17 +372,33 @@ private:
     /// one oversized item
     uint64_t served_round = 0;
   };
-  std::array<Stream, bfq_num_streams> streams;
+  // a deque: growth by a new qos group leaf must not move existing
+  // Streams (move-only items; vector realloc would demand copies)
+  std::deque<Stream> streams = std::deque<Stream>(bfq_num_streams);
   size_t fair_queued = 0;
+
+  /**
+   * qos_leaf_names
+   *
+   * Name of the group backing leaf bfq_num_streams + i of the client
+   * group.  Slots are never erased (leaf indices must stay stable
+   * while queues drain); a slot whose group is no longer in the OSDMap
+   * table and whose queue is empty and inactive is recycled for the
+   * next new group.  Whether a slot's group is still defined is a
+   * lookup in qos_leaf_ids.
+   */
+  std::vector<std::string> qos_leaf_names;
+  /// defined group name -> leaf
+  std::map<std::string, bfq_leaf_t, std::less<>> qos_leaf_ids;
 
   bfq_detail::BfqServiceTree root_tree;
   std::array<bfq_detail::BfqServiceTree, bfq_num_groups> group_trees;
 
-  std::optional<bfq_stream_t> in_service;
+  std::optional<bfq_leaf_t> in_service;
   ceph::coarse_mono_clock::time_point round_start;
 
-  /// pool id -> client stream, rebuilt on every OSDMap the shard consumes
-  std::unordered_map<int64_t, bfq_stream_t> pool_streams;
+  /// pool id -> leaf, rebuilt on every OSDMap the shard consumes
+  std::unordered_map<int64_t, bfq_leaf_t> pool_leaves;
 
   using priority_t = unsigned;
   using SubQueue = std::map<priority_t,

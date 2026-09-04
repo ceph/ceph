@@ -18,6 +18,7 @@
 #include "osd/scheduler/BfqScheduler.h"
 
 #include "common/debug.h"
+#include "common/strtol.h"
 #include "osd/OSDMap.h"
 
 #define dout_context cct
@@ -61,6 +62,15 @@ std::string_view bfq_group_name(bfq_group_t g)
   default:
     return "unknown";
   }
+}
+
+std::string_view BfqScheduler::leaf_name(bfq_leaf_t l) const
+{
+  if (l < bfq_num_streams) {
+    return bfq_stream_name(static_cast<bfq_stream_t>(l));
+  }
+  // a draining slot keeps its last name until recycled
+  return qos_leaf_names[l - bfq_num_streams];
 }
 
 namespace bfq_detail {
@@ -303,100 +313,206 @@ uint64_t BfqScheduler::calc_scaled_cost(int item_cost) const
   return std::max(bytes, min_cost);
 }
 
-bfq_stream_t BfqScheduler::classify(const OpSchedulerItem &item) const
+bfq_leaf_t BfqScheduler::classify(const OpSchedulerItem &item) const
 {
   switch (item.get_scheduler_class()) {
   case SchedulerClass::background_recovery:
-    return bfq_stream_t::background_recovery;
+    return bfq_leaf_of(bfq_stream_t::background_recovery);
   case SchedulerClass::background_best_effort:
-    return bfq_stream_t::background_best_effort;
+    return bfq_leaf_of(bfq_stream_t::background_best_effort);
   default:
     // immediate never reaches the fair hierarchy (handled in enqueue)
     ceph_assert(item.get_scheduler_class() == SchedulerClass::client);
     [[fallthrough]];
   case SchedulerClass::client:
-    if (auto p = pool_streams.find(item.get_ordering_token().pool());
-	p != pool_streams.end()) {
+    if (auto p = pool_leaves.find(item.get_ordering_token().pool());
+	p != pool_leaves.end()) {
       return p->second;
     }
-    return bfq_stream_t::client_other;
+    return bfq_leaf_of(bfq_stream_t::client_other);
+  }
+}
+
+namespace {
+
+/**
+ * Derive a pool's built-in stream from its application metadata: rbd
+ * -> block, rgw -> object, cephfs -> file, refined into data vs
+ * metadata streams from EXPLICIT application metadata only: a
+ * "traffic-class" key under the application tag ("metadata" selects
+ * the metadata stream, anything else the data stream), falling back
+ * for cephfs to the "metadata" key the mon already stamps at fs new /
+ * add_data_pool time (pre-created pools included).  Autoscaler hints
+ * (the bulk flag, pg_autoscale_bias) are deliberately not consulted:
+ * they are absent on pools created before the application starts and
+ * inert or rejected under ratio-driven autoscaling, and pool sizing
+ * hints are not QoS policy.  Untagged and ambiguously tagged pools
+ * yield nullopt (client_other via pool map lookup miss).
+ */
+std::optional<bfq_stream_t> classify_pool_metadata(const pg_pool_t &pool)
+{
+  std::optional<bfq_stream_t> stream;
+  const std::map<std::string, std::string> *app_md_p = nullptr;
+  bool ambiguous = false;
+  for (const auto &[app, app_md] : pool.application_metadata) {
+    std::optional<bfq_stream_t> tagged;
+    if (app == pg_pool_t::APPLICATION_NAME_RBD) {
+      tagged = bfq_stream_t::client_block;
+    } else if (app == pg_pool_t::APPLICATION_NAME_RGW) {
+      tagged = bfq_stream_t::client_object;
+    } else if (app == pg_pool_t::APPLICATION_NAME_CEPHFS) {
+      tagged = bfq_stream_t::client_file;
+    }
+    if (tagged) {
+      if (stream && *stream != *tagged) {
+	ambiguous = true;
+      }
+      stream = tagged;
+      app_md_p = &app_md;
+    }
+  }
+  if (!stream || ambiguous) {
+    return std::nullopt;
+  }
+  const bool meta_class = [&] {
+    if (auto tc = app_md_p->find("traffic-class");
+	tc != app_md_p->end()) {
+      return tc->second == "metadata";
+    }
+    return *stream == bfq_stream_t::client_file &&
+      app_md_p->count("metadata") > 0;
+  }();
+  if (meta_class && *stream == bfq_stream_t::client_object) {
+    stream = bfq_stream_t::client_object_meta;
+  } else if (meta_class && *stream == bfq_stream_t::client_file) {
+    stream = bfq_stream_t::client_file_meta;
+  }
+  // no metadata stream exists for block: the tag is ignored there
+  return stream;
+}
+
+} // anonymous namespace
+
+void BfqScheduler::update_qos_groups(
+  const mempool::osdmap::map<std::string, qos_group_t> &defined)
+{
+  if (in_service && streams[*in_service].items.empty()) {
+    // rounds normally expire lazily on the next fair dequeue; close
+    // out a drained one now so its slot (and its tree entity) is not
+    // pinned active across an arbitrarily long fair-queue idle period
+    end_round(expire_reason::emptied);
+  }
+  qos_leaf_ids.clear();
+  for (const auto &[name, group] : defined) {
+    bfq_leaf_t leaf = 0;
+    bool found = false;
+    // a known group (even one draining after a remove/re-add cycle)
+    // keeps its leaf and, with it, its queue and budget feedback
+    for (size_t i = 0; i < qos_leaf_names.size(); ++i) {
+      if (qos_leaf_names[i] == name) {
+	leaf = static_cast<bfq_leaf_t>(bfq_num_streams + i);
+	found = true;
+	break;
+      }
+    }
+    if (!found) {
+      // recycle a drained slot: its group is absent from the incoming
+      // table (a membership check, not a visited-this-scan flag: a
+      // still-defined group later in the scan must never be
+      // displaced), its queue is empty, and its entity is neither in
+      // service nor on its tree
+      auto &client_tree = group_trees[idx(bfq_group_t::client)];
+      for (size_t i = 0; i < qos_leaf_names.size(); ++i) {
+	const auto l = static_cast<bfq_leaf_t>(bfq_num_streams + i);
+	if (!defined.count(qos_leaf_names[i]) && streams[l].items.empty() &&
+	    in_service != l &&
+	    !client_tree.entity(bfq_leaf_index_in_group(l)).active) {
+	  client_tree.reset_entity(bfq_leaf_index_in_group(l));
+	  streams[l] = Stream{};
+	  streams[l].next_budget = std::max(min_budget, max_budget / 2);
+	  qos_leaf_names[i] = name;
+	  leaf = l;
+	  found = true;
+	  break;
+	}
+      }
+    }
+    if (!found) {
+      leaf = static_cast<bfq_leaf_t>(bfq_num_streams + qos_leaf_names.size());
+      qos_leaf_names.push_back(name);
+      streams.emplace_back();
+      streams.back().next_budget = std::max(min_budget, max_budget / 2);
+      stream_weights.push_back(group.weight);
+      group_trees[idx(bfq_group_t::client)].resize_entities(
+	bfq_num_client_streams + qos_leaf_names.size());
+    }
+    stream_weights[leaf] = group.weight;
+    qos_leaf_ids[name] = leaf;
   }
 }
 
 void BfqScheduler::update_from_osdmap(const OSDMap &map)
 {
-  std::unordered_map<int64_t, bfq_stream_t> next;
+  update_qos_groups(map.get_qos_groups());
+
+  std::unordered_map<int64_t, bfq_leaf_t> next;
   for (const auto &[id, pool] : map.get_pools()) {
-    std::optional<bfq_stream_t> stream;
-    const std::map<std::string, std::string> *app_md_p = nullptr;
-    bool ambiguous = false;
-    for (const auto &[app, app_md] : pool.application_metadata) {
-      std::optional<bfq_stream_t> tagged;
-      if (app == pg_pool_t::APPLICATION_NAME_RBD) {
-	tagged = bfq_stream_t::client_block;
-      } else if (app == pg_pool_t::APPLICATION_NAME_RGW) {
-	tagged = bfq_stream_t::client_object;
-      } else if (app == pg_pool_t::APPLICATION_NAME_CEPHFS) {
-	tagged = bfq_stream_t::client_file;
-      }
-      if (tagged) {
-	if (stream && *stream != *tagged) {
-	  ambiguous = true;
-	}
-	stream = tagged;
-	app_md_p = &app_md;
+    // an explicit qos_group pool option wins over the derived stream;
+    // a reference to a group this map no longer defines (the mon
+    // prevents it, but maps arrive in sequence) falls through
+    std::string group;
+    if (pool.opts.get(pool_opts_t::QOS_GROUP, &group)) {
+      if (auto q = qos_leaf_ids.find(group); q != qos_leaf_ids.end()) {
+	next[id] = q->second;
+	continue;
       }
     }
-    if (stream && !ambiguous) {
-      // refine rgw and cephfs pools into data vs metadata streams from
-      // EXPLICIT application metadata only: a "traffic-class" key under
-      // the application tag ("metadata" selects the metadata stream,
-      // anything else the data stream), falling back for cephfs to the
-      // "metadata" key the mon already stamps at fs new /
-      // add_data_pool time (pre-created pools included).  Autoscaler
-      // hints (the bulk flag, pg_autoscale_bias) are deliberately not
-      // consulted: they are absent on pools created before the
-      // application starts and inert or rejected under ratio-driven
-      // autoscaling, and pool sizing hints are not QoS policy.
-      const bool meta_class = [&] {
-	if (auto tc = app_md_p->find("traffic-class");
-	    tc != app_md_p->end()) {
-	  return tc->second == "metadata";
-	}
-	return *stream == bfq_stream_t::client_file &&
-	  app_md_p->count("metadata") > 0;
-      }();
-      if (meta_class && *stream == bfq_stream_t::client_object) {
-	stream = bfq_stream_t::client_object_meta;
-      } else if (meta_class && *stream == bfq_stream_t::client_file) {
-	stream = bfq_stream_t::client_file_meta;
-      }
-      // no metadata stream exists for block: the tag is ignored there
-      next[id] = *stream;
+    if (auto stream = classify_pool_metadata(pool)) {
+      next[id] = bfq_leaf_of(*stream);
     }
-    // untagged and ambiguously tagged pools fall to client_other via
-    // lookup miss
   }
-  pool_streams = std::move(next);
-  dout(20) << __func__ << " classified " << pool_streams.size()
-	   << " of " << map.get_pools().size() << " pools" << dendl;
+  pool_leaves = std::move(next);
+  dout(20) << __func__ << " classified " << pool_leaves.size()
+	   << " of " << map.get_pools().size() << " pools, "
+	   << qos_leaf_ids.size() << " qos groups" << dendl;
+}
+
+void BfqScheduler::set_pool_leaves(
+  std::unordered_map<int64_t, bfq_leaf_t> &&map)
+{
+  pool_leaves = std::move(map);
 }
 
 void BfqScheduler::set_pool_streams(
   std::unordered_map<int64_t, bfq_stream_t> &&map)
 {
-  pool_streams = std::move(map);
+  std::unordered_map<int64_t, bfq_leaf_t> leaves;
+  for (const auto &[pool, stream] : map) {
+    leaves[pool] = bfq_leaf_of(stream);
+  }
+  pool_leaves = std::move(leaves);
 }
 
-void BfqScheduler::activate_stream(bfq_stream_t s)
+std::map<std::string, bfq_leaf_t> BfqScheduler::set_qos_groups(
+  const std::map<std::string, uint32_t> &weights)
 {
-  const auto g = bfq_group_of(s);
+  mempool::osdmap::map<std::string, qos_group_t> groups;
+  for (const auto &[name, weight] : weights) {
+    groups[name].weight = weight;
+  }
+  update_qos_groups(groups);
+  return {qos_leaf_ids.begin(), qos_leaf_ids.end()};
+}
+
+void BfqScheduler::activate_stream(bfq_leaf_t l)
+{
+  const auto g = bfq_group_of_leaf(l);
   auto &group_tree = group_trees[idx(g)];
   const bool group_was_idle = !group_tree.has_active();
-  auto &stream = streams[idx(s)];
+  auto &stream = streams[l];
   stream.next_budget = std::clamp(stream.next_budget, min_budget, max_budget);
-  group_tree.activate(bfq_index_in_group(s), stream.next_budget,
-		      stream_weights[idx(s)]);
+  group_tree.activate(bfq_leaf_index_in_group(l), stream.next_budget,
+		      stream_weights[l]);
   if (group_was_idle) {
     // the group's expected service is one full budget; the estimate
     // is corrected to actual service when the round expires
@@ -404,21 +520,21 @@ void BfqScheduler::activate_stream(bfq_stream_t s)
   }
 }
 
-void BfqScheduler::begin_round(bfq_stream_t s)
+void BfqScheduler::begin_round(bfq_leaf_t l)
 {
-  auto &stream = streams[idx(s)];
-  in_service = s;
+  auto &stream = streams[l];
+  in_service = l;
   stream.served_round = 0;
   round_start = ceph::coarse_mono_clock::now();
-  dout(20) << __func__ << " " << bfq_stream_name(s)
+  dout(20) << __func__ << " " << leaf_name(l)
 	   << " budget " << stream.next_budget << dendl;
 }
 
 void BfqScheduler::end_round(expire_reason reason)
 {
-  const bfq_stream_t s = *in_service;
-  auto &stream = streams[idx(s)];
-  const auto g = bfq_group_of(s);
+  const bfq_leaf_t l = *in_service;
+  auto &stream = streams[l];
+  const auto g = bfq_group_of_leaf(l);
   auto &group_tree = group_trees[idx(g)];
   const uint64_t served = stream.served_round;
 
@@ -437,8 +553,8 @@ void BfqScheduler::end_round(expire_reason reason)
   }
 
   const bool backlogged = !stream.items.empty();
-  group_tree.expire(bfq_index_in_group(s), served, stream.next_budget,
-		    stream_weights[idx(s)], backlogged);
+  group_tree.expire(bfq_leaf_index_in_group(l), served, stream.next_budget,
+		    stream_weights[l], backlogged);
 
   // one leaf is in service at a time, so the group's service this
   // round is exactly the leaf's
@@ -446,7 +562,7 @@ void BfqScheduler::end_round(expire_reason reason)
 		   group_weights[idx(g)], group_tree.has_active());
   in_service.reset();
 
-  dout(20) << __func__ << " " << bfq_stream_name(s)
+  dout(20) << __func__ << " " << leaf_name(l)
 	   << " reason " << static_cast<int>(reason)
 	   << " served " << served
 	   << " next_budget " << stream.next_budget
@@ -476,22 +592,22 @@ void BfqScheduler::enqueue(OpSchedulerItem &&item)
   } else if (priority >= cutoff_priority) {
     enqueue_high(priority, std::move(item));
   } else {
-    const bfq_stream_t s = classify(item);
+    const bfq_leaf_t l = classify(item);
     const uint64_t scaled = calc_scaled_cost(item.get_cost());
     item.set_qos_cost(static_cast<uint32_t>(
       std::min<uint64_t>(scaled, std::numeric_limits<uint32_t>::max())));
-    dout(20) << __func__ << " " << bfq_stream_name(s)
+    dout(20) << __func__ << " " << leaf_name(l)
 	     << " cost " << item.get_cost()
 	     << " scaled_cost " << scaled
 	     << dendl;
-    auto &stream = streams[idx(s)];
+    auto &stream = streams[l];
     const bool was_idle = stream.items.empty();
     stream.items.push_back(std::move(item));
     ++fair_queued;
-    if (was_idle && in_service != s) {
+    if (was_idle && in_service != l) {
       // an empty stream that is not in service is never on its tree;
       // an in-service stream keeps its round until it expires
-      activate_stream(s);
+      activate_stream(l);
     }
   }
 }
@@ -533,7 +649,7 @@ WorkItem BfqScheduler::dequeue()
 OpSchedulerItem BfqScheduler::dequeue_fair()
 {
   if (in_service) {
-    auto &stream = streams[idx(*in_service)];
+    auto &stream = streams[*in_service];
     if (stream.items.empty()) {
       end_round(expire_reason::emptied);
     } else if (stream.served_round >= stream.next_budget) {
@@ -552,11 +668,11 @@ OpSchedulerItem BfqScheduler::dequeue_fair()
     ceph_assert(gsel);
     auto lsel = group_trees[*gsel].select();
     ceph_assert(lsel);
-    begin_round(bfq_stream_at(*gsel, *lsel));
+    begin_round(bfq_leaf_at(*gsel, *lsel));
   }
 
-  const bfq_stream_t s = *in_service;
-  auto &stream = streams[idx(s)];
+  const bfq_leaf_t l = *in_service;
+  auto &stream = streams[l];
   ceph_assert(!stream.items.empty());
   OpSchedulerItem item = std::move(stream.items.front());
   stream.items.pop_front();
@@ -564,7 +680,7 @@ OpSchedulerItem BfqScheduler::dequeue_fair()
 
   const uint64_t served = calc_scaled_cost(item.get_cost());
   stream.served_round += served;
-  group_trees[idx(bfq_group_of(s))].charge(served);
+  group_trees[idx(bfq_group_of_leaf(l))].charge(served);
   root_tree.charge(served);
   return item;
 }
@@ -578,7 +694,7 @@ void BfqScheduler::dump(ceph::Formatter &f) const
 
   f.open_object_section("bfq");
   f.dump_string("in_service",
-		in_service ? std::string(bfq_stream_name(*in_service))
+		in_service ? std::string(leaf_name(*in_service))
 			   : "none");
   f.open_object_section("root_tree");
   root_tree.dump(f);
@@ -596,13 +712,17 @@ void BfqScheduler::dump(ceph::Formatter &f) const
   }
   f.close_section();
   f.open_array_section("streams");
-  for (size_t s = 0; s < bfq_num_streams; ++s) {
+  for (size_t l = 0; l < streams.size(); ++l) {
     f.open_object_section("stream");
-    f.dump_string("name", std::string(
-      bfq_stream_name(static_cast<bfq_stream_t>(s))));
-    f.dump_unsigned("weight", stream_weights[s]);
-    f.dump_unsigned("queue_size", streams[s].items.size());
-    f.dump_unsigned("next_budget", streams[s].next_budget);
+    f.dump_string("name", std::string(leaf_name(l)));
+    if (l >= bfq_num_streams) {
+      const auto q = qos_leaf_ids.find(leaf_name(l));
+      f.dump_bool("qos_group_defined",
+		  q != qos_leaf_ids.end() && q->second == l);
+    }
+    f.dump_unsigned("weight", stream_weights[l]);
+    f.dump_unsigned("queue_size", streams[l].items.size());
+    f.dump_unsigned("next_budget", streams[l].next_budget);
     f.close_section();
   }
   f.close_section();

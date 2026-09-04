@@ -138,7 +138,8 @@ OpSchedulerItem get_item(WorkItem item)
 using app_md_t = std::map<std::string, std::map<std::string, std::string>>;
 
 int64_t add_pool(OSDMap &map, const std::string &name, app_md_t apps,
-		 bool bulk = false, float bias = 1.0f)
+		 bool bulk = false, float bias = 1.0f,
+		 const std::string &qos_group = "")
 {
   OSDMap::Incremental inc(map.get_epoch() + 1);
   inc.fsid = map.get_fsid();
@@ -158,10 +159,29 @@ int64_t add_pool(OSDMap &map, const std::string &name, app_md_t apps,
   if (bias != 1.0f) {
     p->opts.set(pool_opts_t::PG_AUTOSCALE_BIAS, static_cast<double>(bias));
   }
+  if (!qos_group.empty()) {
+    p->opts.set(pool_opts_t::QOS_GROUP, qos_group);
+  }
   p->application_metadata = std::move(apps);
   inc.new_pool_names[pool_id] = name;
   map.apply_incremental(inc);
   return pool_id;
+}
+
+void set_map_qos_groups(OSDMap &map,
+			const std::map<std::string, uint32_t> &groups)
+{
+  OSDMap::Incremental inc(map.get_epoch() + 1);
+  inc.fsid = map.get_fsid();
+  for (const auto &name : map.get_qos_groups()) {
+    if (!groups.count(name.first)) {
+      inc.old_qos_groups.push_back(name.first);
+    }
+  }
+  for (const auto &[name, weight] : groups) {
+    inc.set_qos_group(name, qos_group_t{weight});
+  }
+  map.apply_incremental(inc);
 }
 
 } // anonymous namespace
@@ -356,7 +376,7 @@ TEST_F(BfqSchedulerTest, TestPoolClassification) {
 
   // no pool map yet: every client op classifies as client_other
   auto unmapped = create_item(1, 1, SchedulerClass::client, 42);
-  ASSERT_EQ(bfq_stream_t::client_other, q->classify(unmapped));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::client_other), q->classify(unmapped));
 
   q->set_pool_streams({
     {42, bfq_stream_t::client_block},
@@ -365,15 +385,16 @@ TEST_F(BfqSchedulerTest, TestPoolClassification) {
   auto block = create_item(1, 1, SchedulerClass::client, 42);
   auto file = create_item(1, 1, SchedulerClass::client, 7);
   auto other = create_item(1, 1, SchedulerClass::client, 9);
-  ASSERT_EQ(bfq_stream_t::client_block, q->classify(block));
-  ASSERT_EQ(bfq_stream_t::client_file, q->classify(file));
-  ASSERT_EQ(bfq_stream_t::client_other, q->classify(other));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::client_block), q->classify(block));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::client_file), q->classify(file));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::client_other), q->classify(other));
 
   // background classes ignore the pool
   auto rec = create_item(1, 1, SchedulerClass::background_recovery, 42);
   auto be = create_item(1, 1, SchedulerClass::background_best_effort, 42);
-  ASSERT_EQ(bfq_stream_t::background_recovery, q->classify(rec));
-  ASSERT_EQ(bfq_stream_t::background_best_effort, q->classify(be));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::background_recovery), q->classify(rec));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::background_best_effort),
+	    q->classify(be));
 }
 
 TEST_F(BfqSchedulerTest, TestOsdmapDataVsMetaRefinement) {
@@ -421,23 +442,216 @@ TEST_F(BfqSchedulerTest, TestOsdmapDataVsMetaRefinement) {
 
   q->update_from_osdmap(map);
 
-  auto stream_of = [&](int64_t pool) {
+  auto leaf_of = [&](int64_t pool) {
     return q->classify(create_item(1, 1, SchedulerClass::client, pool));
   };
-  ASSERT_EQ(bfq_stream_t::client_block, stream_of(rbd));
-  ASSERT_EQ(bfq_stream_t::client_object, stream_of(rgw_plain));
-  ASSERT_EQ(bfq_stream_t::client_object_meta, stream_of(rgw_meta));
-  ASSERT_EQ(bfq_stream_t::client_object, stream_of(rgw_data_class));
-  ASSERT_EQ(bfq_stream_t::client_object, stream_of(rgw_bogus_class));
-  ASSERT_EQ(bfq_stream_t::client_file, stream_of(fs_data));
-  ASSERT_EQ(bfq_stream_t::client_file_meta, stream_of(fs_meta));
-  ASSERT_EQ(bfq_stream_t::client_file, stream_of(fs_override));
-  ASSERT_EQ(bfq_stream_t::client_file, stream_of(fs_bare));
-  ASSERT_EQ(bfq_stream_t::client_block, stream_of(rbd_meta_class));
-  ASSERT_EQ(bfq_stream_t::client_object, stream_of(rgw_biased));
-  ASSERT_EQ(bfq_stream_t::client_object_meta, stream_of(rgw_bulk));
-  ASSERT_EQ(bfq_stream_t::client_other, stream_of(untagged));
-  ASSERT_EQ(bfq_stream_t::client_other, stream_of(ambiguous));
+  auto leaf = [](bfq_stream_t s) { return bfq_leaf_of(s); };
+  ASSERT_EQ(leaf(bfq_stream_t::client_block), leaf_of(rbd));
+  ASSERT_EQ(leaf(bfq_stream_t::client_object), leaf_of(rgw_plain));
+  ASSERT_EQ(leaf(bfq_stream_t::client_object_meta), leaf_of(rgw_meta));
+  ASSERT_EQ(leaf(bfq_stream_t::client_object), leaf_of(rgw_data_class));
+  ASSERT_EQ(leaf(bfq_stream_t::client_object), leaf_of(rgw_bogus_class));
+  ASSERT_EQ(leaf(bfq_stream_t::client_file), leaf_of(fs_data));
+  ASSERT_EQ(leaf(bfq_stream_t::client_file_meta), leaf_of(fs_meta));
+  ASSERT_EQ(leaf(bfq_stream_t::client_file), leaf_of(fs_override));
+  ASSERT_EQ(leaf(bfq_stream_t::client_file), leaf_of(fs_bare));
+  ASSERT_EQ(leaf(bfq_stream_t::client_block), leaf_of(rbd_meta_class));
+  ASSERT_EQ(leaf(bfq_stream_t::client_object), leaf_of(rgw_biased));
+  ASSERT_EQ(leaf(bfq_stream_t::client_object_meta), leaf_of(rgw_bulk));
+  ASSERT_EQ(leaf(bfq_stream_t::client_other), leaf_of(untagged));
+  ASSERT_EQ(leaf(bfq_stream_t::client_other), leaf_of(ambiguous));
+}
+
+TEST_F(BfqSchedulerTest, TestQosGroupClassification) {
+  create_queue();
+
+  OSDMap map;
+  uuid_d fsid;
+  map.build_simple(g_ceph_context, 0, fsid, 1);
+  set_map_qos_groups(map, {
+    {"gold", 500},
+    {"silver", 100}
+  });
+
+  // an explicit qos_group pool option beats the derived stream
+  const auto rbd_gold = add_pool(map, "rbd.gold", {{"rbd", {}}},
+				 false, 1.0f, "gold");
+  // an untagged pool can be steered too
+  const auto plain_silver = add_pool(map, "plain.silver", {},
+				     false, 1.0f, "silver");
+  // a reference to an undefined group falls back to the derived stream
+  const auto rbd_dangling = add_pool(map, "rbd.dangling", {{"rbd", {}}},
+				     false, 1.0f, "tin");
+  const auto rbd_plain = add_pool(map, "rbd", {{"rbd", {}}});
+
+  q->update_from_osdmap(map);
+
+  auto leaf_of = [&](int64_t pool) {
+    return q->classify(create_item(1, 1, SchedulerClass::client, pool));
+  };
+  const auto gold_leaf = leaf_of(rbd_gold);
+  const auto silver_leaf = leaf_of(plain_silver);
+  ASSERT_GE(gold_leaf, bfq_num_streams);
+  ASSERT_GE(silver_leaf, bfq_num_streams);
+  ASSERT_NE(gold_leaf, silver_leaf);
+  ASSERT_EQ(bfq_group_t::client, bfq_group_of_leaf(gold_leaf));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::client_block), leaf_of(rbd_dangling));
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::client_block), leaf_of(rbd_plain));
+
+  // removing a group reroutes its pools to the derived classification;
+  // surviving groups keep their leaves
+  set_map_qos_groups(map, {{"silver", 100}});
+  q->update_from_osdmap(map);
+  ASSERT_EQ(bfq_leaf_of(bfq_stream_t::client_block), leaf_of(rbd_gold));
+  ASSERT_EQ(silver_leaf, leaf_of(plain_silver));
+}
+
+TEST_F(BfqSchedulerTest, TestQosGroupWeights) {
+  set_conf("osd_bfq_max_budget", "16384");
+  set_conf("osd_bfq_min_cost", "4096");
+  set_conf("osd_bfq_budget_timeout", "100000");
+  create_queue();
+  auto leaves = q->set_qos_groups({
+    {"gold", 300},
+    {"silver", 100}
+  });
+  q->set_pool_leaves({
+    {1, leaves.at("gold")},
+    {2, leaves.at("silver")}
+  });
+
+  constexpr unsigned per_stream = 800;
+  for (unsigned i = 0; i < per_stream; ++i) {
+    q->enqueue(create_item(i, 1, SchedulerClass::client, 1));
+    q->enqueue(create_item(i, 2, SchedulerClass::client, 2));
+  }
+
+  // user-defined leaves schedule like built-in streams: weights
+  // 300:100 -> a 3:1 split of the 400 dequeues
+  std::map<uint64_t, unsigned> count;
+  for (unsigned i = 0; i < 400; ++i) {
+    ASSERT_FALSE(q->empty());
+    ++count[get_item(q->dequeue()).get_owner()];
+  }
+  ASSERT_NEAR(300, count[1], 30);
+  ASSERT_NEAR(100, count[2], 30);
+
+  // swap the weights through a table refresh (the OSDMap path calls
+  // the same update): felt when each leaf is next (re)tagged
+  q->set_qos_groups({
+    {"gold", 100},
+    {"silver", 300}
+  });
+  std::map<uint64_t, unsigned> after;
+  for (unsigned i = 0; i < 400; ++i) {
+    ASSERT_FALSE(q->empty());
+    ++after[get_item(q->dequeue()).get_owner()];
+  }
+  ASSERT_NEAR(100, after[1], 40);
+  ASSERT_NEAR(300, after[2], 40);
+}
+
+TEST_F(BfqSchedulerTest, TestQosGroupVsBuiltinWeights) {
+  set_conf("osd_bfq_max_budget", "16384");
+  set_conf("osd_bfq_min_cost", "4096");
+  set_conf("osd_bfq_budget_timeout", "100000");
+  set_conf("osd_bfq_client_block_weight", "100");
+  create_queue();
+  auto leaves = q->set_qos_groups({{"gold", 300}});
+  q->set_pool_leaves({
+    {1, leaves.at("gold")},
+    {2, bfq_leaf_of(bfq_stream_t::client_block)}
+  });
+
+  constexpr unsigned per_stream = 600;
+  for (unsigned i = 0; i < per_stream; ++i) {
+    q->enqueue(create_item(i, 1, SchedulerClass::client, 1));
+    q->enqueue(create_item(i, 2, SchedulerClass::client, 2));
+  }
+
+  // qos group leaves compete as siblings of the built-in streams
+  // under the client group: weights 300:100 -> a 3:1 split
+  std::map<uint64_t, unsigned> count;
+  for (unsigned i = 0; i < 400; ++i) {
+    ASSERT_FALSE(q->empty());
+    ++count[get_item(q->dequeue()).get_owner()];
+  }
+  ASSERT_NEAR(300, count[1], 30);
+  ASSERT_NEAR(100, count[2], 30);
+}
+
+TEST_F(BfqSchedulerTest, TestQosGroupLifecycle) {
+  set_conf("osd_bfq_max_budget", "16384");
+  set_conf("osd_bfq_min_cost", "4096");
+  set_conf("osd_bfq_budget_timeout", "100000");
+  create_queue();
+  auto leaves = q->set_qos_groups({{"gold", 300}});
+  const auto gold = leaves.at("gold");
+  q->set_pool_leaves({{1, gold}});
+
+  for (unsigned i = 0; i < 10; ++i) {
+    q->enqueue(create_item(i, 1, SchedulerClass::client, 1));
+  }
+
+  // the group vanishes from the table while its queue is backlogged:
+  // the leaf must keep scheduling (with its last weight) until empty
+  q->set_qos_groups({});
+  q->set_pool_leaves({});
+  unsigned drained = 0;
+  while (!q->empty()) {
+    get_item(q->dequeue());
+    ++drained;
+  }
+  ASSERT_EQ(10u, drained);
+
+  // the drained slot is recycled for the next new group, not leaked
+  auto leaves2 = q->set_qos_groups({{"bronze", 50}});
+  ASSERT_EQ(gold, leaves2.at("bronze"));
+
+  // and a known group keeps its leaf across table refreshes
+  auto leaves3 = q->set_qos_groups({{"bronze", 500}});
+  ASSERT_EQ(leaves2.at("bronze"), leaves3.at("bronze"));
+
+  // items enqueued to a recycled leaf drain normally
+  q->set_pool_leaves({{2, leaves3.at("bronze")}});
+  q->enqueue(create_item(1, 2, SchedulerClass::client, 2));
+  ASSERT_FALSE(q->empty());
+  get_item(q->dequeue());
+  ASSERT_TRUE(q->empty());
+}
+
+TEST_F(BfqSchedulerTest, TestQosGroupAdditionKeepsIdleSlots) {
+  set_conf("osd_bfq_max_budget", "16384");
+  set_conf("osd_bfq_min_cost", "4096");
+  set_conf("osd_bfq_budget_timeout", "100000");
+  create_queue();
+
+  // silver is defined alone, serves a burst and goes idle: its slot
+  // is drained and off the tree, exactly what a recyclable slot of a
+  // removed group looks like...
+  auto leaves = q->set_qos_groups({{"silver", 100}});
+  const auto silver = leaves.at("silver");
+  q->set_pool_leaves({{1, silver}});
+  for (unsigned i = 0; i < 8; ++i) {
+    q->enqueue(create_item(i, 1, SchedulerClass::client, 1));
+  }
+  while (!q->empty()) {
+    get_item(q->dequeue());
+  }
+
+  // ...but silver is still defined when gold, which sorts before it
+  // in the table, is added.  Reconciliation must judge recyclability
+  // against the whole incoming table, not against a visited flag:
+  // silver keeps its leaf (and with it its adapted budget and
+  // virtual-time memory) and gold lands on a fresh one
+  auto leaves2 = q->set_qos_groups({{"gold", 300}, {"silver", 100}});
+  ASSERT_EQ(silver, leaves2.at("silver"));
+  ASSERT_NE(silver, leaves2.at("gold"));
+  ASSERT_GE(leaves2.at("gold"), bfq_num_streams);
+
+  // and the same table applied again changes nothing
+  auto leaves3 = q->set_qos_groups({{"gold", 300}, {"silver", 100}});
+  ASSERT_EQ(leaves2, leaves3);
 }
 
 TEST_F(BfqSchedulerTest, TestMetaStreamWeights) {

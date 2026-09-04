@@ -25,7 +25,8 @@ weighted groups, in the spirit of ``io.bfq.weight``::
    |   |-- object_meta (rgw omap pools)   (osd_bfq_client_object_meta_weight)
    |   |-- file        (cephfs data)      (osd_bfq_client_file_weight)
    |   |-- file_meta   (cephfs metadata)  (osd_bfq_client_file_meta_weight)
-   |   `-- other                          (osd_bfq_client_other_weight)
+   |   |-- other                          (osd_bfq_client_other_weight)
+   |   `-- <user-defined qos groups>      (weight from `osd qos-group set`)
    `-- background group                   (osd_bfq_background_group_weight)
        |-- recovery                       (osd_bfq_background_recovery_weight)
        `-- best_effort                    (osd_bfq_background_best_effort_weight)
@@ -67,6 +68,40 @@ The per-shard pool map refreshes on every OSDMap the shard consumes, so
 tag changes take effect without a restart.  Background ops are split by
 their existing scheduler class (``background_recovery`` vs
 ``background_best_effort``).
+
+User-defined qos groups
+-----------------------
+
+The derived classification can be overridden per pool.  A *qos group*
+is a named entry in the OSDMap, managed like an erasure code profile
+(requires ``require_osd_release`` >= umbrella)::
+
+   ceph osd qos-group set gold weight=500     # create or update
+   ceph osd qos-group get gold
+   ceph osd qos-group ls
+   ceph osd qos-group rm gold                 # refused while referenced
+
+and a pool is steered into one with a pool option::
+
+   ceph osd pool set volumes qos_group gold
+   ceph osd pool set volumes qos_group unset  # back to the derived stream
+
+Each group becomes an additional leaf of the client group, a sibling
+of the built-in streams, with its own self-tuning budget; the built-in
+stream names (``block``, ``object``, ``object_meta``, ``file``,
+``file_meta``, ``other``, ``recovery``, ``best_effort``) are reserved
+and cannot name a group.  Classification resolves in order: the
+pool's explicit ``qos_group`` option, then the stream derived from
+application metadata, then ``other``.  This is how tenants get
+isolated from each other rather than only protocol-from-protocol: for
+example, rgw placement targets can put a hot tenant's data pools in
+their own group.  Group weights live in the OSDMap (not the config),
+so one command reweights every OSD; unlike erasure code profiles a
+group may be updated freely while in use -- the new weight is felt
+when the leaf is next (re)activated.  The mon refuses to remove a
+group that any pool references; a leaf whose group disappears anyway
+(maps arrive in sequence) keeps scheduling with its last weight until
+its queue drains, after which the slot is recycled.
 
 Weights follow the cgroups v2 convention: 1..1000, default 100, purely
 relative, adjustable at runtime.
@@ -218,16 +253,16 @@ Follow-up candidates
   static approximation of this.
 * An ``osd_bfq_latency_target_ms`` that derives the budget cap from a
   latency goal instead of exposing bytes directly.
-* Evolving the fixed stream enum into declared *traffic groups* and
-  *traffic classes* (the Tectonic model [Tectonic21]_): rgw stamping
-  ``traffic-class`` on the pools it creates; dynamic leaves registered
-  from pool metadata (e.g. ``traffic-group: warehouse``) with weights
-  from a map rather than one option per stream, letting rgw steer
-  tenants into distinct groups via placement targets even on
-  single-protocol clusters; ultimately an op-carried, capability-gated
-  (group, class) tag for traffic that shares a pool (the bucket index
-  pool serves every principal in a zone, so principal-level isolation
-  of index I/O cannot be pool-granular).
+* Completing the *traffic group* / *traffic class* model (the
+  Tectonic model [Tectonic21]_) that qos groups began: rgw stamping
+  ``traffic-class`` (and per-placement-target ``qos_group``
+  assignments) on the pools it creates, and ultimately an op-carried,
+  capability-gated qos group tag for traffic that shares a pool (the
+  bucket index pool serves every principal in a zone, so
+  principal-level isolation of index I/O cannot be pool-granular).
+  Classification is already an override chain (pool option beats the
+  derived stream, resolved per pool at map consumption), so a wire
+  tag slots in at the front of ``classify()`` once MOSDOp carries it.
 * Perf counters mirroring the mclock ones.
 * Completion-based charging, which would recover more of BFQ's
   device-time fairness but requires feedback from the op pipeline.
