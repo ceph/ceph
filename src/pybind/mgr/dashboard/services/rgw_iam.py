@@ -91,3 +91,9 @@ class RgwAccounts:
             return out
         except SubprocessError as error:
             raise DashboardException(error, http_status_code=500, component='rgw')
+
+    @classmethod
+    def get_account_user_count(cls, account_id: str) -> int:
+        """Return the number of users currently in the given account."""
+        out = cls.send_rgw_cmd(['user', 'list', '--account-id', account_id])
+        return len(out) if isinstance(out, list) else 0
