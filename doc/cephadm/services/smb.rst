@@ -12,6 +12,10 @@ SMB Service
     has been determined to be unsuitable for your needs we recommend using that
     module over directly using the smb service spec.
 
+.. important::
+
+    If using Podman, the SMB service requires Podman release 4.1.0 or later.
+
 
 Deploying Samba Containers
 ==========================
