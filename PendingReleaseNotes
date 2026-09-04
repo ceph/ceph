@@ -78,6 +78,13 @@
   Benchmarks showed that the lower thread count improves throughput and reduces latency
   on NVMe and HDD based environments. Users with specific workload requirements can
   tune this value; see also ``rgw_max_concurrent_requests``.
+* RGW: This release contains a fix for CVE-2026-54330. We now reject
+  Sigv4 requests with `host` and `x-amz-` headers not included in the
+  signed subset. Unfortunately, the REST client used in multisite was
+  generating such improperly signed requests.
+* RGW: New CephX profile ``profile rgw`` grants a Ceph Object Gateway the
+  permissions it needs. Create keys with
+  ``mon 'profile rgw' osd 'profile rgw'``.
 
 
 * DASHBOARD: A new Overview landing page provides an at-a-glance cluster summary
