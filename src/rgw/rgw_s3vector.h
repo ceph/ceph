@@ -550,6 +550,74 @@ struct validation_error_t {
   std::string message;
 };
 
+// names of the internal columns of the index table. all of them start with an
+// underscore, which is why a metadata key name may not start with one
+inline constexpr const char* key_field = "_key";
+inline constexpr const char* data_field = "_data";
+inline constexpr const char* metadata_field = "_metadata";
+inline constexpr const char* distance_field = "_distance";
+
+// maximum length of a metadata key name declared at CreateIndex
+inline constexpr size_t max_metadata_key_name_length = 63;
+
+
+// existing and future internal columns (and only them) must start with underscore
+inline constexpr char internal_column_prefix = '_';
+
+inline bool is_internal_column(const std::string& name) {
+  return name.starts_with(internal_column_prefix);
+}
+
+// a column name handed to datafusion is parsed as a SQL identifier, so an
+// unquoted name is lowercased and stripped of its surrounding whitespace, and a
+// name wrapped in quotes or backticks is unwrapped. in such a case the column
+// names won't match the filter expression.
+// this is needed only for filterable metadata keys. keys of the
+// metadata JSON document are treated as string literals
+inline std::string quote_column_name(const std::string& name) {
+  std::string quoted;
+  quoted.reserve(name.size() + 2);
+  quoted += '"';
+  for (const auto c : name) {
+    // an interior double quote is escaped by doubling it
+    if (c == '"') quoted += '"';
+    quoted += c;
+  }
+  quoted += '"';
+  return quoted;
+}
+
+// validate the name of a metadata key. returns the reason the name is invalid,
+// or std::nullopt if it is valid. the returned message has no subject, so that
+// the caller could prefix it with the name as it appears in its own context
+inline std::optional<std::string> validate_metadata_key_name(const std::string& name) {
+  if (name.empty()) {
+    return "must not be empty";
+  }
+  if (is_internal_column(name)) {
+    return fmt::format("must not start with '{}'", internal_column_prefix);
+  }
+  if (name.find('.') != std::string::npos) {
+    return "must not contain '.'";
+  }
+  return std::nullopt;
+}
+
+// validate the name of a metadata key that is declared at CreateIndex, in either
+// filterableMetadataKeys or nonFilterableMetadataKeys
+inline std::optional<std::string> validate_declared_metadata_key_name(const std::string& name) {
+  if (const auto invalid = validate_metadata_key_name(name); invalid) {
+    return invalid;
+  }
+  if (name.size() > max_metadata_key_name_length) {
+    return fmt::format("length ({}) must not exceed {} characters", name.size(), max_metadata_key_name_length);
+  }
+  if (name.find('`') != std::string::npos) {
+    return "must not contain a backtick (`)";
+  }
+  return std::nullopt;
+}
+
 int create_index(const create_index_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y, std::vector<validation_error_t>& errors);
 int create_vector_bucket(const create_vector_bucket_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);
 int delete_index(const delete_index_t& configuration, rgw::sal::Driver* driver, const rgw::sal::User* user, const std::string* tenant, DoutPrefixProvider* dpp, optional_yield y);

@@ -176,7 +176,7 @@ void JSONObj::init(JSONObj *p, Value v, string n)
   if (v.type() == str_type) {
     val.set(v.get_str(), true);
   } else {
-    val.set(json_spirit::write_string(v), false);
+    val.set(json_spirit::write_string(v, raw_utf8), false);
   }
   attr_map.insert(pair<string,data_val>(name, val));
 }
@@ -249,7 +249,7 @@ bool JSONParser::parse(const char *buf_, int len)
       if (data.type() == str_type) {
         val.set(data.get_str(), true);
       } else {
-        const std::string& s = json_spirit::write_string(data);
+        const std::string& s = json_spirit::write_string(data, raw_utf8);
         if (s.size() == (uint64_t)len) { /* Check if entire string is read */
           val.set(s, false);
         } else {

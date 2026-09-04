@@ -12,8 +12,6 @@
 
 namespace rgw::s3vector {
 
-  static constexpr const char* metadata_field = "metadata";
-
   const filterable_metadata_key_t* find_filterable_key(
       const std::string& field_name,
       const std::vector<filterable_metadata_key_t>& filterable_keys) {
@@ -35,6 +33,12 @@ namespace rgw::s3vector {
   LanceDBExpr* build_literal_expr(JSONObj* value_obj, FilterableMetadataType type,
       const std::string& field_name, DoutPrefixProvider* dpp,
       std::vector<validation_error_t>& errors) {
+    // the value of an operator must be a scalar
+    if (value_obj->is_object() || value_obj->is_array()) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector filter: unsupported value type for field '" << field_name << "'" << dendl;
+      errors.push_back({"filter", fmt::format("unsupported value type for field '{}'", field_name)});
+      return nullptr;
+    }
     const auto& dv = value_obj->get_data_val();
     switch (type) {
       case FilterableMetadataType::STRING:
@@ -101,6 +105,10 @@ namespace rgw::s3vector {
 
   static const auto invalid_binary_op = static_cast<LanceDBBinaryOp>(-1);
 
+  bool is_logical_operator(const std::string& name) {
+    return name == "$and" || name == "$or";
+  }
+
   LanceDBBinaryOp s3vector_to_lance_op(const std::string& op) {
     if (op == "$eq") return LANCEDB_BINARY_OP_EQ;
     if (op == "$ne") return LANCEDB_BINARY_OP_NOT_EQ;
@@ -136,7 +144,8 @@ namespace rgw::s3vector {
         // if column must exist, we can create a const boolean expression
         return lancedb_expr_literal_bool(exists);
       }
-      auto* col = lancedb_expr_column(fk->name.c_str());
+      const auto quoted = quote_column_name(fk->name);
+      auto* col = lancedb_expr_column(quoted.c_str());
       // build an expression that checks if the column is null or not
       return exists ? lancedb_expr_is_not_null(col) : lancedb_expr_is_null(col);
     }
@@ -197,7 +206,8 @@ namespace rgw::s3vector {
     if (!fk) {
       field_expr = build_json_field_expr(field_name, vtype);
     } else {
-      field_expr = lancedb_expr_column(fk->name.c_str());
+      const auto quoted = quote_column_name(fk->name);
+      field_expr = lancedb_expr_column(quoted.c_str());
     }
 
     char* error_message = nullptr;
@@ -227,7 +237,8 @@ namespace rgw::s3vector {
     LanceDBExpr* field_expr;
     LanceDBExpr* literal_expr;
     if (fk) {
-      field_expr = lancedb_expr_column(fk->name.c_str());
+      const auto quoted = quote_column_name(fk->name);
+      field_expr = lancedb_expr_column(quoted.c_str());
       literal_expr = build_literal_expr(value_obj, fk->type, field_name, dpp, errors);
     } else {
       auto vtype = infer_value_type(value_obj);
@@ -285,11 +296,12 @@ namespace rgw::s3vector {
       const std::vector<std::string>& nonfilterable_keys,
       DoutPrefixProvider* dpp,
       std::vector<validation_error_t>& errors) {
-    // a metadata key may not contain a '.', so such a field could never be matched.
-    // note that nested documents cannot be addressed either
-    if (field_name.find('.') != std::string::npos) {
-      ldpp_dout(dpp, 1) << "ERROR: s3vector filter: field name '" << field_name << "' must not contain '.'" << dendl;
-      errors.push_back({"filter", fmt::format("field name '{}' must not contain '.'", field_name)});
+    // a name that is not a valid metadata key name could never be matched, since
+    // no such key could have been stored. note that a '.' is rejected here as
+    // well, so nested documents cannot be addressed either
+    if (const auto invalid = validate_metadata_key_name(field_name); invalid) {
+      ldpp_dout(dpp, 1) << "ERROR: s3vector filter: field name '" << field_name << "' " << *invalid << dendl;
+      errors.push_back({"filter", fmt::format("field name '{}' {}", field_name, *invalid)});
       return std::nullopt;
     }
 
@@ -346,13 +358,7 @@ namespace rgw::s3vector {
       auto* child = *it;
       const auto& name = child->get_name();
 
-      if (name == "$and" || name == "$or") {
-        if (!child->is_array()) {
-          ldpp_dout(dpp, 1) << "ERROR: s3vector filter: " << name << " requires an array of conditions" << dendl;
-          errors.push_back({"filter", fmt::format("{} requires an array of conditions", name)});
-          free_filter_exprs(combined);
-          return std::nullopt;
-        }
+      if (is_logical_operator(name) && child->is_array()) {
         // top level logical operators
         if (child->find_first().end()) {
           ldpp_dout(dpp, 1) << "ERROR: s3vector filter: " << name << " requires a non-empty array of conditions" << dendl;
