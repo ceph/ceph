@@ -115,6 +115,7 @@ class DistroKind(StrEnum):
     UBUNTU2604 = "ubuntu26.04"
     DEBIAN12 = "debian12"
     DEBIAN13 = "debian13"
+    OPENRUYI = "openruyi"
 
     @classmethod
     def uses_dnf(cls):
@@ -125,6 +126,7 @@ class DistroKind(StrEnum):
             cls.FEDORA41,
             cls.ROCKY9,
             cls.ROCKY10,
+            cls.OPENRUYI,
         }
 
     @classmethod
@@ -173,6 +175,9 @@ class DistroKind(StrEnum):
             str(cls.DEBIAN13): cls.DEBIAN13,
             "debian-trixie": cls.DEBIAN13,
             "trixie": cls.DEBIAN13,
+            # openruyi
+            str(cls.OPENRUYI): cls.OPENRUYI,
+            "openruyi-creek": cls.OPENRUYI,
         }
 
     @classmethod
@@ -204,6 +209,8 @@ class DefaultImage(StrEnum):
     # debian
     DEBIAN12 = "docker.io/debian:bookworm"
     DEBIAN13 = "docker.io/debian:trixie"
+    # openruyi
+    OPENRUYI = "community-ci.openruyi.cn/openruyi-oci:riscv64"
 
 
 class CommandFailed(Exception):
