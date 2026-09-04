@@ -7,7 +7,7 @@ import ipaddress
 import json
 import logging
 import time
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from mgr_module import HandleCommandResult
 
@@ -136,6 +136,36 @@ else:
             self.busy_rate = self.busy_secs.rate(delay)
             self.idle_rate = self.idle_secs.rate(delay)
 
+    class ConnectionBucketStats:
+        def __init__(self):
+            self.io_count = Counter()
+            self.bdev_sum = Counter()
+            self.net_sum = Counter()
+            self.qos_sum = Counter()
+            self.total_sum = Counter()
+
+            self.ops_rate = 0.0
+            self.bdev_mean = 0.0
+            self.net_mean = 0.0
+            self.qos_mean = 0.0
+            self.total_mean = 0.0
+
+        def update(self, io_count: int, bdev_mean: float, net_mean: float,
+                   qos_mean: float, total_mean: float):
+            self.io_count.update(io_count)
+            self.bdev_sum.update(bdev_mean * io_count)
+            self.net_sum.update(net_mean * io_count)
+            self.qos_sum.update(qos_mean * io_count)
+            self.total_sum.update(total_mean * io_count)
+
+        def calculate(self, delay: float):
+            self.ops_rate = self.io_count.rate(delay)
+            delta_count = self.io_count.current - self.io_count.last
+            self.bdev_mean = self.bdev_sum.rate(delta_count)
+            self.net_mean = self.net_sum.rate(delta_count)
+            self.qos_mean = self.qos_sum.rate(delta_count)
+            self.total_mean = self.total_sum.rate(delta_count)
+
     class NvmeofTopCollector:  # type: ignore[no-redef]  # noqa  # pylint: disable=function-redefined,too-many-instance-attributes
         def __init__(self):
             self.tool: Any = None
@@ -146,8 +176,9 @@ else:
             self.namespaces = {}
             self.lbg_to_gateway: dict = {}
             self.subsystems: Any = None
-            self.reactor_stats = {}
-            self.iostats = {}
+            self.reactor_stats: Dict[str, Dict[str, ReactorStats]] = {}
+            self.iostats: Dict[str, Dict[str, PerformanceStats]] = {}
+            self.connection_stats: Dict[Tuple[str, int], Dict[str, ConnectionBucketStats]] = {}
             self.gw_info: Any = None
             self.client: Any = None
             self.timestamp = time.time()
@@ -254,6 +285,26 @@ else:
                     ))
             reactor_data.sort(key=lambda t: t[sort_pos], reverse=reverse_sort)
             return reactor_data
+
+        def get_connection_data(self, sort_pos: int, reverse_sort: bool):
+            conn_data: List[Tuple[Any, ...]] = []
+            for (gw_addr, size_kb), io_stats in self.connection_stats.items():
+                total_iops = 0.0
+                metrics: List[Optional[float]] = []
+                for io_type in ('read', 'write'):
+                    stats = io_stats.get(io_type)
+                    if stats:
+                        total_iops += stats.ops_rate
+                        metrics += [stats.ops_rate, stats.bdev_mean, stats.net_mean,
+                                    max(0.0, stats.qos_mean), stats.total_mean]
+                    else:
+                        metrics += [None, None, None, None, None]
+
+                conn_data.append((gw_addr, size_kb, total_iops, *metrics))
+
+            conn_data.sort(key=lambda t: t[sort_pos] if t[sort_pos] is not None else 0.0,
+                           reverse=reverse_sort)
+            return conn_data
 
         def get_subsystem_summary_data(self):
             return [
@@ -509,6 +560,47 @@ else:
                     return
             logger.debug("collect_io_data completed")
 
+        def collect_connection_data(self):
+            nqn = self.tool.subsystem_nqn
+            host_nqn = self.tool.host_nqn
+            for client in self.clients.values():
+                req = NVMeoFClient.pb2.get_connection_io_statistics_req(
+                    subsystem_nqn=nqn,
+                    host_nqn=host_nqn,
+                    reset=False
+                )
+                ret = self._call_grpc('get_connection_io_statistics', req, client)
+                if ret is None:
+                    if not self.ready:
+                        return
+                    continue
+                gw_addr = client.gateway_addr
+                if ret.status != 0:
+                    logger.debug("No connection stats from %s: %s",
+                                 gw_addr, ret.error_message)
+                    stale_keys = [key for key in self.connection_stats if key[0] == gw_addr]
+                    for key in stale_keys:
+                        del self.connection_stats[key]
+                    continue
+                for bucket in ret.buckets:
+                    key = (gw_addr, bucket.size)
+                    for io_type, lat_group in (('read', bucket.read), ('write', bucket.write)):
+                        if not lat_group.io_count:
+                            continue
+                        if key not in self.connection_stats:
+                            self.connection_stats[key] = {}
+                        if io_type not in self.connection_stats[key]:
+                            self.connection_stats[key][io_type] = ConnectionBucketStats()
+                        self.connection_stats[key][io_type].update(
+                            lat_group.io_count,
+                            lat_group.bdev.mean,
+                            lat_group.net.mean,
+                            lat_group.qos.mean,
+                            lat_group.total.mean,
+                        )
+                        self.connection_stats[key][io_type].calculate(self.delay)
+            logger.debug("collect_connection_data completed")
+
     class NVMeoFTopTool:
         def __init__(self, args: dict):
             self.args = args
@@ -664,6 +756,103 @@ else:
                 rows.append("<no namespaces defined>\n")
 
             return ''.join(rows)
+
+    class NVMeoFTopConnection(NVMeoFTopTool):
+        connection_headers = [
+            'Gateway', 'SizeKB', 'Total IOPS',
+            'rIOPS', 'rBDEV µs', 'rNet µs', 'rQoS µs', 'rTotal µs',
+            'wIOPS', 'wBDEV µs', 'wNet µs', 'wQoS µs', 'wTotal µs',
+        ]
+        connection_template = (
+            "{:<20}   {:>6}   {:>10}"
+            "   {:>6}   {:>8}   {:>7}   {:>7}   {:>8}"
+            "   {:>6}   {:>8}   {:>7}   {:>7}   {:>8}\n"
+        )
+
+        def __init__(self, args: dict):
+            super().__init__(args)
+            self.subsystem_nqn = args.get('nqn')
+            self.host_nqn = args.get('host_nqn')
+
+        def _collect(self):
+            self.collector.collect_connection_data()
+
+        def format_output(self):
+            if self.sort_key not in NVMeoFTopConnection.connection_headers:
+                raise ValueError(
+                    f"Invalid sort key '{self.sort_key}'. "
+                    f"Valid options: {NVMeoFTopConnection.connection_headers}"
+                )
+            sort_pos = NVMeoFTopConnection.connection_headers.index(self.sort_key)
+
+            rows = []
+            if self.args.get('with_timestamp'):
+                timestamp = time.strftime('%Y-%m-%d %H:%M:%S',
+                                          time.localtime(self.collector.timestamp))
+                rows.append(f"{timestamp} (delay: {self.collector.delay:.2f}s)\n")
+
+            conn_data = self.collector.get_connection_data(
+                sort_pos=sort_pos, reverse_sort=self.reverse_sort)
+
+            if not self.args.get('no_header'):
+                rows.append(NVMeoFTopConnection.connection_template.format(
+                    *NVMeoFTopConnection.connection_headers))
+            if conn_data:
+                for row in conn_data:
+                    formatted = [
+                        '-' if v is None else (f"{v:.0f}" if isinstance(v, float) else v)
+                        for v in row
+                    ]
+                    rows.append(NVMeoFTopConnection.connection_template.format(*formatted))
+            else:
+                rows.append("<no IO statistics available>\n")
+
+            rows.append("\n")
+            return ''.join(rows)
+
+    @DBCLICommand.Read('nvmeof top connection', poll=True)
+    def nvmeof_top_connection(_, nqn: str = '', host_nqn: str = '',
+                              server_address: str = '', server_port: Optional[int] = None,
+                              gw_group: str = '',
+                              descending: bool = False, sort_by: str = 'Gateway',
+                              with_timestamp: bool = False, no_header: bool = False,
+                              period: float = 1.0, session_id: Optional[str] = None):
+        '''
+        NVMeoF Top Connection Tool
+        '''
+        if not nqn:
+            return HandleCommandResult(
+                stderr="Required argument '--nqn' missing",
+                retval=-errno.EINVAL
+            )
+        if not host_nqn:
+            return HandleCommandResult(
+                stderr="Required argument '--host-nqn' missing",
+                retval=-errno.EINVAL
+            )
+        if sort_by not in NVMeoFTopConnection.connection_headers:
+            return HandleCommandResult(
+                stderr=f"Invalid sort-by '{sort_by}': must match a header title: "
+                       f"{NVMeoFTopConnection.connection_headers}",
+                retval=-errno.EINVAL
+            )
+        args = {
+            'nqn': nqn,
+            'host_nqn': host_nqn,
+            'with_timestamp': with_timestamp,
+            'no_header': no_header,
+            'sort_descending': descending,
+            'sort_by': sort_by,
+            'server_address': server_address,
+            'server_port': server_port,
+            'gw_group': gw_group,
+            'period': period,
+            'session_id': session_id,
+        }
+        rc, output = NVMeoFTopConnection(args).run()
+        if rc != 0:
+            return HandleCommandResult(stderr=output, retval=rc)
+        return HandleCommandResult(stdout=output, retval=rc)
 
     @DBCLICommand.Read('nvmeof top cpu', poll=True)
     def nvmeof_top_cpu(_, server_address: str = '', server_port: Optional[int] = None,
