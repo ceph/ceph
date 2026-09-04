@@ -2945,18 +2945,22 @@ class C_MDL_CheckMaxSize : public LockerContext {
   uint64_t new_max_size;
   uint64_t newsize;
   utime_t mtime;
+  uint64_t new_change_attr;
 
 public:
   C_MDL_CheckMaxSize(Locker *l, CInode *i, uint64_t _new_max_size,
-                     uint64_t _newsize, utime_t _mtime) :
+                     uint64_t _newsize, utime_t _mtime,
+                     uint64_t _new_change_attr) :
     LockerContext(l), in(i),
-    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime)
+    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime),
+    new_change_attr(_new_change_attr)
   {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
     if (in->is_auth())
-      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
+      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime,
+                                   new_change_attr);
     in->put(CInode::PIN_PTRWAITER);
   }
 };
@@ -3060,7 +3064,7 @@ bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increas
 
 bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 				  uint64_t new_max_size, uint64_t new_size,
-				  utime_t new_mtime)
+				  utime_t new_mtime, uint64_t new_change_attr)
 {
   ceph_assert(in->is_auth());
   ceph_assert(in->is_file());
@@ -3072,6 +3076,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (update_size) {
     new_size = size = std::max(size, new_size);
     new_mtime = std::max(new_mtime, latest->mtime);
+    new_change_attr = std::max(new_change_attr, latest->change_attr);
     if (latest->size == new_size && latest->mtime == new_mtime)
       update_size = false;
   }
@@ -3089,7 +3094,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   if (in->is_frozen()) {
     dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE,
-		   new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
+		   new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime, new_change_attr));
     return false;
   } else if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
     // lock?
@@ -3105,7 +3110,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     if (!in->filelock.can_wrlock(in->get_loner())) {
       dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
       in->filelock.add_waiter(SimpleLock::WAIT_STABLE,
-			      new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
+			      new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime, new_change_attr));
       return false;
     }
   }
@@ -3135,6 +3140,9 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       if (new_mtime > pi.inode->rstat.rctime)
 	pi.inode->rstat.rctime = new_mtime;
     }
+    dout(10) << "check_inode_max_size change_attr " << pi.inode->change_attr
+             << " -> " << new_change_attr << dendl;
+    pi.inode->change_attr = new_change_attr;
   }
 
   // use EOpen if the file is still open; otherwise, use EUpdate.
@@ -4134,7 +4142,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	  !in->filelock.can_force_wrlock(client)) {
 	C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
 	                                                 forced_change_max ? new_max : 0,
-	                                                 0, utime_t());
+	                                                 0, utime_t(), 0);
 
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
 	change_max = false;

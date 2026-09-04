@@ -405,7 +405,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     objecter_finisher(m->cct),
     m_command_hook(this),
     fscid(0),
-    subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)}
+    subvolume_tracker{std::make_unique<SubvolumeMetricTracker>(cct, whoami)},
+    do_rados_fsync(false)
 {
   /* We only use the locale for normalization/case folding. That is unaffected
    * by the locale but required by the API.
@@ -2667,10 +2668,12 @@ void Client::_closed_mds_session(MetaSession *s, int err, bool rejected)
     mds_sessions.erase(s->mds_num);
 }
 
-static void reinit_mds_features(MetaSession *session,
-				const MConstRef<MClientSession>& m) {
+void Client::reinit_mds_features(MetaSession *session,
+                                        const MConstRef<MClientSession>& m) {
   session->mds_features = std::move(m->supported_features);
   session->mds_metric_flags = std::move(m->metric_spec.metric_flags);
+  do_rados_fsync = session->mds_features.test(CEPHFS_FEATURE_RADOS_FSYNC) &&
+    cct->_conf.get_val<bool>("client_fsync_to_rados");
 }
 
 void Client::handle_client_session(const MConstRef<MClientSession>& m)
@@ -5209,6 +5212,10 @@ int Client::mark_caps_flushing(Inode *in, ceph_tid_t* ptid)
 
   ceph_tid_t flush_tid = ++last_flush_tid;
   in->flushing_cap_tids[flush_tid] = flushing;
+  if (in->dirty_setattr) {
+    in->dirty_setattr = false;
+    in->unflushed_setattr_tid = flush_tid;
+  }
 
   if (!in->flushing_caps) {
     ldout(cct, 10) << __func__ << " " << ccap_string(flushing) << " " << *in << dendl;
@@ -8517,8 +8524,10 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     in->ctime = ceph_clock_now();
     if (issued & CEPH_CAP_AUTH_EXCL)
       in->mark_caps_dirty(CEPH_CAP_AUTH_EXCL);
-    else if (issued & CEPH_CAP_FILE_EXCL)
+    else if (issued & CEPH_CAP_FILE_EXCL) {
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
+    }
     else if (issued & CEPH_CAP_XATTR_EXCL)
       in->mark_caps_dirty(CEPH_CAP_XATTR_EXCL);
     else
@@ -8763,6 +8772,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
         in->cap_dirtier_uid = perms.uid();
         in->cap_dirtier_gid = perms.gid();
         in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+        in->dirty_setattr = true;
         mask &= ~(CEPH_SETATTR_SIZE);
         mask |= CEPH_SETATTR_MTIME;
       } else {
@@ -8790,6 +8800,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->cap_dirtier_uid = perms.uid();
       in->cap_dirtier_gid = perms.gid();
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
                (paux && in->fscrypt_file != *paux)) {
       inode_drop |= CEPH_CAP_FILE_SHARED | CEPH_CAP_FILE_RD | CEPH_CAP_FILE_WR;
@@ -8804,12 +8815,14 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->ctime = ceph_clock_now();
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_MTIME;
     } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_mtime) > in->mtime) {
       in->mtime = utime_t(stx->stx_mtime);
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_MTIME;
     } else if (!in->caps_issued_mask(CEPH_CAP_FILE_SHARED) ||
 	       in->mtime != utime_t(stx->stx_mtime)) {
@@ -8827,12 +8840,14 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
       in->ctime = ceph_clock_now();
       in->time_warp_seq++;
       in->mark_caps_dirty(CEPH_CAP_FILE_EXCL);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_ATIME;
     } else if (!do_sync && in->caps_issued_mask(CEPH_CAP_FILE_WR) &&
                utime_t(stx->stx_atime) > in->atime) {
       in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
       in->mark_caps_dirty(CEPH_CAP_FILE_WR);
+      in->dirty_setattr = true;
       mask &= ~CEPH_SETATTR_ATIME;
     } else {
       /* If we do not hold EXCL or WR caps, we MUST pass this request to the MDS
@@ -12283,7 +12298,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, int iovcnt,
                                   onfinish, blp);
 }
 
-int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
+int64_t Client::_write_success(Fh *f, utime_t start, utime_t op_mtime,
+                               uint64_t fpos,
                                int64_t request_offset, uint64_t request_size,
                                int64_t offset, uint64_t size, Inode *in,
                                bool encrypted)
@@ -12331,7 +12347,7 @@ int64_t Client::_write_success(Fh *f, utime_t start, uint64_t fpos,
   }
 
   // mtime
-  in->mtime = in->ctime = ceph_clock_now();
+  in->mtime = in->ctime = op_mtime;
   in->change_attr++;
   in->mark_caps_dirty(CEPH_CAP_FILE_WR);
 
@@ -12359,7 +12375,8 @@ void Client::C_Write_Finisher::finish_io(int r)
       }
     }
 
-    r = clnt->_write_success(f, start, fpos, req_ofs, req_size, offset, size, in, encrypted);
+    r = clnt->_write_success(f, start, op_mtime, fpos, req_ofs, req_size,
+                             offset, size, in, encrypted);
   }
 
   iofinished = true;
@@ -12439,15 +12456,17 @@ bool Client::C_Write_Finisher::try_complete()
 
 Client::WriteEncMgr::WriteEncMgr(Client *clnt,
                                  Fh *f, int64_t offset, uint64_t size,
+                                 const utime_t& w_mtime,
                                  bufferlist& bl,
                                  bool async) : clnt(clnt), whoami(clnt->whoami),
-                                                   cct(clnt->cct),
+                                               cct(clnt->cct),
 #if defined(__linux__)
-						   fscrypt(clnt->fscrypt.get()),
+                                               fscrypt(clnt->fscrypt.get()),
 #endif
-     						   f(f), in(f->inode.get()),
-                                                   offset(offset), size(size), bl(bl),
-                                                   async(async)
+                                               f(f), in(f->inode.get()),
+                                               offset(offset), size(size),
+                                               mtime(w_mtime), bl(bl),
+                                               async(async)
 {
 #if defined(__linux__)
   denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
@@ -12704,11 +12723,12 @@ int Client::WriteEncMgr_Buffered::do_write()
   // async, caching, non-blocking.
   r = clnt->objectcacher->file_write(&in->oset, &in->layout,
                                      in->snaprealm->get_snap_context(),
-                                     offset, size, *pbl, ceph::real_clock::now(),
+                                     offset, size, *pbl, mtime.to_real_time(),
                                      0, iofinish,
                                      !async
                                      ? clnt->objectcacher->CFG_block_writes_upfront()
-                                     : false);
+                                     : false,
+                                     clnt->do_rados_fsync ? in->change_attr : 0);
 
   return r;
 }
@@ -12719,9 +12739,10 @@ int Client::WriteEncMgr_NotBuffered::do_write()
   clnt->get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
 
   clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-                           offset, size, *pbl, ceph::real_clock::now(), 0,
+                           offset, size, *pbl, mtime.to_real_time(), 0,
                            in->truncate_size, in->truncate_seq,
-                           iofinish);
+                           iofinish, 0 /*op_flags*/,
+                           clnt->do_rados_fsync ? in->change_attr : 0);
 
   return 0;
 }
@@ -12789,6 +12810,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
   // time it.
   utime_t start = mono_clock_now();
+  utime_t op_mtime = ceph_clock_now();
 
   if (in->inline_version == 0) {
     int r = _getattr(in, CEPH_STAT_CAP_INLINE_DATA, f->actor_perms, true);
@@ -12826,11 +12848,11 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
 
   if (buffered_write) {
     enc_mgr = ceph::make_ref<WriteEncMgr_Buffered>(this, f,
-						   offset, size, bl,
+						   offset, size, op_mtime, bl,
 						   !!onfinish);
   } else {
     enc_mgr = ceph::make_ref<WriteEncMgr_NotBuffered>(this, f,
-						      offset, size, bl,
+						      offset, size, op_mtime, bl,
 						      !!onfinish);
   }
 
@@ -12887,7 +12909,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, bufferlist bl,
                         cct->_conf->client_oc &&
                           (have & (CEPH_CAP_FILE_BUFFER |
                                  CEPH_CAP_FILE_LAZYIO)),
-                        f, in, fpos,
+                        op_mtime, f, in, fpos,
                         request_offset, request_size,
                         offset, size,
                         do_fsync, syncdataonly, enc_mgr->encrypted()));
@@ -13007,7 +13029,8 @@ success:
 
   // do not get here if non-blocking caller (onfinish != nullptr)
   ldout(cct, 10) << " _write_filer_succeess" << dendl;
-  r = _write_success(f, start, fpos, request_offset, request_size, enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
+  r = _write_success(f, start, op_mtime, fpos, request_offset, request_size,
+                     enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
 
   if (r >= 0 && do_fsync) {
     int64_t r1;
@@ -13139,6 +13162,7 @@ void Client::C_nonblocking_fsync_state::advance()
 
   ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
 
+  bool mds_flush = false;
   switch (progress) {
   case 0:
     ldout(clnt->cct, 15) << "Client::C_nonblocking_fsync_state::advance - case 0" << dendl;
@@ -13153,6 +13177,22 @@ void Client::C_nonblocking_fsync_state::advance()
     }
 
     if (!syncdataonly && in->dirty_caps) {
+      if (clnt->do_rados_fsync && // rados fsync enabled
+          in->unsafe_ops.empty() && // we don't have to wait for ops anyway
+          in->inline_version == CEPH_INLINE_NONE && // not inline
+          !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL) && // only write caps are dirty
+          !in->dirty_setattr && // we haven't had a setattr
+          // and finally, we don't have a still-flushing setattr
+          (in->flushing_cap_tids.empty() ||
+           in->unflushed_setattr_tid < in->flushing_cap_tids.begin()->first)) {
+        // we don't need to sync to the MDS when we we can recover
+      // everything via Filer::probe()
+        mds_flush = false;
+      } else {
+        mds_flush = true;
+      }
+    }
+    if (mds_flush) {
       clnt->check_caps(in, CHECK_CAPS_NODELAY|CHECK_CAPS_SYNCHRONOUS);
       if (in->flushing_caps)
         flush_tid = clnt->last_flush_tid;
@@ -13347,8 +13387,24 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     _flush(in, object_cacher_completion.get());
     ldout(cct, 15) << "using return-valued form of _fsync" << dendl;
   }
-  
+  bool mds_flush = false;
   if (!syncdataonly && in->dirty_caps) {
+    if (do_rados_fsync && // rados fsync enabled
+        in->unsafe_ops.empty() && // we don't have to wait for ops anyway
+        in->inline_version == CEPH_INLINE_NONE && // not inline
+        !(in->dirty_caps & ~CEPH_CAP_FILE_WR & ~CEPH_CAP_FILE_EXCL) && // only write caps are dirty
+        !in->dirty_setattr && // we haven't had a setattr
+        // and finally, we don't have a still-flushing setattr
+        (in->flushing_cap_tids.empty() ||
+         in->unflushed_setattr_tid < in->flushing_cap_tids.begin()->first)) {
+      // we don't need to sync to the MDS when we we can recover
+      // everything via Filer::probe()
+      mds_flush = false;
+    } else {
+      mds_flush = true;
+    }
+  }
+  if (mds_flush) {
     check_caps(in, CHECK_CAPS_NODELAY|CHECK_CAPS_SYNCHRONOUS);
     if (in->flushing_caps)
       flush_tid = last_flush_tid;
@@ -18979,6 +19035,7 @@ std::vector<std::string> Client::get_tracked_keys() const noexcept
     "client_deleg_break_on_open",
     "client_deleg_timeout",
     "client_fscrypt_as",
+    "client_fsync_to_rados",
     "client_inject_write_delay_secs",
     "client_mount_timeout",
     "client_oc_max_dirty",
@@ -19053,6 +19110,15 @@ void Client::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("client_fscrypt_as")) {
     fscrypt_as = cct->_conf.get_val<bool>(
       "client_fscrypt_as");
+  }
+  if (changed.count("client_fsync_to_rados")) {
+    bool rados_fsync = false;
+    if (!mds_sessions.empty()) {
+      rados_fsync = mds_sessions.at(0)->
+        mds_features.test(CEPHFS_FEATURE_RADOS_FSYNC);
+    }
+    do_rados_fsync = rados_fsync &&
+      cct->_conf.get_val<bool>("client_fsync_to_rados");
   }
 }
 

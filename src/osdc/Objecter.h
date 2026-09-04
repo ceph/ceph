@@ -3367,6 +3367,17 @@ public:
     ObjectOperation *extra_ops = NULL) {
     Op *o = prepare_stat_op(oid, oloc, snap, psize, pmtime, flags,
 			    onfinish, objver, extra_ops);
+    if (extra_ops) { // fill in out_bl/out_rval/out_ec
+      for (size_t i=0; i<extra_ops->out_bl.size(); ++i) {
+        o->out_bl[i] = extra_ops->out_bl[i];
+      }
+      for (size_t i=0; i<extra_ops->out_rval.size(); ++i) {
+        o->out_rval[i] = extra_ops->out_rval[i];
+      }
+      for (size_t i=0; i<extra_ops->out_ec.size(); ++i) {
+        o->out_ec[i] = extra_ops->out_ec[i];
+      }
+    }
     ceph_tid_t tid;
     op_submit(o, &tid);
     return tid;
@@ -4037,12 +4048,13 @@ public:
   void sg_write_trunc(std::vector<ObjectExtent>& extents, const SnapContext& snapc,
 		      const ceph::buffer::list& bl, ceph::real_time mtime, int flags,
 		      uint64_t trunc_size, __u32 trunc_seq,
-		      Context *oncommit, int op_flags = 0) {
+		      Context *oncommit, int op_flags = 0,
+                      ObjectOperation *extra_ops=NULL) {
     if (extents.size() == 1) {
       write_trunc(extents[0].oid, extents[0].oloc, extents[0].offset,
 		  extents[0].length, snapc, bl, mtime, flags,
 		  extents[0].truncate_size, trunc_seq, oncommit,
-		  0, 0, op_flags);
+		  0, extra_ops, op_flags);
     } else {
       C_GatherBuilder gcom(cct, oncommit);
       auto it = bl.cbegin();
@@ -4060,7 +4072,7 @@ public:
 	write_trunc(p->oid, p->oloc, p->offset, p->length,
 	      snapc, cur, mtime, flags, p->truncate_size, trunc_seq,
 	      oncommit ? gcom.new_sub():0,
-	      0, 0, op_flags);
+              0, extra_ops, op_flags);
       }
       gcom.activate();
     }
