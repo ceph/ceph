@@ -66,6 +66,7 @@ from .resources import SMBResource
 from .results import ErrorResult, ResourceResult, Result, ResultGroup
 from .rgw_auth import RGWAuthorizer
 from .staging import (
+    CrossCheckToolbox,
     Staging,
     auth_refs,
     cross_check_resource,
@@ -498,8 +499,10 @@ class ClusterConfigHandler:
             cross_check_resource(
                 resource,
                 staging,
-                path_resolver=path_resolver,
-                earmark_resolver=earmark_resolver,
+                toolbox=CrossCheckToolbox(
+                    path_resolver=path_resolver,
+                    earmark_resolver=earmark_resolver,
+                ),
             )
         except ErrorResult as err:
             log.debug('rejected resource: %r', resource)
