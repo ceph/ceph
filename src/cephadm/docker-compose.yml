@@ -1,0 +1,97 @@
+services:
+  cephadm:
+    build:
+      context: .
+      dockerfile: Containerfile
+      target: cephadm
+    image: "${CEPHADM_IMAGE:-cephadm:latest}"
+
+    # Never keep a stopped container – cephadm is a run-and-exit tool.
+    restart: "no"
+
+    user: root
+
+#    # Host namespaces (see container-run.sh for detailed rationale).
+#    #network_mode: host
+#    #pid: host
+#    #ipc: host
+
+#  #  cap_add:
+  #    - SYS_ADMIN       # sysctl writes, mount ops, ceph-volume, namespace ops
+  #    - NET_ADMIN       # network interface inspection, firewall
+  #    - SYS_PTRACE      # inspect host processes (pairs with pid: host)
+  #    - CHOWN           # set ownership of daemon data directories
+  #    - DAC_OVERRIDE    # read/write host files protected by DAC
+  #    - DAC_READ_SEARCH # traverse/read protected host directories
+  #    - FOWNER          # file permission ops regardless of UID
+  #    - SETUID          # switch UID for daemons
+  #    - SETGID          # switch GID for daemons
+  #    - SYS_RAWIO       # raw block I/O for ceph-volume / SMART data
+  #    - MKNOD           # create device nodes
+  #    - SYS_RESOURCE    # adjust resource limits
+  #    - AUDIT_WRITE     # write to kernel audit log
+  #    - KILL            # send signals to host processes
+
+    security_opt:
+      - label=disable   # disable SELinux/AppArmor label confinement
+
+    # cgroupns=host is required for systemd/cgroup interaction.
+    # Compose v2 exposes it via the "cgroupns_mode" key; Podman Compose
+    # supports it the same way.
+    #cgroupns_mode: host
+
+    environment:
+      # Tell the podman client inside the container to reach the host daemon
+      # through the mounted socket (remote mode).
+      CONTAINER_HOST: "unix:///run/podman/podman.sock"
+      # Docker clients pick up DOCKER_HOST automatically when it is set; keep
+      # both variables so the image works regardless of which engine is on the
+      # host.
+      #DOCKER_HOST: "unix:///var/run/docker.sock"
+      # write_tmp()/tempfile paths are bind-mounted into containers started via
+      # the host podman socket, so they must live on a shared host path — not
+      # the container's private /tmp.  Host /run is typically tmpfs.
+      # Create on the host first: mkdir -p /run/cephadm/tmp
+      TMPDIR: /run/cephadm/tmp
+
+    volumes:
+      # systemd / D-Bus
+#      - /run/systemd:/run/systemd
+      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket
+#      # kernel / device nodes
+#      - /sys:/sys
+#      - /dev:/dev
+#      - /run/udev:/run/udev:ro
+#      - /proc:/proc
+#      # ceph data, logs, config
+      - /var/lib/ceph:/var/lib/ceph
+#      - /var/log/ceph:/var/log/ceph
+#      - /etc/ceph:/etc/ceph
+#      # systemd unit and config drop-in directories
+#      - /etc/systemd/system:/etc/systemd/system
+#      - /etc/sysctl.d:/etc/sysctl.d
+#      - /etc/logrotate.d:/etc/logrotate.d
+#      # cephadm lock / run directory
+#      - /run/cephadm:/run/cephadm
+      # Narrow shared temp dir for host-podman bind-mounts (see TMPDIR above).
+      - /run/cephadm/tmp:/run/cephadm/tmp
+      # Container engine socket – podman (system socket)
+      - /run/podman/podman.sock:/run/podman/podman.sock
+#      # Container engine socket – docker
+#      - /var/run/docker.sock:/var/run/docker.sock
+
+  # Same runtime as cephadm, but execute the host's cephadm source tree
+  # instead of the packaged /usr/sbin/cephadm binary.
+  cephadm-dev:
+    extends:
+      service: cephadm
+
+    build:
+      target: cephadm-dev
+    image: "${CEPHADM_DEV_IMAGE:-cephadm-dev:latest}"
+    volumes:
+      # Local checkout; override with CEPH_PATH=/path/to/ceph
+      - ${CEPH_PATH}:/ceph:ro
+      # Re-declare: some compose implementations replace (not merge) volumes
+      # from extends, and host podman still needs this shared TMPDIR path.
+      - /run/cephadm/tmp:/run/cephadm/tmp
