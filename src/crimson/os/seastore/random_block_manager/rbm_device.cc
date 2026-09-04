@@ -46,10 +46,10 @@ RBMDevice::mkfs_ret RBMDevice::do_primary_mkfs(device_config_t config,
   config.spec.id |= 0x80;
   const size_t cur_block_size = (*st).block_size;
   const size_t cur_total_size = (*st).size;
-  ceph_assert_always(journal_size > 0 ||
-                     config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
-  ceph_assert_always(cur_total_size >= journal_size);
-  ceph_assert_always(shard_num > 0);
+  ceph_assert(journal_size > 0 ||
+              config.spec.dtype == device_type_t::RANDOM_BLOCK_HDD);
+  ceph_assert(cur_total_size >= journal_size);
+  ceph_assert(shard_num > 0);
 
   const size_t aligned_size =
     (cur_total_size / shard_num) -
@@ -176,7 +176,7 @@ read_ertr::future<device_superblock_t> RBMDevice::read_rbm_superblock(
       );
     }
   } else {
-    ceph_assert_always(crc == (checksum_t)-1);
+    ceph_assert(crc == (checksum_t)-1);
   }
   super_block.crc = crc;
   super = super_block;
