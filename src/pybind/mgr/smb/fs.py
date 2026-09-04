@@ -1,5 +1,6 @@
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Iterator, List, Optional, Tuple
 
+import contextlib
 import logging
 import posixpath
 import stat
@@ -50,6 +51,12 @@ class CephFSSubvolumeResolutionError(KeyError):
     pass
 
 
+class _FSHandle:
+    def __init__(self, fs: "cephfs.LibCephFS", volpath: str) -> None:
+        self.fs = fs
+        self.volpath = volpath
+
+
 class CephFSPathResolver:
     """Using the rados and cephfs apis, the CephFSPathResolver can be used to
     map to real paths in the cephfs volume and determine if those paths exist.
@@ -97,13 +104,10 @@ class CephFSPathResolver:
         )
         return posixpath.join(subvolume_path, path)
 
-    def resolve_exists(
+    @contextlib.contextmanager
+    def _open(
         self, volume: str, subvolumegroup: str, subvolume: str, path: str
-    ) -> str:
-        """Executes the `resolve` method and verifies that it maps to a real
-        sharable directory. May raise FileNotFoundError or NotADirectoryError
-        when the path is not valid.
-        """
+    ) -> Iterator[_FSHandle]:
         volpath = self.resolve(volume, subvolumegroup, subvolume, path)
         with open_filesystem(self._cephfs_client, volume) as fs:
             log.debug('checking if %r is a dir in %r', volpath, volume)
@@ -119,8 +123,40 @@ class CephFSPathResolver:
             if not stat.S_ISDIR(stx.get('mode')):
                 log.info('%r is not a directory', volpath)
                 raise NotADirectoryError(volpath)
+            yield _FSHandle(fs, volpath)
+
+    def resolve_exists(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> str:
+        """Executes the `resolve` method and verifies that it maps to a real
+        sharable directory. May raise FileNotFoundError or NotADirectoryError
+        when the path is not valid.
+        """
+        with self._open(volume, subvolumegroup, subvolume, path) as fsh:
+            volpath = fsh.volpath
         log.debug('Verified that %r exists in %r', volpath, volume)
         return volpath
+
+    def resolve_case_sensitivity(
+        self, volume: str, subvolumegroup: str, subvolume: str, path: str
+    ) -> Tuple[bool, bool]:
+        """Resolve the state of case sensitivity settings from a directory
+        in a subvolume. Returns (bool, bool) where the first bool is true
+        iff case sensitive metadata (xattr) is found. The second bool
+        indicates case sensitive is set if True.
+        """
+        xattr_name = b'ceph.dir.casesensitive'
+        found = False
+        sens = True  # by default cephfs is case sensitive
+        with self._open(volume, subvolumegroup, subvolume, path) as fsh:
+            bpath = fsh.volpath.encode('utf-8')
+            try:
+                xvalue = fsh.fs.getxattr(bpath, xattr_name)
+                found = True
+                sens = xvalue == b'1'
+            except (cephfs.ObjectNotFound, cephfs.NoData, OSError):
+                pass
+        return found, sens
 
 
 class _TTLCache:
