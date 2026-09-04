@@ -865,6 +865,21 @@ options:
   flags:
   - startup
   - no_mon_update
+- name: mon_auth_pending_key_ttl
+  type: secs
+  level: advanced
+  desc: how long a pending key may sit uncommitted before a health warning is raised
+  long_desc: >
+    After `ceph auth rotate-pending` (or `auth get-or-create-pending`) generates a new
+    pending key for an entity, the rotation is not complete until `auth
+    commit-pending` is called to promote it. If a pending key remains
+    uncommitted for longer than this many seconds, the AUTH_PENDING_KEY_NOT_COMMITTED
+    health warning is raised so operators notice a stuck or abandoned rotation.
+  default: 1_day
+  services:
+  - mon
+  flags:
+  - runtime
 - name: mon_auth_validate_all_caps
   type: bool
   level: advanced

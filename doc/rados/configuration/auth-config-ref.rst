@@ -320,7 +320,12 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
 #. **Rotate the keys for all service daemon credentials.** These include **mon**, **mgr**, **osd**, and **mds**.
 
-   .. warning:: Changing the key will make the existing daemon unable to reauthenticate.
+   .. warning:: ``auth rotate-pending`` only stores the new key as *pending*; the old
+      key keeps working until you run ``auth commit-pending`` below. Restarting
+      a daemon before then is safe, but the rotation -- and its security
+      benefit -- is not complete until you commit it. ``auth rotate-pending`` is
+      idempotent, so re-running it (for example after a mistake) returns the
+      same pending key instead of minting a new one.
 
    .. note:: The ``mon.`` historically has not been managed by the Monitor auth database; it exists soley in each Monitor's keyring inside its data directory. This suggested rotation procedure now puts the authoritative copy in the auth database alongside other keys. The Monitor keyring persists as a fallback or emergency key.
 
@@ -328,7 +333,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. code:: bash
 
-       ceph auth rotate --key-type=aes256k mon. | tee mon.keyring
+       ceph auth rotate-pending --key-type=aes256k mon. | tee mon.keyring
 
    Save the ``mon.keyring`` file in a safe place. It should **not** be necessary to update the keyring files for each Monitor.
 
@@ -339,6 +344,12 @@ this upgrade, it's necessary to do the upgrade in several steps.
        systemctl restart ceph-mon@$ID
 
    .. warning:: If a Monitor was out-of-quorum during the Monitor key rotation, it will not have the new key. You must put the saved ``mon.keyring`` in its keyring file so it can authenticate.
+
+   Once every Monitor has been restarted, commit the rotation to retire the old ``mon.`` key:
+
+   .. code:: bash
+
+       ceph auth commit-pending mon.
 
 
    Now, for each other service daemon type (**mgr**, **osd**, and **mds**):
@@ -359,7 +370,7 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. code:: bash
 
-       ceph auth rotate --key-type=aes256k $TYPE.$ID | tee keyring
+       ceph auth rotate-pending --key-type=aes256k $TYPE.$ID | tee keyring
 
    .. note:: If you have updated ``auth_preferred_cipher`` then you can omit ``--key-type``.
 
@@ -397,6 +408,12 @@ this upgrade, it's necessary to do the upgrade in several steps.
    .. code:: bash
 
        systemctl restart ceph-$TYPE@$ID
+
+   Once the daemon is back up and using the new key, commit the rotation to retire the old key:
+
+   .. code:: bash
+
+       ceph auth commit-pending $TYPE.$ID
 
 #. **Confirm the** :ref:`auth-insecure-service-key-type` **is cleared.**
 
@@ -507,11 +524,11 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. code:: bash
 
-       ceph auth rotate --key-type=aes256k client.admin | tee ./client.admin.keyring
+       ceph auth rotate-pending --key-type=aes256k client.admin | tee ./client.admin.keyring
 
    .. note:: If you have updated ``auth_preferred_cipher`` then you can omit ``--key-type``.
 
-   .. warning:: The client.admin key is now changed. You cannot execute new Ceph commands as ``client.admin`` until you import the new key into your keyring.
+   .. note:: The old ``client.admin`` key keeps working until you commit the rotation below, so you are not locked out while you update your keyring file.
 
    Import the new ``client.admin`` key into your system's keyring file:
 
@@ -526,6 +543,12 @@ this upgrade, it's necessary to do the upgrade in several steps.
    .. code:: bash
 
        ceph -n client.admin -k /etc/ceph/ceph.client.admin.keyring ceph auth ls
+
+   Once the new key has been copied to every node that needs it and verified, commit the rotation to retire the old key:
+
+   .. code:: bash
+
+       ceph auth commit-pending client.admin
 
    If everything looks good, remove the backup key:
 
@@ -559,11 +582,17 @@ this upgrade, it's necessary to do the upgrade in several steps.
 
    .. code:: bash
 
-       ceph auth rotate --key-type=aes256k client.$ID | tee ./client.$ID.keyring
+       ceph auth rotate-pending --key-type=aes256k client.$ID | tee ./client.$ID.keyring
 
    .. note:: If you have updated ``auth_preferred_cipher`` then you can omit ``--key-type``.
 
-   Then copy and import the key to each machine using that ``client.$ID`` credential.
+   Then copy and import the key to each machine using that ``client.$ID`` credential. The old key keeps working until you commit the rotation, so clients are not locked out mid-rollout.
+
+   Once the new key has been copied everywhere it is used, commit the rotation to retire the old key:
+
+   .. code:: bash
+
+       ceph auth commit-pending client.$ID
 
    Once all client credentials have been upgraded, you should see the ``AUTH_INSECURE_CLIENT_KEY_TYPE`` health warning clear.
 
@@ -626,7 +655,7 @@ For example:
 
     ceph auth rotate client.fs | tee ./client.fs.keyring
 
-The output of the command is the new key:
+The output of the command shows the new key as if it were already active:
 
 ::
 
@@ -644,6 +673,36 @@ This can be imported into a new keyring using ``ceph-authtool``:
 
 
 .. note:: The key must be distributed to all locations where the key is in use.
+
+.. important:: ``auth rotate`` does **not** replace the old key immediately.
+   It stores the new key as a *pending* key: both the old and the new key are
+   accepted for authentication until the rotation is explicitly finished.
+   The old key remains valid, and the security benefit of the rotation is
+   **not** realized, until you run:
+
+   .. code:: bash
+
+       ceph auth commit-pending $TYPE.$ID
+
+   after every location using this credential has picked up the new key. If
+   you decide not to go through with the rotation, discard the pending key
+   and keep the old one with:
+
+   .. code:: bash
+
+       ceph auth clear-pending $TYPE.$ID
+
+   If a pending key is left uncommitted for longer than
+   ``mon_auth_pending_key_ttl`` (one day, by default), the
+   :ref:`auth-pending-key-not-committed` health warning is raised as a
+   reminder to finish or abandon the rotation.
+
+.. note:: ``auth rotate`` always generates a new pending key, even if one is
+   already pending. Scripts or automation that may retry a rotation (for
+   example, after a failure partway through applying it) should use
+   ``auth rotate-pending`` instead: it is idempotent, so a retry returns the
+   same pending key rather than replacing one a client may have already
+   started using.
 
 
 .. _auth_emergency_allowed_ciphers:
