@@ -18,20 +18,22 @@
 
 #include "common/container_concepts.h"
 
-#include <algorithm>
 #include <array>
-#include <compare>
-#include <concepts>
+#include <vector>
+#include <optional>
+
+#include <ranges>
+#include <iterator>
+#include <algorithm>
+
 #include <cstddef>
 #include <cstdint>
-#include <functional>
-#include <iterator>
-#include <optional>
-#include <ranges>
-#include <stdexcept>
-#include <type_traits>
 #include <utility>
-#include <vector>
+#include <compare>
+#include <concepts>
+#include <stdexcept>
+#include <functional>
+#include <type_traits>
 
 // Defines a pure interval algebra used to wrangle ranges over ordered domains; the
 // query layer supplies the FoundationDB-specific key domain:

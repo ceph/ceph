@@ -19,16 +19,17 @@
 #include "common/container_concepts.h"
 #include "interval.h"
 
+#include <string>
+#include <vector>
+#include <optional>
+#include <string_view>
+
+#include <cstddef>
+#include <utility>
 #include <compare>
 #include <concepts>
-#include <cstddef>
 #include <functional>
-#include <optional>
-#include <string>
-#include <string_view>
 #include <type_traits>
-#include <utility>
-#include <vector>
 
 /* libfdb queries are small expression trees over FoundationDB's lexicographic
  * keyspace. The interval algebra is generic and option-free; this header adapts
