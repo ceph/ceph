@@ -372,6 +372,7 @@ target_link_libraries(rgw_common
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
   PUBLIC
+    ceph-json-headers
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context
@@ -494,6 +495,7 @@ if(WITH_RADOSGW_STANDALONE)
     ${ARROW_FLIGHT_LIBRARIES}
     ${LMDB_LIBRARIES}
     PUBLIC
+    ceph-json-headers
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     Boost::context

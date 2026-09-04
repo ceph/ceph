@@ -153,6 +153,7 @@ target_link_libraries(crimson-common
     crimson::cflags
   PRIVATE
     crc32 arch
+    ceph-json-headers
     Boost::iostreams
     Boost::random
     json_spirit
@@ -204,7 +205,9 @@ set_target_properties(crimson PROPERTIES
 target_link_libraries(crimson
   PUBLIC
     crimson-common
-    crimson::cflags)
+    crimson::cflags
+  PRIVATE
+    ceph-json-headers)
 add_subdirectory(admin)
 add_subdirectory(os)
 add_subdirectory(osd)
