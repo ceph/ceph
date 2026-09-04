@@ -40,7 +40,7 @@
           >
             <cd-icon
               type="success"
-              [size]="icons.size20"
+              [size]="iconSize.size20"
             >
             </cd-icon>
             The cluster control plane is ready.
@@ -54,7 +54,7 @@
           >
             <cd-icon
               type="ibmCloudBareMetalServer"
-              [size]="icons.size20"
+              [size]="iconSize.size20"
             >
             </cd-icon>
             Add storage to begin using your cluster.
@@ -86,7 +86,7 @@
             </span>
             <cd-icon
               type="infoCircle"
-              [size]="icons.size20"
+              [size]="iconSize.size20"
             >
             </cd-icon>
           </div>
@@ -102,7 +102,7 @@
           >
             <cd-icon
               type="ibmCloudDedicatedHost"
-              [size]="icons.size20"
+              [size]="iconSize.size20"
             >
             </cd-icon>
             <div
@@ -132,7 +132,7 @@
           >
             <cd-icon
               type="vmdkDisk"
-              [size]="icons.size20"
+              [size]="iconSize.size20"
             >
             </cd-icon>
 
@@ -164,7 +164,7 @@
           >
             <cd-icon
               type="clusterIcon"
-              [size]="icons.size20"
+              [size]="iconSize.size20"
             >
             </cd-icon>
 
@@ -211,25 +211,27 @@
             i18n
           >
             Add storage
-            <svg
-              [cdsIcon]="icons.add"
-              [size]="icons.size20"
-              type="button"
-              class="cds--btn__icon"
-            ></svg>
+            <cd-icon
+              type="add"
+              [size]="iconSize.size20"
+              customClass="cds--btn__icon"
+            >
+            </cd-icon>
           </button>
           <button
             cdsButton="tertiary"
             (click)="skipClusterCreation()"
+            aria-label="View cluster overview"
             type="button"
             i18n
           >
             View cluster overview
-            <svg
-              [cdsIcon]="icons.right"
-              [size]="icons.size20"
-              class="cds--btn__icon"
-            ></svg>
+            <cd-icon
+              type="right"
+              [size]="iconSize.size20"
+              customClass="cds--btn__icon"
+            >
+            </cd-icon>
           </button>
         </div>
       </div>

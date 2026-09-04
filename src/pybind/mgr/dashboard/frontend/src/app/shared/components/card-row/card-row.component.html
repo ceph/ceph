@@ -62,7 +62,7 @@
 </div>
 
 <ng-template #defaultSummary>
-  @if (data === null) {
+  @if (data == null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
     <span
@@ -128,7 +128,7 @@
 </ng-template>
 
 <ng-template #osdSummary>
-  @if (data === null) {
+  @if (data == null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
     <span *ngIf="data.up === data.in">
@@ -178,7 +178,7 @@
 </ng-template>
 
 <ng-template #iscsiSummary>
-  @if (data === null || total === null) {
+  @if (data == null || total == null) {
     <ng-container *ngTemplateOutlet="loadingTpl"></ng-container>
   } @else {
     <span>
@@ -225,7 +225,7 @@
 </ng-template>
 
 <ng-template #noLinkTitle>
-  @if (data !== null || total) {
+  @if (data != null || total) {
     <span
       *ngIf="total || total === 0"
       [ngPlural]="total"

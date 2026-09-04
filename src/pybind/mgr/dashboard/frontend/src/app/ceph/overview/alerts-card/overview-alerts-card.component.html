@@ -11,8 +11,8 @@
       <button
         cdsButton="ghost"
         size="sm"
-        type="button"
         [routerLink]="['/monitoring/active-alerts']"
+        type="button"
         i18n
       >
         View all
@@ -32,7 +32,7 @@
         {{ vm.statusText }}
       </small>
       <!-- SUB TOTAL COUNTS -->
-      <div class="cds-mt-6">
+      <div class="cds-mt-5">
         @if (vm.badges.length) {
           <div [cdsStack]="compact ? 'horizontal' : 'vertical'">
             @for (b of vm.badges; track b.key; let last = $last) {

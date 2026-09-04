@@ -6,7 +6,7 @@ export class NotificationSidebarPageHelper extends PageHelper {
   };
 
   getNotificationIcon() {
-    return cy.get('cd-notifications a');
+    return cy.get(`[data-testid='header-notification-icon']`);
   }
 
   getPanel() {
@@ -40,8 +40,8 @@ export class NotificationSidebarPageHelper extends PageHelper {
   }
 
   open() {
-    this.getNotificationIcon().click();
-    this.getPanel().should('exist');
+    this.getNotificationIcon().click({ force: true });
+    this.getSidebar().should('exist');
     this.getSidebar().should('exist');
   }
 

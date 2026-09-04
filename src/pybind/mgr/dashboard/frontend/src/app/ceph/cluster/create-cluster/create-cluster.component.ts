@@ -35,7 +35,7 @@ import { DriveGroup } from '../osd/osd-form/drive-group.model';
 import { Location } from '@angular/common';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { Step } from 'carbon-components-angular';
-import { Icons } from '~/app/shared/enum/icons.enum';
+import { IconSize } from '~/app/shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-create-cluster',
@@ -76,7 +76,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
   selectedOption = {};
   simpleDeployment = true;
   stepsToSkip: { [steps: string]: boolean } = {};
-  icons = Icons;
+  iconSize = IconSize;
 
   @Output()
   submitAction = new EventEmitter();
@@ -120,10 +120,12 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
       }
     });
 
-    this.osdService.getDeploymentOptions().subscribe((options) => {
-      this.deploymentOption = options;
-      this.selectedOption = { option: options.recommended_option, encrypted: false };
-    });
+    if (this.permissions.osd?.read) {
+      this.osdService.getDeploymentOptions().subscribe((options) => {
+        this.deploymentOption = options;
+        this.selectedOption = { option: options.recommended_option, encrypted: false };
+      });
+    }
 
     this.stepTitles.forEach((stepTitle) => {
       this.stepsToSkip[stepTitle.label] = false;
@@ -199,7 +201,7 @@ export class CreateClusterComponent implements OnInit, OnDestroy, AfterViewInit 
       }
 
       if (this.simpleDeployment) {
-        const title = this.deploymentOption?.options[this.selectedOption['option']].title;
+        const title = this.deploymentOption?.options[this.selectedOption['option']]?.title;
         const trackingId = $localize`${title} deployment`;
         this.taskWrapper
           .wrapTaskAroundCall({

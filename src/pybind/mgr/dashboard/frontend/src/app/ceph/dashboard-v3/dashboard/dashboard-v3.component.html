@@ -144,7 +144,7 @@
             title="iSCSI Gateway"
             summaryType="iscsi"
             id="iscsi-item"
-            *ngIf="enabledFeature.iscsi"
+            *ngIf="enabledFeature.iscsi && iscsiMap"
           ></cd-card-row>
         </ng-container>
       </cd-card>
@@ -252,8 +252,8 @@
                   (click)="toggleAlertsWindow('critical')"
                   id="dangerAlerts"
                   i18n-title
-                  type="button"
                   *ngIf="prometheusAlertService?.activeCriticalAlerts"
+                  type="button"
                 >
                   <i [ngClass]="[icons.danger]"></i>
                   <span>{{ prometheusAlertService.activeCriticalAlerts }}</span>
@@ -266,8 +266,8 @@
                   (click)="toggleAlertsWindow('warning')"
                   id="warningAlerts"
                   i18n-title
-                  type="button"
                   *ngIf="prometheusAlertService?.activeWarningAlerts"
+                  type="button"
                 >
                   <i [ngClass]="[icons.infoCircle]"></i>
                   <span>{{ prometheusAlertService.activeWarningAlerts }}</span>
@@ -404,6 +404,7 @@
                 >
                 <small
                   class="alert_count"
+                  *ngIf="alert.alert_count > 1"
                   [title]="alert.alert_count"
                   i18n
                   >Total occurrences: {{ alert.alert_count }}</small
