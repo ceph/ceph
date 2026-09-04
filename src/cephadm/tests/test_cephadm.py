@@ -3466,3 +3466,128 @@ class TestRmClusterConfigCleanup(fake_filesystem_unittest.TestCase):
 
         assert os.path.exists('/etc/ceph/ceph.conf')
         assert os.path.isdir('/etc/ceph/ceph.conf')
+
+
+class TestZapOsds(object):
+    FSID = '50e242f4-59a8-11f1-b582-fa163efd19cc'
+    OTHER_FSID = 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee'
+
+    def _ctx(self):
+        ctx = _cephadm.CephadmContext()
+        ctx.fsid = self.FSID
+        ctx.image = 'quay.io/ceph/ceph:test'
+        return ctx
+
+    def _run(self, inventory, raw_list):
+        zapped = []
+
+        def fake_container(ctx, args=None, **kwargs):
+            m = mock.Mock()
+            m.run_cmd.return_value = list(args or [])
+            return m
+
+        def fake_call_throws(ctx, cmd, **kwargs):
+            if cmd and cmd[0] == 'raw':
+                return json.dumps(raw_list), '', 0
+            return json.dumps(inventory), '', 0
+
+        with mock.patch('cephadm.get_container_mounts_for_type', return_value={}), \
+                mock.patch('cephadm.get_ceph_volume_container', side_effect=fake_container), \
+                mock.patch('cephadm.call_throws', side_effect=fake_call_throws), \
+                mock.patch('cephadm._zap', side_effect=lambda ctx, path: zapped.append(path)):
+            _cephadm._zap_osds(self._ctx())
+        return zapped
+
+    def test_zaps_raw_devices_matching_fsid(self):
+        zapped = self._run(
+            inventory=[],
+            raw_list={
+                'osd-1': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/vdb',
+                    'osd_id': 0,
+                },
+                'osd-2': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/vdc',
+                    'osd_id': 1,
+                },
+                'osd-other': {
+                    'ceph_fsid': self.OTHER_FSID,
+                    'device': '/dev/vdd',
+                    'osd_id': 2,
+                },
+            },
+        )
+        assert zapped == ['/dev/vdb', '/dev/vdc']
+
+    def test_zaps_raw_db_and_wal_devices(self):
+        zapped = self._run(
+            inventory=[],
+            raw_list={
+                'osd-1': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/sda',
+                    'device_db': '/dev/nvme0n1',
+                    'device_wal': '/dev/nvme1n1',
+                    'osd_id': 0,
+                },
+            },
+        )
+        assert zapped == ['/dev/sda', '/dev/nvme0n1', '/dev/nvme1n1']
+
+    def test_zaps_lvm_and_raw_devices(self):
+        zapped = self._run(
+            inventory=[
+                {
+                    'path': '/dev/vdb',
+                    'ceph_device_lvm': True,
+                    'lvs': [{'name': 'osd-block-1', 'cluster_fsid': self.FSID}],
+                },
+                {
+                    'path': '/dev/vdc',
+                    'ceph_device_lvm': False,
+                    'lvs': [],
+                },
+            ],
+            raw_list={
+                'osd-raw': {
+                    'ceph_fsid': self.FSID,
+                    'device': '/dev/vdc',
+                    'osd_id': 1,
+                },
+            },
+        )
+        assert zapped == ['/dev/vdb', '/dev/vdc']
+
+    def test_skips_lvm_only_when_no_raw_osds(self):
+        zapped = self._run(
+            inventory=[
+                {
+                    'path': '/dev/vdb',
+                    'ceph_device_lvm': True,
+                    'lvs': [{'name': 'osd-block-1', 'cluster_fsid': self.FSID}],
+                },
+            ],
+            raw_list={},
+        )
+        assert zapped == ['/dev/vdb']
+
+    def test_does_not_zap_when_no_matching_osds(self):
+        zapped = self._run(
+            inventory=[
+                {
+                    'path': '/dev/vdb',
+                    'ceph_device_lvm': False,
+                    'lvs': [],
+                },
+            ],
+            raw_list={
+                'osd-other': {
+                    'ceph_fsid': self.OTHER_FSID,
+                    'device': '/dev/vdb',
+                    'osd_id': 0,
+                },
+            },
+        )
+        assert zapped == []
