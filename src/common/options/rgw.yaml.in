@@ -1009,8 +1009,8 @@ options:
   type: int
   level: advanced
   desc: Keystone token cache size
-  long_desc: Max number of Keystone tokens that will be cached. Token that is not cached
-    requires RGW to access the Keystone server when authenticating.
+  long_desc: The maximum number of Keystone tokens that RGW caches. A token that is not
+    cached requires RGW to contact the Keystone server to authenticate.
   default: 10000
   services:
   - rgw
@@ -1346,7 +1346,7 @@ options:
 - name: rgw_num_control_oids
   type: int
   level: advanced
-  desc: Number of control objects used for cross-RGW cache synchronization.
+  desc: Number of control objects used for inter-RGW communication.
   long_desc: The number of control objects RGW uses to pass messages between RGW processes
     in the same zone, chiefly metadata-cache invalidations sent when metadata (such
     as user or bucket info) changes. More control objects allow greater message concurrency
@@ -1378,9 +1378,9 @@ options:
 - name: rgw_verify_ssl
   type: bool
   level: advanced
-  desc: Whether RGW verifies SSL certificates on outgoing requests.
+  desc: Whether RGW verifies SSL certificates on outgoing connections.
   long_desc: Whether RGW verifies the SSL certificate of a remote peer when it makes
-    outgoing requests, for example to other RGW servers during multisite sync.
+    outgoing connections, for example to other RGW servers during multisite sync.
   default: true
   services:
   - rgw
@@ -1757,7 +1757,7 @@ options:
 - name: rgw_log_object_name_utc
   type: bool
   level: advanced
-  desc: Should ops log object name based on UTC
+  desc: Whether ops-log object names use UTC
   long_desc: If set, the names of the RADOS objects that hold the ops log data will
     be based on UTC time zone. If not set, it will use the local time zone.
   default: false
@@ -1770,13 +1770,13 @@ options:
 - name: rgw_usage_max_shards
   type: int
   level: advanced
-  desc: Number of RADOS objects for the usage log (must be uniform cluster-wide).
-  long_desc: The number of RADOS objects across which RGW stores the usage-log data.
+  desc: Maximum number of RADOS objects for the usage log (must be uniform cluster-wide).
+  long_desc: The maximum number of RADOS objects across which RGW stores the usage-log data.
     All RGW daemons and radosgw-admin commands must use the same value; if they differ,
     writes and reads/clears target different objects, so usage data appears empty or
     is not cleared. Set it consistently across the cluster with 'ceph config set global
     rgw_usage_max_shards <N>', or pass --rgw-usage-max-shards to radosgw-admin.
-  fmt_desc: The number of RADOS objects across which RGW stores the usage-log data.
+  fmt_desc: The maximum number of RADOS objects across which RGW stores the usage-log data.
     All RGW daemons and ``radosgw-admin`` commands must use the same value; if they
     differ, writes and reads/clears target different objects, so usage data appears
     empty or is not cleared. Set it consistently across the cluster with ``ceph config
@@ -1938,9 +1938,9 @@ options:
   type: str
   level: basic
   desc: Path to local MIME types file
-  long_desc: The MIME types file is needed in Swift when uploading an object. If object's
-    content type is not specified, RGW will use data from this file to assign a content
-    type to the object.
+  long_desc: The file RGW uses to map filename extensions to MIME content types. When a
+    client uploads an object without specifying a content type, RGW derives one from
+    this file. It applies to both the S3 and Swift APIs.
   default: /etc/mime.types
   services:
   - rgw
@@ -1987,11 +1987,11 @@ options:
   type: int
   level: advanced
   desc: The maximum time an RGW may hold the lease on a GC data shard.
-  long_desc: The garbage-collection thread holds a lease on each GC data shard (the
-    RADOS objects recording which objects need removal) to keep multiple RGW processes
-    from handling the same shard at once. This is the maximum time (in seconds) an
-    RGW may hold that lease; if an RGW exits uncleanly, processing of that shard is
-    blocked for this long.
+  long_desc: The garbage-collection thread holds a lease on the GC data shards it is
+    processing (the RADOS objects recording which objects need removal) to keep
+    multiple RGW processes from handling the same shard at once. This is the maximum
+    time (in seconds) an RGW may hold that lease; if an RGW exits uncleanly,
+    processing of that shard is blocked for this long.
   default: 1_hr
   services:
   - rgw
