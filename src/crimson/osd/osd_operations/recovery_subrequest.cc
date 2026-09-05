@@ -42,7 +42,9 @@ RecoverySubRequest::with_pg_interruptible(
   const bool needs_throttle =
     m->get_type() != MSG_OSD_PG_BACKFILL &&
     m->get_type() != MSG_OSD_PG_BACKFILL_REMOVE &&
-    m->get_type() != MSG_OSD_PG_SCAN;
+    m->get_type() != MSG_OSD_PG_SCAN &&
+    m->get_type() != MSG_OSD_PG_PUSH_REPLY &&
+    m->get_type() != MSG_OSD_PG_RECOVERY_DELETE_REPLY;
 
   std::optional<OperationThrottler::ThrottleReleaser> throttle;
   if (needs_throttle) {
