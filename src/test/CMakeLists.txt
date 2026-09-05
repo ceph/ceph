@@ -77,6 +77,7 @@ if(NOT WIN32)
   add_subdirectory(osdc)
   add_subdirectory(immutable_object_cache)
   add_subdirectory(exporter)
+  add_subdirectory(cephbpf)
 endif(NOT WIN32)
 
 if(WITH_RADOSGW)
