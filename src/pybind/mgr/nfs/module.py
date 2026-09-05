@@ -170,6 +170,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                 enable_rdma: bool = False,
                                 rdma_port: Optional[int] = None,
                                 enable_nfsv3: bool = False,
+                                enable_nfs_metrics: bool = False,
                                 ingress_placement: Optional[str] = None,
                                 inbuf: Optional[str] = None) -> None:
         """Create an NFS Cluster"""
@@ -210,6 +211,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                            ingress_mode=ingress_mode, port=port,
                                            cluster_qos_config=cluster_qos_config,
                                            enable_nfsv3=enable_nfsv3,
+                                           enable_nfs_metrics=enable_nfs_metrics,
                                            ip_addrs=ip_addrs,
                                            monitoring_ip_addrs=monitoring_ip_addrs,
                                            monitoring_port=monitoring_port,
