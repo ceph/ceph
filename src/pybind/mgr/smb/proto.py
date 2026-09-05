@@ -238,3 +238,10 @@ class EarmarkResolver(Protocol):
         self, earmark: str, top_level_scope: EarmarkTopScope
     ) -> bool:
         ...  # pragma: no cover
+
+
+class WarningRecorder(Protocol):
+    """A protocol for recording simple warning messages on an object."""
+
+    def record_warning(self, warning: str) -> None:
+        ...  # pragma: no cover
