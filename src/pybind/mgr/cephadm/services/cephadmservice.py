@@ -24,7 +24,7 @@ from ceph.deployment.service_spec import (
     RequiresCertificatesEntry
 )
 from ceph.deployment.utils import is_ipv6, unwrap_ipv6, wrap_ipv6
-from mgr_util import build_url, merge_dicts
+from mgr_util import CapProfiles, build_url, merge_dicts
 from orchestrator import (
     OrchestratorError,
     DaemonDescription,
@@ -58,9 +58,6 @@ logger = logging.getLogger(__name__)
 
 ServiceSpecs = TypeVar('ServiceSpecs', bound=ServiceSpec)
 AuthEntity = NewType('AuthEntity', str)
-
-# the release that added 'profile rgw'
-RGW_PROFILE_RELEASE = utils.ceph_release_to_major('umbrella')
 
 
 def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEntity:
@@ -371,6 +368,7 @@ class CephadmService(metaclass=ABCMeta):
 
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr: "CephadmOrchestrator" = mgr
+        self._cap_profiles = CapProfiles(mgr)
 
     def get_self_signed_certificates_with_label(self, svc_spec: ServiceSpec, daemon_spec: CephadmDaemonDeploySpec, label: str, ip_addr: Optional[str] = None) -> TLSCredentials:
         svc_name = svc_spec.service_name()
@@ -724,6 +722,7 @@ class CephadmService(metaclass=ABCMeta):
         return DaemonDescription()
 
     def get_keyring_with_caps(self, entity: AuthEntity, caps: List[str]) -> str:
+        caps = self._cap_profiles.resolve(caps)
         # try with newer cipher first, it's possible this isn't supported
         # early in an upgrade
         ret, keyring, err = self.mgr.mon_command({
@@ -1811,19 +1810,10 @@ class RgwService(CephService):
         updated, verify whether the same changes are required for these
         services as well.
         """
-        # a mon or osd from before the profile reads it as granting nothing.
-        # require_osd_release only moves up once all of them are upgraded
-        osdmap = self.mgr.get('osd_map')
-        release = osdmap.get('require_osd_release', 'argonaut')
-        if utils.ceph_release_to_major(release) >= RGW_PROFILE_RELEASE:
-            caps = ['mon', 'profile rgw',
-                    'mgr', 'profile rgw',
-                    'osd', 'profile rgw']
-        else:
-            caps = ['mon', 'allow *',
-                    'mgr', 'allow rw',
-                    'osd', 'allow rwx tag rgw *=*']
-        return self.get_keyring_with_caps(self.get_auth_entity(rgw_id), caps)
+        return self.get_keyring_with_caps(self.get_auth_entity(rgw_id),
+                                          ['mon', 'profile rgw',
+                                           'mgr', 'profile rgw',
+                                           'osd', 'profile rgw'])
 
     def purge(self, service_name: str) -> None:
         self.mgr.check_mon_command({

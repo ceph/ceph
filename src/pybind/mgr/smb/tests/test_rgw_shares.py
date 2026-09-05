@@ -1,4 +1,6 @@
+import errno
 import json
+from unittest import mock
 
 import pytest
 
@@ -863,3 +865,70 @@ def test_external_cluster_no_user_validation(thandler):
             fsid='12345678-1234-1234-1234-123456789abc',
             mon_host='10.0.1.10:6789',
         )
+
+
+class _RecordingMon:
+    def __init__(self):
+        self.sent = []
+
+    def mon_command(self, cmd, inbuf=None):
+        self.sent.append(cmd)
+        if cmd['prefix'] == 'auth get-or-create':
+            return self.get_or_create(cmd)
+        return 0, '', ''
+
+    def get_or_create(self, cmd):
+        return 0, '', ''
+
+    def created(self):
+        return [c for c in self.sent if c['prefix'] == 'auth get-or-create']
+
+
+@pytest.mark.parametrize("supported", [True, False])
+def test_rgw_authorizer_caps(supported):
+    from smb.rgw_auth import RGWAuthorizer
+
+    mon = _RecordingMon()
+    authorizer = RGWAuthorizer(mon)
+    with mock.patch.object(
+        authorizer._cap_profiles, 'supported', return_value=supported
+    ):
+        authorizer.authorize_entity('client.smb.rgw.foo')
+    expected = (
+        ['mon', 'profile rgw', 'osd', 'profile rgw']
+        if supported
+        else ['mon', 'allow *', 'osd', 'allow rwx tag rgw *=*']
+    )
+    assert mon.created() == [
+        {
+            'prefix': 'auth get-or-create',
+            'entity': 'client.smb.rgw.foo',
+            'caps': expected,
+        }
+    ]
+
+
+def test_rgw_authorizer_moves_old_key_to_profile():
+    from smb.rgw_auth import RGWAuthorizer
+
+    class Mon(_RecordingMon):
+        def get_or_create(self, cmd):
+            return (
+                -errno.EINVAL,
+                '',
+                'key for client.smb.rgw.foo exists but cap mon does not match',
+            )
+
+    mon = Mon()
+    authorizer = RGWAuthorizer(mon)
+    with mock.patch.object(
+        authorizer._cap_profiles, 'supported', return_value=True
+    ):
+        authorizer.authorize_entity('client.smb.rgw.foo')
+    assert [c for c in mon.sent if c['prefix'] == 'auth caps'] == [
+        {
+            'prefix': 'auth caps',
+            'entity': 'client.smb.rgw.foo',
+            'caps': ['mon', 'profile rgw', 'osd', 'profile rgw'],
+        }
+    ]

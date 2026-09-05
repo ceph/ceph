@@ -15,6 +15,7 @@ from typing import (
 
 import contextlib
 import dataclasses
+import errno
 import fnmatch
 import logging
 import time
@@ -192,6 +193,11 @@ class _FakeMonCommandIssuer:
     def mon_command(
         self, cmd_dict: dict, inbuf: Optional[str] = None
     ) -> Tuple[int, str, str]:
+        # a cluster that knows nothing about what its daemons run
+        if cmd_dict['prefix'] == 'config-key get':
+            return (-errno.ENOENT, '', 'no such key')
+        if cmd_dict['prefix'].endswith((' metadata', ' info')):
+            return (0, '[]', '')
         return (0, '', '')
 
 
@@ -348,7 +354,7 @@ class ClusterConfigHandler:
         self._authorizer: AccessAuthorizer = authorizer
         if mon_cmd_issuer is None:
             mon_cmd_issuer = _FakeMonCommandIssuer()
-        self._mon_cmd_issuer: MonCommandIssuer = mon_cmd_issuer
+        self._rgw_authorizer = RGWAuthorizer(mon_cmd_issuer)
         self._orch = orch  # if None, disables updating the spec via orch
         if earmark_resolver is None:
             earmark_resolver = cast(EarmarkResolver, _FakeEarmarkResolver())
@@ -711,13 +717,11 @@ class ClusterConfigHandler:
         _save_pending_join_auths(self.priv_store, change_group)
         _save_pending_users_and_groups(self.priv_store, change_group)
         _save_pending_tls_credentials(self.priv_store, change_group)
-        # Create RGW authorizer for this cluster configuration
-        rgw_authorizer = RGWAuthorizer(self._mon_cmd_issuer)
         cluster_conf = _ClusterConf.assemble(
             change_group,
             self._path_resolver,
             self._authorizer,
-            rgw_authorizer,
+            self._rgw_authorizer,
         )
         _save_pending_config(self.public_store, cluster_conf)
         _save_pending_rgw_config(self.priv_store, cluster_conf)

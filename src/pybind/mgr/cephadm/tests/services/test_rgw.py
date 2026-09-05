@@ -1,10 +1,12 @@
 
+import errno
 import pytest
 from unittest.mock import patch, MagicMock
 
 from orchestrator import OrchestratorError
 
 from cephadm.services.service_registry import service_registry
+from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.module import CephadmOrchestrator
 from ceph.deployment.service_spec import RGWSpec, CertificateSource, PlacementSpec
 from cephadm.tests.fixtures import with_host, with_service, _run_cephadm
@@ -259,24 +261,44 @@ class TestRGWService:
 
         return cm, svc_name, spec, daemon, mock_spec_store
 
-    @patch("cephadm.services.cephadmservice.CephadmService.get_keyring_with_caps")
-    def test_rgw_keyring_caps(self, get_keyring_with_caps, cephadm_module: CephadmOrchestrator):
-        get_keyring_with_caps.return_value = ''
+    def test_rgw_keyring_caps(self, cephadm_module: CephadmOrchestrator):
         rgw_svc = service_registry.get_service('rgw')
+        nfs_svc = service_registry.get_service('nfs')
 
-        rgw_svc.get_keyring('foo.bar')
-        assert get_keyring_with_caps.call_args[0][1] == ['mon', 'profile rgw',
-                                                         'mgr', 'profile rgw',
-                                                         'osd', 'profile rgw']
+        def created_caps():
+            return [c['caps'] for c in cephadm_module._mon_commands_sent
+                    if c['prefix'] == 'auth get-or-create']
 
-        cephadm_module.mock_store_set('_ceph_get', 'osd_map', {
-            'osds': [],
-            'require_osd_release': 'tentacle',
-        })
-        rgw_svc.get_keyring('foo.bar')
-        assert get_keyring_with_caps.call_args[0][1] == ['mon', 'allow *',
-                                                         'mgr', 'allow rw',
-                                                         'osd', 'allow rwx tag rgw *=*']
+        with patch('mgr_util.CapProfiles.supported', return_value=False):
+            rgw_svc.get_keyring('foo.bar')
+            assert created_caps()[-1] == ['mon', 'allow *',
+                                          'mgr', 'allow rw',
+                                          'osd', 'allow rwx tag rgw *=*']
+            nfs_svc.create_rgw_keyring(CephadmDaemonDeploySpec('host1', 'foo.mixed', 'nfs'))
+            assert created_caps()[-1] == ['mon', 'allow r', 'osd', 'allow rwx tag rgw *=*']
+
+        with patch('mgr_util.CapProfiles.supported', return_value=True):
+            rgw_svc.get_keyring('foo.bar')
+            nfs_svc.create_rgw_keyring(CephadmDaemonDeploySpec('host1', 'foo.qux', 'nfs'))
+            assert created_caps()[-2:] == [['mon', 'profile rgw',
+                                            'mgr', 'profile rgw',
+                                            'osd', 'profile rgw'],
+                                           ['mon', 'allow r', 'osd', 'profile rgw']]
+
+            # a key made with the old caps is moved to the profile
+            def exists(cmd):
+                return (-errno.EINVAL, '',
+                        'key for client.rgw.foo.bar exists but cap mon does not match')
+            cephadm_module._mon_command_mock_auth_get = \
+                lambda cmd: (0, f"[{cmd['entity']}]\n\tkey = AQ==\n", '')
+            setattr(cephadm_module, '_mon_command_mock_auth_get-or-create', exists)
+            assert rgw_svc.get_keyring('foo.bar') == '[client.rgw.foo.bar]\nkey = AQ==\n'
+            recapped = [c for c in cephadm_module._mon_commands_sent
+                        if c['prefix'] == 'auth caps']
+            assert recapped[-1]['caps'] == ['mon', 'profile rgw',
+                                            'mgr', 'profile rgw',
+                                            'osd', 'profile rgw']
+            delattr(cephadm_module, '_mon_command_mock_auth_get-or-create')
 
     @patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_post_remove_no_op_when_requires_certificates_is_false(

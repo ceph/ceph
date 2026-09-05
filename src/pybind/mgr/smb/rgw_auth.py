@@ -4,6 +4,8 @@ from typing import List, Optional
 
 import logging
 
+from mgr_util import CapProfiles
+
 from .proto import MonCommandIssuer
 
 log = logging.getLogger(__name__)
@@ -20,6 +22,7 @@ class RGWAuthorizer:
 
     def __init__(self, mc: MonCommandIssuer) -> None:
         self._mc = mc
+        self._cap_profiles = CapProfiles(mc)
 
     def authorize_entity(
         self, entity: str, caps: Optional[List[str]] = None
@@ -37,6 +40,7 @@ class RGWAuthorizer:
                 'osd',
                 'profile rgw',
             ]
+        caps = self._cap_profiles.resolve(caps)
 
         cmd = {
             'prefix': 'auth get-or-create',
