@@ -182,6 +182,26 @@ def test_orch_ls(_describe_service):
     assert r == HandleCommandResult(retval=0, stdout=out, stderr='')
 
 
+@mock.patch("orchestrator.OrchestratorCli.describe_service", return_value=OrchResult([]))
+def test_orch_ls_empty(_describe_service):
+    m = OrchestratorCli('orchestrator', 0, 0)
+
+    # plain format keeps the human-readable message
+    r = m._handle_command(None, {'prefix': 'orch ls'})
+    assert r == HandleCommandResult(retval=0, stdout='No services reported', stderr='')
+
+    # structured formats must stay parseable when nothing matches,
+    # e.g. 'orch ls --service-type nvmeof --format json'
+    r = m._handle_command(None, {'prefix': 'orch ls', 'format': 'json'})
+    assert json.loads(r.stdout) == []
+
+    r = m._handle_command(None, {'prefix': 'orch ls', 'format': 'yaml'})
+    assert yaml.safe_load(r.stdout) is None
+
+    r = m._handle_command(None, {'prefix': 'orch ls', 'export': True})
+    assert yaml.safe_load(r.stdout) is None
+
+
 dlist = OrchResult([DaemonDescription(daemon_type="osd", daemon_id="1"), DaemonDescription(
     daemon_type="osd", daemon_id="10"), DaemonDescription(daemon_type="osd", daemon_id="2")])
 
