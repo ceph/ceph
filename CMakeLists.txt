@@ -38,6 +38,11 @@ elseif(CMAKE_SYSTEM_NAME MATCHES "FreeBSD")
   FIND_PACKAGE(Threads)
 endif(CMAKE_SYSTEM_NAME MATCHES "Linux")
 
+if(CMAKE_CXX_COMPILER_ID STREQUAL "Clang" OR
+   CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+  set(CLANG ON)
+endif()
+
 if(WIN32)
   # The Windows headers (e.g. coming from mingw or the Windows SDK) check
   # the targeted Windows version. The availability of certain functions and
@@ -294,7 +299,7 @@ if(WITH_RBD AND LINUX)
 endif()
 
 # libnbd
-if(WITH_RBD AND NOT WIN32)
+if(WITH_RBD AND NOT WIN32 AND NOT FREEBSD)
   find_package(libnbd 1.0 REQUIRED)
   set(HAVE_LIBNBD ${LIBNBD_FOUND})
 endif()
@@ -419,6 +424,7 @@ endif(WITH_UADK)
 
 # needs mds and? XXX
 option(WITH_LIBCEPHFS "libcephfs client library" ON)
+option(WITH_LIBCEPHFS_PROXY "libcephfs proxy library" ON)
 
 option(WITH_LIBCEPHSQLITE "libcephsqlite client library" ON)
 if(WITH_LIBCEPHSQLITE)
