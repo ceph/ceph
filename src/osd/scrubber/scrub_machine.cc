@@ -763,7 +763,9 @@ ReplicaActive::ReplicaActive(my_context ctx)
 
 ReplicaActive::~ReplicaActive()
 {
+  DECLARE_LOCALS;
   clear_remote_reservation(false);
+  scrbr->clear_pgscrub_state();
 }
 
 void ReplicaActive::exit()
