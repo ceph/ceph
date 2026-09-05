@@ -1885,10 +1885,22 @@ Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 	  }
 	}
       }
-      if (dlease.duration_ms > 0) {
+      // no lease is issued when the client already holds Fs/Fx on the parent.
+      // the dentry is still cacheable by the parent's shared_gen rather than
+      // by a lease ttl.
+      if (dlease.duration_ms > 0 ||
+	  diri->caps_issued_mask(CEPH_CAP_FILE_SHARED)) {
+	if (dlease.duration_ms == 0) {
+	  trim_cache();
+	}
 	if (!dn) {
 	  Dir *dir = diri->open_dir();
 	  dn = link(dir, dname, NULL, NULL);
+	  if (dlease.duration_ms == 0) {
+	    // push the newly created negative to the bottom so that when
+	    // trim_cache() is called, it is this negative that gets trimmed.
+	    lru.lru_bottouch(dn);
+	  }
 	}
 	update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       }
@@ -7750,6 +7762,9 @@ int Client::_do_lookup(const InodeRef& dir, const string& name, int mask,
   if (cct->_conf->client_debug_getattr_caps && op == CEPH_MDS_OP_LOOKUP)
       mask |= DEBUG_GETATTR_CAPS;
   req->head.args.getattr.mask = mask;
+  // ask for the dentry back even on ENOENT, so that a negative result can be
+  // cached locally instead of re-issuing a LOOKUP on every stat
+  req->set_dentry_wanted();
 
   ldout(cct, 10) << __func__ << " on " << path << dendl;
 
