@@ -41,6 +41,7 @@
 #include "rgw_rest_s3control.h"
 #include "rgw_rest_s3website.h"
 #include "rgw_rest_pubsub.h"
+#include "rgw_rest_inventory.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -5458,6 +5459,11 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWListBucketMultiparts_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWGetLC_ObjStore_S3;
+  } else if(is_inventory_op()) {
+    if (!s->info.args.get("id").empty()) {
+      return new RGWGetBucketInventory_ObjStore_S3;
+    }
+    return new RGWListBucketInventory_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWGetBucketPolicy;
   } else if (is_tagging_op()) {
@@ -5514,6 +5520,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWSetRequestPayment_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWPutLC_ObjStore_S3;
+  } else if(is_inventory_op()) {
+    return new RGWPutBucketInventory_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWPutBucketPolicy;
   } else if (is_object_lock_op()) {
@@ -5551,6 +5559,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWDeleteLC_ObjStore_S3;
+  } else if(is_inventory_op()) {
+    return new RGWDeleteBucketInventory_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWDeleteBucketPolicy;
   } else if (is_notification_op()) {
