@@ -1,7 +1,7 @@
 RADOS Snapshot Rollback -- Work Breakdown
 ==========================================
 
-Design Document Version 7 - S/M/L sizing - commit-sized sub-tasks ~75 LOC
+Design Document Version 8 - S/M/L sizing - commit-sized sub-tasks ~75 LOC
 each
 
 **Legend:** - **S** Small -- 1--3 commits - **M** Medium -- 4--7 commits,
@@ -1214,6 +1214,169 @@ rollbacksnap <snap-id>`` (Sec.12.4).
 
 --------------
 
+WI-21 - Post-Rollback Head-Deletion Sweep (Sec.19) ``[M]``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Objects created after the source snapshot and never written during the
+rollback window are invisible to the snap-mapper scan (no clone exists
+for ``source_snap X``) and therefore are never processed by
+``rollback_then_trim()``. Without a further step the head objects remain
+live and reappear once the rollback is removed from
+``rollback_snaps_queue``. This work item implements the post-scan
+head-deletion sweep described in Sec.19 that closes this gap.
+
+**Files:** ``src/osd/PrimaryLogPG.h`` - ``src/osd/PrimaryLogPG.cc``
+
++--------+-----------------------+--------------------+-----------------+
+| #      | Commit                | Files              | ~LOC            |
++========+=======================+====================+=================+
+| WI-21-a| Add ``head_deletion_  | ``PrimaryLogPG.h`` | ~15             |
+|        | sweep_cursor`` and    |                    |                 |
+|        | ``head_deletion_      |                    |                 |
+|        | sweep_done`` fields   |                    |                 |
+|        | to the ``Trimming``   |                    |                 |
+|        | state struct.         |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+| WI-21-b| Implement             | ``PrimaryLogPG.cc``| ~80             |
+|        | ``delete_post_        |                    |                 |
+|        | snapshot_heads()``:   |                    |                 |
+|        | batched               |                    |                 |
+|        | ``objects_list_range``|                    |                 |
+|        | scan; filter on       |                    |                 |
+|        | ``SnapSet::seq <      |                    |                 |
+|        | rb_id`` and no clone  |                    |                 |
+|        | for ``source_snap``;  |                    |                 |
+|        | submit DELETE         |                    |                 |
+|        | transactions via      |                    |                 |
+|        | ``simple_opc_         |                    |                 |
+|        | submit()``.           |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+| WI-21-c| Extend                | ``PrimaryLogPG.cc``| ~40             |
+|        | ``AwaitAsyncWork::    |                    |                 |
+|        | react(DoSnapWork)``   |                    |                 |
+|        | nullopt branch        |                    |                 |
+|        | (rollback-only pass): |                    |                 |
+|        | gate completion on    |                    |                 |
+|        | ``head_deletion_      |                    |                 |
+|        | sweep_done``; invoke  |                    |                 |
+|        | ``delete_post_        |                    |                 |
+|        | snapshot_heads()``    |                    |                 |
+|        | in batched            |                    |                 |
+|        | ``WaitRepops`` /      |                    |                 |
+|        | ``WaitTrimTimer``     |                    |                 |
+|        | cycles until done.    |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+| WI-21-d| Reset sweep cursor    | ``PrimaryLogPG.cc``| ~10             |
+|        | and                   |                    |                 |
+|        | ``sweep_done`` flag   |                    |                 |
+|        | at the start of each  |                    |                 |
+|        | new rollback-only     |                    |                 |
+|        | pass in               |                    |                 |
+|        | ``AwaitAsyncWork``    |                    |                 |
+|        | pass-selection.       |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+
+--------------
+
+WI-22 - Tests for Head-Deletion Sweep (Sec.19) ``[M]``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+API-level librados tests (``snapshots_cxx.cc``) that run against a real
+cluster to verify the end-to-end behaviour of the post-scan
+head-deletion sweep. Tests follow the same style and helper functions
+established in WI-16-f: ``set_nosnaptrim()`` to freeze/unfreeze the
+trimmer, ``wait_for_snaptrim_complete()`` to poll for trimmer
+completion, ``write_content()`` / ``verify_head()`` / ``verify_snap()``
+for data-integrity checks, and ``EXPECT_EQ(-ENOENT, ...)`` for absent
+objects. All tests operate on a single pool-managed snapshot pool.
+
+Each test suppresses trimming at the start, builds its object and
+snapshot state, issues the rollback, makes assertions in the pre-trim
+window, then re-enables the trimmer, waits for completion, and makes the
+post-trim assertions.
+
+**Files:** ``src/test/librados/snapshots_cxx.cc``
+
++--------+-----------------------+--------------------+-----------------+
+| #      | Commit                | Files              | ~LOC            |
++========+=======================+====================+=================+
+| WI-22-a| ``PoolSnapRollback    | ``snapshots_cxx.   | ~55             |
+|        | PostSnapObject``:     | cc``               |                 |
+|        | (1) create snap1;     |                    |                 |
+|        | (2) write ``foo``;    |                    |                 |
+|        | (3) assert read of    |                    |                 |
+|        | ``foo`` head          |                    |                 |
+|        | succeeds (pre-        |                    |                 |
+|        | rollback baseline);   |                    |                 |
+|        | (4) rollback to       |                    |                 |
+|        | snap1;                |                    |                 |
+|        | (5) assert read of    |                    |                 |
+|        | ``foo`` returns       |                    |                 |
+|        | ``-ENOENT`` (read     |                    |                 |
+|        | path redirect with    |                    |                 |
+|        | no source clone);     |                    |                 |
+|        | (6) unfreeze          |                    |                 |
+|        | trimmer and wait      |                    |                 |
+|        | for completion;       |                    |                 |
+|        | (7) assert read of    |                    |                 |
+|        | ``foo`` still         |                    |                 |
+|        | returns ``-ENOENT``   |                    |                 |
+|        | (sweep deleted the    |                    |                 |
+|        | head).                |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+| WI-22-b| ``PoolSnapRollback    | ``snapshots_cxx.   | ~60             |
+|        | PostSnapObjectSnap2``:| cc``               |                 |
+|        | (1) create snap1;     |                    |                 |
+|        | (2) write ``foo``;    |                    |                 |
+|        | (3) create snap2;     |                    |                 |
+|        | (4) rollback to       |                    |                 |
+|        | snap1;                |                    |                 |
+|        | (5) assert ``foo``    |                    |                 |
+|        | head returns          |                    |                 |
+|        | ``-ENOENT``;          |                    |                 |
+|        | (6) assert ``foo``    |                    |                 |
+|        | at snap2 is           |                    |                 |
+|        | readable and          |                    |                 |
+|        | contains correct      |                    |                 |
+|        | data;                 |                    |                 |
+|        | (7) unfreeze          |                    |                 |
+|        | trimmer and wait;     |                    |                 |
+|        | (8) assert ``foo``    |                    |                 |
+|        | head still            |                    |                 |
+|        | ``-ENOENT``;          |                    |                 |
+|        | (9) assert ``foo``    |                    |                 |
+|        | at snap2 still        |                    |                 |
+|        | readable with         |                    |                 |
+|        | correct data.         |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+| WI-22-c| ``PoolSnapRollback    | ``snapshots_cxx.   | ~55             |
+|        | PostSnapObjectWrite   | cc``               |                 |
+|        | AfterRollback``:      |                    |                 |
+|        | (1) create snap1;     |                    |                 |
+|        | (2) write ``foo``     |                    |                 |
+|        | (fill 0xbb);          |                    |                 |
+|        | (3) rollback to       |                    |                 |
+|        | snap1;                |                    |                 |
+|        | (4) assert ``foo``    |                    |                 |
+|        | returns ``-ENOENT``;  |                    |                 |
+|        | (5) write ``foo``     |                    |                 |
+|        | again (fill 0xcc)     |                    |                 |
+|        | -- JIT path fires,    |                    |                 |
+|        | advances              |                    |                 |
+|        | ``SnapSet::seq``;     |                    |                 |
+|        | (6) unfreeze          |                    |                 |
+|        | trimmer and wait;     |                    |                 |
+|        | (7) assert ``foo``    |                    |                 |
+|        | head is readable      |                    |                 |
+|        | with fill 0xcc        |                    |                 |
+|        | -- sweep must         |                    |                 |
+|        | not have deleted      |                    |                 |
+|        | the post-rollback     |                    |                 |
+|        | write.                |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+
+--------------
+
 Summary
 -------
 
@@ -1332,7 +1495,22 @@ Summary
 |        |            |                   | MonCommands.h +            |
 |        |            |                   | OSDMonitor handler)        |
 +--------+------------+-------------------+----------------------------+
-| **T    |            | **98**            | ~98 commits - ~5,800 net   |
+| WI-21  | M          | 4                 | Post-rollback head-        |
+|        |            |                   | deletion sweep --          |
+|        |            |                   | ``Trimming`` state fields, |
+|        |            |                   | ``delete_post_snapshot_    |
+|        |            |                   | heads()`` batched scan,    |
+|        |            |                   | nullopt completion gate,   |
+|        |            |                   | sweep cursor reset         |
++--------+------------+-------------------+----------------------------+
+| WI-22  | M          | 3                 | Head-deletion sweep tests  |
+|        |            |                   | (API / real-cluster):      |
+|        |            |                   | post-snap object ENOENT    |
+|        |            |                   | before+after trim; snap2   |
+|        |            |                   | clone survives; JIT write  |
+|        |            |                   | protects head from sweep   |
++--------+------------+-------------------+----------------------------+
+| **T    |            | **105**           | ~105 commits - ~6,400 net  |
 | otal** |            |                   | lines of implementation +  |
 |        |            |                   | test code                  |
 +--------+------------+-------------------+----------------------------+
@@ -1340,14 +1518,17 @@ Summary
 --------------
 
 **Critical path:** WI-1 -> WI-2 -> WI-3/WI-10 -> WI-4 -> WI-5 -> WI-6 -> WI-7
--> WI-8 -> WI-9.
+-> WI-8 -> WI-9 -> WI-21 -> WI-22.
 
 **Boot catch-up chain:** WI-2 (superblock field) -> WI-17 (messages +
 SnapMapper + OSD handler) -- can proceed in parallel with WI-5 onwards.
 
 **API chain:** WI-11 -> WI-12 -> WI-13 (CLI) - WI-14 (librbd) - WI-15
-(test tool) - WI-16 (librados tests). WI-12 is a prerequisite for WI-13,
-WI-14, WI-15, and WI-16. WI-16 depends on WI-12 for the stub.
+(test tool) - WI-16 (librados tests) - WI-22 (head-sweep tests). WI-12
+is a prerequisite for WI-13, WI-14, WI-15, WI-16, and WI-22. WI-22
+depends on WI-16-f helpers (``set_nosnaptrim()``,
+``wait_for_snaptrim_complete()``, ``write_content()``,
+``verify_head()``, ``verify_snap()``).
 
 **Snapshot correctness chain:** WI-18 (clone logic) and WI-19
 (unmanaged later-snap) are independent of each other but both depend on

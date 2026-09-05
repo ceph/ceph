@@ -1,7 +1,7 @@
 RADOS Snapshot Rollback
 =======================
 
-Design Document Version 7
+Design Document Version 8
 
 Author: bill_scales@uk.ibm.com
 
@@ -55,7 +55,9 @@ Table of Contents
 
 17. `Unmanaged Snap Rollback: Later-Snapshot Awareness <#17-unmanaged-snap-rollback-later-snapshot-awareness>`__
 
-18. .. rubric:: `Summary of Changes <#18-summary-of-changes>`__
+18. `Post-Rollback Head-Deletion Sweep for Objects Created After the Snapshot <#18-post-rollback-head-deletion-sweep-for-objects-created-after-the-snapshot>`__
+
+19. .. rubric:: `Summary of Changes <#19-summary-of-changes>`__
        :name: summary-of-changes
 
 1. Concept and Goals
@@ -2144,14 +2146,33 @@ rollback data has already been copied to the head. No deferral mechanism
 is required.
 
 9.2 Object Created After Snapshot
-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+.. note::
+
+   **This section was found to be incomplete.** The claim that "the
+   background trimmer skips such objects" is correct for the
+   snap-mapper-driven phase, but the original design omitted a
+   necessary second phase. Without a post-scan head-deletion sweep,
+   objects created after the snapshot and never written during the
+   rollback window reappear after rollback completion. Section 18
+   describes the corrected design and implementation.
 
 If an object does not exist in the source snapshot (no clone exists for
-that snap ID), a read redirect returns ``ENOENT``. The background
-trimmer skips such objects (the snap mapper returns no entries for
-them). The JIT path on write creates no rollback clone but still updates
-``SnapSet::seq`` to record that rollback has been processed for this
-object.
+that snap ID), a read redirect returns ``ENOENT``. The snap-mapper-driven
+phase of the background trimmer skips such objects (the snap mapper
+returns no entries for them). The JIT path on write creates no rollback
+clone but still updates ``SnapSet::seq`` to record that rollback has been
+processed for this object.
+
+However, if no write is ever issued to such an object during the rollback
+window, the head remains live. When the rollback is declared complete
+and removed from ``rollback_snaps_queue``, the read redirect ceases and
+the object becomes visible again -- incorrectly. The fix (section 18) is
+a post-scan head-deletion sweep that runs after the snap-mapper scan
+exhausts all objects with clones for the source snap, and deletes any
+head whose ``SnapSet::seq < rb_id`` and which has no clone for the
+source snap.
 
 9.3 Rollback of Unmanaged Snaps
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -4200,9 +4221,222 @@ are upgraded, the correct behaviour is restored.
 
 --------------
 
+18. Post-Rollback Head-Deletion Sweep for Objects Created After the Snapshot
+----------------------------------------------------------------------------
+
+18.1 The Gap in Section 9.2 and the Original Section 7 Design
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The original section 9.2 stated:
+
+   "The background trimmer skips such objects (the snap mapper returns no
+   entries for them). The JIT path on write creates no rollback clone but
+   still updates ``SnapSet::seq`` to record that rollback has been
+   processed for this object."
+
+This is **correct for the JIT write path** -- if a write is issued to
+object ``foo`` (created after the snapshot) while the rollback is
+pending, the JIT path advances ``SnapSet::seq`` to the current
+``snapc.seq`` (which is ≥ ``rb_id``), causing
+``find_latest_rollback_source()`` to return ``CEPH_NOSNAP`` and the read
+redirect to become a no-op. At that point the object correctly does not
+exist from the client's perspective (since the JIT path produces no
+clone and no data -- the object is deleted before the client write is
+applied).
+
+However, the original section 7 design had a **correctness bug** for the
+case where **no write ever reaches** object ``foo`` during the lifetime
+of the rollback. In that case:
+
+1. The read redirect (section 6) correctly returns ``ENOENT`` for any
+   read to ``foo`` while ``rb_id`` is still in ``rollback_snaps_queue``
+   (because the redirect to ``source_snap`` finds no clone and returns
+   ``-ENOENT``).
+2. The snap mapper has no clone registered under ``source_snap`` for
+   ``foo`` (since ``foo`` was created after the snapshot), so
+   ``get_next_objects_to_trim(source_snap, max)`` never returns ``foo``.
+3. ``rollback_then_trim()`` is therefore never called for ``foo``.
+4. ``foo``'s head object remains live and unmodified in the object store.
+5. When the rollback completes and ``rb_id`` is removed from
+   ``rollback_snaps_queue``, ``find_latest_rollback_source()`` finds no
+   pending rollback with ``rb_id > foo.SnapSet::seq`` and returns
+   ``CEPH_NOSNAP``. The read redirect ceases.
+6. Reads to ``foo`` now reach the head directly. **Object ``foo``
+   reappears**, which is incorrect: the rollback should have removed it.
+
+This section describes the additional sweep required to close this gap.
+
+18.2 The Fix: Head-Deletion Sweep at Rollback Completion
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The snap mapper only indexes objects by their clone snap IDs. It has no
+way to enumerate head objects that have no clones for a given snap ID.
+Therefore, after the snap-mapper scan for ``source_snap X`` returns
+``nullopt`` (confirming that all objects *with clones* for ``X`` have
+been processed), a separate full-PG enumeration of head objects is
+required to catch any head objects that were created after snap ``X``
+and were never touched by the JIT path.
+
+The criterion for a head object requiring deletion is:
+
+::
+
+    head object OBJ satisfies ALL of:
+      1. OBJ exists (is not already deleted)
+      2. OBJ.SnapSet::seq < rb_id         (rollback not yet applied by JIT)
+      3. no clone of OBJ exists for source_snap X  (object post-dates the snapshot)
+
+The action for each such object is a plain **object deletion**: the head
+is removed from the object store, the ``SnapSet`` (which has no clones
+to update) is discarded, and a ``DELETE`` ``pg_log_entry_t`` is emitted
+for the object.
+
+Note that condition 3 is redundant with the snap-mapper scan completing
+without returning ``OBJ`` -- if a clone under ``X`` existed the scan
+would already have processed ``OBJ`` via ``rollback_then_trim()``.
+Condition 2 prevents double-processing objects that were already handled
+by the JIT path (their ``SnapSet::seq >= rb_id``).
+
+18.3 Where the Sweep Runs
+~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The sweep runs as an additional phase inside
+``AwaitAsyncWork::react(DoSnapWork)``, triggered only in rollback-only
+pass mode (``is_trim_pass == false``) and only at the point the snap
+mapper returns ``nullopt`` -- i.e., after all clone-bearing objects for
+``source_snap X`` have been processed. A trim pass does not need this
+sweep: if ``source_snap X`` is being trimmed then any object ``foo``
+created after ``X`` has its ``SnapSet::seq > X`` (it was written after
+``X`` was taken), and the snap being trimmed is ``X`` itself, not a
+rollback source -- the trim pass does not change the head-exists/not
+question for objects post-dating ``X``.
+
+**Batched enumeration.** The sweep iterates all head objects in the PG
+using ``pgbackend->objects_list_partial()`` (the same function used by
+``scan_range_primary()`` in the backfill path). To avoid holding the PG
+lock across a full object store scan, the iteration follows the same
+batched pattern used by backfill:
+
+- Each call to ``objects_list_partial()`` requests between
+  ``osd_backfill_scan_min`` (default **64**) and
+  ``osd_backfill_scan_max`` (default **512**) objects, returning a batch
+  of up to 512 candidate head objects and an updated cursor (``end``
+  position) for the next call. These values are the same defaults used
+  by ``PrimaryLogPG::scan_range_primary()``.
+- The batch is stored in a ``vector<hobject_t>
+  head_deletion_sweep_pending`` field inside the ``Trimming`` state,
+  alongside the sweep cursor ``head_deletion_sweep_cursor`` and a
+  completion flag ``head_deletion_sweep_done``.
+- Each ``AwaitAsyncWork`` cycle **deletes exactly one qualifying object**
+  from the front of ``head_deletion_sweep_pending`` (after applying the
+  filter from section 18.2), then transitions through ``WaitRepops`` /
+  ``WaitTrimTimer`` before returning for the next scheduled invocation of
+  the trimmer. This matches the snap trimmer's existing one-object-per-
+  cycle discipline and keeps individual transactions small.
+- When ``head_deletion_sweep_pending`` is exhausted and the cursor has
+  not yet reached ``hobject_t::get_max()``, the next
+  ``AwaitAsyncWork`` cycle calls ``objects_list_partial()`` again from
+  the stored cursor to replenish the list before processing the next
+  object.
+- When both the list is empty **and** the cursor has reached
+  ``hobject_t::get_max()``, ``head_deletion_sweep_done`` is set to
+  ``true`` and the sweep is complete.
+
+The rationale for fetching N objects at a time but deleting only one per
+cycle mirrors the backfill design: listing objects in bulk amortises the
+cost of ``objects_list_partial()`` (which may involve a RocksDB or
+FileStore scan), while deleting one object per cycle keeps the
+transaction log manageable and preserves the snap trimmer's throttling
+behaviour (``WaitTrimTimer`` sleep between objects).
+
+The deletion of each qualifying head object is submitted as a
+replicated transaction via ``simple_opc_submit()``, with the same
+``WaitRepops`` acknowledgement cycle used for clone operations.
+
+18.4 Ordering Relative to the Snap-Mapper Scan
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The head-deletion sweep runs **after** the snap-mapper scan returns
+``nullopt``, not interleaved with it. This ordering is safe because:
+
+- Objects found by the snap-mapper scan (those with a clone under ``X``)
+  have already had their rollback applied by ``rollback_then_trim()``.
+  After that call their ``SnapSet::seq`` is advanced to ``>= rb_id``,
+  so they will not satisfy condition 2 of the sweep filter and will not
+  be deleted.
+- Objects found by the head-deletion sweep (those with no clone under
+  ``X``) are disjoint from the snap-mapper results for ``X``, so there
+  is no conflict or double-processing.
+
+18.5 JIT Interaction
+~~~~~~~~~~~~~~~~~~~~
+
+If a write reaches object ``foo`` while the head-deletion sweep is in
+progress (i.e. between the snap-mapper scan completing and the sweep
+completing), the JIT path runs in ``make_writeable()`` and advances
+``foo.SnapSet::seq`` to ``>= rb_id``. This means:
+
+- If the sweep cursor has not yet reached ``foo``, the sweep will
+  encounter ``foo`` with ``SnapSet::seq >= rb_id``, fail condition 2,
+  and correctly skip it (the JIT path already handled it by deleting the
+  head before the write was applied).
+- If the sweep has already deleted ``foo`` before the write arrives, the
+  write creates a new head object, which is correct (the rollback has
+  been applied; a new write after the rollback is valid).
+
+The ``jit_rollback_inflight[rb_id]`` interlock (section 7.2.4) already
+ensures the rollback is not declared complete until all in-flight JIT
+transactions have committed, preventing a race where the sweep completes
+and the rollback is marked done before a concurrent JIT deletion has
+been replicated.
+
+18.6 Completion Ordering
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+The rollback for ``rb_id`` is marked complete (added to
+``pg_info_t::completed_rollbacks``, ``share_pg_info()`` called) only
+after **both** the snap-mapper scan and the head-deletion sweep have
+reached their respective termination points. The existing nullopt handler
+in ``AwaitAsyncWork`` is extended to gate completion on the sweep also
+being finished:
+
+.. code:: cpp
+
+   // In AwaitAsyncWork::react(DoSnapWork), nullopt branch (rollback-only pass)
+   if (rb_info) {
+     if (!head_deletion_sweep_complete) {
+       // Start or continue the head-deletion sweep
+       start_head_deletion_sweep(rb_info);
+       // transitions to WaitRepops for the next batch of deletions
+     } else if (pg->jit_rollback_inflight.count(rb_id) &&
+                pg->jit_rollback_inflight[rb_id] > 0) {
+       pg->rollback_trimq_repeat.insert(rb_id);
+     } else {
+       pg->rollback_trimq.erase(rb_info->rollback_id);
+       pg->recovery_state.adjust_completed_rollbacks(
+         [rb_id](auto& cr) { cr.insert(rb_id); });
+       pg->write_if_dirty(t);
+       pg->recovery_state.share_pg_info();
+     }
+   }
+
+18.7 Impact on Section 9.2
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Section 9.2 should be read with the following correction: the statement
+"The background trimmer skips such objects" is correct only in the sense
+that the snap-mapper-driven phase of the trimmer skips them. The
+**head-deletion sweep** described in this section (section 18) is the
+mechanism that correctly handles such objects by deleting their head.
+After the head-deletion sweep completes, object ``foo`` no longer exists
+and will not reappear when the rollback is declared done and removed from
+``rollback_snaps_queue``.
+
+--------------
+
 .. _summary-of-changes-1:
 
-18. Summary of Changes
+19. Summary of Changes
 ----------------------
 
 +-----------------------------------+-----------------------------------+
@@ -4505,3 +4739,57 @@ are upgraded, the correct behaviour is restored.
 |                                   | non-upgrade-first-half workload   |
 |                                   | YAML files.                       |
 +-----------------------------------+-----------------------------------+
+| ``src/osd/PrimaryLogPG.h``        | **modified** Add                  |
+|                                   | ``head_deletion_sweep_cursor``,   |
+|                                   | ``head_deletion_sweep_done``, and |
+|                                   | ``head_deletion_sweep_pending``   |
+|                                   | fields to the ``Trimming`` state  |
+|                                   | struct alongside                  |
+|                                   | ``snap_being_processed`` and      |
+|                                   | ``is_trim_pass``.                 |
++-----------------------------------+-----------------------------------+
+| ``src/osd/PrimaryLogPG.cc``       | **modified** Add                  |
+|                                   | ``start_head_deletion_sweep()``   |
+|                                   | and                               |
+|                                   | ``delete_post_snapshot_heads()``  |
+|                                   | helpers. Extend                   |
+|                                   | ``AwaitAsyncWork::react           |
+|                                   | (DoSnapWork)`` nullopt branch to  |
+|                                   | run the sweep (fetching up to     |
+|                                   | ``osd_backfill_scan_max`` objects |
+|                                   | per batch, deleting one per       |
+|                                   | cycle) and gate completion on its |
+|                                   | finishing. Extend the per-object  |
+|                                   | loop in ``rollback_then_trim()``  |
+|                                   | pass initialisation to reset the  |
+|                                   | sweep cursor and pending list at  |
+|                                   | the start of each rollback-only   |
+|                                   | pass.                             |
++-----------------------------------+-----------------------------------+
+| ``src/test/librados/              | **new** Add three C++ GTest       |
+| snapshots_cxx.cc``                | cases against a real cluster      |
+|                                   | (style matching WI-16-f):         |
+|                                   | ``PoolSnapRollbackPostSnap        |
+|                                   | Object`` -- creates snap1, writes |
+|                                   | ``foo``, verifies read succeeds   |
+|                                   | before rollback, issues rollback, |
+|                                   | verifies ``-ENOENT`` with         |
+|                                   | trimmer frozen, enables trimmer,  |
+|                                   | waits, verifies ``-ENOENT``       |
+|                                   | after sweep completes.            |
+|                                   | ``PoolSnapRollbackPostSnap        |
+|                                   | ObjectSnap2`` -- creates snap1,   |
+|                                   | writes ``foo``, creates snap2,    |
+|                                   | rolls back to snap1, verifies     |
+|                                   | head ``-ENOENT`` and snap2        |
+|                                   | readable both before and after    |
+|                                   | trim. ``PoolSnapRollbackPostSnap  |
+|                                   | ObjectWriteAfterRollback`` --     |
+|                                   | creates snap1, writes ``foo``,    |
+|                                   | rolls back to snap1, re-writes    |
+|                                   | ``foo`` (triggering JIT path),    |
+|                                   | enables trimmer, waits, verifies  |
+|                                   | head survives with                |
+|                                   | post-rollback content.            |
++-----------------------------------+-----------------------------------+
+
