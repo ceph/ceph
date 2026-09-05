@@ -1731,6 +1731,9 @@ void PG::on_change(ceph::os::Transaction &t) {
   auto _t = osdriver.get_transaction(&t);
   snap_mapper.flush_and_reset_backend(&_t);
   reset_pglog_based_recovery_op();
+  if (is_primary()) {
+    recovery_handler->cancel_backfill();
+  }
 }
 
 void PG::context_registry_on_change() {
