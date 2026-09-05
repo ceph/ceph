@@ -342,7 +342,16 @@ class SplitOp {
   bool abort = false;
   int flags = 0;
   int reference_sub_read = -1;
-  std::map<int, std::vector<int>> op_offset_map;
+
+  /**
+   * @brief Sub-reads holding each read chunk, in ascending order of the range
+   *        they cover, keyed by index of the operation in the operation list.
+   *
+   * Chunks are handed out starting at reference_sub_read and wrap around the
+   * acting set, so the key order of sub_reads does not describe the order the
+   * chunks have to be concatenated in. Reassembly follows this list instead.
+   */
+  std::map<int, std::vector<int>> read_order;
 
  public:
  /**

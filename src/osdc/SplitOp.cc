@@ -287,11 +287,12 @@ std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_spars
   extent_set extents_out;
   bufferlist bl_out;
 
-  for (auto && [acting_index, sr] : sub_reads) {
-    for (auto [off, len] : *sr.details.at(ops_index).e) {
+  for (int acting_index : read_order.at(ops_index)) {
+    auto &details = sub_reads.at(acting_index).details.at(ops_index);
+    for (auto [off, len] : *details.e) {
       extents_out.insert(off, len);
     }
-    bl_out.append(sr.details.at(ops_index).bl);
+    bl_out.append(details.bl);
   }
 
   return std::pair(extents_out, bl_out);
@@ -306,8 +307,8 @@ std::pair<SplitOp::extent_set, bufferlist> ReplicaSplitOp::assemble_buffer_spars
  * @param ops_index Index of the operation in the operation list
  */
 void ReplicaSplitOp::assemble_buffer_read(bufferlist &bl_out, int ops_index) const {
-  for (auto && [acting_index, sr] : sub_reads) {
-    bl_out.append(sr.details.at(ops_index).bl);
+  for (int acting_index : read_order.at(ops_index)) {
+    bl_out.append(sub_reads.at(acting_index).details.at(ops_index).bl);
   }
 }
 
@@ -353,11 +354,24 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
   uint64_t slice_count = replica_min_shard_read_size == 0 ? 1 :
                           std::min(length / replica_min_shard_read_size,
                                    osds.size());
+  // validate() accepts the op as soon as *one* read is worth splitting, so a
+  // shorter read in the same op reaches this point with a slice count of zero.
+  if (slice_count == 0) {
+    slice_count = 1;
+  }
   uint64_t chunk_size = p2roundup(length / slice_count, (uint64_t)CEPH_PAGE_SIZE);
-  
+
+  auto &order = read_order[ops_index];
+
   // Use reference_sub_read (set in constructor) as the starting shard
   // This provides load balancing while ensuring reference_sub_read is always set
-  for (unsigned i = reference_sub_read; length > 0; i = (i + 1 == osds.size()) ? 0 : i + 1) {
+  // Bounding the loop by slice_count keeps each replica to a single extent:
+  // the quotient above truncates, so slice_count chunks can fall short of
+  // length, and wrapping onto a replica that already has an extent for this op
+  // would point two reads at one Details buffer.
+  for (uint64_t slice = 0, i = reference_sub_read;
+       slice < slice_count && length > 0;
+       slice++, i = (i + 1 == osds.size()) ? 0 : i + 1) {
     int acting_index = i;
     if (!sub_reads.contains(acting_index)) {
       sub_reads.emplace(acting_index, orig_op->ops.size() + 1);
@@ -365,13 +379,16 @@ void ReplicaSplitOp::init_read(OSDOp &op, bool sparse, int ops_index) {
     auto &sr = sub_reads.at(acting_index);
     auto bl = &sr.details[ops_index].bl;
     auto rval = &sr.details[ops_index].rval;
-    uint64_t len = std::min(length, chunk_size);
+    // The last slice absorbs what the truncated quotient left over.
+    uint64_t len = (slice + 1 == slice_count) ? length
+                                              : std::min(length, chunk_size);
     if (sparse) {
       sr.details[ops_index].e.emplace();
       sr.rd.sparse_read(offset, len, &(*sr.details[ops_index].e), bl, rval);
     } else {
       sr.rd.read(offset, len, &sr.details[ops_index].ec, bl);
     }
+    order.push_back(acting_index);
     offset += len;
     length -= len;
   }
@@ -894,6 +911,14 @@ void SplitOp::prepare_single_op(Objecter::Op *op, Objecter &objecter, CephContex
   uint64_t data_chunk_count = pi->get_ec_data_shard_count();
   uint32_t chunk_size = pi->get_stripe_width() / data_chunk_count;
 
+  if (chunk_size == 0) {
+    // Replicated pools carry no stripe width, so there is no shard for an
+    // offset to land on and the modulo below would divide by zero. The caller
+    // falls back to submitting the op normally, which is what we want here.
+    debug_op_summary("reuse_op(no stripe):", op, cct);
+    return;
+  }
+
   // Find the first read to work out where the IO goes.
   for (auto o : op->ops) {
     if (o.op.op == CEPH_OSD_OP_SPARSE_READ ||
@@ -1039,6 +1064,13 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
   if (split_read->sub_reads.size() <= 1) {
     ldout(cct, DBG_LVL) << __func__ <<" reusing original op - inefficient" << dendl;
     prepare_single_op(op, objecter, cct);
+    if (!(target.flags & CEPH_OSD_FLAG_FORCE_OSD)) {
+      // Nothing was pinned to a particular OSD, so the op goes back through the
+      // ordinary path. Give it back the balance flag cleared above, which was
+      // only in the way of reading the acting set; validate_flags() rejects the
+      // op unless the caller set it.
+      target.flags |= CEPH_OSD_FLAG_BALANCE_READS;
+    }
     split_read->abort = true; // Required for destructor.
     return false;
   }
