@@ -2945,18 +2945,21 @@ class C_MDL_CheckMaxSize : public LockerContext {
   uint64_t new_max_size;
   uint64_t newsize;
   utime_t mtime;
+  client_t client;
 
 public:
   C_MDL_CheckMaxSize(Locker *l, CInode *i, uint64_t _new_max_size,
-                     uint64_t _newsize, utime_t _mtime) :
+                     uint64_t _newsize, utime_t _mtime, client_t c) :
     LockerContext(l), in(i),
-    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime)
+    new_max_size(_new_max_size), newsize(_newsize), mtime(_mtime),
+    client(c)
   {
     in->get(CInode::PIN_PTRWAITER);
   }
   void finish(int r) override {
     if (in->is_auth())
-      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime);
+      locker->check_inode_max_size(in, false, new_max_size, newsize, mtime,
+                                   client);
     in->put(CInode::PIN_PTRWAITER);
   }
 };
@@ -3060,7 +3063,7 @@ bool Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool *max_increas
 
 bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 				  uint64_t new_max_size, uint64_t new_size,
-				  utime_t new_mtime)
+				  utime_t new_mtime, client_t client)
 {
   ceph_assert(in->is_auth());
   ceph_assert(in->is_file());
@@ -3086,12 +3089,33 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
 	   << " update_size " << update_size
 	   << " on " << *in << dendl;
 
+  // For a max_size increase request, if any other client still holds
+  // WR caps it may have unflushed extensions (e.g. concurrent O_APPEND
+  // writers).  Gather their caps first so that the size they flush is
+  // applied before we grant the new max_size, otherwise the grant would
+  // carry a stale size.  Only check issued caps here so that the
+  // condition clears once the gather completes and cannot loop forever.
+  // Exclude the requester: it may still hold its own WR caps (e.g. a
+  // loner's Fx), which must not block its own grant.
+  bool other_writers = false;
+  if (new_max_size > 0) {
+    for (const auto &p : in->client_caps) {
+      if (p.first != client &&
+	  (p.second.issued() & CEPH_CAP_FILE_WR)) {
+        other_writers = true;
+        break;
+      }
+    }
+  }
+
   if (in->is_frozen()) {
     dout(10) << "check_inode_max_size frozen, waiting on " << *in << dendl;
     in->add_waiter(CInode::WAIT_UNFREEZE,
-		   new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
+		   new C_MDL_CheckMaxSize(this, in, new_max_size, new_size,
+					  new_mtime, client));
     return false;
-  } else if (!force_wrlock && !in->filelock.can_wrlock(in->get_loner())) {
+  } else if (!force_wrlock &&
+             (!in->filelock.can_wrlock(in->get_loner()) || other_writers)) {
     // lock?
     if (in->filelock.is_stable()) {
       auto wanted = in->get_caps_wanted();
@@ -3101,18 +3125,41 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
       } else {
         simple_lock(&in->filelock);
       }
+      // re-evaluate after starting the transition above
+      other_writers = false;
+      for (const auto &p : in->client_caps) {
+        if (p.first != client &&
+	    (p.second.issued() & CEPH_CAP_FILE_WR)) {
+          other_writers = true;
+          break;
+        }
+      }
     }
-    if (!in->filelock.can_wrlock(in->get_loner())) {
+    if (!in->filelock.can_wrlock(in->get_loner()) || other_writers) {
       dout(10) << "check_inode_max_size can't wrlock, waiting on " << *in << dendl;
       in->filelock.add_waiter(SimpleLock::WAIT_STABLE,
-			      new C_MDL_CheckMaxSize(this, in, new_max_size, new_size, new_mtime));
+			      new C_MDL_CheckMaxSize(this, in, new_max_size, new_size,
+						     new_mtime, client));
       return false;
+    }
+  }
+
+  if (client >= 0) {
+    Capability *cap = in->get_client_cap(client);
+    if (cap && (cap->wanted() & CEPH_CAP_FILE_EXCL)) {
+      // The requesting client wants Fx (an O_APPEND writer): make it
+      // the loner so that the filelock transitions to EXCL and the
+      // client writes serially, one appender at a time.
+      dout(10) << "check_inode_max_size setting loner to client."
+	       << client << " " << *in << dendl;
+      in->set_loner_cap(client);
+      in->file_excl_pin = true;
     }
   }
 
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
-    
+
   auto pi = in->project_inode(mut);
   pi.inode->version = in->pre_dirty();
 
@@ -3205,6 +3252,10 @@ void Locker::share_inode_max_size(CInode *in, Capability *only_cap)
                                          cap->get_last_issue(),
                                          mds->get_osd_epoch_barrier());
       in->encode_cap_message(m, cap);
+      // carry the projected size so that the grant reflects the
+      // previous writer's size flush even when its journal entry has
+      // not been committed yet; an O_APPEND revalidation relies on it
+      m->set_size(in->get_projected_inode()->size);
       mds->send_message_client_counted(m, cap->get_session());
     }
     if (only_cap)
@@ -4110,17 +4161,41 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       }
     }
 
+    // For an explicit max_size increase request, if other clients hold
+    // or want WR caps they may have unflushed extensions (e.g.
+    // concurrent O_APPEND writers).  Gather their caps first so that
+    // the size they flush is applied before we grant the new max_size,
+    // otherwise the grant would carry a stale size.  Note that during
+    // a gather their issued and pending WR caps may be transiently
+    // revoked, so check wanted() as well.  If the requester already
+    // holds the filelock exclusively there is nothing to gather.
+    bool other_writers = false;
+    if (forced_change_max &&
+        !(in->filelock.get_state() == LOCK_EXCL &&
+          in->get_loner() == client)) {
+      for (const auto &p : in->client_caps) {
+	if (p.first != client &&
+	    (p.second.issued() | p.second.pending() | p.second.wanted()) &
+	    CEPH_CAP_FILE_WR) {
+	  other_writers = true;
+	  break;
+	}
+      }
+    }
+
     if (in->last == CEPH_NOSNAP &&
 	change_max &&
-	!in->filelock.can_wrlock(client) &&
-	!in->filelock.can_force_wrlock(client)) {
+	((!in->filelock.can_wrlock(client) &&
+	  !in->filelock.can_force_wrlock(client)) || other_writers)) {
       dout(10) << " i want to change file_max, but lock won't allow it (yet)" << dendl;
       if (in->filelock.is_stable()) {
 	bool need_issue = false;
 	if (cap)
 	  cap->inc_suppress();
 	if (in->get_mds_caps_wanted().empty() &&
-	    (in->get_loner() >= 0 || (in->get_wanted_loner() >= 0 && in->try_set_loner()))) {
+	    ((in->get_loner() == client) ||
+	     (in->get_loner() < 0 && in->get_wanted_loner() >= 0 &&
+	      in->try_set_loner()))) {
 	  if (in->filelock.get_state() != LOCK_EXCL)
 	    file_excl(&in->filelock, &need_issue);
 	} else
@@ -4130,11 +4205,11 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 	if (cap)
 	  cap->dec_suppress();
       }
-      if (!in->filelock.can_wrlock(client) &&
-	  !in->filelock.can_force_wrlock(client)) {
+      if ((!in->filelock.can_wrlock(client) &&
+	   !in->filelock.can_force_wrlock(client)) || other_writers) {
 	C_MDL_CheckMaxSize *cms = new C_MDL_CheckMaxSize(this, in,
 	                                                 forced_change_max ? new_max : 0,
-	                                                 0, utime_t());
+	                                                 0, utime_t(), client);
 
 	in->filelock.add_waiter(SimpleLock::WAIT_STABLE, cms);
 	change_max = false;
@@ -4190,6 +4265,15 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
       cr.range.last = new_max;
       cr.follows = in->first - 1;
       in->mark_clientwriteable();
+      if (cap && (cap->wanted() & CEPH_CAP_FILE_EXCL)) {
+	// An O_APPEND writer asked for more max_size: make it the
+	// loner so that the filelock transitions to EXCL and the
+	// grant carries Fx, serializing appends.
+	dout(10) << "_do_cap_update setting loner to client." << client
+		 << " " << *in << dendl;
+	in->set_loner_cap(client);
+	in->file_excl_pin = true;
+      }
       if (cap)
 	cap->mark_clientwriteable();
     } else {
@@ -5742,7 +5826,12 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   else if (lock->get_state() != LOCK_EXCL &&
 	   !lock->is_rdlocked() &&
 	   //!lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   in->get_target_loner() >= 0 &&
+	   (in->get_target_loner() >= 0 ||
+	    // a max_size request (e.g. from an O_APPEND writer) that
+	    // wrlocked the filelock has made this client the loner;
+	    // bump to EXCL even though calc_ideal_loner() no longer
+	    // prefers it, so that the grant carries Fx
+	    (lock->get_state() == LOCK_LOCK && in->get_loner() >= 0)) &&
 	   (in->is_dir() ?
 	    !in->has_subtree_or_exporting_dirfrag() :
 	    (wanted & (CEPH_CAP_ANY_FILE_WR >> CEPH_CAP_SFILE)))) {
