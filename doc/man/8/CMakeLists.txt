@@ -5,7 +5,6 @@ set(client_srcs
   ceph-authtool.rst
   ceph-kvstore-tool.rst
   rados.rst
-  radostrace.rst
   ceph-post-file.rst
   ceph-dencoder.rst)
 
@@ -43,6 +42,11 @@ list(APPEND man_srcs
   librados-config.rst
   cephadm.rst
   cephfs-mirror.rst)
+
+if(WITH_EBPF_TRACE)
+  list(APPEND man_srcs
+    radostrace.rst)
+endif()
 
 if(WITH_CEPHFS_SHELL)
   list(APPEND man_srcs
