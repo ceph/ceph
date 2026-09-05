@@ -296,10 +296,33 @@ class ResultGroup:
         return all(r.success for r in self._contents)
 
     def to_simplified(self) -> Simplified:
-        return {
-            'results': [r.to_simplified() for r in self._contents],
+        warnings: List[str] = []
+        res = []
+        for result in self:
+            res.append(result.to_simplified())
+            warnings.extend(getattr(result, 'warnings', None) or [])
+        out = {
+            'results': res,
             'success': self.success,
         }
+        # add a warnings summary section to inform of warnings and recap them
+        # so that the user "sees" something unusual at the end of the results
+        # group output (vs needing to scroll back to the specific output of
+        # one share out of N with a warning).
+        if warnings:
+            recap = warnings[:5]
+            wslen = len(recap)
+            wlen = len(warnings)
+            if wslen < wlen:
+                recap.append(
+                    f'{wlen - wslen} other warning(s) detected'
+                    ' (see resource result for details)'
+                )
+            out['warnings_summary'] = {
+                'count': len(warnings),
+                'recap': recap,
+            }
+        return out
 
     def mgr_return_value(self) -> int:
         return 0 if self.success else -errno.EAGAIN
