@@ -130,6 +130,19 @@ import { RgwBucketLifecycleListComponent } from './rgw-bucket-lifecycle-list/rgw
 import { RgwRateLimitComponent } from './rgw-rate-limit/rgw-rate-limit.component';
 import { RgwRateLimitDetailsComponent } from './rgw-rate-limit-details/rgw-rate-limit-details.component';
 import { NfsClusterComponent } from '../nfs/nfs-cluster/nfs-cluster.component';
+import { SmbClusterFormComponent } from '../smb/smb-cluster-form/smb-cluster-form.component';
+import { SmbJoinAuthFormComponent } from '../smb/smb-join-auth-form/smb-join-auth-form.component';
+import { SmbUsersgroupsFormComponent } from '../smb/smb-usersgroups-form/smb-usersgroups-form.component';
+import { SmbClusterListComponent } from '../smb/smb-cluster-list/smb-cluster-list.component';
+import { SmbClusterResourceSidebarComponent } from '../smb/smb-cluster-resource-sidebar/smb-cluster-resource-sidebar.component';
+import { SmbClusterResourcePageComponent } from '../smb/smb-cluster-resource-page/smb-cluster-resource-page.component';
+import { SmbClusterResourceBreadcrumbResolver } from '../smb/smb-cluster-resource-page/smb-cluster-resource-breadcrumb.resolver';
+import { SmbJoinAuthListComponent } from '../smb/smb-join-auth-list/smb-join-auth-list.component';
+import { SmbUsersgroupsListComponent } from '../smb/smb-usersgroups-list/smb-usersgroups-list.component';
+import { SmbOverviewComponent } from '../smb/smb-overview/smb-overview.component';
+import { SmbUsersgroupsResourceSidebarComponent } from '../smb/smb-usersgroups-resource-sidebar/smb-usersgroups-resource-sidebar.component';
+import { SmbUsersgroupsResourcePageComponent } from '../smb/smb-usersgroups-resource-page/smb-usersgroups-resource-page.component';
+import { SmbUsergroupsResourceBreadcrumbResolver } from '../smb/smb-usersgroups-resource-page/smb-usersgroups-resource-breadcrumb.resolver';
 import { RgwTopicListComponent } from './rgw-topic-list/rgw-topic-list.component';
 import { RgwTopicResourceSidebarComponent } from './rgw-topic-resource-sidebar/rgw-topic-resource-sidebar.component';
 import { RgwTopicResourcePageComponent } from './rgw-topic-resource-page/rgw-topic-resource-page.component';
@@ -578,6 +591,110 @@ const routes: Routes = [
         path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
         component: NfsFormComponent,
         data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
+  },
+  {
+    path: 'smb',
+    canActivate: [ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'smb',
+        redirectTo: 'error',
+        header: 'SMB module is not enabled',
+        module_name: 'smb',
+        navigate_to: 'rgw/smb'
+      },
+      breadcrumbs: 'SMB'
+    },
+    children: [
+      { path: '', component: SmbClusterListComponent },
+      {
+        path: 'cluster',
+        data: { breadcrumbs: 'Clusters' },
+        children: [
+          { path: '', component: SmbClusterListComponent },
+          {
+            path: `${URLVerbs.CREATE}`,
+            component: SmbClusterFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          },
+          {
+            path: `${URLVerbs.EDIT}/:cluster_id`,
+            component: SmbClusterFormComponent,
+            data: { breadcrumbs: ActionLabels.EDIT }
+          },
+          {
+            path: ':cluster_id',
+            component: SmbClusterResourceSidebarComponent,
+            data: {
+              breadcrumbs: SmbClusterResourceBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: SmbClusterResourcePageComponent,
+                data: { breadcrumbs: 'Overview', section: 'overview' }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        path: 'active-directory',
+        data: { breadcrumbs: 'Active Directory' },
+        children: [
+          { path: '', component: SmbJoinAuthListComponent },
+          {
+            path: `${URLVerbs.CREATE}`,
+            component: SmbJoinAuthFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          },
+          {
+            path: `${URLVerbs.EDIT}/:authId`,
+            component: SmbJoinAuthFormComponent,
+            data: { breadcrumbs: ActionLabels.EDIT }
+          }
+        ]
+      },
+      {
+        path: 'standalone',
+        data: { breadcrumbs: 'Standalone' },
+        children: [
+          { path: '', component: SmbUsersgroupsListComponent },
+          {
+            path: `${URLVerbs.CREATE}`,
+            component: SmbUsersgroupsFormComponent,
+            data: { breadcrumbs: ActionLabels.CREATE }
+          },
+          {
+            path: `${URLVerbs.EDIT}/:usersGroupsId`,
+            component: SmbUsersgroupsFormComponent
+          },
+          {
+            path: ':users_groups_id',
+            component: SmbUsersgroupsResourceSidebarComponent,
+            data: {
+              breadcrumbs: SmbUsergroupsResourceBreadcrumbResolver,
+              showBreadcrumbsLayout: false
+            },
+            children: [
+              { path: '', redirectTo: 'overview', pathMatch: 'full' },
+              {
+                path: 'overview',
+                component: SmbUsersgroupsResourcePageComponent,
+                data: { breadcrumbs: 'Overview', section: 'overview' }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        path: 'overview',
+        component: SmbOverviewComponent,
+        data: { breadcrumbs: 'Overview' }
       }
     ]
   },

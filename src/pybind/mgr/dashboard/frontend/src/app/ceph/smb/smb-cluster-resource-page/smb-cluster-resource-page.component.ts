@@ -1,9 +1,10 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { ActivatedRoute, ParamMap } from '@angular/router';
+import { ActivatedRoute, ParamMap, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
 import { SmbClusterResourceStateService } from '~/app/shared/services/smb-cluster-resource-state.service';
 import { SMBCluster } from '../smb.model';
+import { isRgwSmbRoute } from '../utils';
 
 @Component({
   selector: 'cd-smb-cluster-resource-page',
@@ -19,14 +20,17 @@ export class SmbClusterResourcePageComponent implements OnInit, OnDestroy {
   selection: SMBCluster | undefined;
   loadError = false;
   isOverviewLoading = false;
+  showShareList = true;
   overviewFields: OverviewField[] = [];
 
   constructor(
     private route: ActivatedRoute,
+    private router: Router,
     private smbClusterResourceStateService: SmbClusterResourceStateService
   ) {}
 
   ngOnInit(): void {
+    this.showShareList = !isRgwSmbRoute(this.router.url);
     this.sub.add(
       this.route.data.subscribe((data) => {
         this.section = data['section'] ?? 'overview';
