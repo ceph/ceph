@@ -116,6 +116,8 @@ public:
     Shard(
       std::string root,
       Device* device,
+      std::vector<Device*> &cache_devices,
+      std::vector<Device*> &data_devices,
       bool is_test,
       uint32_t store_shard_nums,
       store_index_t store_index = 0);
@@ -220,10 +222,6 @@ public:
     // init managers and mount transaction_manager
     seastar::future<> mount_managers();
 
-    void set_secondaries(Device& sec_dev) {
-      secondaries.emplace_back(&sec_dev);
-    }
-
     seastar::future<std::vector<coll_core_t>> list_collections();
 
     seastar::future<> write_meta(const std::string& key,
@@ -255,6 +253,7 @@ public:
       return store_active;
     }
   private:
+    void validate_devices();
     struct internal_context_t {
       CollectionRef ch;
       ceph::os::Transaction ext_transaction;
@@ -582,7 +581,7 @@ public:
 
     omap_root_t get_omap_root(omap_type_t type, Onode& onode) const {
       return onode.get_root(type).get(
-        onode.get_metadata_hint(device->get_block_size()));
+        onode.get_metadata_hint(primary_device->get_block_size()));
     }
 
     omaptree_get_value_ret omaptree_get_value(
@@ -665,11 +664,12 @@ public:
 
   private:
     std::string root;
-    Device* device;
     const uint32_t max_object_size;
     bool is_test;
 
-    std::vector<Device*> secondaries;
+    Device* primary_device = nullptr;
+    std::vector<Device*> cache_devices;
+    std::vector<Device*> data_devices;
     TransactionManagerRef transaction_manager;
     CollectionManagerRef collection_manager;
     OnodeManagerRef onode_manager;
@@ -697,6 +697,7 @@ public:
   seastar::future<> stop() override;
 
   Device::access_ertr::future<> _mount();
+
 
   // FuturizedStore::mount_ertr/mkfs_ertr only supports a stateful_ec
   // to keep the interface intact, convert to stateful_ec.
@@ -773,39 +774,49 @@ public:
   mount_ertr::future<> test_mount();
   mkfs_ertr::future<> test_mkfs(uuid_d new_osd_fsid);
 
-  DeviceRef get_primary_device_ref() {
-    return std::move(device);
-  }
+  seastar::future<> test_start(
+    Device* dev,
+    std::vector<DeviceRef> &&cache_devices,
+    std::vector<DeviceRef> &&data_devices);
 
-  seastar::future<> test_start(DeviceRef dev);
+  Device* get_primary_device() {
+    return primary_device;
+  }
+  std::vector<DeviceRef> take_cache_devices() {
+    return std::move(cache_devices);
+  }
+  std::vector<DeviceRef> take_data_devices() {
+    return std::move(data_devices);
+  }
 
 private:
   seastar::future<> write_fsid(uuid_d new_osd_fsid);
 
   seastar::future<> prepare_meta(uuid_d new_osd_fsid);
 
-  seastar::future<> set_secondaries();
-
-  seastar::future<> get_shard_nums();
+  seastar::future<> get_shard_nums(Device&);
   seastar::future<> shard_stores_start(bool is_test);
   seastar::future<> shard_stores_stop();
 
 private:
-class MultiShardStores {
+  class MultiShardStores {
   public:
     std::vector<std::unique_ptr<SeaStore::Shard>> mshard_stores;
 
   public:
     MultiShardStores(size_t count,
                      const std::string& root,
-                     Device* dev,
+                     Device* device,
+                     std::vector<Device*> &cache_devs,
+                     std::vector<Device*> &data_devs,
                      bool is_test,
                      uint32_t store_shard_nums)
     : mshard_stores() {
       mshard_stores.reserve(count); // Reserve space for the shards
       for (size_t store_index = 0; store_index < count; ++store_index) {
         mshard_stores.emplace_back(std::make_unique<SeaStore::Shard>(
-          root, dev, is_test, store_shard_nums, store_index));
+          root, device, cache_devs, data_devs, is_test,
+          store_shard_nums, store_index));
       }
     }
     ~MultiShardStores() {
@@ -814,8 +825,11 @@ class MultiShardStores {
   };
   std::string root;
   MDStoreRef mdstore;
-  DeviceRef device;
-  std::vector<DeviceRef> secondaries;
+  Device* primary_device = nullptr; // the lowest-id device in
+                                    // cache_devices or data_devices
+                                    // if cache_devices is empty.
+  std::vector<DeviceRef> cache_devices;
+  std::vector<DeviceRef> data_devices;
   seastar::sharded<SeaStore::MultiShardStores> shard_stores;
   uint32_t store_shard_nums = 0;
 
