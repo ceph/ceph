@@ -324,8 +324,8 @@ options:
 - name: rgw_data
   type: str
   level: advanced
-  desc: Local data directory for the RADOS Gateway daemon.
-  long_desc: The local directory where the RADOS Gateway daemon keeps its per-daemon
+  desc: Data directory for the RADOS Gateway daemon.
+  long_desc: The directory where the RADOS Gateway daemon keeps its per-daemon
     files, such as its keyring.
   default: /var/lib/ceph/radosgw/$cluster-$id
   services:
@@ -725,28 +725,35 @@ options:
   desc: Swift URL prefix
   long_desc: 'The URL prefix for the Swift API, to distinguish it from the S3 API endpoint.
     The default is swift, which makes the Swift API available at the URL http://host:port/swift/v1
-    (or http://host:port/swift/v1/AUTH_%(tenant_id)s if rgw swift account in url is
+    (or http://host:port/swift/v1/AUTH_%(tenant_id)s if ``rgw_swift_account_in_url`` is
     enabled). For compatibility, setting this configuration variable to the empty string
     causes the default swift to be used; if you do want an empty prefix, set this option
     to /. Warning: If you set this option to /, you must disable the S3 API by modifying
-    rgw enable apis to exclude s3. It is not possible to operate radosgw with rgw swift
-    url prefix = / and simultaneously support both the S3 and Swift APIs. If you do
+    ``rgw_enable_apis`` to exclude ``s3``. It is not possible to operate radosgw with
+    ``rgw_swift_url_prefix`` = ``/`` and simultaneously support both the S3 and Swift
+    APIs. If you do
     need to support both APIs without prefixes, deploy multiple radosgw instances to
     listen on different hosts (or ports) instead, enabling some for S3 and some for
     Swift.'
-  fmt_desc: "The URL prefix for the Swift API, to distinguish it from\nthe S3 API endpoint.\
-    \ The default is ``swift``, which\nmakes the Swift API available at the URL\n``http://host:port/swift/v1``\
-    \ (or\n``http://host:port/swift/v1/AUTH_%(tenant_id)s`` if\n``rgw swift account\
-    \ in url`` is enabled).\n\nFor compatibility, setting this configuration variable\n\
-    to the empty string causes the default ``swift`` to be\nused; if you do want an\
-    \ empty prefix, set this option to\n``/``.\n\n.. warning:: If you set this option\
-    \ to ``/``, you must\n             disable the S3 API by modifying ``rgw\n    \
-    \         enable apis`` to exclude ``s3``. It is not\n             possible to\
-    \ operate radosgw with ``rgw\n             swift url prefix = /`` and simultaneously\n\
-    \             support both the S3 and Swift APIs. If you\n             do need\
-    \ to support both APIs without\n             prefixes, deploy multiple radosgw\
-    \ instances\n             to listen on different hosts (or ports)\n           \
-    \  instead, enabling some for S3 and some for\n             Swift.\n"
+  fmt_desc: |
+    The URL prefix for the Swift API, to distinguish it from the S3 API endpoint.
+    The default is ``swift``, which makes the Swift API available at the URL
+    ``http://host:port/swift/v1`` (or
+    ``http://host:port/swift/v1/AUTH_%(tenant_id)s`` if ``rgw_swift_account_in_url``
+    is enabled).
+
+    For compatibility, setting this configuration variable to the empty string causes
+    the default ``swift`` to be used; if you do want an empty prefix, set this option
+    to ``/``.
+
+    .. warning::
+
+       If you set this option to ``/``, you must disable the S3 API by modifying
+       ``rgw_enable_apis`` to exclude ``s3``. It is not possible to operate radosgw
+       with ``rgw_swift_url_prefix = /`` and simultaneously support both the S3 and
+       Swift APIs. If you do need to support both APIs without prefixes, deploy
+       multiple radosgw instances to listen on different hosts (or ports) instead,
+       enabling some for S3 and some for Swift.
   example: /swift-testing
   default: swift
   services:
@@ -794,49 +801,25 @@ options:
     (or http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<keystone_project_id>) instead,
     and the Keystone object-store endpoint must accordingly be configured to include
     the AUTH_%(tenant_id)s suffix. You must set this option to true (and update the
-    Keystone service catalog) if you want radosgw to support publicly-readable containers
+    Keystone service catalog) if you want radosgw to support publicly readable containers
     and temporary URLs.
-  fmt_desc: 'Whether or not the Swift account name should be included
-  
-    in the Swift API URL.
-  
-    If set to ``false`` (the default), then the Swift API
-  
-    will listen on a URL formed like
-  
-    ``http://host:port/<rgw_swift_url_prefix>/v1``, and the
-  
-    account name (commonly a Keystone project UUID if
-  
-    radosgw is configured with `Keystone integration
-  
-    <../keystone>`_) will be inferred from request
-  
-    headers.
-  
+  fmt_desc: |
+    Whether or not the Swift account name should be included in the Swift API URL.
+
+    If set to ``false`` (the default), then the Swift API will listen on a URL formed
+    like ``http://host:port/<rgw_swift_url_prefix>/v1``, and the account name (commonly
+    a Keystone project UUID if radosgw is configured with `Keystone integration
+    <../keystone>`_) will be inferred from request headers.
+
     If set to ``true``, the Swift API URL will be
-  
-    ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<account_name>``
-  
-    (or
-  
-    ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<keystone_project_id>``)
-  
-    instead, and the Keystone ``object-store`` endpoint must
-  
-    accordingly be configured to include the
-  
-    ``AUTH_%(tenant_id)s`` suffix.
-  
-    You **must** set this option to ``true`` (and update the
-  
-    Keystone service catalog) if you want radosgw to support
-  
-    publicly-readable containers and `temporary URLs
-  
+    ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<account_name>`` (or
+    ``http://host:port/<rgw_swift_url_prefix>/v1/AUTH_<keystone_project_id>``) instead,
+    and the Keystone ``object-store`` endpoint must accordingly be configured to include
+    the ``AUTH_%(tenant_id)s`` suffix.
+
+    You **must** set this option to ``true`` (and update the Keystone service catalog)
+    if you want radosgw to support publicly readable containers and `temporary URLs
     <../swift/tempurl>`_.
-  
-    '
   default: false
   services:
   - rgw
@@ -1747,7 +1730,7 @@ options:
 - name: rgw_log_nonexistent_bucket
   type: bool
   level: advanced
-  desc: Log ops-log requests to nonexistent buckets.
+  desc: Record requests to nonexistent buckets in the ops log.
   long_desc: When set, the ops log records operations sent to nonexistent buckets.
     Such operations inherently fail and do not correspond to a specific user.
   default: false
@@ -1787,7 +1770,7 @@ options:
 - name: rgw_usage_max_shards
   type: int
   level: advanced
-  desc: Number of RADOS shards for the usage log (must be uniform cluster-wide).
+  desc: Number of RADOS objects for the usage log (must be uniform cluster-wide).
   long_desc: The number of RADOS objects across which RGW stores the usage-log data.
     All RGW daemons and radosgw-admin commands must use the same value; if they differ,
     writes and reads/clears target different objects, so usage data appears empty or
@@ -1866,9 +1849,9 @@ options:
 - name: rgw_ops_log_socket_path
   type: str
   level: advanced
-  desc: Unix domain socket path for ops log.
-  long_desc: Path to unix domain socket that RGW will listen for connection on. When
-    connected, RGW will send ops log data through it.
+  desc: Unix domain socket path for the ops log.
+  long_desc: Path to the Unix domain socket that RGW will listen for a connection. When
+    connected, RGW sends ops-log data through it.
   services:
   - rgw
   see_also:
@@ -1899,7 +1882,7 @@ options:
   desc: Maximum ops-log backlog for the Unix-domain-socket sink.
   long_desc: The maximum amount of buffered ops-log data RGW retains when the ops log
     is written to a Unix domain socket. If the backlog exceeds this, ops-log entries
-    are dropped, so the listening consumer must read the socket quickly enough to avoid
+    are dropped, so the consumer must read the socket quickly enough to avoid
     loss.
   default: 5_M
   services:
@@ -1954,8 +1937,8 @@ options:
 - name: rgw_mime_types_file
   type: str
   level: basic
-  desc: Path to local mime types file
-  long_desc: The mime types file is needed in Swift when uploading an object. If object's
+  desc: Path to local MIME types file
+  long_desc: The MIME types file is needed in Swift when uploading an object. If object's
     content type is not specified, RGW will use data from this file to assign a content
     type to the object.
   default: /etc/mime.types
