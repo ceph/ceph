@@ -4,6 +4,7 @@ overrides:
   ceph:
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
+      - MDS_ALL_DOWN
 tasks:
 - install:
     extra_packages:
