@@ -1250,6 +1250,6 @@ void OpenFileTable::trim_destroyed_inos(uint64_t seq)
   while (p != logseg_destroyed_inos.end()) {
     if (p->first >= seq)
       break;
-    logseg_destroyed_inos.erase(p++);
+    p = logseg_destroyed_inos.erase(p);
   }
 }

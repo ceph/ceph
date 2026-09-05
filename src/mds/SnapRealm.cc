@@ -381,7 +381,7 @@ void SnapRealm::split_at(SnapRealm *child)
       dout(20) << " child gets child realm " << *realm << " on " << *realm->inode << dendl;
       realm->parent = child;
       child->open_children.insert(realm);
-      open_children.erase(p++);
+      p = open_children.erase(p);
     } else {
       dout(20) << "    keeping child realm " << *realm << " on " << *realm->inode << dendl;
       ++p;
@@ -518,7 +518,7 @@ void SnapRealm::prune_past_parent_snaps()
     auto q = cached_snaps.find(*p);
     if (q == cached_snaps.end()) {
       dout(10) << __func__ << " pruning " << *p << dendl;
-      srnode.past_parent_snaps.erase(p++);
+      p = srnode.past_parent_snaps.erase(p);
     } else {
       dout(10) << __func__ << " keeping " << *p << dendl;
       ++p;

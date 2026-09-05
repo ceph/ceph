@@ -626,7 +626,7 @@ void MDSRank::update_targets()
     double val = counter.get();
     if (val <= 0.01) {
       dout(15) << "export target mds." << rank << " is no longer an export target" << dendl;
-      export_targets.erase(it++);
+      it = export_targets.erase(it);
       send = true;
       continue;
     }
@@ -2588,7 +2588,7 @@ void MDSRankDispatcher::handle_mds_map(
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
       MDSContext::vec ls;
       ls.swap(p->second);
-      waiting_for_mdsmap.erase(p++);
+      p = waiting_for_mdsmap.erase(p);
       queue_waiters(ls);
     }
   }
