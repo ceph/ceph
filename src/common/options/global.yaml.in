@@ -161,7 +161,7 @@ options:
   level: advanced
   desc: path to MonMap file
   long_desc: This option is normally used during mkfs, but can also be used to identify
-    which monitors to connect to.
+    which Monitors to connect to.
   services:
   - mon
   flags:
@@ -170,7 +170,7 @@ options:
 - name: mon_host
   type: str
   level: basic
-  desc: List of hosts or addresses to search for a monitor
+  desc: List of hosts or addresses to search for a Monitor
   long_desc: This is a list of IP addresses or hostnames that are separated by commas, whitespace, or semicolons. Hostnames are resolved via DNS. All A and AAAA records are included in the search list.
   services:
   - common
@@ -181,7 +181,7 @@ options:
   type: str
   level: advanced
   desc: Monitor(s) to use overriding the MonMap
-  fmt_desc: This is the list of Monitors that the Ceph process **initially** contacts when first establishing communication with the Ceph cluster. This overrides the known monitor list that is derived from MonMap updates sent to older Ceph instances (like librados cluster handles). This option is expected to be useful primarily for debugging.
+  fmt_desc: This is the list of Monitors that the Ceph process **initially** contacts when first establishing communication with the Ceph cluster. This overrides the known Monitor list that is derived from MonMap updates sent to older Ceph instances (like librados cluster handles). This option is expected to be useful primarily for debugging.
   services:
   - common
   flags:
@@ -665,8 +665,8 @@ options:
 - name: clog_to_monitors
   type: str
   level: advanced
-  desc: Make daemons send cluster log messages to monitors
-  fmt_desc: Determines if ``clog`` messages should be sent to monitors.
+  desc: Make daemons send cluster log messages to Monitors
+  fmt_desc: Determines if ``clog`` messages should be sent to Monitors.
   default: default=true
   flags:
   - runtime
@@ -980,7 +980,7 @@ options:
   type: str
   level: basic
   desc: Connection modes (crc, secure) for intra-mon connections in order of preference
-  fmt_desc: the connection mode (or permitted modes) to use between monitors.
+  fmt_desc: the connection mode (or permitted modes) to use between Monitors.
   default: secure crc
   see_also:
   - ms_mon_service_mode
@@ -995,7 +995,7 @@ options:
   level: basic
   desc: Allowed connection modes (crc, secure) for connections to mons
   fmt_desc: A list of permitted modes for clients or
-    other Ceph daemons to use when connecting to monitors.
+    other Ceph daemons to use when connecting to Monitors.
   default: secure crc
   see_also:
   - ms_service_mode
@@ -1008,11 +1008,11 @@ options:
 - name: ms_mon_client_mode
   type: str
   level: basic
-  desc: Connection modes (crc, secure) for connections from clients to monitors in
+  desc: Connection modes (crc, secure) for connections from clients to Monitors in
     order of preference
   fmt_desc: A list of connection modes, in order of
-    preference, for clients or non-monitor daemons to use when
-    connecting to monitors.
+    preference, for clients or non-Monitor daemons to use when
+    connecting to Monitors.
   default: secure crc
   see_also:
   - ms_mon_service_mode
@@ -1116,7 +1116,7 @@ options:
   type: bool
   level: advanced
   desc: Learn address from what IP our first peer thinks we connect from
-  long_desc: Use the IP address our first peer (usually a monitor) sees that we are
+  long_desc: Use the IP address our first peer (usually a Monitor) sees that we are
     connecting from.  This is useful if a client is behind some sort of NAT and we
     want to see it identified by its local (not NATed) address.
   default: true
@@ -1728,7 +1728,7 @@ options:
 - name: mon_warn_on_msgr2_not_enabled
   type: bool
   level: advanced
-  desc: Raise the MON_MSGR2_NOT_ENABLED health warning if monitors are all running Nautilus
+  desc: Raise the MON_MSGR2_NOT_ENABLED health warning if Monitors are all running Nautilus
     but not all binding to a msgr2 port
   default: true
   services:
@@ -1781,7 +1781,7 @@ options:
   type: int
   level: advanced
   desc: Max number of past cluster log epochs to store
-  fmt_desc: Maximum number of Log epochs the monitor should keep.
+  fmt_desc: Maximum number of Log epochs the Monitor should keep.
   default: 500
   services:
   - mon
@@ -1822,7 +1822,7 @@ options:
   type: float
   level: advanced
   desc: Timeout for querying other mons during bootstrap pre-election phase (seconds)
-  fmt_desc: Number of seconds the monitor will wait to find peers before bootstrapping.
+  fmt_desc: Number of seconds the Monitor will wait to find peers before bootstrapping.
   default: 2
   services:
   - mon
@@ -1858,7 +1858,7 @@ options:
   type: secs
   level: advanced
   desc: Frequency for scrubbing the Monitor database
-  fmt_desc: How often the monitor scrubs its store by comparing
+  fmt_desc: How often the Monitor scrubs its store by comparing
     the stored checksums with the computed ones for all stored
     keys. (0 disables, which is dangerous and must be used with care,
     lest the gods smite you.)
@@ -1914,7 +1914,7 @@ options:
   type: float
   level: advanced
   desc: Timeout before canceling sync if syncing mon does not respond
-  fmt_desc: Number of seconds the monitor will wait for the next update
+  fmt_desc: Number of seconds the Monitor will wait for the next update
     message from its sync provider before it gives up and bootstrap
     again.
   default: 1_min
@@ -1993,7 +1993,7 @@ options:
   type: int
   level: dev
   desc: Force Monitors to trim osdmaps through this epoch
-  fmt_desc: Force monitor to trim osdmaps to this point, even if there is
+  fmt_desc: Force Monitor to trim osdmaps to this point, even if there is
     PGs not clean at the specified epoch (0 disables, which is dangerous and
     must be used with care).
   default: 0
@@ -2003,8 +2003,8 @@ options:
 - name: mon_debug_extra_checks
   type: bool
   level: dev
-  desc: Enable some additional monitor checks
-  long_desc: Enable some additional monitor checks that would be too expensive to
+  desc: Enable some additional Monitor checks
+  long_desc: Enable some additional Monitor checks that would be too expensive to
     run on production systems, or would only be relevant while testing or debugging.
   default: false
   services:
@@ -2014,7 +2014,7 @@ options:
   level: dev
   desc: Block OSDMap trimming while the option is enabled.
   long_desc: Blocking OSDMap trimming may be quite helpful to easily reproduce states
-    in which the monitor keeps (hundreds of) thousands of osdmaps.
+    in which the Monitor keeps (hundreds of) thousands of osdmaps.
   default: false
   services:
   - mon
@@ -2968,7 +2968,7 @@ options:
   fmt_desc: The elapsed time when a Ceph OSD Daemon hasn't shown a heartbeat
     that the Ceph Storage Cluster considers it ``down``.
     This setting must be set in both the [mon] and [osd] or [global]
-    sections so that it is read by both monitor and OSD daemons.
+    sections so that it is read by both Monitor and OSD daemons.
   with_legacy: true
 - name: osd_heartbeat_stale
   type: int
@@ -4875,11 +4875,15 @@ options:
 - name: bluestore_compression_min_blob_size
   type: size
   level: advanced
-  desc: Chunks smaller than this are never compressed.
-  long_desc: Chunks smaller than this are never compressed. The per-pool property compression_min_blob_size
-    overrides this setting.
-  fmt_desc: Chunks smaller than this are never compressed. The per-pool property ``compression_min_blob_size``
-    overrides this setting.
+  desc: Chunks smaller than this are never compressed, keeping random-access reads cheap.
+  long_desc: Chunks smaller than this are never compressed. Compressing very small blobs
+    adds decompression overhead to random-access reads for little space saving, so they
+    are left uncompressed. The per-pool property compression_min_blob_size overrides this
+    setting.
+  fmt_desc: Chunks smaller than this are never compressed. Compressing very small blobs
+    adds decompression overhead to random-access reads for little space saving, so they
+    are left uncompressed. The per-pool property ``compression_min_blob_size`` overrides
+    this setting.
   default: 0
   flags:
   - runtime
@@ -6878,7 +6882,7 @@ options:
 - name: mgr_map_cache_enabled
   type: bool
   level: dev
-  desc: Enable the manager's map cache for API calls
+  desc: Enable the Manager's map cache for API calls
   default: true
   services:
   - mgr
