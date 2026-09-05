@@ -196,6 +196,14 @@ int get_encryption_defaults(req_state *s)
     }
   }
   if (meta_sse_group & SSE_C_GROUP) {
+    /*
+     * checked here so part uploads are covered; they never reach the
+     * encrypt path that gates a new object write
+     */
+    int r = rgw_s3_check_sse_c_blocked(s);
+    if (r < 0) {
+      return r;
+    }
     ldpp_dout(s, 20) << "get_encryption_defaults: no defaults cause sse-c forced"
 	<< dendl;
     return 0;			// sse-c: no defaults here
@@ -4838,6 +4846,16 @@ int RGWCompleteMultipart_ObjStore_S3::get_params(optional_yield y)
 
   // if we found attrs, populate crypt_http_responses
   if (res == 0) {
+    /*
+     * an sse-c multipart upload may have started before the bucket
+     * blocked sse-c; refuse to complete it
+     */
+    if (get_str_attribute(obj->get_attrs(), RGW_ATTR_CRYPT_MODE).starts_with("SSE-C")) {
+      res = rgw_s3_check_sse_c_blocked(s);
+      if (res < 0) {
+        return res;
+      }
+    }
     static constexpr bool copy_source = false;
     res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
                                 nullptr, &crypt_http_responses, copy_source);

@@ -2237,7 +2237,7 @@ static inline std::string rgw_bl_str(const ceph::buffer::list& bl)
 }
 
 template <typename T>
-int decode_bl(bufferlist& bl, T& t)
+int decode_bl(const bufferlist& bl, T& t)
 {
   auto iter = bl.cbegin();
   try {
