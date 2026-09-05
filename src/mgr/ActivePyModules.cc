@@ -1794,14 +1794,15 @@ void ActivePyModules::unregister_client(std::string_view name, std::string addrs
 
 PyObject* ActivePyModules::get_daemon_health_metrics()
 {
+  PyFormatter f;
   without_gil_t no_gil;
-  return daemon_state.with_daemons_by_server([&no_gil]
+  daemon_state.with_daemons_by_server([&no_gil, &f]
       (const std::map<std::string, DaemonStateCollection> &all) {
-      no_gil.acquire_gil();
-      PyFormatter f;
-      for (const auto &[hostname, daemon_state] : all) {
-        for (const auto &[key, state] : daemon_state) {
-          f.open_array_section(ceph::to_string(key));
+    for (const auto &[hostname, daemon_state] : all) {
+      for (const auto &[key, state] : daemon_state) {
+        std::lock_guard l(state->lock);
+        with_gil(no_gil, [&f, key=ceph::to_string(key), state=state] {
+          f.open_array_section(key.c_str());
           for (const auto &metric : state->daemon_health_metrics) {
             f.open_object_section(metric.get_type_name());
             f.dump_int("value", metric.get_n1());
@@ -1809,10 +1810,11 @@ PyObject* ActivePyModules::get_daemon_health_metrics()
             f.close_section();
           }
           f.close_section();
-        }
+        });
       }
-      return f.get();
+    }
   });
+  return f.get();
 }
 
 void ActivePyModules::check_all_modules_started(Context *modules_start_complete) {
