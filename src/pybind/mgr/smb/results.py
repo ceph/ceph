@@ -14,6 +14,7 @@ from typing import (
 
 import errno
 
+from .internal import resource_key
 from .proto import Self, Simplified
 from .resources import ConversionOp, SMBResource
 from .utils import one
@@ -122,6 +123,22 @@ class ResourceResult(BaseResult):
             msg=self.msg,
             status=self.status,
             warnings=self.warnings,
+        )
+
+    def combine(self, other: 'ResourceResult') -> Self:
+        assert self.src == other.src
+        if self.msg and other.msg:
+            raise ValueError('unable to combine two result messages')
+        status = dict(self.status or {}) | dict(other.status or {})
+        if 'checked' in status and 'state' in status:
+            # checked is irrelevant if state is set, so lose it
+            del status['checked']
+        return self.__class__(
+            src=self.src,
+            success=self.success and other.success,
+            msg=self.msg or other.msg,
+            status=status or None,
+            warnings=self.warnings + other.warnings,
         )
 
     @classmethod
@@ -304,6 +321,28 @@ class ResultGroup:
                 for result in self._contents
             ]
         )
+
+    def _rkey(self, result: Result) -> str:
+        if not isinstance(result, ResourceResult):
+            return ''  # to be ignored by caller
+        ns, rk = resource_key(result.src)
+        return f'ResourceResult:{ns}:{rk}'
+
+    def merge(self, other: Iterable[Result]) -> None:
+        icache = {}
+        for idx, result in enumerate(self):
+            if rkey := self._rkey(result):
+                icache[rkey] = idx
+        for result in other:
+            rkey = self._rkey(result)
+            if rkey in icache:
+                idx = icache[rkey]
+                rr = self._contents[idx]
+                assert isinstance(result, ResourceResult)
+                assert isinstance(rr, ResourceResult)
+                self._contents[idx] = rr.combine(result)
+            else:
+                self._contents.append(result)
 
 
 def _replace_resource(result: Result, operation: ConversionOp) -> Result:
