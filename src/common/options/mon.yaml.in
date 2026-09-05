@@ -452,7 +452,7 @@ options:
 - name: mon_lease
   type: float
   level: advanced
-  desc: Length of the Paxos version lease, in seconds.
+  desc: Length of the Monitor Paxos version lease, in seconds.
   long_desc: The length, in seconds, of the lease the leader grants on the Monitors'
     versions. It controls how sensitive the Monitor quorum is to intermittent network issues
     or other failures.
