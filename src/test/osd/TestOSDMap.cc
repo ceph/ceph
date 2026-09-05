@@ -13,8 +13,10 @@
 #include "crush/CrushWrapper.h"
 #include "include/stringify.h"
 
+#include <algorithm>
 #include <iostream>
 #include <cmath>
+#include <numeric>
 
 using namespace std;
 
@@ -51,6 +53,9 @@ public:
   static const string ip_addrs[];
   static const string unblocked_ip_addrs[];
   const string EC_RULE_NAME = "erasure";
+  // rules installed by set_up_crush_tree(), host failure domain
+  const string TREE_REP_RULE_NAME = "tree-replicated";
+  const string TREE_EC_RULE_NAME = "tree-erasure";
 
   OSDMapTest() {}
   void set_verbose(bool v) { verbose = v; }
@@ -142,6 +147,52 @@ public:
       new_pool_inc.new_pools[my_rep_pool].set_pgp_num(1 << (int)ceil(lg));
     }
     osdmap.apply_incremental(new_pool_inc);
+  }
+  // build_simple() drops every OSD into a single host bucket, which makes
+  // each straw2 choice linear in the size of the cluster -- unusably slow for
+  // a cluster of thousands of OSDs.  Replace the crush map with a realistic
+  // tree instead: osds_per_host OSDs per host, hosts_per_rack hosts per rack,
+  // and as many racks as it takes to hold the cluster.  Adds a replicated and
+  // an erasure rule, both with a host failure domain.
+  void set_up_crush_tree(int osds_per_host, int hosts_per_rack) {
+    const int osds_per_rack = osds_per_host * hosts_per_rack;
+    ceph_assert(get_num_osds() % osds_per_rack == 0);
+    const int osd_type = 0, host_type = 1, rack_type = 3, root_type = 11;
+    CrushWrapper crush;
+    crush.create();
+    crush.set_type_name(osd_type, "osd");
+    crush.set_type_name(host_type, "host");
+    crush.set_type_name(rack_type, "rack");
+    crush.set_type_name(root_type, "root");
+    int rootid;
+    int r = crush.add_bucket(0, 0, CRUSH_HASH_DEFAULT, root_type, 0,
+			     nullptr, nullptr, &rootid);
+    ceph_assert(r == 0);
+    crush.set_item_name(rootid, "default");
+    for (int o = 0; o < (int)get_num_osds(); ++o) {
+      map<string,string> loc{
+	{"host", "host-" + stringify(o / osds_per_host)},
+	{"rack", "rack-" + stringify(o / osds_per_rack)},
+	{"root", "default"}
+      };
+      r = crush.insert_item(g_ceph_context, o, 1.0,
+			    "osd." + stringify(o), loc);
+      ceph_assert(r >= 0);
+    }
+    stringstream ss;
+    r = crush.add_simple_rule(TREE_REP_RULE_NAME, "default", "host", "",
+			      "firstn", pg_pool_t::TYPE_REPLICATED, &ss);
+    ceph_assert(r >= 0);
+    r = crush.add_simple_rule(TREE_EC_RULE_NAME, "default", "host", "",
+			      "indep", pg_pool_t::TYPE_ERASURE, &ss);
+    ceph_assert(r >= 0);
+    crush.finalize();
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    crush.encode(pending_inc.crush, CEPH_FEATURES_SUPPORTED_DEFAULT);
+    r = osdmap.apply_incremental(pending_inc);
+    ceph_assert(r == 0);
+    ceph_assert(osdmap.crush->get_rule_id(TREE_REP_RULE_NAME) >= 0);
+    ceph_assert(osdmap.crush->get_rule_id(TREE_EC_RULE_NAME) >= 0);
   }
   int get_ec_crush_rule() {
     int r = osdmap.crush->get_rule_id(EC_RULE_NAME);
@@ -1785,6 +1836,220 @@ TEST_F(OSDMapTest, BUG_38897) {
   {
     ASSERT_TRUE(pool_1_id >= 0);
     balance_capacity(pool_1_id);
+  }
+}
+
+TEST_F(OSDMapTest, LargeClusterMapping) {
+  // Guard against scale regressions: `make check` must always exercise a
+  // cluster of a size we actually see in the field.  Almost every other test
+  // here runs with a handful of OSDs, which hides problems that only show up
+  // at scale -- pg mapping, the parallel mapper the mon and mgr use to
+  // precalculate mappings, and osdmap encoding.
+  //
+  // 9999 OSDs in a 101 rack * 9 host * 11 osd tree, with one pool per data
+  // protection scheme.  Every pool is sized so that it places exactly
+  // shards_per_osd shards on each OSD:
+  //
+  //   pg_num = num_osds * shards_per_osd / (k + m)
+  //
+  // which requires (k + m) to divide 9999 * 100 == 999900.
+  constexpr int n_osds = 9999;
+  constexpr int osds_per_host = 11;
+  constexpr int hosts_per_rack = 9;
+  constexpr int shards_per_osd = 100;
+  constexpr int total_shards = n_osds * shards_per_osd;
+
+  set_up_map(n_osds, true);
+  ASSERT_EQ((unsigned)n_osds, osdmap.get_num_osds());
+  ASSERT_EQ((unsigned)n_osds, osdmap.get_num_up_osds());
+  ASSERT_EQ((unsigned)n_osds, osdmap.get_num_in_osds());
+  set_up_crush_tree(osds_per_host, hosts_per_rack);
+  const int rep_rule = osdmap.crush->get_rule_id(TREE_REP_RULE_NAME);
+  const int ec_rule = osdmap.crush->get_rule_id(TREE_EC_RULE_NAME);
+  ASSERT_GE(rep_rule, 0);
+  ASSERT_GE(ec_rule, 0);
+
+  // 3x replication plus a few EC profiles that are common in production.
+  // m == 0 means replicated, in which case k is the replica count.
+  struct profile_t {
+    const char *name;
+    int k;
+    int m;
+    bool is_ec() const { return m > 0; }
+    int width() const { return k + m; }
+  };
+  const vector<profile_t> profiles = {
+    { "rep3",  3, 0 },
+    { "ec4+2", 4, 2 },
+    { "ec8+3", 8, 3 },
+    { "ec8+4", 8, 4 },
+  };
+
+  map<int64_t,const profile_t*> pools;
+  {
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pool_max = osdmap.get_pool_max();
+    pending_inc.fsid = osdmap.get_fsid();
+    for (auto& prof : profiles) {
+      ASSERT_EQ(0, total_shards % prof.width()) << prof.name;
+      int pg_num = total_shards / prof.width();
+      int64_t pool_id = ++pending_inc.new_pool_max;
+      pg_pool_t empty;
+      pg_pool_t *p = pending_inc.get_new_pool(pool_id, &empty);
+      p->size = prof.width();
+      p->set_pg_num(pg_num);
+      p->set_pgp_num(pg_num);
+      if (prof.is_ec()) {
+	p->type = pg_pool_t::TYPE_ERASURE;
+	p->min_size = prof.k + 1;
+	p->crush_rule = ec_rule;
+	p->erasure_code_profile = prof.name;
+	pending_inc.set_erasure_code_profile(
+	  prof.name,
+	  {
+	    { "plugin", "jerasure" },
+	    { "technique", "reed_sol_van" },
+	    { "k", stringify(prof.k) },
+	    { "m", stringify(prof.m) },
+	    { "crush-failure-domain", "host" },
+	  });
+      } else {
+	p->type = pg_pool_t::TYPE_REPLICATED;
+	p->min_size = prof.k - 1;
+	p->crush_rule = rep_rule;
+	p->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
+      }
+      pending_inc.new_pool_names[pool_id] = prof.name;
+      pools[pool_id] = &prof;
+    }
+    osdmap.apply_incremental(pending_inc);
+  }
+  uint64_t expected_pgs = 0;
+  for (auto& [pool_id, prof] : pools) {
+    const pg_pool_t *pi = osdmap.get_pg_pool(pool_id);
+    ASSERT_TRUE(pi != nullptr) << prof->name;
+    ASSERT_EQ((unsigned)prof->width(), pi->get_size());
+    expected_pgs += pi->get_pg_num();
+  }
+
+  // precalculate every mapping with the same parallel mapper the mon uses
+  {
+    ThreadPool tp(g_ceph_context, "LargeClusterMapping::mapper_tp",
+		  "mapper_tp", 8);
+    ParallelPGMapper mapper(g_ceph_context, &tp);
+    tp.start();
+    auto start = mono_clock::now();
+    // same shape as OSDMonitor::start_mapping()
+    std::unique_ptr<ParallelPGMapper::Job> job =
+      mapping.start_update(osdmap, mapper, 4096);
+    job->wait();
+    auto latency = mono_clock::now() - start;
+    tp.stop();
+    cout << "mapped " << mapping.get_num_pgs() << " pgs over " << n_osds
+	 << " osds in " << timespan_str(latency) << std::endl;
+  }
+  ASSERT_EQ(expected_pgs, mapping.get_num_pgs());
+  ASSERT_EQ(osdmap.get_epoch(), mapping.get_epoch());
+
+  // every pg of every pool must map to a full, hole-free set of distinct,
+  // existing OSDs, and each pool must land exactly shards_per_osd shards per
+  // OSD on average
+  vector<int> shards_all(n_osds, 0);
+  for (auto& [pool_id, prof] : pools) {
+    const unsigned pg_num = osdmap.get_pg_pool(pool_id)->get_pg_num();
+    const unsigned width = prof->width();
+    vector<int> shards(n_osds, 0);
+    vector<int> up, acting, sorted;
+    int up_primary, acting_primary;
+    for (unsigned ps = 0; ps < pg_num; ++ps) {
+      pg_t pgid(ps, pool_id);
+      mapping.get(pgid, &up, &up_primary, &acting, &acting_primary);
+      ASSERT_EQ(width, up.size()) << prof->name << " " << pgid;
+      // nothing is down or out, so up and acting must agree
+      ASSERT_EQ(up, acting) << prof->name << " " << pgid;
+      ASSERT_EQ(up_primary, acting_primary) << prof->name << " " << pgid;
+      ASSERT_EQ(up[0], up_primary) << prof->name << " " << pgid;
+      for (auto osd : up) {
+	ASSERT_NE(CRUSH_ITEM_NONE, osd) << prof->name << " " << pgid;
+	ASSERT_GE(osd, 0) << prof->name << " " << pgid;
+	ASSERT_LT(osd, n_osds) << prof->name << " " << pgid;
+	++shards[osd];
+	++shards_all[osd];
+      }
+      sorted = up;
+      std::sort(sorted.begin(), sorted.end());
+      ASSERT_EQ(sorted.end(), std::adjacent_find(sorted.begin(), sorted.end()))
+	<< prof->name << " " << pgid;
+    }
+    // exactly 100 shards per OSD on average, by construction
+    ASSERT_EQ(total_shards,
+	      std::accumulate(shards.begin(), shards.end(), 0)) << prof->name;
+    auto [min_shards, max_shards] =
+      std::minmax_element(shards.begin(), shards.end());
+    cout << prof->name << ": " << pg_num << " pgs, " << width
+	 << " shards each, shards/osd min " << *min_shards
+	 << " max " << *max_shards << " mean " << shards_per_osd << std::endl;
+    // crush is not a balancer, so the band is deliberately loose: this is
+    // here to catch a topology or rule that piles pgs onto a few OSDs, not to
+    // measure how even the distribution is
+    ASSERT_GT(*min_shards, shards_per_osd / 3) << prof->name;
+    ASSERT_LT(*max_shards, shards_per_osd * 3) << prof->name;
+  }
+
+  // the reverse map the mgr uses (osd -> pgs) must agree with the forward one
+  for (int osd = 0; osd < n_osds; ++osd) {
+    ASSERT_EQ((size_t)shards_all[osd], mapping.get_osd_acting_pgs(osd).size())
+      << "osd." << osd;
+  }
+
+  // the precalculated mapping must agree with the on-demand crush path.  Only
+  // a deterministic sample is checked -- mapping every pg twice would double
+  // the crush work of this test for no extra coverage.
+  const unsigned sample_stride = 997;
+  for (auto& [pool_id, prof] : pools) {
+    const unsigned pg_num = osdmap.get_pg_pool(pool_id)->get_pg_num();
+    for (unsigned ps = 0; ps < pg_num; ps += sample_stride) {
+      pg_t pgid = osdmap.raw_pg_to_pg(pg_t(ps, pool_id));
+      vector<int> up, acting, up2, acting2;
+      int up_primary, acting_primary, up_primary2, acting_primary2;
+      osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary,
+				  &acting, &acting_primary);
+      mapping.get(pgid, &up2, &up_primary2, &acting2, &acting_primary2);
+      ASSERT_EQ(up, up2) << prof->name << " " << pgid;
+      ASSERT_EQ(up_primary, up_primary2) << prof->name << " " << pgid;
+      ASSERT_EQ(acting, acting2) << prof->name << " " << pgid;
+      ASSERT_EQ(acting_primary, acting_primary2) << prof->name << " " << pgid;
+    }
+  }
+
+  // a map this large must survive an encode/decode roundtrip and map pgs the
+  // same way afterwards
+  {
+    bufferlist bl;
+    osdmap.encode(bl, CEPH_FEATURES_SUPPORTED_DEFAULT | CEPH_FEATURE_RESERVED);
+    cout << "osdmap with " << n_osds << " osds and " << expected_pgs
+	 << " pgs encodes to " << bl.length() << " bytes" << std::endl;
+    OSDMap decoded;
+    decoded.decode(bl);
+    ASSERT_EQ(osdmap.get_num_osds(), decoded.get_num_osds());
+    ASSERT_EQ(osdmap.get_epoch(), decoded.get_epoch());
+    ASSERT_EQ(osdmap.get_pools().size(), decoded.get_pools().size());
+    for (auto& [pool_id, prof] : pools) {
+      ASSERT_TRUE(decoded.have_pg_pool(pool_id)) << prof->name;
+      ASSERT_EQ(prof->name, decoded.get_pool_name(pool_id));
+      const unsigned pg_num = osdmap.get_pg_pool(pool_id)->get_pg_num();
+      ASSERT_EQ(pg_num, decoded.get_pg_pool(pool_id)->get_pg_num());
+      for (unsigned ps = 0; ps < pg_num; ps += sample_stride) {
+	pg_t pgid = osdmap.raw_pg_to_pg(pg_t(ps, pool_id));
+	vector<int> up, up2;
+	int up_primary, up_primary2;
+	osdmap.pg_to_up_acting_osds(pgid, &up, &up_primary, nullptr, nullptr);
+	decoded.pg_to_up_acting_osds(pgid, &up2, &up_primary2, nullptr,
+				     nullptr);
+	ASSERT_EQ(up, up2) << prof->name << " " << pgid;
+	ASSERT_EQ(up_primary, up_primary2) << prof->name << " " << pgid;
+      }
+    }
   }
 }
 
