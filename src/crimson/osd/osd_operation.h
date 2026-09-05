@@ -371,6 +371,7 @@ class OperationThrottler : public BlockerT<OperationThrottler>,
 
 public:
   OperationThrottler(ConfigProxy &conf);
+  OperationThrottler(ConfigProxy &conf, const std::string &prefix);
   void start();
   seastar::future<> stop();
 
@@ -415,7 +416,7 @@ public:
       return ThrottleReleaser{this};
     });
   }
-  void register_metrics(const std::string &sched_type);
+  void register_metrics(const std::string &sched_type, const std::string &prefix = "");
   void initialize_scheduler(CephContext* cct, ConfigProxy &conf, bool is_rotational, int whoami);
 private:
   void dump_detail(Formatter *f) const final;
