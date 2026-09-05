@@ -721,3 +721,46 @@ def test_drive_group_osd_type_crimson_roundtrip():
     assert spec2.osd_type == 'crimson'
     j2 = spec2.to_json()
     assert j2['spec']['osd_type'] == 'crimson'
+
+
+def test_DeviceSelection_to_json_preserves_per_path_crush_device_class():
+    """
+    A spec is persisted via to_json() and reloaded via from_json() on every mgr
+    restart and by `ceph orch ls --export`, so the round trip must be lossless.
+    """
+    spec = DriveGroupSpec.from_json({
+        'service_type': 'osd',
+        'service_id': 'osd_using_paths',
+        'placement': {'hosts': ['node01']},
+        'crush_device_class': 'ssd',
+        'spec': {
+            'data_devices': {'paths': [
+                {'path': '/dev/sdb', 'crush_device_class': 'ssd'},
+                {'path': '/dev/sdc', 'crush_device_class': 'nvme'},
+            ]},
+            'db_devices': {'paths': ['/dev/sdd']},
+        },
+    })
+
+    reloaded = DriveGroupSpec.from_json(spec.to_json())
+
+    assert [(d.path, d.crush_device_class) for d in reloaded.data_devices.paths] == [
+        ('/dev/sdb', 'ssd'),
+        ('/dev/sdc', 'nvme'),
+    ]
+    # a path with no per-device class still serializes as a plain string
+    assert reloaded.db_devices.to_json()['paths'] == ['/dev/sdd']
+
+
+def test_DeviceSelection_to_json_preserves_actuators():
+    spec = DriveGroupSpec.from_json({
+        'service_type': 'osd',
+        'service_id': 'osd_actuators',
+        'placement': {'hosts': ['node01']},
+        'spec': {'data_devices': {'actuators': 2, 'rotational': 1}},
+    })
+
+    reloaded = DriveGroupSpec.from_json(spec.to_json())
+
+    assert reloaded.data_devices.actuators == 2
+    assert reloaded.data_devices.rotational == 1
