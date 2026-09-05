@@ -35,7 +35,7 @@ to use in production. When radostrace is not running there is no
 performance impact on the traced processes.
 
 **radostrace** requires root privileges and Linux kernel 5.8 or later
-(for BPF ring buffer support).
+(for BPF ring buffer support). It is available on x86_64 and aarch64.
 
 Options
 =======
