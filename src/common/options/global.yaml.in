@@ -847,7 +847,8 @@ options:
   type: str
   level: advanced
   desc: Use openssl_conf for specific openssl algorithm
-  long_desc: 'Pass opts in this way: openssl_conf=/path/to/openssl.conf'
+  long_desc: >-
+    Pass opts in this way: openssl_conf=/path/to/openssl.conf
   flags:
   - startup
 - name: mempool_debug
@@ -2320,11 +2321,11 @@ options:
   level: advanced
   desc: Force older clients that may omit their ticket on reconnects to
     reconnect as part of establishing a session
-  long_desc: 'In permissive mode (auth_allow_insecure_global_id_reclaim set
-    to true), this helps with identifying clients that are not patched. In
-    enforcing mode (auth_allow_insecure_global_id_reclaim set to false), this
-    is a fail-fast mechanism: don''t establish a session that will almost
-    inevitably be broken later.'
+  long_desc: >-
+    In permissive mode (auth_allow_insecure_global_id_reclaim set to true), this helps with
+    identifying clients that are not patched. In enforcing mode
+    (auth_allow_insecure_global_id_reclaim set to false), this is a fail-fast mechanism:
+    don't establish a session that will almost inevitably be broken later.
   default: true
   see_also:
   - mon_warn_on_insecure_global_id_reclaim
@@ -3609,16 +3610,17 @@ options:
   type: uint
   level: advanced
   desc: Number of bits per key to use for RocksDB's bloom filters.
-  long_desc: '''RocksDB bloom filters can be used to quickly answer the question of
-    whether or not a key may exist or definitely does not exist in a given RocksDB
-    SST file without having to read all keys into memory.  Using a higher bit value
-    decreases the likelihood of false positives at the expense of additional disk space
-    and memory consumption when the filter is loaded into RAM.  The current default
-    value of 20 was found to provide significant performance gains when getattr calls
-    are made (such as during new object creation in BlueStore) without significant
-    memory overhead or cache pollution when combined with RocksDB partitioned index
-    filters.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
-    for more information.'''
+  long_desc: >-
+    'RocksDB bloom filters can be used to quickly answer the question of whether or not a
+    key may exist or definitely does not exist in a given RocksDB SST file without having to
+    read all keys into memory.  Using a higher bit value decreases the likelihood of false
+    positives at the expense of additional disk space and memory consumption when the filter
+    is loaded into RAM.  The current default value of 20 was found to provide significant
+    performance gains when getattr calls are made (such as during new object creation in
+    BlueStore) without significant memory overhead or cache pollution when combined with
+    RocksDB partitioned index filters.  See:
+    https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters for more
+    information.'
   default: 20
 - name: rocksdb_cache_index_and_filter_blocks
   type: bool
@@ -3653,23 +3655,26 @@ options:
 - name: rocksdb_index_type
   type: str
   level: dev
-  desc: 'Type of index for SST files: binary_search, hash_search, two_level'
-  long_desc: 'This option controls the table index type.  binary_search is a space
-    efficient index block that is optimized for block-search-based index. hash_search
-    may improve prefix lookup performance at the expense of higher disk and memory
-    usage and potentially slower compactions.  two_level is an experimental index
-    type that uses two binary search indexes and works in conjunction with partition
-    filters.  See: http://rocksdb.org/blog/2017/05/12/partitioned-index-filter.html'
+  desc: >-
+    Type of index for SST files: binary_search, hash_search, two_level
+  long_desc: >-
+    This option controls the table index type.  binary_search is a space efficient index
+    block that is optimized for block-search-based index. hash_search may improve prefix
+    lookup performance at the expense of higher disk and memory usage and potentially slower
+    compactions.  two_level is an experimental index type that uses two binary search
+    indexes and works in conjunction with partition filters.  See:
+    http://rocksdb.org/blog/2017/05/12/partitioned-index-filter.html
   default: binary_search
 - name: rocksdb_partition_filters
   type: bool
   level: dev
   desc: (Experimental) partition SST index/filters into smaller blocks
-  long_desc: 'This is an experimental option for RocksDB that works in conjunction
-    with two_level indices to avoid having to keep the entire filter/index in cache
-    when cache_index_and_filter_blocks is true.  The idea is to keep a much smaller
-    top-level index in heap/cache and then opportunistically cache the lower level
-    indices.  See: https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters'
+  long_desc: >-
+    This is an experimental option for RocksDB that works in conjunction with two_level
+    indices to avoid having to keep the entire filter/index in cache when
+    cache_index_and_filter_blocks is true.  The idea is to keep a much smaller top-level
+    index in heap/cache and then opportunistically cache the lower level indices.  See:
+    https://github.com/facebook/rocksdb/wiki/Partitioned-Index-Filters
   default: false
 - name: rocksdb_metadata_block_size
   type: size
@@ -3686,11 +3691,12 @@ options:
   type: bool
   level: dev
   desc: Compact the column family when a certain number of tombstones are observed within a given window.
-  long_desc: 'This setting instructs RocksDB to compact a column family when a certain
-    number of tombstones are observed during iteration within a certain sliding window.
-    For instance if rocksdb_cf_compact_on_deletion_sliding_window is 8192 and
-    rocksdb_cf_compact_on_deletion_trigger is 4096,  then once 4096 tombstones are
-    observed after iteration over 8192 entries, the column family will be compacted.'
+  long_desc: >-
+    This setting instructs RocksDB to compact a column family when a certain number of
+    tombstones are observed during iteration within a certain sliding window. For instance
+    if rocksdb_cf_compact_on_deletion_sliding_window is 8192 and
+    rocksdb_cf_compact_on_deletion_trigger is 4096,  then once 4096 tombstones are observed
+    after iteration over 8192 entries, the column family will be compacted.
   default: true
   with_legacy: true
   see_also:
@@ -3956,20 +3962,22 @@ options:
   type: size
   level: basic
   desc: Target mapped memory per OSD when TCMalloc and cache autotuning are enabled.
-  long_desc: 'When TCMalloc is available and cache autotuning is enabled, the OSD tries
-    to keep this many bytes mapped in memory. The value must be at least osd_memory_base
-    + osd_memory_cache_min. Note that this may not exactly match the process''s RSS:
-    although the total heap memory mapped is usually close to this target, the kernel
-    is not guaranteed to reclaim unmapped memory. Some kernels have been observed to
-    let the OSD''s RSS exceed the mapped memory by up to 20%, though kernels may reclaim
-    more aggressively under memory pressure. Your mileage may vary.'
-  fmt_desc: 'When TCMalloc is available and cache autotuning is enabled, the OSD tries
-    to keep this many bytes mapped in memory. The value must be at least ``osd_memory_base``
-    + ``osd_memory_cache_min``. Note that this may not exactly match the process''s
-    RSS: although the total heap memory mapped is usually close to this target, the
-    kernel is not guaranteed to reclaim unmapped memory. Some kernels have been observed
-    to let the OSD''s RSS exceed the mapped memory by up to 20%, though kernels may
-    reclaim more aggressively under memory pressure. Your mileage may vary.'
+  long_desc: >-
+    When TCMalloc is available and cache autotuning is enabled, the OSD tries to keep this
+    many bytes mapped in memory. The value must be at least osd_memory_base +
+    osd_memory_cache_min. Note that this may not exactly match the process's RSS: although
+    the total heap memory mapped is usually close to this target, the kernel is not
+    guaranteed to reclaim unmapped memory. Some kernels have been observed to let the OSD's
+    RSS exceed the mapped memory by up to 20%, though kernels may reclaim more aggressively
+    under memory pressure. Your mileage may vary.
+  fmt_desc: >-
+    When TCMalloc is available and cache autotuning is enabled, the OSD tries to keep this
+    many bytes mapped in memory. The value must be at least ``osd_memory_base`` +
+    ``osd_memory_cache_min``. Note that this may not exactly match the process's RSS:
+    although the total heap memory mapped is usually close to this target, the kernel is not
+    guaranteed to reclaim unmapped memory. Some kernels have been observed to let the OSD's
+    RSS exceed the mapped memory by up to 20%, though kernels may reclaim more aggressively
+    under memory pressure. Your mileage may vary.
   default: 4_G
   see_also:
   - bluestore_cache_autotune
@@ -5467,22 +5475,24 @@ options:
   type: str
   level: dev
   desc: Definition of BlueStore's RocksDB column families and their sharding.
-  long_desc: 'Defines BlueStore''s RocksDB sharding as a space-separated list of elements:
-    column_def [ ''='' rocksdb_options ], where column_def := column_name [ ''('' shard_count
-    [ '','' hash_begin ''-'' [ hash_end ] ] '')'' ]. The interval [hash_begin..hash_end)
-    selects the characters used for hash calculation. Example: ''I=write_buffer_size=1048576
-    O(6) m(7,10-)''. Recommended hash ranges: O(0-13) P(0-8) m(0-16); sharding of the
-    S, T, C, M, and B prefixes is inadvised. The optimal value depends on many factors
-    and changing it is inadvisable. This setting is applied only when the OSD runs
-    --mkfs; later starts read the sharding from disk.'
-  fmt_desc: 'Defines BlueStore''s RocksDB sharding as a space-separated list of elements:
-    ``column_def [ ''='' rocksdb_options ]``, where ``column_def := column_name [ ''(''
-    shard_count [ '','' hash_begin ''-'' [ hash_end ] ] '')'' ]``. The interval [hash_begin..hash_end)
-    selects the characters used for hash calculation. Example: ``I=write_buffer_size=1048576
-    O(6) m(7,10-)``. Recommended hash ranges: O(0-13) P(0-8) m(0-16); sharding of the
-    S, T, C, M, and B prefixes is inadvised. The optimal value depends on many factors
-    and changing it is inadvisable. This setting is applied only when the OSD runs
-    ``--mkfs``; later starts read the sharding from disk.'
+  long_desc: >-
+    Defines BlueStore's RocksDB sharding as a space-separated list of elements: column_def [
+    '=' rocksdb_options ], where column_def := column_name [ '(' shard_count [ ','
+    hash_begin '-' [ hash_end ] ] ')' ]. The interval [hash_begin..hash_end) selects the
+    characters used for hash calculation. Example: 'I=write_buffer_size=1048576 O(6)
+    m(7,10-)'. Recommended hash ranges: O(0-13) P(0-8) m(0-16); sharding of the S, T, C, M,
+    and B prefixes is inadvised. The optimal value depends on many factors and changing it
+    is inadvisable. This setting is applied only when the OSD runs --mkfs; later starts read
+    the sharding from disk.
+  fmt_desc: >-
+    Defines BlueStore's RocksDB sharding as a space-separated list of elements: ``column_def
+    [ '=' rocksdb_options ]``, where ``column_def := column_name [ '(' shard_count [ ','
+    hash_begin '-' [ hash_end ] ] ')' ]``. The interval [hash_begin..hash_end) selects the
+    characters used for hash calculation. Example: ``I=write_buffer_size=1048576 O(6)
+    m(7,10-)``. Recommended hash ranges: O(0-13) P(0-8) m(0-16); sharding of the S, T, C, M,
+    and B prefixes is inadvised. The optimal value depends on many factors and changing it
+    is inadvisable. This setting is applied only when the OSD runs ``--mkfs``; later starts
+    read the sharding from disk.
   default: m(3) p(3,0-12) O(3,0-13)=block_cache={type=binned_lru} L=min_write_buffer_number_to_merge=32 P=min_write_buffer_number_to_merge=32
 - name: bluestore_async_db_compaction
   type: bool
@@ -5963,11 +5973,10 @@ options:
   type: str
   level: dev
   desc: Enforces specific hardware profile settings
-  long_desc: '''hybrid'' enforces osd settings applicable to hybrid
-    (AKA main=hdd, db/wal=ssd) disk setup.
-    ''ssd'' enforces osd settings applicable to all-flash disk setup.
-    ''default'' specifies automatic settings selection based on real
-    detected hardware.'
+  long_desc: >-
+    'hybrid' enforces osd settings applicable to hybrid (AKA main=hdd, db/wal=ssd) disk
+    setup. 'ssd' enforces osd settings applicable to all-flash disk setup. 'default'
+    specifies automatic settings selection based on real detected hardware.
   default: default
   enum_values:
   - default
@@ -6008,13 +6017,13 @@ options:
   level: dev
   desc: Sets threshold at which shrinking max free chunk size triggers enabling best-fit
     mode.
-  long_desc: 'The AVL allocator works in two modes: near-fit and best-fit. By default,
-    it uses very fast near-fit mode, in which it tries to fit a new block near the
-    last allocated block of similar size. The second mode is much slower best-fit
-    mode, in which it tries to find an exact match for the requested allocation. This
-    mode is used when either the device gets fragmented or when it is low on free
-    space. When the largest free block is smaller than ''bluestore_avl_alloc_bf_threshold'',
-    best-fit mode is used.'
+  long_desc: >-
+    The AVL allocator works in two modes: near-fit and best-fit. By default, it uses very
+    fast near-fit mode, in which it tries to fit a new block near the last allocated block
+    of similar size. The second mode is much slower best-fit mode, in which it tries to find
+    an exact match for the requested allocation. This mode is used when either the device
+    gets fragmented or when it is low on free space. When the largest free block is smaller
+    than 'bluestore_avl_alloc_bf_threshold', best-fit mode is used.
   default: 128_K
   see_also:
   - bluestore_avl_alloc_bf_free_pct
@@ -6023,13 +6032,13 @@ options:
   level: dev
   desc: Sets the threshold at which shrinking free space (in %, integer) triggers enabling
     best-fit mode.
-  long_desc: 'AVL allocator works in two modes: near-fit and best-fit. By default,
-    it uses very fast near-fit mode, in which it tries to fit a new block near the
-    last allocated block of similar size. The second mode is much slower best-fit
-    mode, in which it tries to find an exact match for the requested allocation. This
-    mode is used when either the device gets fragmented or when it is low on free
-    space. When free space is smaller than `bluestore_avl_alloc_bf_free_pct`, best-fit
-    mode is used.'
+  long_desc: >-
+    AVL allocator works in two modes: near-fit and best-fit. By default, it uses very fast
+    near-fit mode, in which it tries to fit a new block near the last allocated block of
+    similar size. The second mode is much slower best-fit mode, in which it tries to find an
+    exact match for the requested allocation. This mode is used when either the device gets
+    fragmented or when it is low on free space. When free space is smaller than
+    `bluestore_avl_alloc_bf_free_pct`, best-fit mode is used.
   default: 4
   see_also:
   - bluestore_avl_alloc_bf_threshold
