@@ -39,7 +39,9 @@
 #include <concepts>
 #include <cstdint>
 #include <exception>
+#include <filesystem>
 #include <iterator>
+#include <limits>
 #include <list>
 #include <map>
 #include <ranges>
@@ -76,6 +78,57 @@ concept can_lfdb_set = requires(Ts&& ...xs) {
  lfdb::set(std::forward<Ts>(xs)...);
 };
 
+template <typename SourceT>
+concept can_create_database_from = requires(SourceT source) {
+ lfdb::create_database(source);
+};
+
+static_assert(std::constructible_from<lfdb::connection_source, std::filesystem::path>);
+static_assert(std::constructible_from<lfdb::connection_source, std::string_view>);
+static_assert(not std::is_convertible_v<std::filesystem::path, lfdb::connection_source>);
+static_assert(not std::is_convertible_v<std::string_view, lfdb::connection_source>);
+static_assert(not std::constructible_from<lfdb::connection_source, std::nullptr_t>);
+static_assert(not can_create_database_from<std::filesystem::path>);
+static_assert(not can_create_database_from<std::string_view>);
+static_assert(not can_create_database_from<std::string>);
+static_assert(not can_create_database_from<const char *>);
+
+template <typename ValueT>
+concept can_atomic_add =
+ requires(lfdb::database_handle dbh, std::string key, ValueT value) {
+  lfdb::atomic::add(dbh, key, value);
+ };
+
+template <typename ValueT>
+concept can_atomic_min =
+ requires(lfdb::database_handle dbh, std::string key, ValueT value) {
+  lfdb::atomic::min(dbh, key, value);
+ };
+
+template <typename FnT>
+concept can_lfdb_for_each =
+ requires(lfdb::transaction_handle txn, lfdb::select selection, FnT fn) {
+  lfdb::for_each(txn, selection, fn);
+ };
+
+template <typename FnT>
+concept can_lfdb_get_raw_value =
+ requires(lfdb::database_handle dbh, std::string key, FnT fn) {
+  lfdb::get(dbh, key, fn);
+ };
+
+template <typename FnT>
+concept can_lfdb_from_convert_output =
+ requires(std::span<const std::uint8_t> bytes, FnT fn) {
+  lfdb::from::convert(bytes, fn);
+ };
+
+template <typename FnT>
+concept can_lfdb_watched_loop =
+ requires(lfdb::database_handle dbh, std::string key, FnT fn) {
+  lfdb::watched_loop(dbh, key, fn);
+ };
+
 struct pair_identity final
 {
  const string_pair& operator()(const string_pair& kv) const noexcept
@@ -83,6 +136,14 @@ struct pair_identity final
   return kv;
  }
 };
+
+[[nodiscard]] bool contains_key(const std::vector<string_pair>& rows,
+                                const std::string& key)
+{
+ const auto found = std::ranges::find(rows, key, &string_pair::first);
+
+ return std::end(rows) != found;
+}
 
 TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
 {
@@ -104,6 +165,29 @@ TEST_CASE("libfdb concepts describe supported API shapes", "[fdb][concepts]")
  STATIC_REQUIRE(lfdb::concepts::decoded_value_sink<char(&)[9]>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<const std::string&>);
  STATIC_REQUIRE_FALSE(lfdb::concepts::decoded_value_sink<std::string>);
+
+ STATIC_REQUIRE(can_atomic_add<std::uint64_t>);
+ STATIC_REQUIRE_FALSE(can_atomic_add<bool>);
+ STATIC_REQUIRE_FALSE(can_atomic_min<std::int64_t>);
+
+ STATIC_REQUIRE(can_lfdb_for_each<decltype([](string_pair&&) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_for_each<decltype([](string_pair&&) { return 1; })>);
+
+ STATIC_REQUIRE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {})>);
+ STATIC_REQUIRE_FALSE(lfdb::concepts::value_callback<decltype([](std::span<const std::uint8_t>) {
+  return 1;
+ })>);
+ STATIC_REQUIRE(can_lfdb_get_raw_value<decltype([](std::span<const std::uint8_t>) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_get_raw_value<decltype([](std::span<const std::uint8_t>) {
+  return 1;
+ })>);
+ STATIC_REQUIRE(can_lfdb_from_convert_output<decltype([](const char *, std::size_t) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_from_convert_output<decltype([](const char *, std::size_t) {
+  return 1;
+ })>);
+
+ STATIC_REQUIRE(can_lfdb_watched_loop<decltype([](std::string_view) {})>);
+ STATIC_REQUIRE_FALSE(can_lfdb_watched_loop<decltype([](std::string_view) { return true; })>);
 }
 
 TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")
@@ -119,6 +203,58 @@ TEST_CASE("query prefix handles byte-string keyspace edges", "[fdb][query]")
  CHECK(lq::is_universal(lq::prefix("")));
  CHECK(lq::is_empty(lq::prefix(max_keyspace_prefix)));
  CHECK(lq::is_empty(lq::prefix(max_keyspace_prefix + "metadata")));
+}
+
+TEST_CASE("key selectors navigate stored keys", "[fdb][query]")
+{
+ janitor j;
+ const auto prefix = make_key_prefix("selector");
+
+ const auto key0 = prefix + "0";
+ const auto key1 = prefix + "1";
+ const auto key2 = prefix + "2";
+ const auto key3 = prefix + "3";
+ const auto key4 = prefix + "4";
+ const auto key2_5 = prefix + "2.5";
+
+ lfdb::set(j, key0, "zero");
+ lfdb::set(j, key1, "one");
+ lfdb::set(j, key2, "two");
+ lfdb::set(j, key3, "three");
+ lfdb::set(j, key4, "four");
+
+ CHECK(key1 == lfdb::get_key(j, lfdb::lower(key2)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::floor(key2)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::ceiling(key2)));
+ CHECK(key3 == lfdb::get_key(j, lfdb::higher(key2)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::ceiling(key2), lfdb::read_mode::snapshot));
+
+ CHECK(key2 == lfdb::get_key(j, lfdb::lower(key2_5)));
+ CHECK(key2 == lfdb::get_key(j, lfdb::floor(key2_5)));
+ CHECK(key3 == lfdb::get_key(j, lfdb::ceiling(key2_5)));
+ CHECK(key3 == lfdb::get_key(j, lfdb::higher(key2_5)));
+}
+
+TEST_CASE("key selectors compose with content keys and query algebra", "[fdb][query][content]")
+{
+ namespace fdbc = ceph::libfdb::layer::content;
+ namespace lq = ceph::libfdb::query;
+
+ janitor j;
+ const auto root = test_key("content-selector");
+ const auto objects = fdbc::keyspace(root) / "objects";
+ const auto object_a = objects / "a";
+ const auto object_c = objects / "c";
+ const auto object_b = objects / "b";
+
+ lfdb::set(j, object_a, "alpha");
+ lfdb::set(j, object_c, "charlie");
+
+ const auto object_range = fdbc::prefix(objects);
+ const auto next_object = lfdb::get_key(j, lfdb::ceiling(object_b));
+
+ CHECK(lq::contains(object_range, next_object));
+ CHECK(std::string(libfdb_key_view(object_c)) == next_object);
 }
 
 struct position_insert_iterator
@@ -176,6 +312,39 @@ inline void write_raw_fdb_value(lfdb::database_handle dbh,
                      static_cast<int>(std::size(value)));
 
  REQUIRE(lfdb::commit(txn));
+}
+
+inline std::vector<std::uint8_t> read_raw_fdb_value(lfdb::database_handle dbh,
+                                                    std::string_view key)
+{
+ std::vector<std::uint8_t> out;
+
+ REQUIRE(lfdb::get(dbh, key, [&out](std::span<const std::uint8_t> value) {
+  out.assign(std::begin(value), std::end(value));
+ }));
+
+ return out;
+}
+
+inline std::span<const std::uint8_t> raw_bytes(std::string_view value)
+{
+ return {
+  reinterpret_cast<const std::uint8_t *>(value.data()),
+  std::size(value)
+ };
+}
+
+template <std::unsigned_integral ValueT>
+constexpr ValueT decode_little_endian(std::span<const std::uint8_t> bytes)
+{
+ ValueT out = 0;
+
+ for (auto byte : bytes | std::views::reverse) {
+  out <<= 8;
+  out |= static_cast<ValueT>(byte);
+ }
+
+ return out;
 }
 
 inline auto decode_raw_fdb_pairs(std::span<const FDBKeyValue> pairs)
@@ -332,26 +501,67 @@ TEST_CASE("version stamps", "[fdb]") {
  }
 
  SECTION("commit resolves explicit version stamp") {
+  const auto key = test_key("versionstamp/explicit");
   auto txn = lfdb::make_transaction(dbh);
   lfdb::versionstamp stamp;
 
-  lfdb::set(txn, "versionstamp/explicit", "value");
+  lfdb::set(txn, key, "value");
   REQUIRE(lfdb::commit(txn, stamp));
 
   CHECK(stamp.is_resolved());
   CHECK(10 == stamp.resolved_bytes().size());
  }
 
- SECTION("resolved versionstamp cannot be reused for commit") {
+ SECTION("one versionstamp can resolve multiple operations in one transaction") {
+  const auto first_key = test_key("versionstamp/multi/first");
+  const auto second_key = test_key("versionstamp/multi/second");
   lfdb::versionstamp stamp;
 
   auto txn = lfdb::make_transaction(dbh);
-  lfdb::set(txn, "versionstamp/reuse/first", "value");
+  lfdb::set(txn, first_key, lfdb::versioned("", stamp));
+  lfdb::set(txn, second_key, lfdb::versioned("", stamp));
+  REQUIRE(lfdb::commit(txn));
+
+  lfdb::versionstamp first;
+  lfdb::versionstamp second;
+  REQUIRE(lfdb::get(dbh, first_key, first));
+  REQUIRE(lfdb::get(dbh, second_key, second));
+
+  REQUIRE(stamp.is_resolved());
+  CHECK(first.resolved_bytes() == stamp.resolved_bytes());
+  CHECK(second.resolved_bytes() == stamp.resolved_bytes());
+ }
+
+ SECTION("retryable commit failure does not resolve versionstamp") {
+  const auto conflict_key = test_key("versionstamp/conflict/read");
+  const auto output_key = test_key("versionstamp/conflict/output");
+  lfdb::set(dbh, conflict_key, "old");
+
+  auto txn = lfdb::make_transaction(dbh);
+  std::string value;
+  REQUIRE(lfdb::get(txn, conflict_key, value));
+
+  lfdb::versionstamp stamp;
+  lfdb::set(txn, output_key, lfdb::versioned("", stamp));
+
+  lfdb::set(dbh, conflict_key, "new");
+
+  CHECK_FALSE(lfdb::commit(txn));
+  CHECK_FALSE(stamp.is_resolved());
+ }
+
+ SECTION("resolved versionstamp cannot be reused for commit") {
+  const auto first_key = test_key("versionstamp/reuse/first");
+  const auto second_key = test_key("versionstamp/reuse/second");
+  lfdb::versionstamp stamp;
+
+  auto txn = lfdb::make_transaction(dbh);
+  lfdb::set(txn, first_key, "value");
   REQUIRE(lfdb::commit(txn, stamp));
   REQUIRE(stamp.is_resolved());
 
   auto reuse_txn = lfdb::make_transaction(dbh);
-  lfdb::set(reuse_txn, "versionstamp/reuse/second", "value");
+  lfdb::set(reuse_txn, second_key, "value");
 
   CHECK_THROWS_MATCHES(lfdb::commit(reuse_txn, stamp),
                        std::invalid_argument,
@@ -404,34 +614,36 @@ TEST_CASE("version stamps", "[fdb]") {
  }
 
  SECTION("versionstamp key") {
-  lfdb::erase(dbh, lfdb::select { "versionstamp/key/" });
+  const auto prefix = test_key("versionstamp/key/");
+  lfdb::erase(dbh, lfdb::select { prefix });
 
   lfdb::versionstamp stamp;
 
   lfdb::set(dbh,
-            lfdb::versioned("versionstamp/key/", "/entry", stamp),
+            lfdb::versioned(prefix, "/entry", stamp),
             "value"s);
 
   REQUIRE(stamp.is_resolved());
 
   std::map<std::string, std::string> out;
-  lfdb::get(dbh, lfdb::select { "versionstamp/key/" }, std::inserter(out, out.end()));
+  lfdb::get(dbh, lfdb::select { prefix }, std::inserter(out, out.end()));
 
   REQUIRE(1 == out.size());
   CHECK("value" == out.begin()->second);
  }
 
  SECTION("versionstamp value") {
+  const auto key = test_key("versionstamp/value");
   lfdb::versionstamp stamp;
 
   lfdb::set(dbh,
-            "versionstamp/value",
+            key,
             lfdb::versioned("", stamp));
 
   REQUIRE(stamp.is_resolved());
 
   lfdb::versionstamp out;
-  REQUIRE(lfdb::get(dbh, "versionstamp/value", out));
+  REQUIRE(lfdb::get(dbh, key, out));
 
   REQUIRE(out.is_resolved());
   CHECK(stamp.resolved_bytes() == out.resolved_bytes());
@@ -440,11 +652,12 @@ TEST_CASE("version stamps", "[fdb]") {
  SECTION("versionstamp overloads compile and commit") {
   // As these overloads share call paths, just check that they compile and briefly check output:
   {
+    const auto key_prefix = test_key("versionstamp/overload/key/");
     auto txn = lfdb::make_transaction(dbh);
     lfdb::versionstamp stamp;
 
     lfdb::set(txn,
-              lfdb::versioned("versionstamp/overload/key/", stamp),
+              lfdb::versioned(key_prefix, stamp),
               "value",
               lfdb::commit_after_op::commit);
 
@@ -452,17 +665,147 @@ TEST_CASE("version stamps", "[fdb]") {
   }
 
   {
+    const auto key = test_key("versionstamp/overload/value");
     auto txn = lfdb::make_transaction(dbh);
     lfdb::versionstamp stamp;
 
     lfdb::set(txn,
-              "versionstamp/overload/value",
+              key,
               lfdb::versioned("value:", stamp),
               lfdb::commit_after_op::commit);
 
     CHECK(stamp.is_resolved());
   }
  }
+}
+
+TEST_CASE("transaction versions", "[fdb]") {
+ janitor dbh;
+
+ SECTION("read version is available in an active transaction") {
+  auto txn = lfdb::make_transaction(dbh);
+
+  CHECK(0 < lfdb::read_version(txn));
+ }
+
+ SECTION("committed version is only available after commit") {
+  auto txn = lfdb::make_transaction(dbh);
+
+  CHECK_THROWS_MATCHES(lfdb::committed_version(txn),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring(
+                         "committed_version() requires committed transaction")));
+ }
+
+ SECTION("committed version is available after commit") {
+  const auto key = test_key("transaction-version/committed");
+  auto txn = lfdb::make_transaction(dbh);
+
+  lfdb::set(txn, key, "value");
+  REQUIRE(lfdb::commit(txn));
+
+  CHECK(0 < lfdb::committed_version(txn));
+ }
+
+ SECTION("explicit read version can read an earlier committed value") {
+  const auto key = test_key("transaction-version/read-at");
+
+  auto first_txn = lfdb::make_transaction(dbh);
+  lfdb::set(first_txn, key, "first");
+  REQUIRE(lfdb::commit(first_txn));
+  const auto first_version = lfdb::committed_version(first_txn);
+
+  auto second_txn = lfdb::make_transaction(dbh);
+  lfdb::set(second_txn, key, "second");
+  REQUIRE(lfdb::commit(second_txn));
+
+  auto read_txn = lfdb::make_transaction(dbh);
+  lfdb::set_read_version(read_txn, first_version);
+
+  std::string value;
+  REQUIRE(lfdb::get(read_txn, key, value));
+
+  CHECK(first_version == lfdb::read_version(read_txn));
+  CHECK("first" == value);
+ }
+}
+
+TEST_CASE("transaction commit byte estimate", "[fdb]") {
+ janitor dbh;
+ auto txn = lfdb::make_transaction(dbh);
+
+ const auto empty_estimate = lfdb::approximate_commit_bytes(txn);
+
+ lfdb::set(txn, test_key("commit-bytes/a"), "alpha");
+ lfdb::set(txn, test_key("commit-bytes/b"), "bravo");
+
+ const auto populated_estimate = lfdb::approximate_commit_bytes(txn);
+
+CHECK(0 <= empty_estimate);
+CHECK(empty_estimate < populated_estimate);
+}
+
+TEST_CASE("api and system diagnostics", "[fdb]")
+{
+ SECTION("api namespace reports FDB client facts") {
+  CHECK_FALSE(lfdb::api::client_version().empty());
+  CHECK(730 <= lfdb::api::max_version());
+ }
+
+ SECTION("system namespace rejects invalid database handles") {
+  CHECK_THROWS_AS(lfdb::system::main_thread_busyness({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::client_status_json({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::server_protocol({}), std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::reboot_worker({}, "127.0.0.1:4500", false, 0),
+                  std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::force_recovery_with_data_loss({}, "dc1"),
+                  std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::system::create_snapshot({}, "snapshot-id", "snapshot-command"),
+                  std::invalid_argument);
+ }
+
+ SECTION("system namespace reports live database diagnostics") {
+  janitor dbh;
+
+  const auto busyness = lfdb::system::main_thread_busyness(dbh);
+  CHECK(0.0 <= busyness);
+
+  const auto protocol = lfdb::system::server_protocol(dbh);
+  CHECK(0 < protocol);
+
+  const auto status = lfdb::system::client_status_json(dbh);
+  CHECK_FALSE(status.empty());
+  CHECK(std::string::npos != status.find("Healthy"));
+ }
+}
+
+TEST_CASE("approximate range size composes with selections", "[fdb][query]")
+{
+ namespace fdbc = ceph::libfdb::layer::content;
+ namespace lq = ceph::libfdb::query;
+
+ janitor dbh;
+ const auto prefix = make_key_prefix("range-size");
+ const auto object_root = fdbc::keyspace(test_key("range-size-content")) / "objects";
+
+ for (const auto i : std::views::iota(0, 8)) {
+  lfdb::set(dbh, make_key(i, "range-size"), std::string(1024, 'x'));
+ }
+
+ lfdb::set(dbh, object_root / "a", "alpha");
+ lfdb::set(dbh, object_root / "b", "bravo");
+
+ auto txn = lfdb::make_transaction(dbh);
+ const auto range_estimate = lfdb::approximate_range_size(txn, lq::prefix(prefix));
+ const auto union_estimate =
+  lfdb::approximate_range_size(dbh,
+                               lq::set_union(lq::prefix(prefix),
+                                             fdbc::prefix(object_root)));
+
+ CHECK(0 <= range_estimate);
+ CHECK(0 <= union_estimate);
+ CHECK(0 == lfdb::approximate_range_size(dbh, lfdb::select { prefix, prefix }));
 }
 
 static_assert(not std::default_initializable<lfdb::watch_handle>);
@@ -622,6 +965,18 @@ TEST_CASE("transaction watches", "[rgw][fdb]") {
   watch.cancel();
 
   CHECK_THROWS_AS(watch.wait(), lfdb::libfdb_exception);
+  CHECK(watch.ready());
+ }
+
+ SECTION("throwing stop-token wait preserves cancellation as an exception") {
+  auto watch = lfdb::make_watch(dbh, watch_key);
+  std::stop_source stop;
+
+  REQUIRE_FALSE(watch.ready());
+
+  stop.request_stop();
+
+  CHECK_THROWS_AS(watch.wait(stop.get_token()), lfdb::libfdb_exception);
   CHECK(watch.ready());
  }
 
@@ -1239,13 +1594,13 @@ TEST_CASE("query algebra examples execute against fdb", "[fdb][query][example]")
  }
 }
 
-TEST_CASE("legacy generator names delegate to scan vocabulary", "[fdb]")
+TEST_CASE("compatibility generator names delegate to scan vocabulary", "[fdb]")
 {
  janitor dbh;
 
- const auto kvs_in = write_monotonic_kvs(dbh, 10, "legacy-generator");
- const auto selector = lfdb::select { make_key(0, "legacy-generator"),
-                                      make_key(10, "legacy-generator") };
+ const auto kvs_in = write_monotonic_kvs(dbh, 10, "compat-generator");
+ const auto selector = lfdb::select { make_key(0, "compat-generator"),
+                                      make_key(10, "compat-generator") };
 
  auto txn = lfdb::make_transaction(dbh);
 
@@ -1590,6 +1945,695 @@ TEST_CASE("basic generators", "[fdb]") {
       CHECK(out.contains(make_key(nkeys - 1)));
     }
  }
+
+ SECTION("for_each forward") {
+    std::vector<string_pair> out;
+    auto txn = lfdb::make_transaction(j);
+
+    lfdb::for_each(txn, lfdb::select { make_key(0), make_key(nkeys) },
+                   [&out](string_pair&& row) {
+                     out.emplace_back(std::move(row));
+                   });
+
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
+    REQUIRE(nkeys == out.size());
+
+    if (0 < nkeys) {
+      CHECK(make_key(0) == out.front().first);
+      CHECK(make_key(nkeys - 1) == out.back().first);
+      CHECK(std::ranges::is_sorted(out, std::ranges::less {},
+                                   &std::pair<std::string, std::string>::first));
+    }
+ }
+
+ SECTION("for_each reverse") {
+    std::vector<string_pair> out;
+    auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+    selector.options.reverse_order = true;
+
+    auto txn = lfdb::make_transaction(j);
+    lfdb::for_each(txn, selector, [&out](string_pair&& row) {
+      out.emplace_back(std::move(row));
+    });
+
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
+    REQUIRE(nkeys == out.size());
+
+    if (0 < nkeys) {
+      CHECK(make_key(nkeys - 1) == out.front().first);
+      CHECK(make_key(0) == out.back().first);
+      CHECK(std::ranges::is_sorted(out, std::ranges::greater {},
+                                   &std::pair<std::string, std::string>::first));
+    }
+ }
+
+ SECTION("for_each with database handle") {
+    std::vector<string_pair> out;
+
+    lfdb::for_each(j, lfdb::select { make_key(0), make_key(nkeys) },
+                   [&out](string_pair&& row) {
+                    out.emplace_back(std::move(row));
+                   });
+
+    CAPTURE(nkeys);
+    CAPTURE(out.size());
+    REQUIRE(nkeys == out.size());
+
+    if (0 < nkeys) {
+      CHECK(make_key(0) == out.front().first);
+      CHECK(make_key(nkeys - 1) == out.back().first);
+    }
+ }
+
+ SECTION("transform to output iterator") {
+    std::vector<std::string> keys;
+    auto txn = lfdb::make_transaction(j);
+
+    lfdb::transform(txn, lfdb::select { make_key(0), make_key(nkeys) },
+                    [](string_pair&& row) {
+                     return std::move(row.first);
+                    },
+                    std::back_inserter(keys));
+
+    CAPTURE(nkeys);
+    CAPTURE(keys.size());
+    REQUIRE(nkeys == keys.size());
+
+    if (0 < nkeys) {
+      CHECK(make_key(0) == keys.front());
+      CHECK(make_key(nkeys - 1) == keys.back());
+      CHECK(std::ranges::is_sorted(keys));
+    }
+ }
+
+ SECTION("transform returns vector") {
+    auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+    selector.options.reverse_order = true;
+
+    auto txn = lfdb::make_transaction(j);
+    const auto values = lfdb::transform(txn, selector, [](string_pair&& row) {
+      return std::move(row.second);
+    });
+
+    CAPTURE(nkeys);
+    CAPTURE(values.size());
+    REQUIRE(nkeys == values.size());
+
+    if (0 < nkeys) {
+      CHECK(make_value(nkeys - 1) == values.front());
+      CHECK(make_value(0) == values.back());
+    }
+ }
+
+ SECTION("transform with database handle returns vector") {
+    const auto values = lfdb::transform(j,
+                                        lfdb::select { make_key(0), make_key(nkeys) },
+                                        [](string_pair&& row) {
+                                         return std::move(row.second);
+                                        });
+
+    CAPTURE(nkeys);
+    CAPTURE(values.size());
+    REQUIRE(nkeys == values.size());
+
+    if (0 < nkeys) {
+      CHECK(make_value(0) == values.front());
+      CHECK(make_value(nkeys - 1) == values.back());
+    }
+ }
+
+ SECTION("transform with database handle writes to output iterator") {
+    std::vector<std::string> keys;
+
+    lfdb::transform(j, lfdb::select { make_key(0), make_key(nkeys) },
+                    [](string_pair&& row) {
+                     return std::move(row.first);
+                    },
+                    std::back_inserter(keys));
+
+    CAPTURE(nkeys);
+    CAPTURE(keys.size());
+    REQUIRE(nkeys == keys.size());
+
+    if (0 < nkeys) {
+      CHECK(make_key(0) == keys.front());
+      CHECK(make_key(nkeys - 1) == keys.back());
+    }
+ }
+
+ SECTION("erase_if in explicit transaction") {
+    const auto erase_first = 0 < nkeys;
+    const auto erase_third = 2 < nkeys;
+
+    auto txn = lfdb::make_transaction(j);
+    const auto removed = lfdb::erase_if(txn,
+                                        lfdb::select { make_key(0), make_key(nkeys) },
+                                        [](const string_pair& row) {
+                                         return make_key(0) == row.first ||
+                                                make_key(2) == row.first;
+                                        });
+    REQUIRE(lfdb::commit(txn));
+
+    CHECK(static_cast<std::size_t>(erase_first) +
+          static_cast<std::size_t>(erase_third) == removed);
+
+    const auto remaining = lfdb::collect(j, lfdb::select { make_key(0), make_key(nkeys) });
+
+    if (erase_first) {
+      CHECK_FALSE(contains_key(remaining, make_key(0)));
+    }
+    if (erase_third) {
+      CHECK_FALSE(contains_key(remaining, make_key(2)));
+    }
+    if (1 < nkeys) {
+      CHECK(contains_key(remaining, make_key(1)));
+    }
+ }
+
+ SECTION("erase_if with database handle") {
+    const auto erase_second = 1 < nkeys;
+    const auto erase_fourth = 3 < nkeys;
+
+    const auto removed = lfdb::erase_if(j,
+                                        lfdb::select { make_key(0), make_key(nkeys) },
+                                        [](const string_pair& row) {
+                                         return make_key(1) == row.first ||
+                                                make_key(3) == row.first;
+                                        });
+
+    CHECK(static_cast<std::size_t>(erase_second) +
+          static_cast<std::size_t>(erase_fourth) == removed);
+
+    const auto remaining = lfdb::collect(j, lfdb::select { make_key(0), make_key(nkeys) });
+
+    if (erase_second) {
+      CHECK_FALSE(contains_key(remaining, make_key(1)));
+    }
+    if (erase_fourth) {
+      CHECK_FALSE(contains_key(remaining, make_key(3)));
+    }
+    if (0 < nkeys) {
+      CHECK(contains_key(remaining, make_key(0)));
+    }
+ }
+}
+
+TEST_CASE("paged scan", "[fdb]") {
+ janitor j;
+
+ const unsigned nkeys = 10;
+ const auto kvs_in = write_monotonic_kvs(j, nkeys);
+
+ SECTION("collects one generic range page") {
+  auto source = std::views::iota(0, 6)
+              | std::views::transform([](const auto n) { return n * 2; });
+
+  const auto page = lfdb::collect(source, lfdb::page{3});
+
+  CHECK(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(std::vector{0, 2, 4}));
+ }
+
+ SECTION("collects an unlimited generic range page") {
+  const auto page = lfdb::collect(std::views::iota(0, 3), lfdb::page{});
+
+  CHECK_FALSE(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(std::vector{0, 1, 2}));
+ }
+
+ SECTION("collects one page from a scan range") {
+  auto txn = lfdb::make_transaction(j);
+  auto rows = lfdb::scan(txn, lfdb::select { make_key(0), make_key(nkeys) });
+
+  const auto page = lfdb::collect(std::move(rows), lfdb::page{4});
+
+  CHECK(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(first_keys(kvs_in, 4)));
+ }
+
+ SECTION("scans one page in an explicit transaction") {
+  auto txn = lfdb::make_transaction(j);
+  const auto page = lfdb::scan(txn, lfdb::select { make_key(0), make_key(nkeys) },
+                               lfdb::page{3});
+
+  CHECK(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(first_keys(kvs_in, 3)));
+ }
+
+ SECTION("scans one page in an implicit transaction") {
+  const auto page = lfdb::scan(j, lfdb::select { make_key(0), make_key(nkeys) },
+                               lfdb::page{3});
+
+  CHECK(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(first_keys(kvs_in, 3)));
+ }
+
+ SECTION("scans an unlimited page") {
+  const auto page = lfdb::scan(j, lfdb::select { make_key(0), make_key(nkeys) },
+                               lfdb::page{});
+
+  CHECK_FALSE(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(kvs_in));
+ }
+
+ SECTION("scans a terminal page") {
+  const auto page = lfdb::scan(j, lfdb::select { make_key(0), make_key(2) },
+                               lfdb::page{3});
+
+  CHECK_FALSE(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(first_keys(kvs_in, 2)));
+ }
+
+ SECTION("scans one reverse page") {
+  auto selector = lfdb::select { make_key(0), make_key(nkeys) };
+  selector.options.reverse_order = true;
+
+  const auto page = lfdb::scan(j, selector, lfdb::page{3});
+
+  CHECK(page.has_more);
+  CHECK_THAT(page.rows, Catch::Matchers::RangeEquals(last_keys_reversed(kvs_in, 3)));
+ }
+
+ SECTION("does not decode the forward continuation sentinel") {
+  constexpr auto prefix = "paged-scan-forward-sentinel";
+
+  lfdb::make_transactor(j)([prefix](auto& txn) {
+   for (const auto n : std::views::iota(0, 3)) {
+    lfdb::set(txn, make_key(n, prefix), n);
+   }
+
+   std::span<const std::uint8_t> invalid_value;
+   ceph::libfdb::detail::transaction_set_kv_bytes(
+    txn,
+    ceph::libfdb::detail::as_fdb_span(make_key(3, prefix)),
+    invalid_value);
+  });
+
+  const auto page = lfdb::scan<int>(j, lfdb::select { make_key(0, prefix),
+                                                      make_key(4, prefix) },
+                                    lfdb::page{3});
+
+  CHECK(page.has_more);
+  CHECK(3 == std::size(page));
+ }
+
+ SECTION("does not decode the reverse continuation sentinel") {
+  constexpr auto prefix = "paged-scan-reverse-sentinel";
+
+  lfdb::make_transactor(j)([prefix](auto& txn) {
+   std::span<const std::uint8_t> invalid_value;
+   ceph::libfdb::detail::transaction_set_kv_bytes(
+    txn,
+    ceph::libfdb::detail::as_fdb_span(make_key(0, prefix)),
+    invalid_value);
+
+   for (const auto n : std::views::iota(1, 4)) {
+    lfdb::set(txn, make_key(n, prefix), n);
+   }
+  });
+
+  auto selector = lfdb::select { make_key(0, prefix), make_key(4, prefix) };
+  selector.options.reverse_order = true;
+
+  const auto page = lfdb::scan<int>(j, selector, lfdb::page{3});
+
+  CHECK(page.has_more);
+  CHECK(3 == std::size(page));
+ }
+
+ SECTION("scans an empty page") {
+  const auto page = lfdb::scan(j, lfdb::select { make_key(nkeys), make_key(nkeys + 1) },
+                               lfdb::page{3});
+
+  CHECK(page.empty());
+  CHECK_FALSE(page.has_more);
+ }
+
+ SECTION("rejects a page too large for an FDB range limit") {
+  CHECK_THROWS_AS([] {
+                   (void)lfdb::page{static_cast<uint64_t>(
+                     std::numeric_limits<int>::max())};
+                  }(),
+                  lfdb::libfdb_exception);
+ }
+}
+
+TEST_CASE("snapshot reads do not add read conflicts", "[fdb]") {
+ janitor j;
+
+ SECTION("single-key get") {
+  const auto read_key = make_key(0, "snapshot-single");
+  const auto write_key = make_key(1, "snapshot-single");
+
+  lfdb::set(j, read_key, "old");
+
+  auto serializable_txn = lfdb::make_transaction(j);
+  std::string out;
+  REQUIRE(lfdb::get(serializable_txn, read_key, out));
+  lfdb::set(j, read_key, "new");
+  lfdb::set(serializable_txn, write_key, "side-effect");
+  CHECK_FALSE(lfdb::commit(serializable_txn));
+  CHECK_FALSE(lfdb::key_exists(j, write_key));
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  REQUIRE(lfdb::get(snapshot_txn, read_key, out, lfdb::read_mode::snapshot));
+  lfdb::set(j, read_key, "newer");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("range scan") {
+  constexpr auto prefix = "snapshot-range";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto serializable_txn = lfdb::make_transaction(j);
+  REQUIRE_FALSE(lfdb::collect(serializable_txn, selector).empty());
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(serializable_txn, write_key, "side-effect");
+  CHECK_FALSE(lfdb::commit(serializable_txn));
+  CHECK_FALSE(lfdb::key_exists(j, write_key));
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  REQUIRE_FALSE(lfdb::collect(snapshot_txn, selector, lfdb::read_mode::snapshot).empty());
+  lfdb::set(j, conflict_key, "newer");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("selection get") {
+  constexpr auto prefix = "snapshot-get-selection";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  std::vector<string_pair> out;
+  REQUIRE(1 == lfdb::get(snapshot_txn, selector, out, lfdb::read_mode::snapshot));
+
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("functional helpers") {
+  constexpr auto prefix = "snapshot-functional";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  int visited = 0;
+  lfdb::for_each(snapshot_txn, selector,
+                 [&visited](string_pair&&) {
+                  ++visited;
+                 },
+                 lfdb::read_mode::snapshot);
+  REQUIRE(1 == visited);
+
+  const auto values = lfdb::transform(snapshot_txn, selector,
+                                      [](string_pair&& row) {
+                                       return std::move(row.second);
+                                      },
+                                      lfdb::read_mode::snapshot);
+  REQUIRE_THAT(values, Catch::Matchers::Equals(std::vector<std::string>{ "old" }));
+
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("paginated scan") {
+  constexpr auto prefix = "snapshot-page";
+  const auto conflict_key = make_key(0, prefix);
+  const auto write_key = make_key(99, prefix);
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(2, prefix) };
+
+  lfdb::set(j, conflict_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  const auto page = lfdb::scan(snapshot_txn, selector, lfdb::page{1},
+                              lfdb::read_mode::snapshot);
+  REQUIRE(1 == page.size());
+
+  lfdb::set(j, conflict_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+
+ SECTION("managed block scan accepts snapshot mode") {
+  constexpr auto prefix = "snapshot-blocks";
+  const auto selector = lfdb::select { make_key(0, prefix), make_key(3, prefix) };
+
+  lfdb::set(j, make_key(0, prefix), "zero");
+  lfdb::set(j, make_key(1, prefix), "one");
+
+  std::vector<string_pair> rows;
+  for (const auto& block : lfdb::blocks(j, selector, lfdb::read_mode::snapshot)) {
+   std::ranges::copy(block, std::back_inserter(rows));
+  }
+
+  CHECK(2 == std::size(rows));
+ }
+
+ SECTION("key existence") {
+  const auto read_key = make_key(0, "snapshot-exists");
+  const auto write_key = make_key(1, "snapshot-exists");
+
+  lfdb::set(j, read_key, "old");
+
+  auto snapshot_txn = lfdb::make_transaction(j);
+  REQUIRE(lfdb::key_exists(snapshot_txn, read_key, lfdb::read_mode::snapshot));
+  lfdb::set(j, read_key, "new");
+  lfdb::set(snapshot_txn, write_key, "snapshot-side-effect");
+  CHECK(lfdb::commit(snapshot_txn));
+  CHECK(lfdb::key_exists(j, write_key));
+ }
+}
+
+TEST_CASE("explicit conflict ranges", "[fdb]") {
+ janitor j;
+
+ SECTION("marked read conflict fails after concurrent write") {
+  const auto guard_key = make_key(0, "conflict-read-key");
+  const auto side_effect_key = make_key(1, "conflict-read-key");
+
+  lfdb::set(j, guard_key, "old");
+
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(txn, guard_key);
+
+  lfdb::set(j, guard_key, "new");
+  lfdb::set(txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("marked write conflict invalidates overlapping read transaction") {
+  const auto guard_key = make_key(0, "conflict-write-key");
+  const auto side_effect_key = make_key(1, "conflict-write-key");
+
+  lfdb::set(j, guard_key, "old");
+
+  auto read_txn = lfdb::make_transaction(j);
+  std::string value;
+
+  REQUIRE(lfdb::get(read_txn, guard_key, value));
+
+  auto write_txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_write(write_txn, guard_key);
+  REQUIRE(lfdb::commit(write_txn));
+
+  lfdb::set(read_txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(read_txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("selector and query overloads normalize to conflict ranges") {
+  constexpr auto prefix = "conflict-selector";
+  const auto begin = make_key(0, prefix);
+  const auto middle = make_key(1, prefix);
+  const auto end = make_key(2, prefix);
+  const auto side_effect_key = make_key(99, prefix);
+
+  lfdb::set(j, middle, "old");
+
+  auto selector_txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(selector_txn, lfdb::select { begin, end });
+  lfdb::set(j, middle, "new");
+  lfdb::set(selector_txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(selector_txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+
+  auto query_txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(query_txn, lfdb::query::prefix(make_key_prefix(prefix)));
+  lfdb::set(j, middle, "newer");
+  lfdb::set(query_txn, side_effect_key, "query-side-effect");
+
+  CHECK_FALSE(lfdb::commit(query_txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("content keys can mark exact-key conflicts") {
+  const auto object = content::keyspace(test_namespace_prefix()) / "conflict" / "object";
+  const auto side_effect_key = make_key(0, "conflict-content");
+
+  lfdb::set(j, object, "old");
+
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::mark_conflict_read(txn, object);
+
+  lfdb::set(j, object, "new");
+  lfdb::set(txn, side_effect_key, "side-effect");
+
+  CHECK_FALSE(lfdb::commit(txn));
+  CHECK_FALSE(lfdb::key_exists(j, side_effect_key));
+ }
+
+ SECTION("empty conflict ranges are rejected") {
+  const auto key = make_key(0, "conflict-empty");
+
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK_THROWS_MATCHES(lfdb::mark_conflict_read(txn, lfdb::select { key, key }),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring(
+                         "conflict expression must contain a non-empty range")));
+
+  CHECK_THROWS_MATCHES(lfdb::mark_conflict_write(txn, lfdb::query::prefix(std::string("\xFF", 1))),
+                       std::invalid_argument,
+                       Catch::Matchers::MessageMatches(
+                        Catch::Matchers::ContainsSubstring(
+                         "conflict expression must contain a non-empty range")));
+ }
+}
+
+TEST_CASE("atomic mutations", "[fdb]") {
+ janitor j;
+
+ SECTION("add mutates little-endian integer values") {
+  const auto key = test_key("atomic/add");
+
+  lfdb::atomic::add(j, key, std::uint64_t{5});
+
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::atomic::add(txn, key, std::int64_t{-2});
+  REQUIRE(lfdb::commit(txn));
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(3 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("add does not require a read conflict") {
+  const auto key = test_key("atomic/add/concurrent");
+
+  auto first_txn = lfdb::make_transaction(j);
+  auto second_txn = lfdb::make_transaction(j);
+
+  lfdb::atomic::add(first_txn, key, std::uint64_t{1});
+  lfdb::atomic::add(second_txn, key, std::uint64_t{1});
+
+  CHECK(lfdb::commit(first_txn));
+  CHECK(lfdb::commit(second_txn));
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(2 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("min and max use unsigned little-endian parameters") {
+  const auto key = test_key("atomic/min-max");
+
+  lfdb::atomic::max(j, key, std::uint64_t{10});
+  lfdb::atomic::max(j, key, std::uint64_t{7});
+  lfdb::atomic::max(j, key, std::uint64_t{12});
+  lfdb::atomic::min(j, key, std::uint64_t{20});
+  lfdb::atomic::min(j, key, std::uint64_t{4});
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(4 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("bit operations mutate integer bytes") {
+  const auto key = test_key("atomic/bit");
+
+  lfdb::atomic::bit_or(j, key, std::uint64_t{0x0F});
+  lfdb::atomic::bit_xor(j, key, std::uint64_t{0x03});
+  lfdb::atomic::bit_and(j, key, std::uint64_t{0x0A});
+
+  const auto value = read_raw_fdb_value(j, key);
+
+  REQUIRE(sizeof(std::uint64_t) == std::size(value));
+  CHECK(0x08 == decode_little_endian<std::uint64_t>(value));
+ }
+
+ SECTION("byte operations use lexicographic raw values") {
+  const auto key = test_key("atomic/byte-min-max");
+
+  const auto minimum = std::array<std::uint8_t, 1>{'b'};
+  const auto maximum = std::vector<std::uint8_t>{'c'};
+
+  write_raw_fdb_value(j, key, raw_bytes("m"));
+
+  lfdb::atomic::byte_min(j, key, minimum);
+  CHECK(std::vector<std::uint8_t>{'b'} == read_raw_fdb_value(j, key));
+
+  lfdb::atomic::byte_max(j, key, maximum);
+  CHECK(std::vector<std::uint8_t>{'c'} == read_raw_fdb_value(j, key));
+ }
+
+ SECTION("append_if_fits appends raw bytes") {
+  const auto key = test_key("atomic/append-if-fits");
+
+  write_raw_fdb_value(j, key, raw_bytes("cache"));
+  lfdb::atomic::append_if_fits(j, key, "-block");
+
+  CHECK(std::vector<std::uint8_t>{'c', 'a', 'c', 'h', 'e', '-', 'b', 'l', 'o', 'c', 'k'} ==
+        read_raw_fdb_value(j, key));
+ }
+
+ SECTION("compare_and_clear clears only matching raw bytes") {
+  const auto key = test_key("atomic/compare-and-clear");
+
+  write_raw_fdb_value(j, key, raw_bytes("present"));
+  lfdb::atomic::compare_and_clear(j, key, "missing");
+  CHECK(lfdb::key_exists(j, key));
+
+  lfdb::atomic::compare_and_clear(j, key, "present");
+  CHECK_FALSE(lfdb::key_exists(j, key));
+ }
 }
 
 TEST_CASE("generators honor selector endpoints", "[fdb]") {
@@ -1767,6 +2811,35 @@ SCENARIO("transactor", "[fdb]")
 {
  janitor j;
 
+ SECTION("prepare_replay handles retryable errors") {
+  constexpr fdb_error_t not_committed = 1020;
+  REQUIRE(0 != fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, not_committed));
+
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK(lfdb::prepare_replay(txn, not_committed));
+ }
+
+ SECTION("prepare_replay rejects non-retryable errors") {
+  constexpr fdb_error_t operation_cancelled = 1101;
+  REQUIRE_FALSE(fdb_error_predicate(FDB_ERROR_PREDICATE_RETRYABLE, operation_cancelled));
+
+  auto txn = lfdb::make_transaction(j);
+
+  CHECK_FALSE(lfdb::prepare_replay(txn, 0));
+  CHECK_THROWS_AS(lfdb::prepare_replay(txn, operation_cancelled), lfdb::libfdb_exception);
+ }
+
+ SECTION("successful commit ends ordinary transaction work") {
+  auto txn = lfdb::make_transaction(j);
+
+  lfdb::set(txn, test_key("lifecycle"), "value");
+  REQUIRE(lfdb::commit(txn));
+
+  CHECK(0 < lfdb::committed_version(txn));
+  CHECK_THROWS_AS(lfdb::prepare_replay(txn, 1020), std::invalid_argument);
+ }
+
  SECTION("transaction function returns nothing") {
   auto txr = lfdb::make_transactor(j);
   const auto key = test_key("key");
@@ -1869,7 +2942,8 @@ SCENARIO("options", "[fdb]")
                 { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } },  
                 { { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag } });         
 
-  auto dbh1 = lfdb::create_database("fishing for databass!",             // name
+  auto dbh1 = lfdb::create_database(
+                lfdb::connection_source{std::filesystem::path{"fishing for databass!"}},
                 { { FDB_DB_OPTION_LOCATION_CACHE_SIZE, 200'000 } },      // database options
                 { { FDB_NET_OPTION_TRACE_ENABLE, lfdb::option_flag } }); // network options
  
@@ -1878,9 +2952,12 @@ SCENARIO("options", "[fdb]")
 
  SECTION("create_database()") {
   lfdb::create_database();
-  lfdb::create_database("");
-  lfdb::create_database("", {}, {});
+  lfdb::create_database(lfdb::connection_source{std::filesystem::path{"/dev/null"}});
+  lfdb::create_database(lfdb::connection_source{std::filesystem::path{"/dev/null"}}, {}, {});
   lfdb::create_database(lfdb::database_options {}, lfdb::network_options {});
+
+  CHECK_THROWS_AS(lfdb::connection_source{std::filesystem::path{}}, std::invalid_argument);
+  CHECK_THROWS_AS(lfdb::connection_source{""}, std::invalid_argument);
  }
 
  SECTION("piecemeal construction") {
@@ -1892,7 +2969,7 @@ SCENARIO("options", "[fdb]")
   // The cluster file is in "/etc/foundationdb.fdb.cluster" normally, but we'll point to 
   // nowhere just for fun. The cluster file is the "approved" way to establish a list of
   // addressess, AFAIK, rather than setting the option:
-  lfdb::create_database("/dev/null", {}, netopts);
+  lfdb::create_database(lfdb::connection_source{std::filesystem::path{"/dev/null"}}, {}, netopts);
  }
 }
 

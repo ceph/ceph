@@ -25,6 +25,7 @@
 #include <vector>
 #include <cstdint>
 #include <concepts>
+#include <cstring>
 #include <functional>
 #include <string_view>
 #include <type_traits>
@@ -72,44 +73,87 @@ non-FDB input sources here (or any non-matching user output sources). Do NOT add
 non-owning targets, lest Antevorda be angered!: */
 namespace ceph::libfdb::from {
 
+namespace detail {
+
+template <typename OutputFunction>
+concept output_function =
+ requires(OutputFunction& write_output_fn, const char *data, std::size_t size) {
+  { std::invoke(write_output_fn, data, size) } -> std::same_as<void>;
+};
+
+} // namespace detail
+
 inline void convert(const std::span<const std::uint8_t>& from, versionstamp& to)
 {
  to.store_result(from);
 }
 
-inline void convert(const std::span<const std::uint8_t>& from, auto& to)
+template <typename ToT>
+requires (!std::invocable<ToT&, const char *, std::size_t>)
+inline void convert(const std::span<const std::uint8_t>& from, ToT& to)
 {
  zpp::bits::in zpp_in(from);
  zpp_in(to).or_throw();
 }
 
-template <std::invocable<const char *, size_t> OutputFunction>
+template <typename OutputFunction>
+requires detail::output_function<OutputFunction>
 inline void convert(const std::span<const std::uint8_t>& in, OutputFunction& write_output_fn)
 {
- write_output_fn((const char *)in.data(), in.size());
+ std::invoke(write_output_fn, reinterpret_cast<const char *>(in.data()), in.size());
 }
 
 } // namespace ceph::libfdb::from
 
 namespace ceph::libfdb::detail {
 
+inline std::string decode_zpp_string_value(const std::span<const std::uint8_t> from)
+{
+ constexpr auto size_prefix = sizeof(zpp::bits::default_size_type);
+
+ if (from.size() < size_prefix) {
+  throw ceph::libfdb::libfdb_exception("unable to decode string value");
+ }
+
+ zpp::bits::default_size_type size = 0;
+ std::memcpy(&size, from.data(), size_prefix);
+
+ if (from.size() - size_prefix != size) {
+  throw ceph::libfdb::libfdb_exception("unable to decode string value");
+ }
+
+ const auto data = reinterpret_cast<const char *>(size_prefix + from.data());
+
+ return std::string(data, static_cast<std::string::size_type>(size));
+}
+
 template <typename ValueT>
 inline std::pair<std::string, ValueT> to_decoded_kv_pair(const FDBKeyValue& kv)
 {
  std::pair<std::string, ValueT> r;
 
- r.first.assign((const char *)kv.key, static_cast<std::string::size_type>(kv.key_length));
+ r.first.assign(reinterpret_cast<const char *>(kv.key),
+                static_cast<std::string::size_type>(kv.key_length));
 
- try 
-  {
-     ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
+ try {
+  ceph::libfdb::from::convert(std::span<const std::uint8_t>(kv.value, kv.value_length), r.second);
  }
  catch (const std::system_error& e) {
-     // Decode failures still surface as libfdb operation failures to callers.
-     throw ceph::libfdb::libfdb_exception(e.what());
-  }
+  // Decode failures still surface as libfdb operation failures to callers.
+  throw ceph::libfdb::libfdb_exception(e.what());
+ }
 
  return r;
+}
+
+template <>
+inline std::pair<std::string, std::string> to_decoded_kv_pair<std::string>(const FDBKeyValue& kv)
+{
+ return {
+  std::string(reinterpret_cast<const char *>(kv.key),
+              static_cast<std::string::size_type>(kv.key_length)),
+  decode_zpp_string_value(std::span<const std::uint8_t>(kv.value, kv.value_length))
+ };
 }
 
 } // namespace ceph::libfdb::detail
