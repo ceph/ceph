@@ -3604,8 +3604,20 @@ CDentry* Server::prepare_stray_dentry(const MDRequestRef& mdr, CInode *in)
 
   CDentry *straydn = mdr->straydn;
   if (straydn) {
-    ceph_assert(straydn->get_name() == straydname);
-    return straydn;
+    if (straydn->get_name() == straydname)
+      return straydn;
+
+    /*
+     * The victim inode changed since the stray dentry was prepared
+     * (e.g. a concurrent rename replaced the target inode while this
+     * request was deferred with its locks dropped), so the cached
+     * stray dentry no longer matches this request.  Drop it and
+     * prepare a fresh one for the current victim.
+     */
+    dout(10) << __func__ << ": cached stray dentry " << *straydn
+             << " no longer matches " << *in << dendl;
+    mdr->unpin(straydn);
+    mdr->straydn = nullptr;
   }
   CDir *straydir = mdcache->get_stray_dir(in);
 
