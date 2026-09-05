@@ -276,6 +276,13 @@ target_link_libraries(unittest_rgw_range_projection
   ${UNITTEST_LIBS}
   )
 
+add_executable(unittest_rgw_range_parse test_rgw_range_parse.cc)
+add_ceph_unittest(unittest_rgw_range_parse)
+target_link_libraries(unittest_rgw_range_parse
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  )
+
 if(WITH_RADOSGW_RADOS)
 set(test_rgw_reshard_srcs test_rgw_reshard.cc)
 add_executable(unittest_rgw_reshard

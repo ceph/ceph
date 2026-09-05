@@ -78,6 +78,17 @@
 * RGW: iam:RemoveClientIdFromOIDCProvider is now a recognized action for
   policy, corrected from a typo of iam:RemoveCientIdFromOIDCProvider
 
+* RGW: the Range header field of a GET request is now parsed against the grammar
+  in RFC 9110, so a malformed ranges-specifier is refused instead of being
+  reinterpreted. "Range: bytes=abc-def" used to be served as byte 0 and
+  "Range: bytes=0-100xyz" as bytes 0-100; both now fail with 416 InvalidRange.
+  Set "rgw ignore get invalid range" to "true" to have an invalid range ignored
+  and the whole object returned instead. A range unit is also matched in full,
+  so a header such as "Range: xbytes=0-100" is no longer treated as a byte
+  range; per RFC 9110 an unknown range unit is ignored and the whole object is
+  returned. Well formed byte ranges, including a range-set with several ranges,
+  are unaffected.
+
 * MGR: The default values of ``mon_target_pg_per_osd`` and ``mon_max_pg_per_osd``
   have been increased from 100 and 250 to 200 and 500, respectively. These values
   enhance the PG autoscaler's ability to calculate reasonable ``pg_num`` values
