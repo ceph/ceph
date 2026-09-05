@@ -768,7 +768,7 @@ class User {
     virtual std::unique_ptr<User> clone() = 0;
 
     /** Get the display name for this User */
-    virtual std::string& get_display_name() = 0;
+    virtual const std::string& get_display_name() = 0;
     /** Get the tenant name for this User */
     virtual const std::string& get_tenant() = 0;
     /** Set the tenant name for this User */
@@ -830,7 +830,9 @@ class User {
                             GroupList& listing) = 0;
 
     /* dang temporary; will be removed when User is complete */
-    virtual RGWUserInfo& get_info() = 0;
+    virtual const RGWUserInfo& get_info() const = 0;
+    virtual RGWUserInfo& get_info_mut() = 0;
+    virtual std::shared_ptr<const RGWUserInfo> get_info_shared() = 0;
 
     /** Print the User to @a out */
     virtual void print(std::ostream& out) const = 0;

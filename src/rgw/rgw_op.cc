@@ -5700,22 +5700,25 @@ void RGWPutMetadataAccount::execute(optional_yield y)
     return;
   }
 
+  RGWUserInfo old_info = s->user->get_info();
+  RGWUserInfo& info = s->user->get_info_mut();
+
   /* Handle the TempURL-related stuff. */
   if (!temp_url_keys.empty()) {
     for (auto& pair : temp_url_keys) {
-      s->user->get_info().temp_url_keys[pair.first] = std::move(pair.second);
+      info.temp_url_keys[pair.first] = std::move(pair.second);
     }
   }
 
   /* Handle the quota extracted at the verify_permission step. */
   if (new_quota_extracted) {
-    s->user->get_info().quota.user_quota = std::move(new_quota);
+    info.quota.user_quota = std::move(new_quota);
   }
 
   /* We are passing here the current (old) user info to allow the function
    * optimize-out some operations. */
   s->user->set_attrs(attrs);
-  op_ret = s->user->store_user(this, y, false, &s->user->get_info());
+  op_ret = s->user->store_user(this, y, false, &old_info);
 }
 
 int RGWPutMetadataBucket::verify_permission(optional_yield y)

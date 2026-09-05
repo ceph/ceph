@@ -516,7 +516,7 @@ public:
   virtual std::unique_ptr<User> clone() override {
     return std::make_unique<FilterUser>(*this);
   }
-  virtual std::string& get_display_name() override { return next->get_display_name(); }
+  virtual const std::string& get_display_name() override { return next->get_display_name(); }
   virtual const std::string& get_tenant() override { return next->get_tenant(); }
   virtual void set_tenant(std::string& _t) override { next->set_tenant(_t); }
   virtual const std::string& get_ns() override { return next->get_ns(); }
@@ -554,7 +554,11 @@ public:
                   std::string_view marker, uint32_t max_items,
                   GroupList& listing) override;
 
-  RGWUserInfo& get_info() override { return next->get_info(); }
+  virtual const RGWUserInfo& get_info() const override { return next->get_info(); }
+  virtual RGWUserInfo& get_info_mut() override { return next->get_info_mut(); }
+  virtual std::shared_ptr<const RGWUserInfo> get_info_shared() override {
+    return next->get_info_shared();
+  }
   virtual void print(std::ostream& out) const override { return next->print(out); }
 
   /* Internal to Filters */

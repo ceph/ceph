@@ -283,12 +283,23 @@ int RadosUser::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, u
 
 int RadosUser::load_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-    return store->ctl()->user->get_info_by_uid(dpp, info.user_id, &info, y, RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker).set_attrs(&attrs));
+    std::shared_ptr<const RGWUserInfo> uinfo;
+    int r = store->ctl()->user->get_info_by_uid(dpp, get_info().user_id, uinfo, y,
+        RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker).set_attrs(&attrs));
+    /*
+     * In RGWSI_User_RADOS::read_user_info the decode may be skipped without error, the
+     * returned uinfo is empty then. Before using shared_ptr the this.info was kept in
+     * this case because read_user_info directly worked on it. Keep this behaviour.
+     */
+    if (r >= 0 && !uinfo->user_id.empty()) {
+      set_info_shared(std::move(uinfo));
+    }
+    return r;
 }
 
 int RadosUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool exclusive, RGWUserInfo* old_info)
 {
-    return store->ctl()->user->store_info(dpp, info, y,
+    return store->ctl()->user->store_info(dpp, get_info(), y,
 					  RGWUserCtl::PutParams().set_objv_tracker(&objv_tracker)
 					  .set_exclusive(exclusive)
 					  .set_attrs(&attrs)
@@ -297,7 +308,7 @@ int RadosUser::store_user(const DoutPrefixProvider* dpp, optional_yield y, bool 
 
 int RadosUser::remove_user(const DoutPrefixProvider* dpp, optional_yield y)
 {
-    return store->ctl()->user->remove_info(dpp, info, y,
+    return store->ctl()->user->remove_info(dpp, get_info(), y,
 					  RGWUserCtl::RemoveParams().set_objv_tracker(&objv_tracker));
 }
 
@@ -315,6 +326,7 @@ int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
   string& serial = params[0];
   string& pin = params[1];
 
+  const auto& info = get_info();
   auto i = info.mfa_ids.find(serial);
   if (i == info.mfa_ids.end()) {
     ldpp_dout(dpp, 5) << "NOTICE: user does not have mfa device with serial=" << serial << dendl;
@@ -339,7 +351,7 @@ int RadosUser::list_groups(const DoutPrefixProvider* dpp, optional_yield y,
   RGWSI_SysObj& sysobj = *store->svc()->sysobj;
   const RGWZoneParams& zone = store->svc()->zone->get_zone_params();
 
-  const auto& ids = info.group_ids;
+  const auto& ids = get_info().group_ids;
   for (auto id = ids.lower_bound(marker); id != ids.end(); ++id) {
     if (listing.groups.size() >= max_items) {
       listing.next_marker = *id;
@@ -1637,22 +1649,18 @@ std::string RadosStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_
 
 int RadosStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user)
 {
-  RGWUserInfo uinfo;
-  User* u;
+  std::shared_ptr<const RGWUserInfo> uinfo;
   RGWObjVersionTracker objv_tracker;
   Attrs attrs;
 
   int r = ctl()->user->get_info_by_access_key(
-      dpp, key, &uinfo, y,
+      dpp, key, uinfo, y,
       RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker)
                              .set_attrs(&attrs));
   if (r < 0)
     return r;
 
-  u = new RadosUser(this, uinfo);
-  if (!u)
-    return -ENOMEM;
-
+  User* u = new RadosUser(this, std::move(uinfo));
   u->get_version_tracker() = objv_tracker;
   u->get_attrs() = std::move(attrs);
 
@@ -1662,22 +1670,18 @@ int RadosStore::get_user_by_access_key(const DoutPrefixProvider* dpp, const std:
 
 int RadosStore::get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user)
 {
-  RGWUserInfo uinfo;
-  User* u;
+  std::shared_ptr<const RGWUserInfo> uinfo;
   RGWObjVersionTracker objv_tracker;
   Attrs attrs;
 
   int r = ctl()->user->get_info_by_email(
-      dpp, email, &uinfo, y,
+      dpp, email, uinfo, y,
       RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker)
                              .set_attrs(&attrs));
   if (r < 0)
     return r;
 
-  u = new RadosUser(this, uinfo);
-  if (!u)
-    return -ENOMEM;
-
+  User* u = new RadosUser(this, std::move(uinfo));
   u->get_version_tracker() = objv_tracker;
   u->get_attrs() = std::move(attrs);
 
@@ -1687,22 +1691,18 @@ int RadosStore::get_user_by_email(const DoutPrefixProvider* dpp, const std::stri
 
 int RadosStore::get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user)
 {
-  RGWUserInfo uinfo;
-  User* u;
+  std::shared_ptr<const RGWUserInfo> uinfo;
   RGWObjVersionTracker objv_tracker;
   Attrs attrs;
 
   int r = ctl()->user->get_info_by_swift(
-      dpp, user_str, &uinfo, y,
+      dpp, user_str, uinfo, y,
       RGWUserCtl::GetParams().set_objv_tracker(&objv_tracker)
                              .set_attrs(&attrs));
   if (r < 0)
     return r;
 
-  u = new RadosUser(this, uinfo);
-  if (!u)
-    return -ENOMEM;
-
+  User* u = new RadosUser(this, std::move(uinfo));
   u->get_version_tracker() = objv_tracker;
   u->get_attrs() = std::move(attrs);
 
@@ -1973,15 +1973,15 @@ int RadosStore::list_account_users(const DoutPrefixProvider* dpp,
     uid.tenant = tenant;
     uid.id = std::move(id);
 
-    RGWUserInfo info;
-    r = ctl()->user->get_info_by_uid(dpp, uid, &info, y);
+    std::shared_ptr<const RGWUserInfo> info;
+    r = ctl()->user->get_info_by_uid(dpp, uid, info, y);
     if (r == -ENOENT) {
       continue;
     }
     if (r < 0) {
       return r;
     }
-    listing.users.push_back(std::move(info));
+    listing.users.push_back(*info);
   }
 
   return 0;
@@ -2068,15 +2068,15 @@ int RadosStore::list_group_users(const DoutPrefixProvider* dpp,
     uid.tenant = tenant;
     uid.id = std::move(id);
 
-    RGWUserInfo info;
-    r = ctl()->user->get_info_by_uid(dpp, uid, &info, y);
+    std::shared_ptr<const RGWUserInfo> info;
+    r = ctl()->user->get_info_by_uid(dpp, uid, info, y);
     if (r == -ENOENT) {
       continue;
     }
     if (r < 0) {
       return r;
     }
-    listing.users.push_back(std::move(info));
+    listing.users.push_back(*info);
   }
 
   return 0;
