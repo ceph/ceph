@@ -1981,7 +1981,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  iobuf_options: Optional[Dict[str, int]] = None,
                  qos_timeslice_in_usecs: Optional[int] = 0,
                  notifications_interval: Optional[int] = 60,
-                 cnc_enable: bool = True,
+                 cnc_enable: bool = False,
                  cnc_rate_limiter_bytes: Optional[int] = 100000000,
                  cnc_chunk_blocks: Optional[int] = 512,
                  cnc_parallel_chunks: Optional[int] = 8,
