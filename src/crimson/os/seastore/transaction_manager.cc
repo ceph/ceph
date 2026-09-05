@@ -251,9 +251,16 @@ TransactionManager::ref_ret TransactionManager::remove(
   co_await lba_manager->update_mapping_refcount(
     t, std::move(cursor), -1);
   if (refcount == 0) {
+    LogicalChildNodeRef shadow;
+    if (ref->is_mutation_pending()) {
+      auto &prior = static_cast<LogicalChildNode&>(*ref->get_prior_instance());
+      shadow = prior.get_shadow();
+    } else {
+      shadow = ref->get_shadow();
+    }
     cache->retire_extent(t, ref);
     if (shadow_addr != P_ADDR_NULL) {
-      if (auto shadow = ref->get_shadow(); shadow) {
+      if (shadow) {
         cache->retire_extent(t, shadow);
       } else {
         auto laddr = ref->get_laddr();
@@ -333,9 +340,17 @@ TransactionManager::_remove(
 	LogicalChildNode
 	>();
       ceph_assert(extent);
+      LogicalChildNodeRef shadow;
+      if (extent->is_mutation_pending()) {
+        auto &prior = static_cast<LogicalChildNode&>(
+          *extent->get_prior_instance());
+        shadow = prior.get_shadow();
+      } else {
+        shadow = extent->get_shadow();
+      }
       cache->retire_extent(t, extent);
       if (mapping.has_shadow_val()) {
-        if (auto shadow = extent->get_shadow(); shadow) {
+        if (shadow) {
           cache->retire_extent(t, shadow);
         } else {
           auto laddr = mapping.get_intermediate_base();
@@ -585,6 +600,7 @@ TransactionManager::relocate_shadow_extent(
   auto v = get_extent_if_linked(t, *mapping.direct_cursor);
   LogicalChildNodeRef extent;
   auto laddr = mapping.get_intermediate_base();
+  LogicalChildNodeRef shadow;
   if (!v.has_child()) {
     auto &child_pos = v.get_child_pos();
     extent = cache->retire_absent_extent_addr_by_type(
@@ -604,14 +620,16 @@ TransactionManager::relocate_shadow_extent(
     )->template cast<LogicalChildNode>();
   } else {
     extent = co_await std::move(v.get_child_fut());
+    ceph_assert(extent->is_stable());
     if (extent->is_stable_dirty()) {
       // the extent is dirty, skip it.
       DEBUGT("skipping dirty extent: {}", t, *extent);
       co_return LogicalChildNodeRef();
     }
+    shadow = extent->get_shadow();
     cache->retire_extent(t, extent);
   }
-  if (auto shadow = extent->get_shadow(); shadow) {
+  if (shadow) {
     cache->retire_extent(t, shadow);
   } else {
     auto shadow_paddr = mapping.get_shadow_val();
