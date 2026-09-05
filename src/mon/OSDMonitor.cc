@@ -8441,6 +8441,26 @@ int OSDMonitor::prepare_new_pool(string& name,
   if (-1 == pending_inc.new_pool_max)
     pending_inc.new_pool_max = osdmap.pool_max;
   int64_t pool = ++pending_inc.new_pool_max;
+  // RAII helper to automatically rollback the new pool entry and ID if we return
+  // after this point with an error.
+  // The success path calls the guard's commit function.
+  struct PoolAbortGuard {
+    PoolAbortGuard(OSDMap::Incremental &inc, int64_t pool_id)
+      : inc(inc), pool_id(pool_id) {}
+    PoolAbortGuard(const PoolAbortGuard&) = delete; // prevent copying
+    PoolAbortGuard& operator=(const PoolAbortGuard&) = delete; // prevent assignment
+    void commit() { committed = true; }
+    ~PoolAbortGuard() {
+      if (!committed) {
+        inc.new_pools.erase(pool_id);
+        --inc.new_pool_max;
+      }
+    }
+    private:
+      OSDMap::Incremental &inc;
+      int64_t pool_id;
+      bool committed = false;
+  } abort_guard(pending_inc, pool);
   pg_pool_t empty;
   pg_pool_t *pi = pending_inc.get_new_pool(pool, &empty);
   pi->create_time = ceph_clock_now();
@@ -8587,6 +8607,7 @@ int OSDMonitor::prepare_new_pool(string& name,
   }
 
   pending_inc.new_pool_names[pool] = name;
+  abort_guard.commit();
   return 0;
 }
 
