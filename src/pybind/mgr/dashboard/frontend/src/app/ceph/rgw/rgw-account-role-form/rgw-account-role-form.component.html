@@ -211,6 +211,75 @@
             }
           </ng-template>
         </div>
+
+        <!-- Optional Permission Policy -->
+        <div class="form-item cds-mt-4">
+          <legend
+            class="cds--label cds--type-label-01"
+            i18n
+          >
+            Permission policy (optional)
+          </legend>
+          <p
+            class="cds--type-body-compact-01 cds-mb-3"
+            i18n
+          >
+            Optionally attach an inline permission policy to grant access to resources on creation.
+          </p>
+
+          <!-- Permission Policy Name -->
+          <div class="form-item">
+            <cds-text-label
+              label="Policy name"
+              for="perm_policy_name"
+              helperText="Unique name for the inline permission policy."
+              i18n-helperText
+            >
+              Policy name
+              <input
+                cdsText
+                type="text"
+                id="perm_policy_name"
+                name="perm_policy_name"
+                formControlName="perm_policy_name"
+                placeholder="Enter policy name (e.g. S3FullAccessPolicy)"
+              />
+            </cds-text-label>
+          </div>
+
+          <!-- Permission Policy Document -->
+          <div class="form-item">
+            <cds-textarea-label
+              labelInputID="perm_policy_doc"
+              [invalid]="permPolicyDoc.isInvalid"
+              [invalidText]="permPolicyDocError"
+              helperText="Defines actions allowed or denied on resources. Enter a valid JSON policy document."
+              i18n-helperText
+            >
+              Policy document
+              <textarea
+                cdsTextArea
+                cdValidate
+                #permPolicyDoc="cdValidate"
+                id="perm_policy_doc"
+                name="perm_policy_doc"
+                formControlName="perm_policy_doc"
+                placeholder="Enter a JSON permission policy document"
+                rows="6"
+                cols="200"
+              ></textarea>
+            </cds-textarea-label>
+            <ng-template #permPolicyDocError>
+              @if (form.showError('perm_policy_doc', formDir, 'json')) {
+                <span
+                  class="invalid-feedback"
+                  i18n
+                  >Must be a valid JSON.</span
+                >
+              }
+            </ng-template>
+          </div>
+        </div>
       }
 
       <!-- Maximum Session Duration (Edit only) -->
