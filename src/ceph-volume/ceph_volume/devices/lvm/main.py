@@ -10,6 +10,7 @@ from . import listing
 from . import zap
 from . import batch
 from . import migrate
+from . import rotate_dmcrypt
 from typing import List, Optional
 
 
@@ -35,6 +36,7 @@ class LVM:
         'migrate': migrate.Migrate,
         'new-wal': migrate.NewWAL,
         'new-db': migrate.NewDB,
+        'rotate-dmcrypt-key': rotate_dmcrypt.RotateDmcryptKey,
     }
 
     def __init__(self, argv: Optional[List[str]]) -> None:

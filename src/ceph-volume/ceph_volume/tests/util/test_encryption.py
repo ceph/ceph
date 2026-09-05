@@ -390,3 +390,288 @@ class TestCephLuks2:
     @patch.object(encryption.CephLuks2, 'get_json_area', Mock(return_value={"whatever": "fake-value"}))
     def test_is_tpm2_enrolled_false_not_enrolled_with_tpm2(self) -> None:
         assert not encryption.CephLuks2('/dev/foo').is_tpm2_enrolled
+
+
+LUKS1_DUMP = """LUKS header information for /dev/foo
+
+Version:       \t1
+Cipher name:   \taes
+Cipher mode:   \txts-plain64
+Hash spec:     \tsha256
+Payload offset:\t4096
+MK bits:       \t512
+Key Slot 0: ENABLED
+\tIterations:         \t1798537
+\tSalt:               \tde ad be ef
+Key Slot 1: ENABLED
+\tIterations:         \t1798537
+Key Slot 2: DISABLED
+Key Slot 3: DISABLED
+Key Slot 4: DISABLED
+Key Slot 5: DISABLED
+Key Slot 6: DISABLED
+Key Slot 7: DISABLED
+""".split('\n')
+
+LUKS2_DUMP = """LUKS header information
+Version:       \t2
+Epoch:         \t4
+Metadata area: \t16384 [bytes]
+Keyslots area: \t16744448 [bytes]
+UUID:          \tsomething
+Label:         \t(no label)
+Subsystem:     \tceph_fsid=aaaa
+Flags:         \t(no flags)
+
+Data segments:
+  0: crypt
+\toffset: 16777216 [bytes]
+
+Keyslots:
+  0: luks2
+\tKey:        512 bits
+\tPriority:   normal
+\tCipher:     aes-xts-plain64
+  1: luks2
+\tKey:        512 bits
+
+Tokens:
+Digests:
+  0: pbkdf2
+\tHash:       sha256
+""".split('\n')
+
+
+class TestLuksAddKey(object):
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_add_key_command_with_slot(self):
+        encryption.luks_add_key('oldkey', 'newkey', '/dev/foo', slot=1)
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--force-password',
+            '--key-slot', '1',
+            'luksAddKey',
+            '/dev/foo',
+        ]
+        assert encryption.process.call.call_args[0][0] == expected
+        assert encryption.process.call.call_args[1]['stdin'] == 'oldkey\nnewkey\n'
+        assert encryption.process.call.call_args[1]['logfile_verbose'] is False
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_add_key_command_without_slot(self):
+        encryption.luks_add_key('oldkey', 'newkey', '/dev/foo')
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--force-password',
+            'luksAddKey',
+            '/dev/foo',
+        ]
+        assert encryption.process.call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_add_key_never_passes_keys_on_argv(self):
+        encryption.luks_add_key('oldkey', 'newkey', '/dev/foo', slot=0)
+        argv = encryption.process.call.call_args[0][0]
+        assert 'oldkey' not in argv
+        assert 'newkey' not in argv
+        assert '--key-file' not in argv
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], ['boom'], 1)))
+    def test_add_key_failure_raises(self):
+        with pytest.raises(RuntimeError):
+            encryption.luks_add_key('oldkey', 'newkey', '/dev/foo', slot=0)
+
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_add_key_rejects_keys_with_newlines(self, m_call):
+        with pytest.raises(RuntimeError):
+            encryption.luks_add_key('old\nkey', 'newkey', '/dev/foo')
+        with pytest.raises(RuntimeError):
+            encryption.luks_add_key('oldkey', 'new\nkey', '/dev/foo')
+        m_call.assert_not_called()
+
+
+class TestLuksKillSlot(object):
+    @patch('ceph_volume.util.encryption.get_luks_keyslots',
+           Mock(return_value={'version': 2, 'slots': [0, 1]}))
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_kill_slot_command(self):
+        encryption.luks_kill_slot('authkey', '/dev/foo', 1)
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--key-file', '-',
+            'luksKillSlot',
+            '/dev/foo',
+            '1',
+        ]
+        assert encryption.process.call.call_args[0][0] == expected
+        assert encryption.process.call.call_args[1]['stdin'] == 'authkey'
+
+    @patch('ceph_volume.util.encryption.get_luks_keyslots',
+           Mock(return_value={'version': 2, 'slots': [0]}))
+    @patch('ceph_volume.util.encryption.process.call')
+    def test_inactive_slot_is_not_killed(self, m_call):
+        # cryptsetup is never invoked, so its translated "Keyslot N is not
+        # active" message cannot break a rotation on a localized host
+        encryption.luks_kill_slot('authkey', '/dev/foo', 1)
+        m_call.assert_not_called()
+
+    @patch('ceph_volume.util.encryption.get_luks_keyslots',
+           Mock(return_value={'version': 2, 'slots': [0, 1]}))
+    @patch('ceph_volume.util.encryption.process.call',
+           Mock(return_value=([], ['No key available with this passphrase.'], 1)))
+    def test_kill_slot_raises_on_other_errors(self):
+        with pytest.raises(RuntimeError):
+            encryption.luks_kill_slot('authkey', '/dev/foo', 1)
+
+
+class TestLuksTestPassphrase(object):
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_passphrase_valid(self):
+        assert encryption.luks_test_passphrase('key', '/dev/foo') is True
+        expected = [
+            'cryptsetup',
+            '--batch-mode',
+            '--key-file', '-',
+            '--test-passphrase',
+            'luksOpen',
+            '/dev/foo',
+        ]
+        assert encryption.process.call.call_args[0][0] == expected
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 2)))
+    def test_passphrase_invalid(self):
+        assert encryption.luks_test_passphrase('key', '/dev/foo') is False
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_passphrase_slot_restriction(self):
+        encryption.luks_test_passphrase('key', '/dev/foo', slot=1)
+        assert '--key-slot' in encryption.process.call.call_args[0][0]
+        assert '1' in encryption.process.call.call_args[0][0]
+
+
+class TestGetLuksKeyslots(object):
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=(LUKS1_DUMP, [], 0)))
+    def test_luks1_dump(self):
+        assert encryption.get_luks_keyslots('/dev/foo') == {'version': 1, 'slots': [0, 1]}
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=(LUKS2_DUMP, [], 0)))
+    def test_luks2_dump(self):
+        assert encryption.get_luks_keyslots('/dev/foo') == {'version': 2, 'slots': [0, 1]}
+
+    @patch('ceph_volume.util.encryption.process.call',
+           Mock(return_value=([], ['Device /dev/foo is not a valid LUKS device.'], 1)))
+    def test_not_a_luks_device(self):
+        with pytest.raises(RuntimeError):
+            encryption.get_luks_keyslots('/dev/foo')
+
+
+class TestSetDmcryptKey(object):
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_set_command_defaults_to_lockbox(self, conf_ceph_stub, monkeypatch):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        monkeypatch.setattr(encryption.conf, 'cluster', 'ceph')
+        encryption.set_dmcrypt_key('0', 'abcd', 'newkey')
+        expected = [
+            'ceph',
+            '--cluster', 'ceph',
+            '--name', 'client.osd-lockbox.abcd',
+            '--keyring', '/var/lib/ceph/osd/ceph-0/lockbox.keyring',
+            'config-key',
+            'set',
+            'dm-crypt/osd/abcd/luks',
+            '-i', '-',
+        ]
+        assert encryption.process.call.call_args[0][0] == expected
+        assert encryption.process.call.call_args[1]['stdin'] == 'newkey'
+        assert encryption.process.call.call_args[1]['logfile_verbose'] is False
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_set_command_custom_credentials(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        encryption.set_dmcrypt_key('0', 'abcd', 'newkey',
+                                   lockbox_keyring='/etc/ceph/ceph.client.admin.keyring',
+                                   name='client.admin')
+        args = encryption.process.call.call_args[0][0]
+        assert '--name' in args and 'client.admin' in args
+        assert '/etc/ceph/ceph.client.admin.keyring' in args
+
+    @patch('ceph_volume.util.encryption.process.call',
+           Mock(return_value=([], ['Error EACCES: access denied'], 13)))
+    def test_set_access_denied_hint(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        with pytest.raises(RuntimeError) as error:
+            encryption.set_dmcrypt_key('0', 'abcd', 'newkey')
+        assert 'config-key set' in str(error.value)
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], ['boom'], 1)))
+    def test_set_other_failure(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        with pytest.raises(RuntimeError):
+            encryption.set_dmcrypt_key('0', 'abcd', 'newkey')
+
+
+class TestWriteLockboxKeyringForce(object):
+    @patch('ceph_volume.util.encryption.write_keyring')
+    @patch('ceph_volume.util.encryption.os.path.exists', Mock(return_value=True))
+    def test_existing_keyring_skipped_without_force(self, m_write_keyring):
+        encryption.write_lockbox_keyring('0', 'abcd', 'secret')
+        m_write_keyring.assert_not_called()
+
+    @patch('ceph_volume.util.encryption.write_keyring')
+    @patch('ceph_volume.util.encryption.os.unlink')
+    @patch('ceph_volume.util.encryption.os.path.exists', Mock(return_value=True))
+    def test_existing_keyring_overwritten_with_force(self, m_unlink, m_write_keyring):
+        encryption.write_lockbox_keyring('0', 'abcd', 'secret', force=True)
+        m_unlink.assert_called_once()
+        m_write_keyring.assert_called_with('0', 'secret',
+                                           keyring_name='lockbox.keyring',
+                                           name='client.osd-lockbox.abcd')
+
+
+class TestGetDmcryptKeyName(object):
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=(['sekrit'], [], 0)))
+    def test_custom_name_is_used(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        result = encryption.get_dmcrypt_key('0', 'abcd', name='client.admin')
+        args = encryption.process.call.call_args[0][0]
+        assert 'client.admin' in args
+        assert result == 'sekrit'
+
+
+class TestDmcryptKeyTimeouts(object):
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=(['sekrit'], [], 0)))
+    def test_get_without_timeout_by_default(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        encryption.get_dmcrypt_key('0', 'abcd')
+        assert encryption.process.call.call_args[1]['timeout'] is None
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=(['sekrit'], [], 0)))
+    def test_get_forwards_call_timeout(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        encryption.get_dmcrypt_key('0', 'abcd', call_timeout=120)
+        assert encryption.process.call.call_args[1]['timeout'] == 120
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], -9)))
+    def test_get_killed_by_call_timeout_message(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        with pytest.raises(RuntimeError) as error:
+            encryption.get_dmcrypt_key('0', 'abcd', call_timeout=120)
+        assert 'timed out after 120s' in str(error.value)
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], 0)))
+    def test_set_forwards_call_timeout(self, conf_ceph_stub, monkeypatch):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        monkeypatch.setattr(encryption.conf, 'cluster', 'ceph')
+        encryption.set_dmcrypt_key('0', 'abcd', 'newkey', call_timeout=120)
+        assert encryption.process.call.call_args[1]['timeout'] == 120
+
+    @patch('ceph_volume.util.encryption.process.call', Mock(return_value=([], [], -9)))
+    def test_set_killed_by_call_timeout_message(self, conf_ceph_stub, monkeypatch):
+        conf_ceph_stub('[global]\nfsid=abcd')
+        monkeypatch.setattr(encryption.conf, 'cluster', 'ceph')
+        with pytest.raises(RuntimeError) as error:
+            encryption.set_dmcrypt_key('0', 'abcd', 'newkey', call_timeout=120)
+        assert 'timed out after 120s' in str(error.value)
