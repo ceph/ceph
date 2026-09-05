@@ -495,11 +495,9 @@ class NvmeofCLICommand(DBCLICommand):
             return None
 
     def _check_required_params(self, cmd_dict: Dict[str, Any]) -> Optional[str]:
-        for index, name in enumerate(self.arg_spec):
-            if name in self.KNOWN_ARGS:
+        for name in self.arg_spec:
+            if name in self.KNOWN_ARGS or name in self.defaulted_args:
                 continue
-            if index >= self.first_default:
-                break
             if cmd_dict.get(name) is None:
                 return f"missing required parameter: --{name}"
         return None
