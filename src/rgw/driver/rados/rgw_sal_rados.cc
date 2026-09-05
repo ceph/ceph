@@ -3830,7 +3830,12 @@ int RadosObject::copy_object(const ACLOwner& owner,
 
 int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end, RGWGetDataCB* cb, optional_yield y)
 {
-  return parent_op.iterate(dpp, ofs, end, cb, y);
+  parent_op.params.rdma_token = params.rdma_token;
+  parent_op.params.rdma_bytes = params.rdma_bytes;
+  parent_op.params.rdma_crc64 = params.rdma_crc64;
+  int r = parent_op.iterate(dpp, ofs, end, cb, y);
+  params.rdma_submitted = parent_op.params.rdma_submitted;
+  return r;
 }
 
 int RadosObject::swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,

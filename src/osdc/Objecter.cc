@@ -3601,6 +3601,15 @@ Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
      m->otel_trace = jspan_context(*op->otel_trace);
   }
 
+  if (op->rdma_delivery &&
+      osdmap->require_osd_release >= ceph_release_t::umbrella) {
+    // advisory out-of-band delivery: never emit the descriptor to a
+    // cluster that may not decode it (an unknown-version MOSDOp is
+    // garbage-decoded by old OSDs). When the gate fails the data
+    // simply returns inline, which is always correct.
+    m->set_rdma_delivery(*op->rdma_delivery);
+  }
+
   logger->inc(l_osdc_op_send);
   ssize_t sum = 0;
   for (unsigned i = 0; i < m->ops.size(); i++) {
@@ -3981,6 +3990,20 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     ldout(cct, 0) << "WARNING: tid " << op->tid << " reply ops " << out_ops
 		  << " != request ops " << op->ops
 		  << " from " << m->get_source_inst() << dendl;
+
+  if (op->rdma_oob_result) {
+    // at most one data op goes out of band per operation, so at most
+    // one entry carries a crc; bytes sum across entries regardless
+    ceph::rdma::oob_result_t res;
+    for (const auto& r : m->get_oob_results()) {
+      res.bytes += r.bytes;
+      if (r.flags & ceph::rdma::oob_result_t::FLAG_CRC64NVME) {
+	res.crc64 = r.crc64;
+	res.flags |= ceph::rdma::oob_result_t::FLAG_CRC64NVME;
+      }
+    }
+    *op->rdma_oob_result = res;
+  }
 
   bs::error_code handler_error = process_op_reply_handlers(op, out_ops);
 

@@ -48,6 +48,7 @@
 
 #include "common/admin_socket.h"
 #include "common/ceph_time.h"
+#include "common/rdma_token.h"
 #include "common/ceph_mutex.h"
 #include "common/ceph_timer.h"
 #include "common/config_obs.h"
@@ -102,6 +103,15 @@ struct ObjectOperation {
   boost::container::small_vector<boost::system::error_code*,
 				 osdc_opvec_len> out_ec;
 
+  /// advisory out-of-band delivery descriptor, carried on the MOSDOp
+  /// (see common/rdma_token.h): an OSD that can honor it RDMA-writes
+  /// read data straight into the client window and returns only byte
+  /// counts (plus, on request, a CRC64-NVME of the delivered bytes);
+  /// any other OSD returns the data inline as usual
+  std::optional<ceph::rdma::delivery_t> rdma_delivery;
+  /// out: aggregated out-of-band delivery result (bytes 0 = all inline)
+  ceph::rdma::oob_result_t* rdma_oob_result = nullptr;
+
   ObjectOperation() = default;
   ObjectOperation(const ObjectOperation&) = delete;
   ObjectOperation& operator =(const ObjectOperation&) = delete;
@@ -121,6 +131,16 @@ struct ObjectOperation {
     out_handler.clear();
     out_rval.clear();
     out_ec.clear();
+    rdma_delivery.reset();
+    rdma_oob_result = nullptr;
+  }
+
+  void set_rdma_delivery(std::string_view token, uint64_t base_offset,
+			 uint32_t lease_ms, uint32_t flags,
+			 ceph::rdma::oob_result_t* result) {
+    rdma_delivery = ceph::rdma::delivery_t{std::string(token), base_offset,
+					   lease_ms, flags};
+    rdma_oob_result = result;
   }
 
   void set_last_op_flags(int flags) {
@@ -2059,6 +2079,12 @@ public:
 
     int *data_offset;
 
+    /// advisory out-of-band delivery; re-stamped onto every MOSDOp
+    /// this Op sends (resends included, where the OSD-side retry
+    /// refusal keeps the descriptor inert)
+    std::optional<ceph::rdma::delivery_t> rdma_delivery;
+    ceph::rdma::oob_result_t* rdma_oob_result = nullptr;
+
     osd_reqid_t reqid; // explicitly setting reqid
     ZTracer::Trace trace;
     std::uint64_t subsystem = 0;
@@ -3153,6 +3179,8 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery = std::move(op.rdma_delivery);
+    o->rdma_oob_result = op.rdma_oob_result;
     op.clear();
     return o;
   }
@@ -3192,6 +3220,8 @@ public:
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
     o->out_ec.swap(op.out_ec);
+    o->rdma_delivery = std::move(op.rdma_delivery);
+    o->rdma_oob_result = op.rdma_oob_result;
     if (features)
       o->features = features;
     op.clear();

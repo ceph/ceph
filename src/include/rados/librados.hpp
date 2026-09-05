@@ -602,6 +602,32 @@ inline namespace v14_2_0 {
     void getxattr(const char *name, bufferlist *pbl, int *prval);
     void getxattrs(std::map<std::string, bufferlist> *pattrs, int *prval);
     void read(size_t off, uint64_t len, bufferlist *pbl, int *prval);
+    /**
+     * Request out-of-band delivery for this operation's read data: an
+     * OSD that can honor it RDMA-writes the data into the client
+     * memory window identified by the opaque RDMA descriptor token,
+     * at the token's base address plus base_offset, and reports only
+     * byte counts through *result. The request is advisory - an OSD
+     * that cannot or will not push (no RDMA support, expired lease,
+     * retransmitted op) returns the data inline as usual with
+     * result->bytes = 0, so degradation is always plain in-band data.
+     * lease_ms bounds how long after op receipt the OSD may still
+     * start an RDMA write (0 = no bound). Passing
+     * RDMA_DELIVERY_WANT_CRC64 in flags asks the OSD to also report
+     * the canonical CRC-64/NVME of the delivered bytes; it is valid
+     * only when result->flags has RDMA_DELIVERY_CRC64_VALID set (best
+     * effort - older OSDs and non-linear placements omit it).
+     */
+    struct rdma_delivery_result {
+      uint64_t bytes = 0;   ///< bytes delivered out of band
+      uint64_t crc64 = 0;   ///< canonical CRC-64/NVME of those bytes
+      uint32_t flags = 0;   ///< RDMA_DELIVERY_CRC64_VALID when crc64 is set
+    };
+    static constexpr uint32_t RDMA_DELIVERY_WANT_CRC64 = 1;  // request flag
+    static constexpr uint32_t RDMA_DELIVERY_CRC64_VALID = 1; // result flag
+    void set_rdma_delivery(const std::string& token, uint64_t base_offset,
+			   uint32_t lease_ms, uint32_t flags,
+			   rdma_delivery_result *result);
     void checksum(rados_checksum_type_t type, const bufferlist &init_value_bl,
 		  uint64_t off, size_t len, size_t chunk_size, bufferlist *pbl,
 		  int *prval);

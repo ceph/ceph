@@ -1316,6 +1316,19 @@ protected:
   int prepare_transaction(OpContext *ctx);
   std::list<std::pair<OpRequestRef, OpContext*> > in_progress_async_reads;
   void complete_read_ctx(int result, OpContext *ctx);
+#ifdef WITH_OSD_CUOBJ
+  /**
+   * Try to deliver the read reply's data out of band per the MOSDOp's
+   * rdma delivery descriptor: builds an op-aware placement plan
+   * (linear, sparse-extent or EC-direct interleave) and executes it
+   * through the cuObject service. On success strips the delivered
+   * op's outdata from rops and records the pushed byte count in oob;
+   * on any refusal or failure leaves rops untouched so the reply
+   * carries the data inline. Returns true iff anything was pushed.
+   */
+  bool deliver_oob(OpContext *ctx, std::vector<OSDOp>& rops,
+		   std::vector<ceph::rdma::oob_result_t>& oob);
+#endif
 
   // pg on-disk content
   void check_local() override;

@@ -1700,3 +1700,76 @@ options:
   level: dev
   default: true
   with_legacy: true
+# cuObject RDMA (READ_RDMA pushdown) options
+- name: osd_cuobj_enabled
+  type: bool
+  level: advanced
+  desc: Serve CEPH_OSD_OP_READ_RDMA by RDMA-writing object data directly into
+    client memory via NVIDIA cuObject (requires a build with WITH_OSD_CUOBJ and
+    an RDMA-capable NIC)
+  default: false
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_rdma_ip
+  type: str
+  level: advanced
+  desc: IP address of the RDMA-capable network interface; defaults to the OSD's
+    public address when empty
+  default:
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_rdma_port
+  type: uint
+  level: advanced
+  desc: Local port for the cuObject RDMA endpoint (0 lets the library choose;
+    clients never need to reach this port, it only names the local rdma_cm
+    binding)
+  default: 0
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_buffer_size
+  type: size
+  level: advanced
+  desc: Size of each pre-registered RDMA staging buffer; must cover the largest
+    RGW stripe read (rgw_get_obj_max_req_size)
+  default: 8_M
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_buffer_count
+  type: uint
+  level: advanced
+  desc: Number of pre-registered RDMA staging buffers; overflow requests fall
+    back to slower one-shot registrations
+  default: 32
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_num_dcis
+  type: uint
+  level: advanced
+  desc: Number of DC initiators (cuObject channels); must be at least the
+    number of osd op worker threads
+  default: 128
+  services:
+  - osd
+  flags:
+  - startup
+- name: osd_cuobj_dc_key
+  type: uint
+  level: advanced
+  desc: RDMA Dynamically Connected key; must match the cuObject client
+    library's key (default 0xffeeddcc) cluster-wide
+  default: 4293844428
+  services:
+  - osd
+  flags:
+  - startup

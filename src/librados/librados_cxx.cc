@@ -224,6 +224,30 @@ void librados::ObjectReadOperation::sparse_read(uint64_t off, uint64_t len,
   o->sparse_read(off, len, m, data_bl, prval, truncate_size, truncate_seq);
 }
 
+void librados::ObjectReadOperation::set_rdma_delivery(
+    const std::string& token, uint64_t base_offset, uint32_t lease_ms,
+    uint32_t flags, rdma_delivery_result *result)
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  // the public POD mirrors ceph::rdma::oob_result_t so the Objecter
+  // can fill it directly
+  static_assert(sizeof(rdma_delivery_result) ==
+		sizeof(ceph::rdma::oob_result_t));
+  static_assert(offsetof(rdma_delivery_result, bytes) ==
+		offsetof(ceph::rdma::oob_result_t, bytes));
+  static_assert(offsetof(rdma_delivery_result, crc64) ==
+		offsetof(ceph::rdma::oob_result_t, crc64));
+  static_assert(offsetof(rdma_delivery_result, flags) ==
+		offsetof(ceph::rdma::oob_result_t, flags));
+  static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_WANT_CRC64 ==
+		ceph::rdma::delivery_t::FLAG_CRC64NVME);
+  static_assert(librados::ObjectReadOperation::RDMA_DELIVERY_CRC64_VALID ==
+		ceph::rdma::oob_result_t::FLAG_CRC64NVME);
+  o->set_rdma_delivery(token, base_offset, lease_ms, flags,
+		       reinterpret_cast<ceph::rdma::oob_result_t*>(result));
+}
+
 void librados::ObjectReadOperation::checksum(rados_checksum_type_t type,
 					     const bufferlist &init_value_bl,
 					     uint64_t off, size_t len,

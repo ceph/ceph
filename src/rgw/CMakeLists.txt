@@ -40,10 +40,6 @@ endfunction()
 find_package(ICU 52.0 COMPONENTS uc REQUIRED)
 
 set(librgw_common_srcs
-  spdk/crc64.c
-  madler/crc64nvme.c
-  madler/crc32iso_hdlc.c
-  madler/crc32iscsi.c
   rgw_account.cc
   rgw_acl.cc
   rgw_acl_s3.cc
@@ -337,6 +333,10 @@ if(WITH_RADOSGW_STANDALONE)
   )
 endif()
 
+if(WITH_RADOSGW_CUOBJ)
+  list(APPEND librgw_common_srcs rgw_cuobj.cc)
+endif()
+
 add_library(rgw_common STATIC
   ${librgw_common_srcs}
   ${librgw_driver_srcs})
@@ -432,6 +432,10 @@ endif()
 if(WITH_JAEGER)
   add_dependencies(rgw_common jaeger_base)
   target_link_libraries(rgw_common PUBLIC jaeger_base)
+endif()
+
+if(WITH_RADOSGW_CUOBJ)
+  target_link_libraries(rgw_common PRIVATE ${CUOBJSERVER_LIBRARY})
 endif()
 
 if(WITH_RADOSGW_RADOS)

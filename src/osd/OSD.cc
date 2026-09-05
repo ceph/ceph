@@ -70,6 +70,9 @@
 #ifdef HAVE_LIBFUSE
 #include "os/FuseStore.h"
 #endif
+#ifdef WITH_OSD_CUOBJ
+#include "osd_cuobj.h"
+#endif
 
 #include "PrimaryLogPG.h"
 
@@ -530,6 +533,12 @@ void OSDService::shutdown()
     f->stop();
   }
 
+#ifdef WITH_OSD_CUOBJ
+  // op threads are stopped by now, so no RDMA writes are in flight
+  delete cuobj;
+  cuobj = nullptr;
+#endif
+
   publish_map(OSDMapRef());
   next_osdmap = OSDMapRef();
 }
@@ -541,6 +550,11 @@ void OSDService::fast_shutdown()
     std::lock_guard l(watch_lock);
     watch_timer.shutdown();
   }
+#ifdef WITH_OSD_CUOBJ
+  // op threads are stopped by now, so no RDMA writes are in flight
+  delete cuobj;
+  cuobj = nullptr;
+#endif
 }
 
 void OSDService::init()
@@ -2852,6 +2866,14 @@ void OSD::asok_command(
                      superblock.cluster_osdmap_trim_lower_bound);
     f->dump_unsigned("num_pgs", num_pgs);
     f->close_section();
+#ifdef WITH_OSD_CUOBJ
+  } else if (prefix == "cuobj status") {
+    f->open_object_section("cuobj");
+    if (service.cuobj) {
+      service.cuobj->dump_stats(f);
+    }
+    f->close_section();
+#endif
   } else if (prefix == "flush_journal") {
     store->flush_journal();
   } else if (prefix == "dump_ops_in_flight" ||
@@ -4048,6 +4070,26 @@ int OSD::init()
 
   check_config();
 
+#ifdef WITH_OSD_CUOBJ
+  if (cct->_conf.get_val<bool>("osd_cuobj_enabled")) {
+    std::string cuobj_ip = cct->_conf.get_val<std::string>("osd_cuobj_rdma_ip");
+    if (cuobj_ip.empty()) {
+      // default to the public-network address; deployments whose RDMA
+      // NIC is a different interface must set osd_cuobj_rdma_ip
+      cuobj_ip = client_messenger->get_myaddrs().front().ip_only_to_str();
+    }
+    auto cuobj_port = static_cast<uint16_t>(
+      cct->_conf.get_val<uint64_t>("osd_cuobj_rdma_port"));
+    auto cuobj = std::make_unique<OSDCuObj>(cct, cuobj_ip, cuobj_port);
+    if (cuobj->is_available()) {
+      service.cuobj = cuobj.release();
+    } else {
+      derr << "WARNING: cuObject RDMA init failed on " << cuobj_ip
+	   << " (READ_RDMA disabled on this osd)" << dendl;
+    }
+  }
+#endif
+
   dout(10) << "ensuring pgs have consumed prior maps" << dendl;
   consume_map();
 
@@ -4087,6 +4129,14 @@ void OSD::final_init()
   int r = admin_socket->register_command("status", asok_hook,
 					 "high-level status of OSD");
   ceph_assert(r == 0);
+#ifdef WITH_OSD_CUOBJ
+  if (service.cuobj) {
+    r = admin_socket->register_command(
+      "cuobj status", asok_hook,
+      "cuObject out-of-band RDMA delivery statistics");
+    ceph_assert(r == 0);
+  }
+#endif
   r = admin_socket->register_command("flush_journal",
                                      asok_hook,
                                      "flush the journal to permanent store");
