@@ -342,9 +342,13 @@ options:
 - name: osd_scrub_min_interval
   type: float
   level: advanced
-  desc: The desired interval between scrubs of a specific PG. Note that this option
-    must be set at the ``global`` scope, or for both ``mgr`` and ``osd``.
+  desc: The desired interval in seconds between scrubs of a specific PG.
+  long_desc: The desired interval in seconds between scrubs of a specific PG.
+    Note that this option must be set at the global scope, or for
+    both mgr and osd.
   fmt_desc: The desired interval in seconds between scrubs of a specific PG.
+    Note that this option must be set at the ``global`` scope, or for
+    both ``mgr`` and ``osd``.
   default: 1_day
   see_also:
   - osd_scrub_max_interval
@@ -352,9 +356,11 @@ options:
 - name: osd_scrub_max_interval
   type: float
   level: advanced
-  desc: Scrub each PG no less often than this interval. Note that this option
+  desc: The maximum interval in seconds for scrubbing each PG.
+  long_desc: Scrub each PG no less often than this interval. Note that this option
+    must be set at the global scope, or for both mgr and osd.
+  fmt_desc: Scrub each PG no less often than this interval. Note that this option
     must be set at the ``global`` scope, or for both ``mgr`` and ``osd``.
-  fmt_desc: The maximum interval in seconds for scrubbing each PG.
   default: 7_day
   see_also:
   - osd_scrub_min_interval
@@ -494,9 +500,13 @@ options:
 - name: osd_deep_scrub_interval
   type: float
   level: advanced
-  desc: Deep scrub each PG (i.e., verify data checksums) at least this often. Note that this option
-    must be set at the ``global`` scope, or for both ``mgr`` and ``osd``.
-  fmt_desc: The interval for "deep" scrubbing (fully reading all data).
+  desc: The interval for "deep" scrubbing (fully reading all data).
+  long_desc: Deep scrub each PG (i.e., verify data checksums) at least this
+    often. Note that this option must be set at the global scope, or for
+    both mgr and osd.
+  fmt_desc: Deep scrub each PG (i.e., verify data checksums) at least this
+    often. Note that this option must be set at the ``global`` scope, or for
+    both ``mgr`` and ``osd``.
   default: 7_day
   with_legacy: true
 - name: osd_deep_scrub_interval_cv
