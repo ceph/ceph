@@ -2028,6 +2028,16 @@ bool Locker::wrlock_start(const MutationImpl::LockOp &op, const MDRequestRef& mu
 	dout(10) << "requesting scatter from auth on "
 		 << *lock << " on " << *lock->get_parent() << dendl;
 	mds->send_message_mds(make_message<MLock>(lock, LOCK_AC_REQSCATTER, mds->get_nodeid()), auth);
+      } else {
+	/*
+	 * The scatter request cannot be sent (or answered) while the
+	 * auth is down.  Wait for the rank to come back and retry
+	 * instead of parking the request on WAIT_STABLE forever: no
+	 * lock state change will ever fire that waiter.
+	 */
+	dout(10) << "auth mds." << auth << " is down, waiting for it to come back"
+		 << dendl;
+	mds->wait_for_active_peer(auth, new C_MDS_RetryRequest(mdcache, mut));
       }
       break;
     }

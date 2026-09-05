@@ -13202,10 +13202,24 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f, double timeout)
 
 void C_MDS_RetryRequest::finish(int r)
 {
-  mdr->retry++;
-  if (mdr) {
-    cache->dispatch_request(mdr);
+  if (!mdr || mdr->committing) {
+    /*
+     * The request's journal entry is already in flight: this is a
+     * stale waiter firing.  A lock waiter registered on an earlier
+     * retry (e.g. the WAIT_STABLE waiter parked by wrlock_start() on
+     * a gathering scatterlock) stays queued on the lock, and when
+     * the lock state eventually changes -- long after the mutation
+     * acquired the lock through another path, projected its linkage
+     * changes and submitted the journal -- the waiter fires here.
+     * Re-dispatching the request now would re-enter its handler
+     * mid-operation and trip the entry-state assertions; the
+     * journal finisher completes the request.
+     */
+    dout(10) << __func__ << " on a committing request, ignoring" << dendl;
+    return;
   }
+  mdr->retry++;
+  cache->dispatch_request(mdr);
 }
 
 MDSContext *CF_MDS_RetryRequestFactory::build()
