@@ -46,7 +46,7 @@ class NodeProxy(CephService):
             root_cert = mgr.cert_mgr.get_root_ca()
         except Exception:
             pass
-        return sorted([mgr.get_mgr_ip(), server_port, root_cert])
+        return sorted([mgr.get_mgr_ip(), server_port, root_cert, mgr.hw_monitoring_vendor])
 
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         # node-proxy is re-using the agent endpoint and therefore
