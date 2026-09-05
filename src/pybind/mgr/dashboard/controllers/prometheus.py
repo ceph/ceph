@@ -135,7 +135,7 @@ class PrometheusRESTController(RESTController):
 
         if module_name not in ['prometheus', 'alertmanager']:
             raise DashboardException(f'Invalid module name {module_name}',
-                                     coFalsemponent='prometheus')
+                                     component='prometheus')
 
         user = None
         password = None
