@@ -6,6 +6,17 @@
 
 Ceph supports a RESTful API that is compatible with the basic data access model of the `Amazon S3 API`_.
 
+.. toctree::
+   :maxdepth: 1
+
+   Bucket Policy <bucketpolicy>
+   Bucket Logging <bucket_logging>
+   Bucket Notifications <notifications>
+   Cloud Transition <cloud-transition>
+   Cloud Restore <cloud-restore>
+   S3-select <s3select>
+   Server-Side Encryption <encryption>
+
 API
 ---
 
