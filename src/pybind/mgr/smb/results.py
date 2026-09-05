@@ -138,6 +138,26 @@ class ResourceResult(BaseResult):
         """
         return cls(src, success=True, status={'checked': True})
 
+    @classmethod
+    def pending(cls, src: SMBResource) -> Self:
+        """Return a new ResourceResult with metadata indicating that the
+        resource has NOT been checked for validity and thus is still pending
+        getting checked.
+        """
+        return cls(src, success=False, status={'checked': False})
+
+    @classmethod
+    def checked_from_result(cls, other: 'ResourceResult') -> Self:
+        """Return a new ResourceResult with metadata indicating that the
+        resource has been checked for validity.
+        """
+        return cls(
+            other.src,
+            success=True,
+            status={'checked': True},
+            warnings=other.warnings,
+        )
+
 
 class ResourceErrorStatus(TypedDict, total=False):
     """Valid fields for ErrorResult status metadata.
