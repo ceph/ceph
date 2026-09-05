@@ -65,9 +65,34 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64_counter(l_rgw_d4n_cache_evictions, "d4n_cache_evictions", "D4N cache evictions");
 
   pcb->add_time_avg(l_rgw_kms_fetch_lat, "kms_fetch_lat", "Uncached KMS secret fetch latency");
-  pcb->add_u64_counter(l_rgw_kms_error_permanent, "kms_error_permanent", "Permanent (e.g key not found) errors returned from KMS");
-  pcb->add_u64_counter(l_rgw_kms_error_transient, "kms_error_transient", "Transient (e.g timeout, overloaded) errors returned from KMS");
-  pcb->add_u64_counter(l_rgw_kms_error_secret_store, "kms_error_secret_store", "Secret store errors (e.g kernel keyring quota)");
+  pcb->add_u64_counter(l_rgw_kms_error_permanent, "kms_error_permanent", "Permanent (e.g., key not found) errors returned from KMS");
+  pcb->add_u64_counter(l_rgw_kms_error_transient, "kms_error_transient", "Transient (e.g., timeout, overloaded) errors returned from KMS");
+  pcb->add_u64_counter(l_rgw_kms_error_secret_store, "kms_error_secret_store", "Secret store errors (e.g., kernel keyring quota)");
+
+  pcb->add_u64(l_rgw_bucket_reshard_active,
+               "bucket_reshard_active",
+               "Number of active bucket reshards");
+  pcb->add_u64(l_rgw_bucket_reshard_active_shard_count,
+               "bucket_reshard_active_shard_count",
+               "Number of shards actively being resharded");
+  pcb->add_u64_counter(l_rgw_bucket_reshard_ok,
+                       "bucket_reshard_ok",
+                       "Number of successful bucket reshards");
+  pcb->add_u64_counter(l_rgw_bucket_reshard_failed,
+                       "bucket_reshard_failed",
+                       "Number of failed bucket reshards");
+  pcb->add_u64(l_rgw_bucket_reshard_start_time,
+               "bucket_reshard_start_time",
+               "Time of most recent bucket reshard initiation");
+  pcb->add_u64(l_rgw_bucket_reshard_ok_end_time,
+               "bucket_reshard_ok_end_time",
+               "Time of most recent bucket reshard successful completion");
+  pcb->add_u64(l_rgw_bucket_reshard_failed_end_time,
+               "bucket_reshard_failed_end_time",
+               "Time of most recent bucket reshard failed completion");
+  pcb->add_time_avg(l_rgw_bucket_reshard_ok_time_avg,
+                    "bucket_reshard_ok_time_avg",
+                    "Average time span to complete successful reshards");
 }
 
 void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
@@ -300,6 +325,66 @@ std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
 
 } // namespace rgw::lc_counters
 
+
+namespace rgw::bucket_reshard_counters {
+
+ceph::perf_counters::PerfCountersCache *bucket_reshard_counters_cache = nullptr;
+const std::string rgw_bucket_reshard_counters_key = "rgw_bucket_reshard_per_bucket";
+
+void add_bucket_reshard_counters(PerfCountersBuilder* pcb) {
+  pcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
+  pcb->add_u64(l_rgw_bucket_reshard_per_bucket_active_shard_count,
+               "bucket_reshard_per_bucket_active_shard_count",
+               "Number of shards actively being resharded for this bucket");
+  pcb->add_u64_counter(l_rgw_bucket_reshard_per_bucket_ok,
+                       "bucket_reshard_per_bucket_ok",
+                       "Counter of successful bucket reshards for this bucket");
+  pcb->add_u64_counter(l_rgw_bucket_reshard_per_bucket_failed,
+                       "bucket_reshard_per_bucket_failed",
+                       "Counter of failed bucket reshard attempts for this bucket");
+  pcb->add_u64(l_rgw_bucket_reshard_per_bucket_start_time,
+               "bucket_reshard_per_bucket_start_time",
+               "Time of most recent reshard initiation for this bucket");
+  pcb->add_u64(l_rgw_bucket_reshard_per_bucket_ok_end_time,
+               "bucket_reshard_per_bucket_ok_end_time",
+               "Time of most recent reshard successful completion for this bucket");
+  pcb->add_u64(l_rgw_bucket_reshard_per_bucket_failed_end_time,
+               "bucket_reshard_per_bucket_failed_end_time",
+               "Time of most recent reshard failed completion for this bucket");
+  pcb->add_time_avg(l_rgw_bucket_reshard_per_bucket_ok_time_avg,
+                    "bucket_reshard_per_bucket_ok_time_avg",
+                    "Average time span to complete successful reshard for this bucket");
+} // add_bucket_reshard_counters()
+
+std::shared_ptr<PerfCounters> create_bucket_reshard_counters(const std::string& name,
+                                                             CephContext *cct)
+{
+  PerfCountersBuilder pcb(cct, name,
+                          l_rgw_bucket_reshard_first, l_rgw_bucket_reshard_last);
+  add_bucket_reshard_counters(&pcb);
+  std::shared_ptr<PerfCounters> new_counters(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(new_counters.get());
+  return new_counters;
+}
+
+std::shared_ptr<PerfCounters> get(const std::string& bucket_name,
+                                  const std::string& tenant)
+{
+  if (!bucket_reshard_counters_cache) {
+    return nullptr;
+  }
+  std::string key = ceph::perf_counters::key_create(rgw_bucket_reshard_counters_key,
+                                                    {{"bucket", bucket_name}});
+  if (!tenant.empty()) {
+    key = ceph::perf_counters::key_insert(key, {{"tenant", tenant}});
+  }
+  return bucket_reshard_counters_cache->get(key);
+}
+
+}; // namespace rgw::bucket_reshard_counters
+
+
 int rgw_perf_start(CephContext *cct)
 {
   frontend_counters_init(cct);
@@ -322,6 +407,17 @@ int rgw_perf_start(CephContext *cct)
     rgw::lc_counters::lc_counters_cache = new PerfCountersCache(cct, target_size, rgw::lc_counters::create_lc_counters);
   }
 
+  const bool bucket_reshard_counters_cache_enabled =
+    cct->_conf.get_val<bool>("rgw_bucket_reshard_counters_cache");
+  if (bucket_reshard_counters_cache_enabled) {
+    const uint64_t target_size =
+      cct->_conf.get_val<uint64_t>("rgw_bucket_reshard_counters_cache_size");
+    rgw::bucket_reshard_counters::bucket_reshard_counters_cache =
+      new PerfCountersCache(cct,
+                            target_size,
+                            rgw::bucket_reshard_counters::create_bucket_reshard_counters);
+  }
+
   global_op_counters_init(cct);
   return 0;
 }
@@ -337,4 +433,5 @@ void rgw_perf_stop(CephContext *cct)
   delete user_counters_cache;
   delete bucket_counters_cache;
   delete rgw::lc_counters::lc_counters_cache;
+  delete rgw::bucket_reshard_counters::bucket_reshard_counters_cache;
 }
