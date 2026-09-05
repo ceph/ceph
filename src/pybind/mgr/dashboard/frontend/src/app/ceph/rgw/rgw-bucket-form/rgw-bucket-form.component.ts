@@ -39,10 +39,11 @@ import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { map, switchMap } from 'rxjs/operators';
 import { TextAreaXmlFormatterService } from '~/app/shared/services/text-area-xml-formatter.service';
 import { RgwRateLimitComponent } from '../rgw-rate-limit/rgw-rate-limit.component';
+import { RgwStorageClassQuotaComponent } from '../rgw-storage-class-quota/rgw-storage-class-quota.component';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { ModalCdsService } from '~/app/shared/services/modal-cds.service';
 import { RgwUserAccountsService } from '~/app/shared/api/rgw-user-accounts.service';
-import { RgwUser } from '../models/rgw-user';
+import { RgwUser, StorageClassQuota } from '../models/rgw-user';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -95,6 +96,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   }
 
   @ViewChild(RgwRateLimitComponent, { static: false }) rateLimitComponent!: RgwRateLimitComponent;
+  @ViewChild('bucketScQuota') storageClassQuotaComponent?: RgwStorageClassQuotaComponent;
+  savedStorageClassQuotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
 
   constructor(
     private route: ActivatedRoute,
@@ -301,6 +304,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
             value['lifecycle'] = JSON.stringify(bidResp['lifecycle'] || {});
           }
           this.bucketForm.setValue(value);
+          this.savedStorageClassQuotas = bidResp['bucket_quota']?.storage_class_quotas;
           if (this.editing) {
             // Disable changing the owner of the bucket in case
             // its owned by the account.
@@ -355,6 +359,9 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
   submit() {
     // Exit immediately if the form isn't dirty.
     if (this.bucketForm.pristine && this.rateLimitComponent.form.pristine) {
+      if (this.storageClassQuotaComponent?.isDirty()) {
+        this.updateStorageClassQuota(this.bucketForm.getRawValue()['bid']);
+      }
       this.goToListView();
       return;
     }
@@ -422,6 +429,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
               $localize`Updated Object Gateway bucket '${values.bid}'.`
             );
             this.updateBucketRateLimit();
+            this.updateStorageClassQuota(values['bid']);
             this.goToListView();
           },
           () => {
@@ -457,6 +465,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
             );
             this.goToListView();
             this.updateBucketRateLimit();
+            this.updateStorageClassQuota(values['bid']);
           },
           () => {
             // Reset the 'Submit' button.
@@ -464,6 +473,21 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           }
         );
     }
+  }
+
+  updateStorageClassQuota(bucket: string) {
+    if (!this.storageClassQuotaComponent?.isDirty()) {
+      return;
+    }
+    this.rgwBucketService
+      .setQuota(bucket, {
+        storage_class_quotas: this.storageClassQuotaComponent.getStorageClassQuotas()
+      })
+      .subscribe({
+        error: () => {
+          this.bucketForm.setErrors({ cdSubmitButton: true });
+        }
+      });
   }
 
   updateBucketRateLimit() {

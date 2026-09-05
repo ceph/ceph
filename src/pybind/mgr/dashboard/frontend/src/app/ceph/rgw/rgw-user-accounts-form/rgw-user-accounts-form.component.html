@@ -286,6 +286,16 @@
             "
           >
           </ng-container>
+          <cd-rgw-storage-class-quota
+            #accountScQuota
+            idPrefix="account-sc-quota"
+            title="Account storage class quotas"
+            i18n-title
+            description="Limits this account's total usage per storage class across all buckets. Cap hot and cold tiers separately."
+            i18n-description
+            [savedQuotas]="accountStorageClassQuotas"
+          >
+          </cd-rgw-storage-class-quota>
         </div>
 
         <!-- Bucket Quota -->
@@ -306,6 +316,16 @@
             "
           >
           </ng-container>
+          <cd-rgw-storage-class-quota
+            #bucketScQuota
+            idPrefix="account-bucket-sc-quota"
+            title="Default bucket storage class quotas"
+            i18n-title
+            description="Limits applied to each of this account's buckets, per storage class. Cap hot and cold tiers separately."
+            i18n-description
+            [savedQuotas]="bucketStorageClassQuotas"
+          >
+          </cd-rgw-storage-class-quota>
         </div>
       </div>
       <cd-form-button-panel

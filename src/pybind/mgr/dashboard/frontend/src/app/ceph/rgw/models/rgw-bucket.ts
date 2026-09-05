@@ -1,3 +1,5 @@
+import { StorageClassQuota } from './rgw-user';
+
 export interface Bucket {
   bucket: string;
   tenant: string;
@@ -25,12 +27,14 @@ export interface Bucket {
   creation_time: string;
   max_marker: string;
   usage: Record<string, any>;
+  storage_class_stats?: Array<Record<string, any>> | Record<string, any>;
   bucket_quota: {
     enabled: boolean;
     check_on_raw: boolean;
     max_size: number;
     max_size_kb: number;
     max_objects: number;
+    storage_class_quotas?: StorageClassQuota[] | Record<string, StorageClassQuota>;
   };
   read_tracker: number;
   bid: string;

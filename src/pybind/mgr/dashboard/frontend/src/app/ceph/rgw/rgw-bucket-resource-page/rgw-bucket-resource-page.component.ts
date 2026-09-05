@@ -9,9 +9,19 @@ import { ContentSwitcherOption } from 'carbon-components-angular';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { Bucket } from '../models/rgw-bucket';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { RgwBucketReplication } from '../models/rgw-bucket-replication';
 import { RgwRateLimitConfig } from '../models/rgw-rate-limit';
 import { OverviewField } from '~/app/shared/components/resource-overview-card/resource-overview-card.component';
+import { CdTableColumn } from '~/app/shared/models/cd-table-column';
+import {
+  DUMMY_BUCKET_STORAGE_CLASS_STATS,
+  extractBucketStorageClassStats,
+  STORAGE_CLASS_MONITOR_COLUMNS,
+  StorageClassMonitorRow,
+  toStorageClassMonitorRows,
+  toStorageClassUsageRows
+} from '../utils/rgw-storage-class-stats';
 
 @Component({
   selector: 'cd-rgw-bucket-resource-page',
@@ -63,16 +73,39 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
 
   overviewFields: OverviewField[] = [];
   configurationSummaryFields: OverviewField[] = [];
+  storageClassUsage: Record<string, string | number>[] = [];
+  storageClassUsageColumns: CdTableColumn[] = [];
+  storageClassQuotas: StorageClassMonitorRow[] = [];
+  storageClassQuotaColumns: CdTableColumn[] = [];
 
   constructor(
     private route: ActivatedRoute,
     private rgwBucketService: RgwBucketService,
     private cd: ChangeDetectorRef,
-    private cdDatePipe: CdDatePipe
+    private cdDatePipe: CdDatePipe,
+    private dimlessBinary: DimlessBinaryPipe
   ) {}
 
   ngOnInit(): void {
     this.section = this.route.snapshot.data['section'] ?? '';
+    this.storageClassUsageColumns = [
+      {
+        name: $localize`Storage class`,
+        prop: 'storage_class',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Used size`,
+        prop: 'size',
+        flexGrow: 1
+      },
+      {
+        name: $localize`Used objects`,
+        prop: 'num_objects',
+        flexGrow: 1
+      }
+    ];
+    this.storageClassQuotaColumns = STORAGE_CLASS_MONITOR_COLUMNS();
 
     this.sub.add(
       this.route.parent?.paramMap.subscribe((pm: ParamMap) => {
@@ -93,6 +126,8 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
       this.selection = undefined;
       this.overviewFields = [];
       this.configurationSummaryFields = [];
+      this.storageClassUsage = [];
+      this.storageClassQuotas = [];
       return;
     }
 
@@ -124,6 +159,8 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
     this.extractLifecycleDetails();
     this.overviewFields = this.buildOverviewFields();
     this.configurationSummaryFields = this.buildConfigurationSummaryFields();
+    this.storageClassUsage = this.createStorageClassUsageRows();
+    this.storageClassQuotas = this.createStorageClassQuotaRows();
   }
 
   private toFields(rows: Array<{ key: string; value: any }>): OverviewField[] {
@@ -285,6 +322,26 @@ export class RgwBucketResourcePageComponent implements OnInit, OnDestroy {
       ...this.toFields(this.overviewData),
       ...this.toFields(this.quotaData)
     ];
+  }
+
+  private createStorageClassUsageRows(): Record<string, string | number>[] {
+    return toStorageClassUsageRows(
+      extractBucketStorageClassStats(this.selection),
+      DUMMY_BUCKET_STORAGE_CLASS_STATS
+    ).map((row) => ({
+      storage_class: row.storage_class || '-',
+      size: this.dimlessBinary.transform(row.size),
+      num_objects: row.num_objects
+    }));
+  }
+
+  private createStorageClassQuotaRows(): StorageClassMonitorRow[] {
+    return toStorageClassMonitorRows(
+      extractBucketStorageClassStats(this.selection),
+      this.selection?.bucket_quota?.storage_class_quotas,
+      (bytes) => this.dimlessBinary.transform(bytes),
+      DUMMY_BUCKET_STORAGE_CLASS_STATS
+    );
   }
 
   private buildConfigurationSummaryFields(): OverviewField[] {
