@@ -768,11 +768,18 @@ Options
 
 .. option:: --placement-id
 
-   Placement ID for the zonegroup placement commands.
+   Placement ID for the zonegroup placement commands, and the default
+   placement of a user for the user commands. On ``user modify`` an explicitly
+   empty value (``--placement-id ""``) clears the default placement of the
+   user, together with its storage class, so that the user falls back to the
+   placement of its zonegroup. Omitting the option leaves it unchanged.
 
 .. option:: --tags=<list>
 
-   The list of tags for zonegroup placement add and modify commands.
+   The list of tags for zonegroup placement add and modify commands, and the
+   placement tags of a user for the user commands. On ``user modify`` an
+   explicitly empty value (``--tags ""``) clears the placement tags of the
+   user. Omitting the option leaves them unchanged.
 
 .. option:: --tags-add=<list>
 

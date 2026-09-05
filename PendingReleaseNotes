@@ -104,6 +104,15 @@
   individual bucket without suspending its owner. S3 requests against a suspended
   bucket fail with ``403 BucketSuspended``. The ``suspended`` field is now included
   in ``radosgw-admin bucket stats`` output.
+* RGW: The default placement and the placement tags of a user can now be cleared.
+  On ``user modify``, both in the admin ops API and in ``radosgw-admin``, an
+  explicitly empty ``default-placement`` (``--placement-id ""``) clears the
+  default placement rule of the user together with its storage class, and an
+  explicitly empty ``placement-tags`` (``--tags ""``) clears the placement tags.
+  Omitting a parameter still leaves it unchanged. Previously an empty value was
+  indistinguishable from an absent one and was silently ignored. Relatedly,
+  ``default-storage-class`` (``--storage-class``) given without a placement on
+  ``user modify`` now fails with ``EINVAL`` instead of being silently ignored.
 * RGW: OpenSSL engine support is deprecated in favor of provider support.
   - Removed the `openssl_engine_opts` configuration option. OpenSSL engine configuration in string format is no longer supported.
   - Added the `openssl_conf` configuration option for loading specified providers as default providers.
