@@ -73,11 +73,14 @@ class ResourceResult(BaseResult):
         success: bool,
         msg: str = '',
         status: Union[ResourceStatus, Simplified, None] = None,
+        *,
+        warnings: Optional[List[str]] = None,
     ) -> None:
         self.src = src
         self.success = success
         self.msg = msg
         self.status = status
+        self.warnings: List[str] = warnings or []
         self._check_status()
 
     _allowed_status: Any = ResourceStatus
@@ -94,11 +97,19 @@ class ResourceResult(BaseResult):
                 f'unknown keys in status: {", ".join(sorted(other_keys))}'
             )
 
+    def record_warning(self, warning: str) -> None:
+        """Record a new warning associated with this resource.
+        Warnings are non-fatal issues we want to notify the user about.
+        """
+        self.warnings.append(warning)
+
     def to_simplified(self) -> Simplified:
         ds: Simplified = {}
         ds['resource'] = self.src.to_simplified()
         if self.status:
             ds.update(self.status)
+        if self.warnings:
+            ds['warnings'] = self.warnings
         if self.msg:
             ds['msg'] = self.msg
         ds['success'] = self.success
@@ -110,6 +121,7 @@ class ResourceResult(BaseResult):
             success=self.success,
             msg=self.msg,
             status=self.status,
+            warnings=self.warnings,
         )
 
     @classmethod
