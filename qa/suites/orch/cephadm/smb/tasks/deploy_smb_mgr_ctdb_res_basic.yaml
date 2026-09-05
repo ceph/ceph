@@ -97,10 +97,19 @@ tasks:
 # verify CTDB is healthy, cluster well formed
 - smb.workunit:
     admin_node: host.a
+    smb_nodes: [host.a, host.b, host.c]
+    smb_shares:
+      - share1
+      - share2
+    smb_users:
+      - username: user1
+        password: t3stP4ss1
+      - username: user2
+        password: t3stP4ss2
     timeout: 15m
     clients:
       client.0:
-        - [ctdb_healthy]
+        - [ctdb_healthy, default, hosts_access, users_groups_access]
 
 # Test a different host in the cluster
 - template.exec:
