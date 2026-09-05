@@ -391,6 +391,29 @@ private:
     unsigned max                ///< [in] max to get
     );  ///< @return nullopt if no more objects
 
+  /**
+   * get_next_rollback_objects
+   *
+   * Cursor-based scan for rollback-only passes.  Unlike
+   * get_next_objects_to_trim(), which advances by watching objects disappear
+   * from the snap mapper as they are deleted, this method accepts an explicit
+   * start-after cursor and returns up to @max objects whose snap-mapper key is
+   * strictly greater than to_raw_key(snap, after).  When the result is empty
+   * the caller has walked all objects for this snap in this PG.
+   *
+   * The caller stores the last returned hobject_t as the new cursor and passes
+   * it on the next call.  Pass hobject_t() (the minimum hobject_t) to start
+   * from the beginning.
+   *
+   * @return empty vector when there are no more objects (not nullopt, to
+   *         distinguish "done" from the trim-path sentinel).
+   */
+  std::vector<hobject_t> get_next_rollback_objects(
+    snapid_t snap,              ///< [in] snap to scan under
+    const hobject_t &after,     ///< [in] start-after cursor (exclusive lower bound)
+    unsigned max                ///< [in] max objects to return
+    );
+
   /// Remove mapping for oid
   int remove_oid(
     const hobject_t &oid,    ///< [in] oid to remove

@@ -5258,6 +5258,13 @@ int PrimaryLogPG::rollback_then_trim(
 
       update_snapset_for_rollback(ctx.get(), ops, pool.info, ctx->op_t.get());
       emit_rollback_log_entries(ctx.get(), ops);
+
+      // Sync the updated snapset (with advanced seq) back into the in-memory
+      // OBC cache.  update_snapset_for_rollback() only writes ctx->new_snapset;
+      // without this the guard `snapset.seq < rb_info->rollback_id` fires
+      // again on the next trimmer cycle and re-applies the rollback.
+      // The clone OBC and head OBC share the same SnapSetContext.
+      obc->ssc->snapset = ctx->new_snapset;
     }
   }
 
@@ -9185,10 +9192,14 @@ void PrimaryLogPG::update_snapset_for_rollback(
     ss.seq = ctx->snapc.seq;
   }
 
-  // Write SS_ATTR for the head object
+  // Write SS_ATTR for the head object.  In the snap-trim path ctx->obc is the
+  // clone being trimmed while ctx->head_obc is the actual head; use head_obc
+  // when available so the setattr lands on the head's op_map entry.  In the
+  // JIT write path head_obc is not set and ctx->obc is already the head.
+  ObjectContextRef ss_obc = ctx->head_obc ? ctx->head_obc : ctx->obc;
   bufferlist bss;
   encode(ss, bss);
-  setattr_maybe_cache(ctx->obc, t, SS_ATTR, bss);
+  setattr_maybe_cache(ss_obc, t, SS_ATTR, bss);
 
   dout(20) << __func__ << " " << soid << " done, snapset=" << ss << dendl;
 }
@@ -16749,6 +16760,11 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   }
 
   auto [selected_snap, is_trim] = *candidates.begin(); // lowest snap ID
+
+  // Reset the rollback cursor whenever we switch to a new snap.
+  if (context<Trimming>().snap_being_processed != selected_snap) {
+    context<Trimming>().rollback_scan_cursor = hobject_t{};
+  }
   context<Trimming>().snap_being_processed = selected_snap;
   context<Trimming>().is_trim_pass = is_trim;
   context<Trimming>().snap_to_trim = selected_snap;
@@ -16758,13 +16774,35 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
        << " is_trim_pass=" << is_trim << dendl;
 
   unsigned max = pg->cct->_conf->osd_pg_max_concurrent_snap_trims;
-  // we need to look for at least 1 snaptrim, otherwise we'll misinterpret
-  // the ENOENT below and erase snap_to_trim.
   ceph_assert(max > 0);
 
-  auto to_trim =
-      pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max);
-  if (!to_trim.has_value()) {
+  // For TRIM passes use the existing delete-driven iterator (objects
+  // disappear from the snap mapper as they are deleted, so the scan
+  // drains naturally).  For ROLLBACK_ONLY nothing is ever removed from
+  // the snap mapper, so the delete-driven iterator can never advance
+  // past the first batch.  Use a cursor-based scan instead.
+  std::vector<hobject_t> to_process_vec;
+  bool scan_done = false;
+
+  if (is_trim) {
+    auto to_trim = pg->snap_mapper.get_next_objects_to_trim(snap_to_trim, max);
+    if (!to_trim.has_value()) {
+      scan_done = true;
+    } else {
+      to_process_vec = std::move(*to_trim);
+    }
+  } else {
+    // ROLLBACK_ONLY: cursor-based scan, advances regardless of deletions.
+    to_process_vec = pg->snap_mapper.get_next_rollback_objects(
+      snap_to_trim,
+      context<Trimming>().rollback_scan_cursor,
+      max);
+    if (to_process_vec.empty()) {
+      scan_done = true;
+    }
+  }
+
+  if (scan_done) {
     // Done with scan for snap_to_trim!
     ldout(pg->cct, 10) << "no more entries for snap " << snap_to_trim << dendl;
 
@@ -16842,7 +16880,7 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
   const rollback_snap_info_t* rb_info =
     find_rollback_for_source(pg->rollback_trimq, snap_to_trim);
 
-  for (auto &&object: *to_trim) {
+  for (auto &&object: to_process_vec) {
     // Get next
     ldout(pg->cct, 10) << "AwaitAsyncWork react processing " << object << dendl;
     OpContextUPtr ctx;
@@ -16883,6 +16921,14 @@ boost::statechart::result PrimaryLogPG::AwaitAsyncWork::react(const DoSnapWork&)
       });
 
     pg->simple_opc_submit(std::move(ctx));
+
+    // For ROLLBACK_ONLY passes, advance the cursor past this object so the
+    // next call to get_next_rollback_objects() starts after it.  The snap
+    // mapper is never modified in this pass, so without this the cursor-based
+    // scan would re-return the same batch every cycle.
+    if (!is_trim) {
+      context<Trimming>().rollback_scan_cursor = object;
+    }
   }
 
   return transit< WaitRepops >();

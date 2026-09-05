@@ -772,6 +772,56 @@ std::optional<vector<hobject_t>> SnapMapper::get_next_objects_to_trim(
 }
 
 
+std::vector<hobject_t> SnapMapper::get_next_rollback_objects(
+  snapid_t snap,
+  const hobject_t &after,
+  unsigned max)
+{
+  ceph_assert(max > 0);
+
+  // Build a start key that is strictly after to_raw_key(snap, after).
+  // to_raw_key() produces  "SNA_<pool>_<snap_hex>_<shard><obj_str>".
+  // Appending '\x01' to that key gives us a value that sorts immediately
+  // after any key equal to to_raw_key(snap, after) in the RocksDB ordering.
+  std::string start_key;
+  if (after == hobject_t{}) {
+    // Start from the very first entry under this snap.
+    start_key = get_prefix(pool, snap);
+  } else {
+    start_key = to_raw_key(snap, after) + '\x01';
+  }
+
+  const std::string snap_prefix = get_prefix(pool, snap);
+  std::vector<hobject_t> out;
+  out.reserve(max);
+
+  std::string pos = start_key;
+  while (out.size() < max) {
+    pair<string, ceph::buffer::list> next;
+    int r = backend.get_next(pos, &next);
+    if (r != 0) {
+      break;  // end of DB
+    }
+    // Stop as soon as we leave the snap's key range.
+    if (next.first.compare(0, snap_prefix.size(), snap_prefix) != 0) {
+      break;
+    }
+    if (!is_mapping(next.first)) {
+      break;
+    }
+    pair<snapid_t, hobject_t> decoded(from_raw(next));
+    ceph_assert(decoded.first == snap);
+    ceph_assert(check(decoded.second));
+    out.emplace_back(std::move(decoded.second));
+    pos = next.first;
+  }
+
+  dout(20) << *this << __func__ << " snap=" << snap
+           << " after=" << after << " returning " << out.size()
+           << " objects" << dendl;
+  return out;
+}
+
 int SnapMapper::remove_oid(
   const hobject_t &oid,
   MapCacher::Transaction<std::string, ceph::buffer::list> *t)

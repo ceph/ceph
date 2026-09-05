@@ -1745,6 +1745,10 @@ private:
     snapid_t snap_to_trim;
     snapid_t snap_being_processed;
     bool is_trim_pass = true;
+    // Cursor for rollback-only passes: the last hobject_t processed in the
+    // current pass.  hobject_t() means "start from the beginning".  Reset to
+    // hobject_t() whenever snap_being_processed changes.
+    hobject_t rollback_scan_cursor;
 
     explicit Trimming(my_context ctx)
       : my_base(ctx),
