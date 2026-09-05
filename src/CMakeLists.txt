@@ -791,6 +791,7 @@ endif()
 
 option(WITH_CEPHADM "Flag to determine if cephadm should be built" ON)
 option(WITH_PYPKG "Build using PEP517 & PEP518 packaging when possible" OFF)
+option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" ON)
 
 if(NOT WIN32)
 add_subdirectory(pybind)
@@ -1017,8 +1018,6 @@ if(WITH_FUSE)
 endif(WITH_FUSE)
 
 # NVMEOF GATEWAY MONITOR CLIENT
-option(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT "build nvmeof gateway monitor client" ON)
-
 if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
 
   # Prefer config mode so gRPC sees protobuf's full target set
