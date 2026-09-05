@@ -111,6 +111,7 @@ def test_nfsganesha_init():
 
 
 def test_nfsganesha_container_mounts():
+    log_dir = "/var/log/ceph/" + SAMPLE_UUID + "/nfs.fred"
     with with_cephadm_ctx([]) as ctx:
         nfsg = _cephadm.NFSGanesha(
             ctx,
@@ -118,8 +119,8 @@ def test_nfsganesha_container_mounts():
             "fred",
             good_nfs_json(),
         )
-        cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 4
+        cmounts = nfsg._get_container_mounts("/var/tmp", log_dir)
+        assert len(cmounts) == 5
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
@@ -127,6 +128,7 @@ def test_nfsganesha_container_mounts():
             cmounts["/var/tmp/ganesha-entrypoint.sh"]
             == "/usr/local/scripts/ganesha-entrypoint.sh"
         )
+        assert cmounts[log_dir] == "/var/log/ceph:z"
 
     with with_cephadm_ctx([]) as ctx:
         nfsg = _cephadm.NFSGanesha(
@@ -135,8 +137,8 @@ def test_nfsganesha_container_mounts():
             "fred",
             nfs_json(pool=True, files=True, rgw=True),
         )
-        cmounts = nfsg._get_container_mounts("/var/tmp")
-        assert len(cmounts) == 5
+        cmounts = nfsg._get_container_mounts("/var/tmp", log_dir)
+        assert len(cmounts) == 6
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
         assert cmounts["/var/tmp/etc/ganesha"] == "/etc/ganesha:z"
@@ -144,6 +146,7 @@ def test_nfsganesha_container_mounts():
             cmounts["/var/tmp/keyring.rgw"]
             == "/var/lib/ceph/radosgw/ceph-jsmith/keyring:z"
         )
+        assert cmounts[log_dir] == "/var/log/ceph:z"
 
 
 def test_nfsganesha_container_envs():
@@ -216,6 +219,20 @@ def test_nfsganesha_get_daemon_args():
         assert args == ["-F", "-L", "STDERR"]
 
 
+def test_nfsganesha_get_daemon_args_log_to_file():
+    config = good_nfs_json()
+    config['log_to_file'] = True
+    with with_cephadm_ctx([]) as ctx:
+        nfsg = _cephadm.NFSGanesha(
+            ctx,
+            SAMPLE_UUID,
+            "fred",
+            config,
+        )
+        args = nfsg.get_daemon_args()
+        assert args == ["-F", "-L", "/var/log/ceph/ceph-client.nfs.fred.log"]
+
+
 @pytest.mark.parametrize(
     'conf,expected',
     [
@@ -274,6 +291,7 @@ def test_nfsganesha_create_daemon_dirs(_logger, cephadm_fs):
         with pytest.raises(OSError):
             nfsg.create_daemon_dirs("/var/tmp", 45, 54)
         cephadm_fs.create_dir("/var/tmp")
+        cephadm_fs.create_dir("/var/log/ceph")
         nfsg.create_daemon_dirs("/var/tmp", 45, 54)
         with open("/var/tmp/ganesha-entrypoint.sh") as f:
             assert 'rpcbind' in f.read()
@@ -305,5 +323,6 @@ def test_nfsganesha_create_daemon_dirs_rgw(_logger, cephadm_fs):
             nfs_json(pool=True, files=True, rgw=True),
         )
         cephadm_fs.create_dir("/var/tmp")
+        cephadm_fs.create_dir("/var/log/ceph")
         nfsg.create_daemon_dirs("/var/tmp", 45, 54)
         # TODO: make assertions about the dirs created
