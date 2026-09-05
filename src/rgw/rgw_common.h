@@ -1261,6 +1261,24 @@ struct RGWStorageStats
   void dump(Formatter *f) const;
 }; // RGWStorageStats
 
+// Per-storage-class aggregate stats for billing and quota reporting.
+// Computed on demand by scanning the bucket index; never persisted.
+struct RGWStorageClassStats {
+  uint64_t size{0};
+  uint64_t size_rounded{0};
+  uint64_t size_utilized{0};
+  uint64_t num_objects{0};
+
+  void dump(Formatter *f) const;
+  RGWStorageClassStats& operator+=(const RGWStorageClassStats& o) {
+    size += o.size;
+    size_rounded += o.size_rounded;
+    size_utilized += o.size_utilized;
+    num_objects += o.num_objects;
+    return *this;
+  }
+}; // RGWStorageClassStats
+
 class RGWEnv;
 
 /* Namespaced forward declarations. */
