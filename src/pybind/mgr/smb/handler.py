@@ -501,20 +501,21 @@ class ClusterConfigHandler:
             earmark_resolver = self._choose_earmark_resolver(
                 resource, staging
             )
+            pending_result = ResourceResult.pending(resource)
             cross_check_resource(
                 resource,
                 staging,
                 toolbox=CrossCheckToolbox(
                     path_resolver=path_resolver,
                     earmark_resolver=earmark_resolver,
+                    recorder=pending_result,
                 ),
             )
         except ErrorResult as err:
             log.debug('rejected resource: %r', resource)
             return err
         log.debug('checked resource: %r', resource)
-        result = ResourceResult.checked(resource)
-        return result
+        return ResourceResult.checked_from_result(pending_result)
 
     def _choose_path_resolver(
         self, resource: SMBResource, staging: Staging

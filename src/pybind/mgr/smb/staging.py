@@ -46,6 +46,7 @@ from .proto import (
     EntryKey,
     PathCaseSensitivityResolver,
     PathResolver,
+    WarningRecorder,
 )
 from .resources import SMBResource
 from .results import ErrorResult, ResourceResult, ResultGroup
@@ -224,6 +225,7 @@ class CrossCheckToolbox:
 
     path_resolver: PathResolver
     earmark_resolver: EarmarkResolver
+    recorder: WarningRecorder
 
 
 @functools.singledispatch
@@ -686,9 +688,12 @@ def _check_case_sensitivity_settings(
         (True, False): 'is case sensitive',
         (True, True): 'is configured to be case sensitive',
     }[checked, found]
+    prefix = f'CephFS subvolume {desc}'
     if policy is CaseInsensitiveCheckPolicy.WARN:
         log.debug('warning share %r: wrong subvol case setting', share)
-        # TODO: emit a warning visible on the CLI
+        toolbox.recorder.record_warning(
+            f'{prefix}; case insensitive mode is recommended'
+        )
         return
     log.debug('rejecting share %r: invalid subvol case setting', share)
     raise ErrorResult(
