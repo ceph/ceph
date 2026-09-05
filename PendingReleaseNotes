@@ -32,7 +32,8 @@
   RGW, cephfs-mirror, etc.) and reports per-operation latency, object
   name, pool/PG, acting set and operation types in real time, without
   any code changes or client restarts. It requires Linux kernel 5.8+
-  and the ceph debuginfo/dbgsym packages for the traced client. See
+  and the ceph debuginfo/dbgsym packages for the traced client, and is
+  built on x86_64 and aarch64 only. See
   the ``radostrace(8)`` man page and ``doc/dev/radostrace.rst`` for
   details.
 

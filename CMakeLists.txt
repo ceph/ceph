@@ -730,8 +730,9 @@ endif(${WITH_LTTNG})
 
 option(WITH_OSD_INSTRUMENT_FUNCTIONS OFF)
 
-#option for eBPF tracing - only available on Linux
-cmake_dependent_option(WITH_EBPF_TRACE "Build eBPF tracing tools" ON "LINUX" OFF)
+#option for eBPF tracing - only available on Linux x86_64 and aarch64
+cmake_dependent_option(WITH_EBPF_TRACE "Build eBPF tracing tools" ON
+  "LINUX;CMAKE_SYSTEM_PROCESSOR MATCHES x86_64|aarch64" OFF)
 if(WITH_EBPF_TRACE)
   find_program(CLANG_EXECUTABLE clang 
     REQUIRED)
