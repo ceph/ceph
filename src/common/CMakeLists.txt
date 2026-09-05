@@ -289,9 +289,14 @@ if(HAVE_KEYUTILS)
   set(parse_secret_srcs
     secret.c)
   add_library(parse_secret_objs OBJECT ${parse_secret_srcs})
+endif()
 
-  set(keyring_srcs
-    keyring.cc)
-  add_library(keyring STATIC ${keyring_srcs})
+# keyring.cc already guards its Linux Key Retention Service paths and falls
+# back to UnsupportedKeyring elsewhere, so build it everywhere - callers of
+# Keyring::get_best() are not Linux-only.  Only keyutils itself is optional.
+set(keyring_srcs
+  keyring.cc)
+add_library(keyring STATIC ${keyring_srcs})
+if(HAVE_KEYUTILS)
   target_link_libraries(keyring keyutils::keyutils)
 endif()

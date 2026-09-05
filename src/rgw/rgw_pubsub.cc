@@ -368,7 +368,7 @@ void rgw_pubsub_dest::decode_json(JSONObj* f) {
 ShardNamesView rgw_pubsub_dest::get_shard_names() const {
   const std::string base_name = persistent_queue; 
   auto get_shard_name = [base_name](uint64_t i){return i != 0 ? fmt::format("{}.{}", base_name, i) : base_name;};
-  return std::ranges::views::iota(0ul, num_shards) | std::ranges::views::transform(std::function<std::string(uint64_t)>(get_shard_name));
+  return std::ranges::views::iota(uint64_t{0}, num_shards) | std::ranges::views::transform(std::function<std::string(uint64_t)>(get_shard_name));
 }
 
 RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,

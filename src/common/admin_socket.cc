@@ -13,15 +13,19 @@
  *
  */
 
+#include "acconfig.h" // for HAVE_TIMER_CREATE
+
 #include "common/admin_socket.h"
 
 #include <poll.h>
 #include <signal.h>
 #include <sys/un.h>
 
-#ifndef WIN32
+#ifdef HAVE_TIMER_CREATE
 #include <time.h>
 #else
+// No POSIX per-process timers (Windows, Darwin): the delayed-signal
+// "raise" command is unavailable, but the hook still has to compile.
 typedef void* timer_t;
 #endif
 
@@ -839,7 +843,7 @@ class RaiseHook: public AdminSocketHook {
     }
 
     void release() noexcept {
-#ifndef WIN32
+#ifdef HAVE_TIMER_CREATE
       if (timer_id) {
         timer_delete(*timer_id);
         timer_id = std::nullopt;
@@ -879,7 +883,7 @@ class RaiseHook: public AdminSocketHook {
 
     bool cancel()
     {
-#ifndef WIN32
+#ifdef HAVE_TIMER_CREATE
       struct itimerspec zero = {};
       struct itimerspec prev = {};
       if (timer_settime(*timer_id, 0, &zero, &prev) < 0) {
@@ -893,7 +897,7 @@ class RaiseHook: public AdminSocketHook {
 
     static std::optional<Killer> arm(CephContext* m_cct, int signal_to_send, double delay)
     {
-#ifndef WIN32
+#ifdef HAVE_TIMER_CREATE
       struct sigevent sev = {};
       sev.sigev_notify = SIGEV_SIGNAL;
       sev.sigev_signo = signal_to_send;

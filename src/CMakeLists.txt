@@ -113,7 +113,7 @@ if(NOT MSVC)
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wno-ignored-qualifiers>)
 endif()
 
-if (CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-Wsign-compare>)
 endif()
 
@@ -162,7 +162,7 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
       string(APPEND CMAKE_EXE_LINKER_FLAGS " -pie")
     endif()
   endif()
-elseif(CMAKE_CXX_COMPILER_ID STREQUAL Clang)
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   if(CMAKE_CXX_COMPILER_VERSION VERSION_LESS 16)
     message(FATAL_ERROR "C++20 support requires a minimum Clang version of 16.")
   endif()
@@ -985,8 +985,12 @@ if(WITH_LIBCEPHFS)
   install(TARGETS ceph-syn DESTINATION bin)
   if(LINUX)
     add_subdirectory(mount)
+    # libcephfsd shares one libcephfs mount between processes over a Unix
+    # socket, for the container cases that want it, and is written to Linux
+    # throughout - fscrypt's UAPI structures, O_TMPFILE, linkat(AT_EMPTY_PATH),
+    # MSG_CMSG_CLOEXEC.
+    add_subdirectory(libcephfs_proxy)
   endif()
-  add_subdirectory(libcephfs_proxy)
 endif(WITH_LIBCEPHFS)
 
 if(WITH_LIBCEPHSQLITE)

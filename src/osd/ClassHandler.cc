@@ -67,6 +67,17 @@ int ClassHandler::open_all_classes()
       char cname[PATH_MAX + 1];
       strncpy(cname, pde->d_name + sizeof(CLS_PREFIX) - 1, sizeof(cname) -1);
       cname[strlen(cname) - (sizeof(CLS_SUFFIX) - 1)] = '\0';
+      // Mach-O places the version before the extension, so the versioned
+      // libcls_foo.1.dylib and libcls_foo.1.0.0.dylib also end in CLS_SUFFIX
+      // and would yield the bogus class names "foo.1" and "foo.1.0.0".
+      // Loading one of those dlopen()s the class, which then registers under
+      // its real name, and the mismatch leaves the caller with a null handle.
+      // A class name never contains a dot.  (The ELF equivalents end in
+      // .so.1.0.0 and are already rejected by the suffix test above.)
+      if (strchr(cname, '.')) {
+	ldout(cct, 20) << __func__ << " skipping versioned " << pde->d_name << dendl;
+	continue;
+      }
       ldout(cct, 10) << __func__ << " found " << cname << dendl;
       ClassData *cls;
       // skip classes that aren't in 'osd class load list'
