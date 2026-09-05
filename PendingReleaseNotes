@@ -1185,3 +1185,8 @@ Relevant tracker: https://tracker.ceph.com/issues/71677
   seconds, which matches the previously hardcoded behaviour.
 
   Relevant tracker: https://tracker.ceph.com/issues/78727
+* RADOS: A new ``POOL_MIXED_MIN_ALLOC_SIZE`` health warning reports pools
+  that span BlueStore OSDs using different allocation units
+  (``min_alloc_size``), leading to non-uniform space usage and performance
+  across the pool's PGs. It can be disabled with the new
+  ``mon_warn_on_pool_mixed_min_alloc_size`` option.

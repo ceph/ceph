@@ -1843,6 +1843,47 @@ you can label the pool by running the following low-level command:
 
 For more information, see :ref:`associate-pool-to-application`.
 
+POOL_MIXED_MIN_ALLOC_SIZE
+_________________________
+
+One or more pools span BlueStore OSDs that use different allocation units
+(``min_alloc_size``). The set of OSDs that can host a pool's PGs is
+determined by the pool's CRUSH rule; when these OSDs do not all use the same
+allocation unit, space usage and performance are not uniform across the
+pool's PGs.
+
+Such a mix usually results from OSDs having been created under different
+defaults, since the allocation unit is frozen when each OSD is created: the
+default was 64 KiB for HDD-backed OSDs prior to the Pacific release (and
+16 KiB for SSD-backed OSDs prior to Nautilus 14.2.8), whereas current
+releases default to 4 KiB. Typical scenarios include adding new nodes or
+OSDs to a cluster upgraded from an older release, redeploying only some of
+the older OSDs, or deploying some OSDs with an explicitly configured
+``bluestore_min_alloc_size``.
+
+The detail of the health warning lists, for each affected pool, the
+allocation units in use and the number of OSDs using each of them. To
+display the allocation unit of each OSD, run the following command:
+
+.. prompt:: bash #
+
+   ceph osd metadata | jq '.[] | {id, bluestore_min_alloc_size}'
+
+The warning is resolved by redeploying (destroying and re-creating) the OSDs
+that still use a legacy allocation unit. Make sure that the cluster is
+healthy and has enough free capacity before doing so, and redeploy only one
+OSD or failure domain at a time. If devices with different optimal
+allocation units are mixed deliberately — for example, QLC NVMe devices with
+a 64 KiB indirection unit alongside TLC devices — it is best to assign them
+to distinct CRUSH device classes and use separate CRUSH rules, so that no
+pool spans both types of devices.
+
+To disable this alert, run the following command:
+
+.. prompt:: bash #
+
+   ceph config set mon mon_warn_on_pool_mixed_min_alloc_size false
+
 POOL_FULL
 _________
 
