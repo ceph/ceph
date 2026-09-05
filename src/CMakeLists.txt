@@ -938,6 +938,7 @@ install(FILES
 install(PROGRAMS
   ceph_common.sh
   ceph-osd-prestart.sh
+  block-device-health
   DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/ceph)
 
 install(PROGRAMS
