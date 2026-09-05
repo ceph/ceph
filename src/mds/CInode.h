@@ -1030,7 +1030,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   }
 
   double get_ephemeral_rand() const;
-  void maybe_ephemeral_rand(double threshold=-1.0);
+  bool should_random_pin_frag(frag_t fg) const;
   void setxattr_ephemeral_rand(double prob=0.0);
   bool is_ephemeral_rand() const {
     return state_test(STATE_RANDEPHEMERALPIN);

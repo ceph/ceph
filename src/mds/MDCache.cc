@@ -276,6 +276,10 @@ void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDS
     use_global_snaprealm_seq = g_conf().get_val<bool>("mds_use_global_snaprealm_seq_for_subvol");
     dout(20) << __func__ << " mds_use_global_snaprealm_seq_for_subvol now " << use_global_snaprealm_seq << dendl;
   }
+  if (changed.count("mds_export_ephemeral_frag_factor") ||
+      changed.count("mds_export_ephemeral_distributed_factor")) {
+    handle_mdsmap(*mds->mdsmap, *mds->mdsmap);
+}
 
   migrator->handle_conf_change(changed, mdsmap);
   mds->balancer->handle_conf_change(changed, mdsmap);
@@ -14493,6 +14497,27 @@ void MDCache::dump_dir(Formatter *f, CDir *dir, bool dentry_dump) {
   f->close_section();
 }
 
+double MDCache::get_effective_ephemeral_frag_factor() const
+{
+  double factor = g_conf().get_val<double>("mds_export_ephemeral_frag_factor");
+
+  auto default_opt = g_conf().get_val_default("mds_export_ephemeral_frag_factor");
+  if (default_opt) {
+    double default_factor = std::stod(*default_opt);
+    if (factor == default_factor) {
+      auto legacy_default_opt = g_conf().get_val_default("mds_export_ephemeral_distributed_factor");
+      if (legacy_default_opt) {
+        double legacy_default = std::stod(*legacy_default_opt);
+        double legacy_factor = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
+        if (legacy_factor != legacy_default) {
+          factor = legacy_factor;
+        }
+      }
+    }
+  }
+  return factor;
+}
+
 void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   const mds_rank_t max_mds = mdsmap.get_max_mds();
 
@@ -14526,12 +14551,11 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap, const MDSMap &oldmap) {
   if (max_mds <= 1) {
     export_ephemeral_dist_frag_bits = 0;
   } else {
-    double want = g_conf().get_val<double>("mds_export_ephemeral_distributed_factor");
-    want *= max_mds;
+    double want = get_effective_ephemeral_frag_factor() * max_mds;
     unsigned n = 0;
     while ((1U << n) < (unsigned)want)
       ++n;
-    export_ephemeral_dist_frag_bits = n;
+    export_ephemeral_frag_bits = n;
   }
 }
 

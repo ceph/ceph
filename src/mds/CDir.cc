@@ -2019,7 +2019,6 @@ CDentry *CDir::_load_dentry(
         if (in->get_inode()->is_dirty_rstat())
           in->mark_dirty_rstat();
 
-        in->maybe_ephemeral_rand(rand_threshold);
         //in->hack_accessed = false;
         //in->hack_load_stamp = ceph_clock_now();
         //num_new_inodes_loaded++;
@@ -2925,10 +2924,15 @@ void CDir::_committed(int r, version_t v)
 mds_rank_t CDir::get_export_pin(bool inherit) const
 {
   mds_rank_t export_pin = inode->get_export_pin(inherit);
-  if (export_pin == MDS_RANK_EPHEMERAL_DIST)
+  if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
     export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
-  else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
-    export_pin = mdcache->hash_into_rank_bucket(ino());
+  } else if (export_pin == MDS_RANK_EPHEMERAL_RAND) {
+    if (inode->should_random_pin_frag(get_frag())) {
+      export_pin = mdcache->hash_into_rank_bucket(ino(), get_frag());
+    } else {
+      export_pin = MDS_RANK_NONE;
+    }
+  }
   return export_pin;
 }
 

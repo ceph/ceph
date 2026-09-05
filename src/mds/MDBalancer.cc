@@ -174,19 +174,18 @@ void MDBalancer::handle_export_pins(void)
     dout(20) << " executing export_pin=" << export_pin << " on " << *in << dendl;
     unsigned min_frag_bits = 0;
     mds_rank_t target = MDS_RANK_NONE;
-    if (export_pin >= 0)
+    if (export_pin >= 0) {
       target = export_pin;
-    else if (export_pin == MDS_RANK_EPHEMERAL_RAND)
-      target = mdcache->hash_into_rank_bucket(in->ino());
-    else if (export_pin == MDS_RANK_EPHEMERAL_DIST)
-      min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
+    } else if (export_pin == MDS_RANK_EPHEMERAL_DIST || export_pin == MDS_RANK_EPHEMERAL_RAND) {
+      min_frag_bits = mdcache->get_ephemeral_frag_bits();
+    }
 
     bool remove = true;
     for (auto&& dir : in->get_dirfrags()) {
       if (!dir->is_auth())
 	continue;
 
-      if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
+      if (export_pin == MDS_RANK_EPHEMERAL_DIST || export_pin == MDS_RANK_EPHEMERAL_RAND) {
 	if (dir->get_frag().bits() < min_frag_bits) {
 	  if (!dir->state_test(CDir::STATE_CREATING) &&
 	      !dir->is_frozen() && !dir->is_freezing()) {
@@ -195,7 +194,11 @@ void MDBalancer::handle_export_pins(void)
 	  remove = false;
 	  continue;
 	}
-	target = mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
+        if (export_pin == MDS_RANK_EPHEMERAL_DIST || in->should_random_pin_frag(dir->get_frag())) {
+          target = mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
+        } else {
+          target = MDS_RANK_NONE;
+        }
       }
 
       if (target == MDS_RANK_NONE) {
@@ -259,7 +262,11 @@ void MDBalancer::handle_export_pins(void)
     if (export_pin == MDS_RANK_EPHEMERAL_DIST) {
       export_pin = mdcache->hash_into_rank_bucket(cd->ino(), cd->get_frag());
     } else if (export_pin == MDS_RANK_EPHEMERAL_RAND) {
-      export_pin = mdcache->hash_into_rank_bucket(cd->ino());
+      if (cd->inode->should_random_pin_frag(cd->get_frag())) {
+        export_pin = mdcache->hash_into_rank_bucket(cd->ino(), cd->get_frag());
+      } else {
+        export_pin = cd->inode->authority().first;
+      }
     }
 
     if (print_auth_subtrees)
@@ -641,8 +648,8 @@ void MDBalancer::queue_split(const CDir *dir, bool fast)
     // happen if the checks in MDCache::can_fragment fail.
     dout(10) << _func_ << " splitting " << *dir << dendl;
     int bits = bal_split_bits;
-    if (dir->inode->is_ephemeral_dist()) {
-      unsigned min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
+    if (dir->inode->is_ephemerally_pinned()) {
+      unsigned min_frag_bits = mdcache->get_ephemeral_frag_bits();
       if (df.frag.bits() + bits < min_frag_bits)
 	bits = min_frag_bits - df.frag.bits();
     }
@@ -706,8 +713,9 @@ void MDBalancer::queue_merge(CDir *dir)
     CInode *diri = dir->get_inode();
 
     unsigned min_frag_bits = 0;
-    if (diri->is_ephemeral_dist())
-      min_frag_bits = mdcache->get_ephemeral_dist_frag_bits();
+    if (diri->is_ephemerally_pinned()) {
+      min_frag_bits = mdcache->get_ephemeral_frag_bits();
+    }
 
     frag_t fg = dir->get_frag();
     while (fg.bits() > min_frag_bits) {
