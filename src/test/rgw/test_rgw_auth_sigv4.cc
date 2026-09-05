@@ -29,6 +29,8 @@
 #include <map>
 #include <string>
 
+#include <boost/algorithm/string/predicate.hpp>
+#include <boost/beast/http/fields.hpp>
 #include <boost/optional.hpp>
 
 #include "common/ceph_argparse.h"
@@ -47,6 +49,27 @@ namespace {
  * every `x-amz-*` header actually sent are the only ones that MUST be
  * signed. */
 const std::string BASE_SIGNED{"host;x-amz-content-sha256;x-amz-date"};
+
+/* init_env() gives the env two views of a request: env_map, keyed by CGI
+ * meta-variable, and the header fields the frontend parsed off the wire.
+ * SigV4 canonicalizes out of the latter, so derive it here the same way the
+ * frontend does. Only header-ish entries carry over; REQUEST_METHOD and
+ * friends are meta-variables, not headers. */
+boost::beast::http::fields
+wire_fields(const RGWEnv& env)
+{
+  boost::beast::http::fields fields;
+  for (const auto& [key, val] : env.get_map()) {
+    if (boost::iequals(key, "CONTENT_TYPE")) {
+      fields.set("content-type", val);
+    } else if (boost::iequals(key, "CONTENT_LENGTH")) {
+      fields.set("content-length", val);
+    } else if (boost::istarts_with(key, "HTTP_")) {
+      fields.set(lowercase_dash_http_attr(key.substr(5), false), val);
+    }
+  }
+  return fields;
+}
 
 class SigV4CanonicalHeaders : public ::testing::Test {
 protected:
@@ -94,6 +117,8 @@ protected:
     for (const auto& [key, val] : extra_env) {
       env.set(key, val);
     }
+    /* last, so it reflects extra_env too */
+    env.set_raw_headers(wire_fields(env));
     req_info info(cct, &env);
     return get_v4_canonical_headers(
         cct, info, signedheaders, using_qs, force_boto2_compat);

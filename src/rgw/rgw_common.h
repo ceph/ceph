@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <iterator>
 #include <ranges>
+#include <optional>
 #include <string_view>
 #include <unordered_map>
 
@@ -27,6 +28,7 @@
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
+#include <boost/beast/http/fields.hpp>
 
 #include "include/neorados/RADOS.hpp"
 
@@ -511,11 +513,21 @@ using env_map_t = std::map<std::string, std::string, ltstr_nocase>;
 
 class RGWEnv {
   env_map_t env_map;
+  boost::beast::http::fields raw_headers;
   RGWConf conf;
 public:
   void init(CephContext *cct);
-  void init(CephContext *cct, char **envp);
   void set(std::string name, std::string val);
+  // replaces the header block wholesale; unlike env_map (last-wins), this
+  // preserves a field repeated across several field-lines
+  void set_raw_headers(boost::beast::http::fields headers);
+  // post-parse header injection/removal visible to signature verification,
+  // which reads raw_headers rather than env_map
+  void set_header(std::string_view name, std::string_view val);
+  void remove_header(std::string_view name);
+  // every field-line for 'name' (wire-form), comma-joined per RFC 7230 -
+  // the form a SigV4 client signs. nullopt if absent
+  std::optional<std::string> get_combined_header(std::string_view name) const;
   const char *get(const char *name, const char *def_val = nullptr) const;
   boost::optional<const std::string&>
   get_optional(const std::string& name) const;
@@ -526,6 +538,11 @@ public:
   bool exists_prefix(const char *prefix) const;
   void remove(const char *name);
   const std::map<std::string, std::string, ltstr_nocase>& get_map() const { return env_map; }
+  // the header block as parsed; migration surface for tracker #57646, which
+  // wants consumers off the mangled HTTP_* env keys and onto this directly
+  const boost::beast::http::fields& get_raw_headers() const {
+    return raw_headers;
+  }
   int get_enable_ops_log() const {
     return conf.enable_ops_log;
   }

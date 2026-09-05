@@ -110,27 +110,63 @@ static const struct rgw_http_attr base_rgw_to_http_attrs[] = {
   { RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION, "x-amz-website-redirect-location" },
 };
 
+// anonymous: rgw_lc_tier.cc has its own global-scope 'generic_attr' - two
+// differing definitions of one class name would be an ODR violation
+namespace {
+
+// whether the field is a comma-separated list per RFC 9110's #rule ABNF.
+// joining a non-list would persist a malformed value (Expires already has a
+// comma; Content-Disposition has no list form). 'single' - what you get by
+// omitting this - is the safe default: wrong 'single' just keeps last-wins,
+// wrong 'comma_list' persists a bad value forever
+enum class field_values { single, comma_list };
 
 struct generic_attr {
   const char *http_header;
   const char *rgw_attr;
+  field_values values;
+};
+
+// what preprocess() needs per env key, resolved once at startup so the
+// request path neither re-derives the wire name nor keeps a second list of
+// which attrs may be combined
+struct generic_attr_info {
+  std::string wire_header;
+  std::string rgw_attr;
+  field_values values;
 };
 
 /*
  * mapping between http env fields and rgw object attrs
  */
-static const struct generic_attr generic_attrs[] = {
-  { "CONTENT_TYPE",             RGW_ATTR_CONTENT_TYPE },
-  { "HTTP_CONTENT_LANGUAGE",    RGW_ATTR_CONTENT_LANG },
-  { "HTTP_EXPIRES",             RGW_ATTR_EXPIRES },
-  { "HTTP_CACHE_CONTROL",       RGW_ATTR_CACHE_CONTROL },
-  { "HTTP_CONTENT_DISPOSITION", RGW_ATTR_CONTENT_DISP },
-  { "HTTP_CONTENT_ENCODING",    RGW_ATTR_CONTENT_ENC },
-  { "HTTP_X_ROBOTS_TAG",        RGW_ATTR_X_ROBOTS_TAG },
+const struct generic_attr generic_attrs[] = {
+  { "CONTENT_TYPE",             RGW_ATTR_CONTENT_TYPE,  field_values::single },
+  { "HTTP_CONTENT_LANGUAGE",    RGW_ATTR_CONTENT_LANG,  field_values::comma_list },
+  { "HTTP_EXPIRES",             RGW_ATTR_EXPIRES,       field_values::single },
+  { "HTTP_CACHE_CONTROL",       RGW_ATTR_CACHE_CONTROL, field_values::comma_list },
+  { "HTTP_CONTENT_DISPOSITION", RGW_ATTR_CONTENT_DISP,  field_values::single },
+  { "HTTP_CONTENT_ENCODING",    RGW_ATTR_CONTENT_ENC,   field_values::comma_list },
+  { "HTTP_X_ROBOTS_TAG",        RGW_ATTR_X_ROBOTS_TAG,  field_values::comma_list },
 };
 
+// "HTTP_CONTENT_ENCODING" -> "content-encoding". derived, not tabulated: a
+// typo in a hand-written column would silently break the join with no signal
+std::string env_name_to_wire(std::string_view env_name)
+{
+  if (env_name.starts_with("HTTP_")) {
+    env_name.remove_prefix(5);
+  }
+  return lowercase_dash_http_attr(std::string{env_name}, false);
+}
+
+map<string, generic_attr_info> generic_attrs_map;
+
+} // anonymous namespace
+
+// rgw_to_http_attrs is declared extern in rgw_rest.h, so it stays at namespace
+// scope. http_status_names has no such declaration and is used only here, but
+// moving it is unrelated to this change
 map<string, string> rgw_to_http_attrs;
-static map<string, string> generic_attrs_map;
 map<int, const char *> http_status_names;
 
 /* avoid duplicate hostnames in hostnames lists */
@@ -144,7 +180,9 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
   }
 
   for (const auto& http2rgw : generic_attrs) {
-    generic_attrs_map[http2rgw.http_header] = http2rgw.rgw_attr;
+    generic_attrs_map[http2rgw.http_header] =
+      { env_name_to_wire(http2rgw.http_header), http2rgw.rgw_attr,
+        http2rgw.values };
   }
 
   list<string> extended_http_attrs;
@@ -161,7 +199,20 @@ void rgw_rest_init(CephContext *cct, const rgw::sal::ZoneGroup& zone_group)
     string http_header = "HTTP_";
     uppercase_dash_transform(*iter, std::back_inserter(http_header));
 
-    generic_attrs_map[http_header] = rgw_attr;
+    // shadowing a built-in has always been allowed (x-robots-tag, the only
+    // built-in spelled with dashes, resolves to a different attr key and
+    // needs it to stay readable) - just inherit its list semantics rather
+    // than silently resetting them to single
+    auto values = field_values::single;
+    if (const auto found = generic_attrs_map.find(http_header);
+        found != generic_attrs_map.end()) {
+      values = found->second.values;
+      ldout(cct, 10) << "rgw_extended_http_attrs entry '" << *iter
+                     << "' shadows an existing attribute" << dendl;
+    }
+
+    generic_attrs_map[http_header] =
+      { env_name_to_wire(http_header), rgw_attr, values };
   }
 
   for (const struct rgw_http_status_code *h = http_codes; h->code; h++) {
@@ -2257,12 +2308,20 @@ int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)
     return -EINVAL;
   }
 
-  map<string, string>::iterator giter;
-  for (giter = generic_attrs_map.begin(); giter != generic_attrs_map.end();
+  for (auto giter = generic_attrs_map.begin(); giter != generic_attrs_map.end();
        ++giter) {
     const char *env = info.env->get(giter->first.c_str());
+    std::optional<std::string> combined;
+    if (giter->second.values == field_values::comma_list) {
+      // a list-valued field sent on several field-lines has to keep every
+      // value the client sent; env_map holds only the last one
+      combined = info.env->get_combined_header(giter->second.wire_header);
+      if (combined) {
+        env = combined->c_str();
+      }
+    }
     if (env) {
-      s->generic_attrs[giter->second] = env;
+      s->generic_attrs[giter->second.rgw_attr] = env;
     }
   }
 
