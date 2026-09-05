@@ -4743,13 +4743,81 @@ def update_service_for_daemon(ctx: CephadmContext,
     # check if all the daemon names are valid
     if not set(update_daemons).issubset(set(available_daemons)):
         raise Error(f'Error EINVAL: one or more daemons of {update_daemons} does not exist on this host')
+    # osdspec_affinity stores the bare service id (e.g. "foobar"), not the
+    # full service name (e.g. "osd.foobar"), consistent with how ceph-volume
+    # writes it at OSD creation time via CEPH_VOLUME_OSDSPEC_AFFINITY.
+    _, _, service_id = ctx.service_name.partition('.')
+    if not service_id:
+        service_id = ctx.service_name
     for name in update_daemons:
         path = os.path.join(ctx.data_dir, ctx.fsid, name, 'unit.meta')
         update_meta_file(path, data)
+        update_osd_bluestore_affinity(ctx, name, service_id)
         print(f'Successfully updated daemon {name} with service {ctx.service_name}')
 
 
+def update_osd_bluestore_affinity(ctx: CephadmContext, daemon_name: str, service_name: str) -> None:
+    """Update osdspec_affinity via ceph-bluestore-tool set-label-key.
+
+    ceph-bluestore-tool is only available inside the ceph container image, not
+    on the host directly, so we run it as an ephemeral privileged container.
+
+    The block device is held exclusively by the running OSD (EBUSY), so the
+    OSD systemd unit must be stopped first and restarted afterwards.
+
+    The OSD data dir is accessible inside the container via /rootfs (the full
+    host filesystem is mounted there for OSD containers), so the block device
+    path is prefixed accordingly.
+    """
+    osd_data_dir = os.path.join(ctx.data_dir, ctx.fsid, daemon_name)
+    block_path = os.path.join(osd_data_dir, 'block')
+
+    if not os.path.exists(block_path):
+        raise Error(f'Block device not found at {block_path} for {daemon_name}')
+
+    # daemon_name is "osd.3" (type="osd", id="3")
+    daemon_type, daemon_id = daemon_name.split('.', 1)
+    unit_name = get_unit_name(ctx.fsid, daemon_type, daemon_id)
+
+    logger.info(f'Stopping {unit_name} to update osdspec_affinity bdev label')
+    call_throws(ctx, ['systemctl', 'stop', unit_name])
+    try:
+        # Inside the container the host root is mounted at /rootfs, so the
+        # block symlink and the resolved device under /dev are both accessible.
+        block_path_in_container = '/rootfs' + block_path
+
+        c = CephContainer(
+            ctx,
+            image=ctx.image,
+            privileged=True,
+            entrypoint='ceph-bluestore-tool',
+            args=[
+                '--dev', block_path_in_container,
+                'set-label-key',
+                '-k', 'osdspec_affinity',
+                '-v', service_name,
+            ],
+            volume_mounts=get_ceph_mounts_for_type(ctx, ctx.fsid, 'osd'),
+        )
+        out, err, ret = call(
+            ctx,
+            c.run_cmd(),
+            verbosity=CallVerbosity.QUIET_UNLESS_ERROR,
+        )
+        if ret:
+            raise Error(
+                f'ceph-bluestore-tool set-label-key failed for {daemon_name} '
+                f'(osdspec_affinity={service_name}): {err}'
+            )
+        logger.debug(f'Updated osdspec_affinity={service_name} for {daemon_name}')
+    finally:
+        logger.info(f'Restarting {unit_name}')
+        call(ctx, ['systemctl', 'start', unit_name],
+             verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+
+
 @infer_fsid
+@infer_image
 def command_update_osd_service(ctx: CephadmContext) -> int:
     """update service for provided daemon"""
     update_daemons = [f'osd.{osd_id}' for osd_id in ctx.osd_ids.split(',')]
