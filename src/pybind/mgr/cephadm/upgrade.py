@@ -1415,23 +1415,33 @@ class CephadmUpgrade:
     def _enough_mds_for_ok_to_stop(self, mds_daemon: DaemonDescription) -> bool:
         # type (DaemonDescription) -> bool
 
-        # find fs this mds daemon belongs to
+        # find the fs this mds daemon serves: prefer actual membership from
+        # the fsmap over the mds.<fs_name> service naming convention, since
+        # mds_join_fs is only a preference and a daemon can hold a rank in
+        # a filesystem short on MDS other than its service's
+        assert mds_daemon.daemon_id
+        service_fs_name = mds_daemon.service_name().split('.', 1)[1]
         fsmap = self.mgr.get("fs_map")
+        target_mdsmap = None
+        service_mdsmap = None
         for fs in fsmap.get('filesystems', []):
             mdsmap = fs["mdsmap"]
-            fs_name = mdsmap["fs_name"]
-
-            assert mds_daemon.daemon_id
-            if fs_name != mds_daemon.service_name().split('.', 1)[1]:
-                # wrong fs for this mds daemon
-                continue
-
+            if any(info.get('name') == mds_daemon.daemon_id
+                   for info in (mdsmap.get('info') or {}).values()):
+                # the fs this daemon actually serves
+                target_mdsmap = mdsmap
+                break
+            if mdsmap["fs_name"] == service_fs_name:
+                service_mdsmap = mdsmap
+        if target_mdsmap is None:
+            target_mdsmap = service_mdsmap
+        if target_mdsmap is not None:
             # get number of mds daemons for this fs
             mds_count = len(
                 [daemon for daemon in self.mgr.cache.get_daemons_by_service(mds_daemon.service_name())])
 
             # standby mds daemons for this fs?
-            if mdsmap["max_mds"] < mds_count:
+            if target_mdsmap["max_mds"] < mds_count:
                 return True
             return False
 
