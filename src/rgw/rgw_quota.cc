@@ -21,6 +21,7 @@
 #include "common/RefCountedObj.h"
 #include "common/Thread.h"
 #include "common/ceph_mutex.h"
+#include "common/async/blocked_completion.h"
 
 #include "rgw_common.h"
 #include "rgw_sal.h"
@@ -46,6 +47,7 @@ struct rqcs_to_key {
   }
 };
 
+using WaitHandler = boost::asio::any_completion_handler<void()>;
 template <typename Key>
 struct RGWQuotaCacheStats
   : public ceph::common::intrusive_lru_base<
@@ -57,7 +59,52 @@ struct RGWQuotaCacheStats
   RGWStorageStats stats;
   utime_t expiration;
   utime_t async_refresh_time;
-  explicit RGWQuotaCacheStats(const Key &key) : key(key) {}
+  ceph::mutex lock;
+  std::vector<WaitHandler> wakeups;
+  explicit RGWQuotaCacheStats(const Key &key)
+    : key(key), lock(ceph::make_mutex("RGWQuotaCacheStats")) {}
+
+  template <typename CompletionToken>
+  auto wait(CompletionToken &&token) {
+    return boost::asio::async_initiate<CompletionToken, void()>(
+      [this](auto handler) {
+        bool no_wait = false;
+        {
+          std::lock_guard l(lock);
+          if (async_refresh_time.sec() == 0) {
+            wakeups.emplace_back(std::move(handler));
+          } else {
+            no_wait = true;
+          }
+        }
+
+        if (no_wait) {
+          auto ex = boost::asio::get_associated_executor(handler);
+          boost::asio::dispatch(ex, std::move(handler));
+        }
+      },
+      token
+    );
+  }
+
+  void notify() {
+    std::vector<WaitHandler> w;
+    {
+      std::lock_guard l(lock);
+      for (auto &wakeup : wakeups) {
+        w.emplace_back(std::move(wakeup));
+      }
+      wakeups.clear();
+    }
+    for (auto &wakeup : w) {
+      auto ex = boost::asio::get_associated_executor(wakeup);
+      boost::asio::dispatch(
+        ex,
+        [h=std::move(wakeup)]() mutable {
+          std::move(h)();
+        });
+    }
+  }
 };
 template <typename Key>
 using RGWQuotaCacheStatsRef = RGWQuotaCacheStats<Key>::Ref;
@@ -153,6 +200,7 @@ void RGWQuotaCache<T>::async_refresh_response(
     std::lock_guard l(stats_lock);
     set_stats(key, qs, stats);
   }
+  qs.notify();
 }
 
 template<class T>
@@ -177,6 +225,7 @@ int RGWQuotaCache<T>::get_stats(
 {
   bool do_async_refresh = false;
   bool do_fetch_stats = false;
+  bool do_wait_refresh = false;
   RGWQuotaCacheStatsRef<T> rqcs_ref;
   {
     std::lock_guard l(stats_lock);
@@ -184,19 +233,50 @@ int RGWQuotaCache<T>::get_stats(
     auto now = ceph_clock_now();
     rqcs_ref = qs_ref;
     auto &qs = *qs_ref;
-    do_fetch_stats = (!found) || (qs.expiration <= now);
+    do_fetch_stats = !found;
     do_async_refresh =
       (found) &&
       qs.async_refresh_time.sec() > 0 &&
       now >= qs.async_refresh_time;
+    do_wait_refresh =
+      (found) &&
+      qs.async_refresh_time.sec() == 0 &&
+      qs.expiration <= now;
     if (do_async_refresh) {
       qs.async_refresh_time = utime_t{0, 0};
     }
   }
 
+  if (do_wait_refresh) {
+    ceph_assert(!do_async_refresh && !do_fetch_stats);
+    ldout(driver->ctx(), 20)
+      << "waiting for existing stats fetching/refreshing for "
+      << rqcs_ref->key << dendl;
+
+    boost::system::error_code ec;
+    if (y) {
+      ldout(driver->ctx(), 20) << "asio coroutine wait" << dendl;
+      auto yield = y.get_yield_context();
+      rqcs_ref->wait(yield[ec]);
+    } else {
+      rqcs_ref->wait(ceph::async::use_blocked[ec]);
+    }
+    if (ec) {
+      return ceph::from_error_code(ec);
+    }
+    ldout(driver->ctx(), 20)
+      << "done waiting for " << rqcs_ref->key << dendl;
+    {
+      std::lock_guard l(stats_lock);
+      stats = rqcs_ref->stats;
+    }
+    return 0;
+  }
+
   if (do_async_refresh) {
     ldout(driver->ctx(), 20) << "refreshing stats for "
       << rqcs_ref->key << dendl;
+    ceph_assert(!do_wait_refresh && !do_fetch_stats);
     int r = init_refresh(key, async_refcount, *rqcs_ref);
     if (r < 0) {
       ldpp_dout(dpp, 0)
@@ -209,6 +289,7 @@ int RGWQuotaCache<T>::get_stats(
 
   if (do_fetch_stats) {
     ldout(driver->ctx(), 20) << "fetching stats for " << rqcs_ref->key << dendl;
+    ceph_assert(!do_wait_refresh && !do_async_refresh);
     int ret = fetch_stats_from_storage(key, stats, y, dpp);
     if (ret < 0 && ret != -ENOENT)
       return ret;
@@ -217,6 +298,7 @@ int RGWQuotaCache<T>::get_stats(
       std::lock_guard l(stats_lock);
       set_stats(key, *rqcs_ref, stats);
     }
+    rqcs_ref->notify();
     ldout(driver->ctx(), 20) << "fetched stats for " << rqcs_ref->key << dendl;
     return 0;
   }
