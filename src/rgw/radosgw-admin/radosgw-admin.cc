@@ -689,7 +689,9 @@ static SimpleCmd::Commands all_cmds = {
 #endif
   { "bucket logging flush", OPT::BUCKET_LOGGING_FLUSH },
   { "bucket logging info", OPT::BUCKET_LOGGING_INFO },
+#ifdef WITH_RADOSGW_RADOS
   { "bucket logging list", OPT::BUCKET_LOGGING_LIST },
+#endif
   { "policy", OPT::POLICY },
 #ifdef WITH_RADOSGW_RADOS
   { "log list", OPT::LOG_LIST },
