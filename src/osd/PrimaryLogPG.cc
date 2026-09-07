@@ -9052,7 +9052,7 @@ PrimaryLogPG::build_pending_ops(
         auto snap_ids = snap_id_set_from_snapc(rb_info.snapc);
         for (snapid_t sid : snap_ids) {
           if (sid > obj_seq && sid <= current_seq &&
-              sid != rb_id &&
+              sid > rb_info.source_snap &&
               emitted_snaps.find(sid) == emitted_snaps.end()) {
             ops.push_back({pending_op_t::SNAP, sid, CEPH_NOSNAP});
             emitted_snaps.insert(sid);

@@ -562,7 +562,7 @@ simulate_build_pending_ops(const pg_pool_t& pp,
       if (rb_id > obj_seq && rb_id <= current_seq) {
         for (snapid_t sid : rb_info.snapc.snaps) {
           if (sid > obj_seq && sid <= current_seq &&
-              sid != rb_id &&
+              sid > rb_info.source_snap &&
               emitted_snaps.find(sid) == emitted_snaps.end()) {
             ops.push_back({pending_op_sim_t::SNAP, sid, CEPH_NOSNAP});
             emitted_snaps.insert(sid);
