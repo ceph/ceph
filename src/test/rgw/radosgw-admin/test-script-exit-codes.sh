@@ -185,166 +185,86 @@ check_cluster "put: file not found" 2 -- \
 check_cluster "put: --tenant with background context" 22 -- \
   script put --context background --tenant foo --infile /dev/null
 
+# get, rm and remove take the same options and behave the same way,
+# so every row runs for all three verbs.
+script_verb_tests() {
+  local verb="$1"
+
+  # missing required
+  check_cluster "$verb: missing --context"        22 -- \
+    script "$verb"
+
+  # missing option value
+  check "$verb: --context missing value" 1 \
+    script "$verb" --context
+
+  # flag before script
+  check_cluster "$verb: --context before script"  0 -- \
+    --context prerequest script "$verb"
+  check_cluster "$verb: --tenant before script"   0 -- \
+    --tenant mytenant script "$verb" --context prerequest
+
+  # flag between script and the verb
+  check_cluster "$verb: --context between script and $verb"  0 -- \
+    script --context prerequest "$verb"
+  check_cluster "$verb: --tenant between script and $verb"   0 -- \
+    script --tenant mytenant "$verb" --context prerequest
+
+  # the same flag given twice, both after the verb
+  check_cluster "$verb: duplicate --context after $verb"  0 -- \
+    script "$verb" --context prerequest --context background
+  check_cluster "$verb: duplicate --tenant after $verb"   0 -- \
+    script "$verb" --context prerequest --tenant foo --tenant bar
+
+  # both flags duplicated after the verb
+  check_cluster "$verb: duplicate --context and --tenant after $verb"  0 -- \
+    script "$verb" --context prerequest --context background --tenant foo --tenant bar
+
+  # once before script and again after the verb
+  check_cluster "$verb: --context before script and again after $verb"  0 -- \
+    --context prerequest script "$verb" --context background
+  check_cluster "$verb: --tenant before script and again after $verb"   0 -- \
+    --tenant foo script "$verb" --context prerequest --tenant bar
+
+  # stray positional args
+  check "$verb: stray after flags"           1 \
+    script "$verb" --context prerequest strayarg
+  check "$verb: stray before script"         1 \
+    foo script "$verb" --context prerequest
+  check "$verb: stray between script and $verb" 1 \
+    script extra "$verb" --context prerequest
+  check "$verb: script twice in a row before $verb" 1 \
+    script script "$verb" --context prerequest
+
+  # unrecognized flag
+  check "$verb: unrecognized flag"  22 \
+    script "$verb" --context prerequest --fakeflag
+
+  # --infile is accepted here and makes no difference
+  check_cluster "$verb: --infile is accepted and ignored"  0 -- \
+    script "$verb" --infile /dev/null --context prerequest
+
+  check_cluster "$verb: invalid context string" 22 -- \
+    script "$verb" --context invalid_ctx
+}
+
 # ============================================================
 echo ""
 echo "=== script get ==="
 # ============================================================
-
-# missing required
-check_cluster "get: missing --context"        22 -- \
-  script get
-
-# missing option value
-check "get: --context missing value" 1 \
-  script get --context
-
-# flag before script
-check_cluster "get: --context before script"  0 -- \
-  --context prerequest script get
-check_cluster "get: --tenant before script"   0 -- \
-  --tenant mytenant script get --context prerequest
-
-# flag between script and get
-check_cluster "get: --context between script and get"  0 -- \
-  script --context prerequest get
-check_cluster "get: --tenant between script and get"   0 -- \
-  script --tenant mytenant get --context prerequest
-
-# the same flag given twice, both after get
-check_cluster "get: duplicate --context after get"  0 -- \
-  script get --context prerequest --context background
-check_cluster "get: duplicate --tenant after get"   0 -- \
-  script get --context prerequest --tenant foo --tenant bar
-
-# both flags duplicated after get
-check_cluster "get: duplicate --context and --tenant after get"  0 -- \
-  script get --context prerequest --context background --tenant foo --tenant bar
-
-# once before script and again after get
-check_cluster "get: --context before script and again after get"  0 -- \
-  --context prerequest script get --context background
-
-# stray positional args
-check "get: stray after flags"           1 \
-  script get --context prerequest strayarg
-check "get: stray before script"         1 \
-  foo script get --context prerequest
-check "get: stray between script and get" 1 \
-  script extra get --context prerequest
-check "get: script twice in a row before get" 1 \
-  script script get --context prerequest
-
-# unrecognized flag
-check "get: unrecognized flag"  22 \
-  script get --context prerequest --fakeflag
-
-# --infile is accepted here and makes no difference
-check_cluster "get: --infile is accepted and ignored"  0 -- \
-  script get --infile /dev/null --context prerequest
-
-check_cluster "get: invalid context string" 22 -- \
-  script get --context invalid_ctx
+script_verb_tests get
 
 # ============================================================
 echo ""
 echo "=== script rm ==="
 # ============================================================
-
-# missing required
-check_cluster "rm: missing --context"         22 -- \
-  script rm
-
-# missing option value
-check "rm: --context missing value"  1 \
-  script rm --context
-
-# flag before script
-check_cluster "rm: --context before script"  0 -- \
-  --context prerequest script rm
-check_cluster "rm: --tenant before script"   0 -- \
-  --tenant mytenant script rm --context prerequest
-
-# flag between script and rm
-check_cluster "rm: --context between script and rm"  0 -- \
-  script --context prerequest rm
-check_cluster "rm: --tenant between script and rm"   0 -- \
-  script --tenant mytenant rm --context prerequest
-
-# the same flag given twice, both after rm
-check_cluster "rm: duplicate --context after rm"  0 -- \
-  script rm --context prerequest --context background
-check_cluster "rm: duplicate --tenant after rm"   0 -- \
-  script rm --context prerequest --tenant foo --tenant bar
-
-# once before script and again after rm
-check_cluster "rm: --context before script and again after rm"  0 -- \
-  --context prerequest script rm --context background
-check_cluster "rm: --tenant before script and again after rm"   0 -- \
-  --tenant foo script rm --context prerequest --tenant bar
-
-# stray positional args
-check "rm: stray after flags"           1 \
-  script rm --context prerequest strayarg
-check "rm: stray before script"         1 \
-  foo script rm --context prerequest
-check "rm: stray between script and rm" 1 \
-  script extra rm --context prerequest
-
-# unrecognized flag
-check "rm: unrecognized flag"  22 \
-  script rm --context prerequest --fakeflag
-
-check_cluster "rm: invalid context string" 22 -- \
-  script rm --context invalid_ctx
+script_verb_tests rm
 
 # ============================================================
 echo ""
 echo "=== script remove (alias for rm) ==="
 # ============================================================
-
-# missing required
-check_cluster "remove: missing --context"         22 -- \
-  script remove
-
-# missing option value
-check "remove: --context missing value"  1 \
-  script remove --context
-
-# flag before script
-check_cluster "remove: --context before script"  0 -- \
-  --context prerequest script remove
-check_cluster "remove: --tenant before script"   0 -- \
-  --tenant mytenant script remove --context prerequest
-
-# flag between script and remove
-check_cluster "remove: --context between script and remove"  0 -- \
-  script --context prerequest remove
-check_cluster "remove: --tenant between script and remove"   0 -- \
-  script --tenant mytenant remove --context prerequest
-
-# the same flag given twice, both after remove
-check_cluster "remove: duplicate --context after remove"  0 -- \
-  script remove --context prerequest --context background
-check_cluster "remove: duplicate --tenant after remove"   0 -- \
-  script remove --context prerequest --tenant foo --tenant bar
-
-# once before script and again after remove
-check_cluster "remove: --context before script and again after remove"  0 -- \
-  --context prerequest script remove --context background
-check_cluster "remove: --tenant before script and again after remove"   0 -- \
-  --tenant foo script remove --context prerequest --tenant bar
-
-# stray positional args
-check "remove: stray after flags"              1 \
-  script remove --context prerequest strayarg
-check "remove: stray before script"            1 \
-  foo script remove --context prerequest
-check "remove: stray between script and remove" 1 \
-  script extra remove --context prerequest
-
-# unrecognized flag
-check "remove: unrecognized flag"  22 \
-  script remove --context prerequest --fakeflag
+script_verb_tests remove
 
 # ============================================================
 echo ""
