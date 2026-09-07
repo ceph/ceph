@@ -2744,7 +2744,8 @@ TEST(PgPoolTRollback, EncodeDecodeWithRollbackSnaps)
   rb.source_snap = snapid_t(10);
   pool.rollback_snaps[rb.rollback_id] = rb;
 
-  // Full feature set to exercise v34 encoding
+  // Full feature set to exercise v34 encoding (requires SERVER_UMBRELLA)
+  // FIXME: Will need updating when SERVER_VAMPIRE exists
   uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5 |
                       CEPH_FEATURE_INCARNATION_2 |
                       CEPH_FEATURE_PGPOOL3 |
@@ -2753,7 +2754,9 @@ TEST(PgPoolTRollback, EncodeDecodeWithRollbackSnaps)
                       CEPH_FEATURE_NEW_OSDOP_ENCODING |
                       CEPH_FEATUREMASK_SERVER_LUMINOUS |
                       CEPH_FEATUREMASK_SERVER_MIMIC |
-                      CEPH_FEATUREMASK_SERVER_NAUTILUS;
+                      CEPH_FEATUREMASK_SERVER_NAUTILUS |
+                      CEPH_FEATUREMASK_SERVER_TENTACLE |
+                      CEPH_FEATUREMASK_SERVER_UMBRELLA;
 
   bufferlist bl;
   pool.encode(bl, features);
@@ -2783,7 +2786,8 @@ TEST(PgPoolTRollback, OldDecoderSeesNewFieldsIntact)
   ASSERT_FALSE(orig.rollback_snaps.empty())
     << "generate_test_instances must include a rollback_snaps entry";
 
-  // Encode it
+  // Encode it (requires SERVER_UMBRELLA to reach v34)
+  // FIXME: Will need updating when SERVER_VAMPIRE exists
   uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5 |
                       CEPH_FEATURE_INCARNATION_2 |
                       CEPH_FEATURE_PGPOOL3 |
@@ -2792,7 +2796,9 @@ TEST(PgPoolTRollback, OldDecoderSeesNewFieldsIntact)
                       CEPH_FEATURE_NEW_OSDOP_ENCODING |
                       CEPH_FEATUREMASK_SERVER_LUMINOUS |
                       CEPH_FEATUREMASK_SERVER_MIMIC |
-                      CEPH_FEATUREMASK_SERVER_NAUTILUS;
+                      CEPH_FEATUREMASK_SERVER_NAUTILUS |
+                      CEPH_FEATUREMASK_SERVER_TENTACLE |
+                      CEPH_FEATUREMASK_SERVER_UMBRELLA;
 
   bufferlist bl;
   orig.encode(bl, features);
