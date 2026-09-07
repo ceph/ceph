@@ -1878,7 +1878,22 @@ When this OSDMap increment is applied:
    from ``rollback_snaps_queue``.
 -  Each PG receives the update in its next OSDMap processing pass and
    removes the completed entry from ``rollback_trimq``.
--  The pool’s ``pg_pool_t::rollback_snaps`` map is updated (the entry is
+-  Each active-primary PG's ``PG::on_active_advmap()`` calls
+   ``recovery_state.adjust_completed_rollbacks()`` to **erase** the
+   pruned IDs from ``pg_info_t::completed_rollbacks``.  This is the
+   feedback loop (mirroring the ``new_purged_snaps`` block in §2.4.5)
+   that stops the PG from re-reporting already-pruned IDs in future
+   ``pg_stat_t`` messages.  ``adjust_completed_rollbacks()`` sets
+   ``dirty_big_info = true``, which causes ``Active::react(AdvMap)``
+   to call ``share_pg_info()`` immediately, pushing fresh stats to
+   the MON.  Without this step the PG would keep reporting completed
+   IDs forever and ``calc_completed_rollbacks()`` would keep returning
+   them to ``try_prune_completed_rollbacks()``.  The already-pruned
+   check in that function (§4.6) saves correctness but wastes CPU, and
+   a future re-rollback of the *same snap ID* would be silently
+   skipped because ``on_activate()`` guards ``rollback_trimq``
+   population with ``!info.completed_rollbacks.contains(rb_id)``.
+-  The pool's ``pg_pool_t::rollback_snaps`` map is updated (the entry is
    removed in ``pending_inc.new_pools``).
 
 **End-to-end data flow:**
@@ -1921,6 +1936,8 @@ When this OSDMap increment is applied:
             v  (OSDMap broadcast)
     rollback_snaps_queue[pool].erase(rb_id)
     pg_pool_t::rollback_snaps.erase(rb_id)
+    pg_info_t::completed_rollbacks.erase(rb_id)  [feedback loop]
+    share_pg_info() --> stops future over-reporting to MON
 
 7.8 Throttling
 ~~~~~~~~~~~~~~

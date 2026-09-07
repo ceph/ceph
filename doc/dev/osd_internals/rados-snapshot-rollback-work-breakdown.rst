@@ -225,7 +225,8 @@ WI-5 - PG Work Queue Population ``[S]``
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 Populate ``rollback_trimq`` on activation/advmap; drain on completion;
-extend ``kick_snap_trim()`` (Sec.7.3).
+feedback-loop erasure from ``pg_info_t``; extend ``kick_snap_trim()``
+(Sec.7.3, Sec.7.7).
 
 **Files:** ``src/osd/PG.cc`` - ``PeeringState.cc`` - ``PrimaryLogPG.cc``
 
@@ -258,6 +259,33 @@ extend ``kick_snap_trim()`` (Sec.7.3).
 |        | rollbacks``;          |                    |                 |
 |        | assert it is not      |                    |                 |
 |        | re-added.             |                    |                 |
++--------+-----------------------+--------------------+-----------------+
+| WI-5-d | ``on_active_          | ``PG.cc``          | ~20             |
+|        | advmap()``            |                    |                 |
+|        | feedback loop:        |                    |                 |
+|        | after draining        |                    |                 |
+|        | ``rollback_trimq``    |                    |                 |
+|        | on receipt of         |                    |                 |
+|        | ``new_completed_      |                    |                 |
+|        | rollbacks``, call     |                    |                 |
+|        | ``recovery_state.     |                    |                 |
+|        | adjust_completed_     |                    |                 |
+|        | rollbacks()``         |                    |                 |
+|        | to erase those IDs    |                    |                 |
+|        | from                  |                    |                 |
+|        | ``pg_info_t::         |                    |                 |
+|        | completed_rollbacks`` |                    |                 |
+|        | (mirrors the          |                    |                 |
+|        | ``new_purged_snaps``  |                    |                 |
+|        | erasure in            |                    |                 |
+|        | §2.4.5). Sets         |                    |                 |
+|        | ``dirty_big_info``    |                    |                 |
+|        | → ``share_pg_info()`` |                    |                 |
+|        | stops future          |                    |                 |
+|        | over-reporting and    |                    |                 |
+|        | unblocks future       |                    |                 |
+|        | re-rollbacks of the   |                    |                 |
+|        | same snap ID.         |                    |                 |
 +--------+-----------------------+--------------------+-----------------+
 
 --------------
