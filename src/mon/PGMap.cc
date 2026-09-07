@@ -1555,6 +1555,7 @@ void PGMap::calc_purged_snaps()
 void PGMap::calc_completed_rollbacks(
     mempool::pgmap::map<int64_t, snap_interval_set_t>& ret) const
 {
+  ret.clear();
   set<int64_t> unknown;
   for (auto& i : pg_stat) {
     if (i.second.state == 0) {
