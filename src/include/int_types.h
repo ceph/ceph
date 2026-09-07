@@ -53,4 +53,8 @@ typedef int64_t __s64;
 #define BOOST_MPL_LIMIT_MAP_SIZE 30 // or whatever you need
 #endif
 
+#ifndef BOOST_MPL_LIMIT_LIST_SIZE
+#define BOOST_MPL_LIMIT_LIST_SIZE 30 // or whatever you need
+#endif
+
 #endif

@@ -95,6 +95,9 @@ EXTRA_OPTS=""
 #
 
 
+# Global associative array to store crimson OSD arguments
+declare -A CRIMSON_OSD_ARGS
+
 function get_asok_dir() {
     if [ -n "$CEPH_ASOK_DIR" ]; then
         echo "$CEPH_ASOK_DIR"
@@ -178,15 +181,33 @@ function teardown() {
         fi
     fi
     if [ "$cores" = "yes" -o "$dumplogs" = "1" ]; then
-	if [ -n "$LOCALRUN" ]; then
-	    display_logs $dir
+ if [ -n "$LOCALRUN" ]; then
+     # Check if this is a Crimson test by checking directory name or log files
+     if [[ "$dir" == *"crimson"* ]] || ls $dir/*crimson-osd*.log >/dev/null 2>&1; then
+         # Use tail to display only last part of logs to avoid pipe buffer overflow with large Crimson logs
+         echo "Crimson test detected - displaying last 1000 lines of each log file in $dir:"
+         for logfile in $dir/*.log; do
+             if [ -f "$logfile" ]; then
+                 echo "=== Last 1000 lines of $(basename $logfile) ==="
+                 tail -n 1000 "$logfile" 2>/dev/null || true
+             fi
+         done
+         echo "Full logs preserved in $dir"
+     else
+         # Classic OSD test - display full logs
+         display_logs $dir
+     fi
         else
-	    # Move logs to where Teuthology will archive it
-	    mkdir -p $TESTDIR/archive/log
-	    mv $dir/*.log $TESTDIR/archive/log
-	fi
+     # Move logs to where Teuthology will archive it
+     mkdir -p $TESTDIR/archive/log
+     mv $dir/*.log $TESTDIR/archive/log
+ fi
     fi
-    rm -fr $dir
+    if [ "${NOREMOVE:-0}" = "1" ]; then
+        echo "NOREMOVE set: preserving log directory $dir"
+    else
+        rm -fr $dir
+    fi
     rm -rf $(get_asok_dir)
     if [ "$cores" = "yes" ]; then
         echo "ERROR: Failure due to cores found"
@@ -713,6 +734,7 @@ function run_crimson_osd() {
     ceph_args+=" --osd-journal=${osd_data}/journal"
     ceph_args+=" --chdir="
     ceph_args+=$EXTRA_OPTS
+    ceph_args+=${CRIMSON_EXTRA_OPTS:+" $CRIMSON_EXTRA_OPTS"}
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --admin-socket=$(get_asok_path)"
     ceph_args+=" --log-file=$dir/\$name.log"
@@ -725,6 +747,9 @@ function run_crimson_osd() {
     ceph_args+=" "
     ceph_args+="$@"
     mkdir -p $osd_data
+
+    # Save the original arguments in global array for potential restart
+    CRIMSON_OSD_ARGS[$id]="$@"
 
     # Find ceph-osd-crimson binary
     local crimson_osd=""
@@ -953,19 +978,48 @@ function activate_osd() {
     ceph_args+=$EXTRA_OPTS
     ceph_args+=" --run-dir=$dir"
     ceph_args+=" --admin-socket=$(get_asok_path)"
-    ceph_args+=" --debug-osd=20"
     ceph_args+=" --log-file=$dir/\$name.log"
     ceph_args+=" --pid-file=$dir/\$name.pid"
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
-    ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
-    ceph_args+=" --osd-mclock-profile=high_recovery_ops"
-    ceph_args+=" "
-    ceph_args+="$@"
     mkdir -p $osd_data
 
+    # Check if this is a Crimson OSD by checking the type file
+    local osd_binary="ceph-osd"
+    if [ -f "$osd_data/type" ]; then
+        local osd_type=$(cat $osd_data/type)
+        if [ "$osd_type" = "seastore" ]; then
+            # This is a Crimson OSD, use crimson-osd binary
+            if [ -f "./bin/crimson-osd" ]; then
+                osd_binary="./bin/crimson-osd"
+            elif [ -f "$CEPH_ROOT/build/bin/crimson-osd" ]; then
+                osd_binary="$CEPH_ROOT/build/bin/crimson-osd"
+            else
+                echo "ERROR: crimson-osd binary not found for OSD $id"
+                return 1
+            fi
+            # Crimson requires msgr2 and explicit objectstore type
+            ceph_args+=" --ms-bind-msgr2=true"
+            ceph_args+=" --ms-bind-msgr1=false"
+            ceph_args+=" --osd_objectstore=$osd_type"
+        else
+            # Classic OSD
+            ceph_args+=" --debug-osd=20"
+            ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+            ceph_args+=" --osd-mclock-profile=high_recovery_ops"
+        fi
+    else
+        # No type file, assume classic OSD
+        ceph_args+=" --debug-osd=20"
+        ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
+        ceph_args+=" --osd-mclock-profile=high_recovery_ops"
+    fi
+
+    ceph_args+=" "
+    ceph_args+="$@"
+
     echo start osd.$id
-    ceph-osd -i $id $ceph_args &
+    $osd_binary -i $id $ceph_args &
 
     [ "$id" = "$(cat $osd_data/whoami)" ] || return 1
 
@@ -1358,7 +1412,16 @@ function _objectstore_tool_nodown() {
     shift
     local osd_data=$dir/$id
 
-    ceph-objectstore-tool \
+    # Detect if this is a crimson OSD by checking the type file
+    local objectstore_tool="ceph-objectstore-tool"
+    if [ -f "$osd_data/type" ]; then
+        local osd_type=$(cat $osd_data/type)
+        if [ "$osd_type" = "seastore" ]; then
+            objectstore_tool="crimson-objectstore-tool"
+        fi
+    fi
+
+    $objectstore_tool \
         --data-path $osd_data \
         "$@" || return 1
 }
@@ -1368,11 +1431,79 @@ function _objectstore_tool_nowait() {
     shift
     local id=$1
     shift
+    local osd_data=$dir/$id
 
-    kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
+    # Check if this is a crimson OSD - they need KILL signal instead of TERM
+    local signal="TERM"
+    if [ -f "$osd_data/type" ]; then
+        local osd_type=$(cat $osd_data/type)
+        if [ "$osd_type" = "seastore" ]; then
+            # Crimson OSDs (Seastar-based) don't respond well to TERM, use KILL
+            signal="KILL"
+        fi
+    fi
+
+    kill_daemons $dir $signal osd.$id >&2 < /dev/null || return 1
 
     _objectstore_tool_nodown $dir $id "$@" || return 1
-    activate_osd $dir $id $ceph_osd_args >&2 || return 1
+
+    # Check if this is a crimson OSD and restart appropriately
+    if [ -f "$osd_data/type" ]; then
+        local osd_type=$(cat $osd_data/type)
+        if [ "$osd_type" = "seastore" ]; then
+            # For crimson OSDs, we need to restart with crimson-osd
+            # Extract the crimson-osd binary path
+            local crimson_osd=""
+            if [ -f "./bin/crimson-osd" ]; then
+                crimson_osd="./bin/crimson-osd"
+            elif [ -f "$CEPH_ROOT/build/bin/crimson-osd" ]; then
+                crimson_osd="$CEPH_ROOT/build/bin/crimson-osd"
+            else
+                echo "ERROR: crimson-osd binary not found for restarting OSD $id"
+                return 1
+            fi
+
+            # Build the command line arguments (similar to run_crimson_osd but for restart)
+            local ceph_args="$CEPH_ARGS"
+            ceph_args+=" --osd-failsafe-full-ratio=.99"
+            ceph_args+=" --osd-journal-size=100"
+            ceph_args+=" --osd-scrub-load-threshold=2000"
+            ceph_args+=" --osd-data=$osd_data"
+            ceph_args+=" --osd-journal=${osd_data}/journal"
+            ceph_args+=" --chdir="
+            ceph_args+=$EXTRA_OPTS
+            ceph_args+=" --run-dir=$dir"
+            ceph_args+=" --admin-socket=$(get_asok_path)"
+            ceph_args+=" --log-file=$dir/\$name.log"
+            ceph_args+=" --pid-file=$dir/\$name.pid"
+            ceph_args+=" --osd-max-object-name-len=460"
+            ceph_args+=" --osd-max-object-namespace-len=64"
+            ceph_args+=" --ms-bind-msgr2=true"
+            ceph_args+=" --ms-bind-msgr1=false"
+            ceph_args+=" "
+
+            # Restore original arguments from global array
+            if [ -n "${CRIMSON_OSD_ARGS[$id]}" ]; then
+                ceph_args+="${CRIMSON_OSD_ARGS[$id]}"
+                ceph_args+=" "
+            fi
+            ceph_args+="$ceph_osd_args"
+
+            echo "Restarting crimson osd.$id" >&2
+            $crimson_osd -i $id $ceph_args & >&2
+
+            # Wait for OSD to come up (unless noup is set)
+            if ! ceph osd dump --format=json | jq '.flags_set[]' | grep -q '"noup"' ; then
+                wait_for_osd up $id >&2 || return 1
+            fi
+        else
+            # Regular OSD, use activate_osd
+            activate_osd $dir $id $ceph_osd_args >&2 || return 1
+        fi
+    else
+        # No type file, assume regular OSD
+        activate_osd $dir $id $ceph_osd_args >&2 || return 1
+    fi
 }
 
 ##
@@ -2663,10 +2794,10 @@ function create_ec_pool() {
 
     ceph osd erasure-code-profile set myprofile crush-failure-domain=osd "$@" || return 1
 
-    create_pool "$poolname" 1 1 erasure myprofile || return 1
+    create_pool "$pool_name" 1 1 erasure myprofile || return 1
 
     if [ "$allow_overwrites" = "true" ]; then
-        ceph osd pool set "$poolname" allow_ec_overwrites true || return 1
+        ceph osd pool set "$pool_name" allow_ec_overwrites true || return 1
     fi
 
     wait_for_clean || return 1

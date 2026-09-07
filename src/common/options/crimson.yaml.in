@@ -417,3 +417,8 @@ options:
   level: dev
   desc: Seconds of the period to force process background tasks
   default: 5
+- name: seastore_debug_inject_read_err
+  type: bool
+  level: dev
+  default: false
+  desc: Inject read errors for testing scrub and repair functionality

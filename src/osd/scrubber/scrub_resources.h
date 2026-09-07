@@ -6,19 +6,26 @@
 #include <functional>
 #include <string>
 
+#ifndef WITH_CRIMSON
 #include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
+#endif
 #include "common/Formatter.h"
 #include "osd/osd_types.h"
 
+#ifdef WITH_CRIMSON
+namespace crimson::osd::scrub {
+#else
 namespace Scrub {
-
+#endif
 /**
  * an interface allowing the ScrubResources to log directly into its
  * owner's log. This way, we do not need the full dout() mechanism
  * (prefix func, OSD id, etc.)
  */
+#ifndef WITH_CRIMSON
 using log_upwards_t = std::function<void(std::string msg)>;
+#endif
 class LocalResourceWrapper;
 
 /**
@@ -38,7 +45,7 @@ class ScrubResources {
    * regular scrubs will be allowed to start.
    */
   int scrubs_local{0};
-
+#ifndef WITH_CRIMSON
   mutable ceph::mutex resource_lock =
       ceph::make_mutex("ScrubQueue::resource_lock");
 
@@ -48,9 +55,14 @@ class ScrubResources {
 
   /// an aux used to check available local scrubs. Must be called with
   /// the resource lock held.
-  bool can_inc_local_scrubs_unlocked() const;
 
+  bool can_inc_local_scrubs_unlocked() const;
+#endif
  public:
+#ifdef WITH_CRIMSON
+   ScrubResources() = default;
+   std::unique_ptr<LocalResourceWrapper> inc_scrubs_local(bool is_high_priority, int scrubs_total);
+#else
   explicit ScrubResources(
       log_upwards_t log_access,
       const ceph::common::ConfigProxy& config);
@@ -63,9 +75,12 @@ class ScrubResources {
 
   /// increments the number of scrubs acting as a Primary
   std::unique_ptr<LocalResourceWrapper> inc_scrubs_local(bool is_high_priority);
-
+#endif
   /// decrements the number of scrubs acting as a Primary
   void dec_scrubs_local();
+#ifdef WITH_CRIMSON
+  int get_scrubs_local() const;
+#endif
 
   void dump_scrub_reservations(ceph::Formatter* f) const;
 };

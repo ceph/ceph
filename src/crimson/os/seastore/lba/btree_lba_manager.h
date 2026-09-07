@@ -356,21 +356,7 @@ public:
   base_iertr::future<LBACursorRef> update_mapping_refcount(
     Transaction &t,
     LBACursorRef cursor,
-    int delta) final {
-    co_return co_await _update_mapping(
-      t,
-      *cursor,
-      [delta](lba_map_val_t ret) {
-	ceph_assert((int)ret.refcount + delta >= 0);
-	ret.refcount += delta;
-	return ret;
-      },
-      nullptr
-    ).handle_error_interruptible(
-      base_iertr::pass_further{},
-      crimson::ct_error::assert_all("unexpected error")
-    );
-  }
+    int delta) final;
 
   /**
    * Split or shrink an existing mapping according to the remap entries.

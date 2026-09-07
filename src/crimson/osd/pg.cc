@@ -49,6 +49,7 @@
 #include "crimson/osd/pg_recovery.h"
 #include "crimson/osd/replicated_recovery_backend.h"
 #include "crimson/osd/watch.h"
+#include "osd/scrubber_common.h"
 
 using std::ostream;
 using std::set;
@@ -634,6 +635,8 @@ void PG::initiate_snap_trim()
 {
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+
+  // Kick snap trim if active and clean
   if (peering_state.is_active() && peering_state.is_clean()) {
     if (peering_state.state_test(PG_STATE_SNAPTRIM)) {
       logger().debug("{}: {} already trimming.", *this, __func__);
@@ -780,12 +783,48 @@ PG::interruptible_future<bool> PG::do_recover_missing(
   }
 }
 
+seastar::future<scrub::schedule_result_t> PG::start_scrubbing(
+    const scrub::SchedEntry& candidate,
+    scrub::OSDRestrictions osd_restrictions)
+{
+  LOG_PREFIX(PG::start_scrubbing);
+  DEBUGDPP(
+    "starting scrubbing {}, {}+{} (env restrictions:{})", *this,
+    candidate, (is_active() ? "<active>" : "<not-active>"),
+    (is_clean() ? "<clean>" : "<not-clean>"), osd_restrictions);
+
+  scrub::ScrubPGPreconds pg_cond{};
+  pg_cond.allow_shallow =
+      !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
+	      peering_state.get_pgpool().info.has_flag(pg_pool_t::FLAG_NOSCRUB));
+  pg_cond.allow_deep =
+      !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+	      peering_state.get_pgpool().info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB));
+  pg_cond.can_autorepair =
+      (crimson::common::local_conf().get_val<bool>("osd_scrub_auto_repair") &&
+       get_backend().auto_repair_supported());
+
+  return scrubber.start_scrub(
+      candidate.level, osd_restrictions, pg_cond);
+}
+
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {
   /* We don't actually route the scrub request message into the state machine.
    * Instead, we handle it directly in PGScrubber::handle_scrub_requested).
    */
   ceph_assert(0 == "impossible in crimson");
+}
+
+void PG::on_scrub_schedule_input_change()
+{
+  LOG_PREFIX(PG::on_scrub_schedule_input_change);
+  if (is_primary() && !scrubber.is_queued_or_active()) {
+    DEBUGDPP("active/primary and not scrubbing, updating scrub job", *this);
+    scrubber.update_scrub_job();
+  } else {
+    DEBUGDPP("inactive, non-primary, or already scrubbing - skipping update", *this);
+  }
 }
 
 void PG::log_state_enter(const char *state) {
@@ -927,12 +966,16 @@ void PG::do_peering_event(
 void PG::handle_advance_map(
   cached_map_t next_map, PeeringCtx &rctx)
 {
+  LOG_PREFIX(PG::handle_advance_map);
   vector<int> newup, newacting;
   int up_primary, acting_primary;
   next_map->pg_to_up_acting_osds(
     pgid.pgid,
     &newup, &up_primary,
     &newacting, &acting_primary);
+
+  epoch_t range_starts_at = peering_state.get_osdmap()->get_epoch();
+
   peering_state.advance_map(
     next_map,
     peering_state.get_osdmap(),
@@ -942,6 +985,16 @@ void PG::handle_advance_map(
     acting_primary,
     rctx);
   osdmap_gate.got_map(next_map->get_epoch());
+
+  // If pool.info changed during this map update, invoke
+  // on_scrub_schedule_input_change() as pool.info contains scrub scheduling
+  // parameters.
+  const auto& pool = get_pgpool();
+  if (pool.info.last_change >= range_starts_at) {
+    DEBUGDPP("pool info changed (last_change={} >= range_starts_at={}), updating scrub schedule",
+             *this, pool.info.last_change, range_starts_at);
+    on_scrub_schedule_input_change();
+  }
 }
 
 void PG::handle_activate_map(PeeringCtx &rctx)
@@ -981,7 +1034,12 @@ void PG::dump_primary(Formatter* f)
   f->close_section();
 
   // TODO: snap_trimq
-  // TODO: scrubber state
+
+  // Dump scrubber state
+  if (is_primary() && is_active()) {
+    scrubber.dump_scrub_metrics(f);
+  }
+
   // TODO: agent state
 }
 
@@ -1320,6 +1378,40 @@ PG::interruptible_future<MURef<MOSDOpReply>> PG::do_pg_ops(Ref<MOSDOp> m)
 				     peering_state.get_info().last_user_version);
     return seastar::make_ready_future<MURef<MOSDOpReply>>(std::move(reply));
   });
+}
+
+int PG::do_scrub_ls(const MOSDOp *m, OSDOp *osd_op) const
+{
+  if (m->get_pg() != get_info().pgid.pgid) {
+    logger().debug("scrubls pg={} != {}", m->get_pg(), get_info().pgid);
+    return -EINVAL;
+  }
+
+  auto bp = osd_op->indata.cbegin();
+  scrub_ls_arg_t arg;
+  try {
+    arg.decode(bp);
+  } catch (ceph::buffer::error&) {
+    logger().warn("corrupted scrub_ls_arg_t");
+    return -EINVAL;
+  }
+
+  int r = 0;
+  scrub_ls_result_t result = {.interval = get_info().history.same_interval_since};
+
+  if (arg.interval != 0 && arg.interval != get_info().history.same_interval_since) {
+    r = -EAGAIN;
+  } else {
+    bool store_queried = scrubber.get_store_errors(arg, result);
+    if (store_queried) {
+      encode(result, osd_op->outdata);
+    } else {
+      // the scrubber's store is not initialized
+      r = -ENOENT;
+    }
+  }
+
+  return r;
 }
 
 hobject_t PG::get_oid(const hobject_t& hobj)
@@ -1830,21 +1922,22 @@ bool PG::should_send_op(
      // 1. peer_info.last_backfill has passed "hoid"
      // 2. last_backfill_started has passed "hoid"
      hoid <= peering_state.get_peer_info(peer).last_backfill ||
-     (has_backfill_state() && hoid <= get_last_backfill_started())) &&
-    !is_missing_on_peer(peer, hoid);
+     (has_backfill_state() && hoid <= get_last_backfill_started()));
   if (unlikely(!should_send)) {
-    if (peering_state.is_async_recovery_target(peer)) {
-      logger().info("{}: {} shipping empty opt to osd.{}, object {}"
-                    " which is pending recovery in async_recovery_targets",
-                   *this, __func__, peer, hoid);
-    } else {
-      ceph_assert(is_backfill_target(peer));
-      logger().debug("{} issue_repop shipping empty opt to osd."
-                     "{}, object {} beyond std::max(last_backfill_started, "
-                     "peer_info[peer].last_backfill {})",
-                     __func__, peer, hoid,
-                     peering_state.get_peer_info(peer).last_backfill);
-    }
+    ceph_assert(is_backfill_target(peer));
+    logger().debug("{} issue_repop shipping empty opt to osd."
+                   "{}, object {} beyond std::max(last_backfill_started, "
+                   "peer_info[peer].last_backfill {})",
+                   __func__, peer, hoid,
+                   peering_state.get_peer_info(peer).last_backfill);
+    return should_send;
+  }
+  if (peering_state.is_async_recovery_target(peer) &&
+      peering_state.get_peer_missing(peer).get_items().count(hoid)) {
+    should_send = false;
+    logger().info("{}: {} shipping empty opt to osd.{}, object {}"
+                  " which is pending recovery in async_recovery_targets",
+                  *this, __func__, peer, hoid);
   }
   return should_send;
 }
@@ -2036,6 +2129,15 @@ void PG::PGLogEntryHandler::partial_write(pg_info_t *info,
   }
   logger().debug("{}: after pwlc={}",
                  __func__, info->partial_writes_last_complete);
+}
+
+unsigned PG::get_scrub_priority()
+{
+  // a higher value -> a higher priority
+  int64_t pool_scrub_priority =
+    get_pgpool().info.opts.value_or(pool_opts_t::SCRUB_PRIORITY, (int64_t)0);
+  return pool_scrub_priority > 0 ? pool_scrub_priority :
+    crimson::common::local_conf().get_val<uint64_t>("osd_scrub_priority");
 }
 
 void PG::add_merge_source(

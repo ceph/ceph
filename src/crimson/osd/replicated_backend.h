@@ -34,6 +34,7 @@ public:
   void got_rep_op_reply(const MOSDRepOpReply& reply) final;
   seastar::future<> stop() final;
   void on_actingset_changed(bool same_primary) final;
+  bool auto_repair_supported() const final { return true; }
 
   PGBackend::get_attr_ierrorator::future<ceph::bufferlist> getxattr(
     const hobject_t& soid,

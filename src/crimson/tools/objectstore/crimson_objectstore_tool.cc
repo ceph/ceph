@@ -84,11 +84,15 @@ enum class operation_type_t {
   SET_OMAP,
   RM_OMAP,
   LIST_OMAP,
+  GET_OMAPHDR,
+  SET_OMAPHDR,
   REMOVE,
   REMOVEALL,
   DUMP,
   SET_SIZE,
   CLEAR_DATA_DIGEST,
+  CORRUPT_INFO,
+  CLEAR_SNAPSET,
 
   // Device-inspection operations (--op)
   DUMP_SUPERBLOCK,
@@ -112,11 +116,15 @@ std::string to_string(operation_type_t op) {
     case operation_type_t::SET_OMAP: return "set-omap";
     case operation_type_t::RM_OMAP: return "rm-omap";
     case operation_type_t::LIST_OMAP: return "list-omap";
+    case operation_type_t::GET_OMAPHDR: return "get-omaphdr";
+    case operation_type_t::SET_OMAPHDR: return "set-omaphdr";
     case operation_type_t::REMOVE: return "remove";
     case operation_type_t::REMOVEALL: return "removeall";
     case operation_type_t::DUMP: return "dump";
     case operation_type_t::SET_SIZE: return "set-size";
     case operation_type_t::CLEAR_DATA_DIGEST: return "clear-data-digest";
+    case operation_type_t::CORRUPT_INFO: return "corrupt-info";
+    case operation_type_t::CLEAR_SNAPSET: return "clear-snapset";
     case operation_type_t::DUMP_SUPERBLOCK: return "dump-superblock";
     case operation_type_t::GC: return "gc";
     default: return "unknown";
@@ -143,11 +151,15 @@ tl::expected<operation_type_t, std::string> parse_object_operation(const std::st
   if (objcmd == "set-omap") return operation_type_t::SET_OMAP;
   if (objcmd == "rm-omap") return operation_type_t::RM_OMAP;
   if (objcmd == "list-omap") return operation_type_t::LIST_OMAP;
+  if (objcmd == "get-omaphdr") return operation_type_t::GET_OMAPHDR;
+  if (objcmd == "set-omaphdr") return operation_type_t::SET_OMAPHDR;
   if (objcmd == "remove") return operation_type_t::REMOVE;
   if (objcmd == "removeall") return operation_type_t::REMOVEALL;
   if (objcmd == "dump") return operation_type_t::DUMP;
   if (objcmd == "set-size") return operation_type_t::SET_SIZE;
   if (objcmd == "clear-data-digest") return operation_type_t::CLEAR_DATA_DIGEST;
+  if (objcmd == "corrupt-info") return operation_type_t::CORRUPT_INFO;
+  if (objcmd == "clear-snapset") return operation_type_t::CLEAR_SNAPSET;
   return tl::unexpected("Unknown object command: " + objcmd);
 }
 
@@ -155,6 +167,7 @@ struct operation_params_t {
   operation_type_t op;
   std::optional<pg_t> pgid;
   std::optional<std::string> object;
+  bool head = false;
   std::optional<std::string> key;
   std::optional<std::string> omap_start;
   std::optional<std::string> file;
@@ -184,6 +197,7 @@ struct objectstore_config_t {
   bool debug = false;
   bool force = false;
   bool tty = false;
+  bool head = false;
 
   // Internal state
   std::optional<operation_params_t> operation;
@@ -206,6 +220,8 @@ struct objectstore_config_t {
        "PG id, mandatory for info operation")
       ("op", bpo::value<std::string>(&op),
        "Arg is one of [info, list, list-pgs, dump-superblock]")
+      ("head", bpo::bool_switch(&head),
+       "Restrict to head object (snapid == CEPH_NOSNAP)")
       ("file", bpo::value<std::string>(&file),
        "path of file to read from or write to")
       ("format", bpo::value<std::string>(&format)->default_value("json-pretty"),
@@ -258,15 +274,17 @@ class LookupGhobject : public ObjectAction {
 public:
   explicit LookupGhobject(
     std::string_view name,
-    std::optional<std::string_view> nspace = std::nullopt)
-    : name(name), nspace(nspace) {}
+    std::optional<std::string_view> nspace = std::nullopt,
+    bool head_only = false)
+    : name(name), nspace(nspace), head_only(head_only) {}
 
   seastar::future<> call(
     const coll_t& coll,
     seastar::shard_id shard_id,
     const ghobject_t& ghobj) override {
     if ((name.empty() || ghobj.hobj.oid.name == name) &&
-        (!nspace.has_value() || ghobj.hobj.nspace == *nspace)) {
+        (!nspace.has_value() || ghobj.hobj.nspace == *nspace) &&
+        (!head_only || ghobj.hobj.snap == CEPH_NOSNAP)) {
       objects.push_back({coll, ghobj, shard_id});
     }
     return seastar::now();
@@ -276,6 +294,7 @@ public:
 private:
   std::string_view name;
   std::optional<std::string_view> nspace;
+  bool head_only;
 };
 
 class PrintObjectAction : public ObjectAction {
@@ -360,7 +379,7 @@ static seastar::future<bool> resolve_operation_parameters(
   // 2. Handle empty object case
   if (!op.object.has_value() || op.object->empty()) {
     if (op.op == operation_type_t::LIST_OBJECTS) {
-      co_return true;  // No object resolution needed for list operation
+      co_return true;  // No object resolution needed for list-all operation
     }
     if (!op.pgid.has_value()) {
       fmt::println(std::cerr, "PG ID is required for pgmeta operations");
@@ -371,15 +390,43 @@ static seastar::future<bool> resolve_operation_parameters(
 
     // Find shard for pgmeta object
     co_return co_await find_shard_for_object(st, config, "pgmeta");
+  } else if (op.object.has_value() &&
+             *op.object == ghobject_t::SNAPMAPPER_OID &&
+             op.pgid.has_value()) {
+    // "snapmapper" is a magic object name: resolve it directly via
+    // spg_t::make_snapmapper_oid() so the correct namespace
+    // (".internal_pg_local") is used.  A plain LookupGhobject search
+    // would miss it because it lives in a non-default namespace.
+    config.ghobj = config.pgid.make_snapmapper_oid();
+    co_return co_await find_shard_for_object(st, config, "snapmapper");
   } else {
     // 3. Handle non-empty object specification
     ghobject_t parsed_obj;
     bool is_json = false;
+    std::optional<pg_t> parsed_pgid;
+
     try {
       json_spirit::Value json_val;
       if (json_spirit::read(*op.object, json_val)) {
-        parsed_obj.decode(json_val);
-        is_json = true;
+        // Check if it's an array format: ["pgid", {object}]
+        if (json_val.type() == json_spirit::array_type) {
+          auto& arr = json_val.get_array();
+          if (arr.size() == 2) {
+            // Extract PG ID from first element
+            std::string pgid_str = arr[0].get_str();
+            pg_t pgid;
+            if (pgid.parse(pgid_str.c_str())) {
+              parsed_pgid = pgid;
+            }
+            // Extract object from second element
+            parsed_obj.decode(arr[1]);
+            is_json = true;
+          }
+        } else {
+          // Direct object JSON format
+          parsed_obj.decode(json_val);
+          is_json = true;
+        }
       }
     } catch (...) {
       is_json = false;
@@ -388,7 +435,13 @@ static seastar::future<bool> resolve_operation_parameters(
     if (is_json) {
       // JSON object specification
       config.ghobj = parsed_obj;
-      if (!op.pgid.has_value()) {
+
+      // Use parsed pgid if available, otherwise require it from command line
+      if (parsed_pgid.has_value()) {
+        op.pgid = parsed_pgid;
+        config.pgid = spg_t(*parsed_pgid);
+        config.coll = coll_t(config.pgid);
+      } else if (!op.pgid.has_value()) {
         fmt::println(std::cerr, "PG ID is required when object is specified as JSON");
         co_return false;
       }
@@ -397,7 +450,13 @@ static seastar::future<bool> resolve_operation_parameters(
       co_return co_await find_shard_for_object(st, config, "JSON");
     } else {
       // Object name lookup
-      LookupGhobject lookup(*op.object, config.namespace_);
+      // For LIST_OBJECTS operation, we don't need to resolve to a single object
+      // The filtering will be done during the list operation itself
+      if (op.op == operation_type_t::LIST_OBJECTS) {
+        co_return true;  // Object name will be used for filtering during list
+      }
+
+      LookupGhobject lookup(*op.object, config.namespace_, op.head);
       co_await action_on_all_objects(st, lookup, op.pgid);
 
       if (lookup.objects.empty()) {
@@ -434,12 +493,15 @@ void print_usage(const bpo::options_description& desc) {
   std::cout << "crimson-objectstore-tool ... <object> (get|set)-bytes [file]" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> set-(attr|omap) <key> [file]" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> (get|rm)-(attr|omap) <key>" << std::endl;
+  std::cout << "crimson-objectstore-tool ... <object> (get|set)-omaphdr [file]" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> list-attrs" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> list-omap" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> remove|removeall" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> dump" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> set-size" << std::endl;
   std::cout << "crimson-objectstore-tool ... <object> clear-data-digest" << std::endl;
+  std::cout << "crimson-objectstore-tool ... <object> corrupt-info" << std::endl;
+  std::cout << "crimson-objectstore-tool ... <object> clear-snapset [corrupt]" << std::endl;
   std::cout << std::endl;
   std::cout << "<object> can be a JSON object description as displayed" << std::endl;
   std::cout << "by --op list." << std::endl;
@@ -773,8 +835,28 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
     }
 
     case operation_type_t::LIST_OBJECTS: {
-      PrintObjectAction print_action;
-      co_await action_on_all_objects(st, print_action, op.pgid);
+      // If an object name is specified, filter by that name
+      if (op.object.has_value() && !op.object->empty()) {
+        LookupGhobject lookup(*op.object, config.namespace_, op.head);
+        co_await action_on_all_objects(st, lookup, op.pgid);
+
+        // Print the found objects
+        for (const auto& found : lookup.objects) {
+          std::stringstream ss;
+          std::unique_ptr<Formatter> obj_formatter(Formatter::create("json"));
+          obj_formatter->dump_object("obj", found.ghobj);
+          obj_formatter->flush(ss);
+          std::string obj_json = ss.str();
+          if (!obj_json.empty() && obj_json.back() == '\n') {
+            obj_json.pop_back();
+          }
+          fmt::println(std::cout, R"(["{}",{}])", get_pgid_str_from_coll(found.coll), obj_json);
+        }
+      } else {
+        // No object name specified, list all objects
+        PrintObjectAction print_action;
+        co_await action_on_all_objects(st, print_action, op.pgid);
+      }
       break;
     }
 
@@ -806,7 +888,7 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
       if (!omap_value_result) {
         co_return omap_value_result.error();
       }
-      
+
       bool success = co_await st.set_omap(
         config.coll, config.ghobj,
         op.key.value(), *omap_value_result);
@@ -842,6 +924,30 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
           op.key.value());
       } else {
         fmt::println(std::cerr, "remove omap failed");
+        co_return EXIT_FAILURE;
+      }
+      break;
+    }
+
+    case operation_type_t::GET_OMAPHDR: {
+      std::string header = co_await st.get_omap_header(
+        config.coll, config.ghobj);
+      co_return co_await write_output(op.file, header);
+    }
+
+    case operation_type_t::SET_OMAPHDR: {
+      auto header_result = read_input(op.file);
+      if (!header_result) {
+        co_return header_result.error();
+      }
+
+      bool success = co_await st.set_omap_header(
+        config.coll, config.ghobj, *header_result);
+      if (success) {
+        fmt::println(std::cout, "set omap header success: size={}",
+          header_result->size());
+      } else {
+        fmt::println(std::cerr, "set omap header failed");
         co_return EXIT_FAILURE;
       }
       break;
@@ -1002,6 +1108,28 @@ seastar::future<int> run_tool(StoreTool& st, objectstore_config_t& config) {
       break;
     }
 
+    case operation_type_t::CORRUPT_INFO: {
+      bool success = co_await st.corrupt_info(config.coll, config.ghobj);
+      if (success) {
+        fmt::println(std::cout, "corrupt info success");
+      } else {
+        fmt::println(std::cerr, "corrupt info failed");
+        co_return EXIT_FAILURE;
+      }
+      break;
+    }
+
+    case operation_type_t::CLEAR_SNAPSET: {
+      bool success = co_await st.clear_snapset(config.coll, config.ghobj, config.arg1);
+      if (success) {
+        fmt::println(std::cout, "clear snapset success");
+      } else {
+        fmt::println(std::cerr, "clear snapset failed");
+        co_return EXIT_FAILURE;
+      }
+      break;
+    }
+
     case operation_type_t::GC: {
       co_await st.do_gc();
       break;
@@ -1024,10 +1152,10 @@ int main(int argc, const char* argv[])
 
   bpo::options_description positional("Positional options");
   positional.add_options()
-    ("object", bpo::value<std::string>(&config.object), 
+    ("object", bpo::value<std::string>(&config.object),
      "'' for pgmeta_oid, object name or ghobject in json")
-    ("objcmd", bpo::value<std::string>(&config.objcmd), 
-     "command [(get|set)-bytes, (get|set|rm)-(attr|omap), list-attrs, list-omap, remove, removeall, dump, set-size, clear-data-digest]")
+    ("objcmd", bpo::value<std::string>(&config.objcmd),
+     "command [(get|set)-bytes, (get|set|rm)-(attr|omap), list-attrs, list-omap, remove, removeall, dump, set-size, clear-data-digest, corrupt-info, clear-snapset]")
     ("arg1", bpo::value<std::string>(&config.arg1), "arg1 based on cmd")
     ("arg2", bpo::value<std::string>(&config.arg2), "arg2 based on cmd")
     ;
@@ -1040,7 +1168,7 @@ int main(int argc, const char* argv[])
 
   bpo::variables_map vm;
   std::vector<std::string> ceph_option_strings;
-  
+
   try {
     auto parsed = bpo::command_line_parser(argc, argv)
       .options(all)
@@ -1092,6 +1220,7 @@ int main(int argc, const char* argv[])
     params.op = *op_result;
     params.pgid = pgid;
     params.object = object_str;
+    params.head = config.head;
     params.force = config.force;
 
     if (vm.count("file")) {
@@ -1170,10 +1299,17 @@ int main(int argc, const char* argv[])
       pgid = *pgid_result;
     }
 
+    // Check if an object name was provided as a positional argument
+    std::optional<std::string> object_str;
+    if (vm.count("object")) {
+      object_str = config.object;
+    }
+
     config.operation = operation_params_t{
       *op_result,
       pgid,
-      std::nullopt,
+      object_str,
+      config.head,
       std::nullopt,
       std::nullopt,
       std::nullopt,
@@ -1259,16 +1395,28 @@ int main(int argc, const char* argv[])
                 seastar::log_level::error
               );
             }
+            // Read the store type from metadata to ensure we use the correct type
+            std::string metadata_type = config.type;
+            std::string type_file = config.data_path + "/type";
+            std::ifstream type_stream(type_file);
+            if (type_stream.good()) {
+              std::getline(type_stream, metadata_type);
+              if (!metadata_type.empty() && metadata_type != config.type) {
+                fmt::println(std::cerr,
+                  "Warning: Store type mismatch. Metadata says '{}' but --type is '{}'. Using metadata type.",
+                  metadata_type, config.type);
+              }
+            }
+
             auto store = crimson::os::FuturizedStore::create(
-              config.type,
+              metadata_type.empty() ? config.type : metadata_type,
               config.data_path,
               local_conf().get_config_values());
             store->start().get();
             store->mount().handle_error(
-              crimson::stateful_ec::assert_failure(fmt::format(
+              crimson::stateful_ec::assert_failure(
                 "error mounting object store in {}",
-                config.data_path
-              ).c_str())
+                config.data_path)
             ).get();
             StoreTool st(std::move(store));
             auto stop_st = seastar::deferred_stop(st);

@@ -283,6 +283,103 @@ function standard_scrub_cluster() {
     if [[ -n "$saved_echo_flag" ]]; then set -x; fi
 }
 
+# Start the cluster "nodes" and create a pool for testing - Crimson version.
+#
+# Similar to standard_scrub_cluster() but uses Crimson OSDs with seastore.
+# The OSDs are started with a set of parameters aimed in creating a repeatable
+# and stable scrub sequence:
+#  - no scrub randomizations/backoffs
+#  - no autoscaler
+#  - uses seastore object store by default
+#
+# $1: the test directory
+# $2: [in/out] an array of configuration values
+#
+# The function adds/updates the configuration dictionary with the name of the
+# pool created, and its ID.
+#
+# Argument 2 might look like this:
+#
+#  declare -A test_conf=(
+#    ['osds_num']="3"
+#    ['pgs_in_pool']="7"
+#    ['extras']="--extra1 --extra2"
+#    ['pool_name']="testpl"
+#    ['object_store']="seastore"
+#  )
+function crimson_standard_scrub_cluster() {
+    local dir=$1
+    local -n args=$2
+
+    local OSDS=${args['osds_num']:-"3"}
+    local pg_num=${args['pgs_in_pool']:-"8"}
+
+    local poolname="${args['pool_name']:-test}"
+    args['pool_name']=$poolname
+
+    local pool_default_size=${args['pool_default_size']:-3}
+    args['pool_default_size']=$pool_default_size
+
+    local object_store="${args['object_store']:-seastore}"
+    args['object_store']=$object_store
+
+    local extra_pars=${args['extras']}
+    local debug_msg=${args['msg']:-"dbg"}
+
+    # turn off '-x' (but remember previous state)
+    local saved_echo_flag=${-//[^x]/}
+    set +x
+
+    run_mon $dir a --osd_pool_default_size=$pool_default_size || return 1
+    run_mgr $dir x --mgr_stats_period=1 || return 1
+
+    # Apply critical Crimson configurations
+    ceph config set mon mon_osd_reporter_subtree_level osd || return 1
+    ceph config set mon mon_data_avail_warn 2 || return 1
+    ceph config set mon mon_data_avail_crit 1 || return 1
+    ceph config set mon mon_allow_pool_delete true || return 1
+    ceph config set mon mon_allow_pool_size_one true || return 1
+    ceph config set osd osd_scrub_load_threshold 2000 || return 1
+    ceph config set osd osd_debug_op_order true || return 1
+    ceph config set osd osd_debug_misdirected_ops true || return 1
+
+    local ceph_osd_args="--osd_objectstore=$object_store \
+            --osd_deep_scrub_randomize_ratio=0 \
+            --osd_scrub_interval_randomize_ratio=0 \
+            --osd_scrub_backoff_ratio=0.0 \
+            --osd_pool_default_pg_autoscale_mode=off \
+            --osd_pg_stat_report_interval_max_seconds=1 \
+            --osd_pg_stat_report_interval_max_epochs=1 \
+            --osd_stats_update_period_not_scrubbing=3 \
+            --osd_stats_update_period_scrubbing=1 \
+            --osd_scrub_retry_after_noscrub=5 \
+            --osd_scrub_retry_pg_state=5 \
+            --osd_scrub_retry_delay=3 \
+            --osd_pool_default_size=$pool_default_size \
+            $extra_pars"
+
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      run_crimson_osd $dir $osd $(echo $ceph_osd_args) --debug || return 1
+    done
+
+    if [[ "$poolname" != "nopool" ]]; then
+        create_pool $poolname $pg_num $pg_num --autoscale_mode=off || return 1
+        wait_for_clean || return 1
+    fi
+
+    # update the in/out 'args' with the ID of the new pool
+    sleep 1
+    if [[ "$poolname" != "nopool" ]]; then
+        name_n_id=`ceph osd dump | awk '/^pool.*'$poolname'/ { gsub(/'"'"'/," ",$3); print $3," ", $2}'`
+        echo "crimson_standard_scrub_cluster: $debug_msg: test pool is $name_n_id"
+        args['pool_id']="${name_n_id##* }"
+    fi
+    args['osd_args']=$ceph_osd_args
+    if [[ -n "$saved_echo_flag" ]]; then set -x; fi
+}
+
+
 
 # Start the cluster "nodes" and create a pool for testing - wpq version.
 #
