@@ -977,6 +977,12 @@ bool SplitOp::create(Objecter::Op *op, Objecter &objecter,
     return false;
   }
 
+  // Reject if pool does not support non-primary reads.
+  if (!pi->allows_nonprimary_reads()) {
+    ldout(cct, DBG_LVL) << __func__ <<" REJECT: non-primary reads not supported for split ops" << dendl;
+    return false;
+  }
+
   auto [validated, single_op] = validate(op, objecter, pi, cct);
 
   if (!validated) {
