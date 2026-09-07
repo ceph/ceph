@@ -26,13 +26,20 @@ export class LogsPageHelper extends PageHelper {
     // go to audit logs tab
     cy.contains('.nav-link', 'Audit Logs').click();
 
+    // The filter toolbar is re-created on every tab switch. Wait until the
+    // new pane's keyword filter is interactable before driving the filter
+    // inputs, otherwise the clear/type intermittently hits the input while
+    // it is still initializing and fails on a disabled element.
+    cy.get('.tab-pane.active #logs-keyword').should('be.visible').and('be.enabled');
+
     // Enter an earliest time so that no old messages with the same pool name show up
     this.setTimepickerValue(0, hour);
     this.setTimepickerValue(1, minute);
 
     // Enter the pool name into the filter box
-    cy.get('#logs-keyword').clear();
-    cy.get('#logs-keyword').type(poolname);
+    cy.get('.tab-pane.active #logs-keyword').clear();
+    cy.get('.tab-pane.active #logs-keyword').type(poolname);
+    cy.get('.tab-pane.active #logs-keyword').should('have.value', poolname);
 
     cy.get('.tab-pane.active')
       .get('.log-viewer')
@@ -47,13 +54,17 @@ export class LogsPageHelper extends PageHelper {
     // go to audit logs tab
     cy.contains('.nav-link', 'Audit Logs').click();
 
+    // See checkAuditForPoolFunction: wait for the re-created filter toolbar.
+    cy.get('.tab-pane.active #logs-keyword').should('be.visible').and('be.enabled');
+
     // Enter an earliest time so that no old messages with the same config name show up
     this.setTimepickerValue(0, hour);
     this.setTimepickerValue(1, minute);
 
     // Enter the config name into the filter box
-    cy.get('#logs-keyword').clear();
-    cy.get('#logs-keyword').type(configname);
+    cy.get('.tab-pane.active #logs-keyword').clear();
+    cy.get('.tab-pane.active #logs-keyword').type(configname);
+    cy.get('.tab-pane.active #logs-keyword').should('have.value', configname);
 
     cy.get('.tab-pane.active')
       .get('.log-viewer')

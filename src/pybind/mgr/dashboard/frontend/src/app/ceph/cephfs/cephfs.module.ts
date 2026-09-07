@@ -10,8 +10,8 @@ import {
   NgbTypeaheadModule
 } from '@ng-bootstrap/ng-bootstrap';
 import { provideCharts, withDefaultRegisterables, BaseChartDirective } from 'ng2-charts';
+import { RouterModule } from '@angular/router';
 
-import { AppRoutingModule } from '~/app/app-routing.module';
 import { SharedModule } from '~/app/shared/shared.module';
 import { CephfsChartComponent } from './cephfs-chart/cephfs-chart.component';
 import { CephfsClientsComponent } from './cephfs-clients/cephfs-clients.component';
@@ -90,7 +90,7 @@ import FolderIcon16 from '@carbon/icons/es/folder/16';
   imports: [
     CommonModule,
     SharedModule,
-    AppRoutingModule,
+    RouterModule,
     TreeviewModule,
     NgbNavModule,
     FormsModule,

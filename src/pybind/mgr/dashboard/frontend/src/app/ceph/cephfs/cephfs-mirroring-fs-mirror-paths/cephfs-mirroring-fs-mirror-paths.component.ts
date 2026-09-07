@@ -8,8 +8,8 @@ import {
   inject
 } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { BehaviorSubject, of, Subscription } from 'rxjs';
-import { catchError, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
+import { BehaviorSubject, forkJoin, Observable, of, Subscription } from 'rxjs';
+import { catchError, finalize, map, shareReplay, startWith, switchMap, tap } from 'rxjs/operators';
 import { CephfsService } from '~/app/shared/api/cephfs.service';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
 import { DeleteConfirmationModalComponent } from '~/app/shared/components/delete-confirmation-modal/delete-confirmation-modal.component';
@@ -303,7 +303,8 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
             fsName: this.fsName,
             path
           }),
-          call: this.cephfsService.removeMirrorDirectory(this.fsName, path).pipe(
+          call: this.deleteSnapshotSchedulesForPath(path).pipe(
+            switchMap(() => this.cephfsService.removeMirrorDirectory(this.fsName, path)),
             tap(() => {
               if (this.selectedPath?.path === path) {
                 this.closeSidePanel();
@@ -829,31 +830,15 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
 
     this.schedulePoliciesLoading = true;
     this.subscriptions.add(
-      this.snapshotScheduleService.getSnapshotSchedule(path, this.fsName, false).subscribe(
+      this.snapshotScheduleService.getSnapshotSchedule(path, this.fsName, true).subscribe(
         (policies) => {
           if (this.selectedPath?.path !== path) {
             this.schedulePoliciesLoading = false;
             return;
           }
-
-          const normalizedPath = this.normalizePath(path);
-          this.schedulePolicies = policies
-            .filter((policy) => {
-              return (
-                this.normalizePath(policy.path) === normalizedPath ||
-                this.normalizePath(policy.rel_path) === normalizedPath
-              );
-            })
-            .filter(
-              (policy, index, filteredPolicies) =>
-                filteredPolicies.findIndex(
-                  (candidate) =>
-                    candidate.path === policy.path &&
-                    candidate.schedule === policy.schedule &&
-                    String(candidate.start) === String(policy.start)
-                ) === index
-            )
-            .map((policy) => this.buildSchedulePolicyViewModel(policy as MirrorPathSchedule));
+          this.schedulePolicies = policies.map((policy) =>
+            this.buildSchedulePolicyViewModel(policy as MirrorPathSchedule)
+          );
           this.schedulePoliciesLoading = false;
         },
         () => {
@@ -871,33 +856,46 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
       return;
     }
 
-    const retentionPolicy = policy.retention
-      ? Object.entries(policy.retention)
-          .filter(([, interval]) => interval !== null && interval !== undefined)
-          .map(([frequency, interval]) => `${interval}-${frequency}`)
-          .join('|')
-      : undefined;
+    const scheduleName = policy.scheduleCopy || policy.schedule;
+    this.cdsModalService.show(DeleteConfirmationModalComponent, {
+      impact: DeletionImpact.medium,
+      itemDescription: $localize`schedule`,
+      itemNames: [scheduleName],
+      actionDescription: 'remove',
+      submitActionObservable: () => this.deleteSchedulePolicy(policy)
+    });
+  }
+
+  private deleteSchedulePolicy(policy: MirrorPathSchedule) {
+    const retentionPolicy = this.buildRetentionPolicyString(policy.retention);
 
     this.removingSchedule = `${policy.path}@${policy.schedule}`;
-    this.subscriptions.add(
-      this.snapshotScheduleService
+    return this.taskWrapper.wrapTaskAroundCall({
+      task: new FinishedTask('cephfs/snapshot/schedule/delete', {
+        path: policy.path
+      }),
+      call: this.snapshotScheduleService
         .delete({
           path: policy.path,
           schedule: policy.schedule,
           start: policy.start,
           fs: policy.fs || this.fsName,
-          retentionPolicy
+          retentionPolicy,
+          subvol: policy.subvol,
+          group: policy.group
         })
-        .subscribe(
-          () => {
+        .pipe(
+          tap(() => {
+            this.schedulePolicies = this.schedulePolicies.filter(
+              (item) => item.removeId !== policy.removeId
+            );
+            this.loadSchedulePolicies(this.selectedPath?.path || policy.path);
+          }),
+          finalize(() => {
             this.removingSchedule = '';
-            this.loadSchedulePolicies(policy.path);
-          },
-          () => {
-            this.removingSchedule = '';
-          }
+          })
         )
-    );
+    });
   }
 
   getScheduleStatusIcon(active: boolean): keyof typeof ICON_TYPE {
@@ -931,6 +929,21 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
 
   private formatRetentionCopy(retentionCopy?: string[]): string {
     return retentionCopy?.length ? retentionCopy.join(', ') : '-';
+  }
+
+  private buildRetentionPolicyString(
+    retention?: Record<string, number> | string
+  ): string | undefined {
+    if (!retention || typeof retention === 'string') {
+      return undefined;
+    }
+
+    const retentionPolicy = Object.entries(retention)
+      .filter(([, interval]) => interval !== null && interval !== undefined)
+      .map(([frequency, interval]) => `${interval}-${frequency}`)
+      .join('|');
+
+    return retentionPolicy || undefined;
   }
 
   private buildRetentionCopy(retention?: Record<string, number>): string[] {
@@ -1011,6 +1024,41 @@ export class CephfsMirroringFsMirrorPathsComponent implements OnInit, OnDestroy 
     }
 
     return nextSync.toLocaleString();
+  }
+
+  private deleteSnapshotSchedulesForPath(path: string): Observable<void> {
+    return this.snapshotScheduleService.getSnapshotSchedule(path, this.fsName, false).pipe(
+      catchError(() => of([])),
+      switchMap((policies) => {
+        const normalizedPath = this.normalizePath(path);
+        const schedules = policies.filter(
+          (policy) =>
+            this.normalizePath(policy.path) === normalizedPath ||
+            this.normalizePath(policy.rel_path) === normalizedPath
+        );
+        if (!schedules.length) {
+          return of(undefined);
+        }
+
+        return forkJoin(
+          schedules.map((policy) => {
+            const retentionPolicy = this.buildRetentionPolicyString(policy.retention);
+
+            return this.snapshotScheduleService
+              .delete({
+                path: policy.path,
+                schedule: policy.schedule,
+                start: policy.start,
+                fs: policy.fs || this.fsName,
+                retentionPolicy,
+                subvol: policy.subvol,
+                group: policy.group
+              })
+              .pipe(catchError(() => of(undefined)));
+          })
+        ).pipe(map(() => undefined));
+      })
+    );
   }
 
   private normalizePath(path?: string): string {

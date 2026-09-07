@@ -85,10 +85,8 @@
           <div class="form-item cds-mb-5">
             <div class="cds-input-group">
               <div class="fit-content">
-                <cds-text-label
-                  cdRequiredField="Username"
-                  i18n
-                >
+                <cds-text-label i18n>
+                  Username
                   <input
                     cdsText
                     value="client."
@@ -136,13 +134,15 @@
               @if (tokenForm.controls['username'].hasError('invalidChars')) {
                 <span i18n>Only letters, numbers, underscores, and hyphens are allowed.</span>
               }
+              @if (tokenForm.controls['username'].hasError('invalidMdsCaps')) {
+                <span i18n>Invalid capabilities on the MDS.</span>
+              }
             </ng-template>
           </div>
 
           <div class="form-item cds-mb-5">
             <cds-text-label
               for="sitename"
-              cdRequiredField="Sitename"
               [helperText]="sitenameHelper"
               [invalid]="
                 tokenForm.controls['sitename'].invalid && tokenForm.controls['sitename'].touched

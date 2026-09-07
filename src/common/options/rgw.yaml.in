@@ -2118,7 +2118,8 @@ options:
     multisite deployment where zone endpoints such as "https://zone-a.example.com"
     map to several backend RGW nodes, this allows inter-zone traffic to be spread
     across all peers without requiring an external load balancer.
-  default: false
+    Disable it to fall back to plain libcurl behavior.
+  default: true
   services:
   - rgw
   see_also:
@@ -2133,8 +2134,10 @@ options:
     failure. This option controls how long (in seconds) an IP address remains
     marked as "failed" before RGW considers it eligible for retry.
     After this timeout expires, the IP will be tried again in the normal
-    round-robin rotation.
-  default: 2
+    round-robin rotation. A longer timeout keeps requests away from a peer
+    that stays down, at the cost of taking that much longer to bring a
+    recovered peer back into rotation; nothing probes the IP in the meantime.
+  default: 30
   services:
   - rgw
   see_also:
@@ -4081,6 +4084,32 @@ options:
   see_also:
   - rgw_dmclock_metadata_res
   - rgw_dmclock_metadata_wgt
+- name: rgw_default_data_log_backing
+  type: str
+  level: advanced
+  desc: Default backing store for the RGW data sync log
+  long_desc: Whether to use the older OMAP backing store or the high performance FIFO
+    based backing store by default. This only covers the creation of the log on startup
+    if none exists.
+  default: fifo
+  services:
+  - rgw
+  enum_values:
+  - fifo
+  - omap
+- name: rgw_default_bucket_bilog_type
+  type: str
+  level: advanced
+  desc: Default bilog backend for newly created buckets
+  long_desc: Whether new buckets use the InIndex (omap-based, stored in bucket index
+    objects) or FIFO bilog backend. Defaults to 'fifo'. Existing InIndex buckets are
+    migrated to FIFO automatically on their next reshard.
+  default: fifo
+  services:
+  - rgw
+  enum_values:
+  - inindex
+  - fifo
 - name: rgw_d3n_l1_local_datacache_enabled
   type: bool
   level: advanced

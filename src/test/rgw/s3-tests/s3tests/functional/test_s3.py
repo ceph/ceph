@@ -1270,6 +1270,73 @@ def test_bucket_listv2_unordered():
     assert status == 400
     assert error_code == 'InvalidArgument'
 
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_bucket_list_unordered_policy_reject():
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+
+    policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Deny',
+            'Principal': '*',
+            'Action': 's3:ListBucket',
+            'Resource': f'arn:aws:s3:::{bucket_name}',
+            'Condition': {
+                'Bool': {
+                    'rgw:allow-unordered': 'true'
+                }
+            }
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+    # expect success when allow-unordered is not specified
+    client.list_objects(Bucket=bucket_name)
+
+    # adds the unordered query parameter
+    def add_unordered(**kwargs):
+        kwargs['params']['url'] += "&allow-unordered=true"
+    client.meta.events.register('before-call.s3.ListObjects', add_unordered)
+
+    # expect AccessDenied when specified
+    e = assert_raises(ClientError, client.list_objects, Bucket=bucket_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+@pytest.mark.fails_on_aws
+@pytest.mark.fails_on_dbstore
+def test_bucket_list_unordered_policy_require():
+    client = get_client()
+    bucket_name = get_new_bucket(client)
+
+    policy = json.dumps({
+        'Version': '2012-10-17',
+        'Statement': [{
+            'Effect': 'Deny',
+            'Principal': '*',
+            'Action': 's3:ListBucket',
+            'Resource': f'arn:aws:s3:::{bucket_name}',
+            'Condition': {
+                'Bool': {
+                    'rgw:allow-unordered': 'false'
+                }
+            }
+        }]
+    })
+    client.put_bucket_policy(Bucket=bucket_name, Policy=policy)
+
+    # expect AccessDenied when allow-unordered is not specified
+    e = assert_raises(ClientError, client.list_objects, Bucket=bucket_name)
+    assert (403, 'AccessDenied') == _get_status_and_error_code(e.response)
+
+    # adds the unordered query parameter
+    def add_unordered(**kwargs):
+        kwargs['params']['url'] += "&allow-unordered=true"
+    client.meta.events.register('before-call.s3.ListObjects', add_unordered)
+
+    # expect success when specified
+    client.list_objects(Bucket=bucket_name)
 
 def test_bucket_list_maxkeys_invalid():
     key_names = ['bar', 'baz', 'foo', 'quxx']
@@ -10074,7 +10141,7 @@ def test_lifecycle_cloud_multiple_transition():
     assert len(expire1_keys[sc[2]]) == 0
 
     # Wait for next expiration cycle
-    time.sleep(7*lc_interval)
+    time.sleep(5*lc_interval)
     expire1_keys = list_bucket_storage_class(client, bucket_name)
     assert len(expire1_keys['STANDARD']) == 2
     assert len(expire1_keys[sc[1]]) == 0
@@ -10085,7 +10152,7 @@ def test_lifecycle_cloud_multiple_transition():
         assert len(expire1_keys[sc[2]]) == 0
 
     # Wait for final expiration cycle
-    time.sleep(12*lc_interval)
+    time.sleep(6*lc_interval)
     expire3_keys = list_bucket_storage_class(client, bucket_name)
     assert len(expire3_keys['STANDARD']) == 2
     assert len(expire3_keys[sc[1]]) == 0
@@ -11909,6 +11976,24 @@ def test_sse_kms_not_declared():
     e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key, Body=data)
     status, error_code = _get_status_and_error_code(e.response)
     assert status == 400
+
+@pytest.mark.encryption
+def test_sse_empty_algorithm():
+    bucket_name = get_new_bucket()
+    client = get_client()
+    sse_client_headers = {
+        'x-amz-server-side-encryption': ''
+    }
+    data = 'A'*100
+    key = 'testobj'
+
+    lf = (lambda **kwargs: kwargs['params']['headers'].update(sse_client_headers))
+    client.meta.events.register('before-call.s3.PutObject', lf)
+
+    e = assert_raises(ClientError, client.put_object, Bucket=bucket_name, Key=key, Body=data)
+    status, error_code = _get_status_and_error_code(e.response)
+    assert status == 400
+    assert error_code == 'InvalidArgument'
 
 @pytest.mark.encryption
 @pytest.mark.fails_on_dbstore

@@ -426,6 +426,57 @@ describe('CdValidators', () => {
     });
   });
 
+  describe('mirroringMdsCaps', () => {
+    let users: { entity?: string; caps?: { mds?: string } }[];
+
+    beforeEach(() => {
+      users = [];
+      form = new CdFormGroup({
+        filesystem: new FormControl(''),
+        username: new FormControl(
+          '',
+          CdValidators.mirroringMdsCaps(() => users)
+        )
+      });
+      formHelper = new FormHelper(form);
+    });
+
+    it('should skip empty username', () => {
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.expectValid('username');
+    });
+
+    it('should allow unknown users', () => {
+      users = [{ entity: 'client.other', caps: { mds: 'allow r fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'new-peer');
+      formHelper.expectValid('username');
+    });
+
+    it('should allow existing users with mirroring caps', () => {
+      users = [{ entity: 'client.mirror', caps: { mds: 'allow rwps fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'mirror');
+      formHelper.expectValid('username');
+    });
+
+    it('should error when an existing user has invalid MDS caps', () => {
+      users = [{ entity: 'client.readonly', caps: { mds: 'allow r fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'readonly');
+      formHelper.expectError('username', 'invalidMdsCaps');
+    });
+
+    it('should revalidate when the filesystem changes', () => {
+      users = [{ entity: 'client.mirror', caps: { mds: 'allow rwps fsname=myfs' } }];
+      formHelper.setValue('filesystem', 'myfs');
+      formHelper.setValue('username', 'mirror');
+      formHelper.expectValid('username');
+      formHelper.setValue('filesystem', 'otherfs');
+      formHelper.expectError('username', 'invalidMdsCaps');
+    });
+  });
+
   describe('validate if condition', () => {
     beforeEach(() => {
       form = new CdFormGroup({

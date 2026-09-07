@@ -19,6 +19,7 @@
 
 #include <rocksdb/version.h>
 
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/perf_counters_key.h"
 #include "crush/CrushWrapper.h"

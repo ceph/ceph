@@ -143,6 +143,45 @@ bool parse_aws_s3_error(const std::string& input, rgw_err& err)
   return true;
 }
 
+// try to parse the json error response body.
+static bool parse_json_error(const std::string& input, rgw_err& err)
+{
+  JSONParser parser;
+  if (!parser.parse(input.c_str(), input.length())) {
+    return false;
+  }
+  JSONObj* error = parser.find_obj("Error");
+  if (!error) {
+    error = &parser;
+  }
+  if (auto code = error->find_obj("Code"); code) {
+    err.err_code = code->get_data();
+  }
+  if (auto message = error->find_obj("Message"); message) {
+    err.message = message->get_data();
+  }
+  return true;
+}
+
+// parse the error response body. s3/iam/sts use xml, but the admin api
+// uses json
+static bool parse_error_response(const std::string& input, rgw_err& err)
+{
+  const auto pos = input.find_first_not_of(" \t\r\n");
+  if (pos == std::string::npos) {
+    return false;
+  }
+  switch (input[pos]) {
+    case '<':
+      return parse_aws_s3_error(input, err);
+    case '{':
+    case '[':
+      return parse_json_error(input, err);
+    default:
+      return false;
+  }
+}
+
 int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
                                   const rgw::SiteConfig& site,
                                   const rgw_owner& effective_owner,
@@ -186,7 +225,7 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
   }
   err.http_ret = *result;
   if (err.is_err() && outdata.length()) { // 4xx or 5xx
-    std::ignore = parse_aws_s3_error(rgw_bl_str(outdata), err);
+    std::ignore = parse_error_response(rgw_bl_str(outdata), err);
   }
   int ret = rgw_http_error_to_errno(err.http_ret);
   if (ret < 0) {
@@ -626,12 +665,21 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     s->bucket_owner = s->bucket_acl.get_owner();
     acct_acl_user = &s->bucket_owner;
 
-    s->zonegroup_endpoint = rgw::get_zonegroup_endpoint(zonegroup);
-    s->zonegroup_name = zonegroup.get_name();
+    const std::string& bucket_zonegroup_id = s->bucket->get_info().zonegroup;
 
-    if (!zonegroup.equals(s->bucket->get_info().zonegroup)) {
+    /* the zonegroup that holds the bucket, which is where any redirect has to
+     * point. using the local zonegroup here would send the client back to the
+     * endpoint it just used, and clients that follow redirects would loop */
+    const RGWZoneGroup* bucket_zonegroup = rgw::find_zonegroup_by_id(
+        zonegroup, s->penv.site->get_period(), bucket_zonegroup_id);
+    if (bucket_zonegroup) {
+      s->zonegroup_endpoint = rgw::get_zonegroup_endpoint(*bucket_zonegroup);
+      s->zonegroup_name = bucket_zonegroup->get_name();
+    }
+
+    if (!zonegroup.equals(bucket_zonegroup_id)) {
       ldpp_dout(dpp, 0) << "NOTICE: request for data in a different zonegroup ("
-          << s->bucket->get_info().zonegroup << " != "
+          << bucket_zonegroup_id << " != "
           << zonegroup.get_id() << ")" << dendl;
       /* we now need to make sure that the operation actually requires copy source, that is
        * it's a copy operation
@@ -643,6 +691,11 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       } else if (!s->local_source ||
           (s->op != OP_PUT && s->op != OP_COPY) ||
           rgw::sal::Object::empty(s->object.get())) {
+        if (s->zonegroup_endpoint.empty()) {
+          ldpp_dout(dpp, 0) << "NOTICE: no endpoint found for zonegroup "
+              << bucket_zonegroup_id << ", responding without a redirect "
+              "location" << dendl;
+        }
         return -ERR_PERMANENT_REDIRECT;
       }
     }
@@ -3549,6 +3602,9 @@ int RGWListBucket::verify_permission(optional_yield y)
     s->env.emplace("s3:delimiter", delimiter);
 
   s->env.emplace("s3:max-keys", std::to_string(max));
+
+  // expose rgw's allow-unordered extension to policy evaluation
+  s->env.emplace("rgw:allow-unordered", allow_unordered ? "true" : "false");
 
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
   if (has_s3_resource_tag)

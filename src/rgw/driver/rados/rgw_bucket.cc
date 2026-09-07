@@ -1522,21 +1522,21 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
     return -ERR_PERMANENT_REDIRECT;
   }
 
-  if (bypass_gc)
-    ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
-  else
-    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
-  if (ret < 0)
-    return ret;
-
-  // forward to master zonegroup
+  // forward to master first
   const std::string delpath = "/admin/bucket";
   RGWEnv env;
   env.set("REQUEST_METHOD", "DELETE");
   env.set("SCRIPT_URI", delpath);
   env.set("REQUEST_URI", delpath);
-  env.set("QUERY_STRING", fmt::format("bucket={}&tenant={}", bucket->get_name(), bucket->get_tenant()));
   req_info req(dpp->get_cct(), &env);
+  req.args.append("bucket", bucket->get_name());
+  req.args.append("tenant", bucket->get_tenant());
+  if (op_state.will_delete_children()) {
+    req.args.append("purge-objects", "true");
+  }
+  if (bypass_gc) {
+    req.args.append("bypass-gc", "true");
+  }
   rgw_err err; // unused
 
   ret = rgw_forward_request_to_master(dpp, site, bucket->get_owner(), nullptr, nullptr, req, err, y);
@@ -1545,6 +1545,11 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, const rgw::SiteCon
                       << ret << dendl;
     return ret;
   }
+
+  if (bypass_gc)
+    ret = bucket->remove_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
+  else
+    ret = bucket->remove(dpp, op_state.will_delete_children(), y);
 
   return ret;
 }
@@ -3058,6 +3063,7 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
 				std::optional<rgw::BucketIndexType> type,
 				std::optional<uint32_t> shards) {
+
   layout.current_index.gen = 0;
   layout.current_index.layout.normal.hash_type = rgw::BucketHashType::Mod;
 
@@ -3076,7 +3082,13 @@ void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
   }
 
   if (layout.current_index.layout.type == rgw::BucketIndexType::Normal) {
-    layout.logs.push_back(log_layout_from_index(0, layout.current_index));
+    const bool use_fifo =
+      (cct->_conf.get_val<std::string>("rgw_default_bucket_bilog_type") == "fifo");
+    if (use_fifo) {
+      layout.logs.push_back(fifo_log_layout_from_index(0, layout.current_index));
+    } else {
+      layout.logs.push_back(log_layout_from_index(0, layout.current_index));
+    }
   }
 }
 
@@ -3132,7 +3144,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     const auto& log = bci.info.layout.logs.back();
     if (bci.info.bucket_deleted() && log.layout.type != rgw::BucketLogType::Deleted) {
       const auto index_log = bci.info.layout.logs.back();
-      const int shards_num = rgw::num_shards(index_log.layout.in_index);
+      const int shards_num = rgw::num_shards(index_log);
       bci.info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
       ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
       for (int i = 0; i < shards_num; ++i) {

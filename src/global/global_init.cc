@@ -192,7 +192,13 @@ static bool dumpCallback(
     const google_breakpad::MinidumpDescriptor& descriptor, void* context,
     bool succeeded) {
   char buf[1024];
-  snprintf(buf, sizeof(buf), "minidump created in path %s", descriptor.path());
+  if (succeeded) {
+    snprintf(buf, sizeof(buf), "minidump created in path %s",
+             descriptor.path());
+  } else {
+    snprintf(buf, sizeof(buf), "failed to create minidump in path %s",
+             descriptor.path());
+  }
   dout_emergency(buf);
   return succeeded;
 }

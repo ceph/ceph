@@ -17,6 +17,8 @@
 
 #include <boost/system/system_error.hpp>
 
+#include "msg/Messenger.h"
+
 namespace neorados {
 namespace detail {
 

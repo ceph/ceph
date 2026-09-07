@@ -824,8 +824,7 @@ def test_snapdiff(testdir):
     cephfs.mksnap("/snapdiff_test", "snap2", 0o755)
     snap1id = cephfs.snap_info(b"/snapdiff_test/.snap/snap1")['id']
     snap2id = cephfs.snap_info(b"/snapdiff_test/.snap/snap2")['id']
-    diff = cephfs.opensnapdiff(b"/snapdiff_test", b"/", b"snap2", b"snap1",
-     libcephfs.CEPH_SNAPDIFF_CTIME | libcephfs.CEPH_SNAPDIFF_MTIME)
+    diff = cephfs.opensnapdiff(b"/snapdiff_test", b"/", b"snap2", b"snap1")
     cnt = 0
     e = diff.readdir()
     while e is not None:
@@ -840,6 +839,44 @@ def test_snapdiff(testdir):
         e = diff.readdir()
     assert_equal(cnt, 2)
     diff.close()
+    cephfs.rmdir("/snapdiff_test/.snap/snap2")
+    cephfs.rmdir("/snapdiff_test/.snap/snap1")
+    cephfs.unlink("/snapdiff_test/file-1")
+    cephfs.rmdir("/snapdiff_test")
+
+def test_snapdiff2(testdir):
+    cephfs.mkdir("/snapdiff_test", 0o755)
+    fd = cephfs.open('/snapdiff_test/file-1', 'w', 0o755)
+    cephfs.write(fd, b"1111", 0)
+    cephfs.close(fd)
+    fd = cephfs.open('/snapdiff_test/file-2', 'w', 0o755)
+    cephfs.write(fd, b"2222", 0)
+    cephfs.close(fd)
+    cephfs.mksnap("/snapdiff_test", "snap1", 0o755)
+    cephfs.chmod('/snapdiff_test/file-1', 0o644)
+    # see https://tracker.ceph.com/issues/74984
+    cephfs.sync_fs()
+    cephfs.mksnap("/snapdiff_test", "snap2", 0o755)
+    snap1id = cephfs.snap_info(b"/snapdiff_test/.snap/snap1")['id']
+    snap2id = cephfs.snap_info(b"/snapdiff_test/.snap/snap2")['id']
+    diff = cephfs.opensnapdiff2(b"/snapdiff_test", b"/", b"snap2", b"snap1",
+                                libcephfs.CEPH_SNAPDIFF_MODE)
+    cnt = 0
+    e = diff.readdir()
+    while e is not None:
+        if (e.d_name == b"file-1"):
+            cnt = cnt + 1
+            assert_equal(snap2id, e.d_snapid)
+        elif (e.d_name != b"." and e.d_name != b".."):
+            cnt = cnt + 1
+        e = diff.readdir()
+    assert_equal(cnt, 1)
+    diff.close()
+    cephfs.rmdir("/snapdiff_test/.snap/snap2")
+    cephfs.rmdir("/snapdiff_test/.snap/snap1")
+    cephfs.unlink("/snapdiff_test/file-1")
+    cephfs.unlink("/snapdiff_test/file-2")
+    cephfs.rmdir("/snapdiff_test")
 
 def test_single_target_command():
     command = {'prefix': u'session ls', 'format': 'json'}

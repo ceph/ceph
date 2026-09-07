@@ -2748,7 +2748,7 @@ bool RadosObject::is_sync_completed(const DoutPrefixProvider* dpp,
   }
 
   const auto& log_layout = bucket_info.layout.logs.front();
-  const uint32_t shard_count = num_shards(log_to_index_layout(log_layout));
+  const uint32_t shard_count = num_shards(log_layout);
 
   std::string marker;
   bool truncated;

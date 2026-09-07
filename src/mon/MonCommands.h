@@ -1156,8 +1156,11 @@ COMMAND("osd pool force-remove-snap "
 	"order to cause OSDs to re-trim them.",
 	"osd", "rw")
 COMMAND("osd pool ls "
-	"name=detail,type=CephChoices,strings=detail,req=false",
-	"list pools", "osd", "r")
+	"name=detail,type=CephChoices,strings=detail,req=false "
+	"name=show_rule_names,type=CephBool,req=false",
+	"list pools (with `detail` and --show-rule-names, render the "
+	"CRUSH rule by name in the text output, and add a "
+	"`crush_rule_name` field to the JSON output)", "osd", "r")
 COMMAND("osd pool create "
 	"name=pool,type=CephPoolname "
 	"name=pg_num,type=CephInt,range=0,req=false "
@@ -1172,9 +1175,9 @@ COMMAND("osd pool create "
 	"name=autoscale_mode,type=CephChoices,strings=on|off|warn,req=false "
 	"name=bulk,type=CephBool,req=false "
 	"name=target_size_bytes,type=CephInt,range=0,req=false "
-	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "\
-	"name=force_pg_limit,type=CephBool,req=false"
-	"name=yes_i_really_mean_it,type=CephBool,req=false"
+	"name=target_size_ratio,type=CephFloat,range=0.0,req=false "
+	"name=force_pg_limit,type=CephBool,req=false "
+	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=crimson,type=CephBool,req=false",
 	"create pool", "osd", "rw")
 COMMAND_WITH_FLAG("osd pool delete "

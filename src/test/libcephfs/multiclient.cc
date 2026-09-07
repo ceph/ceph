@@ -212,11 +212,31 @@ TEST(LibCephFS, SnapMdMutate) {
   ASSERT_EQ(0, ceph_mksnap(cmount, dir_path, snap_name, 0755, snap_meta,
                            std::size(snap_meta)));
 
+  // verify before update
+  struct snap_info info;
+  ASSERT_EQ(0, ceph_get_snap_info(cmount2, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 3);
+
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0;  j < std::size(snap_meta); ++j) {
+      if (k == snap_meta[j].key and v == snap_meta[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
   // actual test -
   ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo", "bar123",
                                   CEPH_SNAP_MD_OP_CREATE));
 
-  struct snap_info info;
   ASSERT_EQ(0, ceph_get_snap_info(cmount2, snap_path, &info));
   ASSERT_GT(info.id, 1);
   ASSERT_EQ(info.nr_snap_metadata, 3);
@@ -231,6 +251,31 @@ TEST(LibCephFS, SnapMdMutate) {
     bool found = false;
     for (size_t j = 0;  j < std::size(snap_meta2); ++j) {
       if (k == snap_meta2[j].key and v == snap_meta2[j].value) {
+        found = true;
+        break;
+      }
+    }
+
+    ASSERT_EQ(found, true);
+  }
+
+  // remove a key
+  ASSERT_EQ(0, ceph_do_snap_md_op(cmount, snap_path, "foo", "",
+                                  CEPH_SNAP_MD_OP_REMOVE));
+
+  struct snap_metadata snap_meta3[] = {{"this", "that"}, {"abcde", "12345"}};
+  ASSERT_EQ(0, ceph_get_snap_info(cmount2, snap_path, &info));
+  ASSERT_GT(info.id, 1);
+  ASSERT_EQ(info.nr_snap_metadata, 2);
+
+  // verify snap metadata
+  for (size_t i = 0; i < info.nr_snap_metadata; ++i) {
+    auto k = std::string(info.snap_metadata[i].key);
+    auto v = std::string(info.snap_metadata[i].value);
+
+    bool found = false;
+    for (size_t j = 0;  j < std::size(snap_meta3); ++j) {
+      if (k == snap_meta3[j].key and v == snap_meta3[j].value) {
         found = true;
         break;
       }

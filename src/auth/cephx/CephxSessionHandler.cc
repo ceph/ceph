@@ -19,6 +19,7 @@
 #include <errno.h>
 
 #include "common/config.h"
+#include "include/Context.h"
 #include "include/ceph_features.h"
 #include "msg/Message.h"
 

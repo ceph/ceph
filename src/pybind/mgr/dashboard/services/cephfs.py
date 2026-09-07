@@ -5,12 +5,13 @@ import errno
 import logging
 import os
 from contextlib import contextmanager, suppress
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import cephfs
 
 from .. import mgr
 from ..exceptions import DashboardException
+from .ceph_service import CephService, SendCommandError
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +39,65 @@ def get_subvolumegroup_path(vol_name: str, group_name: str) -> str:
             f'Failed to get path for subvolume group {group_name}: {err}'
         )
     return out
+
+
+def has_mirroring_mds_caps(mds_caps: Optional[str], fs_name: str) -> bool:
+    """Return True if MDS caps allow CephFS snapshot mirroring for fs_name.
+
+    Mirroring requires the equivalent of ``fs authorize <fs> <entity> / rwps``,
+    stored as ``allow rwps fsname=<fs>`` (path ``/`` is omitted). ``allow *``
+    and unrestricted ``allow rwps`` are also sufficient.
+    """
+    if not mds_caps or not fs_name:
+        return False
+
+    for grant in mds_caps.split(','):
+        words = grant.split()
+        if len(words) < 2 or words[0] != 'allow':
+            continue
+
+        perms = words[1]
+        attrs = dict(word.split('=', 1) for word in words[2:] if '=' in word)
+
+        if perms != '*' and not all(flag in perms for flag in 'rwps'):
+            continue
+
+        grant_fs = attrs.get('fsname')
+        if grant_fs is not None and grant_fs not in (fs_name, '*', 'all'):
+            continue
+
+        grant_path = attrs.get('path')
+        if grant_path and grant_path != '/':
+            continue
+
+        return True
+
+    return False
+
+
+def ensure_mirroring_client_caps(client_name: str, fs_name: str) -> None:
+    """Reject existing CephX users that lack MDS caps required for mirroring.
+
+    Missing users are left unchanged so bootstrap can create them. Existing
+    users with sufficient MDS caps are also left unchanged.
+    """
+    try:
+        user_data = CephService.send_command('mon', 'auth get', entity=client_name)
+    except SendCommandError as ex:
+        if ex.errno == -errno.ENOENT:
+            return
+        raise DashboardException(
+            ex,
+            msg=f'Failed to lookup CephX user {client_name}: {ex}',
+            component='cephfs.mirror')
+
+    auth = user_data[0] if isinstance(user_data, list) else user_data
+    mds_caps = (auth.get('caps') or {}).get('mds', '')
+    if not has_mirroring_mds_caps(mds_caps, fs_name):
+        raise DashboardException(
+            msg='Invalid capabilities on the MDS',
+            code='invalid_mds_caps',
+            component='cephfs.mirror')
 
 
 class CephFS(object):

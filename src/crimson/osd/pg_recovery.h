@@ -51,6 +51,7 @@ public:
     const hobject_t& obj,
     const eversion_t& v,
     const std::vector<pg_shard_t> &peers) final;
+  void cancel_backfill();  // called from PG::on_change()
 private:
   PGRecoveryListener* pg;
   size_t start_primary_recovery_ops(
@@ -163,6 +164,7 @@ private:
   void backfilled() final;
   void request_backfill();
   void all_replicas_recovered();
+  void reset_backfill_state();  // common reset logic
 
   friend crimson::osd::BackfillState::PGFacade;
   friend crimson::osd::PG;

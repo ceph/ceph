@@ -47,6 +47,9 @@ def geom_disk_parser(block):
         column= re.sub(r"^[0-9]+\.", "", column)
         value = value.strip()
         value = re.sub(r'\s*\([0-9A-Za-z.]+\)', '', value).strip()
+        column = re.sub(r"^[0-9]+\.", "", column)
+        value = value.strip()
+        value = re.sub(r"\([0-9A-Z]+\)", '', value)
         parsed[column.lower()] = value
     return parsed
 

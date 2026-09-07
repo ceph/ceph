@@ -2,7 +2,7 @@ tasks:
 - install:
     # extra packages added for the rgw-d4ntests task
     extra_system_packages:
-      deb: ['s3cmd'] # valkey not available by default
+      deb: ['s3cmd', 'valkey-server'] # valkey is named valkey-server on deb
       rpm: ['s3cmd', 'valkey']
 - ceph:
 - redis:

@@ -66,6 +66,9 @@ cdef extern from "cephfs/libcephfs.h" nogil:
     cdef struct ceph_snapdiff_info:
         pass
 
+    cdef struct ceph_snapdiff_info2:
+        pass
+
     cdef struct ceph_snapdiff_entry_t:
         dirent dir_entry
         uint64_t snapid
@@ -170,10 +173,18 @@ cdef extern from "cephfs/libcephfs.h" nogil:
                            const char *rel_path,
                            const char *snap1,
                            const char *snap2,
-                           unsigned snapdiff_mask,
                            ceph_snapdiff_info *out)
-    int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out);
+    int ceph_open_snapdiff2(ceph_mount_info *cmount,
+                            const char *root_path,
+                            const char *rel_path,
+                            const char *snap1,
+                            const char *snap2,
+                            unsigned snapdiff_mask,
+                            ceph_snapdiff_info2 **out)
+    int ceph_readdir_snapdiff(ceph_snapdiff_info *snapdiff, ceph_snapdiff_entry_t *out)
+    int ceph_readdir_snapdiff2(ceph_snapdiff_info2 *snapdiff, ceph_snapdiff_entry_t *out)
     int ceph_close_snapdiff(ceph_snapdiff_info *snapdiff)
+    int ceph_close_snapdiff2(ceph_snapdiff_info2 *snapdiff)
     int ceph_rmdir(ceph_mount_info *cmount, const char *path)
     const char* ceph_getcwd(ceph_mount_info *cmount)
     int ceph_sync_fs(ceph_mount_info *cmount)

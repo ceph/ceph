@@ -224,6 +224,7 @@ class Nvmeof(Task):
             NVMEOF_GATEWAY_IP_ADDRESSES={",".join(gateway_ips)}
             NVMEOF_GATEWAY_NAMES={",".join(gateway_names)}
             NVMEOF_DEFAULT_GATEWAY_IP_ADDRESS={ip_address}
+            NVMEOF_DEFAULT_GATEWAY_HOSTNAME={self.remote.shortname}
             NVMEOF_CLI_IMAGE="{self.cli_image}"
             NVMEOF_SUBSYSTEMS_PREFIX={self.nqn_prefix}
             NVMEOF_SUBSYSTEMS_COUNT={self.subsystems_count}

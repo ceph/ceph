@@ -79,6 +79,9 @@ public:
   /// notify machine on replica that PG is active
   void on_replica_activate();
 
+  /// stop the scrubber on PG shutdown
+  void stop();
+
   /// notify machine of interval change
   void on_interval_change();
 
