@@ -900,14 +900,16 @@ endif()
 
 # dashboard angular2 frontend
 option(WITH_MGR_DASHBOARD_FRONTEND "Build the mgr/dashboard frontend using `npm`" ON)
-option(WITH_SYSTEM_NPM "Assume that dashboard build tools already installed through packages" OFF)
-if(WITH_SYSTEM_NPM)
-  find_program(NPM_EXECUTABLE npm
-    REQUIRED)
-endif()
-set(DASHBOARD_FRONTEND_LANGS "ALL" CACHE STRING
-  "List of comma separated ceph-dashboard frontend languages to build. \
-  Use value `ALL` to build all languages")
+if(WITH_MGR_DASHBOARD_FRONTEND)
+  option(WITH_SYSTEM_NPM "Assume that dashboard build tools already installed through packages" OFF)
+  if(WITH_SYSTEM_NPM)
+    find_program(NPM_EXECUTABLE npm
+      REQUIRED)
+  endif()
+  set(DASHBOARD_FRONTEND_LANGS "ALL" CACHE STRING
+    "List of comma separated ceph-dashboard frontend languages to build. \
+    Use value `ALL` to build all languages")
+endif(WITH_MGR_DASHBOARD_FRONTEND)
 CMAKE_DEPENDENT_OPTION(WITH_MGR_ROOK_CLIENT "Enable the mgr's Rook support" ON
   "WITH_MGR" OFF)
 
