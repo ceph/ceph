@@ -1548,7 +1548,11 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
     }
   }
 
-  // Handle completed rollbacks: remove from rollback_trimq
+  // Handle completed rollbacks: remove from rollback_trimq and erase from
+  // pg_info_t::completed_rollbacks (feedback loop, mirrors new_purged_snaps
+  // block above).  Without the erase the PG keeps re-reporting already-pruned
+  // IDs in every pg_stat_t and a future re-rollback of the same snap ID would
+  // be silently skipped by the on_activate() guard.
   {
     auto& new_completed_rollbacks = osdmap->get_new_completed_rollbacks();
     auto rb_done = new_completed_rollbacks.find(get_pgid().pgid.pool());
@@ -1559,6 +1563,17 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
         dout(10) << __func__ << " completed rollbacks " << k.first
                  << "+" << k.second << " drained from rollback_trimq" << dendl;
       }
+      // Erase from pg_info_t so we stop reporting these IDs to the MON.
+      // adjust_completed_rollbacks() sets dirty_big_info, which causes
+      // Active::react(AdvMap) to call share_pg_info() immediately.
+      recovery_state.adjust_completed_rollbacks(
+        [&rb_done](auto &cr) {
+          for (auto k : rb_done->second) {
+            cr.erase(k.first, k.second);
+          }
+        });
+      dout(10) << __func__ << " completed_rollbacks now "
+               << recovery_state.get_info().completed_rollbacks << dendl;
     }
   }
 }
