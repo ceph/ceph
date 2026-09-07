@@ -845,6 +845,8 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                               bool high_precision_time,
                               const char* if_match,
                               const char* if_nomatch,
+                              const char* dest_if_match,
+                              const char* dest_if_nomatch,
                               AttrsMod attrs_mod,
                               bool copy_if_newer,
                               Attrs& attrs,
@@ -861,6 +863,9 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                               optional_yield y)
 {
   bool write_to_cache = g_conf()->d4n_writecache_enabled;
+  if (write_to_cache && (dest_if_match || dest_if_nomatch)) {
+    return -ERR_NOT_IMPLEMENTED;
+  }
   bool dirty{false};
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(this->get_read_op());
   read_op->params.mod_ptr = mod_ptr;
@@ -886,7 +891,8 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
                            nextBucket(src_bucket),
                            dest_placement, src_mtime, mtime,
                            mod_ptr, unmod_ptr, high_precision_time, if_match,
-                           if_nomatch, attrs_mod, copy_if_newer, attrs,
+                           if_nomatch, dest_if_match, dest_if_nomatch,
+                           attrs_mod, copy_if_newer, attrs,
                            category, olh_epoch, delete_at, version_id, tag,
                            etag, progress_cb, progress_data, dp_factory, dpp, y);
     if (ret < 0) {
