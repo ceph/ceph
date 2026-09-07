@@ -35,7 +35,6 @@
 #include <ranges>
 #include <iterator>
 #include <algorithm>
-#include <generator>
 
 #include <mutex>
 #include <thread>
@@ -55,14 +54,18 @@
 
 #include "common/container_concepts.h"
 
-#ifdef __cpp_lib_flat_map
- #include <flat_map>
- template <typename ...Args>
- using flat_map = std::flat_map<Args...>;
-#else
+#if !defined(CEPH_LIBFDB_HAS_GENERATOR)
+ #error "libfdb requires generator support"
+#endif
+
+#include <generator>
+
+#if !defined(CEPH_LIBFDB_HAS_FLAT_MAP)
+ #error "libfdb requires flat_map support"
+#elif defined(CEPH_LIBFDB_HAS_ALT_FLAT_MAP)
  #include <boost/container/flat_map.hpp>
- template <typename ...Args>
- using flat_map = boost::container::flat_map<Args...>;
+#else
+ #include <flat_map>
 #endif
 
 // Wrangle some forward declarations:
@@ -86,6 +89,14 @@ using transaction_handle = std::shared_ptr<transaction>;
 
 extern transaction_handle make_transaction(database_handle dbh);
 [[nodiscard]] inline watch_handle make_watch(transaction_handle txn, std::string_view key);
+
+#if defined(CEPH_LIBFDB_HAS_ALT_FLAT_MAP)
+ template <typename ...Args>
+ using flat_map = boost::container::flat_map<Args...>;
+#elif defined(CEPH_LIBFDB_HAS_FLAT_MAP)
+ template <typename ...Args>
+ using flat_map = std::flat_map<Args...>;
+#endif
 
 } // namespace ceph::libfdb
 

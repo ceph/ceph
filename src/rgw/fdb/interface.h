@@ -16,7 +16,6 @@
 
 #include "base.h"
 #include "conversion.h"
-
 namespace ceph::libfdb {
 
 /* This should be called when the application is all done with FoundationDB: */
