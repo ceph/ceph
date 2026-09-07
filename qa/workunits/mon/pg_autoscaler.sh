@@ -30,6 +30,11 @@ function wait_for() {
     return 0
 }
 
+function expect_false() {
+    set -x
+    if "$@"; then return 1; else return 0; fi
+}
+
 function power2_floor() { echo "x=l($1)/l(2); scale=0; 2^(x/1)" | bc -l;}
 
 function power2_ceil() { echo "x=l($1)/l(2); scale=0; 2^((x+0.999)/1)" | bc -l; }
@@ -211,6 +216,245 @@ function test_exact_budget() {
     ceph osd pool rm data1 data1 --yes-i-really-really-mean-it
 }
 
+function test_simple_autoscale_greenfield() {
+    # greenfield simple provisioning: with the simpleautoscale flag set, a
+    # pool born with an effective_ratio starts at its planned pg_num with
+    # pg_autoscale_plan 'current' - no acceptance round-trip. pg_num =
+    # ratio * T * NUM_OSDS / size is topology independent for
+    # T = 768 / NUM_OSDS: 0.5 -> 128, 0.25 -> 64 (size 3).
+    MON_TARGET_PG_PER_OSD=$(( 768 / $NUM_OSDS ))
+    ceph config set global mon_target_pg_per_osd $MON_TARGET_PG_PER_OSD
+
+    # a ratio may be pre-staged while the flag is unset, but it is inert
+    # and the pool has no plan state
+    ceph osd pool create inert0
+    ceph osd pool set inert0 effective_ratio 0.5
+    expect_false ceph osd pool get inert0 pg_autoscale_plan
+    expect_false ceph osd pool autoscale-accept inert0
+    ceph osd pool rm inert0 inert0 --yes-i-really-really-mean-it
+
+    # the flag is the master switch for the planner
+    ceph osd pool set simpleautoscale
+    wait_for 30 "ceph osd pool get simpleautoscale 2>&1 | grep -w on"
+
+    # legacy knobs cannot be combined with a ratio at create
+    expect_false ceph osd pool create bad0 --effective-ratio 0.5 --target-size-ratio 0.1
+
+    # --dry-run previews the plan without creating anything
+    OUT=$(ceph osd pool create dry0 --effective-ratio 0.5 --dry-run 2>&1)
+    echo "$OUT" | grep -q "dry run: effective_ratio"
+    expect_false ceph osd pool get dry0 size
+
+    ceph osd pool create pin0 --effective-ratio 0.5 --autoscale-mode warn
+    ceph osd pool create pin1 --effective-ratio 0.25 --autoscale-mode warn
+
+    # born at the planned size, plan already current
+    ceph osd pool get pin0 pg_num | grep -w 128
+    ceph osd pool get pin1 pg_num | grep -w 64
+    RATIO=$(ceph osd pool get pin0 effective_ratio | grep -Eo '[0-9.]+')
+    eval_actual_expected_val $RATIO '0.5'
+    ceph osd pool get pin0 pg_autoscale_plan | grep -w current
+
+    # legacy autoscaler knobs are rejected while the flag is set
+    expect_false ceph osd pool set pin0 target_size_ratio 0.5
+    expect_false ceph osd pool set pin0 target_size_bytes 1000000
+    expect_false ceph osd pool set pin0 pg_autoscale_bias 4
+    expect_false ceph osd pool set pin0 bulk true
+
+    # a world change (here: the budget) never moves a 'warn' pool's
+    # pg_num; the new plans are stamped and the pools go 'pending'
+    ceph config set global mon_target_pg_per_osd $(( $MON_TARGET_PG_PER_OSD * 2 ))
+    wait_for 120 "ceph osd pool get pin0 pg_autoscale_plan | grep -w pending"
+    wait_for 120 "ceph osd pool get pin1 pg_autoscale_plan | grep -w pending"
+    wait_for 120 "ceph health detail | grep POOL_AUTOSCALE_PENDING"
+    ceph osd pool get pin0 pg_num | grep -w 128
+    PLANNED=$(ceph osd pool get pin0 planned_pg_num | grep -Eo '[0-9]+')
+    eval_actual_expected_val $PLANNED 256
+
+    # --all accepts every pending plan in one osdmap transaction: the
+    # command returns after the single commit, so one dump must already
+    # show both stamped plans applied
+    ceph osd pool autoscale-accept --all
+    DUMP=$(ceph osd dump -f json)
+    echo "$DUMP" | jq -e '.pools[] | select(.pool_name == "pin0") | .pg_num_target == 256'
+    echo "$DUMP" | jq -e '.pools[] | select(.pool_name == "pin1") | .pg_num_target == 128'
+    wait_for 120 "ceph osd pool get pin0 pg_autoscale_plan | grep -w current"
+    wait_for 120 "ceph osd pool get pin1 pg_autoscale_plan | grep -w current"
+    expect_false ceph osd pool get pin0 planned_pg_num
+
+    # accepting with nothing pending is an idempotent no-op
+    ceph osd pool autoscale-accept pin0 2>&1 | grep -q 'no plan pending'
+
+    # free budget headroom before raising pin1: the .mgr pool's learned
+    # morsel shares this root, so a full Sigma=1.0 declaration would be
+    # shaved down to fit rather than split. pin0's smaller plan just
+    # stays pending, unaccepted.
+    ceph osd pool set pin0 effective_ratio 0.125
+
+    # a mode 'on' pool applies its own plans (here: a split after its
+    # ratio is raised)
+    ceph osd pool set pin1 pg_autoscale_mode on
+    ceph osd pool set pin1 effective_ratio 0.5
+    wait_for 120 "ceph osd dump | grep -w pin1 | grep -Eq 'pg_num(_target)? 256'"
+    wait_for 120 "ceph osd pool get pin1 pg_autoscale_plan | grep -w current"
+
+    # ... but a plan that merges away half or more of the PGs of a pool
+    # holding data is held 'pending' for manual confirmation, even on 'on'
+    ceph config set mon mon_osd_pool_pg_merge_confirm_bytes 4096
+    rados -p pin1 bench 2 write -b 65536 --no-cleanup
+    wait_for 120 "ceph df | grep -w pin1 | grep -Eq 'KiB|MiB'"
+    ceph osd pool set pin1 effective_ratio 0.0625
+    wait_for 120 "ceph osd pool get pin1 pg_autoscale_plan | grep -w pending"
+    wait_for 120 "ceph health detail | grep POOL_AUTOSCALE_PENDING"
+    ceph osd dump | grep -w pin1 | grep -Eq 'pg_num(_target)? 256'
+    expect_false ceph osd pool autoscale-accept pin1
+    ceph osd pool autoscale-accept pin1 --yes-i-really-mean-it
+    wait_for 120 "ceph osd dump | grep -w pin1 | grep -Eq 'pg_num(_target)? 32'"
+    wait_for 120 "ceph osd pool get pin1 pg_autoscale_plan | grep -w current"
+    ceph config rm mon mon_osd_pool_pg_merge_confirm_bytes
+
+    ceph osd pool rm pin0 pin0 --yes-i-really-really-mean-it
+    ceph osd pool rm pin1 pin1 --yes-i-really-really-mean-it
+    ceph osd pool unset simpleautoscale
+    ceph config set global mon_target_pg_per_osd $MON_TARGET_PG_PER_OSD
+}
+
+function test_simple_autoscale_learn() {
+    # brownfield transition: set legacy pools to 'warn' so nothing acts,
+    # set the simpleautoscale flag; the autoscaler learns each pool's
+    # effective_ratio fill-only from its current pg_num, plans match
+    # pg_num, and the pools sit quietly in plan 'current'
+    MON_TARGET_PG_PER_OSD=$(( 768 / $NUM_OSDS ))
+    ceph config set global mon_target_pg_per_osd $MON_TARGET_PG_PER_OSD
+
+    ceph osd pool create legacy0 --autoscale-mode on
+    ceph osd pool create legacy1 --autoscale-mode on
+    ceph osd pool set legacy0 target_size_ratio 0.5
+    ceph osd pool set legacy1 pg_autoscale_bias 2
+    sleep 60
+
+    LEGACY0_PG=$(ceph osd pool get legacy0 pg_num | grep -Eo '[0-9]+')
+
+    # recommended runbook: warn first, then flag
+    ceph osd pool set legacy0 pg_autoscale_mode warn
+    ceph osd pool set legacy1 pg_autoscale_mode warn
+    ceph osd pool set simpleautoscale
+    wait_for 30 "ceph osd pool get simpleautoscale 2>&1 | grep -w on"
+
+    # the guardrail rejects legacy knobs while the flag is set
+    expect_false ceph osd pool set legacy0 target_size_ratio 0.9
+    expect_false ceph osd pool set legacy1 bulk true
+
+    # while the flag is set the status table is the concise simple view
+    ceph osd pool autoscale-status | grep -q 'EFFECTIVE RATIO'
+    ceph osd pool autoscale-status | grep -qw 'PLAN'
+    expect_false bash -c "ceph osd pool autoscale-status | grep -q 'RAW CAPACITY'"
+
+    # ratios are learned fill-only; a learned plan equals the current
+    # pg_num, so nothing is pending and nothing moves
+    wait_for 180 "ceph osd pool get legacy0 effective_ratio"
+    wait_for 180 "ceph osd pool get legacy1 effective_ratio"
+    wait_for 120 "ceph osd pool get legacy0 pg_autoscale_plan | grep -w current"
+    wait_for 120 "ceph osd pool get legacy1 pg_autoscale_plan | grep -w current"
+    eval_actual_expected_val $(ceph osd pool get legacy0 pg_num | grep -Eo '[0-9]+') $LEGACY0_PG
+    expect_false bash -c "ceph health detail | grep -q POOL_AUTOSCALE_PENDING"
+
+    # accepting a converged pool is an idempotent no-op
+    ceph osd pool autoscale-accept legacy0 2>&1 | grep -q 'no plan pending'
+
+    # stale legacy knobs may remain set (legacy0 still carries its
+    # target_size_ratio); they are simply inert while the flag is set
+
+    # rollback: unset the flag; every pool resumes legacy autoscaling,
+    # ratios stay stored but inert, and legacy knobs work again
+    ceph osd pool unset simpleautoscale
+    ceph osd pool set legacy1 pg_autoscale_bias 4
+    ceph osd pool get legacy0 effective_ratio
+    expect_false ceph osd pool get legacy0 pg_autoscale_plan
+    # the full status table returns once the flag is unset
+    wait_for 30 "ceph osd pool autoscale-status | grep -q 'RAW CAPACITY'"
+
+    ceph osd pool rm legacy0 legacy0 --yes-i-really-really-mean-it
+    ceph osd pool rm legacy1 legacy1 --yes-i-really-really-mean-it
+}
+
+function test_device_class_pins() {
+    # pins are scoped to the budget domain (shadow root) the pool's CRUSH
+    # rule resolves to, not the nominal root
+    MON_TARGET_PG_PER_OSD=200
+    ceph config set global mon_target_pg_per_osd $MON_TARGET_PG_PER_OSD
+
+    # split the OSDs into two artificial device classes
+    HALF=$(( $NUM_OSDS / 2 ))
+    for osd in $(seq 0 $(( $HALF - 1 ))); do
+        ceph osd crush rm-device-class osd.$osd || true
+        ceph osd crush set-device-class fast osd.$osd
+    done
+    for osd in $(seq $HALF $(( $NUM_OSDS - 1 ))); do
+        ceph osd crush rm-device-class osd.$osd || true
+        ceph osd crush set-device-class slow osd.$osd
+    done
+    ceph osd crush rule create-replicated pin-fast default osd fast
+    ceph osd crush rule create-replicated pin-slow default osd slow
+
+    # a classless pool keeps the nominal root in play, so every class OSD
+    # splits its per-OSD budget between the nominal root and its shadow
+    # root; pins are prorated by the same split. Create one explicitly so
+    # the test behaves the same whether or not .mgr exists.
+    ceph osd pool create classless0 --autoscale-mode=on
+
+    # fast0 exercises auto-acceptance (mode on), slow0 the manual
+    # plan/accept walk (mode warn)
+    ceph osd pool create fast0 --autoscale-mode=on
+    ceph osd pool create slow0 --autoscale-mode=warn
+    ceph osd pool set fast0 crush_rule pin-fast
+    ceph osd pool set slow0 crush_rule pin-slow
+    ceph osd pool set fast0 size 3
+    ceph osd pool set slow0 size 3
+    ceph osd pool set simpleautoscale
+    # declare ratios only after the pools are scoped to their shadow
+    # roots. The fractions are derived from HALF so the plan is exactly
+    # 64/32 pgs in both topologies: plan = ratio * (HALF * T / 2) / 3.
+    ceph osd pool set fast0 effective_ratio $(awk "BEGIN{printf \"%.4f\", 384 / $HALF / $MON_TARGET_PG_PER_OSD}")
+    ceph osd pool set slow0 effective_ratio $(awk "BEGIN{printf \"%.4f\", 192 / $HALF / $MON_TARGET_PG_PER_OSD}")
+
+    # mode 'on': the plan (a split up to 64) is applied automatically
+    wait_for 300 "ceph osd dump | grep -w fast0 | grep -Eq 'pg_num(_target)? 64'"
+    wait_for 120 "ceph osd pool get fast0 pg_autoscale_plan | grep -w current"
+
+    # mode 'warn': the plan is stamped and held pending; accept until the
+    # plan converges (crush moves may restamp along the way)
+    accept_plan() {
+        local pool=$1
+        local target=$2
+        local i
+        for i in $(seq 1 60); do
+            if ceph osd dump -f json | jq -e ".pools[] | select(.pool_name == \"$pool\") | .pg_num_target == $target" > /dev/null; then
+                return 0
+            fi
+            if ceph osd pool get $pool pg_autoscale_plan | grep -qw pending; then
+                ceph osd pool autoscale-accept $pool || true
+            fi
+            sleep 5
+        done
+        echo failed
+        return 1
+    }
+    accept_plan slow0 32
+    wait_for 120 "ceph osd pool get slow0 pg_autoscale_plan | grep -w current"
+
+    ceph osd pool rm classless0 classless0 --yes-i-really-really-mean-it
+    ceph osd pool rm fast0 fast0 --yes-i-really-really-mean-it
+    ceph osd pool rm slow0 slow0 --yes-i-really-really-mean-it
+    ceph osd pool unset simpleautoscale
+    ceph osd crush rule rm pin-fast
+    ceph osd crush rule rm pin-slow
+    for osd in $(seq 0 $(( $NUM_OSDS - 1 ))); do
+        ceph osd crush rm-device-class osd.$osd || true
+        ceph osd crush set-device-class hdd osd.$osd
+    done
+}
+
 function test_overlapping_roots() {
     # Create custom CRUSH rules for zone-based placement
     MON_TARGET_PG_PER_OSD=100
@@ -368,6 +612,9 @@ ceph osd pool set threshold 1.0
 test_autoscaler_basic || return 1
 test_pool_starvation || return 1
 test_exact_budget || return 1
+test_simple_autoscale_greenfield || return 1
+test_simple_autoscale_learn || return 1
+test_device_class_pins || return 1
 test_overlapping_roots || return 1
 
 echo OK

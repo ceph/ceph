@@ -48,6 +48,8 @@ class TestPgAutoscaler(object):
         # a bunch of attributes for testing.
         self.autoscaler = module.PgAutoscaler('module_name', 0, 0)
         self.autoscaler.mon_target_pg_per_osd = 100
+        # the test harness has no osdmap to read the flag from
+        self.autoscaler.has_simpleautoscale_flag = lambda: False
 
     def helper_test(self, osd_dic, rules, pools, expected_result):
         osdmap = OSDMAP(pools)

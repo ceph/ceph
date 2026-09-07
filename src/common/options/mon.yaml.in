@@ -46,6 +46,20 @@ options:
   level: advanced
   default: 64_K
   fmt_desc: The maximum number of placement groups per pool.
+- name: mon_osd_pool_pg_merge_confirm_bytes
+  type: size
+  level: advanced
+  desc: pools storing more than this many bytes require --yes-i-really-mean-it
+    on 'osd pool autoscale-accept' when the plan reduces their pg_num by more
+    than half
+  long_desc: Accepting a plan that merges away most of a pool's PGs is an
+    expensive and slow data movement, so the monitor requires explicit
+    confirmation on pools holding significant data. The same threshold keeps
+    the pg_autoscaler from auto-accepting such a merge on a pool whose
+    pg_autoscale_mode is 'on'; the plan is held in pg_autoscale_plan 'pending'
+    for manual acceptance instead.
+  default: 1_T
+  services: [mon]
 - name: mon_mgr_digest_period
   type: int
   level: dev

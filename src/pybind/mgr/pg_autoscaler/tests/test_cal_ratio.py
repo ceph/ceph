@@ -35,3 +35,23 @@ def test_total_bytes():
     assert etr == approx(0.0)
     etr = effective_target_ratio(1, 1, 10, 10)
     assert etr == approx(0.0)
+
+
+def test_pinned_ratio():
+    # pools with a pinned effective_ratio shave the pie available to
+    # pools with a normalized target_size_ratio
+    etr = effective_target_ratio(1, 1, 0, 0, 0.4)
+    assert etr == approx(0.6)
+    # target ratios are still normalized within the remaining fraction
+    etr = effective_target_ratio(0.5, 1.0, 0, 0, 0.5)
+    assert etr == approx(0.25)
+    etr = effective_target_ratio(1, 2, 0, 0, 0.5)
+    assert etr == approx(0.25)
+    # pinned reservations stack with target_size_bytes reservations
+    etr = effective_target_ratio(1, 1, 5, 10, 0.25)
+    assert etr == approx(0.25)
+    # nothing is left once pins (and byte reservations) consume the budget
+    etr = effective_target_ratio(1, 1, 0, 0, 1.0)
+    assert etr == approx(0.0)
+    etr = effective_target_ratio(1, 1, 10, 10, 0.5)
+    assert etr == approx(0.0)
