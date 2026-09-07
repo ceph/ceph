@@ -40,6 +40,14 @@ export interface CdTableColumn extends Partial<TableHeaderItem> {
   filterPredicate?: (row: any, value: any) => boolean;
 
   /**
+   * Convert a cell value into the string used by table search.
+   *
+   * Use this when the displayed value differs from the raw data (for example
+   * tagged OSD IDs shown as `osd.123`). The table applies this before matching.
+   */
+  searchFormatter?: (value: any) => string | null;
+
+  /**
    * Hides a column from the 'toggle columns' drop down checkboxes
    */
   isInvisible?: boolean;
