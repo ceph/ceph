@@ -1615,6 +1615,8 @@ protected:
   const char *if_unmod;
   const char *if_match{nullptr};
   const char *if_nomatch{nullptr};
+  const char *dest_if_match{nullptr};
+  const char *dest_if_nomatch{nullptr};
   // Required or it is not a copy operation
   std::string_view copy_source;
   // Not actually required

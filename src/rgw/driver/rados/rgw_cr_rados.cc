@@ -797,6 +797,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        false, /* high precision time */
                        NULL, /* const char *if_match, */
                        NULL, /* const char *if_nomatch, */
+                       NULL, /* const char *dest_if_match, */
+                       NULL, /* const char *dest_if_nomatch, */
                        RGWRados::ATTRSMOD_NONE,
                        copy_if_newer,
                        attrs,
