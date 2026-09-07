@@ -14,6 +14,7 @@ except ImportError:
 from .. import mgr
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
+from ..services.telemetry import DashboardTelemetryService
 from ..tools import prepare_url_prefix
 from . import BaseController, ControllerAuthMixin, Endpoint, Router, allow_empty_body
 
@@ -57,7 +58,7 @@ class Saml2(BaseController, ControllerAuthMixin):
                 mgr.ACCESS_CTRL_DB.get_user(username)
             except UserDoesNotExist:
                 raise cherrypy.HTTPRedirect("{}/#/sso/404".format(url_prefix))
-
+            DashboardTelemetryService.increment_login_count()
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
 

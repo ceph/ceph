@@ -2,6 +2,7 @@ import cherrypy
 
 from dashboard.exceptions import DashboardException
 from dashboard.services.auth.oauth2 import OAuth2
+from dashboard.services.telemetry import DashboardTelemetryService
 
 from . import Endpoint, RESTController, Router
 
@@ -21,6 +22,7 @@ class Oauth2(RESTController):
         if OAuth2.is_token_expired(token):
             raise cherrypy.HTTPError(401, 'Your session has expired. Please log in again.')
 
+        DashboardTelemetryService.increment_login_count()
         raise cherrypy.HTTPRedirect(OAuth2.get_login_redirect_url(token))
 
     @Endpoint(json_response=False, version=None)
