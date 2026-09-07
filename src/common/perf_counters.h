@@ -259,6 +259,11 @@ public:
   void dec(int idx, uint64_t v = 1);
   void set(int idx, uint64_t v);
   uint64_t get(int idx) const;
+  /// Atomically lower a gauge to v if v is less than its current value, or
+  /// if the gauge is still at its initial 0 ("unset"); a v of 0 is ignored.
+  /// Accepts a plain u64 gauge or a (non-avg) time gauge, whose value is
+  /// nanoseconds (see tset()); not valid on LONGRUNAVG counters.
+  void set_min_nonzero(int idx, uint64_t v);
 
   void tset(int idx, utime_t v);
   void tset(int idx, ceph::timespan v);
