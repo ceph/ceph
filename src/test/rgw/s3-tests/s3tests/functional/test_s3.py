@@ -14739,6 +14739,90 @@ def test_copy_object_ifnonematch_failed():
     body = _get_body(response)
     assert body == 'bar'
 
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.parametrize('versioning', [None,
+    pytest.param('Enabled', marks=pytest.mark.versioning)])
+@pytest.mark.parametrize('size', [1, 5*1024*1024])
+def test_copy_object_dest_if_match(versioning, size):
+    client = get_client()
+    bucket = get_new_bucket(client)
+    if versioning:
+        check_configure_versioning_retry(bucket, versioning, versioning)
+    body = 'a' * size
+    src_etag = client.put_object(Bucket=bucket, Key='src', Body=body)['ETag']
+    copy_source = bucket + '/src'
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch='badetag')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+    dst_etag = client.put_object(Bucket=bucket, Key='dst', Body='old')['ETag']
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch='badetag')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch=src_etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    assert 'old' == _get_body(client.get_object(Bucket=bucket, Key='dst'))
+    if versioning == 'Enabled':
+        assert 1 == len(client.list_object_versions(Bucket=bucket, Prefix='dst')['Versions'])
+
+    response = client.copy_object(Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch=dst_etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    assert body == _get_body(client.get_object(Bucket=bucket, Key='dst'))
+    response = client.copy_object(Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
+    response = client.delete_object(Bucket=bucket, Key='dst')
+    if versioning:
+        assert response['DeleteMarker']
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch='*')
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfMatch=src_etag, IfMatch=src_etag)
+    assert (404, 'NoSuchKey') == _get_status_and_error_code(e.response)
+
+@pytest.mark.conditional_write
+@pytest.mark.fails_on_dbstore
+@pytest.mark.parametrize('versioning', [None,
+    pytest.param('Enabled', marks=pytest.mark.versioning)])
+@pytest.mark.parametrize('size', [1, 5*1024*1024])
+def test_copy_object_dest_if_none_match(versioning, size):
+    client = get_client()
+    bucket = get_new_bucket(client)
+    if versioning:
+        check_configure_versioning_retry(bucket, versioning, versioning)
+    body = 'a' * size
+    src_etag = client.put_object(Bucket=bucket, Key='src', Body=body)['ETag']
+    copy_source = bucket + '/src'
+
+    response = client.copy_object(Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfNoneMatch='badetag', IfNoneMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    assert body == _get_body(client.get_object(Bucket=bucket, Key='dst'))
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfNoneMatch='badetag', IfNoneMatch='*')
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfNoneMatch='badetag', IfNoneMatch=src_etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+
+    dst_etag = client.put_object(Bucket=bucket, Key='dst', Body='old')['ETag']
+
+    e = assert_raises(ClientError, client.copy_object, Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfNoneMatch='badetag', IfNoneMatch=dst_etag)
+    assert (412, 'PreconditionFailed') == _get_status_and_error_code(e.response)
+    assert 'old' == _get_body(client.get_object(Bucket=bucket, Key='dst'))
+    if versioning == 'Enabled':
+        assert 2 == len(client.list_object_versions(Bucket=bucket, Prefix='dst')['Versions'])
+
+    response = client.copy_object(Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfNoneMatch='badetag', IfNoneMatch=src_etag)
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+    assert body == _get_body(client.get_object(Bucket=bucket, Key='dst'))
+
+    response = client.delete_object(Bucket=bucket, Key='dst')
+    if versioning:
+        assert response['DeleteMarker']
+    response = client.copy_object(Bucket=bucket, Key='dst', CopySource=copy_source, CopySourceIfNoneMatch='badetag', IfNoneMatch='*')
+    assert 200 == response['ResponseMetadata']['HTTPStatusCode']
+
 # TODO: results in a 404 instead of 400 on the RGW
 @pytest.mark.fails_on_rgw
 def test_object_read_unreadable():
