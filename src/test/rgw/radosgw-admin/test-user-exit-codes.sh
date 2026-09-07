@@ -6,6 +6,12 @@
 #   RGW_ADMIN=/path/to/radosgw-admin ./test-user-exit-codes.sh
 #   CEPH_CONF=/path/to/ceph.conf ./test-user-exit-codes.sh
 #
+# Test types:
+#   check()         - no cluster needed; runs with --no-mon-config
+#   check_cluster() - needs a running cluster, SKIPs when there is none
+#
+# Both verify the exit code.
+#
 # Run from the build directory:
 #   cd /path/to/ceph/build && bash /path/to/test-user-exit-codes.sh
 
@@ -29,7 +35,7 @@ check "info: unrecognized flag" 22 user info --fakeflag
 check "info: stray after flags" 1 user info --uid u strayarg
 check "info: --uid missing value" 1 user info --uid
 check "info: --access-key missing value" 1 user info --access-key
-check "info: no identity flags" 22 user info
+check_cluster "info: no identity flags" 22 -- user info
 
 # ============================================================
 echo ""
@@ -41,7 +47,7 @@ check "create: --uid missing value" 1 user create --uid
 check "create: --display-name missing value" 1 user create --display-name
 check "create: --email missing value" 1 user create --email
 check "create: --max-buckets invalid int" 22 user create --uid u --max-buckets banana
-check "create: no display-name" 22 user create --uid u-no-display
+check_cluster "create: no display-name" 22 -- user create --uid u-no-display
 
 # ============================================================
 echo ""
@@ -49,9 +55,9 @@ echo "=== user modify / enable / suspend ==="
 # ============================================================
 
 check "modify: unrecognized flag" 22 user modify --fakeflag
-check "modify: no uid" 22 user modify --email x@y.com
-check "enable: no uid" 22 user enable
-check "suspend: no uid" 22 user suspend
+check_cluster "modify: no uid" 22 -- user modify --email x@y.com
+check_cluster "enable: no uid" 22 -- user enable
+check_cluster "suspend: no uid" 22 -- user suspend
 
 # ============================================================
 echo ""
@@ -59,8 +65,8 @@ echo "=== user rm / rename ==="
 # ============================================================
 
 check "rm: unrecognized flag" 22 user rm --fakeflag
-check "rm: no uid" 22 user rm
-check "rename: no uid" 22 user rename --new-uid newname
+check_cluster "rm: no uid" 22 -- user rm
+check_cluster "rename: no uid" 22 -- user rename --new-uid newname
 check "rename: --new-uid missing value" 1 user rename --uid u --new-uid
 
 # ============================================================
@@ -69,9 +75,11 @@ echo "=== user stats ==="
 # ============================================================
 
 check "stats: unrecognized flag" 22 user stats --fakeflag
-check "stats: no uid" 22 user stats
-check "stats: --sync-stats and --reset-stats" 22 user stats --uid u --sync-stats --reset-stats
-check "stats: --reset-stats with bucket" 22 user stats --uid u --reset-stats --bucket b
+check_cluster "stats: no uid" 22 -- user stats
+check_cluster "stats: --sync-stats and --reset-stats" 22 -- \
+  user stats --uid u --sync-stats --reset-stats
+check_cluster "stats: --reset-stats with bucket" 22 -- \
+  user stats --uid u --reset-stats --bucket b
 
 check_cluster "stats: nonexistent user" 2 -- user stats --uid "no-such-user-$RANDOM"
 
@@ -93,19 +101,19 @@ echo ""
 echo "=== user policy ==="
 # ============================================================
 
-check "policy attach: no uid" 22 user policy attach --policy-arn arn:x
-check "policy attach: empty arn" 22 user policy attach --uid u
-check "policy detach: no uid" 22 user policy detach --policy-arn arn:x
-check "policy list: no uid" 22 user policy list attached
+check_cluster "policy attach: no uid" 22 -- user policy attach --policy-arn arn:x
+check_cluster "policy attach: empty arn" 22 -- user policy attach --uid u
+check_cluster "policy detach: no uid" 22 -- user policy detach --policy-arn arn:x
+check_cluster "policy list: no uid" 22 -- user policy list attached
 
 # ============================================================
 echo ""
 echo "=== subuser / key / caps ==="
 # ============================================================
 
-check "subuser create: no uid" 22 subuser create --subuser s:u
-check "key create: no uid" 22 key create
-check "caps add: no uid" 22 caps add --caps "buckets=*"
+check_cluster "subuser create: no uid" 22 -- subuser create --subuser s:u
+check_cluster "key create: no uid" 22 -- key create
+check_cluster "caps add: no uid" 22 -- caps add --caps "buckets=*"
 
 # ============================================================
 echo ""
