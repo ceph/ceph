@@ -65,6 +65,10 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
   // Device table row selection type
   @Input() selectionType: string = undefined;
 
+  // Enable the shared cd-table search field (Physical Disks page).
+  // Kept off by default so OSD device-selection flows stay filter-driven.
+  @Input() searchField = false;
+
   @Output() filterChange = new EventEmitter<CdTableColumnFiltersChange>();
 
   @Output() fetchInventory = new EventEmitter();
@@ -104,6 +108,7 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
         visible: () => _.isString(this.selectionType)
       }
     ];
+    const osdPrefix = 'osd.';
     const columns = [
       {
         name: $localize`Device path`,
@@ -157,7 +162,11 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
         cellTransformation: CellTemplate.tag,
         customTemplateConfig: {
           class: 'tag-dark',
-          prefix: 'osd.'
+          prefix: osdPrefix
+        },
+        searchFormatter: (value: any) => {
+          const items = _.isArray(value) ? value : [value];
+          return items.map((id) => `${osdPrefix}${id}`).join(' ');
         }
       }
     ];

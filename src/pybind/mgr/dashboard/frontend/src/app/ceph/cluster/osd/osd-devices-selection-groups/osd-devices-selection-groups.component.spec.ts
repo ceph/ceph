@@ -79,6 +79,10 @@ describe('OsdDevicesSelectionGroupsComponent', () => {
       fixtureHelper.expectElementVisible('cd-inventory-devices', true);
       expect(component.tableDevices).toEqual([]);
     });
+
+    it('should keep the shared table search field hidden', () => {
+      fixtureHelper.expectElementVisible('cds-table-toolbar-search', false);
+    });
   });
 
   describe('with devices selected', () => {
