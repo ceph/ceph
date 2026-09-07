@@ -41,7 +41,6 @@ fi
 # mkdir ${BUILD_DIR}
 ./do_cmake.sh "$*" \
 	-D WITH_CCACHE=ON \
-	-D NINJA_MAX_COMPILE_JOBS=24 -DNINJA_MAX_LINK_JOBS=24 \
 	-D CMAKE_BUILD_TYPE=Debug \
 	-D CMAKE_CXX_FLAGS_DEBUG="$CMAKE_CXX_FLAGS_DEBUG" \
 	-D CMAKE_C_FLAGS_DEBUG="$CMAKE_C_FLAGS_DEBUG" \
@@ -57,7 +56,7 @@ fi
 	-D WITH_XFS=OFF \
 	-D WITH_KVS=ON \
 	-D CEPH_MAN_DIR=man \
-	-D WITH_LIBCEPHFS=ON \
+	-D WITH_LIBCEPHFS=ON -D WITH_LIBCEPHFS_PROXY=OFF \
 	-D WITH_CEPHFS=OFF \
 	-D WITH_MGR=ON -D WITH_MGR_DASHBOARD_FRONTEND=OFF \
 	-D WITH_RDMA=OFF \
@@ -79,16 +78,16 @@ printenv
 
 cd ${BUILD_DIR}
 if [ -f build.ninja ]; then
-  ninja -j$NPROC 
+  ninja -j${NPROC} 
   ninja tests 
 else
-  gmake -j$CPUS V=1 VERBOSE=1 
+  gmake -j${NPROC} V=1 VERBOSE=1 
   gmake tests 
 fi
 
 # Build the tests
   echo -n "start testing: "; date ;
-  ctest -j $CPUS || RETEST=1
+  ctest -j ${NPROC} || RETEST=1
 
 echo "Testing result, retest: = " $RETEST
 

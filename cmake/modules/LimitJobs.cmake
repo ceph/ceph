@@ -1,8 +1,28 @@
 set(MAX_COMPILE_MEM 3500 CACHE INTERNAL "maximum memory used by each compiling job (in MiB)")
 set(MAX_LINK_MEM 4500 CACHE INTERNAL "maximum memory used by each linking job (in MiB)")
-
 cmake_host_system_information(RESULT _num_cores QUERY NUMBER_OF_LOGICAL_CORES)
 cmake_host_system_information(RESULT _total_mem QUERY TOTAL_PHYSICAL_MEMORY)
+
+if(FREEBSD)
+  # cmake_host_system_information() can come back empty (not just "0") on
+  # FreeBSD if the underlying query is unsupported or fails. math(EXPR ...)
+  # treats an empty operand as a hard configure-time error, not a silent
+  # zero -- so guard both variables before any math() call ever sees them,
+  # and warn loudly instead of failing quietly or aborting the configure.
+  if(NOT _num_cores MATCHES "^[0-9]+$")
+    message(WARNING "LimitJobs: NUMBER_OF_LOGICAL_CORES query returned '${_num_cores}' "
+      "(not a positive integer) -- falling back to 1. Pass -DNINJA_MAX_COMPILE_JOBS= "
+      "and -DNINJA_MAX_LINK_JOBS= explicitly to avoid relying on this detection.")
+    set(_num_cores 1)
+  endif()
+  if(NOT _total_mem MATCHES "^[0-9]+$")
+    message(WARNING "LimitJobs: TOTAL_PHYSICAL_MEMORY query returned '${_total_mem}' "
+      "(not a positive integer) -- falling back to ${MAX_COMPILE_MEM} MiB (1 compile job). "
+      "Pass -DNINJA_MAX_COMPILE_JOBS= and -DNINJA_MAX_LINK_JOBS= explicitly to avoid "
+      "relying on this detection.")
+    set(_total_mem "${MAX_COMPILE_MEM}")
+  endif()
+endif()
 
 if(NINJA_MAX_COMPILE_JOBS)
   set(_avg_compile_jobs "${NINJA_MAX_COMPILE_JOBS}")
@@ -27,8 +47,11 @@ if(NINJA_MAX_COMPILE_JOBS)
     avg_compile_job_pool=${NINJA_MAX_COMPILE_JOBS}
     heavy_compile_job_pool=${_heavy_compile_jobs})
   set(CMAKE_JOB_POOL_COMPILE avg_compile_job_pool)
+  if(FREEBSD OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    message(STATUS "LimitJobs: compile job pool depth = ${NINJA_MAX_COMPILE_JOBS} "
+      "(cores=${_num_cores}, mem=${_total_mem}MiB)")
+  endif()
 endif()
-
 if(NINJA_MAX_LINK_JOBS)
   set(_avg_link_jobs "${NINJA_MAX_LINK_JOBS}")
 else()
@@ -52,4 +75,8 @@ if(NINJA_MAX_LINK_JOBS)
     avg_link_job_pool=${NINJA_MAX_LINK_JOBS}
     heavy_link_job_pool=${_heavy_link_jobs})
   set(CMAKE_JOB_POOL_LINK avg_link_job_pool)
+  if(FREEBSD OR CMAKE_SYSTEM_NAME STREQUAL "FreeBSD")
+    message(STATUS "LimitJobs: link job pool depth = ${NINJA_MAX_LINK_JOBS} "
+      "(cores=${_num_cores}, mem=${_total_mem}MiB)")
+  endif()
 endif()
