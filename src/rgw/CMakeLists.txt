@@ -819,7 +819,9 @@ if(WITH_RADOSGW_STANDALONE)
 endif()
 
 set(radosgw_admin_srcs
-  radosgw-admin/radosgw-admin.cc)
+  radosgw-admin/radosgw-admin.cc
+  radosgw-admin/admin_meta.cc
+  radosgw-admin/user.cc)
 
 # this is unsatisfying and hopefully temporary; ARROW should not be
 # part of radosgw_admin
