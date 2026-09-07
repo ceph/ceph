@@ -1374,7 +1374,7 @@ class TestCephadm(object):
             assert cephadm_module.validate_device('test', dg) == ""
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
-    def test_validate_device_rejects_path_in_cache_but_unavailable(self, cephadm_module):
+    def test_validate_device_path_only_allows_unavailable_in_cache(self, cephadm_module):
         with with_host(cephadm_module, 'test'):
             cephadm_module.cache.update_host_devices('test', [
                 Device('/dev/sdb', available=False, rejected_reasons=['Has a File System']),
@@ -1383,8 +1383,20 @@ class TestCephadm(object):
                 placement=PlacementSpec(host_pattern='test'),
                 data_devices=DeviceSelection(paths=['/dev/sdb']),
             )
-            out = cephadm_module.validate_device('test', dg)
-            assert 'unavailable' in out
+            assert cephadm_module.validate_device('test', dg) == ""
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_validate_device_nvme_partition_missing_from_cache(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            cephadm_module.cache.update_host_devices('test', [
+                Device('/dev/sda', available=True),
+            ])
+            dg = DriveGroupSpec(
+                placement=PlacementSpec(host_pattern='test'),
+                method='raw',
+                data_devices=DeviceSelection(paths=['/dev/nvme0n1p1']),
+            )
+            assert cephadm_module.validate_device('test', dg) == ""
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
     def test_validate_device_rejects_empty_path(self, cephadm_module):
@@ -1434,6 +1446,21 @@ class TestCephadm(object):
                     saved = cephadm_module.spec_store.all_specs['osd.default']
                     assert saved.data_devices.paths[0].path == '/dev/sdb'
                     assert saved.data_devices.paths[0].crush_device_class == 'ssd'
+                    mock_apply.assert_called_once()
+
+    def test_create_osd_default_spec_preserves_method(self, cephadm_module):
+        with mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}')):
+            with mock.patch("cephadm.module.CephadmOrchestrator.apply") as mock_apply:
+                with with_host(cephadm_module, 'test'):
+                    dg = DriveGroupSpec(
+                        placement=PlacementSpec(host_pattern='test'),
+                        data_devices=DeviceSelection(paths=['/dev/nvme0n1p1']),
+                        method='raw',
+                        service_id='default',
+                    )
+                    cephadm_module.create_osd_default_spec(dg)
+                    saved = cephadm_module.spec_store.all_specs['osd.default']
+                    assert saved.method == 'raw'
                     mock_apply.assert_called_once()
 
     def test_create_osds_skips_default_spec_when_osd_default_exists(self, cephadm_module):
@@ -1611,6 +1638,16 @@ class TestCephadm(object):
             out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview)
             assert all(any(cmd in exp_cmd for exp_cmd in exp_commands)
                        for cmd in out), f'Expected cmds from f{out} in {exp_commands}'
+
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+    def test_raw_driveselection_nvme_partition(self, cephadm_module):
+        with with_host(cephadm_module, 'test'):
+            devices = ['/dev/nvme0n1p1']
+            dg = DriveGroupSpec(service_id='test.spec', method='raw', placement=PlacementSpec(
+                host_pattern='test'), data_devices=DeviceSelection(paths=devices))
+            ds = DriveSelection(dg, Devices([Device(path) for path in devices]))
+            out = cephadm_module.osd_service.driveselection_to_ceph_volume(ds, [], preview=False)
+            assert out == ['raw prepare --bluestore --data /dev/nvme0n1p1']
 
     @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm(
         json.dumps([

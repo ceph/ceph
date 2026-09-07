@@ -1576,6 +1576,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule):
         usage = """
 Usage:
   ceph orch daemon add osd host:device1,device2,...
+  ceph orch daemon add osd host:device raw
   ceph orch daemon add osd host:data_devices=device1,device2,db_devices=device3,osds_per_device=2[,encrypted=false]
   ceph orch daemon add osd host:data_devices=device1[,encrypted=true,tpm2=true]
 """
