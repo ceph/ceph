@@ -36,11 +36,14 @@ static void set_nosnaptrim(librados::Rados &cluster, bool stop)
 }
 
 // Poll pg dump until snaptrimq_len is 0 for all PGs (trim complete).
-// Times out after ~5 minutes (60 x 5-second polls).
+// This isn't perfect - we are polling pg dump for a transient
+// notification, it is possible that we miss it completely or
+// that we return to early before the trimmer has run
 static void wait_for_snaptrim_complete(librados::Rados &cluster)
 {
-  for (int tries = 0; tries < 60; ++tries) {
-    sleep(5);
+  bool detected_rollback_trim = false;
+  for (int tries = 0; tries < 30; ++tries) {
+    sleep(1);
     bufferlist outbl;
     ASSERT_EQ(0, cluster.mon_command(
       "{\"prefix\": \"pg dump\", \"format\": \"json\"}", {}, &outbl, nullptr));
@@ -63,9 +66,16 @@ static void wait_for_snaptrim_complete(librados::Rados &cluster)
         }
       }
     }
-    if (total_trimq == 0)
-      return;
+    if (total_trimq == 0) {
+      if (detected_rollback_trim || tries > 6) {
+	return;
+      }
+      // trimmer might not have run yet, or we may have missed it running
+      continue;
+    }
+    detected_rollback_trim = true;
   }
+  // rollback snaptrim is stuck
   ADD_FAILURE() << "Timed out waiting for snaptrim to complete";
 }
 
