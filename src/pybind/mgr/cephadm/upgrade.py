@@ -23,6 +23,7 @@ from cephadm.utils import (
     GATEWAY_TYPES,
     ALLOWED_CIPHERS,
     SERVICE_CIPHER,
+    SUPPORTED_UPGRADE_DAEMON_TYPE_FILTER_TYPES,
 )
 from cephadm.ssh import HostConnectionError
 from orchestrator import OrchestratorError, DaemonDescription, DaemonDescriptionStatus, daemon_type_to_service
@@ -400,8 +401,17 @@ class CephadmUpgrade:
         if any(not d.container_image_digests for d in daemons if d.daemon_type == 'mgr'):
             return '', []
 
-        completed_daemons = [(d.daemon_type, any(d in self.upgrade_state.target_digests for d in (
-            d.container_image_digests or []))) for d in daemons if d.daemon_type]
+        completed_daemons = []
+        for d in daemons:
+            if not d.daemon_type:
+                continue
+            if d.daemon_type in NON_CEPH_IMAGE_TYPES:
+                upgraded = any(dig in self.upgrade_state.target_digests
+                               for dig in (d.deployed_by or []))
+            else:
+                upgraded = any(dig in self.upgrade_state.target_digests
+                               for dig in (d.container_image_digests or []))
+            completed_daemons.append((d.daemon_type, upgraded))
 
         done = len([True for completion in completed_daemons if completion[1]])
 
@@ -753,8 +763,14 @@ class CephadmUpgrade:
         # what we need to do here is build a list of daemons that must already be upgraded
         # in order for the user's selection of daemons to upgrade to be valid. for example,
         # if they say --daemon-types 'osd,mds' but mons have not been upgraded, we block.
+        # We include NON_CEPH_IMAGE_TYPES that are supported as --daemon-types filter
+        # targets (e.g. nvmeof) so ordering is validated between them and other types.
+        # Types that are NOT supported filter targets (monitoring, mgmt-gateway) are
+        # excluded as they only need redeploying and don't participate in ordering checks.
+        non_filter_types = [t for t in NON_CEPH_IMAGE_TYPES
+                            if t not in SUPPORTED_UPGRADE_DAEMON_TYPE_FILTER_TYPES]
         daemons = [d for d in self.mgr.cache.get_daemons(
-        ) if d.daemon_type not in NON_CEPH_IMAGE_TYPES]
+        ) if d.daemon_type not in non_filter_types]
         err_msg_base = 'Cannot start upgrade. '
         # "dtypes" will later be filled in with the types of daemons that will be upgraded with the given parameters
         dtypes = []
@@ -1832,7 +1848,14 @@ class CephadmUpgrade:
             target_digests = []
         self._rotate_mgr_mon_auth_keys(target_image, target_digests)
         for d_entry in to_upgrade:
-            if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0 and not d_entry[1]:
+            # d_entry[1] is True for redeploys, False for image upgrades.
+            # For NON_CEPH_IMAGE_TYPES that are supported as --daemon-types
+            # targets (e.g. nvmeof), redeploys are real upgrades that must
+            # count toward the --limit quota.
+            is_real_upgrade = not d_entry[1] or (
+                d_entry[0].daemon_type in SUPPORTED_UPGRADE_DAEMON_TYPE_FILTER_TYPES
+                and d_entry[0].daemon_type not in CEPH_IMAGE_TYPES)
+            if self.upgrade_state.remaining_count is not None and self.upgrade_state.remaining_count <= 0 and is_real_upgrade:
                 self.mgr.log.info(
                     f'Hit upgrade limit of {self.upgrade_state.total_count}. Stopping upgrade')
                 return
@@ -1911,7 +1934,10 @@ class CephadmUpgrade:
                 })
                 return
             num += 1
-            if self.upgrade_state.remaining_count is not None and not d_entry[1]:
+            is_real_upgrade = not d_entry[1] or (
+                d_entry[0].daemon_type in SUPPORTED_UPGRADE_DAEMON_TYPE_FILTER_TYPES
+                and d_entry[0].daemon_type not in CEPH_IMAGE_TYPES)
+            if self.upgrade_state.remaining_count is not None and is_real_upgrade:
                 self.upgrade_state.remaining_count -= 1
                 self._save_upgrade_state()
 
@@ -2248,10 +2274,14 @@ class CephadmUpgrade:
                 # we hit our limit and should end the upgrade
                 # except for cases where we only need to redeploy, but not actually upgrade
                 # the image (which we don't count towards our limit). This case only occurs with mgr
-                # and monitoring stack daemons. Additionally, this case is only valid if
+                # and monitoring/mgmt-gateway daemons. Additionally, this case is only valid if
                 # the active mgr is already upgraded.
+                # NON_CEPH_IMAGE_TYPES that are supported as --daemon-types targets
+                # (e.g. nvmeof) get real upgrades and must respect the limit.
+                redeploy_only_types = [t for t in NON_CEPH_IMAGE_TYPES
+                                       if t not in SUPPORTED_UPGRADE_DAEMON_TYPE_FILTER_TYPES]
                 if any(d in target_digests for d in self.mgr.get_active_mgr_digests()):
-                    if daemon_type not in NON_CEPH_IMAGE_TYPES and daemon_type != 'mgr':
+                    if daemon_type not in redeploy_only_types and daemon_type != 'mgr':
                         continue
                 else:
                     self._mark_upgrade_complete(target_digests, target_image)
