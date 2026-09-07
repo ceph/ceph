@@ -5237,7 +5237,30 @@ int PrimaryLogPG::rollback_then_trim(
     ctx->snapc.seq = rb_info->rollback_id;
     auto ops = build_pending_ops(pool.info, snapset.seq, rb_info->rollback_id);
     if (!ops.empty()) {
-      execute_clone_plan(head_oid, ops, ctx->new_snapset, ctx->op_t.get());
+      hobject_t rolled_back_from = execute_clone_plan(head_oid, ops, ctx->new_snapset, ctx->op_t.get());
+      if (rolled_back_from != head_oid) {
+        ObjectContextRef src_obc = get_object_context(rolled_back_from, false);
+        ceph_assert(src_obc);
+        if (head_obc->obs.oi.is_whiteout()) {
+          dout(10) << __func__ << " clearing whiteout on head " << head_oid
+                   << " due to rollback" << dendl;
+          --ctx->delta_stats.num_whiteouts;
+        }
+        if (!head_obc->obs.exists) {
+          dout(10) << __func__ << " recreating head " << head_oid
+                   << " due to rollback" << dendl;
+          ++ctx->delta_stats.num_objects;
+        }
+        eversion_t head_version = head_obc->obs.oi.version;
+        eversion_t head_prior_version = head_obc->obs.oi.prior_version;
+        head_obc->obs.oi = src_obc->obs.oi;
+        head_obc->obs.oi.soid = head_oid;
+        head_obc->obs.oi.version = head_version;
+        head_obc->obs.oi.prior_version = head_prior_version;
+        ctx->new_obs.oi = head_obc->obs.oi;
+        head_obc->obs.exists = true;
+        ctx->new_obs.exists = true;
+      }
 
       // Register OBCs for rollback source clones
       for (auto& op : ops) {
@@ -9488,7 +9511,33 @@ void PrimaryLogPG::make_writeable(OpContext *ctx)
     jit_ctx->new_snapset = ctx->new_snapset;
 
     // Emit clone operations for the rollback ops into jit_ctx->op_t (T1).
-    execute_clone_plan(soid, jit_ops, jit_ctx->new_snapset, jit_ctx->op_t.get());
+    hobject_t rolled_back_from = execute_clone_plan(soid, jit_ops, jit_ctx->new_snapset, jit_ctx->op_t.get());
+    if (rolled_back_from != soid) {
+      ObjectContextRef src_obc = get_object_context(rolled_back_from, false);
+      ceph_assert(src_obc);
+      if (jit_ctx->new_obs.oi.is_whiteout()) {
+        --jit_ctx->delta_stats.num_whiteouts;
+      }
+      if (!jit_ctx->new_obs.exists) {
+        ++jit_ctx->delta_stats.num_objects;
+      }
+      eversion_t head_version = jit_ctx->new_obs.oi.version;
+      eversion_t head_prior_version = jit_ctx->new_obs.oi.prior_version;
+      jit_ctx->new_obs.oi = src_obc->obs.oi;
+      jit_ctx->new_obs.oi.soid = soid;
+      jit_ctx->new_obs.oi.version = head_version;
+      jit_ctx->new_obs.oi.prior_version = head_prior_version;
+      jit_ctx->new_obs.exists = true;
+
+      if (ctx->new_obs.oi.is_whiteout()) {
+        --ctx->delta_stats.num_whiteouts;
+      }
+      if (!ctx->new_obs.exists) {
+        ++ctx->delta_stats.num_objects;
+      }
+      ctx->new_obs.oi = jit_ctx->new_obs.oi;
+      ctx->new_obs.exists = true;
+    }
 
     // Register OBCs for rollback source clones so EC's get_write_plan can
     // look them up from the transaction's obc_map.
