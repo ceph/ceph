@@ -973,6 +973,7 @@ class DaosStore : public StoreDriver {
   virtual void get_quota(RGWQuota& quota) override;
   virtual void get_ratelimit(RGWRateLimitInfo& bucket_ratelimit,
                              RGWRateLimitInfo& user_ratelimit,
+                             RGWRateLimitInfo& account_ratelimit,
                              RGWRateLimitInfo& anon_ratelimit) override;
   virtual int set_buckets_enabled(const DoutPrefixProvider* dpp,
                                   std::vector<rgw_bucket>& buckets,
