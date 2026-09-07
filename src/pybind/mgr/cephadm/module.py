@@ -2492,7 +2492,10 @@ Then run the following:
             except MonCommandFailed as e:
                 self.log.error(f'Couldn\'t remove host {host} from CRUSH map: {str(e)}')
                 return (f'Cephadm failed removing host {host}\n'
-                        f'Failed to remove host {host} from the CRUSH map: {str(e)}')
+                        f'Failed to remove host {host} from the CRUSH map: {str(e)}\n'
+                        f'OSDs may still be present in the CRUSH bucket. '
+                        f"Remove them with 'ceph orch osd rm' or "
+                        f"'ceph orch host drain {host}' first.")
 
         self.inventory.rm_host(host)
         self.cache.rm_host(host)
@@ -5301,8 +5304,15 @@ Then run the following:
 
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_host(hostname)
 
-        osds_to_remove = [d.daemon_id for d in daemons if d.daemon_type == 'osd']
-        self.remove_osds(osds_to_remove, zap=zap_osd_devices)
+        osd_daemons = [d for d in daemons if d.daemon_type == 'osd']
+        error_osds = [d.daemon_id for d in osd_daemons
+                      if d.status == DaemonDescriptionStatus.error]
+        other_osds = [d.daemon_id for d in osd_daemons
+                      if d.status != DaemonDescriptionStatus.error]
+        if error_osds:
+            self.remove_osds(error_osds, zap=zap_osd_devices, force=True)
+        if other_osds or not error_osds:
+            self.remove_osds(other_osds, zap=zap_osd_devices)
 
         daemons_table = ""
         daemons_table += "{:<20} {:<15}\n".format("type", "id")
