@@ -1470,6 +1470,10 @@ namespace rgw::s3vector {
       throw JSONDecoder::err("policy must be specified and cannot be empty");
     }
     // policy TODO: validate JSON
+    JSONParser parser;
+    if(!parser.parse(policy.c_str(), policy.length())) {
+      throw JSONDecoder::err("policy must be specified and cannot be empty");
+    }
   }
 
   // get vector bucket policy
