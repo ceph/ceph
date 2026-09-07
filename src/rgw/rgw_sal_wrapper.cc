@@ -963,6 +963,8 @@ int rgw_copy_object( CRgwDriver* driver_ptr, const CRgwDoutPrefix* dpp_ptr,
                             false,            /* high_precision_time */
                             nullptr,          /* if_match */
                             nullptr,          /* if_nomatch */
+                            nullptr,          /* dest_if_match */
+                            nullptr,          /* dest_if_nomatch */
                             rgw::sal::ATTRSMOD_NONE,
                             false,            /* copy_if_newer */
                             attrs,
@@ -1074,6 +1076,8 @@ int rgw_copy_object_conditional( CRgwDriver* driver_ptr, const CRgwDoutPrefix* d
                             false,            /* high_precision_time */
                             if_match,         /* if_match */
                             copy_if_nomatch,  /* if_nomatch */
+                            nullptr,          /* dest_if_match */
+                            nullptr,          /* dest_if_nomatch */
                             rgw::sal::ATTRSMOD_NONE,
                             false,            /* copy_if_newer */
                             attrs,

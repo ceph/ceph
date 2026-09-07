@@ -1228,6 +1228,7 @@ int DaosObject::copy_object(
     ceph::real_time* src_mtime, ceph::real_time* mtime,
     const ceph::real_time* mod_ptr, const ceph::real_time* unmod_ptr,
     bool high_precision_time, const char* if_match, const char* if_nomatch,
+    const char* dest_if_match, const char* dest_if_nomatch,
     AttrsMod attrs_mod, bool copy_if_newer, Attrs& attrs,
     RGWObjCategory category, uint64_t olh_epoch,
     boost::optional<ceph::real_time> delete_at, std::string* version_id,
