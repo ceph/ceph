@@ -785,8 +785,9 @@ std::vector<hobject_t> SnapMapper::get_next_rollback_objects(
   // after any key equal to to_raw_key(snap, after) in the RocksDB ordering.
   std::string start_key;
   if (after == hobject_t{}) {
-    // Start from the very first entry under this snap.
-    start_key = get_prefix(pool, snap);
+    // Start from the first prefix of this PG to avoid reading other PGs' keys.
+    ceph_assert(!prefixes.empty());
+    start_key = get_prefix(pool, snap) + *prefixes.begin();
   } else {
     start_key = to_raw_key(snap, after) + '\x01';
   }
@@ -811,7 +812,10 @@ std::vector<hobject_t> SnapMapper::get_next_rollback_objects(
     }
     pair<snapid_t, hobject_t> decoded(from_raw(next));
     ceph_assert(decoded.first == snap);
-    ceph_assert(check(decoded.second));
+    if (!check(decoded.second)) {
+      pos = next.first;
+      continue;
+    }
     out.emplace_back(std::move(decoded.second));
     pos = next.first;
   }
