@@ -87,6 +87,37 @@ def test_upgrade_start_offline_hosts(cephadm_module: CephadmOrchestrator):
 
 
 @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_nvmeof_daemon_type(cephadm_module: CephadmOrchestrator):
+    """Regression: --daemon-types nvmeof must not raise 'Got unexpected daemon type'."""
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with mock.patch.object(
+                    cephadm_module.upgrade, '_validate_upgrade_filters'
+                ):
+                    result = wait(
+                        cephadm_module,
+                        cephadm_module.upgrade_start(
+                            'image_id', None,
+                            daemon_types=['nvmeof'],
+                        ),
+                    )
+                    assert result == 'Initiating upgrade to image_id'
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
+def test_upgrade_start_invalid_daemon_type(cephadm_module: CephadmOrchestrator):
+    with with_host(cephadm_module, 'test'):
+        with with_host(cephadm_module, 'test2'):
+            with with_service(cephadm_module, ServiceSpec('mgr', placement=PlacementSpec(count=2)), status_running=True):
+                with pytest.raises(OrchestratorError, match=r'Got unexpected daemon type "foo"'):
+                    cephadm_module.upgrade_start(
+                        'image_id', None,
+                        daemon_types=['foo'],
+                    )
+
+
+@mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('{}'))
 def test_upgrade_daemons_offline_hosts(cephadm_module: CephadmOrchestrator):
     with with_host(cephadm_module, 'test'):
         with with_host(cephadm_module, 'test2'):

@@ -400,8 +400,17 @@ class CephadmUpgrade:
         if any(not d.container_image_digests for d in daemons if d.daemon_type == 'mgr'):
             return '', []
 
-        completed_daemons = [(d.daemon_type, any(d in self.upgrade_state.target_digests for d in (
-            d.container_image_digests or []))) for d in daemons if d.daemon_type]
+        completed_daemons = []
+        for d in daemons:
+            if not d.daemon_type:
+                continue
+            if d.daemon_type in NON_CEPH_IMAGE_TYPES:
+                upgraded = any(dig in self.upgrade_state.target_digests
+                               for dig in (d.deployed_by or []))
+            else:
+                upgraded = any(dig in self.upgrade_state.target_digests
+                               for dig in (d.container_image_digests or []))
+            completed_daemons.append((d.daemon_type, upgraded))
 
         done = len([True for completion in completed_daemons if completion[1]])
 
