@@ -137,6 +137,15 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
   // Display search field inside tool header?
   @Input()
   searchField? = true;
+  // Placeholder text shown inside the Carbon toolbar search field.
+  @Input()
+  searchPlaceholder = $localize`Search`;
+  // Accessible label for the Carbon toolbar search field.
+  @Input()
+  searchLabel = $localize`Search`;
+  // ARIA label for the Carbon toolbar search field.
+  @Input()
+  searchAriaLabel = $localize`Search`;
   // Display the table header?
   @Input()
   header? = true;
@@ -259,6 +268,18 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
    */
   @Input()
   emptyStateMessage: string = $localize`There are currently no records to display.`;
+  /**
+   * Title to be displayed when a search term yields no matching rows.
+   * Falls back to emptyStateTitle when unset.
+   */
+  @Input()
+  searchEmptyStateTitle?: string;
+  /**
+   * Helper text to be displayed when a search term yields no matching rows.
+   * Falls back to emptyStateMessage when unset.
+   */
+  @Input()
+  searchEmptyStateMessage?: string;
   /**
    * Illustration image to be displayed when there is no data
    */
@@ -415,6 +436,18 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
     [key: string]: TemplateRef<any>;
   } = {};
   search = '';
+
+  get displayedEmptyStateTitle(): string {
+    return this.search && this.searchEmptyStateTitle
+      ? this.searchEmptyStateTitle
+      : this.emptyStateTitle;
+  }
+
+  get displayedEmptyStateMessage(): string {
+    return this.search && this.searchEmptyStateMessage
+      ? this.searchEmptyStateMessage
+      : this.emptyStateMessage;
+  }
 
   set rows(value: any[]) {
     this._rows = value;
@@ -1613,24 +1646,52 @@ export class TableComponent implements AfterViewInit, OnInit, OnChanges, OnDestr
             return false;
           }
 
-          if (_.isArray(cellValue)) {
-            cellValue = cellValue.join(' ');
-          } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
-            cellValue = cellValue.toString();
-          }
-
-          if (_.isObjectLike(cellValue)) {
-            if (this.searchableObjects) {
-              cellValue = JSON.stringify(cellValue);
-            } else {
-              return false;
-            }
+          cellValue = this.toSearchableCellValue(col, cellValue);
+          if (_.isUndefined(cellValue) || _.isNull(cellValue)) {
+            return false;
           }
 
           return cellValue.toLowerCase().indexOf(searchTerm) !== -1;
         }).length > 0
       );
     });
+  }
+
+  /**
+   * Convert a cell value into the text users actually see, so search matches
+   * displayed values such as tagged OSD IDs (`osd.123`).
+   */
+  private toSearchableCellValue(col: CdTableColumn, cellValue: any): string | null {
+    if (col.cellTransformation === CellTemplate.tag) {
+      const items = _.isArray(cellValue) ? cellValue : [cellValue];
+      return items.map((item) => this.toSearchableTagItem(col, item)).join(' ');
+    }
+
+    if (_.isArray(cellValue)) {
+      cellValue = cellValue.join(' ');
+    } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {
+      cellValue = cellValue.toString();
+    }
+
+    if (_.isObjectLike(cellValue)) {
+      if (this.searchableObjects) {
+        return JSON.stringify(cellValue);
+      }
+      return null;
+    }
+
+    return cellValue;
+  }
+
+  private toSearchableTagItem(col: CdTableColumn, item: any): string {
+    const config = col.customTemplateConfig;
+    if (!_.isNil(config?.map?.[item]?.value)) {
+      return String(config.map[item].value);
+    }
+    if (config?.prefix) {
+      return `${config.prefix}${item}`;
+    }
+    return String(item);
   }
 
   getRowClass() {

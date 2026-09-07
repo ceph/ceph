@@ -65,6 +65,10 @@ export class InventoryDevicesComponent implements OnInit, OnDestroy {
   // Device table row selection type
   @Input() selectionType: string = undefined;
 
+  // Enable the shared cd-table search field (Physical Disks page).
+  // Kept off by default so OSD device-selection flows stay filter-driven.
+  @Input() searchField = false;
+
   @Output() filterChange = new EventEmitter<CdTableColumnFiltersChange>();
 
   @Output() fetchInventory = new EventEmitter();

@@ -9,6 +9,7 @@
         [devices]="devices"
         [hiddenColumns]="hostname === undefined ? [] : ['hostname']"
         selectionType="single"
+        [searchField]="true"
         (fetchInventory)="refresh()"
         [orchStatus]="orchStatus"
       >
