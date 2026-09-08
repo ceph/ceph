@@ -2,11 +2,8 @@ from typing import (
     TYPE_CHECKING,
     Any,
     List,
-    Literal,
     Optional,
-    Union,
     cast,
-    overload,
 )
 
 import logging
@@ -359,26 +356,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             password_filter_out=password_filter_out,
         ).squash(cluster)
 
-    @overload
-    def cluster_rm(
-        self,
-        cluster_id: str,
-        wildcard: Literal[False] = False,
-        recursive: bool = False,
-        password_filter: PasswordFilter = PasswordFilter.NONE,
-    ) -> results.Result:
-        ...
-
-    @overload
-    def cluster_rm(
-        self,
-        cluster_id: str,
-        wildcard: Literal[True],
-        recursive: bool = False,
-        password_filter: PasswordFilter = PasswordFilter.NONE,
-    ) -> results.ResultGroup:
-        ...
-
     @SMBCLICommand('cluster rm', perm='rw')
     def cluster_rm(
         self,
@@ -386,7 +363,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         wildcard: bool = False,
         recursive: bool = False,
         password_filter: PasswordFilter = PasswordFilter.NONE,
-    ) -> Union[results.Result, results.ResultGroup]:
+    ) -> results.Result:
         """Remove an smb cluster"""
         if recursive or wildcard:
             return self._cluster_multi_rm(
@@ -680,18 +657,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             ),
         )
         return self._apply_res([share], create_only=True).one()
-
-    @overload
-    def share_rm(
-        self, cluster_id: str, share_id: str, wildcard: Literal[False] = False
-    ) -> results.Result:
-        ...
-
-    @overload
-    def share_rm(
-        self, cluster_id: str, share_id: str, wildcard: Literal[True]
-    ) -> results.ResultGroup:
-        ...
 
     @SMBCLICommand('share rm', perm='rw')
     def share_rm(
