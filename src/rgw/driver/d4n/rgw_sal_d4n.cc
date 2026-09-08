@@ -1464,12 +1464,12 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
  *     1. plain name          — "latest" pointer, overwritten by each PUT
  *     2. "_:null_<name>"     — null-instance alias, always mirrors plain name
  *     3. "_:<ver>_<name>"    — version-specific; survives subsequent PUTs; guards readers on
- *                              concurrent GET+PUT races via delete_data_blocks
+ *                              concurrent GET+PUT races via do_delete
  *
  *   Versioned bucket, actual instance (is_latest_version=true, versioned(), instance!="null"):
  *     1. plain name          — "latest" pointer, overwritten by each PUT of a newer version
  *     2. "<name>#<instance>" — instance-specific; never overwritten by other-version PUTs;
- *                              used as the stable readers guard in delete_data_blocks
+ *                              used as the stable readers guard in do_delete
  *
  *   Versioned bucket, null-instance or suspended versioning (versioned(), instance=="null"):
  *     1. plain name          — "latest" pointer
@@ -1477,7 +1477,7 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
  *     3. "_:<ver>_<name>"    — version-specific; survives subsequent PUTs; stable readers guard
  *
  * The version-specific entry ("_:<ver>_<name>" or "<name>#<instance>") is the only entry that
- * survives a concurrent overwriting PUT.  It is the anchor that delete_data_blocks checks before
+ * survives a concurrent overwriting PUT.  It is the anchor that do_delete checks before
  * deleting dirty data blocks while a remote GET may still be reading them.
  *
  * In addition to the block directory entries above, this method also:
@@ -1505,7 +1505,7 @@ int D4NFilterObject::create_delete_marker(const DoutPrefixProvider* dpp, optiona
  *   handling GET and DELETE requests. Without it, you can't correctly route a null-instance request in a bucket that also has real versioned
  *   instances.
  * - "_:<ver>_<name>" is a safety anchor — it holds the readers refcount in a key that no subsequent PUT can overwrite. Without it, the
- *   readers guard is silently zeroed by a concurrent PUT before delete_data_blocks checks it, and dirty data can be deleted while a remote
+ *   readers guard is silently zeroed by a concurrent PUT before do_delete checks it, and dirty data can be deleted while a remote
  *   GET is still reading it.
  * The two don't substitute for each other. "_:null_<name>" can't serve as the guard because it gets overwritten by every new null-instance
  * PUT. And "_:<ver>_<name>" can't serve as the routing key because it encodes the specific D4N version, which the incoming GET request
@@ -3425,7 +3425,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
 
     /* For dirty objects (excluding delete markers): inline delete data blocks if cache request or low free space.
        Otherwise, invalidate_dirty_object() has already marked blocks as invalid via RGW_CACHE_ATTR_INVALID,
-       and blockDir data block cleanup is deferred to delete_data_blocks.
+       and blockDir data block cleanup is deferred to do_delete.
        Clean object data block and blockDir cleanup is owned entirely by the eviction path. */
     if (!objDirty || (objDirty && !block.deleteMarker)) {
       const off_t lst = size;
