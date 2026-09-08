@@ -19369,6 +19369,9 @@ def _bucket_logging_cleanup(cleanup_type, logging_type, single_prefix, concurren
     else:
         if single_prefix and logging_type == 'Journal' and cleanup_type not in ['target', 'updating']:
             assert len(keys) == 1
+        elif single_prefix and logging_type == 'Standard' and cleanup_type == 'disabling':
+            # A single shared log record is committed but the PutLogging op is not logged
+            assert len(keys) == 1
         else:
             assert len(keys) == num_buckets
 
@@ -19627,7 +19630,7 @@ def _bucket_logging_partial_cleanup(cleanup_type, logging_type, concurrency):
     log_bucket = get_new_bucket_resource(name=log_bucket_name)
     client = get_client()
 
-    num_buckets = 3
+    num_buckets = 5
     buckets = []
     log_prefixes = []
     longer_time = expected_object_roll_time*10
@@ -19724,11 +19727,10 @@ def _bucket_logging_partial_cleanup(cleanup_type, logging_type, concurrency):
         assert len(keys) >= 1 and len(keys) <= num_buckets
     elif cleanup_type == 'updating':
         assert len(keys) == num_buckets
-    elif logging_type == 'Standard':
-        # 1st deleted/disabled source write the bucket_deletion/put_bucket_logging record
+    elif logging_type == 'Standard' and cleanup_type == 'deletion':
         assert len(keys) == num_buckets
     else:
-        assert len(keys) == num_buckets - 1
+        assert len(keys) == 2
 
 
     prefixes = []
